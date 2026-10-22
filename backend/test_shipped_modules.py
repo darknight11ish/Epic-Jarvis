@@ -85,7 +85,13 @@ THIRD_PARTY = {
     "numpy": "numpy",
     "sherpa_onnx": "sherpa-onnx",
     "onnxruntime": "onnxruntime",
-    "fastembed": "fastembed",
+    # The memory search runs ONNX Runtime directly since 2026-10-21 (the
+    # fastembed library it used before is gone): `tokenizers` turns text into
+    # the model's numbers and `huggingface_hub` fetches a model once when this
+    # PC does not have it yet. Both were already installed and pinned as
+    # fastembed's own dependencies; they are named in requirements.txt now.
+    "tokenizers": "tokenizers",
+    "huggingface_hub": "huggingface-hub",
     "sqlite_vec": "sqlite-vec",
     "uiautomation": "uiautomation",
     "tomli": "tomli",

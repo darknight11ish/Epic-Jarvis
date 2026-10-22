@@ -10,12 +10,18 @@ so every place the backend loads onnxruntime itself switches them off first
 proves:
   1. jarvis_wakeword and jarvis_turn call disable_telemetry_events() when
      they are imported.
-  2. jarvis_memory.quiet_onnxruntime() calls it, and both fastembed load
-     sites (the meaning model and the re-ranker) call quiet_onnxruntime()
-     before they import fastembed.
-  3. A missing onnxruntime, or one whose switch raises, is harmless - and a
+  2. jarvis_memory.quiet_onnxruntime() calls it, and the two public model
+     loaders - OnnxEmbedder.__init__ and OnnxReranker.__init__ - call
+     quiet_onnxruntime() BEFORE _backend_for(...), the one seam that builds
+     the ONNX engine (fastembed is gone; the engine is called directly,
+     2026-10-21).
+  3. The engine is imported in one private place only: _OnnxBackend's
+     constructor (onnxruntime) and the tokenizer helper it alone calls
+     (tokenizers); quiet_onnxruntime() itself is the switch, so it imports
+     onnxruntime too. Nothing imports either at module level.
+  4. A missing onnxruntime, or one whose switch raises, is harmless - and a
      switch that raises does NOT leave the module without onnxruntime.
-  4. With the real onnxruntime installed (the owner's PC), the call works.
+  5. With the real onnxruntime installed (the owner's PC), the call works.
 """
 import ast
 import importlib
@@ -103,25 +109,107 @@ def t_memory_helper():
             sys.modules.pop("onnxruntime", None)
 
 
-def t_both_fastembed_sites_call_it_first():
-    """Read the source: in every function that imports fastembed, the call
-    to quiet_onnxruntime() comes before the import."""
+# --------------------------------------------------------------------------
+#   The new rule (2026-10-21): the engine is built behind one seam, and the
+#   telemetry switch is called BEFORE that seam in both public loaders.
+# --------------------------------------------------------------------------
+
+def _enclosing(tree):
+    """Every node's enclosing function, as 'Class.method' or 'function'."""
+    out = {}
+
+    def walk(node, classes, funcs):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.ClassDef):
+                walk(child, classes + [child.name], funcs)
+            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                walk(child, classes, funcs + [child.name])
+            else:
+                label = ".".join(classes + funcs) if funcs else "(module level)"
+                out[id(child)] = label
+                walk(child, classes, funcs)
+
+    walk(tree, [], [])
+    return out
+
+
+def _engine_imports(node):
+    """The engine module names an Import/ImportFrom node brings in."""
+    names = set()
+    if isinstance(node, ast.Import):
+        names.update(alias.name.split(".")[0] for alias in node.names)
+    elif isinstance(node, ast.ImportFrom) and node.module:
+        names.add(node.module.split(".")[0])
+    return names & {"onnxruntime", "tokenizers"}
+
+
+def _class_function(tree, cls, name):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == cls:
+            for sub in node.body:
+                if isinstance(sub, ast.FunctionDef) and sub.name == name:
+                    return sub
+    return None
+
+
+def t_the_engine_sites_are_quiet_and_one():
+    """AST, because this is about WHERE calls sit: the two public loaders call
+    quiet_onnxruntime() before _backend_for(), and the engine is imported in
+    one private place, never at module level. No model is loaded and no engine
+    is imported here - this only reads the source."""
     tree = ast.parse((HERE / "rebuilt" / "jarvis_memory.py").read_text(encoding="utf-8"))
-    sites = 0
-    for fn in ast.walk(tree):
-        if not isinstance(fn, ast.FunctionDef):
+    enclosing = _enclosing(tree)
+
+    # 1. quiet_onnxruntime() before _backend_for(), in both public loaders.
+    for cls in ("OnnxEmbedder", "OnnxReranker"):
+        init = _class_function(tree, cls, "__init__")
+        check(f"{cls}.__init__ exists", init is not None)
+        if init is None:
             continue
-        imports = [n for n in ast.walk(fn) if isinstance(n, ast.ImportFrom)
-                   and (n.module or "").startswith("fastembed")]
-        if not imports:
-            continue
-        sites += 1
-        calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+        quiet = [n for n in ast.walk(init) if isinstance(n, ast.Call)
                  and getattr(n.func, "id", "") == "quiet_onnxruntime"]
-        first_import = min(n.lineno for n in imports)
-        check(f"{fn.name}: quiet_onnxruntime() before fastembed",
-              any(c.lineno < first_import for c in calls))
-    check("both fastembed load sites were found", sites == 2, f"found {sites}")
+        seam = [n for n in ast.walk(init) if isinstance(n, ast.Call)
+                and getattr(n.func, "id", "") == "_backend_for"]
+        check(f"{cls}.__init__ calls both quiet_onnxruntime() and _backend_for()",
+              len(quiet) == 1 and len(seam) == 1, (len(quiet), len(seam)))
+        check(f"{cls}.__init__ calls quiet_onnxruntime() BEFORE _backend_for() "
+              "(the engine is not opened before telemetry is off)",
+              bool(quiet) and bool(seam) and quiet[0].lineno < seam[0].lineno,
+              [(n.lineno, getattr(n.func, "id", "?")) for n in quiet + seam])
+
+    # 2. The engine is imported only in the private ONNX plumbing.
+    sites, at_module_level, fastembed = {}, False, []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        mods = _engine_imports(node)
+        if mods:
+            label = enclosing.get(id(node), "?")
+            if label == "(module level)":
+                at_module_level = True
+            sites.setdefault(label, set()).update(mods)
+        module = getattr(node, "module", None) or ""
+        if module.startswith("fastembed") or any(
+                alias.name.startswith("fastembed") for alias in node.names):
+            fastembed.append(node.lineno)
+    allowed = {"quiet_onnxruntime", "_OnnxBackend.__init__", "_load_tokenizer",
+               "_download_snapshot"}
+    check("the engine (onnxruntime/tokenizers) is imported only inside the "
+          "private ONNX plumbing", set(sites) <= allowed, sites)
+    check("... onnxruntime in the telemetry switch and the one backend",
+          sites.get("quiet_onnxruntime") == {"onnxruntime"}
+          and "onnxruntime" in sites.get("_OnnxBackend.__init__", set()), sites)
+    check("... tokenizers only in the loader's own tokenizer helper",
+          sites.get("_load_tokenizer") == {"tokenizers"}, sites)
+    check("nothing imports the engine at module level", at_module_level is False, sites)
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and getattr(n.func, "id", "") == "_load_tokenizer"]
+    check("_load_tokenizer() is only called by _OnnxBackend.__init__",
+          len(calls) == 1
+          and enclosing.get(id(calls[0])) == "_OnnxBackend.__init__",
+          [enclosing.get(id(n)) for n in calls])
+    check("no fastembed imports are left anywhere in the module", fastembed == [],
+          fastembed)
 
 
 def t_real_onnxruntime():
@@ -140,7 +228,7 @@ def t_real_onnxruntime():
 
 if __name__ == "__main__":
     for fn in (t_modules_switch_it_off, t_a_raising_switch_is_harmless, t_memory_helper,
-               t_both_fastembed_sites_call_it_first, t_real_onnxruntime):
+               t_the_engine_sites_are_quiet_and_one, t_real_onnxruntime):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

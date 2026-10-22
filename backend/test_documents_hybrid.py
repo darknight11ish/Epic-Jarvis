@@ -7,7 +7,7 @@ somewhere in the file" and rank by nothing. It now ranks with SQLite's own
 `bm25` over an FTS5 index, fuses that with MEANING when this PC has a meaning
 model, and falls back to exactly the old scan when there is no usable index.
 
-The parts that need proving are the ones a machine without fastembed cannot
+The parts that need proving are the ones a machine without the meaning model cannot
 show by accident - which is every CI runner, and the reason the vector half is
 driven here with an INJECTED embedder whose vectors are known, so the fusion
 and its floor are checked rather than hoped for:
@@ -24,7 +24,7 @@ and its floor are checked rather than hoped for:
     adds NOTHING when nothing is close - the floor that stops it handing back
     every file in the folder.
 
-No pytest, no network, no fastembed needed. Real SQLite files in a temp folder.
+No pytest, no network, no meaning model needed. Real SQLite files in a temp folder.
 """
 import os
 import shutil
@@ -63,7 +63,7 @@ CONF.mkdir()
 D._config_dir = lambda: CONF
 
 #: NO MEANING MODEL, on every machine, so this suite answers the same in CI as
-#: on a PC with fastembed installed. The meaning half is driven by passing an
+#: on a PC with the meaning model available. The meaning half is driven by passing an
 #: embedder in, whose vectors are known - never by hoping one is installed.
 os.environ["JARVIS_DOCUMENTS_EMBED"] = "0"
 

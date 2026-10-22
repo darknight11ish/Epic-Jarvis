@@ -343,6 +343,48 @@ def live_limits() -> dict:
 ROUTE = "/api/voice/live"
 TITLE = "Jarvis Live"
 
+#: Slice G's frozen contract (2026-10-21, docs/DESIGN-PHONE-LIVE-STREAM.md):
+#: the persistent-stream URL is reserved here as a switched-off 501 stub. The
+#: URL, the switch key and the refusal shape are fixed before any audio path
+#: exists, so both apps and a later implementation cannot disagree about them.
+#: NO AUDIO IS READ on this route: it never opens the microphone, never stores
+#: a byte and never reaches the speech pipeline.
+STREAM_ROUTE = "/api/live/stream"
+STREAM_OFF_REASON = ("Jarvis can't stream Live audio yet - the persistent "
+                     "stream is switched off on this PC.")
+STREAM_NOT_BUILT_REASON = ("Jarvis can't stream Live audio yet - the persistent "
+                           "stream is not built.")
+
+
+def stream_enabled() -> bool:
+    """The `[live] stream` switch: OFF by default, and a missing key is OFF.
+
+    A settings file with no `[live]` table, or with the key absent, is never
+    read as permission (the same rule `[app_control]` keeps). The value may be
+    a real TOML boolean or one of the plain on/off words an older hand edit
+    might write; anything else is OFF.
+    """
+    value = _live_cfg("stream", False)
+    if value is True:
+        return True
+    return isinstance(value, str) and value.strip().lower() in (
+        "1", "true", "yes", "on")
+
+
+def stream_stub(enabled: Optional[bool] = None) -> tuple:
+    """(501, body) for the frozen route. It never reads, stores or plays audio.
+
+    `enabled=None` reads the switch; a caller (the suite) may pass one so the
+    two states are testable without touching a settings file. Both states are
+    501 on purpose: this slice freezes the contract, it does not build the
+    transport - "switched off" and "not built yet" are different sentences for
+    the owner, and neither ever pretends the feature works.
+    """
+    on = stream_enabled() if enabled is None else bool(enabled)
+    return 501, {"ok": False, "available": False, "enabled": on,
+                 "stream": "not_built" if on else "off",
+                 "error": STREAM_NOT_BUILT_REASON if on else STREAM_OFF_REASON}
+
 OFF, ON, PAUSED, ENDED = "off", "on", "paused", "ended"
 
 # --------------------------------------------------------------------------
@@ -1755,7 +1797,14 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_GET(self):
         parsed = urlsplit(str(getattr(self, "path", "") or ""))
-        if parsed.path.rstrip("/") != ROUTE:
+        route = parsed.path.rstrip("/")
+        if route == STREAM_ROUTE:
+            # Slice G's frozen stub: the switch and the refusal, no audio path.
+            # Auth is the same gate as every Live request, checked first.
+            if not _allowed(self):
+                return None
+            return self._send(*stream_stub())
+        if route != ROUTE:
             return get0(self)
         if not _allowed(self):
             return None
@@ -1767,6 +1816,11 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_POST(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
+        if route == STREAM_ROUTE:
+            # Before the body is read: the stub never accepts audio or a frame.
+            if not _allowed(self):
+                return None
+            return self._send(*stream_stub())
         if route != ROUTE:
             return post0(self)
         if not _allowed(self):

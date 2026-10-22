@@ -1097,7 +1097,7 @@ def propose(extract, messages, llm, *, source: str = "conversation",
 # or a card you discarded only when ALL of these hold:
 #
 #   * it is not a correction - a correction is never dropped;
-#   * the real embedder is loaded (semantic=True); until fastembed has
+#   * the real embedder is loaded (semantic=True); until the model has
 #     downloaded, this check does not run at all;
 #   * the two say the same words in the same order, once case, punctuation,
 #     "a"/"an"/"the", plurals and "the user"/"the owner" are set aside;

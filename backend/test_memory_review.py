@@ -314,53 +314,43 @@ def t_b13_everyday_facts_about_people_stay_normal():
 # ================================================================ B17 ==
 
 def t_b17_the_models_are_kept_in_jarvis_own_folder():
-    """fastembed stubbed: what folder is each model asked to live in?"""
-    seen = {}
+    """The models live in Jarvis's own data folder, not %TEMP% - and
+    FASTEMBED_CACHE_PATH still wins when it is set (B17).
 
-    class TextEmbedding:
-        def __init__(self, model_name=None, **kw):
-            seen["embed"] = kw.get("cache_dir")
-
-        def embed(self, texts):
-            return [[0.1, 0.2, 0.3] for _ in texts]
-
-    class TextCrossEncoder:
-        def __init__(self, model_name=None, **kw):
-            seen["rerank"] = kw.get("cache_dir")
-
-        def rerank(self, q, texts):
-            return [0.0 for _ in texts]
-
-    fe = types.ModuleType("fastembed")
-    fe.TextEmbedding = TextEmbedding
-    rr = types.ModuleType("fastembed.rerank")
-    ce = types.ModuleType("fastembed.rerank.cross_encoder")
-    ce.TextCrossEncoder = TextCrossEncoder
-    keep = {k: sys.modules.get(k) for k in ("fastembed", "fastembed.rerank",
-                                             "fastembed.rerank.cross_encoder")}
-    sys.modules.update({"fastembed": fe, "fastembed.rerank": rr,
-                        "fastembed.rerank.cross_encoder": ce})
+    Both models are read from that one folder by the direct ONNX path, so the
+    check is that `model_cache_dir()` returns it and that `_cached_snapshot()`
+    - the lookup the loader makes before any download - finds a model placed
+    there. Nothing is downloaded and no engine is imported.
+    """
     old_env = os.environ.pop("FASTEMBED_CACHE_PATH", None)
     try:
-        M.FastEmbedder()
-        M.FastReranker()
         want = str(Path(_fw.CONFIG_DIR) / "models")
-        check("B17: the meaning model is kept in Jarvis's own folder, not the temp folder",
-              seen.get("embed") == want, seen)
-        check("B17: ... and so is the re-ranker", seen.get("rerank") == want, seen)
+        check("B17: the meaning model and the re-ranker live in Jarvis's own folder, "
+              "not the temp folder", M.model_cache_dir() == want,
+              (M.model_cache_dir(), want))
+        for label, model, models in (
+                ("meaning model", M.EMBED_MODEL_DEFAULT, M.ONNX_EMBED_MODELS),
+                ("re-ranker", M.RERANK_MODEL_DEFAULT, M.ONNX_RERANK_MODELS)):
+            spec = models[model]
+            snapshot = (Path(M.model_cache_dir())
+                        / f"models--{spec['source'].replace('/', '--')}"
+                        / "snapshots" / "rev1")
+            model_file = snapshot / spec["file"]
+            model_file.parent.mkdir(parents=True, exist_ok=True)
+            model_file.write_bytes(b"a cached model")
+            for name in M._MODEL_SIDE_FILES:
+                (snapshot / name).write_text("{}", encoding="utf-8")
+            check(f"B17: a cached {label} in that folder is found without a download",
+                  M._cached_snapshot(spec) == snapshot,
+                  (M._cached_snapshot(spec), snapshot))
         os.environ["FASTEMBED_CACHE_PATH"] = str(_TMP / "elsewhere")
-        M.FastEmbedder()
         check("B17: FASTEMBED_CACHE_PATH still wins when it is set",
-              seen.get("embed") == str(_TMP / "elsewhere"), seen)
+              M.model_cache_dir() == str(_TMP / "elsewhere"), M.model_cache_dir())
     finally:
-        os.environ.pop("FASTEMBED_CACHE_PATH", None)
-        if old_env is not None:
+        if old_env is None:
+            os.environ.pop("FASTEMBED_CACHE_PATH", None)
+        else:
             os.environ["FASTEMBED_CACHE_PATH"] = old_env
-        for k, v in keep.items():
-            if v is None:
-                sys.modules.pop(k, None)
-            else:
-                sys.modules[k] = v
 
 
 # ============================================================ I1, I13 ==

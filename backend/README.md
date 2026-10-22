@@ -647,10 +647,12 @@ the approval card can say which fact this will retire before you agree to it.
 
 ### 2. Installing the embedding model bricked every future write
 
-First run without `fastembed` creates `facts_vec` as `float[256]`, the hash
-stand-in's width. `CREATE VIRTUAL TABLE IF NOT EXISTS` never rebuilds it, so
-when the real 384-dimension model finished downloading, every `add_fact` raised
-`Dimension mismatch` — permanently, on a store that had been working.
+First run without the meaning model - because onnxruntime or tokenizers is
+missing, or its download cannot happen yet - creates `facts_vec` as
+`float[256]`, the hash stand-in's width. `CREATE VIRTUAL TABLE IF NOT EXISTS`
+never rebuilds it, so when the real 384-dimension model finished downloading,
+every `add_fact` raised `Dimension mismatch` — permanently, on a store that
+had been working.
 
 Worse, `add_fact`'s `INSERT` commits before the vector write (the connection is
 `isolation_level=None`), so the failure was reported for a fact that had in
@@ -2011,7 +2013,8 @@ Not a column nobody reads:
 Needs `memory-safety`. Independent of everything else.
 
 `_pack` is `struct.pack(f"{n}f", *v)`. It accepts NaN and infinity silently,
-and `FastEmbedder.embed` was:
+and the meaning model's `embed` was (the class was `FastEmbedder` then,
+`OnnxEmbedder` now):
 
 ```python
 def embed(self, texts):
@@ -8705,10 +8708,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPat
 ```
 
 **2. Run the memory self-test.** It uses the real embedding model if your
-Python has fastembed (the one Jarvis uses; if its model is not downloaded
-yet, fastembed downloads it first, about 130 MB - none of your data is sent
-anywhere) and words only otherwise, and says which on its first line. It
-takes about 2-10 minutes. Run it from this repository's folder. The two result files land in a folder called
+Python has the memory search's packages - onnxruntime and tokenizers to run
+it, huggingface-hub to fetch it the first time (the ones Jarvis uses; if its
+model is not downloaded yet, the first run downloads it, about 130 MB - none
+of your data is sent anywhere) and words only otherwise, and says which on
+its first line. It takes about 2-10 minutes. Run it from this repository's
+folder. The two result files land in a folder called
 `jarvis-memory-eval` in your home folder, normally
 `C:\Users\pcadmin\jarvis-memory-eval`; the command opens that folder at the
 end. Open the `.md` file:
@@ -8718,11 +8723,12 @@ py -3 backend\eval_memory.py; explorer "$env:USERPROFILE\jarvis-memory-eval"
 ```
 
 Please send the `.md` file back. The numbers below were measured in the dev
-container, **with words-only search**, because fastembed's model cannot be
-downloaded there. Your PC's run is the first measurement of meaning search,
-and the first real distance-floor sweep: `JARVIS_MEMORY_MAX_DISTANCE = 1.0`
-is still a guess until then. The run also re-chooses the word floor with
-meaning search switched on, and prints its choice.
+container, **with words-only search**, because the memory search's model
+cannot be downloaded there. Your PC's run is the first measurement of
+meaning search, and the first real distance-floor sweep:
+`JARVIS_MEMORY_MAX_DISTANCE = 1.0` is still a guess until then. The run also
+re-chooses the word floor with meaning search switched on, and prints its
+choice.
 
 ## What was measured here (words only, dev container, not your PC)
 
@@ -11778,7 +11784,8 @@ section 5, "Memory ideas 1-4".
 - **The re-ranker** you will not see - it only changes which five facts
   reach the model, and in what order. **It is OFF until your PC's self-test
   shows it helps** (your rule; changed 2026-09-26). The self-test downloads
-  it once, about 80 MB (fastembed does this, like the meaning model).
+  it once, about 80 MB (the memory search's own download path does this, the
+  same way it fetches the meaning model).
 
 ## The self-test numbers
 
@@ -11802,14 +11809,16 @@ before ideas 1, 3 and 4. As a chat turn recalls (the entity layer on):
 
 **The re-ranker is NOT measured.** Its model cannot be downloaded here
 (huggingface.co answers 403 through this container's proxy; tried with
-fastembed 0.8.1). With a word-overlap STAND-IN in its place - which proves
-the wiring, not the gain - recall@5 moved 78.7% -> 78.7% (71 facts),
+fastembed 0.8.1, the library the code used then - the direct ONNX path
+downloads from the same address, so nothing here changes that). With a
+word-overlap STAND-IN in its place - which proves the wiring, not the gain -
+recall@5 moved 78.7% -> 78.7% (71 facts),
 77.7% -> 78.7% (171, unrelated filler), 75.5% -> 75.5% (10,071, same
 topic); MRR 0.698 -> 0.701; two-fact questions lost one at 1,071 and
 10,071 same-topic facts; the middle search time (p50) rose 0.1-0.5 ms.
 **Run the self-test on the PC** to see what the real model does:
-`py -3 backend\eval_memory.py` (it measures the re-ranker when fastembed
-can load it; `--reranker off` skips it).
+`py -3 backend\eval_memory.py` (it measures the re-ranker when the memory
+search can load it; `--reranker off` skips it).
 
 ## 1. The re-ranker
 
@@ -12358,7 +12367,7 @@ one right).
 | B13 | Private details about other people read aloud once saved | done | The topic is kept with the fact (`meta.sensitive`, a label) and read by `jarvis_sensitive.fact_topic`; "I had a TIA" is now your own health, not an aunt's. Everyday facts about people stay normal |
 | B14 | Common ways of saying suicide attempt, self-harm, domestic violence, stalking, homelessness went unflagged | done | Probe file 16/26 -> 26/26, false alarms 1/13 -> 1/13 (that one, "my boss is killing me", was already flagged for "my boss"); the four sets: recall never down, false alarms never up |
 | B15 | Forgotten facts came back for questions about the past | done | F-1 (absent), F-2 guard (a corrected fact still labelled); past questions 8/8 unchanged. `docs/ARCHITECTURE.md`'s line that said the opposite is corrected |
-| B17 | Both memory models stored in the temp folder | done | `cache_dir` = `~/.openjarvis/models` (or `FASTEMBED_CACHE_PATH`); a test with fastembed stubbed |
+| B17 | Both memory models stored in the temp folder | done | `cache_dir` = `~/.openjarvis/models` (or `FASTEMBED_CACHE_PATH`, the name kept from when fastembed owned the folder); `test_memory_review.py` checks the setting still wins |
 | I1 | "boss" = "manager", "GP" = "doctor" and a few more, on lookup only | **kept** | recall@5 78.7 -> 80.9% at 71 facts (+2.2; the review asked +2), every size +2.1-2.2; don't-know 1.47 unchanged; "my wife" still never finds the partner |
 | I2 | Skip the re-ranker at 5 facts or fewer | **not kept** | Recall@5 identical, as it must be, but with the stand-in re-ranker recall@1 fell at one size (64.9 -> 63.8%) and MRR at five (e.g. 0.711 -> 0.701). The time it would save shows only on the PC |
 | I3 | "three" = "3" when checking your words | **kept** | V01-V03 card -> saved; V04 ("three" vs "4") still a card; g05, g06, g14 still cards |
@@ -18831,7 +18840,9 @@ The sentence "This is a simplified what-if, not financial advice." is added by c
 What is here:
 
 - `jarvis_retirement.py` (shipped whole): plain Python (no numpy, no scipy, no monteplan: the
-  backend still supports Python 3.10 and starts without numpy), a fixed random seed so the same
+  code itself still imports on Python 3.10 and starts without numpy; only the pinned install
+  needs 3.11 now, because the lock moved to 3.11 on 2026-10-21 when Pillow 13.0.0 turned out
+  to have no 3.10 build), a fixed random seed so the same
   numbers always give the same answer, every input checked and bounded, the routes, and the
   model-callable door (`tool_call`, wired into `jarvis_agent.py` as `retirement_whatif`; section
   103.6: the chat shows code-written text only, and the tool is opt-in like `my_spending`: add

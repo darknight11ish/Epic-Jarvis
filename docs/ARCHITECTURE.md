@@ -882,7 +882,8 @@ On Windows they go to ETW, and only reach Microsoft if a trace session is
 collecting and the owner's Windows diagnostic-data setting allows it.
 Jarvis switches them off before any model loads, wherever the backend loads
 onnxruntime itself: `jarvis_wakeword.py`, `jarvis_turn.py`, and
-`jarvis_memory.quiet_onnxruntime()` before fastembed
+`jarvis_memory.quiet_onnxruntime()` before the memory search loads its own
+meaning model or re-ranker on ONNX Runtime directly
 (`backend/test_ort_quiet.py`). **Known limit:** sherpa-onnx (speech-to-text,
 Kokoro, the voice check) carries its own copy of ONNX Runtime with no switch
 Jarvis can reach. For that copy, Windows' own setting (Settings → Privacy &
@@ -1218,8 +1219,8 @@ migration plus a full re-embed, and `vec0` is a virtual table most extensions
 cannot touch. Cost it honestly or design around it.
 
 **The distance floor is inert on first boot.** It sits behind
-`self.embedder.semantic`, and until fastembed finishes downloading the
-embedder is `HashEmbedder` with `semantic=False`. Until 2026-09-24, on day
+`self.embedder.semantic`, and until the meaning model finishes downloading
+the embedder is `HashEmbedder` with `semantic=False`. Until 2026-09-24, on day
 one the tail *was* padded to `k` on any shared content word ("what is my dog
 called?" got the cat, on "called"). The word list now has its own floor:
 a hit must match `JARVIS_MEMORY_MIN_WORD_SHARE` (default 0.1) of the
@@ -1394,9 +1395,9 @@ fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORD
 - **The re-ranker** (idea 1). Chat recall only (`jarvis_past.recall` ->
   `search(rerank=True)`): the top 20 facts that pass every filter are
   re-ordered by a small cross-encoder on the processor
-  (`Xenova/ms-marco-MiniLM-L-6-v2` through fastembed, Apache-2.0, English
-  only) before the first `k` go to the model. It only re-orders - no fact
-  added, `k` and both floors unchanged - and never touches `find_one()`,
+  (`Xenova/ms-marco-MiniLM-L-6-v2` on ONNX Runtime directly, Apache-2.0,
+  English only) before the first `k` go to the model. It only re-orders - no
+  fact added, `k` and both floors unchanged - and never touches `find_one()`,
   corrections or anything that writes. **Off by default** (2026-09-26: a
   memory change is kept only once the PC's self-test shows it helps);
   `JARVIS_MEMORY_RERANK=1` turns it on, and `eval_memory.py` measures it
@@ -1476,8 +1477,10 @@ added, each measured by the self-test before it was kept:
 - **"Said again" after Erase is a day, not a moment** (I12): an erased
   fact's said-again times are rounded down to the day, the count kept.
 - **Both memory models live in Jarvis's own folder** (B17,
-  `~/.openjarvis/models`, or `FASTEMBED_CACHE_PATH`), not the temp folder a
-  disk clean-up empties.
+  `~/.openjarvis/models`; the `FASTEMBED_CACHE_PATH` setting still wins when
+  set, its name kept from when fastembed owned the folder so a PC that
+  already set it keeps working), not the temp folder a disk clean-up
+  empties.
 
 **Smarter memory dates, "Where did I put ...?" and the overnight tidy**
 (the owner's choice of 2026-09-28, docs/RESEARCH-AUDIT-2026-09-28.md
@@ -2561,7 +2564,7 @@ are deliberate and recorded rather than left to be discovered:
 | Shutting the backend down (`/api/shutdown`) | The phone would then have nothing to reach and no way to undo it. |
 | Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
 | Fetching the look spec (`/api/visual-spec`) | The phone ships its own copy and checks it in a unit test (`SpecDriftTest`); `JARVIS-API.md` says the phone never fetches it. |
-| "Finished, or only paused?" (`/api/voice/turn`) | The phone runs the same Smart Turn model itself (`voice/SmartTurn.kt`), so its audio never leaves it just to ask. The desktop asks its own PC over loopback. |
+| "Finished, or only paused?" (`/api/voice/turn`) | The phone runs the same Smart Turn model itself (`voice/SmartTurn.kt`), so its audio never leaves it just to ask. The desktop asks its own PC over loopback. **Fast path (2026-10-21):** the route also takes raw 16 kHz mono int16 PCM (sniffed; old WAV clients unchanged), and `jarvis_turn.predict_pcm()`/`TurnStream` answer in process with no WAV/base64/HTTP, building the log-mel picture incrementally (`MelStream`) over the 32 ms chunks against the unchanged `features()` reference (tested within a stated tolerance); the session was already cached, CPU only, no new dependencies. **The owner check's first window (same day, V1-Path A):** `hear()` asks the same `jarvis_voice.verify` on the clip's first ~1.2 s of voice (`_decide_owner`), decides only outside `[voice] early_verify_margin` (0.06) and re-checks the FULL clip inside the band; the verify-first privacy rule and the stated costs are unchanged (words made beside the check are discarded when it says no, and a refusal still waits for that worker, so timing does not reveal the distinction). `[voice] early_verify_window = 0` restores the old single full-clip call. Hardware latency is NOT-MEASURED. |
 | Looking at the screen: the Alt+Shift+S "Look at this" key, the optional Alt+Shift+V "Watch with me" key, and the always-on-top "Jarvis is watching" badge (**rewritten 2026-09-28**) | **The old row is replaced.** It said (2026-09-24) that the phone should not capture the screen live, because Android's photo picker already offered its screenshots. The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the owner's screen, on the PC and the phone") replaces that: **both apps get both halves** (`docs/SCREEN-DESIGN.md` §6) - on the phone, "Look at this" through the assistant gesture and "Watch with me" through Android's own screen sharing, with Android's consent dialog every session, the phone's own "Never look at" list of apps, and the pictures sent only to the PC over Tailscale/Meshnet, never streamed. What stays on the desktop alone is the **keys and the badge**: keyboard shortcuts are PC things (like the hotkeys below), and the phone's sign is its persistent "Jarvis is watching · Stop" notification and Android's own status-bar icon instead of a floating window. Built 2026-09-29 (JARVIS-API §62, §96): the backend, the desktop and the phone. **One-sided on purpose, and why:** (a) **the Never look at list is per device**: the PC's holds programs and websites and is refused from any other device (`/api/screen/never-look`, `deliberate` in `tools/check_parity.py`); the phone's holds Android apps, on the phone (`data/ScreenNever.kt`), because neither side can see the other's programs; (b) **the keys, the badge and the tray row are the PC's**, like the other hotkeys; the phone's signs are a Home plate (for the PC's watching, with Stop) and its own ongoing notification (for its own Watch); the PC's watching has no phone notification yet; (c) **starting, asking and extending a PC watch is the PC's alone** - the PC refuses those from any other device, and the phone only reads the sign and can Stop it (stopping only makes Jarvis look less); (d) **the phone's own screen is looked at only on the phone**: the assistant gesture (Look at this) and Android's screen sharing (Watch this phone with me) have no PC equivalent, and their words or one picture travel only inside a chat question to the PC, over Tailscale or Meshnet; (e) **the phone's Watch needs Android's Usage access and its own consent dialog every time**, which the PC has no version of. **Screen safety (2026-09-29, API §62.13):** hiding anything that looks like a key, password or card number covers BOTH apps (the phone's screen text and screen picture are cleaned on the PC before anything uses them); **one-sided on purpose:** (f) **painting other windows black, the private-window pause and the streaming sites on the Never look at list are the PC's** - the phone has no windows behind the one in front to paint, Chrome's Incognito windows block screenshots by default and streaming apps use copy protection, so the assist gesture gets no text or picture from them (not tried on a real phone), and its own list already covers password managers and bank apps. (g) **the phone's Watch cannot pause on password boxes** (audit, 2026-09-29; the owner chose to write it down and keep Watch as it is): Android does not reliably say when a password box is in front, so the phone pauses only for apps on its Never look at list, bank and password-manager apps, a switched-off screen and a near-black picture. The PC still blacks out anything shaped like a key, password or card number, but a password shown with a "show" eye is not caught. Not tried on a real phone. **Picture mode (2026-09-29, API §96.1):** (2026-09-30: with the second/third card's "Pictures" lane running, a look uses that lane's picture model first and the processor reader is the fallback - the same cleaned picture, no new switch, this PC only) its model runs on the PC only - both apps show and set its switch (`/api/screen/picture`, `ported`), but neither reads a picture for it: the phone's screenshot goes to the PC as before and the PC's picture reader looks at it, after secrets are blacked out. |
 | Starting a pairing, the QR code and the typed code, and watching or cancelling it (`/api/pair/start`, `/session`, `/cancel`; QR-code pairing, 2026-09-28, `docs/PAIRING-DESIGN.md` section 12) | The code is shown on the PC and the `pair_device` card is approved there with Windows Hello; the backend refuses these routes from any other device (403 `pc_only`). The phone is the device being paired, so it scans or types the code instead (the phone table below). |
 | Turning on signed approvals and the signing challenge (`/api/devices/approval-key`, `/api/approve/challenge`; pairing phase 2, 2026-09-29, `docs/PAIRING-DESIGN.md` section 11) | The signing key lives in a phone's Keystore and the fingerprint or PIN is asked on the phone; the desktop IS the PC and its risky approvals are checked by Windows Hello on the PC itself, so it has no key to register and never signs. It only reads the result: the device list's `approval_key` (`false`, `"waiting"` or `true`) beside each phone. `tools/check_parity.py` lists both routes as phone-only. |

@@ -74,7 +74,7 @@ THE SEARCH INDEX - a derived file that makes `search` rank, not just match
     re-indexed first, a row whose file has gone is dropped, and deleting the
     index rebuilds it. The FTS table is CONTENTLESS, so a file's words are
     indexed and its text is never stored in the index.
-  * WITHOUT fastembed (CI, or a PC that has never had it) the meaning half is
+  * WITHOUT A MEANING MODEL (CI, or a PC that has never had one) the meaning half is
     simply not used and `bm25` alone ranks. A missing model is never an error
     and never an empty answer; with no usable index at all, `search` is the
     plain word scan it has always been. `JARVIS_DOCUMENTS_EMBED=0` turns the
@@ -127,7 +127,7 @@ names without them.
 
 Standard library only, apart from MarkItDown in the child process, the shared
 closing-connection helper (jarvis_sqlite.py) the search index uses, and the
-meaning model (fastembed, inside jarvis_memory.py, imported only when the
+meaning model (inside jarvis_memory.py, on ONNX Runtime, imported only when the
 index is used, and never required). Nothing here opens a socket.
 """
 from __future__ import annotations
@@ -896,7 +896,7 @@ def _snippet(text: str, want: list) -> str:
 # the shape of the DERIVED tables it would drop and rebuild them, which loses
 # no document because every document is on disk.
 #
-# WITHOUT A MEANING MODEL (CI, and any PC without fastembed). The vector half
+# WITHOUT A MEANING MODEL (CI, and any PC without one). The vector half
 # is simply not used: `bm25` alone ranks, which is the same word-index ranking
 # a machine with the model gets, minus the semantic recall. A missing embedder
 # is never an error and never an empty answer.
@@ -1411,9 +1411,9 @@ def the_index() -> TextIndex:
 def document_embedder():
     """The meaning model for document search, or None - never an exception.
 
-    This machine already knows one way to load fastembed for a search, and it
+    This machine already knows one way to load the meaning model for a search, and it
     is `jarvis_memory`'s. Reusing it means one model in memory and one model
-    on disk, not a second copy of either. It never raises: with no fastembed
+    on disk, not a second copy of either. It never raises: with no meaning model
     (or `JARVIS_NO_EMBED=1`) it hands back a hash stand-in, and a stand-in's
     numbers are not meaning - so it is refused here by checking `semantic`,
     exactly the test jarvis_memory.search() makes for its own vector half.

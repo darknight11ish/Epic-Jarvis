@@ -2763,3 +2763,54 @@ Built in `jarvis-desktop/src/jarvis_hud.html` (copied byte-identically to
   * **What is built.** `backend/jarvis_price_radar.py`: a pure-Python `tfs` query builder (byte-parity with the MIT `punitarani/fli` reference, goldens in the suite), a tolerant parser that keeps whole integer cents and never invents a price, and a SQLite history with last-known-good/stale semantics and an outside-text diff. No new dependency; the twin is in `jarvis-backend/` and it ships whole.
   * **What it refuses, hard.** No checkout/cart/seat-hold/PNR path exists; no cookies, login or vault credential is used; a 403/429 is stale `blocked_by_site_challenge` and is never retried or challenged; the only host is the public Google Flights page (strict SSRF allowlist, redirects refused); no proxy in F1; checks are at least 300 s apart with +/-30% jitter. The endpoint is **unofficial** and may break - it is a public search page, not an API.
   * **What is off, and how it turns on.** `[price_radar] enabled = false` in both shipped toml copies; nothing runs until the owner turns it on with one `change_own_config` approval card, and turning it off is immediate. No live request is made in the tests; the real payload is NOT-MEASURED until the switch is on. The approved disclosure words are in the module and both toml copies so F2/F3 reuse them.
+
+## 2026-10-21 - the owner check looks at the first window of voice; Smart Turn's picture is built as the audio arrives
+
+Owner approved "the whole audited program" (the Live & Voice audit, 2026-10-21
+morning), whose revised Slice B is backend latency plumbing with no new
+dependencies. Two decisions were needed inside it:
+
+**1. The owner check may decide on the first ~1.2 s of voice.** The audit's
+V1-Path A: a speaker model gets nearly all of its information from one clean
+second, and the check costs a fraction of a whole-clip check, so `hear()` now
+asks the SAME `jarvis_voice.verify` on the clip's first window
+(`[voice] early_verify_window`, default 1.2 s; `early_verify_margin`, default
+0.06). It is a **saving, not a different standard**: only a score at least the
+margin past the bar (either way) decides on the window; anything inside the
+band is re-checked on the FULL clip exactly as before, and if the window's
+worker raises the full clip is checked rather than the error being trusted.
+`early_verify_window = 0` restores the old single full-clip call. The
+verify-first privacy rule does not move: words are still made beside the check
+and, on a no, the worker is joined and the words discarded unread - and a
+refusal still **costs that transcription**, so the app cannot be fingerprinted
+by how fast it refused. The owner's "verified before the words are used"
+wording still holds; what changed is how much audio the verdict needed. The
+check-only path of a Live voice pause gets the window too (same check).
+**Ruling 10.4 (Gemini's sign-off, same day): an early verdict is bound to one
+recording.** The single-shot path builds and purges its window worker inside
+each `hear()` call and keeps no audio or verdict at module/class level; a
+`StreamingVerify` instance ties its check to the current recording, clears
+worker, buffer and token in `verdict()`'s `finally:`, and `abort()` covers a
+recording abandoned before an answer - so no utterance can inherit the
+previous one's early verdict. Three regression tests cover reuse and abort.
+
+**2. Smart Turn gets a raw-PCM, in-process path whose features follow the
+audio in.** `predict_pcm()`/`TurnStream` take raw 16 kHz mono int16 PCM with
+no WAV/base64/HTTP, and `MelStream` caches the FFT of every frame a future 8 s
+window can ask for, correcting cached raw frames for the window's mean and
+variance analytically at the end. The old `features()` stays unchanged as the
+reference, and every incremental case is tested against it inside a stated
+tolerance; the ONNX session was already cached, CPU only, no new dependency.
+The wire is unchanged: `voice.rs` sends the WAV it always sent, and the phone
+runs its own model. **What is not claimed:** any real-hardware latency - the
+audit's 90 ms / 12-18 ms / 140 ms figures are unmeasured here (no CAM++
+weights, no Parakeet weights, no Smart Turn ONNX on this machine, no
+microphone), the tests record stand-in mechanism numbers only, and the honest
+gate for a spoken-sentence before/after remains the owner's retrain plus one
+measured Live sentence.
+
+Built in `backend/jarvis_speech.py` and `backend/jarvis_turn.py` (both mirrored
+to `jarvis-backend/`), proven by `backend/test_voice_parallel.py`,
+`backend/test_live.py` and `backend/test_turn.py`; documented in
+`docs/JARVIS-API.md` (the turn route and the owner check) and
+`docs/ARCHITECTURE.md` §8's Smart Turn row.

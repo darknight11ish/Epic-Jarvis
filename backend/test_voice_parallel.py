@@ -30,6 +30,17 @@ EVERY sink `hear()` has:
      behaviour: checked first, and a passing clip turned into words after.
   6. THE DELAY NUMBER is the transcription's own length, not the short wait
      for a worker that was already running.
+  7. THE EARLY WINDOW (2026-10-21, the audit's V1-Path A): the owner check
+     is asked on the clip's FIRST ~1.2 s rather than the whole clip. A clear
+     answer decides on its own; a score inside the margin is re-checked on
+     the FULL clip exactly as before (`_decide_owner`, `_early_decides`).
+     The privacy rule does not move: the words are still made beside the
+     check and thrown away unread when the answer is no, and a REFUSAL still
+     costs the transcription (the worker is joined before `hear()` returns),
+     so the caller cannot tell "verified" from "refused" by a short reply.
+     `StreamingVerify` is the same rule for a caller that feeds chunks while
+     the owner is still speaking: the check starts as soon as a window of
+     voice has arrived, so end of speech is answered at once.
 
 The parallelism assertion is a MECHANISM test, not a benchmark: the stand-ins
 sleep, and the test checks that the transcription STARTED before the owner
@@ -79,6 +90,7 @@ import jarvis_speech as S  # noqa: E402
 
 PASSED, FAILED = [], []
 WORKER_NAME = "jarvis-stt-beside-check"
+VERIFY_WORKER = "jarvis-verify-beside-check"
 
 
 def check(name, cond, detail=""):
@@ -87,7 +99,8 @@ def check(name, cond, detail=""):
 
 
 def workers_alive():
-    return [t for t in threading.enumerate() if t.name == WORKER_NAME and t.is_alive()]
+    return [t for t in threading.enumerate()
+            if t.name in (WORKER_NAME, VERIFY_WORKER) and t.is_alive()]
 
 
 # ---------------------------------------------------------------------------
@@ -95,11 +108,11 @@ def workers_alive():
 # ---------------------------------------------------------------------------
 
 class Verdict:
-    def __init__(self, owner=True, reason=""):
+    def __init__(self, owner=True, reason="", score=None, threshold=0.5):
         self.is_owner = owner
         self.reason = reason or ("" if owner else "that did not sound like you")
-        self.score = 0.99 if owner else 0.1
-        self.threshold = 0.5
+        self.score = (0.99 if owner else 0.1) if score is None else float(score)
+        self.threshold = float(threshold)
         self.mode = "owner"
         self.voice_print = "desk"
         self.strictness = "very_strict"
@@ -159,7 +172,8 @@ class World:
 
     def __init__(self, owner=True, verify_boom=False, transcribe_boom=False,
                  verify_seconds=0.0, transcribe_seconds=0.0,
-                 transcribe_text="what time is my meeting", engine=True, live=None):
+                 transcribe_text="what time is my meeting", engine=True, live=None,
+                 verify_script=None):
         self.owner = owner
         self.verify_boom = verify_boom
         self.transcribe_boom = transcribe_boom
@@ -168,8 +182,13 @@ class World:
         self.transcribe_text = transcribe_text
         self.engine = engine
         self.live = live
+        #: Per-call answers for the owner check: [{"owner":bool, "score":float,
+        #: "seconds":float, "boom":bool}, ...] - consumed in order. Empty:
+        #: the plain `owner`/`verify_seconds` answer for every call.
+        self.verify_script = list(verify_script or [])
         self.calls = []            # [("owner_check" | "stt", perf_counter)]
         self.times = {}            # "verify_start"/"verify_end"/"stt_start"/"stt_end"
+        self.sample_counts = []    # how many samples each owner check was given
         self.noted = []            # (words, ...) _note_for_history was given
         self.flows = []            # every _flow() call
         self.verdicts = []
@@ -178,13 +197,16 @@ class World:
 
     def _verify(self, samples, embedder, **kw):
         self.calls.append(("owner_check", time.perf_counter()))
+        self.sample_counts.append(len(samples))
         self.times["verify_start"] = time.perf_counter()
-        if self.verify_seconds:
-            time.sleep(self.verify_seconds)
+        spec = self.verify_script.pop(0) if self.verify_script else {}
+        seconds = spec.get("seconds", self.verify_seconds)
+        if seconds:
+            time.sleep(seconds)
         self.times["verify_end"] = time.perf_counter()
-        if self.verify_boom:
+        if spec.get("boom") or self.verify_boom:
             raise RuntimeError("the speaker model failed")
-        v = Verdict(self.owner)
+        v = Verdict(spec.get("owner", self.owner), score=spec.get("score"))
         self.verdicts.append(v)
         return v
 
@@ -423,6 +445,225 @@ def t_the_audio_reference_is_released_after_the_worker():
         early = S._EarlyStt(clip, 16000)
         early.join()
     check("a finished worker no longer holds the clip", early._samples is None)
+
+
+# ---------------------------------------------------------------------------
+#   5. The early window: the check starts on the first ~1.2 s, not the clip
+# ---------------------------------------------------------------------------
+
+def t_early_window_answer_is_used_at_end_of_speech():
+    """A clear first-window answer decides; the full clip is not checked.
+
+    TEST-MODE mechanism, not a benchmark: the stand-ins are what the numbers
+    here describe. The window check is given ~1.2 s of the clip, and the call
+    no longer waits for the full-clip check's sleep - which is what the real
+    check's cost difference is made of. The real CAM++/Parakeet times are
+    NOT-MEASURED here (no weights, no microphone) and are not claimed.
+    """
+    script = [{"owner": True, "score": 0.97, "seconds": 0.10},
+              {"owner": True, "score": 0.99, "seconds": 0.80}]
+    with World(owner=True, transcribe_seconds=0.05, verify_script=script) as w:
+        t0 = time.perf_counter()
+        heard = _hear(w, source="push_to_talk", mic="desktop")
+        wall = time.perf_counter() - t0
+    check("the owner's words come back", heard.is_owner and heard.text, heard)
+    check("the window's answer was the one used",
+          sorted(c for c, _t in w.calls) == ["owner_check", "stt"], w.calls)
+    check("...and it was given ~1.2 s of the clip, not all of it",
+          w.sample_counts and 18000 <= w.sample_counts[0] <= 19500, w.sample_counts)
+    check("...the call did not wait for the full-clip check",
+          wall < 0.6, f"wall {wall:.3f}s (window 0.10 s, full would have added 0.80 s)")
+    steps = w.flows[0][0][2] if w.flows else {}
+    check("the delay table says the early check answered",
+          steps.get("owner_check_early") == 1.0, steps)
+    print(f"  TEST-MODE numbers: window check 100 ms (stand-in), call {wall * 1000:.0f} ms, "
+          "full-clip stand-in 800 ms not run - NOT hardware latency")
+
+
+def t_a_borderline_window_is_rechecked_on_the_full_clip():
+    """Inside the margin, the full clip decides exactly as it always did."""
+    script = [{"owner": True, "score": 0.52, "seconds": 0.02},   # inside +0.06 band
+              {"owner": True, "score": 0.99, "seconds": 0.02}]
+    with World(owner=True, verify_script=script) as w:
+        heard = _hear(w, source="push_to_talk", mic="desktop")
+    counts = [c for c, _t in w.calls]
+    check("the window was asked, then the full clip", counts == ["stt", "owner_check", "owner_check"]
+          or counts == ["owner_check", "owner_check", "stt"], counts)
+    check("...the full clip really got the whole clip",
+          len(w.sample_counts) == 2 and w.sample_counts[1] == 40000, w.sample_counts)
+    check("...the answer is the full clip's", heard.is_owner and heard.text, heard)
+    steps = w.flows[0][0][2] if w.flows else {}
+    check("...and the delay table does not claim the early path",
+          steps.get("owner_check_early") == 0.0, steps)
+
+
+def t_a_clear_refusal_on_the_window_still_costs_the_transcription():
+    """Privacy + the stated cost: the words are made beside the check and
+    thrown away, and the refusal waits for them, so it cannot be told apart
+    from a verified clip by a suspiciously short answer."""
+    script = [{"owner": False, "score": 0.05, "seconds": 0.02}]
+    with World(owner=False, transcribe_seconds=0.30, verify_script=script) as w:
+        t0 = time.perf_counter()
+        heard = _hear(w, source="push_to_talk", mic="desktop")
+        wall = time.perf_counter() - t0
+    check("the stranger is refused", not heard.is_owner and heard.text == "", heard)
+    check("...on the window alone", len(w.sample_counts) == 1 and
+          18000 <= w.sample_counts[0] <= 19500, w.sample_counts)
+    check("...the transcription still ran (and was discarded)",
+          any(c == "stt" for c, _t in w.calls), w.calls)
+    check("...the refusal took at least the transcription's length",
+          wall >= 0.24, f"wall {wall:.3f}s vs transcription stand-in 0.30 s")
+    check("NOT RETURNED / STORED / LOGGED: the existing sinks are empty",
+          not any(SECRET in json.dumps(h.as_dict()) for h in [heard])
+          and w.noted == [] and w.flows == [], (w.noted, w.flows))
+
+
+def t_a_failing_window_worker_falls_back_to_the_full_clip():
+    script = [{"boom": True}, {"owner": True, "score": 0.97}]
+    with World(owner=True, verify_script=script) as w:
+        heard = _hear(w, source="push_to_talk", mic="desktop")
+    check("a worker that raises is not a refusal: the full clip is checked",
+          heard.is_owner and len(w.sample_counts) == 2 and w.sample_counts[1] == 40000,
+          (heard, w.sample_counts))
+    check("...and no verify worker is left behind",
+          not [t for t in threading.enumerate()
+               if t.name == VERIFY_WORKER and t.is_alive()], threading.enumerate())
+
+
+def t_early_window_can_be_switched_off_and_the_old_path_returns():
+    with World(owner=True) as w, \
+            mock.patch.object(S, "_early_verify_window", lambda: 0.0):
+        heard = _hear(w, source="push_to_talk", mic="desktop")
+    check("[voice] early_verify_window = 0: one full-clip check, exactly as before",
+          heard.is_owner and w.sample_counts == [40000], w.sample_counts)
+    steps = w.flows[0][0][2] if w.flows else {}
+    check("...and the delay table says the early path did not run",
+          steps.get("owner_check_early") == 0.0, steps)
+
+
+def t_streaming_verify_answers_before_end_of_speech():
+    """The chunk-fed path: the check starts once a window of voice has
+    arrived, so end of speech waits only for the answer that is already there."""
+    script = [{"owner": True, "score": 0.97, "seconds": 0.25}]
+    with World(owner=True, verify_script=script) as w:
+        streaming = S.StreamingVerify(16000, mic="desktop", window=1.2)
+        state = {}
+        chunk = (b"\x66\x06" * 512)          # 0.1 amplitude, 512 samples = 32 ms
+        for _ in range(40):                    # 1.28 s of voiced audio
+            state = streaming.feed(chunk)
+            if state["started"]:
+                break
+        started_before_end = state["started"]
+        time.sleep(0.30)                       # the window check finishes meanwhile
+        t0 = time.perf_counter()
+        verdict, _emb, used_early, _ms = streaming.verdict(samples=[0.1] * 40000)
+        wait = time.perf_counter() - t0
+    check("the check started while the audio was still arriving", started_before_end, state)
+    check("...it was given the window, not the whole clip",
+          w.sample_counts and w.sample_counts[0] <= 19500, w.sample_counts)
+    check("...end of speech used that answer", used_early is True, used_early)
+    check("...and the full clip was not checked", len(w.sample_counts) == 1, w.sample_counts)
+    check("...so end-of-speech waited only milliseconds (stand-in check 250 ms)",
+          wait < 0.05, f"wait {wait * 1000:.1f} ms")
+    check("...and it produced no words at all",
+          not hasattr(streaming, "text") and w.noted == [] and w.flows == [])
+    print(f"  TEST-MODE numbers: window check stand-in 250 ms, end-of-speech wait "
+          f"{wait * 1000:.1f} ms - mechanism only, NOT hardware latency")
+
+
+# ---------------------------------------------------------------------------
+#   6. Ruling 10.4: an early verdict belongs to ONE recording, never the next
+# ---------------------------------------------------------------------------
+
+
+def _voiced_pcm(seconds: float = 1.28) -> bytes:
+    """Voiced 16 kHz mono int16 PCM: 0.1 amplitude, 512-sample chunks."""
+    chunk = b"\x66\x06" * 512
+    want = int(seconds * 16000) * 2
+    return chunk * (want // len(chunk) + 1)
+
+
+def _feed_until_started(streaming, seconds: float = 1.28):
+    data = _voiced_pcm(seconds)
+    state = {}
+    for i in range(0, len(data), 1024):
+        state = streaming.feed(data[i:i + 1024])
+        if state["started"]:
+            break
+    return state
+
+
+def t_streaming_verify_never_carries_a_verdict_to_the_next_utterance():
+    """One instance, two sentences: the second must start its OWN window
+    check and answer from it, never from the first sentence's verdict."""
+    script = [{"owner": True, "score": 0.97, "seconds": 0.02},    # sentence 1
+              {"owner": False, "score": 0.05, "seconds": 0.02}]   # sentence 2
+    with World(owner=True, verify_script=script) as w:
+        sv = S.StreamingVerify(16000, mic="desktop", window=1.2)
+        st1 = _feed_until_started(sv)
+        check("the first utterance started a window check", st1["started"], st1)
+        time.sleep(0.05)
+        v1, _e1, early1, _ms1 = sv.verdict(samples=[0.1] * 40000)
+        first_counts = list(w.sample_counts)
+        st2 = _feed_until_started(sv)
+        check("a second utterance on the SAME instance starts a fresh check",
+              st2["started"], st2)
+        time.sleep(0.05)
+        v2, _e2, early2, _ms2 = sv.verdict(samples=[0.1] * 40000)
+        all_counts = list(w.sample_counts)
+    check("sentence 1: the owner's window decided", v1.is_owner and early1 is True, v1)
+    check("...on one window of audio, not the whole clip",
+          first_counts and 18000 <= first_counts[0] <= 19500, first_counts)
+    check("the second sentence's answer came from a NEW check",
+          len(all_counts) == len(first_counts) + 1, (first_counts, all_counts))
+    check("...and it is ITS refusal, not the first sentence's pass",
+          (not v2.is_owner) and early2 is True, v2)
+    print("  TEST-MODE numbers: two sentences, one StreamingVerify instance, "
+          f"{len(all_counts)} window checks (2 expected) - no inherited verdict")
+
+
+def t_an_aborted_recording_cannot_answer_the_next_one():
+    """A recording abandoned before its verdict (stop/hang-up) leaves no audio
+    and no answer behind, and the full-clip fallback of the next recording
+    sees only the next recording's samples."""
+    script = [{"owner": True, "score": 0.97, "seconds": 0.02},    # abandoned check
+              {"owner": False, "score": 0.52, "seconds": 0.02},   # sentence 2: borderline
+              {"owner": False, "score": 0.97, "seconds": 0.02}]   # full clip: still a stranger
+    with World(owner=True, verify_script=script) as w:
+        sv = S.StreamingVerify(16000, mic="desktop", window=1.2)
+        _feed_until_started(sv)
+        time.sleep(0.05)
+        sv.abort()
+        check("abort() keeps no audio and no worker from the abandoned recording",
+              sv.voiced_seconds == 0.0 and not sv.started
+              and not [t for t in threading.enumerate()
+                       if t.name == VERIFY_WORKER and t.is_alive()],
+              (sv.voiced_seconds, sv.started))
+        _feed_until_started(sv)
+        time.sleep(0.05)
+        v, _e, early, _ms = sv.verdict()        # its own buffer; no caller samples
+    check("the abandoned recording's 'owner' verdict never comes back",
+          (not v.is_owner) and early is False, (v, early))
+    check("...the fallback full check got the SECOND recording only (1.2 s, not 2.4 s)",
+          w.sample_counts and 18000 <= w.sample_counts[-1] <= 19500, w.sample_counts)
+    print("  TEST-MODE numbers: aborted recording then a stranger - "
+          f"full-clip fallback saw {w.sample_counts[-1]} samples (one window)")
+
+
+def t_each_hear_gets_its_own_early_verdict():
+    """The single-shot path builds a new window worker per call; nothing is
+    cached between utterances, so the second call cannot inherit the first's."""
+    script = [{"owner": True, "score": 0.97},
+              {"owner": False, "score": 0.05}]
+    with World(owner=True, verify_script=script) as w:
+        first = _hear(w, source="push_to_talk", mic="desktop")
+        second = _hear(w, source="push_to_talk", mic="desktop")
+        counts = list(w.sample_counts)
+    check("each hear() asked the check on its own fresh window",
+          counts == [19200, 19200], counts)
+    check("the first recording passes", first.is_owner and first.text, first)
+    check("the second is refused on ITS verdict, not the first's",
+          (not second.is_owner) and second.text == "", second)
 
 
 if __name__ == "__main__":

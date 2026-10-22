@@ -147,14 +147,15 @@ _LOCK = threading.RLock()
 
 
 def model_cache_dir() -> str:
-    """Where fastembed keeps the meaning model and the re-ranker (the
-    memory review of 2026-09-27, B17): FASTEMBED_CACHE_PATH if set, else a
-    "models" folder in Jarvis's own data folder (~/.openjarvis/models).
+    """Where Jarvis keeps the meaning model and the re-ranker (the memory
+    review of 2026-09-27, B17): FASTEMBED_CACHE_PATH if set, else a "models"
+    folder in Jarvis's own data folder (~/.openjarvis/models).
 
-    Left to itself fastembed uses the system temp folder (%TEMP%\\
-    fastembed_cache on Windows), which a disk clean-up empties - then both
-    models download again, and offline the re-ranker switches off and search
-    falls back to words only, until the next start that can download."""
+    The folder is a Hugging Face cache, and it is unchanged from when fastembed
+    owned it, so a model that is already here is found and used WITHOUT a
+    download (or a network round-trip) by the direct ONNX path. The variable's
+    name is kept for the same reason: a PC that already set it keeps working,
+    and the installed base's models stay where they are."""
     env = os.environ.get("FASTEMBED_CACHE_PATH")
     path = Path(os.path.expanduser(env)) if env else _config_dir() / "models"
     try:
@@ -263,8 +264,8 @@ def _share_env(name: str, default: float) -> float:
 #: Every word-search hit was fused in with no cut-off at all, so a question
 #: that shared ONE ordinary word with a fact got that fact: "what is my dog
 #: called?" came back with "Owner's cat is called Biscuit", on nothing but
-#: "called". On day one - before fastembed has downloaded - words are the
-#: only list there is, so this was the whole of recall.
+#: "called". On day one - before the meaning model has downloaded - words are
+#: the only list there is, so this was the whole of recall.
 #:
 #: The rule: a fact must match at least this SHARE of the question's content
 #: words, each word weighted by how rare it is in the store (the same idf
@@ -381,12 +382,12 @@ def _content_words(text: str) -> list[str]:
 # --------------------------------------------------------------------------
 
 def quiet_onnxruntime() -> None:
-    """Switch off ONNX Runtime's own trace events before fastembed loads a
-    model with it. They are ON by default in Microsoft's builds (its
-    docs/Privacy.md; on Windows they go to ETW and, with the owner's Windows
-    diagnostic-data consent, may reach Microsoft). Rule 1: nothing about the
-    owner leaves the PC. Process-wide and repeatable; a missing or older
-    onnxruntime is harmless."""
+    """Switch off ONNX Runtime's own trace events before a model is loaded.
+    They are ON by default in Microsoft's builds (its docs/Privacy.md; on
+    Windows they go to ETW and, with the owner's Windows diagnostic-data
+    consent, may reach Microsoft). Rule 1: nothing about the owner leaves the
+    PC. Process-wide and repeatable; a missing or older onnxruntime is
+    harmless."""
     try:
         import onnxruntime
         onnxruntime.disable_telemetry_events()
@@ -483,13 +484,22 @@ class HashEmbedder(Embedder):
 EMBED_MODEL_DEFAULT = "BAAI/bge-small-en-v1.5"
 
 #: What some models need written in front of a QUESTION and of a stored FACT
-#: to work as their makers measured them. From fastembed 0.8.1's own model
+#: to work as their makers measured them. From the model library's own 0.8.1
 #: list, which says so in each model's description (read 2026-09-28):
 #: EmbeddingGemma wants "task: search result | query: " and "title: none |
 #: text: "; Qwen3-Embedding wants "Instruct: <the task>\nQuery:" before a
-#: question and nothing before a fact. fastembed itself adds none of them
-#: (its query_embed() is plain embed() for these models), so they are added
+#: question and nothing before a fact. The library itself added none of them
+#: (its query_embed() was plain embed() for these models), so they are added
 #: here. The default model has none, so its vectors and name are unchanged.
+#:
+#: REACHABILITY, 2026-10-21: the direct ONNX path copies the model list this
+#: project's pinned library had (0.8.0). These two models arrived in 0.8.1,
+#: which the lock deliberately never took, so a locked install could only run
+#: them after a hand-install - and the direct path does not list them yet.
+#: The entries are kept because the STORE's name for a model carries the
+#: prefix version (EMBED_PREFIX_VERSION), so a store written by a build that
+#: did run one still identifies its vectors correctly rather than silently
+#: comparing them with a different model's.
 EMBED_PREFIXES = {
     "google/embeddinggemma-300m": ("task: search result | query: ", "title: none | text: "),
     "Qwen/Qwen3-Embedding-0.6B": (
@@ -509,16 +519,8 @@ def embed_model_wanted() -> str:
 
 
 class EmbedModelUnavailable(Exception):
-    """The model asked for is not one the installed fastembed has. str() is
-    a plain sentence for the owner."""
-
-
-def fastembed_version() -> str:
-    try:
-        from importlib.metadata import version
-        return version("fastembed")
-    except Exception:
-        return "unknown"
+    """The model asked for is not one this build has, or cannot be loaded.
+    str() is a plain sentence for the owner."""
 
 
 #: Why the model asked for is not the one in use, in plain words - or "".
@@ -526,20 +528,478 @@ def fastembed_version() -> str:
 _embed_refused = ""
 
 
-class FastEmbedder(Embedder):
-    """The real one, if fastembed is installed.
+# --------------------------------------------------------------------------
+#   The ONNX models (replacing fastembed, 2026-10-21)
+# --------------------------------------------------------------------------
+#
+# WHY THIS EXISTS. `_make_embedder` used to hand the model to the `fastembed`
+# library, which opened ONNX Runtime for us. fastembed is a good library, but
+# every release of it forbids Pillow 13, and Pillow 12.3.0 carries 24 security
+# advisories that only Pillow 13 fixes - so the dependency had to go, not the
+# ONNX Runtime underneath it. What is left is the same engine fastembed used,
+# called directly: `onnxruntime` runs the model, `tokenizers` turns text into
+# the model's numbers, and `huggingface_hub` fetches a model once if this PC
+# does not have it yet.
+#
+# THE VECTORS ARE UNCHANGED, MEASURED ON THIS PC. Both models were run through
+# both paths over a corpus (short facts, a question, an empty string, a text
+# longer than 512 tokens, unpunctuated text) and every float32 came out
+# identical - see `backend/memory_embed_golden.json`, filled in by
+# `tools/gen_memory_embed_golden.py` while fastembed was still installed, and
+# re-checked by `tools/check_onnx_parity.py` against the direct path.
+# `OnnxEmbedder.name` is therefore the SAME model name as before, so a store
+# written by fastembed is not re-embedded.
+#
+# WHAT fastembed DID FOR THE DEFAULT MODELS, copied exactly (read from
+# fastembed 0.8.0's own files on 2026-10-21): `tokenizer.json` truncated at the
+# model's own `model_max_length` (512) and padded to `[PAD]`/id 0; feed
+# `input_ids` plus `attention_mask` and zero `token_type_ids` when the graph
+# declares them; take `output[0]`; when it is 3-D take token 0 (CLS - the
+# default meaning model is CLS-pooled, NOT mean-pooled, whatever fastembed's
+# own docstring said), when 2-D use it as it is; then divide each row by
+# max(its L2 norm, 1e-12). The re-ranker feeds (query, document) PAIRS with the
+# tokenizer's `type_ids` and returns column 0 of the logits, with no sigmoid.
+#
+# WHICH MODELS. `ONNX_EMBED_MODELS` is fastembed 0.8.0's own embedding model
+# list, one for one, each model's pooling and normalize flag taken from the
+# class that used to run it. The two models that needed a model-specific
+# recipe rather than one of those three - `jinaai/jina-embeddings-v3` (a task
+# prefix per request) and `Qdrant/clip-ViT-B-32-text` (half of an image
+# model) - are refused in plain words rather than run with the wrong recipe.
+# `ONNX_RERANK_MODELS` is its cross-encoder list, also one for one.
+#
+# A model NOT in `MODEL_PINS` is downloaded and loaded without a byte check,
+# exactly as fastembed left it; the two models this project actually uses keep
+# the files' SHA-256 pins the security audit asked for (M8, 2026-10-18).
+#
+# WHERE THE MODELS LIVE. `model_cache_dir()` - unchanged, so a model fastembed
+# already downloaded on this PC is found and used without a download (the
+# directory is a Hugging Face cache: `models--<owner>--<name>/snapshots/<rev>/`).
 
-    THE GUARD IS THE POINT. embedding-guard.patch found that this class had no
-    finite/zero check at all, so a model that returned NaN - which they do, on
-    an empty string or a pathological input - wrote a row nothing could ever
-    find again. Checked here, at the only place vectors are produced.
+#: fastembed 0.8.0's embedding models, by name: where the ONNX file lives on
+#: Hugging Face, how wide it is, how token vectors are pooled ("cls" = the
+#: first token, "mean" = the attention-masked average) and whether each row is
+#: L2-normalized after pooling. Copied one for one from the five classes
+#: fastembed ran them with (OnnxTextEmbedding, CLIPOnnxEmbedding,
+#: PooledNormalizedEmbedding, PooledEmbedding, JinaEmbeddingV3).
+ONNX_EMBED_MODELS = {
+    "BAAI/bge-base-en": {"source": "Qdrant/fast-bge-base-en",
+                         "file": "model_optimized.onnx", "dim": 768},
+    "BAAI/bge-base-en-v1.5": {"source": "qdrant/bge-base-en-v1.5-onnx-q",
+                              "file": "model_optimized.onnx", "dim": 768},
+    "BAAI/bge-large-en-v1.5": {"source": "qdrant/bge-large-en-v1.5-onnx",
+                               "file": "model.onnx", "dim": 1024},
+    "BAAI/bge-small-en": {"source": "Qdrant/bge-small-en",
+                          "file": "model_optimized.onnx", "dim": 384},
+    "BAAI/bge-small-en-v1.5": {"source": "Qdrant/bge-small-en-v1.5-onnx-Q",
+                               "file": "model_optimized.onnx", "dim": 384},
+    "BAAI/bge-small-zh-v1.5": {"source": "Qdrant/bge-small-zh-v1.5",
+                               "file": "model_optimized.onnx", "dim": 512},
+    "mixedbread-ai/mxbai-embed-large-v1": {
+        "source": "mixedbread-ai/mxbai-embed-large-v1",
+        "file": "onnx/model.onnx", "dim": 1024},
+    "snowflake/snowflake-arctic-embed-xs": {
+        "source": "snowflake/snowflake-arctic-embed-xs",
+        "file": "onnx/model.onnx", "dim": 384},
+    "snowflake/snowflake-arctic-embed-s": {
+        "source": "snowflake/snowflake-arctic-embed-s",
+        "file": "onnx/model.onnx", "dim": 384},
+    "snowflake/snowflake-arctic-embed-m": {
+        "source": "Snowflake/snowflake-arctic-embed-m",
+        "file": "onnx/model.onnx", "dim": 768},
+    "snowflake/snowflake-arctic-embed-m-long": {
+        "source": "snowflake/snowflake-arctic-embed-m-long",
+        "file": "onnx/model.onnx", "dim": 768},
+    "snowflake/snowflake-arctic-embed-l": {
+        "source": "snowflake/snowflake-arctic-embed-l",
+        "file": "onnx/model.onnx", "dim": 1024},
+    "jinaai/jina-clip-v1": {"source": "jinaai/jina-clip-v1",
+                            "file": "onnx/text_model.onnx", "dim": 768},
+    "sentence-transformers/all-MiniLM-L6-v2": {
+        "source": "qdrant/all-MiniLM-L6-v2-onnx",
+        "file": "model.onnx", "dim": 384,
+        "pool": "mean", "normalize": True},
+    "jinaai/jina-embeddings-v2-base-en": {
+        "source": "xenova/jina-embeddings-v2-base-en",
+        "file": "onnx/model.onnx", "dim": 768,
+        "pool": "mean", "normalize": True},
+    "jinaai/jina-embeddings-v2-small-en": {
+        "source": "xenova/jina-embeddings-v2-small-en",
+        "file": "onnx/model.onnx", "dim": 512,
+        "pool": "mean", "normalize": True},
+    "jinaai/jina-embeddings-v2-base-de": {
+        "source": "jinaai/jina-embeddings-v2-base-de",
+        "file": "onnx/model_fp16.onnx", "dim": 768,
+        "pool": "mean", "normalize": True},
+    "jinaai/jina-embeddings-v2-base-code": {
+        "source": "jinaai/jina-embeddings-v2-base-code",
+        "file": "onnx/model.onnx", "dim": 768,
+        "pool": "mean", "normalize": True},
+    "jinaai/jina-embeddings-v2-base-zh": {
+        "source": "jinaai/jina-embeddings-v2-base-zh",
+        "file": "onnx/model.onnx", "dim": 768,
+        "pool": "mean", "normalize": True},
+    "jinaai/jina-embeddings-v2-base-es": {
+        "source": "jinaai/jina-embeddings-v2-base-es",
+        "file": "onnx/model.onnx", "dim": 768,
+        "pool": "mean", "normalize": True},
+    "thenlper/gte-base": {"source": "thenlper/gte-base",
+                          "file": "onnx/model.onnx", "dim": 768,
+                          "pool": "mean", "normalize": True},
+    "thenlper/gte-large": {"source": "qdrant/gte-large-onnx",
+                           "file": "model.onnx", "dim": 1024,
+                           "pool": "mean", "normalize": True},
+    "nomic-ai/nomic-embed-text-v1.5": {
+        "source": "nomic-ai/nomic-embed-text-v1.5",
+        "file": "onnx/model.onnx", "dim": 768,
+        "pool": "mean", "normalize": False},
+    "nomic-ai/nomic-embed-text-v1.5-Q": {
+        "source": "nomic-ai/nomic-embed-text-v1.5",
+        "file": "onnx/model_quantized.onnx", "dim": 768,
+        "pool": "mean", "normalize": False},
+    "nomic-ai/nomic-embed-text-v1": {
+        "source": "nomic-ai/nomic-embed-text-v1",
+        "file": "onnx/model.onnx", "dim": 768,
+        "pool": "mean", "normalize": False},
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {
+        "source": "qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q",
+        "file": "model_optimized.onnx", "dim": 384,
+        "pool": "mean", "normalize": False},
+    "sentence-transformers/paraphrase-multilingual-mpnet-base-v2": {
+        "source": "xenova/paraphrase-multilingual-mpnet-base-v2",
+        "file": "onnx/model.onnx", "dim": 768,
+        "pool": "mean", "normalize": False},
+    "intfloat/multilingual-e5-large": {
+        "source": "qdrant/multilingual-e5-large-onnx",
+        "file": "model.onnx", "dim": 1024,
+        "pool": "mean", "normalize": False},
+}
 
-    A model other than the default must be one the installed fastembed lists,
-    or this refuses it with EmbedModelUnavailable (a plain sentence) before
-    anything is downloaded or loaded. Its name in the store carries the
+#: fastembed 0.8.0's cross-encoder re-rankers, by name. Every one takes
+#: (query, document) pairs and answers with the first column of its logits.
+ONNX_RERANK_MODELS = {
+    "Xenova/ms-marco-MiniLM-L-6-v2": {
+        "source": "Xenova/ms-marco-MiniLM-L-6-v2", "file": "onnx/model.onnx"},
+    "Xenova/ms-marco-MiniLM-L-12-v2": {
+        "source": "Xenova/ms-marco-MiniLM-L-12-v2", "file": "onnx/model.onnx"},
+    "BAAI/bge-reranker-base": {
+        "source": "BAAI/bge-reranker-base", "file": "onnx/model.onnx"},
+    "jinaai/jina-reranker-v1-tiny-en": {
+        "source": "jinaai/jina-reranker-v1-tiny-en",
+        "file": "onnx/model.onnx"},
+    "jinaai/jina-reranker-v1-turbo-en": {
+        "source": "jinaai/jina-reranker-v1-turbo-en",
+        "file": "onnx/model.onnx"},
+    "jinaai/jina-reranker-v2-base-multilingual": {
+        "source": "jinaai/jina-reranker-v2-base-multilingual",
+        "file": "onnx/model.onnx"},
+}
+
+#: The two files this project's own models are checked against, by SHA-256,
+#: taken from the Hugging Face repositories on 2026-10-18 (the security
+#: audit's supply-chain finding M8). A download checks sizes and hub blob ids,
+#: not a cryptographic hash; this is the check that the bytes loaded are the
+#: bytes measured. A different model the owner chooses
+#: (JARVIS_MEMORY_EMBED_MODEL / _RERANK_MODEL) has no pin here and is left to
+#: the downloader's own checks, exactly as it was under fastembed.
+MODEL_PINS = {
+    "BAAI/bge-small-en-v1.5": {
+        "source": "Qdrant/bge-small-en-v1.5-onnx-Q",
+        "file": "model_optimized.onnx",
+        "sha256": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431"},
+    "Xenova/ms-marco-MiniLM-L-6-v2": {
+        "source": "Xenova/ms-marco-MiniLM-L-6-v2",
+        "file": "onnx/model.onnx",
+        "sha256": "c623d0bcb99f4622beb413eaef00cfbe5db20df9f1dd982da4b4f26022881870"},
+}
+
+#: How many texts one ONNX pass takes for the meaning model, and how many
+#: (query, document) pairs one pass takes for the re-ranker - fastembed's own
+#: defaults (`onnx_embedding.py:265` and `onnx_text_cross_encoder.py:163`).
+EMBED_BATCH = 256
+RERANK_BATCH = 64
+
+#: The files a cached model must have beside its ONNX file to be loaded.
+_MODEL_SIDE_FILES = ("config.json", "tokenizer.json",
+                     "tokenizer_config.json", "special_tokens_map.json")
+
+#: Setting any of these to a true value stops the downloader from touching the
+#: network; a model already in the cache still loads (huggingface_hub's own
+#: offline switches, honoured here so a suite run or an offline PC cannot hang).
+_OFFLINE_ENV = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE")
+
+_TRUE = ("1", "true", "yes", "on")
+
+
+def _offline() -> bool:
+    return any(str(os.environ.get(name, "")).strip().lower() in _TRUE
+               for name in _OFFLINE_ENV)
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _hf_cache_root(source: str) -> Path:
+    """`model_cache_dir()/models--<owner>--<name>`, as Hugging Face names it.
+
+    The name on disk can differ in CASE between fastembed versions (0.8.0
+    asks for `qdrant/...`, the pin records `Qdrant/...`), and Windows would
+    not care while Linux would - so a case-insensitive match is used before
+    falling back to the exact name.
+    """
+    wanted = source.replace("/", "--")
+    root = Path(model_cache_dir()) / f"models--{wanted}"
+    if root.is_dir():
+        return root
+    try:
+        for candidate in sorted(Path(model_cache_dir()).glob("models--*")):
+            if candidate.name.lower() == root.name.lower():
+                return candidate
+    except OSError:
+        pass
+    return root
+
+
+def _snapshot_root(model_file: Path, rel: str) -> Path:
+    """The `snapshots/<revision>/` folder holding a model file."""
+    root = model_file
+    for _ in Path(rel).parts:
+        root = root.parent
+    return root
+
+
+def _cached_snapshot(spec: dict) -> Optional[Path]:
+    """The newest cached copy of a model that has every file it needs, or None."""
+    root = _hf_cache_root(spec["source"])
+    try:
+        hits = sorted(root.glob(f"snapshots/*/{spec['file']}"))
+    except OSError:
+        return None
+    for hit in reversed(hits):
+        snapshot = _snapshot_root(hit, spec["file"])
+        if all((snapshot / name).is_file() for name in _MODEL_SIDE_FILES):
+            return snapshot
+    return None
+
+
+def _download_snapshot(model: str, spec: dict) -> Path:
+    """Fetch a model once from Hugging Face, or refuse in plain words."""
+    if _offline():
+        raise EmbedModelUnavailable(
+            f"The memory search model {model!r} is not on this PC, and "
+            "downloads are switched off (HF_HUB_OFFLINE is set), so it was "
+            "not used.")
+    try:
+        from huggingface_hub import snapshot_download
+        snapshot = snapshot_download(
+            repo_id=spec["source"],
+            cache_dir=model_cache_dir(),
+            allow_patterns=list(_MODEL_SIDE_FILES) + [spec["file"]],
+        )
+    except Exception as exc:  # noqa: BLE001 - every failure is words-only search
+        raise EmbedModelUnavailable(
+            f"The memory search model {model!r} could not be downloaded "
+            f"({type(exc).__name__}), so it was not used. Words alone are "
+            "used until it can be fetched.") from None
+    return Path(str(snapshot))
+
+
+def _verify_model_pin(model: str, snapshot: Path) -> None:
+    """Refuse a pinned model whose bytes do not match its pin, in plain words."""
+    pin = MODEL_PINS.get(model)
+    if not pin:
+        return
+    path = snapshot / pin["file"]
+    try:
+        got = _sha256_file(path)
+    except OSError as exc:
+        raise EmbedModelUnavailable(
+            f"The memory search model {model!r} on this PC could not be read "
+            f"({type(exc).__name__}), so it was not used.") from None
+    if got.lower() != pin["sha256"].lower():
+        raise EmbedModelUnavailable(
+            f"The memory search model {model!r} on this PC does not match its "
+            f"pinned SHA-256, so it was not used. Delete {path.parent} and let "
+            "Jarvis download it again; nothing was loaded from the changed "
+            "bytes.")
+
+
+def _ensure_snapshot(model: str, spec: dict) -> Path:
+    """The model's folder on this PC, cached or fetched once, then pin-checked.
+
+    A cached copy is used with NO network call at all (fastembed re-validated
+    it online on every start, which made an offline PC wait for a timeout).
+    """
+    snapshot = _cached_snapshot(spec)
+    if snapshot is None:
+        snapshot = _download_snapshot(model, spec)
+    _verify_model_pin(model, snapshot)
+    return snapshot
+
+
+def _load_tokenizer(model_dir: Path):
+    """The model's own tokenizer, configured the way fastembed configured it."""
+    from tokenizers import Tokenizer
+
+    with open(model_dir / "config.json", encoding="utf-8") as handle:
+        config = json.load(handle)
+    with open(model_dir / "tokenizer_config.json", encoding="utf-8") as handle:
+        tokenizer_config = json.load(handle)
+    with open(model_dir / "special_tokens_map.json", encoding="utf-8") as handle:
+        tokens_map = json.load(handle)
+
+    if "model_max_length" not in tokenizer_config:
+        max_context = tokenizer_config["max_length"]
+    elif "max_length" not in tokenizer_config:
+        max_context = tokenizer_config["model_max_length"]
+    else:
+        max_context = min(tokenizer_config["model_max_length"],
+                          tokenizer_config["max_length"])
+
+    tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
+    tokenizer.enable_truncation(max_length=max_context)
+    if not tokenizer.padding:
+        tokenizer.enable_padding(
+            pad_id=config.get("pad_token_id", 0),
+            pad_token=tokenizer_config["pad_token"])
+    for token in tokens_map.values():
+        if isinstance(token, str):
+            tokenizer.add_special_tokens([token])
+    return tokenizer
+
+
+def _pool_and_normalize(raw, attention_mask, spec: dict):
+    """Turn a model's raw output into one vector per text, as fastembed did."""
+    import numpy as np
+
+    if getattr(raw, "ndim", 0) == 3:
+        if spec.get("pool") == "mean":
+            if attention_mask is None:
+                raise ValueError("mean pooling needs an attention mask")
+            mask = np.asarray(attention_mask, dtype="float32")[..., None]
+            counts = np.maximum(mask.sum(axis=1), 1e-9)
+            vectors = (raw * mask).sum(axis=1) / counts
+        else:
+            vectors = raw[:, 0]
+    elif getattr(raw, "ndim", 0) == 2:
+        vectors = raw
+    else:
+        raise ValueError(f"unsupported model output shape {getattr(raw, 'shape', None)}")
+
+    if spec.get("normalize", True):
+        norm = np.linalg.norm(vectors, ord=2, axis=1, keepdims=True)
+        norm = np.maximum(norm, 1e-12)
+        vectors = vectors / norm
+    return vectors
+
+
+class _OnnxBackend:
+    """One loaded ONNX model: the session, the tokenizer, and one way to run it.
+
+    The ONLY place this module talks to onnxruntime or tokenizers. It is a
+    separate object so the suites can replace it with a stand-in (through
+    `_backend_for` below) without downloading a model or importing the engine.
+    """
+
+    def __init__(self, model: str, spec: dict, *, rerank: bool) -> None:
+        try:
+            import numpy as np
+            import onnxruntime as ort
+        except Exception:  # noqa: BLE001 - a missing engine means words-only search
+            raise EmbedModelUnavailable(
+                "the memory search needs the onnxruntime and tokenizers "
+                "packages, and one of them is not installed, so meaning search "
+                "is off and words alone are used.") from None
+        self._np = np
+        self.model = model
+        self.spec = dict(spec)
+        self.rerank = bool(rerank)
+        self.snapshot = _ensure_snapshot(model, spec)
+        try:
+            self.tokenizer = _load_tokenizer(self.snapshot)
+        except Exception as exc:  # noqa: BLE001 - words-only rather than a crash
+            raise EmbedModelUnavailable(
+                f"The memory search model {model!r} on this PC is missing a "
+                f"tokenizer file ({type(exc).__name__}), so it was not used.") from None
+
+        options = ort.SessionOptions()
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        # CPU on purpose: docs/MODEL-TOPOLOGY.md keeps the embedder off the
+        # graphics cards, and this is the provider every Windows PC has.
+        self.session = ort.InferenceSession(
+            str(self.snapshot / spec["file"]),
+            providers=["CPUExecutionProvider"],
+            sess_options=options)
+        self.input_names = {node.name for node in self.session.get_inputs()}
+        self.dim = 0 if self.rerank else int(spec.get("dim") or 0)
+
+    def _feed(self, encodings) -> dict:
+        np = self._np
+        feed = {"input_ids": np.array([e.ids for e in encodings], dtype=np.int64)}
+        if "attention_mask" in self.input_names:
+            feed["attention_mask"] = np.array(
+                [e.attention_mask for e in encodings], dtype=np.int64)
+        if "token_type_ids" in self.input_names:
+            if self.rerank:
+                feed["token_type_ids"] = np.array(
+                    [e.type_ids for e in encodings], dtype=np.int64)
+            else:
+                feed["token_type_ids"] = np.array(
+                    [np.zeros(len(e.ids), dtype=np.int64) for e in encodings],
+                    dtype=np.int64)
+        return feed
+
+    def embed_texts(self, texts: list) -> list:
+        """One pooled, normalized vector per text, in order."""
+        out = []
+        for start in range(0, len(texts), EMBED_BATCH):
+            batch = list(texts[start:start + EMBED_BATCH])
+            encoded = self.tokenizer.encode_batch(batch)
+            feed = self._feed(encoded)
+            raw = self.session.run(None, feed)[0]
+            vectors = _pool_and_normalize(
+                raw, feed.get("attention_mask"), self.spec)
+            out.extend([[float(x) for x in row] for row in vectors])
+        return out
+
+    def score_pairs(self, query: str, texts: list) -> list:
+        """One score per (query, text) pair, in order; higher answers better."""
+        scores = []
+        for start in range(0, len(texts), RERANK_BATCH):
+            batch = list(texts[start:start + RERANK_BATCH])
+            encoded = self.tokenizer.encode_batch([(query, text) for text in batch])
+            feed = self._feed(encoded)
+            raw = self.session.run(None, feed)[0]
+            scores.extend([float(row[0]) for row in raw])
+        return scores
+
+
+def _backend_for(model: str, spec: dict, *, rerank: bool):
+    """The one seam the suites replace, so nothing downloads in a test run."""
+    return _OnnxBackend(model, spec, rerank=rerank)
+
+
+class OnnxEmbedder(Embedder):
+    """The real one, on ONNX Runtime directly (was fastembed's TextEmbedding).
+
+    THE GUARD IS THE POINT. embedding-guard.patch found that a model that
+    returned NaN - which they do, on an empty string or a pathological input -
+    wrote a row nothing could ever find again. Checked here, at the only place
+    vectors are produced.
+
+    A model other than the default must be one this build's `ONNX_EMBED_MODELS`
+    lists, or this refuses it with EmbedModelUnavailable (a plain sentence)
+    before anything is downloaded or loaded. Its name in the store carries the
     prefix version when it uses prefixes, so a change of prefixes counts as a
     change of model: the store then embeds every fact again (never a mix -
-    MemoryStore._init() compares the name, not the width).
+    MemoryStore._init() compares the name, not the width). Keeping the name
+    the same as fastembed's for the default model is deliberate: measured
+    bit-identical vectors, so no fact is re-embedded by this change.
 
     The ONE embedder that opts in to the shared question cache: its `name` is
     the model (plus the prefix version), so two instances - the memory store's
@@ -552,33 +1012,28 @@ class FastEmbedder(Embedder):
 
     def __init__(self, model: Optional[str] = None) -> None:
         model = (model or embed_model_wanted()).strip()
-        _verify_pinned_model(model)          # a cached copy, before fastembed loads it
-        quiet_onnxruntime()
-        from fastembed import TextEmbedding  # imported lazily and on purpose
-        if model != EMBED_MODEL_DEFAULT and model not in {
-                str(m.get("model")) for m in TextEmbedding.list_supported_models()}:
+        spec = ONNX_EMBED_MODELS.get(model)
+        if spec is None:
             raise EmbedModelUnavailable(
-                f"The memory search model {model!r} is not one this PC's fastembed "
-                f"({fastembed_version()}) has, so it was not used. Check the spelling "
-                "against tools/model_tryout/README.md; the newer models need fastembed "
-                "0.8.1 or later (the same page has the one line that installs it).")
-        self._m = TextEmbedding(model_name=model, cache_dir=model_cache_dir())
-        # First use downloads: check the copy that has just landed too, still
-        # before the first vector is computed.
-        _verify_pinned_model(model, getattr(getattr(self._m, "model", None), "_model_dir", None))
+                f"The memory search model {model!r} is not one this build can "
+                "run, so it was not used. Remove JARVIS_MEMORY_EMBED_MODEL to "
+                f"use {EMBED_MODEL_DEFAULT!r}, the model Jarvis uses by default.")
+        quiet_onnxruntime()
+        self._b = _backend_for(model, spec, rerank=False)
         self._q, self._d = EMBED_PREFIXES.get(model, ("", ""))
         self.name = model if not (self._q or self._d) else \
             f"{model}+prefixes-{EMBED_PREFIX_VERSION}"
-        self.dim = len(next(iter(self._m.embed([self._d + "probe"]))))
+        probe = self._d + "probe" if self._d else "probe"
+        self.dim = len(self._b.embed_texts([probe])[0])
 
     def _vectors(self, texts) -> list[list[float]]:
         out: list[list[float]] = []
-        for v in self._m.embed(list(texts)):
-            vec = [float(x) for x in v]
+        vectors = self._b.embed_texts(list(texts))
+        for vec in vectors:
             # Zero rather than NaN. The caller (_embed_rows) drops non-finite
             # vectors; returning the wrong LENGTH here would corrupt the vec0
             # table instead, which is worse.
-            out.append(vec if _usable_vector(vec, self.dim) else [0.0] * self.dim)
+            out.append(list(vec) if _usable_vector(vec, self.dim) else [0.0] * self.dim)
         return out
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -599,7 +1054,7 @@ QUERY_CACHE_SIZE = 256
 #: Which embedder may answer for each cached (class, model name). Kept outside
 #: the lru_cache because the cache is keyed by the model's identity, not by the
 #: instance: that is what lets the memory store and the documents store - two
-#: FastEmbedder instances of one model - share a question's vector. An entry
+#: OnnxEmbedder instances of one model - share a question's vector. An entry
 #: only holds one reference per model, so this stays tiny.
 _QUERY_EMBEDDERS: dict = {}
 _QUERY_LOCK = threading.Lock()
@@ -695,9 +1150,10 @@ def _say_refused(why: str) -> None:
 def _make_embedder():
     """The best available, never an exception.
 
-    JARVIS_MEMORY_EMBED_MODEL naming a model this fastembed does not have (or
-    cannot load) is REFUSED in plain words - said once, and in status() - and
-    the default model is used instead, never a silent drop to words only.
+    JARVIS_MEMORY_EMBED_MODEL naming a model this build does not have (or one
+    that cannot be loaded) is REFUSED in plain words - said once, and in
+    status() - and the default model is used instead, never a silent drop to
+    words only.
 
     Choosing an embedder is choosing a MODEL, so any cached question vector
     from the previous one is forgotten here: the cache is keyed by the model,
@@ -707,7 +1163,7 @@ def _make_embedder():
         return HashEmbedder()
     wanted = embed_model_wanted()
     try:
-        return FastEmbedder(wanted)
+        return OnnxEmbedder(wanted)
     except EmbedModelUnavailable as exc:
         _say_refused(str(exc))
     except Exception as exc:
@@ -716,7 +1172,7 @@ def _make_embedder():
         _say_refused(f"The memory search model {wanted!r} could not be loaded "
                      f"({type(exc).__name__}), so it was not used.")
     try:
-        return FastEmbedder(EMBED_MODEL_DEFAULT)
+        return OnnxEmbedder(EMBED_MODEL_DEFAULT)
     except Exception:
         return HashEmbedder()
 
@@ -734,11 +1190,11 @@ def _make_embedder():
 # have been in the pool, never changes k or either floor, and never touches
 # find_one(), corrections or anything that writes.
 #
-# The model is fastembed's cross-encoder `Xenova/ms-marco-MiniLM-L-6-v2`
+# The model is the cross-encoder `Xenova/ms-marco-MiniLM-L-6-v2`
 # (Apache-2.0, about 80 MB, English only - like the meaning model), the
-# default of Hindsight (MIT). Jarvis already uses fastembed for meaning
-# search. It runs on the processor, on this PC; fastembed downloads it once,
-# the way it downloads the meaning model.
+# default of Hindsight (MIT). It runs on the processor, on this PC, through
+# the same direct ONNX Runtime path the meaning model uses; the model is
+# downloaded once, the way the meaning model is.
 #
 # OFF BY DEFAULT (2026-09-26, the owner's rule: a change is kept only once
 # the memory self-test shows it helps). It has only been measured as a
@@ -749,82 +1205,19 @@ def _make_embedder():
 #
 # FAILS SOFT. When it is on, the model is loaded on a background thread the
 # first time recall asks - never on the chat's own thread - and until it is
-# ready, recall is exactly what it was. If it cannot load (no fastembed, a
-# fastembed too old to have re-rankers, no download), recall stays as it
-# was for good, and that is said ONCE (the audit log and the backend's
-# window, and status()). Once it is loaded, a chat's recall WAITS for it,
-# up to RERANK_BUDGET_S seconds (1.5 s); a re-rank slower than that is not
-# waited for any longer and that question gets the merged order.
+# ready, recall is exactly what it was. If it cannot load (no onnxruntime or
+# tokenizers, no download), recall stays as it was for good, and that is said
+# ONCE (the audit log and the backend's window, and status()). Once it is
+# loaded, a chat's recall WAITS for it, up to RERANK_BUDGET_S seconds (1.5 s);
+# a re-rank slower than that is not waited for any longer and that question
+# gets the merged order.
 
 RERANK_MODEL_DEFAULT = "Xenova/ms-marco-MiniLM-L-6-v2"
-#: JARVIS_MEMORY_RERANK_MODEL names another of fastembed's re-rankers (the
+#: JARVIS_MEMORY_RERANK_MODEL names another of this build's re-rankers (the
 #: "Model tryouts" group, 2026-09-28) - for the self-test's tryout, or for
 #: real once the self-test shows it helps. Unset: the default above.
 RERANK_MODEL = (os.environ.get("JARVIS_MEMORY_RERANK_MODEL") or "").strip() \
     or RERANK_MODEL_DEFAULT
-
-#: The two model files Jarvis's fastembed actually loads, by SHA-256, taken
-#: from the Hugging Face repositories fastembed names for these models on
-#: 2026-10-18 (the security audit's supply-chain finding M8). fastembed checks
-#: sizes and hub blob ids on download, not a cryptographic hash; this is the
-#: check that the bytes loaded are the bytes measured. A different pinned model
-#: the owner chooses (JARVIS_MEMORY_EMBED_MODEL / _RERANK_MODEL) is left to
-#: fastembed's own checks, since this repository has no pin for it.
-FASTEMBED_PINS = {
-    "BAAI/bge-small-en-v1.5": (
-        "Qdrant/bge-small-en-v1.5-onnx-Q", "model_optimized.onnx",
-        "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431"),
-    "Xenova/ms-marco-MiniLM-L-6-v2": (
-        "Xenova/ms-marco-MiniLM-L-6-v2", "onnx/model.onnx",
-        "c623d0bcb99f4622beb413eaef00cfbe5db20df9f1dd982da4b4f26022881870"),
-}
-
-
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _pinned_model_file(model: str, model_dir=None):
-    """The model file for `model` in fastembed's cache, or None if not there."""
-    pin = FASTEMBED_PINS.get(model)
-    if not pin:
-        return None, ""
-    source, rel, expected = pin
-    if model_dir:
-        path = Path(str(model_dir)) / rel
-        return (path if path.is_file() else None), expected
-    root = Path(model_cache_dir()) / f"models--{source.replace('/', '--')}"
-    hits = sorted(root.glob(f"snapshots/*/{rel}"))
-    return (hits[-1] if hits else None), expected
-
-
-def _verify_pinned_model(model: str, model_dir=None) -> None:
-    """Refuse to load a pinned fastembed model whose bytes do not match its pin.
-
-    Called once before the model is loaded (a cached copy) and once after it
-    exists (the copy fastembed has just downloaded), before any inference. A
-    mismatch raises `EmbedModelUnavailable` in plain words, so the caller falls
-    back to words-only search rather than trusting the wrong file. A model with
-    no pin here is not refused by this function.
-    """
-    path, expected = _pinned_model_file(model, model_dir)
-    if path is None:
-        return
-    try:
-        got = _sha256_file(path)
-    except OSError as exc:
-        raise EmbedModelUnavailable(
-            f"The memory search model {model!r} on this PC could not be read "
-            f"({type(exc).__name__}), so it was not used.") from None
-    if got.lower() != expected:
-        raise EmbedModelUnavailable(
-            f"The memory search model {model!r} on this PC does not match its pinned "
-            f"SHA-256, so it was not used. Delete {path.parent} and let fastembed "
-            "download it again; nothing was loaded from the changed bytes.")
 
 
 def _env_int(name: str, default: int, lo: int, hi: int) -> int:
@@ -885,28 +1278,26 @@ class Reranker:
         raise NotImplementedError
 
 
-class FastReranker(Reranker):
-    """fastembed's cross-encoder. Imported lazily and on purpose."""
+class OnnxReranker(Reranker):
+    """The cross-encoder, on ONNX Runtime directly (was fastembed's)."""
 
     def __init__(self, model: str = RERANK_MODEL) -> None:
-        _verify_pinned_model(model)          # a cached copy, before fastembed loads it
-        quiet_onnxruntime()
-        from fastembed.rerank.cross_encoder import TextCrossEncoder
-        if model != RERANK_MODEL_DEFAULT and model not in {
-                str(m.get("model")) for m in TextCrossEncoder.list_supported_models()}:
+        model = (model or RERANK_MODEL).strip()
+        spec = ONNX_RERANK_MODELS.get(model)
+        if spec is None:
             raise EmbedModelUnavailable(
-                f"the re-ranking model {model!r} is not one this PC's fastembed "
-                f"({fastembed_version()}) has - check the spelling against "
-                "tools/model_tryout/README.md")
-        self._m = TextCrossEncoder(model_name=model, cache_dir=model_cache_dir())
-        # First use downloads: check the copy that has just landed too, still
-        # before its first rerank call.
-        _verify_pinned_model(model, getattr(getattr(self._m, "model", None), "_model_dir", None))
+                f"the re-ranking model {model!r} is not one this build can run - "
+                "remove JARVIS_MEMORY_RERANK_MODEL to use "
+                f"{RERANK_MODEL_DEFAULT!r}")
+        quiet_onnxruntime()
+        self._b = _backend_for(model, spec, rerank=True)
         self.name = model
-        list(self._m.rerank("probe", ["probe"]))      # load it now, not on a question
+        # Load it now, not on a question: a bad model is refused before recall
+        # ever waits on it.
+        self._b.score_pairs("probe", ["probe"])
 
     def score(self, query: str, texts: list) -> list:
-        return [float(x) for x in self._m.rerank(query, list(texts))]
+        return self._b.score_pairs(query, list(texts))
 
 
 _rr_lock = threading.Lock()
@@ -943,7 +1334,7 @@ def _rr_load(factory) -> None:
                 _rr.update(state="ready", model=m, why="")
     except Exception as exc:
         why = (str(exc) if isinstance(exc, EmbedModelUnavailable) else
-               f"{type(exc).__name__}: fastembed is not installed or has no re-ranker"
+               f"{type(exc).__name__}: the memory search packages are not installed"
                if isinstance(exc, ImportError) else
                f"{type(exc).__name__}: the re-ranking model could not be loaded")
         with _rr_lock:
@@ -966,9 +1357,9 @@ def reranker(*, wait: bool = False):
             return None
         _rr["state"] = "loading"
     if wait:
-        _rr_load(FastReranker)
+        _rr_load(OnnxReranker)
         return _rr["model"]
-    threading.Thread(target=_rr_load, args=(FastReranker,), daemon=True,
+    threading.Thread(target=_rr_load, args=(OnnxReranker,), daemon=True,
                      name="jarvis-memory-reranker").start()
     return None
 
@@ -2522,7 +2913,7 @@ class MemoryStore:
         two identical facts were stored.
 
         The shipped embedders cannot do that. A test double, a half-installed
-        fastembed, or a future embedder can, and the caller cannot tell the
+        engine, or a future embedder can, and the caller cannot tell the
         difference - so the whole body is guarded, not only the parts that
         looked risky.
         """

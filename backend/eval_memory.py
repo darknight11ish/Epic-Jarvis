@@ -2,7 +2,7 @@
 
     python eval_memory.py                      # the full run, about 2-10 minutes
     python eval_memory.py --sizes 0,100        # a quick one
-    python eval_memory.py --words-only         # as on day one, before fastembed
+    python eval_memory.py --words-only         # as on day one, before a meaning model
     python eval_memory.py --out C:\\somewhere   # where the two result files go
     python eval_memory.py --against old.json   # better / worse than an earlier run;
                                                # exit 1 if recall@5, a wrong version
@@ -27,9 +27,9 @@ NEVER YOUR DATA. The store it fills is a new file in a temporary folder,
 deleted at the end. JARVIS_MEMORY_DB is pointed at that file before the
 memory module is even imported, and the store is opened by that path, so
 your real memory.db is never opened. No chat model is asked anything, and
-nothing is sent anywhere. (The one download it can cause is fastembed
-fetching its embedding model, the same one Jarvis uses, if this PC does not
-have it yet.)
+nothing is sent anywhere. (The one download it can cause is the meaning model
+itself - the same one Jarvis uses, run directly on ONNX Runtime - if this PC
+does not have it yet.)
 
 WHAT IT MEASURES
 
@@ -75,7 +75,7 @@ WHAT IT MEASURES
                         their own line, and so are the "don't know" facts
                         it adds
 
-The embedder is the real one (fastembed) when this PC has it, and the
+The embedder is the real one (direct ONNX Runtime) when this PC can load it, and the
 words-only fallback otherwise; the output says which, on its first line.
 Numbers from the words-only fallback say nothing about meaning search.
 
@@ -332,7 +332,7 @@ def filler(kind: str, seed: int = 7):
 def _add_filler(st, stream, n: int) -> dict:
     """Add n filler facts. Words are indexed as they go in; the embedding is
     done afterwards in batches (backfill_embeddings), the way a store that
-    was filled before fastembed downloaded catches up - and timed."""
+    was filled before the model download catches up - and timed."""
     if n <= 0:
         return {"added": 0, "add_ms_per_fact": None, "embed_s": None}
     vec = st._vec_ok
@@ -589,7 +589,7 @@ def _db_bytes(path: Path) -> int:
 
 def _pick_reranker(M, how: str):
     """(re-ranker or None, what was used or why not). `how`: "auto" - the
-    real model if fastembed can load it here (it may download it once), "off",
+    real model if this PC can load it here (it may download it once), "off",
     or "stand-in" (StandInReranker)."""
     if how == "off":
         return None, "off (--reranker off)"
@@ -597,15 +597,14 @@ def _pick_reranker(M, how: str):
         return None, "this jarvis_memory.py has no re-ranker"
     if how == "stand-in":
         return StandInReranker(M), StandInReranker.name
-    if hasattr(M, "FastReranker"):
+    if hasattr(M, "OnnxReranker"):
         # Loaded directly, not through reranker(): the backend keeps it off
         # until this self-test shows it helps (JARVIS_MEMORY_RERANK), and
         # the self-test is how that is found out.
         try:
-            m = M.FastReranker()
-        except ImportError as exc:
-            return None, (f"the real model could not be loaded: {type(exc).__name__}: "
-                          f"fastembed is not installed or has no re-ranker")
+            m = M.OnnxReranker()
+        except M.EmbedModelUnavailable as exc:
+            return None, f"the real model could not be loaded: {exc}"
         except Exception as exc:
             return None, (f"the real model could not be loaded: {type(exc).__name__}: "
                           f"the re-ranking model could not be loaded")
@@ -886,7 +885,7 @@ def markdown(res: dict) -> str:
         "",
         f"Run {res['ran_at']} on {res['machine']}. Embedder: **{res['embedder']}** - "
         + ("meaning AND words." if sem else
-           "**words only** (the fallback; fastembed or sqlite-vec is not available here, "
+           "**words only** (the fallback; the meaning model or sqlite-vec is not available here, "
            "so these numbers say nothing about meaning search)."),
         f"Memory code: `{res['memory_module']}`. Word floor now: "
         f"{res['word_floor_configured']} (JARVIS_MEMORY_MIN_WORD_SHARE). "
@@ -1000,7 +999,7 @@ def markdown(res: dict) -> str:
         if "stand-in" in str(res.get("reranker")):
             lines += ["", "These re-ranker numbers are from a STAND-IN (word overlap), not "
                       "the real model: they show the wiring works, not what the model "
-                      "gains. Run the self-test on the PC with fastembed to measure that."]
+                      "gains. Run the self-test on the PC with the real model to measure that."]
     elif "reranker" in res:
         lines += ["", f"The re-ranker (memory idea 1): not measured - {res['reranker']}."]
     sa_rows = [lv for lv in res["levels"] if lv.get("said_again") and lv.get("entities")]
@@ -1418,7 +1417,7 @@ def main(argv=None) -> int:
     ap.add_argument("--sizes", default="0,100,1000,10000",
                     help="filler sizes, comma-separated (default 0,100,1000,10000)")
     ap.add_argument("--words-only", action="store_true",
-                    help="use the words-only fallback even if fastembed is installed")
+                    help="use the words-only fallback even if the meaning model is available")
     ap.add_argument("--out", default=str(Path.home() / "jarvis-memory-eval"),
                     help="folder for the two result files (default: jarvis-memory-eval "
                          "in your home folder)")
@@ -1429,7 +1428,7 @@ def main(argv=None) -> int:
                          "the backend folder, for jarvis_extract.py). Off by default: the "
                          "default run needs no model")
     ap.add_argument("--reranker", choices=("auto", "off", "stand-in"), default="auto",
-                    help="auto (default): measure the real re-ranker if fastembed can load "
+                    help="auto (default): measure the real re-ranker if this PC can load "
                          "it here - it downloads about 80 MB once; stand-in: a word-overlap "
                          "stand-in that proves the wiring only; off")
     ap.add_argument("--ollama", default="http://127.0.0.1:11434",

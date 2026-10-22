@@ -325,10 +325,12 @@ template prints that block before the tools, a spoken question or one with
 recalled facts differs before the tool list and reuses only the rules. The
 speed record's `cached_tokens` shows which.
 
-**Keep the embedder on the CPU.** bge-small is ~130 MB through fastembed/ONNX.
+**Keep the embedder on the CPU.** bge-small is ~130 MB on ONNX Runtime.
 On the GPU it would cost ~0.2 GiB *and* contend for the same SMs mid-utterance.
-It is on the 3900X's 12 cores today; that is correct, and it is written down
-here so it stays a decision rather than a default.
+It is on the 3900X's 12 cores today, and that is now enforced rather than
+merely decided: the memory search loads its ONNX models with the CPU provider
+only (`CPUExecutionProvider` is the one provider named in
+`jarvis_memory.py`), so no graphics card is offered them at all.
 
 **`jarvis_persona.memory_top_k` is dead.** Personas declare 4, 6, 8, 10 or 16
 and every one of them gets 5, because the number was hardcoded in the search

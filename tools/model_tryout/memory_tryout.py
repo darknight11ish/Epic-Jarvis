@@ -8,8 +8,13 @@ help Jarvis find a saved fact:
 
   - the MEANING model ("embedder"): turns each fact and each question into
     numbers, so "what should I cook?" finds "Owner is vegetarian". Today:
-    BAAI/bge-small-en-v1.5. Tried against it: Qwen/Qwen3-Embedding-0.6B-Q and
-    google/embeddinggemma-300m (both need fastembed 0.8.1).
+    BAAI/bge-small-en-v1.5. Tried against it: any of the models this build
+    can run (jarvis_memory.ONNX_EMBED_MODELS - fastembed 0.8.0's own
+    embedding list, now run on ONNX Runtime directly). The two newer meaning
+    models the first tryout named, Qwen/Qwen3-Embedding-0.6B-Q and
+    google/embeddinggemma-300m, arrived in fastembed 0.8.1, which the locked
+    install never took; this build does not list them, so a tryout of those
+    two is no longer possible.
   - the RE-RANKER: reads the question and each of the top ~20 facts together
     and puts the best first. Today: Xenova/ms-marco-MiniLM-L-6-v2 (and off
     until the self-test shows it helps). Tried: MiniLM-L-12 and
@@ -22,12 +27,16 @@ and prints one table with a verdict per model by rules written down before
 anything was measured (EMBED_RULE and RERANK_RULE below), then the rows for
 docs/MEMORY-SCOREBOARD.md.
 
-A model this PC's fastembed does not have is not run; the line that installs
-fastembed 0.8.1 is printed instead (tools/model_tryout/README.md has it too).
+Each model is loaded once through jarvis_memory's own OnnxEmbedder or
+OnnxReranker before its run - the same classes Jarvis itself uses - so a
+model this build does not have, or one that cannot be downloaded on this PC,
+is said plainly in words and simply not run. Nothing crashes, and nothing is
+claimed for a model that never loaded.
 
-The only downloads are fastembed fetching the models themselves, once (about
-1.1 GB and 1.2 GB for the two meaning models, 0.1-0.2 GB per re-ranker), the
-same way it fetched the one Jarvis uses. Nothing about you is sent anywhere.
+The only downloads are the models themselves, once, the memory search's own
+way (huggingface-hub inside jarvis_memory.py): about 130 MB for the default
+meaning model (the others are bigger, up to about 1.2 GB) and about 80 MB
+per re-ranker, from Hugging Face. Nothing about you is sent anywhere.
 
     py -3 tools\\model_tryout\\memory_tryout.py
 
@@ -40,6 +49,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -48,17 +58,24 @@ REPO = HERE.parent.parent
 EVAL = REPO / "backend" / "eval_memory.py"
 
 EMBED_DEFAULT = "BAAI/bge-small-en-v1.5"
-EMBEDDERS = (EMBED_DEFAULT, "Qwen/Qwen3-Embedding-0.6B-Q", "google/embeddinggemma-300m")
+EMBEDDERS = (EMBED_DEFAULT,)
 RERANK_DEFAULT = "Xenova/ms-marco-MiniLM-L-6-v2"
 RERANKERS = (RERANK_DEFAULT, "Xenova/ms-marco-MiniLM-L-12-v2",
              "jinaai/jina-reranker-v1-turbo-en")
 
-#: The newer models arrived in fastembed 0.8.1 (backend/requirements.lock
-#: pins 0.8.0 until 0.8.1 is 7 days old - see the README).
-FASTEMBED_UPGRADE = (
-    "Set-Content -Path \"$env:TEMP\\fastembed-0.8.1.txt\" -Value 'fastembed==0.8.1 "
-    "--hash=sha256:b4f4043080af36ee820d22d2d3034df635c1a8b9764e5d2a642bc7aeb1d0e749'; "
-    "py -3 -m pip install --no-deps --require-hashes -r \"$env:TEMP\\fastembed-0.8.1.txt\"")
+#: The two meaning models the 2026-09-28 tryout named that this build cannot
+#: run: they only arrived in fastembed 0.8.1, and the locked install never
+#: took 0.8.1 (its list is 0.8.0's). Jarvis now runs 0.8.0's own list on ONNX
+#: Runtime directly, so a tryout of these is no longer possible - said plainly
+#: rather than dropped without a word.
+GONE_MEANING_MODELS = {
+    "Qwen/Qwen3-Embedding-0.6B": "it was only in fastembed 0.8.1, which the "
+                                 "locked install never took",
+    "Qwen/Qwen3-Embedding-0.6B-Q": "it was only in fastembed 0.8.1, which the "
+                                   "locked install never took",
+    "google/embeddinggemma-300m": "it was only in fastembed 0.8.1, which the "
+                                  "locked install never took",
+}
 
 RECALL_GAIN = 2.0          # points of recall@5 a new meaning model must add
 SEARCH_P95_MS = 250.0      # a spoken answer waits for this search
@@ -166,7 +183,8 @@ def embed_verdict(base: dict, cand: dict) -> tuple:
     if not base.get("ok") or base.get("recall5") is None:
         return "cannot say", f"{EMBED_DEFAULT} was not measured, so there is nothing to compare"
     if not cand.get("semantic"):
-        return "cannot say", "meaning search did not run (fastembed or sqlite-vec is missing)"
+        return "cannot say", ("meaning search did not run (the memory search packages, "
+                              "the model, or sqlite-vec is missing)")
     gain = round((cand["recall5"] or 0) - (base["recall5"] or 0), 1)
     why = []
     if gain < RECALL_GAIN:
@@ -218,20 +236,81 @@ def scoreboard_row(date: str, change: str, sb: dict) -> str:
 
 
 # --------------------------------------------------------------------------
-#   Running
+#   The engine (jarvis_memory.py, run on ONNX Runtime directly since
+#   2026-10-21 - fastembed is not part of this tool or the backend any more)
 # --------------------------------------------------------------------------
 
-def fastembed_lists():
-    """(version, meaning models, re-rankers) this PC's fastembed has, or None."""
+def load_engine():
+    """The backend's own jarvis_memory module, or None.
+
+    Searched the way backend/eval_memory.py searches it: the live backend
+    folder when JARVIS_BACKEND names one, then this repository's
+    backend/rebuilt, then backend. Nothing is stored and no memory database
+    is opened by importing it - but as a belt and braces, JARVIS_MEMORY_DB is
+    pointed at a throwaway file first, so even a future accidental store
+    could never open the owner's real memory.
+    """
+    os.environ.setdefault(
+        "JARVIS_MEMORY_DB",
+        str(Path(tempfile.gettempdir()) / "jarvis-memory-tryout-not-a-store.db"))
+    paths = [str(REPO / "backend" / "rebuilt"), str(REPO / "backend")]
+    real = os.environ.get("JARVIS_BACKEND")
+    if real and (Path(real) / "jarvis_memory.py").is_file():
+        paths.insert(0, real)
+    for p in reversed(paths):
+        sys.path.insert(0, p)
     try:
-        from importlib.metadata import version
-        from fastembed import TextEmbedding
-        from fastembed.rerank.cross_encoder import TextCrossEncoder
-        return (version("fastembed"),
-                {str(m.get("model")) for m in TextEmbedding.list_supported_models()},
-                {str(m.get("model")) for m in TextCrossEncoder.list_supported_models()})
+        import jarvis_memory as M
+        return M
     except Exception:
         return None
+
+
+def engine_installed() -> bool:
+    """Are the packages the memory search runs on actually importable here?"""
+    try:
+        import onnxruntime  # noqa: F401
+        import tokenizers  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def memory_lists(engine) -> tuple:
+    """(onnxruntime version, meaning models, re-rankers) this build can run.
+
+    The lists are jarvis_memory's own static registries - ONNX_EMBED_MODELS
+    and ONNX_RERANK_MODELS - so they are exactly the models the backend has,
+    not a library's list that could drift from it.
+    """
+    try:
+        from importlib.metadata import version
+        ver = version("onnxruntime")
+    except Exception:
+        ver = "unknown version"
+    return (ver, set(engine.ONNX_EMBED_MODELS), set(engine.ONNX_RERANK_MODELS))
+
+
+def load_model(engine, model: str, *, rerank: bool = False) -> tuple:
+    """(True, "") if this PC can load `model`, else (False, why in plain words).
+
+    Loaded through the backend's OWN class - jarvis_memory.OnnxEmbedder or
+    jarvis_memory.OnnxReranker - so the tryout can never disagree with what
+    Jarvis would load, and a model that is not on this PC yet is fetched by
+    the same code that fetches it for Jarvis (once; the run beside it then
+    uses the cached copy). A model this build does not have, or one that
+    cannot be downloaded or loaded, comes back as a plain sentence for the
+    caller to print - never as a crash.
+    """
+    try:
+        maker = engine.OnnxReranker if rerank else engine.OnnxEmbedder
+        maker(model)        # loading is the whole check; the object is thrown away
+    except Exception as exc:
+        plain = isinstance(exc, getattr(engine, "EmbedModelUnavailable", ()))
+        return False, (str(exc) if plain else
+                       f"the model could not be loaded on this PC "
+                       f"({type(exc).__name__})")
+    return True, ""
 
 
 def run_eval(out_dir: Path, sizes: str, embed: str, rerank, run=subprocess.run) -> dict:
@@ -240,8 +319,14 @@ def run_eval(out_dir: Path, sizes: str, embed: str, rerank, run=subprocess.run) 
     env = dict(os.environ, JARVIS_MEMORY_EMBED_MODEL=embed)
     env.pop("JARVIS_MEMORY_RERANK_MODEL", None)
     env.pop("JARVIS_NO_EMBED", None)
+    # Measure the real re-ranker for THIS run: JARVIS_MEMORY_RERANK=1 lets the
+    # self-test load it even though the owner keeps the setting off otherwise.
+    # For this run only - the owner's setting is never touched, and the tools
+    # switch nothing.
+    env.pop("JARVIS_MEMORY_RERANK", None)
     if rerank:
         env["JARVIS_MEMORY_RERANK_MODEL"] = rerank
+        env["JARVIS_MEMORY_RERANK"] = "1"
     cmd = [sys.executable, str(EVAL), "--sizes", sizes, "--reranker",
            "auto" if rerank else "off", "--out", str(out_dir)]
     try:
@@ -265,20 +350,40 @@ def _v(x, unit=""):
     return "-" if x is None else f"{x}{unit}"
 
 
-def main(argv=None, *, run=subprocess.run, lists=None, out_root=None, say=print) -> int:
+def _not_run(why: str) -> dict:
+    return {"ok": False, "why": why}
+
+
+def main(argv=None, *, run=subprocess.run, engine=None, out_root=None, say=print) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--embedders", nargs="+", default=list(EMBEDDERS))
-    ap.add_argument("--rerankers", nargs="+", default=list(RERANKERS))
+    ap.add_argument("--embedders", nargs="+", default=list(EMBEDDERS),
+                    help="meaning models to try (any name jarvis_memory.ONNX_EMBED_MODELS "
+                         "has; default: bge-small only)")
+    ap.add_argument("--rerankers", nargs="+", default=list(RERANKERS),
+                    help="re-rankers to try (any name jarvis_memory.ONNX_RERANK_MODELS has)")
     ap.add_argument("--sizes", default="0,100,1000",
                     help="filler sizes for the self-test (default 0,100,1000; add 10000 "
                          "for the full test, several hours with the bigger models)")
     a = ap.parse_args(argv)
-    have = lists if lists is not None else fastembed_lists()
-    if not have:
-        say("fastembed is not installed here, so there is no meaning model to try. "
-            "Run apply-patches.ps1 first (docs/INSTALL.md).")
+    if engine is None:
+        if not engine_installed():
+            say("the memory search needs the onnxruntime and tokenizers packages, and "
+                "one of them is not installed, so there is no meaning model to try. "
+                "Run apply-patches.ps1 first (docs/INSTALL.md).")
+            return 2
+        engine = load_engine()
+        if engine is None:
+            say("the memory search's own module (jarvis_memory.py) could not be imported "
+                "here, so there is no meaning model to try. Run apply-patches.ps1 first "
+                "(docs/INSTALL.md).")
+            return 2
+    if not (hasattr(engine, "ONNX_EMBED_MODELS") and hasattr(engine, "ONNX_RERANK_MODELS")
+            and hasattr(engine, "OnnxEmbedder") and hasattr(engine, "OnnxReranker")):
+        say("the jarvis_memory.py in your Jarvis folder is older than this tryout - it "
+            "does not run the memory models on ONNX Runtime directly, so there is "
+            "nothing to try. Run apply-patches.ps1 first (docs/INSTALL.md).")
         return 2
-    ver, emb_have, rr_have = have
+    ver, emb_have, rr_have = memory_lists(engine)
     embedders = [EMBED_DEFAULT] + [m for m in a.embedders if m != EMBED_DEFAULT]
     rerankers = [RERANK_DEFAULT] + [m for m in a.rerankers if m != RERANK_DEFAULT]
     missing = [m for m in embedders if m not in emb_have] + \
@@ -286,46 +391,72 @@ def main(argv=None, *, run=subprocess.run, lists=None, out_root=None, say=print)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     out = Path(out_root or (Path.home() / "jarvis-model-tryout")) / f"memory-{stamp}"
     out.mkdir(parents=True, exist_ok=True)
-    say(f"fastembed {ver} is installed.")
+    src = getattr(engine, "__file__", None)
+    if src:
+        say(f"jarvis_memory.py: {Path(src).resolve()}")
+    say(f"onnxruntime {ver} is installed.")
     if missing:
-        say("Not on this PC's fastembed, so not tried: " + ", ".join(missing) + ". The "
-            "newer models need fastembed 0.8.1; one line installs it (its file is checked "
-            "against the hash below before anything installs):\n  " + FASTEMBED_UPGRADE)
+        say("Not a model this build can run, so not tried: " + ", ".join(missing) + ".")
+        gone = [m for m in missing if m in GONE_MEANING_MODELS]
+        if gone:
+            say("That includes " + ", ".join(gone) + ": " + GONE_MEANING_MODELS[gone[0]]
+                + ". Jarvis now runs fastembed 0.8.0's own model list directly on ONNX "
+                "Runtime, and those two are not in it - so no tryout of them is possible.")
     n = 1 + len([m for m in embedders[1:] if m in emb_have]) + \
         len([m for m in rerankers[1:] if m in rr_have])
     say(f"{n} self-test run(s), about 1 to 3 hours in all (longer the first time: the models "
         f"download once). Results go in {out}")
-    base_res = run_eval(out / "embed-bge-small", a.sizes, EMBED_DEFAULT,
-                        RERANK_DEFAULT if RERANK_DEFAULT in rr_have else None, run)
-    base = read_embed(base_res) if "_error" not in base_res else {"ok": False,
-                                                                   "why": base_res["_error"]}
+    ok, why = load_model(engine, EMBED_DEFAULT)
+    if not ok:
+        say(f"\nThe meaning model Jarvis uses cannot be loaded on this PC, so there is "
+            f"nothing to compare against: {why}")
+        return 2
+    base_rr = RERANK_DEFAULT if RERANK_DEFAULT in rr_have else None
+    if base_rr:
+        ok, why = load_model(engine, RERANK_DEFAULT, rerank=True)
+        if not ok:
+            say(f"\nThe re-ranker Jarvis uses cannot be loaded on this PC, so the first run "
+                f"measures the meaning model without it: {why}")
+            base_rr = None
+    base_res = run_eval(out / "embed-bge-small", a.sizes, EMBED_DEFAULT, base_rr, run)
+    base = read_embed(base_res) if "_error" not in base_res else _not_run(base_res["_error"])
     emb_rows = [(EMBED_DEFAULT, base, base_res)]
     for m in embedders[1:]:
         if m not in emb_have:
-            emb_rows.append((m, {"ok": False, "why": f"not in fastembed {ver}"}, {}))
+            emb_rows.append((m, _not_run("not a model this build can run"), {}))
             continue
         say(f"\n=== meaning model {m} ===")
+        ok, why = load_model(engine, m)
+        if not ok:
+            say(f"It was not tried: {why}")
+            emb_rows.append((m, _not_run(why), {}))
+            continue
         res = run_eval(out / ("embed-" + m.split("/")[-1]), a.sizes, m, None, run)
-        got = read_embed(res) if "_error" not in res else {"ok": False, "why": res["_error"]}
+        got = read_embed(res) if "_error" not in res else _not_run(res["_error"])
         if got.get("ok") and not str(got.get("embedder") or "").startswith(m):
-            got = {"ok": False, "why": f"the self-test used {got.get('embedder')} instead: "
-                                       "the model could not be loaded, or the jarvis_memory.py "
-                                       "in your Jarvis folder is older than this tryout (run "
-                                       "apply-patches.ps1 first)"}
+            got = _not_run(f"the self-test used {got.get('embedder')} instead: "
+                           "the model could not be loaded, or the jarvis_memory.py "
+                           "in your Jarvis folder is older than this tryout (run "
+                           "apply-patches.ps1 first)")
         emb_rows.append((m, got, res))
     rr_rows = [(RERANK_DEFAULT, read_rerank(base_res) if "_error" not in base_res
-                else {"ok": False, "why": base_res["_error"]}, base_res)]
+                else _not_run(base_res["_error"]), base_res)]
     for m in rerankers[1:]:
         if m not in rr_have:
-            rr_rows.append((m, {"ok": False, "why": f"not in fastembed {ver}"}, {}))
+            rr_rows.append((m, _not_run("not a model this build can run"), {}))
             continue
         say(f"\n=== re-ranker {m} ===")
+        ok, why = load_model(engine, m, rerank=True)
+        if not ok:
+            say(f"It was not tried: {why}")
+            rr_rows.append((m, _not_run(why), {}))
+            continue
         res = run_eval(out / ("rerank-" + m.split("/")[-1]), a.sizes, EMBED_DEFAULT, m, run)
-        got = read_rerank(res) if "_error" not in res else {"ok": False, "why": res["_error"]}
+        got = read_rerank(res) if "_error" not in res else _not_run(res["_error"])
         if got.get("ok") and got.get("model") != m:
-            got = {"ok": False, "why": f"the self-test measured {got.get('model')} instead: the "
-                                       "jarvis_memory.py in your Jarvis folder is older than "
-                                       "this tryout (run apply-patches.ps1 first)"}
+            got = _not_run(f"the self-test measured {got.get('model')} instead: the "
+                           "jarvis_memory.py in your Jarvis folder is older than "
+                           "this tryout (run apply-patches.ps1 first)")
         rr_rows.append((m, got, res))
     date = datetime.date.today().isoformat()
     lines = ["MEANING MODELS (on the hardest test; each at its own best distance floor)", ""]
@@ -368,7 +499,7 @@ def main(argv=None, *, run=subprocess.run, lists=None, out_root=None, say=print)
     text = "\n".join(lines)
     (out / "results.txt").write_text(text + "\n", encoding="utf-8")
     (out / "results.json").write_text(json.dumps(
-        {"fastembed": ver, "sizes": a.sizes, "embed_rule": EMBED_RULE,
+        {"onnxruntime": ver, "sizes": a.sizes, "embed_rule": EMBED_RULE,
          "rerank_rule": RERANK_RULE,
          "embedders": [{"model": m, **r} for m, r, _ in emb_rows],
          "rerankers": [{"model": m, **r} for m, r, _ in rr_rows]}, indent=1),
