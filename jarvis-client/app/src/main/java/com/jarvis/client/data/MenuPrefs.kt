@@ -2,11 +2,14 @@ package com.jarvis.client.data
 
 import android.content.Context
 import androidx.core.content.edit
+import com.jarvis.client.net.HudLayout
+import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.MenuCatalog
 import com.jarvis.client.net.MenuLogic
 import com.jarvis.client.net.MenuResult
 import com.jarvis.client.net.MenuState
 import com.jarvis.client.net.MenuView
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -117,10 +120,181 @@ class MenuPrefs(context: Context) {
         }
     }
 
+
+    // ------------------------------------------------------------- Home HUD ----
+    // The editable Home HUD (the Android A1-A4 slice, 2026-10-22). ONE versioned
+    // layout document and the owner's own preset copies, in the SAME
+    // SharedPreferences file as the menu visibility above - ids only, per
+    // device, never sent anywhere, no card, no pairing token (docs section 8's
+    // editable-HUD rules, applied to the phone).
+
+    /** The layout the Home screen draws from, and the owner's preset copies. */
+    private val _hud = MutableStateFlow(loadHud())
+    val hudLayout: StateFlow<HudLayout.Layout> = _hud.asStateFlow()
+
+    /** The owner's copies ("Duplicate to custom"); always after the built-ins. */
+    private val _presets = MutableStateFlow(loadPresets())
+    val customPresets: StateFlow<List<HudLayout.Preset>> = _presets.asStateFlow()
+
+    /** The layout held in memory (for the edit screen's own draft/undo). */
+    val layout: HudLayout.Layout get() = _hud.value
+
+    /**
+     * Applies ONE edit - the same [HudLayout.Action] a drag, a button or a
+     * TalkBack custom action makes - and saves it at once (autosave). A
+     * protected card is present after every edit because [HudLayout.normalize]
+     * is what the reducer returns.
+     */
+    @Synchronized
+    fun applyLayout(action: HudLayout.Action): HudLayout.Layout {
+        val next = HudLayout.apply(_hud.value, action)
+        if (next != _hud.value) {
+            _hud.value = next
+            saveHud(next)
+        }
+        return next
+    }
+
+    /** Back to the Default preset's arrangement. */
+    fun resetLayout(): HudLayout.Layout = applyLayout(HudLayout.Action.Reset)
+
+    /** One of the five built-in presets, read-only. */
+    fun applyPreset(presetId: String): HudLayout.Layout =
+        applyLayout(HudLayout.Action.ApplyPreset(presetId))
+
+    /**
+     * "Duplicate to custom": a copy of the CURRENT layout (or any built-in)
+     * that later edits go into. The built-in itself is never changed.
+     */
+    @Synchronized
+    fun duplicateToCustom(title: String): HudLayout.Preset {
+        val copy = HudLayout.copyAs(title, _hud.value)
+        val mine = _presets.value.filterNot { it.id == copy.id }
+        _presets.value = mine + copy
+        savePresets(_presets.value)
+        return copy
+    }
+
+    /** Renames one of the owner's copies; the built-ins are never touched. */
+    @Synchronized
+    fun renameCustomPreset(id: String, title: String): HudLayout.Preset? {
+        val clean = title.trim().replace(Regex("\\s+"), " ").take(40)
+        if (clean.isEmpty()) return null
+        val preset = _presets.value.firstOrNull { it.id == id } ?: return null
+        val renamed = preset.copy(title = clean)
+        _presets.value = _presets.value.map { if (it.id == id) renamed else it }
+        savePresets(_presets.value)
+        return renamed
+    }
+
+    /** Deletes one of the owner's copies; the layout itself stays as it is. */
+    @Synchronized
+    fun deleteCustomPreset(id: String): Boolean {
+        val gone = _presets.value.filterNot { it.id == id }
+        if (gone.size == _presets.value.size) return false
+        _presets.value = gone
+        savePresets(gone)
+        return true
+    }
+
+    /** Reads one of the owner's copies, never a built-in. */
+    fun customPreset(id: String): HudLayout.Preset? = _presets.value.firstOrNull { it.id == id }
+
+    /**
+     * The JSON a person can copy out (and paste back on another phone or into
+     * a note): the layout only, sanitized by [HudLayout.normalize]. It is not a
+     * backup of the phone and never carries words of a chat or a memory.
+     */
+    fun layoutJson(): String = HudLayout.toJson(_hud.value)
+
+    /**
+     * A pasted document, made safe by [HudLayout.fromJson] + normalize. An
+     * invalid one changes nothing and answers false - the built-in preset
+     * list is never rewritten by an import.
+     */
+    @Synchronized
+    fun importLayoutJson(json: String?): Boolean {
+        val safe = HudLayout.fromJson(json) ?: return false
+        if (safe == _hud.value) return false
+        _hud.value = safe
+        saveHud(safe)
+        return true
+    }
+
+    private fun loadHud(): HudLayout.Layout = runCatching {
+        val text = prefs.getString(KEY_HUD_LAYOUT, null)
+        val stored = HudLayout.fromJson(text)
+        if (stored != null) {
+            stored
+        } else {
+            // Migration from the menu visibility that already exists: the same
+            // cards this phone already hides are not put on the Home screen by
+            // a first-run layout (a personal choice made before the layout
+            // existed is not silently undone).
+            val hidden = load()
+            val base = HudLayout.defaults()
+            HudLayout.normalize(
+                base.copy(sections = base.sections.mapValues { (section, ids) ->
+                    ids.filter { id ->
+                        val menu = HudLayout.card(id)?.menu ?: return@filter true
+                        !MenuLogic.isHidden(hidden, menu)
+                    }
+                }),
+            )
+        }
+    }.getOrDefault(HudLayout.defaults())
+
+    private fun saveHud(layout: HudLayout.Layout) {
+        runCatching {
+            prefs.edit {
+                putString(KEY_HUD_LAYOUT, HudLayout.toJson(layout))
+                putInt(KEY_HUD_VERSION, HudLayout.VERSION)
+            }
+        }
+    }
+
+    private fun loadPresets(): List<HudLayout.Preset> = runCatching {
+        val raw = prefs.getString(KEY_HUD_PRESETS, null) ?: return@runCatching emptyList()
+        val arr = JarvisJson.parseToJsonElement(raw) as? kotlinx.serialization.json.JsonArray
+            ?: return@runCatching emptyList()
+        arr.mapNotNull { el ->
+            val obj = el as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+            val title = (obj["title"] as? kotlinx.serialization.json.JsonPrimitive)
+                ?.takeIf { it.isString }?.content ?: return@mapNotNull null
+            val layout = HudLayout.fromJson(
+                (obj["layout"] as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.takeIf { it.isString }?.content ?: return@mapNotNull null,
+            ) ?: return@mapNotNull null
+            HudLayout.copyAs(title, layout).copy(id = (obj["id"] as? kotlinx.serialization.json.JsonPrimitive)
+                ?.takeIf { it.isString }?.content ?: HudLayout.copyAs(title, layout).id)
+        }
+    }.getOrDefault(emptyList())
+
+    private fun savePresets(presets: List<HudLayout.Preset>) {
+        runCatching {
+            val arr = presets.map { p ->
+                kotlinx.serialization.json.buildJsonObject {
+                    put("id", p.id)
+                    put("title", p.title)
+                    put("layout", HudLayout.toJson(p.layout))
+                }
+            }
+            prefs.edit {
+                putString(KEY_HUD_PRESETS, kotlinx.serialization.json.JsonArray(arr).toString())
+                putInt(KEY_HUD_VERSION, HudLayout.VERSION)
+            }
+        }
+    }
+
     private companion object {
         const val PREFS = "jarvis_menus"
         const val KEY_VERSION = "v"
         const val KEY_HIDDEN = "hidden"
         const val KEY_COLLAPSED = "collapsed"
+        // The Home HUD (A1): its own keys, so the menu catalogue's own version
+        // and the layout's version can never be confused for one another.
+        const val KEY_HUD_VERSION = "hud_v"
+        const val KEY_HUD_LAYOUT = "hud_layout"
+        const val KEY_HUD_PRESETS = "hud_presets"
     }
 }
