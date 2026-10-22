@@ -20,9 +20,12 @@
  *
  * WHAT EACH CHANGE DOES. ON raises ONE `history_enable` card and the route
  * answers "waiting" at once, so the page says so and re-reads the status while
- * it is waiting; OFF is immediate. Choosing a retention deletes conversations
- * older than the chosen age AT ONCE, so it asks here first and is held on a
- * stale link (rule 4) - turning history OFF is never held.
+ * it is waiting; OFF is immediate. Choosing a retention has NO card in the
+ * backend: it is a direct setting change that deletes conversations older than
+ * the chosen age AT ONCE, so the page asks here first (in plain words, with the
+ * count it will act on) and the change is held on a stale link (rule 4) -
+ * turning history OFF is never held. This page does not pretend the retention
+ * choice raises a card the route does not have.
  *
  * @module chat-history-settings
  */
@@ -211,7 +214,9 @@ async function setKeep(days) {
     return;
   }
   busy = true;
-  say(ASKING);
+  say(days === 0
+    ? ASKING
+    : "Deleting conversations older than the chosen age - this can take a moment…");
   paint();
   try {
     const out = await TAURI.core.invoke("history_settings",

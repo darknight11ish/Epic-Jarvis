@@ -950,6 +950,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           waiting: false, message: "Chat history is off. Nothing new is kept." };
         return JSON.parse(JSON.stringify(window.__historySettings));
       }
+      {
+        // A scenario can make the PC's synchronous deletion slow
+        // (`history.keepDelayMs`), so the page's patience can be tested: the
+        // real change runs the PC's housekeeping inside the same request.
+        const delay = Number(window.__historySettings.keepDelayMs || 0);
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
       window.__historySettings = { ...window.__historySettings,
         keep_days: Number(args && args.keepDays),
         message: `Conversations are now kept for ${args && args.keepDays} days.` };

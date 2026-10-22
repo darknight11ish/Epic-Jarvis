@@ -150,6 +150,29 @@ await check("the retention choice sends ONE keep_days field, after asking", asyn
   await page.close();
 });
 
+await check("a slow retention deletion is waited for, not reported as a failure", async () => {
+  const page = await open({ chatHistory: { enabled: true, keep_days: 0,
+    recording: true, why_not: "", keepDelayMs: 1400 } });
+  await ready(page);
+  page.on("dialog", async (dialog) => { await dialog.accept(); });
+  await page.locator("#ch-keep").selectOption("90");
+  // While the PC is deleting, the page says what is happening.
+  await page.waitForFunction(
+    () => /Deleting conversations older than the chosen age/.test(
+      document.getElementById("ch-status").textContent),
+    { timeout: 4000 });
+  // It then reports the PC's real answer, not a timeout - the budget is 60s.
+  await page.waitForFunction(
+    () => /kept for 90 days/.test(document.getElementById("ch-status").textContent),
+    { timeout: 8000 });
+  const tone = await page.evaluate(() =>
+    document.getElementById("ch-status").dataset.tone || "");
+  assert.notEqual(tone, "warn", "a slow but successful deletion was shown as a failure");
+  assert.deepEqual((await state(page)).calls.filter((c) => c.action === "keep"),
+    [{ action: "keep", keepDays: 90 }]);
+  await page.close();
+});
+
 await check("ON and a retention change wait for a live link; OFF does not", async () => {
   const page = await open({ link: { stale: true },
     chatHistory: { enabled: false, keep_days: 0, recording: false } });
@@ -215,11 +238,19 @@ await check("CONTROL: the command's verbs are read/on/off/keep, one field each",
   assert.match(rust, /"off" => Ok\(serde_json::json!\(\{ "enabled": false \}\)\)/);
   assert.match(rust, /"keep" => match keep_days/);
   assert.match(rust, /const KEEP_DAYS: \[u32; 4\] = \[0, 30, 90, 365\];/);
+  // The retention change runs the PC's own synchronous deletion: it gets a
+  // much longer budget than an ordinary write, and a timeout is worded so the
+  // page never claims the change definitely did not happen.
+  assert.match(rust, /const KEEP_TIMEOUT: Duration = Duration::from_secs\(60\);/);
+  assert.match(rust, /The change did not answer in time/);
   // No delete, no conversation list, no approval anywhere in it.
   assert.doesNotMatch(rust, /\/api\/history\/(delete|conversation|search)/);
   assert.doesNotMatch(rust, /decide_approval|answer_card/);
   // Only ON and a retention change are held on a stale link.
   assert.match(rust, /stale && \(action == "on" \|\| action == "keep"\)/);
+  // The docs must not claim the retention change raises a card.
+  assert.doesNotMatch(rust, /RETENTION CHANGE\. `enabled/,
+    "the module still says a retention change is a card");
 });
 
 await check("CONTROL: the read drops every conversation in Rust", async () => {

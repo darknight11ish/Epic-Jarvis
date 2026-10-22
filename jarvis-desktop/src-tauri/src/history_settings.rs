@@ -24,13 +24,14 @@
 //! wire into the Settings page. (The PC-side process still reads the page the
 //! route serves; the page does not.)
 //!
-//! ON IS ONE CARD, AND SO IS A RETENTION CHANGE. `enabled: true` raises the
-//! EXISTING `history_enable` card (tier ask) and the route answers 202
-//! "waiting" straight away - the page says so and re-reads the status until it
-//! is decided. A `keep_days` change DELETES conversations older than the
-//! chosen age at once, so it is held on a stale link too (rule 4) - the same
-//! rule the Brain's own History switch follows. OFF is immediate and never
-//! held. All writes get the short budget: none of them blocks on a person.
+//! ON IS ONE CARD; A RETENTION CHANGE IS A DIRECT CHANGE AFTER A CONFIRM.
+//! `enabled: true` raises the EXISTING `history_enable` card (tier ask) and the
+//! route answers 202 "waiting" straight away - the page says so and re-reads
+//! the status until it is decided. A `keep_days` change has NO card in the
+//! backend: it is a direct setting change that DELETES conversations older than
+//! the chosen age at once, so the page asks here first and the change is held
+//! on a stale link (rule 4); this command does not invent a card the route does
+//! not have. OFF is immediate and never held.
 
 use std::time::Duration;
 
@@ -54,14 +55,20 @@ const STATUS_PATH: &str = "/api/history?limit=1";
 pub(crate) const MISSING: &str = "This PC's Jarvis does not keep chat history yet. \
      Update the backend by running apply-patches.ps1, then open this again.";
 
-/// ON asks for a card, and a retention change deletes older conversations at
-/// once: both are held while the link is stale (rule 4). OFF is never held.
+/// ON asks for a card; a retention change deletes older conversations at
+/// once with no card. Both are held while the link is stale (rule 4). OFF is
+/// never held.
 const STALE_HELD: &str = "The connection to Jarvis is catching up, so changing this is held \
      until it does - try again in a moment. Turning chat history off works at once.";
 
-/// One write with no waiting on a person: ON answers 202 at once, OFF and a
-/// retention change are immediate. Ten seconds is plenty.
+/// ON answers 202 at once and OFF is one small write: ten seconds is plenty.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// A retention change runs the PC's own synchronous housekeeping: it may delete
+/// many conversations in the same request, so its budget is deliberately much
+/// longer than an ordinary write. If it does time out, the page must not say
+/// "nothing happened" - the words below say the choice may still have applied.
+const KEEP_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// The body of one verb - ONE field, exactly as the route documents.
 pub(crate) fn body(action: &str, keep_days: Option<u32>) -> Result<serde_json::Value, String> {
@@ -166,15 +173,23 @@ pub async fn history_settings(
         })?;
         return status_only(&page);
     }
-    let said = look::post(&app, PATH, body, WRITE_TIMEOUT)
-        .await
-        .map_err(|why| {
-            if why == look::MISSING {
-                MISSING.to_string()
-            } else {
-                why
-            }
-        })?;
+    let timeout = if action == "keep" {
+        KEEP_TIMEOUT
+    } else {
+        WRITE_TIMEOUT
+    };
+    let said = look::post(&app, PATH, body, timeout).await.map_err(|why| {
+        if why == look::MISSING {
+            MISSING.to_string()
+        } else if action == "keep" {
+            format!(
+                "The change did not answer in time. The PC may still have applied it - \
+                         open this again before changing it once more. ({why})"
+            )
+        } else {
+            why
+        }
+    })?;
     Ok(answer(&said))
 }
 
@@ -228,9 +243,19 @@ mod tests {
     #[test]
     fn on_answers_waiting_at_once_so_no_write_blocks_on_a_person() {
         // The route raises the card and returns 202 "waiting" immediately, so
-        // every write gets the short budget; the page re-reads the status
+        // the switch writes get the short budget; the page re-reads the status
         // until the card is decided.
         assert!(WRITE_TIMEOUT <= Duration::from_secs(15));
+    }
+
+    #[test]
+    fn a_retention_change_gets_a_budget_for_its_synchronous_deletion() {
+        // Choosing a shorter retention deletes older conversations in the same
+        // request, with no card. That can take far longer than an ordinary
+        // write, so its budget is a minute - and a timeout is worded so the page
+        // never claims the change definitely did not happen.
+        assert!(KEEP_TIMEOUT >= Duration::from_secs(60));
+        assert!(KEEP_TIMEOUT > WRITE_TIMEOUT * 3);
     }
 
     #[test]
