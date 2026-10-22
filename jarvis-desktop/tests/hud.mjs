@@ -136,6 +136,11 @@ async function openHud(browser, status, pageOptions = {}) {
       window.__TAURI__ = { core: { Channel, invoke: async (cmd, args) => {
         window.__invokes.push([cmd, cmd === "hud_chat" ? { body: args.body } : args]);
         switch (cmd) {
+          case "get_hud_layout":
+            // H1: the injected bootstrap reads the saved layout. With no
+            // saved document it leaves the page's own look alone, which is
+            // what these page tests assume.
+            return { layout: null, source: "none" };
           case "summon_push_to_talk":
             if (mode === "fail") throw new Error("not allowed on window");
             return null;
@@ -243,6 +248,12 @@ async function openHud(browser, status, pageOptions = {}) {
       // The approval queue. The injected bootstrap reads this too (review
       // ruling 8.2 needs the PC's own `replaces` field before an Approve can
       // mean anything), so a scenario can give rows with `status.pending`.
+      // GALAXY v2 (2026-10-21, G1): the one graph the page already reads.
+      // Only a scenario that asks for it gets a graph; otherwise the real
+      // 404 path stays exactly as it was.
+      if (url.pathname === "/api/graph" && status.graph) {
+        return route.fulfill({ status: 200, headers: cors, json: status.graph });
+      }
       if (url.pathname === "/api/pending") {
         return route.fulfill({ status: 200, headers: cors,
           json: { available: true, pending: status.pending || [], history: [] } });
@@ -1489,7 +1500,7 @@ await check("the HUD page holds no token, and every request it makes goes throug
   assert.deepEqual(direct, [], `the page reached the backend by itself: ${JSON.stringify(direct)}`);
   assert.equal(chats.length, 1, "the chat did not reach the backend through the shell");
   assert.ok(log.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."), JSON.stringify(log));
-  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get"].includes(c)), [],
+  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout"].includes(c)), [],
     `the HUD called ${JSON.stringify(held.invoked)}`);
   // Every read is one hud_proxy.rs allows (HUD_GET_PATHS and /api/retrieve).
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
@@ -1620,7 +1631,8 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
     pressed: document.getElementById("mic").getAttribute("aria-pressed"),
   }));
   await page.close();
-  assert.deepEqual(after.invokes.map((c) => c[0]).filter((c) => c !== "hud_get"), ["summon_push_to_talk"],
+  assert.deepEqual(after.invokes.map((c) => c[0]).filter((c) => c !== "hud_get" && c !== "get_hud_layout"),
+    ["summon_push_to_talk"],
     "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
   assert.equal(after.listening, false, "the page's own (browser) recogniser started");
   assert.equal(after.pressed, "false");
@@ -1668,7 +1680,14 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // the BAR'S OWN `apply_focus_preset` (its one "Use this preset"), so
       // the PC raises the same switch_model card and the page never posts
       // /api/work/apply itself; the read is hud_get's /api/presets.
-      "focus-presets"]);
+      "focus-presets",
+      // H1 of the editable-HUD design (2026-10-21): the injected bootstrap
+      // reads the saved layout so the page can wear the owner's preset. READ
+      // ONLY: the Settings window's picker holds the write; the HUD page still
+      // cannot save a layout, and it still holds no pairing token.
+      "hud-layout-read"]);
+  assert.equal(cap.permissions.includes("hud-layout-write"), false,
+    "the HUD page was granted the layout WRITE; only the Settings picker may save one");
   assert.match(cap.description, /holds NO pairing token/);
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
   assert.match(cap.description, /hud-approvals/,
@@ -2261,6 +2280,204 @@ await check("the footer Jarvis-bar pill is there with the shell, and gone in a p
   assert.equal(withShell.shown, true, "the footer pill is not drawn in the Cockpit rail");
   assert.equal(withoutShell.ready, false, "a plain browser drew a Jarvis-bar pill with no bar to open");
   assert.equal(withoutShell.shown, false);
+});
+
+
+/* =========================================================================
+ * GALAXY v2 (Wave 3 slice G1, 2026-10-21): three lenses over the ONE graph
+ * the HUD reads (/api/graph, through the shell's fixed allowlist - no new
+ * route, no new permission). Memory and Neural are node groups the PC's own
+ * build_graph() computed; the counts are computed from that payload here and
+ * never typed into the page.
+ * ========================================================================= */
+
+const GALAXY_GRAPH = {
+  counts: { models: 2, tools: 3, facts: 2, documents: 1, knowledge: 1, skills: 1 },
+  nodes: [
+    { id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 },
+    { id: "model:local", label: "qwen3.5:9b", group: "model", weight: 3 },
+    { id: "model:jarvis-escalate", label: "jarvis-escalate", group: "model", weight: 3 },
+    { id: "cluster:reason", label: "Reasoning", group: "cluster", weight: 3 },
+    { id: "tool:think", label: "think", group: "tool", detail: "Enabled ability" },
+    { id: "tool:web_search", label: "web_search", group: "tool", detail: "Enabled ability" },
+    { id: "fact:0", label: "Prefers tea", group: "fact" },
+    { id: "fact:1", label: "Has a cat", group: "fact" },
+    { id: "document:0", label: "project-notes.md", group: "document" },
+    { id: "entity:repo", label: "Epic-Jarvis", group: "entity" },
+  ],
+  links: [
+    { source: "core", target: "model:local", kind: "runs" },
+    { source: "core", target: "model:jarvis-escalate", kind: "runs" },
+    { source: "core", target: "cluster:reason", kind: "runs" },
+    { source: "cluster:reason", target: "tool:think", kind: "has" },
+    { source: "cluster:reason", target: "tool:web_search", kind: "has" },
+    { source: "core", target: "fact:0", kind: "recalls" },
+    { source: "core", target: "fact:1", kind: "recalls" },
+    { source: "core", target: "document:0", kind: "knows" },
+    { source: "core", target: "entity:repo", kind: "knows" },
+  ],
+};
+
+async function galaxySnap(page) {
+  return page.evaluate(() => {
+    const nodes = [...document.querySelectorAll(".galaxy-node-btn")].map((b) => ({
+      id: b.getAttribute("data-galaxy-node"), tag: b.tagName,
+      label: b.getAttribute("aria-label"), hidden: b.hidden,
+      tabIndex: b.tabIndex,
+      x: Math.round(b.getBoundingClientRect().x), y: Math.round(b.getBoundingClientRect().y),
+      w: Math.round(b.getBoundingClientRect().width),
+    }));
+    return {
+      lenses: [...document.querySelectorAll("button[data-galaxy-lens]")].map((b) => ({
+        lens: b.getAttribute("data-galaxy-lens"), tag: b.tagName,
+        pressed: b.getAttribute("aria-pressed"), text: b.textContent.trim(),
+      })),
+      counts: document.getElementById("galaxy-counts").textContent,
+      countsLens: document.getElementById("galaxy-counts").getAttribute("data-galaxy-counts"),
+      overlay: Boolean(document.getElementById("galaxy-overlay")),
+      nodes, visible: nodes.filter((n) => !n.hidden),
+      vw: innerWidth,
+    };
+  });
+}
+
+async function openGalaxy(browser, graph) {
+  const opened = await openHud(browser, { jarvis: true, ollama: true, proxy: false, graph });
+  await opened.page.click('[data-view="brain"]');
+  await opened.page.waitForTimeout(500);
+  return opened;
+}
+
+await check("GALAXY v2: three lenses, real node buttons, and counts computed from the payload", async () => {
+  const { page, problems } = await openGalaxy(browser, GALAXY_GRAPH);
+  const neural = await galaxySnap(page);
+  // Neural = the capability half (core + models + clusters + tools).
+  assert.deepEqual(neural.lenses.map((l) => l.lens), ["memory", "neural", "unified"],
+    "the three lenses are not in the expected order");
+  assert.deepEqual(neural.lenses.filter((l) => l.pressed === "true").map((l) => l.lens), ["neural"],
+    "Neural is not the default lens");
+  assert.equal(neural.overlay, true, "there is no node-button overlay");
+  const capabilityIds = ["cluster:reason", "core", "model:jarvis-escalate", "model:local",
+    "tool:think", "tool:web_search"].sort();
+  assert.deepEqual(neural.visible.map((n) => n.id).sort(), capabilityIds,
+    "Neural did not show exactly the capability half plus the core");
+  assert.ok(neural.visible.every((n) => n.tag === "BUTTON" && n.tabIndex >= 0 && n.w >= 18),
+    "a galaxy dot is not a real, focusable button");
+  assert.ok(neural.visible.every((n) => n.label && n.label.includes("(")),
+    "a node button has no useful aria-label");
+  assert.match(neural.counts, /Neural: 2 brains · 1 ability group · 2 abilities/,
+    `Neural counts do not match the payload: ${neural.counts}`);
+
+  // Memory = the other half, same payload.
+  await page.click('button[data-galaxy-lens="memory"]');
+  await page.waitForTimeout(400);
+  const memory = await galaxySnap(page);
+  assert.deepEqual(memory.visible.map((n) => n.id).sort(),
+    ["core", "document:0", "entity:repo", "fact:0", "fact:1"],
+    "Memory did not show exactly the memory half plus the core");
+  assert.match(memory.counts, /Memory: 2 facts · 1 document · 1 knowledge entry/,
+    `Memory counts do not match the payload: ${memory.counts}`);
+  assert.ok(!memory.visible.some((n) => /^(model|cluster|tool):/.test(n.id)),
+    "the Memory lens leaked a capability node");
+
+  // Unified = both, with the counts line saying which half is which.
+  await page.click('button[data-galaxy-lens="unified"]');
+  await page.waitForTimeout(400);
+  const unified = await galaxySnap(page);
+  assert.equal(unified.visible.length, 10, "Unified did not show both halves");
+  assert.match(unified.counts, /Unified: 4 memory · 5 capability nodes/,
+    `Unified counts are not the two halves: ${unified.counts}`);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("GALAXY v2: the counts follow the payload, they are not typed into the page", async () => {
+  // One more ability and one more fact in the PC's graph: the SAME page must
+  // say three abilities and three facts. A hardcoded count cannot pass this.
+  const graph = {
+    ...GALAXY_GRAPH,
+    nodes: [...GALAXY_GRAPH.nodes,
+      { id: "tool:calculator", label: "calculator", group: "tool", detail: "Enabled ability" },
+      { id: "fact:2", label: "Runs a 2080 Super", group: "fact" }],
+  };
+  const { page } = await openGalaxy(browser, graph);
+  const neural = await galaxySnap(page);
+  assert.match(neural.counts, /3 abilities/, `abilities did not follow the payload: ${neural.counts}`);
+  await page.click('button[data-galaxy-lens="memory"]');
+  await page.waitForTimeout(400);
+  const memory = await galaxySnap(page);
+  assert.match(memory.counts, /3 facts/, `facts did not follow the payload: ${memory.counts}`);
+  await page.close();
+});
+
+await check("GALAXY v2: a keyboard user can reach and open a node in every lens", async () => {
+  const { page } = await openGalaxy(browser, GALAXY_GRAPH);
+  for (const lens of ["neural", "memory", "unified"]) {
+    await page.click(`button[data-galaxy-lens="${lens}"]`);
+    await page.waitForTimeout(400);
+    // Tab from the lens pill reaches a node button (the overlay is real HTML,
+    // not something drawn only on the canvas).
+    await page.focus(`button[data-galaxy-lens="${lens}"]`);
+    let reached = false;
+    for (let i = 0; i < 40; i += 1) {
+      await page.keyboard.press("Tab");
+      reached = await page.evaluate(() => {
+        const a = document.activeElement;
+        return Boolean(a && a.classList && a.classList.contains("galaxy-node-btn") && !a.hidden);
+      });
+      if (reached) break;
+    }
+    assert.equal(reached, true, `Tab never reached a node button in the ${lens} lens`);
+    const before = await page.evaluate(() => ({
+      label: document.activeElement.getAttribute("aria-label"),
+      pressed: document.activeElement.getAttribute("aria-pressed"),
+    }));
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(250);
+    const opened = await page.evaluate(() => ({
+      on: document.getElementById("inspector").classList.contains("on"),
+      title: document.getElementById("insp-title").textContent.trim(),
+      pressed: (document.activeElement && document.activeElement.getAttribute)
+        ? document.activeElement.getAttribute("aria-pressed") : null,
+    }));
+    assert.equal(opened.on, true, `Enter on a node in the ${lens} lens did not open the inspector`);
+    assert.equal(opened.title, before.label.split(" (")[0],
+      `the inspector opened the wrong node in the ${lens} lens`);
+  }
+  await page.close();
+});
+
+await check("GALAXY v2: the Memory lens says so honestly when the PC has no memory to show", async () => {
+  const graph = {
+    ...GALAXY_GRAPH,
+    nodes: GALAXY_GRAPH.nodes.filter((n) => !["fact", "document", "entity"].includes(n.group)),
+    links: GALAXY_GRAPH.links.filter((l) => !String(l.target).startsWith("fact:")
+      && !String(l.target).startsWith("document:") && !String(l.target).startsWith("entity:")),
+  };
+  const { page } = await openGalaxy(browser, graph);
+  await page.click('button[data-galaxy-lens="memory"]');
+  await page.waitForTimeout(400);
+  const memory = await galaxySnap(page);
+  assert.match(memory.counts, /no saved facts on this PC yet/,
+    `an empty Memory lens invented content instead of saying it is empty: ${memory.counts}`);
+  assert.deepEqual(memory.visible.map((n) => n.id), ["core"],
+    "an empty Memory lens drew nodes the PC did not send");
+  await page.close();
+});
+
+await check("GALAXY v2: the lens is remembered, like the other cosmetic view choices", async () => {
+  const { page } = await openGalaxy(browser, GALAXY_GRAPH);
+  await page.click('button[data-galaxy-lens="memory"]');
+  await page.waitForTimeout(400);
+  await page.reload();
+  await page.waitForTimeout(1400);
+  await page.click('[data-view="brain"]');
+  await page.waitForTimeout(500);
+  const after = await galaxySnap(page);
+  assert.deepEqual(after.lenses.filter((l) => l.pressed === "true").map((l) => l.lens), ["memory"],
+    "the chosen lens did not survive a reload");
+  assert.match(after.counts, /Memory:/, "the remembered lens did not redraw its own counts");
+  await page.close();
 });
 
 await browser.close();

@@ -43,6 +43,7 @@ pub mod frame_feed;
 pub mod handoff;
 pub mod hardware;
 pub mod hotkeys;
+pub mod hud_layout;
 pub mod hud_proxy;
 pub mod limits;
 pub mod live;
@@ -1127,6 +1128,11 @@ pub fn run() {
             commands::get_theme_prefs,
             commands::set_theme_follow_system,
             commands::open_faces,
+            // The desktop HUD's saved layout (H1 of the editable-HUD design,
+            // 2026-10-21): the same appearance-class settings store the theme
+            // uses. The Settings picker writes; the HUD bootstrap only reads.
+            hud_layout::get_hud_layout,
+            hud_layout::set_hud_layout,
             // "Everything Jarvis can do" (2026-10-08): the whole feature set,
             // read-only, opened from Settings and the tray.
             commands::open_features,

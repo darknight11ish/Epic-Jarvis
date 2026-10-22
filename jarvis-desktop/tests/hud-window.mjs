@@ -176,7 +176,7 @@ function makeNode(tag = "") {
  *
  * Returns the fake page and everything the run created.
  */
-function runBootstrap({ saved = {}, shell = true, raw = null } = {}) {
+function runBootstrap({ saved = {}, shell = true, raw = null, layout = null } = {}) {
   const created = [];
   const page = {
     input: makeNode("textarea"),
@@ -228,6 +228,7 @@ function runBootstrap({ saved = {}, shell = true, raw = null } = {}) {
   };
   if (shell) {
     const invoked = [];
+    let layoutAsks = 0;
     window.__invokes = invoked;
     // The shell's own feed, in the form hud_bootstrap.js defines it. The
     // shell pushes by evaluating a call to it - `__jarvisFeed("bar", true)`
@@ -239,9 +240,20 @@ function runBootstrap({ saved = {}, shell = true, raw = null } = {}) {
     window.__TAURI__ = {
       core: {
         Channel: class { constructor() { this.onmessage = null; } },
-        invoke: (cmd, args) => { invoked.push([cmd, args]); return Promise.resolve(null); },
+        // The saved HUD layout is a separate, later section of the bootstrap;
+        // it is counted here and covered by its own test, and its call is not
+        // mixed into the legacy `__invokes` lists the button tests compare.
+        invoke: (cmd, args) => {
+          if (cmd === "get_hud_layout") {
+            layoutAsks += 1;
+            return Promise.resolve({ layout, source: layout ? "saved" : "none" });
+          }
+          invoked.push([cmd, args]);
+          return Promise.resolve(null);
+        },
       },
     };
+    window.__layoutAsks = () => layoutAsks;
   }
 
   const source = BOOT.replace("__JARVIS_BASE__", JSON.stringify("http://127.0.0.1:4719"));
@@ -577,7 +589,7 @@ await check("the card's status line names the chosen layout in words", () => {
   assert.match(S.describeHudLayout("bogus"), /Command Cockpit/);
 });
 
-await check("the Settings card offers the three layouts, and nothing there needs Rust", () => {
+await check("the Settings card offers the seven presets through the layout store", () => {
   const at = SETTINGS_HTML.indexOf('id="hud-window"');
   assert.ok(at > 0, "settings.html has no #hud-window card");
   const card = SETTINGS_HTML.slice(at, SETTINGS_HTML.indexOf("</section>", at));
@@ -585,12 +597,16 @@ await check("the Settings card offers the three layouts, and nothing there needs
     "the card has no layout picker fieldset");
   assert.match(card, /<legend class="label" id="hud-layout-legend">HUD layout<\/legend>/);
   assert.match(card, /id="hud-layout-status"/, "the picker has no status line");
-  // The rows are built from HUD_LAYOUT_INFO at run time (as the theme picker's
-  // are from THEME_INFO), so the page cannot list a layout the module does not
-  // know about.
-  assert.match(SETTINGS_JS, /HUD_LAYOUT_INFO/, "the card does not read the layout table");
-  assert.match(SETTINGS_JS, /HUD_LAYOUTS/, "the card does not read the layout list");
-  assert.doesNotMatch(SETTINGS_JS, /invoke\s*\(/, "the layout picker calls a Rust command");
+  // The rows are built from the preset table at run time (as the theme picker's
+  // are from THEME_INFO), so the page cannot list a preset the module does not
+  // know about. The persistence rides through the layout store, never a
+  // direct `invoke` in this panel - the store is the one place that talks to
+  // Rust, and it is what the HUD bootstrap reads too.
+  assert.match(SETTINGS_JS, /presetRows/, "the card does not read the preset rows");
+  assert.match(SETTINGS_JS, /choosePreset/, "the card does not save through the store");
+  assert.match(SETTINGS_JS, /loadLayout/, "the card does not read the saved layout");
+  assert.doesNotMatch(SETTINGS_JS, /__TAURI__|invoke\s*\(/,
+    "the layout picker talks to Rust itself instead of the layout store");
 });
 
 await check("the page's own key is the one the module exports (the page cannot import it)", () => {
@@ -606,6 +622,35 @@ await check("the page's own key is the one the module exports (the page cannot i
     assert.ok(HUD.includes(`data-hud-layout-choice="${id}"`),
       `the HUD's own picker offers no ${id} button`);
   }
+});
+
+await check("the bootstrap wears the saved preset's look (H1), and asks once", async () => {
+  const layout = {
+    version: 1,
+    id: "focus",
+    name: "Focus",
+    base_preset: "focus",
+    shell_template: "two-column-left",
+    cards: [],
+  };
+  const run = runBootstrap({ shell: true, layout });
+  assert.equal(run.window.__layoutAsks(), 1, "the bootstrap did not read the saved layout");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(run.document.documentElement.getAttribute("data-hud-layout"), "ambient",
+    "Focus did not wear the nearest of the page's three looks");
+  assert.deepEqual(run.window.__jarvisHudLayout.base_preset, "focus",
+    "the document was not left for H2");
+  assert.equal(run.document.documentElement.getAttribute("data-hud-layout"), "ambient");
+});
+
+await check("with no saved layout, or no shell, the page's own look is left alone", async () => {
+  const none = runBootstrap({ shell: true, layout: null });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(none.document.documentElement.getAttribute("data-hud-layout"), null,
+    "an empty store changed the page's look");
+  const browser = runBootstrap({ shell: false, layout: null });
+  assert.equal(browser.window.__layoutAsks, undefined,
+    "a page served on its own has no shell command to ask");
 });
 
 if (fails.length) {

@@ -179,6 +179,11 @@ fn main() {
             "set_theme_follow_system",
             // Settings' "Open Faces" button.
             "open_faces",
+            // The HUD's saved layout (H1 of the editable-HUD design): the
+            // read is for the HUD bootstrap and the Settings picker, the
+            // write only for the Settings window's picker.
+            "get_hud_layout",
+            "set_hud_layout",
             // Settings' "Everything Jarvis can do" button, and the same row in
             // the tray menu (2026-10-08, docs/FEATURES-LIST-DESIGN.md). The page
             // this opens holds no command of its own.

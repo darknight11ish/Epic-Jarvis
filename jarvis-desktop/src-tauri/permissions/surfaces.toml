@@ -55,6 +55,23 @@ identifier = "theme-write"
 description = "Change the theme for every window."
 permissions = ["allow-set-theme", "allow-set-theme-follow-system"]
 
+# The HUD's saved layout (H1 of the editable-HUD design, 2026-10-21; Gemini
+# rulings 23-28). Read-only for the HUD window, whose injected bootstrap reads
+# the saved document so the page can wear it; the Settings window's picker
+# holds both, and it is the only surface that writes - the HUD page itself
+# still holds no settings-writing command and no pairing token. A layout is
+# the appearance class the theme is: card positions, visibility and names,
+# nothing private, so it raises no approval card.
+[[set]]
+identifier = "hud-layout-read"
+description = "Read the HUD's saved layout."
+permissions = ["allow-get-hud-layout"]
+
+[[set]]
+identifier = "hud-layout-write"
+description = "Choose the HUD's layout preset (Settings' picker)."
+permissions = ["allow-set-hud-layout"]
+
 # Answering a gate is a decision with consequences, so it is separate from
 # reading the stream. The quickbar and the widget both render approvals and
 # both get it; the settings window reads the link state to show a connection
