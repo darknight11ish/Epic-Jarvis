@@ -1139,6 +1139,7 @@ pub fn run() {
             // uses. The Settings picker writes; the HUD bootstrap only reads.
             hud_layout::get_hud_layout,
             hud_layout::set_hud_layout,
+            hud_layout::open_hud_edit,
             // "Everything Jarvis can do" (2026-10-08): the whole feature set,
             // read-only, opened from Settings and the tray.
             commands::open_features,

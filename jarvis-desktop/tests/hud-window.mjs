@@ -493,8 +493,18 @@ await check("the card raises nothing: no Rust command, no card, no held change",
   // Cosmetic, so the whole card is localStorage and nothing else. A command
   // here would need surfaces.toml, capabilities/settings.json and an approval
   // path - the opposite of what this setting is.
-  assert.doesNotMatch(SETTINGS_JS, /invoke\s*\(/, "the card calls a Rust command");
-  assert.doesNotMatch(SETTINGS_JS, /decide|approve|amend/, "the card decides something");
+  // H2 (2026-10-22) adds exactly ONE command to this card: `open_hud_edit`,
+  // a navigation door that shows the HUD window in edit mode. It saves no
+  // setting and raises no card; nothing else may appear here.
+  const withoutNavigation = SETTINGS_JS.replace(/invoke\s*\(\s*"open_hud_edit"\s*\)/g, "");
+  assert.doesNotMatch(withoutNavigation, /invoke\s*\(/,
+    "the card calls a Rust command other than the one navigation door");
+  assert.match(SETTINGS_JS, /invoke\s*\(\s*"open_hud_edit"\s*\)/,
+    "the card lost its Edit HUD navigation button");
+  // Words in comments describe what the card does NOT do ("raises no card",
+  // "approves nothing"); the check is about the CODE.
+  const code = SETTINGS_JS.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  assert.doesNotMatch(code, /decide|approve|amend/, "the card decides something");
   assert.match(SETTINGS_JS, /import[\s\S]*from "\.\/hud-window\.js"/,
     "the card does not read its setting from hud-window.js");
 });
@@ -605,7 +615,11 @@ await check("the Settings card offers the seven presets through the layout store
   assert.match(SETTINGS_JS, /presetRows/, "the card does not read the preset rows");
   assert.match(SETTINGS_JS, /choosePreset/, "the card does not save through the store");
   assert.match(SETTINGS_JS, /loadLayout/, "the card does not read the saved layout");
-  assert.doesNotMatch(SETTINGS_JS, /__TAURI__|invoke\s*\(/,
+  // The picker’s persistence must still ride the layout store. H2’s one
+  // navigation command (open_hud_edit) is allowed and is not a picker write.
+  const picker = SETTINGS_JS.replace(/invoke\s*\(\s*"open_hud_edit"\s*\)/g, "")
+    .replace(/globalThis\.__TAURI__/g, "");
+  assert.doesNotMatch(picker, /invoke\s*\(/,
     "the layout picker talks to Rust itself instead of the layout store");
 });
 

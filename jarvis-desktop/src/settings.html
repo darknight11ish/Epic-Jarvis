@@ -1365,11 +1365,22 @@
         <p class="note">
           These seven starting layouts are for the big "Jarvis" window on this
           computer only, and picking one saves it at once - no approval card.
-          They are read-only starting points for now; the full editor, where
-          you move and resize cards yourself, comes later. The three pills in
-          that window's own header still switch its look in the meantime.
         </p>
         <p class="status" id="hud-layout-status" role="status"></p>
+
+        <!-- H2 of the editable-HUD design (2026-10-22): the editor lives in
+             the HUD window itself (drag, or use each card's own buttons).
+             This button only opens that window and puts it into edit mode. -->
+        <p class="note">
+          To move, resize, fold or hide cards yourself, open the big window and
+          press <b>Edit HUD</b> in its header - or start here. Escape finishes
+          editing, and <b>Reset to preset</b> in the editing bar puts back the
+          layout you chose above.
+        </p>
+        <button type="button" class="button" id="hud-edit-open">
+          Edit HUD in the window
+        </button>
+        <p class="status" id="hud-edit-open-status" role="status"></p>
       </section>
 
       <h2 class="settings-group-heading">Rare</h2>
