@@ -5779,6 +5779,67 @@ words cannot reach the audit. **Honest limit:** this is the backend method and v
 that proposes it automatically is deferred (no route was added, and nothing in
 v1 calls it yet).
 
+**HUD Reminders Phase 2: `edit`, `move`, `reorder` and the `rank` column
+(added 2026-10-22).** The same `POST /api/schedule/act` gains three single-job
+verbs; no route was added and no patch-carried file changed. Each answers 200
+`{"ok": true, "id", "said"}` with fixed words ("Changed.", "Moved to that
+list." / "Moved to the to-do list.", "Reordered."), the same 400/404/409 error
+shapes as the older verbs, and one `schedule` change event. They run after the
+existing row gate, so a fired/waiting/done job is refused first, and
+`clear_list` is still routed before the id check.
+
+* `{"id", "do": "edit", ...}` - all-or-nothing, unknown keys refused 400, at
+  least one field required. `text` replaces the words (≤ `MAX_TEXT`; a
+  reminder/to-do still needs some). A ONE-OFF job's own time is changed
+  cardless with exactly one of `when` (an epoch, or `{"date","time"}`), `at`
+  (an epoch) or `date` + `time` (this PC's wall clock) - the same class as
+  pause/add-time; a timer is changed with `seconds` (`MIN_TIMER` …
+  `MAX_TIMER`; a paused timer keeps its state and gets the new left time); a
+  to-do refuses any time (409). A **repeating** job's `when` is refused 409
+  with the plain sentence that a repeating rule is changed by editing its
+  `repeat`, never by moving its next time. A `repeat` change (only for a kind
+  that may repeat; alarms, reminders and briefings) raises exactly ONE
+  `schedule_repeat` 202 card and the OLD rule stays active until it is
+  approved; denied/timed-out/refused changes nothing. Module-managed kinds
+  (`tellme`, `standby`, `briefing`, `today`, … - `KINDS[kind].add` is set)
+  refuse `edit` 409: they are changed where they were set up. A to-do may
+  carry `list` in the same edit, applied with the words as one all-or-nothing
+  change.
+* `{"id", "do": "move", "list": <name or null>}` - a to-do only (409 for
+  every other kind); `null`/`"todo"`/`"to-do"` is the to-do list itself. The
+  name goes through `list_key()` exactly like adding a to-do, a NEW name
+  counts against `MAX_LISTS`, and the item is appended to the end of its new
+  list; ids, words, `created` and `state` stay. Cardless. The reply never
+  repeats the list's title.
+* `{"id", "do": "reorder", "rank": <int>}` (or the convenience
+  `"before"`/`"after"`: another open item's id) - a to-do only, position
+  within its CURRENT list 0..n-1; the store rewrites `rank` for every open
+  item of that list to 0..n-1 in one transaction, and the identical request a
+  second time writes nothing. Cardless.
+
+The list read carries **one additive top-level `"phase2": true`** capability
+marker, so a newer UI talking to an older backend hides the edit/move/reorder
+controls instead of drawing ones it cannot honour. The marker is a boolean
+only and old clients ignore it; the `?id=` one-job read keeps its old shape.
+
+Storage: a `rank INTEGER` column added through the same idempotent ALTER path
+as every later column, plus a one-time per-list backfill of the OPEN to-dos
+(active/paused) to 0..n-1 in `(created,rowid)` order. The ALTERs and the
+backfill run in ONE explicit transaction, so a crash cannot leave half of it;
+done/fired rows are never ranked, opening again writes nothing, and old code
+ignores the column (a code rollback loses nothing). `todos()` reads
+`ORDER BY (rank IS NULL), rank, created, rowid`; a to-do's view carries
+`"rank": <int or null>`. This is the only new field, and it is a number.
+
+Privacy: the audit reuses `schedule.act` with ids/kinds/outcomes only - an
+`edit` adds a fixed-order `fields` list of FIELD NAMES (never a value),
+`move` adds `named_list: true|false` (never the list's name), `reorder` adds
+the integer `rank`. No reply, event or error repeats the owner's words or a
+named list's title. **Not included in v1:** undo/edit history (the existing
+"cancel that" only deletes jobs; the owner can re-edit), and the UI controls
+themselves are a separate follow-up slice. **No UI work, no capability/ACL
+change and no patch-carried file change is in this backend slice.**
+
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for

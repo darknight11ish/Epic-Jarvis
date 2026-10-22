@@ -468,6 +468,23 @@ mod tests {
     }
 
     #[test]
+    fn a_saved_focus_layout_is_still_accepted_after_the_quiet_rename() {
+        // F7 (2026-10-22): the JS normalizer maps "focus" to "quiet" silently.
+        // This side only has to keep STORING such a document (the store's
+        // closed-world validator must not reject an owner's saved layout just
+        // because the label changed); the page bootstrap already accepts the
+        // old id, and H2 normalizes it on load.
+        let mut doc = base();
+        doc["id"] = serde_json::json!("focus");
+        doc["name"] = serde_json::json!("Focus");
+        doc["base_preset"] = serde_json::json!("focus");
+        doc["shell_template"] = serde_json::json!("two-column-left");
+        let clean = sanitise(&doc).expect("a saved focus layout must stay storable");
+        assert_eq!(clean["base_preset"], "focus");
+        assert_eq!(clean["id"], "focus");
+    }
+
+    #[test]
     fn the_contract_mirror_has_the_seven_presets_and_they_all_validate() {
         let text = include_str!("../../../contract/hud-presets.json");
         let doc: serde_json::Value = serde_json::from_str(text).unwrap();
@@ -477,13 +494,16 @@ mod tests {
             .iter()
             .map(|preset| preset["id"].as_str().unwrap())
             .collect();
+        // Focus was renamed Quiet on 2026-10-22 (coherence slice F7). The
+        // contract carries the new id; the JS normalizer keeps "focus" as a
+        // silent migration alias for a saved document.
         assert_eq!(
             ids,
             [
                 "cockpit",
                 "studio",
                 "ambient",
-                "focus",
+                "quiet",
                 "telemetry",
                 "second_brain",
                 "minimal"
