@@ -817,6 +817,48 @@ places between screens. Presentation only - no approval logic changed.
      copy. The backend suite asserts the exact words per action against the
      gate's `_RISK` why.
 
+### Cardless by design, and why
+
+The rule "the app never auto-approves anything" (rule 4) is not the same claim
+as "every write raises a card": a cardless path here raises no card because it
+answers none, and every one of them either only makes Jarvis do less or
+records a preference the owner can change back in one press. This is the
+complete list; a write that is not on it asks first. (The two-press cards and
+the tiers themselves are section 3 above.)
+
+| What is written | Why no card | What still guards it |
+|---|---|---|
+| **Appearance and layout** - the desktop's `theme` (`commands::set_theme`, the settings store's appearance class) and the big HUD's layout document (`hud_layout.rs` `set_hud_layout`) | Paint and arrangement only: no private material, no backend call, no outbound request, and changing it back is one press. | Rust's closed-world normaliser (`hud_layout::sanitise`) is the authority for the saved document and the page's normaliser is a second line; the layout write is its own appearance-class grant (`hud-layout-write`, owner-approved 2026-10-21, `capabilities/hud.json`), separate from the page's schedule grant, and the page holds no pairing token. |
+| **One job on the schedule** - pause, resume, delete, done, add time or snooze on ONE job, plus a ONE-OFF reminder/alarm/timer add (`jarvis_schedule` `act()` / the add route) | "Stopping only makes things quieter": one job's state, or one new item. There is no list form and no delete-all - clearing a named list stays the Brain window's, by Ruling 15. | The stale-link hold blocks ACTING while the event stream is stale (rule 4); the audit line carries ids, kinds and outcomes only, never the item's words; and a REPEATING add does raise its one `schedule_repeat` card at tier `ask`. |
+| **A ready-for-review marker** - Wave D-1's ready-for-review path (`Scheduler.propose_ready`, `jarvis_schedule.py`; JARVIS-API section 21) - the ruling calls this `suggest_done` | It completes nothing and changes no state: it only says "Jarvis's part is done - check it". | Only a to-do can be marked; the item stays `active`/`paused` until the owner's own `act("done")`, the one action that completes a task; the audit line is `schedule.ready` with ids, kind and a short reason only - never the item's words. |
+| **The next message's lane** - the big HUD's ONE Cloud button (the same lane switch the bar always had; `jarvis_hud.html`'s rail) | It routes one message: it approves nothing, sends nothing, stores nothing, and it marks nothing until `/api/status` says the proxy is up. | The server's own rule-1 refusals still apply: a turn touching private material never runs on a cloud lane (`jarvis_agent.local_model_refusal`; `_one_call` refuses it again before any card - section 4). |
+| **Actions that only reduce or refuse** - Stop, Stop everything, Pause, Cancel, Mute, Deny and Undo | "Stopping is never gated" (section 3 above): each makes Jarvis do less or refuses a request, so a card asking permission to stop would be a card that cannot be safely refused. | Stop everything also refuses the remaining tool calls of the answer being written, and works while App lock is on; Deny is always the safe direction; Undo only puts back what ONE card removed, inside 10 minutes; none of them approves, denies, starts or resumes anything (only Resume raises a card). |
+
+**Wave D-1 (PR #722) is proactive, read-only and local-only, and its Rule-1
+and Rule-4 position is recorded here before it ships.** Its proactive reads -
+calendar travel/flight collisions and wrong-day anomalies
+(`jarvis_calendar.detect_travel_and_flight_collisions`,
+`detect_calendar_anomalies`), quiet email threads
+(`jarvis_email.find_quiet_threads`), the 2-minute meeting prep cards and the
+Daily Pulse / "where to look" strip (`jarvis_briefing.build`, `pulse_from`;
+`jarvis_today` carries the pulse on the Today board) - add no socket of their
+own, no model call and no card: they are built from reads the briefing already
+makes, and a source nobody read is listed in `not_checked`, never shown as 0.
+**Rule 1** holds because the calendar read latches outside text through
+`jarvis_gate.latch_taint` (`jarvis_calendar`'s own read does this today), the
+briefing is read-only and opens only the calendar and email reads their own
+settings allow, everything it shows passes through its own `_clean` cap or is
+already bounded by the read that produced it, and the sections that name
+people are withheld by the same App-lock / hide-memory redaction as the
+sections around them (the Today board's `pulse` is withheld entirely while the
+private lists are hidden). **Rule 4** holds
+because nothing here acts: the one write is the ready-for-review marker in the
+row above, which never completes a task - only the owner's explicit
+`act("done")` does. **Honest limit, stated by D-1's own docs:** the quiet-thread
+list, the prep people/notes and the money/study/PC-health Pulse sources are
+caller-supplied in v1, and no route or live mailbox read is wired yet; a source
+nobody read is said so in `not_checked`, never invented.
+
 ---
 
 ## 4. The egress boundary
@@ -2375,6 +2417,27 @@ desktop HUD reads `/api/presets` through its window's fixed read allowlist
 surface spells the route this way. `tools/check_parity.py` records it as
 `deliberate` for that reason.
 
+**`/api/work/choose` is kept and `/api/work/recommend` is being removed, and
+the difference is a caller, not a policy** (2026-10-22; coherence audit F11,
+Gemini ruling Q9). `POST /api/work/recommend` is dead: neither app calls it -
+the phone's only caller, `JarvisRuntime.offerWorkSetup`, is called by no Kotlin
+file under `jarvis-client/app/src/main`, so the "Jarvis suggests a setup" panel
+`HardwarePlate.kt` can draw is never populated - and the phone-side surface is
+being deleted in Session B's coherence slice (`jarvis-client/` belongs to that
+session, not this one). `POST /api/work/choose` is kept: it only remembers a
+preference and changes no model (`docs/JARVIS-API.md` section 128), and it
+belongs to the phone's Work setups section (`HardwarePlate.kt`'s "use" and
+"stop" buttons call it). The desktop's carded equivalent is
+`POST /api/work/apply` - one `switch_model` card, the one asked action
+(JARVIS-API section 145), sent by the bar's, Settings' and the HUD rail's
+`apply_focus_preset` - and the two routes are NOT unified: one remembers a
+setup, the other asks for a carded model change. `tools/check_parity.py` names
+both as `planned` until the phone PR lands (two warnings, exit 0); the
+classification change that removes the last warning rides with that phone PR,
+because a docs edit cannot reclassify a route. **Honest limit:** this paragraph
+records the decision and the dead half; the checker's zero-warning state lands
+with the phone files, not here.
+
 **The editable HUD's layout presets are the desktop's, on purpose** (2026-10-21;
 H1 of the editable-HUD design, Gemini rulings 23-28; `jarvis-desktop/src/hud-layout.js`,
 `contract/hud-presets.json`, `src-tauri/src/hud_layout.rs`). The big HUD
@@ -2383,14 +2446,14 @@ window is a 1280x820 widescreen WebView2 cockpit whose named regions
 exist only there. The seven built-in layouts - **Cockpit** (the default),
 **Studio**, **Ambient**, **Focus**, **Telemetry & Ops**, **Second Brain &
 Planner** and **Minimal** - are therefore desktop-only data, mirrored in
-`contract/hud-presets.json` for the desktop's own Rust and tests; the phone
-has its own `MenuCatalog`-backed home-HUD presets with a different screen
-geometry and different card ids (the Android `A1`-`A4` slice below), and it
-deliberately does not read this file. `tools/check_parity.py` has nothing to
-classify: no backend route and no phone source names it. The choice is saved
-in the desktop's appearance-class settings store (the same class as `theme`,
-no approval card, no pairing token), and a page served on its own in a
-browser keeps the old three-way `jarvis.hud.layout` fallback.
+`contract/hud-presets.json` for the desktop's own Rust and tests. **The phone
+does not read this file and has no editable-HUD layouts: the Android home-HUD
+presets (`A1`-`A4`) are planned and not yet built** (the plan lives in the
+editable-HUD design, not in shipped code, and no phone source names this file
+or the layout document). `tools/check_parity.py` has nothing to classify: no
+backend route and no phone source names it. The choice is saved in the
+desktop's appearance-class settings store (the same class as `theme`, no
+approval card, no pairing token).
 
 **H2 draws the editor: one reducer, every input (2026-10-22; H2 of the
 editable-HUD design, rulings 23-27; `jarvis-desktop/src/hud-edit.js`, the HUD
@@ -2430,10 +2493,9 @@ composer, stage tabs) is fixed - its registry rows round-trip but H2 does not
 reparent the live stage; there is no import/export (copy/paste JSON is H3), no
 user-preset management (`Duplicate to My Presets` is H3), and touch/pen drag is
 NOT-TESTABLE on real hardware here (keyboard/click paths are the guaranteed
-alternatives). Desktop-only, like H1: the phone has its own home HUD and never
-reads this.
+alternatives). Desktop-only, like H1: the phone keeps its own home screen and
+never reads this.
 
-**Not on the phone yet, and that is the scope of this slice rather than a
 **The HUD Reminders tab is the desktop HUD's, on purpose** (2026-10-21; the
 owner's dedicated Reminders menu). The HUD page (`jarvis_hud.html`, vendored
 byte-for-byte in three copies: `jarvis-desktop/src/`, `backend/` and
@@ -2455,6 +2517,24 @@ so they need a later deploy, and they are not faked in the page. The phone is
 not missing a control: its own app already reads and acts on the same
 schedule. `tools/check_parity.py` has nothing new to classify, because no
 backend route is added and the phone's read of `/api/schedule` is unchanged.
+
+**Wave D-1's proactive surfaces are desktop-first in one place, and that is
+written down rather than implied** (2026-10-22; PR #722; JARVIS-API sections 22
+and 82). The briefing's new sections - Travel and next steps, 2-minute prep and
+Quiet threads - travel on the existing briefing answer, which both apps already
+show, and no backend route was added. The Daily Pulse's `where_to_look` strip
+reaches the desktop's Today board (`jarvis_today` carries `pulse`); the phone's
+Today board does not exist yet - the phone's Today is unchanged in this slice,
+and a phone Today board is the named follow-up in JARVIS-API section 82 - so
+this is a recorded scope gap, not a parity pass. `tools/check_parity.py` has
+nothing new to classify: no route, and the phone's existing reads are
+unchanged. The Rule-1/Rule-4 position for the proactive reads and for the
+ready-for-review marker (`suggest_done` in the ruling; `propose_ready` in the
+code) is recorded in section 3's "Cardless by
+design, and why" subsection before this wave merges; the short version is that
+the reads are read-only, local-only and built from reads the briefing already
+makes, and the marker never completes a task - only the owner's explicit
+`act("done")` does.
 
 **Not on the phone yet, and that is the scope of this slice rather than a
 one-sided decision** (2026-10-19; extended by S3, 2026-10-20): **searchable
