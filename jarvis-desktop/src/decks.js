@@ -53,7 +53,10 @@ export const CHOOSE_DECK = "Choose a deck";
 export const KEEP_HIDDEN = "Turn off Hide memory lists to keep questions";
 
 export const SHOW_ANSWER = "Show answer";
-export const TYPED_PLACEHOLDER = "Type your answer (only for you - it is not sent or marked)";
+export const TYPED_PLACEHOLDER = "Type your answer (it stays on this device unless you ask the PC to mark it)";
+export const MARK_ANSWER = "Mark my answer";
+/** The heading over the PC's fading-deck rows (slice 22B; the phone's RADAR_HEADING). */
+export const RADAR_HEADING = "Cards fading";
 export const ENOUGH = "That's enough for now";
 export const MORE = "Do 10 more";
 export const STOP = "Stop";

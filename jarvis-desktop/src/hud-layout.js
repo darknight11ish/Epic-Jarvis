@@ -70,7 +70,7 @@ export const DENSITIES = Object.freeze(["comfortable", "compact", "spacious"]);
 export const THEMES = Object.freeze(["system", "deep-space", "paper", "high-contrast"]);
 
 /** The stage tabs a layout can open on (the page's own four plus Talk). */
-export const STAGE_TABS = Object.freeze(["talk", "galaxy", "today", "memory", "telemetry"]);
+export const STAGE_TABS = Object.freeze(["talk", "galaxy", "today", "reminders", "memory", "telemetry"]);
 
 /** The four cards no layout may hide (ruling 25). */
 export const PROTECTED_IDS = Object.freeze([

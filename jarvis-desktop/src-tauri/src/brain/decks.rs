@@ -380,12 +380,28 @@ pub async fn brain_review(
     }
 }
 
+/// The body `POST /api/review/reveal` takes. `answer` is the owner's own typed
+/// words when they pressed "Mark my answer" (slice 22B, wired on the desktop
+/// 2026-10-21): sent only on that tap, so the PC's deterministic grader can
+/// mark it in the same reply. Whitespace alone is no answer at all; the words
+/// are never kept by the window after the reply.
+fn reveal_body(card: &str, answer: Option<&str>) -> serde_json::Value {
+    let typed = answer.map(str::trim).unwrap_or("");
+    if typed.is_empty() {
+        serde_json::json!({ "card": card })
+    } else {
+        serde_json::json!({ "card": card, "answer": typed })
+    }
+}
+
 /// Shows a card's back. A card can be rated only after this. Held on a stale
-/// link; not asked of the PC while hidden.
+/// link; not asked of the PC while hidden. The optional `answer` is the
+/// "Mark my answer" tap above - "Show answer" passes none.
 #[tauri::command]
 pub async fn brain_review_reveal(
     app: AppHandle,
     card: String,
+    answer: Option<String>,
 ) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
     if !valid_id(&card) {
@@ -397,7 +413,7 @@ pub async fn brain_review_reveal(
     post(
         &app,
         "/api/review/reveal",
-        serde_json::json!({ "card": card }),
+        reveal_body(&card, answer.as_deref()),
         Some("back"),
     )
     .await
@@ -587,6 +603,25 @@ mod tests {
         let all: serde_json::Value = serde_json::from_str(FIXTURE).unwrap();
         assert_eq!(all["words"]["review_hidden"], REVIEW_HIDDEN);
         assert_eq!(all["ratings"], serde_json::json!(RATINGS));
+    }
+
+    #[test]
+    fn a_reveal_body_carries_the_typed_answer_only_when_one_was_asked_to_be_marked() {
+        // "Show answer": no answer key at all, exactly the old request.
+        assert_eq!(
+            reveal_body("c1a2b3c4d5e6", None),
+            serde_json::json!({ "card": "c1a2b3c4d5e6" })
+        );
+        // "Mark my answer" with an empty box sends nothing rather than "".
+        assert_eq!(
+            reveal_body("c1a2b3c4d5e6", Some("   ")),
+            serde_json::json!({ "card": "c1a2b3c4d5e6" })
+        );
+        // The typed words go to the PC's grader, trimmed, as `answer` (JARVIS-API 102).
+        assert_eq!(
+            reveal_body("c1a2b3c4d5e6", Some("  the plants  ")),
+            serde_json::json!({ "card": "c1a2b3c4d5e6", "answer": "the plants" })
+        );
     }
 
     #[test]

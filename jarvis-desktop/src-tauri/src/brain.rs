@@ -206,7 +206,7 @@ pub async fn brain_read(
 /// own comment, "the call JARVIS-API singles out as the one state-changing
 /// thing a phone may drive" - the desktop's copy of that same action had no
 /// gate at all.
-fn require_link_live(app: &AppHandle) -> Result<(), String> {
+pub(crate) fn require_link_live(app: &AppHandle) -> Result<(), String> {
     if app.state::<crate::stream::StreamState>().link().stale {
         return Err(
             "the event stream is stale, so this cannot be confirmed live - \

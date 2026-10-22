@@ -112,6 +112,14 @@ const MAX_LIST_NAME: usize = 30;
 /// The longest to-do item the PC keeps (jarvis_schedule.MAX_TEXT).
 pub(crate) const MAX_TEXT: usize = 300;
 
+/// The longest a timer may run (jarvis_schedule.MAX_TIMER): a timer is for
+/// today; later than 24 hours is a reminder.
+pub(crate) const MAX_TIMER_SECONDS: f64 = 24.0 * 3600.0;
+
+/// The HUD Reminders tab's own sentence for a value it cannot send.
+pub(crate) const REMINDERS_FORM_HINT: &str =
+    "The Reminders tab adds a reminder, a timer, an alarm or a to-do item.";
+
 fn parsed(body: &str) -> Option<serde_json::Value> {
     serde_json::from_str::<serde_json::Value>(body)
         .ok()
@@ -439,6 +447,164 @@ pub(crate) fn today_body(text: &str, at: &str, days: &[u8]) -> Result<serde_json
         serde_json::json!({ "every": "week", "at": at, "days": d })
     };
     Ok(serde_json::json!({ "kind": "today", "text": t, "repeat": repeat }))
+}
+
+/// The HUD Reminders tab's form -> the body of `POST /api/schedule/add`.
+/// ONE item at a time, in the four plain kinds the form offers, and nothing
+/// the backend does not already take for them. `notes` is not a field of its
+/// own on the PC (a reminder has ONE free-text field), so it is carried as
+/// the last sentence of the item's words, after " - ": the PR says so.
+///
+/// This is PHASE 1 of the owner's Reminders request: adding items and the
+/// existing one-job actions. Editing an item's words/time/list and
+/// reordering need backend actions and therefore a later deploy (Phase 2);
+/// this builder deliberately has no body for them.
+//
+// One argument per form field (see `hud_schedule_add`): the tests assert the
+// flat body each combination makes, and the fields are the page's own.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn hud_add_body(
+    kind: &str,
+    text: Option<&str>,
+    notes: Option<&str>,
+    seconds: Option<f64>,
+    date: Option<&str>,
+    time: Option<&str>,
+    repeat: Option<&serde_json::Value>,
+    list: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    let kind = kind.trim().to_ascii_lowercase();
+    let words = joined_words(text, notes)?;
+    match kind.as_str() {
+        "todo" => todo_body(&words, list),
+        "timer" => {
+            let seconds = seconds.ok_or_else(|| "A timer needs how long it runs.".to_string())?;
+            if !seconds.is_finite() || seconds <= 0.0 {
+                return Err("A timer needs a positive number of seconds.".to_string());
+            }
+            if seconds > MAX_TIMER_SECONDS {
+                return Err("A timer is for today - at most 24 hours.".to_string());
+            }
+            let mut body = serde_json::json!({ "kind": "timer", "seconds": seconds });
+            if !words.is_empty() {
+                body["text"] = serde_json::json!(words);
+            }
+            Ok(body)
+        }
+        "alarm" | "reminder" => {
+            if let Some(rule) = repeat {
+                let mut body = serde_json::json!({ "kind": kind, "repeat": repeat_rule(rule)? });
+                if !words.is_empty() {
+                    body["text"] = serde_json::json!(words);
+                }
+                return Ok(body);
+            }
+            let date = date
+                .map(str::trim)
+                .filter(|d| !d.is_empty())
+                .ok_or_else(|| "Pick a date, like 2030-09-15.".to_string())?;
+            if !date_shape(date) {
+                return Err("A date looks like 2030-09-15.".to_string());
+            }
+            let at = time
+                .and_then(hhmm)
+                .ok_or_else(|| "Write the time as HH:MM, like 18:00.".to_string())?;
+            let mut body = serde_json::json!({ "kind": kind, "date": date, "time": at });
+            if !words.is_empty() {
+                body["text"] = serde_json::json!(words);
+            }
+            Ok(body)
+        }
+        _ => Err(REMINDERS_FORM_HINT.to_string()),
+    }
+}
+
+/// The words an item is added with: its text, then its notes when there are
+/// any (one field on the PC), tidied and kept to the PC's limit.
+fn joined_words(text: Option<&str>, notes: Option<&str>) -> Result<String, String> {
+    let tidy = |v: Option<&str>| {
+        v.map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
+            .unwrap_or_default()
+    };
+    let mut out = tidy(text);
+    let notes = tidy(notes);
+    if !notes.is_empty() {
+        if out.is_empty() {
+            out = notes;
+        } else {
+            out = format!("{out} - {notes}");
+        }
+    }
+    if out.chars().count() > MAX_TEXT {
+        return Err(format!(
+            "That is longer than {MAX_TEXT} characters - say it more briefly."
+        ));
+    }
+    Ok(out)
+}
+
+/// A date as the PC writes one ("2030-09-15"), before the PC's own calendar
+/// check. Only the shape is judged here - the backend owns "not a date".
+fn date_shape(v: &str) -> bool {
+    let b = v.as_bytes();
+    b.len() == 10
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && b.iter()
+            .enumerate()
+            .all(|(i, c)| (i == 4 || i == 7) || c.is_ascii_digit())
+}
+
+/// The repeat rule the HUD form offers, tidied the way `jarvis_schedule`'s
+/// `check_rule` does it: every day, every weekday, or every week on the
+/// picked days. The PC checks it again; this refuses early in plain words.
+fn repeat_rule(rule: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let rule = rule.as_object().ok_or_else(|| {
+        "A repeat is every day, every weekday, or every week on some days.".to_string()
+    })?;
+    if rule.contains_key("until") {
+        return Err("Only a standby schedule has an end time.".to_string());
+    }
+    let every = rule
+        .get("every")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    match every.as_str() {
+        "day" | "weekday" => {
+            let at = rule
+                .get("at")
+                .and_then(|v| v.as_str())
+                .and_then(hhmm)
+                .ok_or_else(|| "Write the time as HH:MM, like 07:30.".to_string())?;
+            Ok(serde_json::json!({ "every": every, "at": at }))
+        }
+        "week" => {
+            let at = rule
+                .get("at")
+                .and_then(|v| v.as_str())
+                .and_then(hhmm)
+                .ok_or_else(|| "Write the time as HH:MM, like 07:30.".to_string())?;
+            let days = rule.get("days").and_then(|v| v.as_array()).ok_or_else(|| {
+                "A weekly repeat needs its days, 0 (Monday) to 6 (Sunday).".to_string()
+            })?;
+            let mut out: Vec<u8> = Vec::new();
+            for day in days {
+                let n = day.as_u64().filter(|n| *n <= 6).ok_or_else(|| {
+                    "A weekly repeat needs its days, 0 (Monday) to 6 (Sunday).".to_string()
+                })?;
+                out.push(n as u8);
+            }
+            out.sort_unstable();
+            out.dedup();
+            if out.is_empty() {
+                return Err("Pick at least one day.".to_string());
+            }
+            Ok(serde_json::json!({ "every": "week", "at": at, "days": out }))
+        }
+        _ => Err("A repeat is every day, every weekday, or every week on some days.".to_string()),
+    }
 }
 
 /// Whether a `schedule` event that went off should be shown at all. The PC
@@ -1068,7 +1234,7 @@ pub async fn brain_schedule_set_unspoken(
     post(&app, COCKPIT_PATH, serde_json::json!({"enabled": enabled})).await
 }
 
-async fn post(
+pub(crate) async fn post(
     app: &AppHandle,
     path: &str,
     body: serde_json::Value,
@@ -1513,5 +1679,249 @@ mod tests {
         assert!(first_time("s00000000aa", 100));
         assert!(!first_time("s00000000aa", 100));
         assert!(first_time("s00000000aa", 200));
+    }
+
+    // ---- the HUD Reminders tab's add form (2026-10-21) ------------------
+
+    /// The form's fields -> the exact bodies `POST /api/schedule/add`
+    /// already takes; nothing invented, no field the backend does not know.
+    #[test]
+    fn the_hud_add_form_makes_the_body_the_backend_takes() {
+        let todo = hud_add_body(
+            "todo",
+            Some("Buy milk"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("shopping"),
+        )
+        .unwrap();
+        assert_eq!(
+            todo,
+            serde_json::json!(
+            {"kind": "todo", "text": "Buy milk", "list": "shopping"})
+        );
+
+        // The notes are carried in the item's ONE free-text field, on the end.
+        let noted = hud_add_body(
+            "reminder",
+            Some("  Call Mum  "),
+            Some("about the trip"),
+            None,
+            Some("2030-09-15"),
+            Some("7:30"),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            noted,
+            serde_json::json!({
+            "kind": "reminder", "date": "2030-09-15", "time": "07:30",
+            "text": "Call Mum - about the trip"})
+        );
+
+        let timer = hud_add_body("timer", None, None, Some(600.0), None, None, None, None).unwrap();
+        assert_eq!(
+            timer,
+            serde_json::json!({"kind": "timer", "seconds": 600.0})
+        );
+
+        let daily = hud_add_body(
+            "reminder",
+            Some("Stretch"),
+            None,
+            None,
+            None,
+            None,
+            Some(&serde_json::json!({"every": "weekday", "at": "8:05"})),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            daily,
+            serde_json::json!({
+            "kind": "reminder", "repeat": {"every": "weekday", "at": "08:05"},
+            "text": "Stretch"})
+        );
+
+        let weekly = hud_add_body(
+            "alarm",
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&serde_json::json!(
+                                      {"every": "week", "at": "06:00", "days": [5, 0, 5]})),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            weekly,
+            serde_json::json!({
+            "kind": "alarm", "repeat": {"every": "week", "at": "06:00", "days": [0, 5]}})
+        );
+    }
+
+    /// Every refusal is a plain sentence, and no bad shape reaches the PC.
+    #[test]
+    fn the_hud_add_form_refuses_bad_shapes_in_plain_words() {
+        let err = |b: Result<serde_json::Value, String>| b.unwrap_err();
+        assert_eq!(
+            err(hud_add_body(
+                "todo", None, None, None, None, None, None, None
+            )),
+            "Type what to add first."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "reminder",
+                Some("x"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            )),
+            "Pick a date, like 2030-09-15."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "reminder",
+                Some("x"),
+                None,
+                None,
+                Some("2030-9-15"),
+                Some("07:30"),
+                None,
+                None
+            )),
+            "A date looks like 2030-09-15."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "alarm",
+                Some("x"),
+                None,
+                None,
+                Some("2030-09-15"),
+                Some("25:00"),
+                None,
+                None
+            )),
+            "Write the time as HH:MM, like 18:00."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "timer",
+                None,
+                None,
+                Some(0.0),
+                None,
+                None,
+                None,
+                None
+            )),
+            "A timer needs a positive number of seconds."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "timer",
+                None,
+                None,
+                Some(MAX_TIMER_SECONDS + 1.0),
+                None,
+                None,
+                None,
+                None
+            )),
+            "A timer is for today - at most 24 hours."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "briefing",
+                Some("x"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            )),
+            REMINDERS_FORM_HINT
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "reminder",
+                Some("x"),
+                None,
+                None,
+                None,
+                None,
+                Some(&serde_json::json!({"every": "week", "at": "07:00",
+                                                             "days": []})),
+                None
+            )),
+            "Pick at least one day."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "reminder",
+                Some("x"),
+                None,
+                None,
+                None,
+                None,
+                Some(&serde_json::json!({"every": "week", "at": "07:00",
+                                                             "days": [9]})),
+                None
+            )),
+            "A weekly repeat needs its days, 0 (Monday) to 6 (Sunday)."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "reminder",
+                Some("x"),
+                None,
+                None,
+                None,
+                None,
+                Some(&serde_json::json!({"every": "day", "at": "07:00",
+                                                             "until": "08:00"})),
+                None
+            )),
+            "Only a standby schedule has an end time."
+        );
+        assert_eq!(
+            err(hud_add_body(
+                "reminder",
+                Some("x"),
+                None,
+                None,
+                None,
+                None,
+                Some(&serde_json::json!({"every": "minutes"})),
+                None
+            )),
+            "A repeat is every day, every weekday, or every week on some days."
+        );
+        let too_long = "a".repeat(MAX_TEXT + 1);
+        assert_eq!(
+            err(hud_add_body(
+                "todo",
+                Some(&too_long),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            )),
+            format!("That is longer than {MAX_TEXT} characters - say it more briefly.")
+        );
     }
 }

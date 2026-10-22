@@ -36,13 +36,20 @@ use crate::ChatState;
 /// owner's request for the HUD. Applying one is NOT a read and does not
 /// happen here - `focus_presets::apply_focus_preset` is the one command
 /// for that, with its ONE switch_model card, exactly as the bar uses it.
-pub const HUD_GET_PATHS: [&str; 6] = [
+///
+/// `/api/schedule` (2026-10-21, the owner's HUD Reminders request): the
+/// Reminders tab's list. A read only - `/api/schedule/add` and
+/// `/api/schedule/act` are NOT here and stay refused; a change goes through
+/// `hud_schedule_add` / `hud_schedule_act`, which hold the same stale-link
+/// rule as the Brain.
+pub const HUD_GET_PATHS: [&str; 7] = [
     "/api/status",
     "/api/graph",
     "/api/pending",
     "/api/initiative",
     "/api/memory/pending",
     "/api/presets",
+    "/api/schedule",
 ];
 
 /// The retrieval trace: `/api/retrieve?q=<the question>`, and nothing else.
@@ -356,6 +363,11 @@ mod tests {
             "/api/../api/approve",
             "/api/graph/../memory/export",
             "api/status",
+            "/api/schedule/add",
+            "/api/schedule/act",
+            "/api/schedule?id=s0123456789",
+            "/api/schedule?x=1",
+            "/api/schedule/",
             "http://127.0.0.1:4719/api/status",
             "/api/retrieve",
             "/api/retrieve?q=",

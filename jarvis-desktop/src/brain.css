@@ -1769,6 +1769,18 @@ body {
   font: inherit;
 }
 
+/* The PC's own sentence marking a typed answer (slice 22B, wired on the
+   desktop 2026-10-21; the same sentence the phone shows). */
+.review-grade {
+  margin: 4px 0 8px;
+  color: var(--text);
+}
+
+/* The fading-card radar under "My study decks" (slice 22B). */
+.deck-radar {
+  margin-top: 10px;
+}
+
 .review-ratings {
   display: flex;
   flex-wrap: wrap;
