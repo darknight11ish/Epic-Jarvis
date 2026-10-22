@@ -28,16 +28,12 @@ branches are unreachable - the HUD's live event path has been dead since the
 shim replaced its socket, and nothing anywhere says so: no error, no log line,
 just a page that updates on its 30-second poll instead of on the event.
 
-This script reports that, and does not fix it: `jarvis_hud.html` is vendored
-from the backend folder, so the file and line are named instead. The five
-branches are recorded in KNOWN_BREAKS below - printed loudly on every run, and
-not counted against the exit code, because the file cannot be edited here.
-
-A recorded break still fails when it MOVES or when a new one appears: the key
-is the check, the file, the line, the kind the handler is registered for AND
-the name read, so a branch added to the same handler, a branch renamed, a
-second branch on the same line, or the whole handler re-registered at a new
-line is a finding with no entry and the check goes red again.
+This script found that, and the 2026-10-22 coherence slice FIXED it: all three
+byte-identical `jarvis_hud.html` copies now register real listeners for the
+five kinds (`hello`, `approval`, `proposal`, `finding`, `activity`), so those
+branches run. `KNOWN_BREAKS` is EMPTY since then and this check stands whole:
+a new unreachable read (or a moved/renamed one) is a finding with no entry and
+fails the run - there is no recorded list for a new violation to hide in.
 
 What it reads - all from THIS checkout:
 
@@ -136,118 +132,26 @@ CONSUMED_WITHOUT_A_PAGE = {
 # ---------------------------------------------------------------------------
 #   The known breaks a guard is still allowed to guard around
 # ---------------------------------------------------------------------------
-# A guard with a list of known breaks is still a guard, because the list is
-# keyed rather than wildcarded: a violation NOT in it takes the exit code to 1
-# exactly as before, and a violation that IS in it is printed in full on every
-# single run. That is the difference between a recorded break and a silenced
-# one - the recorded one cannot be forgotten, and it cannot spread. What it
-# must never become is a place a NEW violation hides, so an entry only covers
-# the one finding it names (check, file, line, name), and an entry that stops
-# being reported is itself printed as stale.
-#
-# Entries exist only where the fix is genuinely impossible IN THIS REPOSITORY.
-# Everything below is one finding: five unreachable `if` branches inside one
-# handler in `jarvis_hud.html`.
-_KnownBreak = namedtuple("_KnownBreak", "reason fix")
-
-KNOWN_BREAKS = {
-    # Re-anchored ONCE MORE 2026-10-21 after #692 (layout DPI) and #703
-    # (telemetry drawer) merged ahead of the OWNER-REQUESTED preset rail:
-    # all three PRs grew the same vendored page above this handler, so these
-    # five read at the lines below now (the checker's own report is the
-    # authority). Same five recorded breaks, nothing new.
-    # --- 1. a kind read in a handler registered for another type -------------
-    # The key is this script's own four coordinates for that finding: the check
-    # that reports it, `file` (the page), `line` (the line the kind is READ at -
-    # not the line the handler is registered at, which is printed beside it),
-    # `kind` (the type the handler is registered for) and `name` (the kind being
-    # read). All four, so that an added branch, a renamed one, a second branch on
-    # the same line, or the whole handler moved down the page is a finding with
-    # no entry - and an entry that stops matching is reported as stale.
-    #
-    # THE FIVE HUD LINES BELOW MOVED +142 IN ONE JUMP (2447/2448/2455/2456/2457
-    # -> 2589/2590/2597/2598/2599), +100 IN ANOTHER (-> 2689/2690/2697/2698/2699),
-    # +69 IN A THIRD (-> 2758/2759/2766/2767/2768), +12 IN A FOURTH (-> 2770/2771/
-    # 2778/2779/2780) and +595 IN A FIFTH (-> 3365/3366/3373/3374/3375): #504
-    # (a5cce7f4, 2026-10-17) added 71 lines to the vendored page, #651 (25d548f96,
-    # 2026-10-20) added 12 more, and neither re-anchored these entries - which is
-    # the stale-entry failure this checker exists to report. The 2026-10-20 HUD
-    # three-layout PR (the owner's "3 different UIs for the jarvis HUD") added the
-    # layout CSS, markup and the layout script, which moved the whole handler
-    # down again - and it DID re-anchor these five, in the same commit, exactly as
-    # this rule asks.
-    #
-    # That is this rule firing correctly, not a workaround, and the same rule
-    # the 2026-10-07 audit note below records: `jarvis_hud.html` grew, the whole
-    # page below the insertion moved down, and these entries moved with it. The
-    # 2026-10-13 additions - the standing "the local model isn't running" line,
-    # its CSS, its re-read on the page's beat and the two functions that draw it
-    # - are the second jump, and #504's HUD fix is the third. A branch was fixed
-    # or removed? Then fix or delete its entry - the shift is not a reason for
-    # any of them to stay.
-    # Re-anchored 2026-10-21 for the tree that merged #689 (HUD field fixes):
-    # its anchors are 3532/3533/3540/3541/3542, and this branch's owner-
-    # approved extension of the two-press guard widens the page's
-    # REPLACE_ACTIONS floor by three lines above these branches, putting the
-    # same five at 3535/3536/3543/3544/3545 (the checker's own report).
-    # Same five recorded breaks, nothing new.
-    # Re-anchored again 2026-10-21 on the tree that MERGED #682 (three selectable
-    # HUD layouts): that PR moved these branches to 3365/3366/3373/3374/3375, and
-    # #680's own +46 lines above them moved the same five to
-    # 3411/3412/3419/3420/3421, which is what the merged page really reads (the
-    # checker's own report is the authority). Nothing else about the recorded
-    # break changed. Re-anchored ONCE MORE in the same night's field-fix PR
-    # (2026-10-21, HUD fit + one status row): the page grew above this handler
-    # (the fit guards, the one-row status block, its compact wording and
-    # tooltip, and the drawer's Escape path), so the five now read at
-    # Re-anchored once more by the HUD Reminders merge (2026-10-21): G1's
-    # lens markup and the Reminders tab's markup, CSS and script all sit ABOVE
-    # this handler, so the five reads moved to 4300/4301/4308/4309/4310 in the
-    # merged page (handler at 4291) - and this same commit moved the entries
-    # with them, exactly as the rule above asks. The handler is untouched.
-    # 3532/3533/3540/3541/3542 - the handler itself is untouched; only its
-    # position moved.
-    ("1 a read that can never arrive", "jarvis_hud.html", 4458, "message", "hello"):
-        _KnownBreak(
-            "the file is vendored byte for byte from the owner's backend folder, so a "
-            "branch and a listener cannot be added here",
-            "the backend's own copy of jarvis_hud.html: register a listener per kind "
-            "the page reads - es.addEventListener(\"hello\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 4459, "message", "approval"):
-        _KnownBreak(
-            "the file is vendored byte for byte from the owner's backend folder, so a "
-            "branch and a listener cannot be added here",
-            "the backend's own copy of jarvis_hud.html: register a listener per kind "
-            "the page reads - es.addEventListener(\"approval\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 4466, "message", "proposal"):
-        _KnownBreak(
-            "the file is vendored byte for byte from the owner's backend folder, so a "
-            "branch and a listener cannot be added here",
-            "the backend's own copy of jarvis_hud.html: register a listener per kind "
-            "the page reads - es.addEventListener(\"proposal\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 4467, "message", "finding"):
-        _KnownBreak(
-            "the file is vendored byte for byte from the owner's backend folder, so a "
-            "branch and a listener cannot be added here",
-            "the backend's own copy of jarvis_hud.html: register a listener per kind "
-            "the page reads - es.addEventListener(\"finding\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 4468, "message", "activity"):
-        _KnownBreak(
-            "the file is vendored byte for byte from the owner's backend folder, so a "
-            "branch and a listener cannot be added here",
-            "the backend's own copy of jarvis_hud.html: register a listener per kind "
-            "the page reads - es.addEventListener(\"activity\", ...) - where that page lives"),
-}
+# EMPTY SINCE 2026-10-22 (F9, Gemini ruling Q7). The five recorded breaks were
+# the five unreachable `if` branches inside the HUD page's onmessage handler;
+# all three byte-identical copies now register real listeners for those kinds,
+# so the breaks are gone and the entries were DELETED rather than re-anchored.
+# This list must stay empty: a new unreachable read fails the run, and the fix
+# belongs in the page (or, if a future producer genuinely lives outside this
+# repository and the page cannot be changed, a single reasoned entry keyed on
+# check + file + line + handler kind + name - never a wildcard).
+KNOWN_BREAKS = ()
 
 
 def known_break(check: str, page: str, line: int, kind: str, name: str):
     """The recorded entry for one finding, or None - which means NEW.
 
-    All four coordinates and not one of them: the file and the line alone would
-    let a second, different branch on the same line pass as the recorded one,
-    the name alone would let an added branch hide behind a name already here,
-    and the kind alone would cover every handler on the page.
+    Empty since 2026-10-22: the five HUD breaks were fixed, not re-anchored.
+    The function stays so a future genuinely-unfixable finding has one narrow,
+    fully keyed place to be recorded and cannot be a wildcard.
     """
+    if not KNOWN_BREAKS:
+        return None
     return KNOWN_BREAKS.get((check, page, line, kind, name))
 
 

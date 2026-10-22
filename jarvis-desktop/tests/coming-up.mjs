@@ -90,6 +90,7 @@ import {
   TODO_TITLE,
   WAITING,
 } from "../src/coming-up.js";
+import * as HUD_ACTIONS from "../src/hud-actions.js";
 import * as K from "./uikit.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -163,7 +164,7 @@ await check("countdowns, lengths and each row's lines", async () => {
   assert.deepEqual(metaOf(v.jobs[2]), ["every weekday (Monday to Friday) at 07:00",
     "next: 07:00 on Monday"]);
   assert.deepEqual(metaOf(v.jobs[3]), ["every 2 hours", WAITING]);
-  assert.deepEqual(actionsOf(v.jobs[0]), ["pause", "delete"]);
+  assert.deepEqual(actionsOf(v.jobs[0]), ["add_time", "pause", "delete"]);
   assert.deepEqual(actionsOf(v.jobs[3]), ["delete"]);
   assert.deepEqual(actionsOf(v.todo[0]), ["done", "delete"]);
   const missed = readSchedule({ jobs: [{ ...JOBS[2], missed: "missed at 07:00" }], todo: [] });
@@ -381,7 +382,10 @@ await check("the section: title, its line, every job with its own buttons, and t
   assert.match(rows[1], /07:00 tomorrow/);
   assert.match(rows[2], /every weekday/);
   assert.match(rows[3], new RegExp(WAITING.replace(/[.]/g, "\\.")));
-  assert.deepEqual(buttons, [["Pause", "Delete"], ["Pause", "Delete"], ["Pause", "Delete"], ["Delete"]]);
+  // The first row is a TIMER: +5 minutes is the one action the PC allows only
+  // for a timer (jarvis_schedule.act), so only that row offers it.
+  assert.deepEqual(buttons, [["+5 minutes", "Pause", "Delete"], ["Pause", "Delete"],
+    ["Pause", "Delete"], ["Delete"]]);
   assert.equal(todo.length, 1);
   assert.match(todo[0], /buy milk/);
   assert.deepEqual(todoButtons, ["Done", "Delete"]);
@@ -470,7 +474,7 @@ await check("a tap sends ONE change for that id, asks nothing, and the list read
   ]);
   assert.equal(rows, 3);
   assert.match(todo, new RegExp(EMPTY_TODO.replace(/[.]/g, "\\.")));
-  assert.deepEqual(firstButtons, ["Resume", "Delete"]);
+  assert.deepEqual(firstButtons, ["+5 minutes", "Resume", "Delete"]);
 });
 
 await check("a to-do item is added in the owner's words, one at a time", async () => {
@@ -779,6 +783,58 @@ await check("the review decks' daily job is named plainly and offers no Pause or
   // the phone says the same
   const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt");
   assert.ok(kt.includes('"review" -> "card review"') && kt.includes('REVIEW_JOB_TITLE = "Card review"'));
+});
+
+
+/* ── F5 (2026-10-22): ONE action table, cross-surface hook ──────────────── */
+
+await check("F5: the shared table offers add_time for a TIMER only, as the PC's act() allows", () => {
+  const py = readRepo("backend/jarvis_schedule.py");
+  assert.ok(py.includes('if kind != "timer":'),
+    "jarvis_schedule.act no longer gates add_time on the timer kind");
+  assert.ok(py.includes("Time can only be added to a timer."),
+    "the PC's own add_time refusal sentence is gone");
+  assert.equal(HUD_ACTIONS.kindAllowsAddTime("timer"), true);
+  for (const kind of ["alarm", "reminder", "todo", "tellme", "nexttime", "standby", "review"]) {
+    assert.equal(HUD_ACTIONS.kindAllowsAddTime(kind), false, `${kind} must not add time`);
+    const names = HUD_ACTIONS.actionNames({ kind, state: "active" });
+    assert.equal(names.includes("add_time"), false, `${kind} drew an add_time button`);
+  }
+  // The one row that MAY add time draws it first, in the words every surface uses.
+  assert.deepEqual(HUD_ACTIONS.actionNames({ kind: "timer", state: "active" }),
+    ["add_time", "pause", "delete"]);
+  assert.deepEqual(HUD_ACTIONS.actionNames({ kind: "timer", state: "paused" }),
+    ["add_time", "resume", "delete"]);
+  // The Brain module is the same table, not a second one.
+  assert.deepEqual(actionsOf({ kind: "timer", state: "active" }),
+    HUD_ACTIONS.actionNames({ kind: "timer", state: "active" }));
+});
+
+await check("F5: the HUD page consumes the shared table (checked fallback, not a third copy)", () => {
+  const page = read("src/jarvis_hud.html");
+  assert.match(page, /import \{ actionsFor as hudActionsFor \} from "\.\/hud-actions\.js"/,
+    "the HUD page does not import the one shared action table");
+  assert.match(page, /window\.__hudActionsFor = hudActionsFor/,
+    "the page never receives the shared table");
+  assert.match(page, /window\.__hudActionsFallback = fallbackActionsFor/,
+    "the browser-served fallback is not identifiable by a test");
+  assert.match(page, /if \(typeof window\.__hudActionsFor === "function"\)/,
+    "the page does not prefer the shared table");
+});
+
+/* The cross-surface hook: the phone is another owner's file, so this records
+ * the honest gap instead of editing it. When the phone's Coming up gains the
+ * same add_time action, flip PHONE_HAS_ADD_TIME to true and this test fails
+ * until the shared table and the phone are checked against each other again -
+ * which is the point of a hook, not a drift. */
+const PHONE_HAS_ADD_TIME = false;
+await check("F5 hook: the phone's known action gap is recorded, not assumed away", () => {
+  const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt");
+  for (const action of ["pause", "resume", "delete", "done", "snooze"]) {
+    assert.ok(kt.includes(`"${action}"`), `the phone has no ${action} action`);
+  }
+  assert.equal(kt.includes('"add_time"'), PHONE_HAS_ADD_TIME,
+    "the phone's add_time state changed: flip PHONE_HAS_ADD_TIME and re-check the surfaces");
 });
 
 await browser.close();

@@ -114,7 +114,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "lanes",
-    label: "Brain switcher",
+    label: "Focus presets",
     region: "left_rail",
     order: 1,
     col_span: 12,
@@ -126,7 +126,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "systems",
-    label: "System lights",
+    label: "Systems",
     region: "left_rail",
     order: 2,
     col_span: 12,
@@ -210,7 +210,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "reminders",
-    label: "Reminders and Today",
+    label: "Reminders",
     region: "stage_main",
     order: 3,
     col_span: 12,
@@ -246,7 +246,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "telemetry",
-    label: "Last answer telemetry",
+    label: "Last turn telemetry",
     region: "right_rail",
     order: 1,
     col_span: 12,
@@ -258,7 +258,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "tools",
-    label: "Tools used",
+    label: "Abilities used",
     region: "right_rail",
     order: 2,
     col_span: 12,
@@ -270,7 +270,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "brain_stats",
-    label: "Memory and documents",
+    label: "Second brain & vault",
     region: "right_rail",
     order: 3,
     col_span: 12,
@@ -282,7 +282,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "budget",
-    label: "Rate budget",
+    label: "Free-tier budget",
     region: "right_rail",
     order: 4,
     col_span: 12,
@@ -294,7 +294,7 @@ export const CARD_REGISTRY = Object.freeze([
   },
   {
     id: "voice_stats",
-    label: "Voice readiness",
+    label: "Voice",
     region: "right_rail",
     order: 5,
     col_span: 12,
@@ -392,8 +392,8 @@ const PRESET_NOTE = {
       "Voice-first: one large core, the latest exchange, floating status pills "
       + "and a centred box - no side rails.",
   },
-  focus: {
-    label: "Focus",
+  quiet: {
+    label: "Quiet",
     glyph: "\u25a2",
     blurb: "Quiet chat: the conversation and the waiting cards, nothing else.",
   },
@@ -440,7 +440,7 @@ function cardsFor(presetId) {
     studio: [
       ["emergency_stop", {}],
       ["nav", { collapsed: true }],
-      ["lanes", { collapsed: true }],
+      ["lanes", {}],
       ["systems", {}],
       ["bar_launcher", {}],
       ["approvals", {}],
@@ -474,7 +474,7 @@ function cardsFor(presetId) {
       ["lanes", { visible: false }],
       ["systems", { visible: false }],
     ],
-    focus: [
+    quiet: [
       ["emergency_stop", {}],
       ["bar_launcher", { collapsed: true }],
       ["approvals", {}],
@@ -553,7 +553,7 @@ const PRESET_FACTS = {
   cockpit: { shell_template: "three-column", theme: "system", density: "comfortable", default_stage_tab: "talk" },
   studio: { shell_template: "split-stage", theme: "system", density: "comfortable", default_stage_tab: "talk" },
   ambient: { shell_template: "center-core", theme: "system", density: "spacious", default_stage_tab: "talk" },
-  focus: { shell_template: "two-column-left", theme: "paper", density: "comfortable", default_stage_tab: "talk" },
+  quiet: { shell_template: "two-column-left", theme: "paper", density: "comfortable", default_stage_tab: "talk" },
   telemetry: { shell_template: "three-column", theme: "deep-space", density: "compact", default_stage_tab: "telemetry" },
   second_brain: { shell_template: "three-column", theme: "system", density: "comfortable", default_stage_tab: "galaxy" },
   minimal: { shell_template: "single-stage-bento", theme: "system", density: "compact", default_stage_tab: "talk" },
@@ -588,7 +588,7 @@ export const PRESETS = Object.freeze([
   buildPreset("cockpit"),
   buildPreset("studio"),
   buildPreset("ambient"),
-  buildPreset("focus"),
+  buildPreset("quiet"),
   buildPreset("telemetry"),
   buildPreset("second_brain"),
   buildPreset("minimal"),
@@ -599,20 +599,34 @@ export const DEFAULT_PRESET_ID = PRESETS[0].id;
 
 const PRESET_BY_ID = new Map(PRESETS.map((preset) => [preset.id, preset]));
 
-/** The label/blurb/glyph for one preset id, or null. */
+/**
+ * Old names the store may still hold, and the id each one now means. "focus"
+ * was H1's layout name before the 2026-10-22 coherence slice renamed it
+ * "quiet"; a saved layout carrying it is migrated silently, never dropped.
+ */
+export const PRESET_ALIASES = Object.freeze({ focus: "quiet" });
+
+function canonicalPresetId(presetId) {
+  const key = typeof presetId === "string" ? presetId : "";
+  return PRESET_ALIASES[key] || key;
+}
+
+/** The label/blurb/glyph for one preset id, or null. Old ids are accepted. */
 export function presetInfo(presetId) {
-  if (!PRESET_BY_ID.has(presetId)) return null;
+  const id = canonicalPresetId(presetId);
+  if (!PRESET_BY_ID.has(id)) return null;
   return {
-    id: presetId,
-    label: PRESET_NOTE[presetId].label,
-    blurb: PRESET_NOTE[presetId].blurb,
-    glyph: PRESET_NOTE[presetId].glyph,
+    id,
+    label: PRESET_NOTE[id].label,
+    blurb: PRESET_NOTE[id].blurb,
+    glyph: PRESET_NOTE[id].glyph,
   };
 }
 
 /** A fresh, complete layout document for a built-in preset; unknown = cockpit. */
 export function presetLayout(presetId) {
-  const id = PRESET_BY_ID.has(presetId) ? presetId : DEFAULT_PRESET_ID;
+  const key = canonicalPresetId(presetId);
+  const id = PRESET_BY_ID.has(key) ? key : DEFAULT_PRESET_ID;
   return normalizeLayout(buildPreset(id));
 }
 
@@ -635,10 +649,12 @@ export function normalizeLayout(doc) {
   if (doc.version !== LAYOUT_VERSION) {
     return presetLayout(DEFAULT_PRESET_ID);
   }
-  const baseId = PRESET_BY_ID.has(doc.base_preset)
-    ? doc.base_preset
-    : PRESET_BY_ID.has(doc.id)
-      ? doc.id
+  const baseKey = canonicalPresetId(doc.base_preset);
+  const idKey = canonicalPresetId(doc.id);
+  const baseId = PRESET_BY_ID.has(baseKey)
+    ? baseKey
+    : PRESET_BY_ID.has(idKey)
+      ? idKey
       : DEFAULT_PRESET_ID;
   const skeleton = buildPreset(baseId);
   const rawCards = Array.isArray(doc.cards) ? doc.cards : [];
@@ -669,8 +685,15 @@ export function normalizeLayout(doc) {
   cards.splice(0, cards.length, ...sortCards(cards));
   return {
     version: LAYOUT_VERSION,
-    id: textOf(doc.id, 60) || skeleton.id,
-    name: textOf(doc.name, 60) || skeleton.name,
+    id: PRESET_BY_ID.has(canonicalPresetId(doc.id))
+      ? canonicalPresetId(doc.id)
+      : textOf(doc.id, 60) || skeleton.id,
+    // A saved old name ("Focus") follows its preset to the new name ("Quiet");
+    // a custom layout's own name is never touched.
+    name: (PRESET_ALIASES[doc.base_preset] || PRESET_ALIASES[doc.id])
+      && String(doc.name || "").trim().toLowerCase() === "focus"
+      ? skeleton.name
+      : textOf(doc.name, 60) || skeleton.name,
     base_preset: baseId,
     shell_template: SHELL_TEMPLATES.includes(doc.shell_template)
       ? doc.shell_template
@@ -707,7 +730,7 @@ export function parseLayoutText(text) {
  */
 export function migrateLegacyLayout(value) {
   const legacy = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return presetLayout(PRESET_BY_ID.has(legacy) ? legacy : DEFAULT_PRESET_ID);
+  return presetLayout(PRESET_BY_ID.has(canonicalPresetId(legacy)) ? legacy : DEFAULT_PRESET_ID);
 }
 
 /**

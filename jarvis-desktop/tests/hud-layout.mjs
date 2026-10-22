@@ -103,7 +103,7 @@ await check("exactly seven presets, cockpit first and the default", () => {
   assert.equal(L.PRESETS[0].id, "cockpit");
   assert.equal(L.DEFAULT_PRESET_ID, "cockpit");
   assert.deepEqual(L.PRESETS.map((preset) => preset.id), [
-    "cockpit", "studio", "ambient", "focus", "telemetry", "second_brain", "minimal",
+    "cockpit", "studio", "ambient", "quiet", "telemetry", "second_brain", "minimal",
   ]);
 });
 
@@ -148,7 +148,7 @@ await check("the presets differ where the ruling says they do", () => {
   assert.equal(byId.studio.shell_template, "split-stage");
   assert.equal(byId.ambient.shell_template, "center-core");
   assert.equal(byId.minimal.shell_template, "single-stage-bento");
-  assert.equal(byId.focus.shell_template, "two-column-left");
+  assert.equal(byId.quiet.shell_template, "two-column-left");
   // Ambient hides both side rails' ordinary cards; Minimal hides the telemetry.
   for (const id of ["nav", "lanes", "systems"]) {
     assert.equal(byId.ambient.cards.find((card) => card.id === id)?.visible, false,
@@ -159,6 +159,77 @@ await check("the presets differ where the ruling says they do", () => {
   // Telemetry & Ops puts the telemetry high and compact.
   assert.ok(byId.telemetry.cards.find((card) => card.id === "telemetry").row_span >= 2,
     "Telemetry preset gives telemetry no height");
+});
+
+await check("F7: Focus is renamed Quiet, and an old saved 'focus' still means Quiet", () => {
+  assert.equal(L.presetInfo("quiet").label, "Quiet");
+  assert.equal(L.presetInfo("focus").id, "quiet");
+  assert.equal(L.presetInfo("focus").label, "Quiet");
+  assert.match(L.presetInfo("quiet").blurb, /Quiet chat/i);
+  const old = { version: 1, base_preset: "focus", id: "focus", name: "Focus", cards: [] };
+  const out = L.normalizeLayout(old);
+  assert.equal(out.base_preset, "quiet");
+  assert.equal(out.id, "quiet");
+  assert.equal(out.name, "Quiet");
+  assert.equal(L.migrateLegacyLayout("focus").base_preset, "quiet");
+  assert.equal(L.migrateLegacyLayout("quiet").base_preset, "quiet");
+});
+
+await check("F8: every registry label with a page heading matches that heading", () => {
+  const page = readFileSync(join(HERE, "..", "src", "jarvis_hud.html"), "utf8");
+  const headings = {
+    lanes: "Focus presets",
+    systems: "Systems",
+    waiting: "Cards waiting",
+    telemetry: "Last turn telemetry",
+    tools: "Abilities used",
+    brain_stats: "Second brain &amp; vault".replace("&amp;", "&"),
+    budget: "Free-tier budget",
+    voice_stats: "Voice",
+    reminders: "Reminders",
+  };
+  for (const [id, words] of Object.entries(headings)) {
+    const card = L.CARD_REGISTRY.find((entry) => entry.id === id);
+    assert.ok(card, `${id} is not a registry card`);
+    assert.equal(card.label, words, `${id} label is stale`);
+    assert.ok(page.includes(`>${words.replace("&", "&amp;")}</div>`),
+      `${id}'s heading "${words}" is not on the HUD page`);
+  }
+  // The navigation rail carries its name as an aria-label, not a heading.
+  assert.equal(L.CARD_REGISTRY.find((entry) => entry.id === "nav").label, "Navigation");
+  assert.ok(page.includes('id="rail-nav" role="tablist" aria-label="Navigation"'),
+    "the navigation rail's accessible name does not match its registry label");
+  // Cards whose DOM has no static heading (dynamic cards, the stage views and
+  // the shell-created bar button) are exempt with the reason, not silently.
+  const exempt = {
+    approvals: "the cards are created at runtime; the H2 toolbar uses its label",
+    conversation: "the conversation is the stage itself",
+    composer: "the ask box is part of the stage",
+    galaxy: "the Galaxy is a stage tab, not a labelled card",
+    memory: "Memory is a stage tab",
+    emergency_stop: "Stop everything is a fixed header control",
+    voice_controls: "the mic controls sit beside the composer",
+  };
+  for (const [id, why] of Object.entries(exempt)) {
+    assert.ok(L.CARD_REGISTRY.some((entry) => entry.id === id),
+      `${id} is missing from the registry (${why})`);
+  }
+  assert.equal(L.CARD_REGISTRY.find((entry) => entry.id === "bar_launcher").label,
+    "Open the Jarvis bar");
+  assert.ok(page.includes("Open the Jarvis bar"), "the bar button's word is gone");
+});
+
+await check("FT-1/L1: Focus presets start OPEN in Cockpit and Studio (owner collapse is remembered)", () => {
+  for (const id of ["cockpit", "studio"]) {
+    const card = L.presetLayout(id).cards.find((entry) => entry.id === "lanes");
+    assert.ok(card, `${id} lost the Focus presets card`);
+    assert.equal(card.visible, true, `${id} hides the Focus presets card`);
+    assert.equal(card.collapsed, false, `${id} starts with the Focus presets folded`);
+  }
+  // Ambient deliberately keeps the card off the glass: the layout badge still
+  // reaches it, so this is a look choice, not a discoverability hole.
+  const ambient = L.presetLayout("ambient").cards.find((entry) => entry.id === "lanes");
+  assert.equal(ambient.visible, false);
 });
 
 /* ── 3. The contract mirror ─────────────────────────────────────────────── */
@@ -305,8 +376,11 @@ await check("a custom layout keeps its id and name but still passes the closed w
 });
 
 await check("a whole import document round-trips through parseLayoutText", () => {
-  const out = L.parseLayoutText(JSON.stringify(L.presetLayout("focus")));
-  assert.deepEqual(out, L.presetLayout("focus"));
+  const out = L.parseLayoutText(JSON.stringify(L.presetLayout("quiet")));
+  assert.deepEqual(out, L.presetLayout("quiet"));
+  // The old H1 name is a silent migration alias: a saved "focus" layout is the
+  // Quiet layout now, never the default.
+  assert.deepEqual(L.presetLayout("focus"), L.presetLayout("quiet"));
   assert.equal(L.parseLayoutText("{not json"), null);
   assert.equal(L.parseLayoutText("42"), null);
 });
@@ -438,7 +512,7 @@ await check("the old value is migrated and SAVED the first time the shell has no
   noShell();
 });
 
-await check("choosing a preset saves its whole document and mirrors the page's look", async () => {
+await check("choosing a preset saves its document in the store, and writes NO legacy key", async () => {
   const written = [];
   fakeShell((cmd, args) => {
     if (cmd === "set_hud_layout") {
@@ -448,14 +522,16 @@ await check("choosing a preset saves its whole document and mirrors the page's l
     return { layout: null, source: "none" };
   });
   const storage = mem();
-  const answer = await store.choosePreset("focus", storage);
+  const answer = await store.choosePreset("quiet", storage);
   assert.equal(answer.saved, true);
   assert.equal(written.length, 1);
-  assert.equal(written[0].base_preset, "focus");
+  assert.equal(written[0].base_preset, "quiet");
   assert.equal(written[0].cards.some((card) => card.id === "approvals"
     && card.visible === true), true, "the saved preset lost its protected card");
-  assert.equal(storage.getItem(store.LEGACY_KEY), "ambient",
-    "the page's three-way look was not mirrored for the Focus preset");
+  // F1: the store is the sole writer; the retired localStorage key is not
+  // touched by a preset choice any more (the HUD page does not read it).
+  assert.equal(storage.getItem(store.LEGACY_KEY), null,
+    "a preset choice wrote the retired localStorage layout key again");
   noShell();
 });
 

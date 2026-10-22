@@ -1882,30 +1882,34 @@
 })();
 
 /* ---------------------------------------------------------------------------
- * 7. The saved HUD layout (H1 of the editable-HUD design, 2026-10-21)
+ * 7. The saved HUD layout (H1/H2; F1 of the 2026-10-22 coherence slice)
  * ---------------------------------------------------------------------------
- * The Settings picker saves the owner's layout through the shell's own
- * appearance-class settings store (`hud_layout.rs`, the same store the theme
- * uses). This bootstrap reads that document and dresses the page in the
- * matching one of its three existing looks until H2 draws the real region
- * grid. The page's own localStorage read is untouched and stays the fallback
- * for a page served on its own in a browser - here nothing happens at all
- * without `window.__TAURI__`.
+ * ONE truth: the HUD-layout document in the shell's appearance-class settings
+ * store (`hud_layout.rs`, the same store the theme uses). Settings and the
+ * in-window H2 editor write it; this bootstrap only READS it. The page's own
+ * localStorage layout key is retired - the page no longer reads or writes it.
  *
- * The document is also left on `window.__jarvisHudLayout` and announced with a
- * `jarvis:hud-layout` event, so H2 can take over without re-reading the store.
+ * What arrives here is a HUD layout (an arrangement of cards); the page still
+ * paints one of its three view shapes (cockpit/studio/ambient) as the outer
+ * shell, so the bootstrap hands the matching shape to the page as
+ * `jarvis:hud-look`. The full document is left on `window.__jarvisHudLayout`
+ * and announced as `jarvis:hud-layout` for the H2 editor. A page served on its
+ * own in a plain browser (no `window.__TAURI__`) keeps Cockpit, unchanged.
  * ------------------------------------------------------------------------- */
 (function () {
   var tauri = window.__TAURI__;
   var invoke = tauri && tauri.core && tauri.core.invoke;
   if (typeof invoke !== "function") return;
 
-  /* The page still has three looks; a preset wears the nearest one until H2.
-   * Keep this table in step with hud-layout-store.js LOOK_BY_PRESET. */
+  /* The page still paints three view shapes; a HUD layout wears the nearest
+   * one. `focus` is the old H1 name kept as a silent alias for a saved document
+   * written before the 2026-10-22 rename to `quiet`. Keep this table in step
+   * with hud-layout-store.js LOOK_BY_PRESET. */
   var LOOKS = {
     cockpit: "cockpit",
     studio: "studio",
     ambient: "ambient",
+    quiet: "ambient",
     focus: "ambient",
     telemetry: "cockpit",
     second_brain: "studio",
@@ -1918,14 +1922,15 @@
     if (!look) return;
     window.__jarvisHudLayout = layout;
     var root = document.documentElement;
-    if (root && root.getAttribute("data-hud-layout") !== look) {
-      root.setAttribute("data-hud-layout", look);
-      if (document.body) document.body.setAttribute("data-hud-layout", look);
-      try {
-        window.dispatchEvent(new CustomEvent("jarvis:hud-layout", { detail: layout }));
-      } catch (e) {
-        /* An old engine without CustomEvent: the global is still set. */
-      }
+    if (root) root.setAttribute("data-hud-layout", look);
+    if (document.body) document.body.setAttribute("data-hud-layout", look);
+    try {
+      // F1: the page obeys this shape in its own applyLayout (state, history,
+      // reminders docking); the H2 editor obeys the full document.
+      window.dispatchEvent(new CustomEvent("jarvis:hud-look", { detail: look }));
+      window.dispatchEvent(new CustomEvent("jarvis:hud-layout", { detail: layout }));
+    } catch (e) {
+      /* An old engine without CustomEvent: the attributes are still set. */
     }
   }
 

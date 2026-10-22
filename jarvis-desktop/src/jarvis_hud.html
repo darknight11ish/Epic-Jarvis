@@ -31,24 +31,16 @@
   } catch (e) {
     /* private mode, cleared site data - the default theme is correct */
   }
-  /* The HUD's layout, also before first paint (2026-10-20): the same read of
-     this window origin's localStorage the theme above makes, so the window
-     does not paint Cockpit and then jump into Studio. It goes on <html> here
-     because <body> does not exist yet; the layout script at the end of the
-     page puts the same value on document.body.dataset.hudLayout (the DOM
-     contract the pickers and tests read) and keeps the two in step.
-     The key is hud-window.js's HUD_LAYOUT_KEY; the page cannot import that
-     module (the Python backend serves it as one file), so it is spelled
-     again here - tests/hud.mjs drives the real page with the module's own
-     key, so a rename on either side fails there. */
-  try {
-    var jarvisHudLayout = localStorage.getItem("jarvis.hud.layout");
-    document.documentElement.setAttribute("data-hud-layout",
-      ["cockpit", "studio", "ambient"].indexOf(jarvisHudLayout) >= 0
-        ? jarvisHudLayout : "cockpit");
-  } catch (e) {
-    document.documentElement.setAttribute("data-hud-layout", "cockpit");
-  }
+  /* The HUD's layout, before first paint (F1 of the 2026-10-22 coherence
+     slice). ONE truth: the saved layout document in the desktop settings store
+     (H1/H2). This page no longer reads or writes the old
+     localStorage["jarvis.hud.layout"] key - that control and its pills were
+     the second truth and are gone. Cockpit is painted here; the injected
+     shell bootstrap reads the store and, when the owner chose another HUD
+     layout, publishes it on `jarvis:hud-look`, which the page's own script
+     obeys (see applyLayout at the end of this file). A browser-served page
+     with no shell keeps Cockpit. */
+  document.documentElement.setAttribute("data-hud-layout", "cockpit");
 </script>
 <link rel="stylesheet" href="theme.css">
 
@@ -675,26 +667,19 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
  * ====================================================================== */
 
 /* ---- atoms the layouts share ---------------------------------------- */
-.layout-picker{
-  display:flex; gap:2px; padding:2px; border:1px solid var(--line);
-  border-radius:4px; background:var(--plate-2); flex-shrink:0;
-  /* Wrap the three pills rather than run past the window's right edge if a
-     wide text setting or an unusual DPI leaves the header very narrow: a pill
-     that is pushed off the edge is a control the owner cannot click (the
-     field report of 2026-10-21, and the pixels it was argued from). */
-  flex-wrap:wrap; max-width:100%;
+/* The header HUD-layout badge next to [Edit HUD] (F1/FT-1, 2026-10-22). It is
+   READ ONLY: it names the saved preset; the window's layout changes through
+   Edit HUD / Settings, never through this badge. Clicking it only reveals the
+   Focus-presets card so the model presets and Cloud are discoverable without
+   entering Edit HUD (field finding L1). */
+.hud-layout-badge{
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.05em;
+  color:var(--dim); border:1px solid var(--line); border-radius:3px;
+  padding:4px 8px; background:transparent; cursor:pointer; white-space:nowrap;
+  flex-shrink:0;
 }
-.layout-choice{
-  display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:3px;
-  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.06em; color:var(--dim);
-  transition:color .15s, background .15s;
-}
-.layout-choice:hover{color:var(--text); background:rgb(var(--accent-rgb) / .08);}
-.layout-choice[aria-pressed="true"]{
-  color:var(--ice); background:rgb(var(--accent-rgb) / .14);
-  box-shadow:inset 0 0 0 1px rgb(var(--accent-rgb) / .28);
-}
-.lc-glyph{font-size:12px; line-height:1;}
+.hud-layout-badge:hover{color:var(--text); border-color:var(--line-hot);}
+.hud-layout-badge[aria-expanded="true"]{color:var(--ice); border-color:var(--line-hot);}
 
 .appr-badge{display:none; border-color:var(--warn); color:var(--warn);}
 .appr-badge[hidden]{display:none !important;}
@@ -900,6 +885,9 @@ html[data-hud-layout="studio"] #stage{
 }
 html[data-hud-layout="studio"] #stage > .stage-bar{
   grid-column:1 / -1; grid-row:1; padding:10px 16px; min-height:0;
+  /* L2/FT-2 (2026-10-22): the header band is above the Studio right-rail
+     overlay, so [Edit HUD] and the layout badge can never be covered by it. */
+  position:relative; z-index:45;
 }
 html[data-hud-layout="studio"] #stage-title{display:none;}
 html[data-hud-layout="studio"] #stage-tabs{
@@ -933,7 +921,9 @@ html[data-hud-layout="studio"] .lane-compact{display:block;}
 html[data-hud-layout="studio"] .rail-toggle{display:none;}
 html[data-hud-layout="studio"] .appr-badge:not([hidden]){display:inline-flex;}
 html[data-hud-layout="studio"] #rail-right{
-  display:none; position:fixed; top:0; right:0; bottom:0; width:45%; z-index:30;
+  display:none; position:fixed; top:56px; right:0; bottom:0; width:45%; z-index:30;
+  /* L2/FT-2 (2026-10-22): the rail starts BELOW the header band. z-index alone
+     was not enough: the rail still visually covered the card toolbars. */
   overflow-y:auto; padding:18px 14px;
   border-left:1px solid var(--line-hot);
   background:linear-gradient(180deg, var(--plate), var(--void));
@@ -1008,10 +998,17 @@ html[data-hud-layout="studio"] .bento-waiting{display:flex; flex-direction:colum
   font-family:var(--f-mono); font-size:10.5px; color:var(--text);}
 .rem-form-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
 .rem-form-note{font-family:var(--f-mono); font-size:10px; color:var(--text-faint);}
-html[data-hud-layout="studio"][data-hud-tab="reminders"] #rail-right{display:flex; flex-direction:column;}
-html[data-hud-layout="studio"][data-hud-tab="reminders"] #rail-right .rail-section{display:none;}
-html[data-hud-layout="studio"][data-hud-tab="reminders"] #rail-right #rail-reminders{display:flex;
-  flex-direction:column; gap:8px;}
+/* L3/FT-3 (2026-10-22): the Reminders stage tab is a FULL-STAGE screen, not a
+   rail-only selection. The page's own script docks #rail-reminders into
+   #stage while this tab is chosen and puts it back when the owner leaves, so
+   there is still ONE reminders panel and no second list. */
+html[data-hud-layout="studio"][data-hud-tab="reminders"] #talk,
+html[data-hud-layout="studio"][data-hud-tab="reminders"] #brain{display:none !important;}
+html[data-hud-layout="studio"][data-hud-tab="reminders"] #stage > #rail-reminders{
+  display:flex; flex-direction:column; gap:10px;
+  grid-column:1 / -1; grid-row:7; min-height:0; overflow-y:auto;
+  padding:12px 18px 22px; border-top:1px solid var(--line); background:var(--void);
+}
 html[data-hud-layout="cockpit"] #rail-reminders{display:flex; flex-direction:column; gap:8px;}
 html[data-hud-layout="ambient"] #rail-reminders{display:flex; flex-direction:column; gap:8px;}
 
@@ -1133,9 +1130,6 @@ html[data-hud-layout="ambient"] .composer{
  *  drags it smaller: the second column folds away and the drawer takes
  *  over, exactly as the base stylesheet already does below 1080px.
  * --------------------------------------------------------------------- */
-@media (max-width:1180px){
-  .lc-name{display:none;}
-}
 @media (max-width:1080px){
   html[data-hud-layout="cockpit"] #shell{grid-template-columns:188px minmax(0,1fr);}
   html[data-hud-layout="cockpit"] .bento-brain{grid-template-columns:1fr 1fr;}
@@ -1167,7 +1161,6 @@ html[data-hud-layout="ambient"] .composer{
     position:static; left:auto; right:auto; margin:6px auto 0;
   }
   .stage-bar{padding:8px 12px; gap:8px;}
-  .layout-picker{flex-wrap:wrap; max-width:100%;}
   html[data-hud-layout="studio"] .stage-tab{padding-left:8px; padding-right:8px;}
 }
 
@@ -1281,7 +1274,7 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
       <div class="sub" id="brand-sub">local · standing by</div>
     </div>
 
-    <div class="modes rail-nav" id="rail-nav" role="tablist" aria-label="View">
+    <div class="modes rail-nav" id="rail-nav" role="tablist" aria-label="Navigation">
       <button class="mode" role="tab" aria-selected="true" data-view="talk" title="Talk">
         <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <path d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/>
@@ -1424,23 +1417,11 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
            from the SAME #lanes buttons renderLanes() draws (a selection
            clicks that button), so there is one list of lanes, not two. -->
       <select class="lane-compact" id="lane-compact" aria-label="Brain in use" title="Brain in use"></select>
-      <!-- The in-HUD layout picker. Three buttons rather than a menu: one
-           click switches, and the current one is pressed - the same
-           localStorage key the Settings card writes. -->
-      <div class="layout-picker" id="hud-layout-picker" role="group" aria-label="HUD layout">
-        <button type="button" class="layout-choice" data-hud-layout-choice="cockpit" aria-pressed="true"
-                title="Command Cockpit - three columns: navigation, conversation, Bento inspector">
-          <span class="lc-glyph" aria-hidden="true">&#8862;</span><span class="lc-name">Cockpit</span>
-        </button>
-        <button type="button" class="layout-choice" data-hud-layout-choice="studio" aria-pressed="false"
-                title="Studio Split-Workspace - conversation on the left, the Galaxy or telemetry stage on the right">
-          <span class="lc-glyph" aria-hidden="true">&#9707;</span><span class="lc-name">Studio</span>
-        </button>
-        <button type="button" class="layout-choice" data-hud-layout-choice="ambient" aria-pressed="false"
-                title="Ambient Voice Core - one large core, floating pills, centred conversation">
-          <span class="lc-glyph" aria-hidden="true">&#9678;</span><span class="lc-name">Ambient</span>
-        </button>
-      </div>
+      <!-- The legacy three-pill HUD-layout control was REMOVED on
+           2026-10-22 (F1 of the coherence slice). The layout is the saved
+           H1/H2 document in the desktop settings store, and the window shows a
+           read-only `Layout: <Preset Name>` badge next to [Edit HUD] instead
+           (hud-edit.js). Nothing in this page writes a layout. -->
       <button class="ghost rail-toggle" id="rail-toggle" type="button"
               aria-controls="rail-right" aria-expanded="false">Telemetry</button>
     </div>
@@ -1584,7 +1565,7 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
          one that cannot be undone. The buttons in the layout script keep it
          in step with the cards. -->
     <div class="rail-section bento-waiting" id="rail-waiting">
-      <div class="hud-label">Waiting for you</div>
+      <div class="hud-label">Cards waiting</div>
       <p class="waiting-line">
         <span class="wait-check" aria-hidden="true">&#10003;</span>
         <span id="waiting-words">No cards waiting</span>
@@ -4446,26 +4427,14 @@ function subscribe(){
 
   es.onopen = () => { STREAM.backoff = 1000; STREAM.live = true; };
 
+  // EventSource delivers NAMED frames only to a listener registered for that
+  // exact type; onmessage is the handler for type `message` and nothing else.
+  // The five branches below used to live INSIDE onmessage, so they could never
+  // run (F9 of the 2026-10-22 coherence slice). They are real listeners now -
+  // the same pattern as `schedule` below and hud_bootstrap.js's own shim.
   es.onmessage = (m) => {
     STREAM.live = true;
     if (m.lastEventId) STREAM.lastId = +m.lastEventId || STREAM.lastId;
-    let d = {};
-    try { d = JSON.parse(m.data || "{}"); } catch(e){ return; }
-    const kind = d.kind || m.type;
-    // hello.stale means we were away long enough to fall off the back of the
-    // server's ring buffer. Everything local is suspect; re-read all of it
-    // rather than assume we only missed the tail.
-    if (kind === "hello" && d.stale) { apprPoll(); initPoll(); return; }
-    if (kind === "approval") apprPoll();
-    // The extractor fills the memory review queue on its own, 45s after a
-    // conversation goes quiet - so nobody ASKED for the thing that is
-    // waiting, and without this the only way to find out was to open the
-    // Brain window and look. initPoll() is the right call rather than a new
-    // one: /api/initiative already carries proposal cards, so this reuses the
-    // surface instead of building a second one beside it.
-    else if (kind === "proposal") initPoll();
-    else if (kind === "finding") initPoll();
-    else if (kind === "activity" && typeof onActivity === "function") onActivity(d);
   };
 
   // Named events reach addEventListener, never onmessage (hud_bootstrap.js's
@@ -4473,6 +4442,40 @@ function subscribe(){
   // moment (`{"serious": bool}`, section 38.1) and the power mode
   // (`{"value": "standby"}`, what stream.rs reads).
   const dataOf = (m) => { try { return JSON.parse(m.data || "{}") || {}; } catch(e){ return {}; } };
+  const noteFrame = (m) => {
+    STREAM.live = true;
+    if (m && m.lastEventId) STREAM.lastId = +m.lastEventId || STREAM.lastId;
+  };
+  // hello.stale means we were away long enough to fall off the back of the
+  // server's ring buffer. Everything local is suspect; re-read all of it
+  // rather than assume we only missed the tail.
+  es.addEventListener("hello", (m) => {
+    noteFrame(m);
+    const d = dataOf(m);
+    if (d.stale) { apprPoll(); initPoll(); }
+  });
+  es.addEventListener("approval", (m) => {
+    noteFrame(m);
+    apprPoll();
+  });
+  // The extractor fills the memory review queue on its own, 45s after a
+  // conversation goes quiet - so nobody ASKED for the thing that is waiting.
+  // initPoll() is the right call rather than a new one: /api/initiative
+  // already carries proposal cards, so this reuses the surface instead of
+  // building a second one beside it.
+  es.addEventListener("proposal", (m) => {
+    noteFrame(m);
+    initPoll();
+  });
+  es.addEventListener("finding", (m) => {
+    noteFrame(m);
+    initPoll();
+  });
+  es.addEventListener("activity", (m) => {
+    noteFrame(m);
+    const d = dataOf(m);
+    if (typeof onActivity === "function") onActivity(d);
+  });
   es.addEventListener("wellbeing", (m) => {
     const d = dataOf(m);
     if (typeof d.serious === "boolean") reactor.setSerious(d.serious);
@@ -4544,13 +4547,13 @@ subscribe();
 (function () {
   "use strict";
 
-  /* The key `src/hud-window.js` exports as HUD_LAYOUT_KEY. This page cannot
-   * import that module (the Python backend serves it as one file, with no
-   * module graph), so the key and the three ids are spelled again here - the
-   * same duplication hud_bootstrap.js makes for OPEN_BAR_KEY, and tests/hud.mjs
-   * proves the two agree by driving the real page with the module's own
-   * values. */
-  var LAYOUT_KEY = "jarvis.hud.layout";
+  /* F1 (2026-10-22 coherence slice): ONE truth is the H1/H2 layout document
+   * in the desktop settings store. This page no longer reads or writes the old
+   * localStorage["jarvis.hud.layout"] key, and the three header pills that
+   * wrote it are gone. The shell bootstrap reads the store and publishes the
+   * matching VIEW shape on `jarvis:hud-look`; a browser-served page (no shell)
+   * stays on Cockpit. The read-only `Layout: <Preset Name>` badge beside
+   * [Edit HUD] names the saved preset (hud-edit.js). */
   var LAYOUTS = ["cockpit", "studio", "ambient"];
   var TABS = ["galaxy", "today", "reminders", "memory", "telemetry"];
   var body = document.body;
@@ -4559,57 +4562,29 @@ subscribe();
   function normalLayout(name) {
     return LAYOUTS.indexOf(name) >= 0 ? name : LAYOUTS[0];
   }
-  function readLayout() {
-    try { return normalLayout(localStorage.getItem(LAYOUT_KEY)); }
-    catch (e) { return LAYOUTS[0]; }
-  }
-  function saveLayout(name) {
-    try { localStorage.setItem(LAYOUT_KEY, normalLayout(name)); return true; }
-    catch (e) { return false; }
-  }
   function normalTab(name) {
     return TABS.indexOf(name) >= 0 ? name : TABS[0];
   }
 
-  /* ── the picker ─────────────────────────────────────────────────────── */
-
-  var choices = [].slice.call(document.querySelectorAll("[data-hud-layout-choice]"));
-
-  function paintPicker() {
-    var now = normalLayout(body.dataset.hudLayout);
-    choices.forEach(function (b) {
-      b.setAttribute("aria-pressed", String(b.dataset.hudLayoutChoice === now));
-    });
-  }
-
-  function applyLayout(name, persist) {
+  function applyLayout(name) {
     var id = normalLayout(name);
-    // <body> is the contract (document.body.dataset.hudLayout); <html> is
-    // put in step too because the pre-paint read set it there and the
-    // stylesheet keys every layout rule off it - so there is one value the
-    // two can never disagree about.
+    // <body> is the contract (document.body.dataset.hudLayout); <html> is put
+    // in step too because the stylesheet keys every layout rule off it, so
+    // there is one value the two can never disagree about.
     body.dataset.hudLayout = id;
     document.documentElement.setAttribute("data-hud-layout", id);
-    if (persist) saveLayout(id);
-    paintPicker();
     if (id === "studio" && TABS.indexOf(body.dataset.hudTab) < 0) setTab("galaxy");
     if (id !== "ambient") setHistory(false);
+    placeReminders();
     if (id === "studio") refreshTab();
     paintCore();
     paintAmbient();
   }
 
-  choices.forEach(function (b) {
-    b.addEventListener("click", function () { applyLayout(b.dataset.hudLayoutChoice, true); });
-  });
-
-  /* A change made in Settings while this window is open is obeyed at once
-   * (this computer's windows share the HUD origin's localStorage, and a write
-   * in one fires `storage` in the others - the same road hud_bootstrap.js's
-   * open-bar switch follows). A cleared store reads as the default. */
-  window.addEventListener("storage", function (e) {
-    if (e && e.key && e.key !== LAYOUT_KEY) return;
-    applyLayout(readLayout(), false);
+  // The shell bootstrap owns the saved layout; this is how it hands the
+  // matching view shape to the page. No page code writes a layout.
+  window.addEventListener("jarvis:hud-look", function (e) {
+    if (e && e.detail) applyLayout(e.detail);
   });
 
   /* ── the Studio Inspector Stage tabs ────────────────────────────────── */
@@ -4644,12 +4619,40 @@ subscribe();
     }
   }
 
+  /* L3/FT-3: remember where the ONE reminders panel lives, dock it into the
+     stage for the Studio Reminders tab, and put it back for every other tab /
+     layout. Moving the element (rather than copying it) is what keeps one
+     list: the add form, actions and polling are the same nodes either way. */
+  var remindersHome = null;
+  (function rememberRemindersHome() {
+    var rem = $("rail-reminders");
+    if (rem && rem.parentNode) {
+      remindersHome = { parent: rem.parentNode, next: rem.nextSibling };
+    }
+  }());
+
+  function placeReminders() {
+    var rem = $("rail-reminders");
+    var stage = $("stage");
+    if (!rem || !stage || !remindersHome) return;
+    var inStage = body.dataset.hudLayout === "studio"
+      && body.dataset.hudTab === "reminders";
+    if (inStage && rem.parentNode !== stage) {
+      stage.appendChild(rem);
+    } else if (!inStage && rem.parentNode !== remindersHome.parent) {
+      var before = remindersHome.next
+        && remindersHome.next.parentNode === remindersHome.parent
+        ? remindersHome.next : null;
+      remindersHome.parent.insertBefore(rem, before);
+    }
+  }
+
   function setTab(name) {
     body.dataset.hudTab = normalTab(name);
-    // <html> carries the same value: the pre-paint read put the LAYOUT there
-    // and the stylesheet keys both off it, so the tab must be visible to CSS
-    // as well as to the DOM contract on <body>.
+    // <html> carries the same value so the stylesheet sees the tab as well as
+    // the DOM contract on <body>.
     document.documentElement.setAttribute("data-hud-tab", body.dataset.hudTab);
+    placeReminders();
     refreshTab();
   }
 
@@ -4947,7 +4950,9 @@ var laneSelect = $("lane-compact");
   });
 
   /* ── first paint, and the retry for the shell's own function ────────── */
-  applyLayout(readLayout(), false);
+  // F1: the page paints Cockpit; the shell bootstrap publishes the saved
+  // preset's view shape on jarvis:hud-look when it arrives.
+  applyLayout("cockpit");
   makeTiles();
   paintWaiting();
   paintTelemetry();
@@ -5102,7 +5107,15 @@ var laneSelect = $("lane-compact");
    * A button is never drawn for something the PC answers "That cannot be
    * paused now." to. */
   var NO_PAUSE_KINDS = { nexttime: true };
-  function actionsFor(job, wentOff) {
+  /* F5 (2026-10-22): ONE action table lives in src/hud-actions.js and is
+     handed to this page by the external module at the end of the file
+     (window.__hudActionsFor). The function below is only the browser-served
+     fallback for a page with no module graph (the Python backend serves this
+     file alone); tests/hud.mjs proves the two agree on every kind/state, so
+     it cannot drift into a silent third hand copy. The PC's own act() is the
+     authority on which kind allows which action: add_time is a timer's alone
+     because jarvis_schedule.act refuses it for every other kind. */
+  function fallbackActionsFor(job, wentOff) {
     var out = [];
     if (wentOff) return [{ do: "snooze", label: "Snooze 10 minutes" },
                          { do: "delete", label: "Delete", danger: true }];
@@ -5124,6 +5137,13 @@ var laneSelect = $("lane-compact");
     out.push({ do: "delete", label: "Delete", danger: true });
     return out;
   }
+  function actionsFor(job, wentOff) {
+    if (typeof window.__hudActionsFor === "function") {
+      return window.__hudActionsFor(job, wentOff);
+    }
+    return fallbackActionsFor(job, wentOff);
+  }
+  window.__hudActionsFallback = fallbackActionsFor;
   function rowOf(job, wentOff) {
     var row = el("div", "rem-row");
     row.setAttribute("data-rem-id", job.id);
@@ -5359,6 +5379,13 @@ var laneSelect = $("lane-compact");
 <script type="module">
 import { paintLaneWarning } from "./lane-warning.js";
 window.paintLaneWarning = paintLaneWarning;
+
+/* F5 of the 2026-10-22 coherence slice: the ONE kind->actions table is
+ * src/hud-actions.js. The reminders script above uses it when this module has
+ * run and falls back only for a browser-served page with no module graph; the
+ * HUD's action buttons and the Brain's Coming up both read this same table. */
+import { actionsFor as hudActionsFor } from "./hud-actions.js";
+window.__hudActionsFor = hudActionsFor;
 
 /* H2 of the editable HUD (2026-10-22). An EXTERNAL module: the page keeps the
  * inline-script count it had (tests/csp-inline.mjs pins it) and the CSP is

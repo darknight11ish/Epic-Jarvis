@@ -623,27 +623,37 @@ await check("the Settings card offers the seven presets through the layout store
     "the layout picker talks to Rust itself instead of the layout store");
 });
 
-await check("the page's own key is the one the module exports (the page cannot import it)", () => {
-  // jarvis_hud.html is served by the Python backend as one file, so its inline
-  // script spells the key again, like hud_bootstrap.js spells OPEN_BAR_KEY.
-  // tests/hud.mjs proves the agreement by DRIVING the page with this key; this
-  // is the cheap reading that says the page names it at all.
+await check("F1: the page's legacy layout control is GONE; the store and the badge are the truth", () => {
+  // The 2026-10-22 coherence slice removed the three header pills and the
+  // localStorage["jarvis.hud.layout"] road: the saved H1/H2 document is the
+  // only control, the bootstrap hands the page its view shape, and the
+  // read-only badge beside Edit HUD names it (FT-1 / L1).
   const HUD = read("src/jarvis_hud.html");
-  assert.ok(HUD.includes(`"${S.HUD_LAYOUT_KEY}"`),
-    `jarvis_hud.html does not name hud-window.js's ${S.HUD_LAYOUT_KEY}`);
+  const EDIT = read("src/hud-edit.js");
+  // The retired key may still be NAMED in a comment that explains its removal;
+  // what must be gone is every read or write of it.
+  assert.doesNotMatch(HUD,
+    /localStorage\s*\.\s*(get|set|remove)Item\(\s*["']jarvis\.hud\.layout/,
+    "the page still reads or writes the retired layout key");
+  assert.ok(!HUD.includes("data-hud-layout-choice"),
+    "the page still renders the legacy layout pills");
+  assert.doesNotMatch(HUD, /localStorage\s*\.\s*(get|set)Item\([^)]*hud\.layout/,
+    "the page still reads or writes the retired layout key");
   assert.match(HUD, /body\.dataset\.hudLayout/, "the page never sets body.dataset.hudLayout");
-  for (const id of S.HUD_LAYOUTS) {
-    assert.ok(HUD.includes(`data-hud-layout-choice="${id}"`),
-      `the HUD's own picker offers no ${id} button`);
-  }
+  assert.match(HUD, /jarvis:hud-look/,
+    "the page does not obey the bootstrap's saved-look event");
+  assert.match(EDIT, /hud-layout-badge/, "no read-only Layout badge beside Edit HUD");
+  assert.match(EDIT, /Layout: \$\{name\}/, "the badge does not name the saved preset");
+  assert.match(EDIT, /presetInfo\(layout\.base_preset\)/,
+    "the badge does not read the preset's own name");
 });
 
 await check("the bootstrap wears the saved preset's look (H1), and asks once", async () => {
   const layout = {
     version: 1,
-    id: "focus",
-    name: "Focus",
-    base_preset: "focus",
+    id: "quiet",
+    name: "Quiet",
+    base_preset: "quiet",
     shell_template: "two-column-left",
     cards: [],
   };
@@ -652,7 +662,7 @@ await check("the bootstrap wears the saved preset's look (H1), and asks once", a
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(run.document.documentElement.getAttribute("data-hud-layout"), "ambient",
     "Focus did not wear the nearest of the page's three looks");
-  assert.deepEqual(run.window.__jarvisHudLayout.base_preset, "focus",
+  assert.deepEqual(run.window.__jarvisHudLayout.base_preset, "quiet",
     "the document was not left for H2");
   assert.equal(run.document.documentElement.getAttribute("data-hud-layout"), "ambient");
 });
