@@ -459,7 +459,20 @@ object SettingsSearch {
             // generated from jarvis_feature_guide.abilities_directory()).
             key = "all-features", title = "All features and abilities",
             label = "All features; abilities; what can Jarvis do; feature list; " +
-                "typed commands; switches; safety rules; where to change a setting",
+                "typed commands; switches; safety rules; where to change a setting; " +
+                // The BOOL_SETTINGS names that have no Settings row of their own
+                // on the phone: Brain (memory/history), a plate, or the PC. The
+                // directory says where each one lives, so typing its name finds
+                // that answer instead of "Nothing here matches that" (2026-10-22).
+                "background learning; sensitive topics; ask before every search; " +
+                "sandbox; media index; searchable recordings; pictures; briefing " +
+                "senders; big coder; big model; alarm sounds; reminder sounds; " +
+                "briefing notification; handoff notification; quiet hours; voice " +
+                "follows the face; better voice; write like me; second card; " +
+                // The phone-owned gaps: browser-engine and the notification rows.
+                "browser without a window; windowless browser; Obscura; browser " +
+                "engine; phone notifications; smartwatch notifications; watch " +
+                "notifications; notifications on a watch",
             quotes = listOf(
                 "All features and abilities",
                 "Every feature Jarvis knows about, in the PC's own words.",
