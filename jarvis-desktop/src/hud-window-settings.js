@@ -166,12 +166,13 @@ function buildUserRows(list) {
  * Saves the choice and repaints from what the store actually kept.
  *
  * The HUD window itself (another window) reads the saved document on its next
- * load through the injected bootstrap; the page's three in-header pills still
- * switch its look for now (H2 replaces that picker). Nothing is previewed in
- * THIS window.
+ * load through the injected bootstrap. Nothing is previewed in THIS window.
+ * H3-PM-1 (post-merge audit): the current document is passed through, so
+ * picking a built-in preset replaces only the active arrangement and keeps
+ * every layout in "My layouts" - the same rule Reset and the Layouts menu use.
  */
 async function pickLayout(presetId) {
-  const chosen = await choosePreset(presetId);
+  const chosen = await choosePreset(presetId, answer && answer.layout);
   answer = {
     layout: chosen.layout,
     saved: chosen.saved,

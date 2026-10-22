@@ -2504,8 +2504,15 @@ A preset's own `shell_template` (six shells), `density` (comfortable / compact /
 spacious) and `default_stage_tab` are now drawn: the bootstrap puts
 `data-hud-shell`/`data-hud-density` on the page and announces `jarvis:hud-shell`,
 the page opens the mapped view or inspector tab, and the six shells are CSS
-Grid/Flexbox variants with a working drawer for every rail a shell hides (no
-card becomes unreachable). The four-into-three `LOOKS` alias map, the
+Grid/Flexbox variants with a way back from every rail a shell hides - a
+slide-over drawer (Ambient `center-core`, `two-column-right`, `single-stage-bento`)
+or the stage tabs (`split-stage`'s right rail, via Telemetry/Memory/Today) - so
+no card becomes unreachable. Entering **Edit HUD** auto-reveals every hidden
+rail, so all four protected cards the page draws/keeps (`approvals`,
+`emergency_stop`, `voice_controls`, `bar_launcher`) stay visible and reachable
+while editing (the stop/voice entries are fixed data cards with no separate
+page control yet; the drawn controls are approvals, the Jarvis-bar button and
+the mic). The four-into-three `LOOKS` alias map, the
 `data-hud-layout` look attribute and `lookForPreset` are **retired**; the only
 survivor of the old road is a `jarvis.hud.preview` localStorage mirror holding
 three facts purely so the FIRST frame is not the wrong shell (the store's answer

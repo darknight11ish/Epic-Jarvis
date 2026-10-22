@@ -620,6 +620,11 @@ await check("the Settings card offers the seven presets through the layout store
   // Rust, and it is what the HUD bootstrap reads too.
   assert.match(SETTINGS_JS, /presetRows/, "the card does not read the preset rows");
   assert.match(SETTINGS_JS, /choosePreset/, "the card does not save through the store");
+  // H3-PM-1 (post-merge audit): the picker must hand the store the CURRENT
+  // document, or a built-in choice saves user_presets: [] and deletes
+  // "My layouts". The Settings page test drives the real page as well.
+  assert.match(SETTINGS_JS, /choosePreset\(presetId, answer && answer\.layout\)/,
+    "the card does not pass the current document, so a preset choice can drop My layouts");
   assert.match(SETTINGS_JS, /loadLayout/, "the card does not read the saved layout");
   // The picker’s persistence must still ride the layout store. H2’s one
   // navigation command (open_hud_edit) is allowed and is not a picker write.

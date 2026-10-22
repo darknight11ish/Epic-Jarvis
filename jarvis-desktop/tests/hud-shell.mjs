@@ -400,10 +400,46 @@ await check("Q5: LOOKS, lookForPreset, data-hud-layout and jarvis:hud-look are g
   assert.equal(storeSrc.includes("lookForPreset"), false, "store still exports lookForPreset");
   assert.equal(modelSrc.includes("THEMES"), false, "model still exports THEMES");
   assert.equal(editSrc.includes("presetsPeek"), false, "editor still peeks at Focus presets");
-  // The stale H1/H2 comments are rewritten, not left saying "until H2".
-  for (const source of [modelSrc, storeSrc, page]) {
+  // The stale H1/H2 comments are rewritten, not left saying "until H2" - and
+  // the broader pre-H3 descriptions are gone too (post-merge audit H3-PM-5).
+  for (const source of [modelSrc, storeSrc, page, settingsModule, editSrc, presetsSrc]) {
     assert.equal(/until H2/.test(source), false, "a stale 'until H2' comment survived");
+    assert.equal(source.includes("H2 draws the region grid"), false,
+      "a stale 'H2 draws the region grid' comment survived");
+    assert.equal(source.includes("three in-header pills"), false,
+      "a stale 'three in-header pills' comment survived");
+    assert.equal(source.includes("current three-way `data-hud-layout` look"), false,
+      "a stale three-way data-hud-layout comment survived");
   }
+});
+
+await check("H3-PM-2: Ambient's left rail is a drawer, not an unreachable hidden rail", () => {
+  // The old center-core block hid the left rail outright, so its cards (and
+  // the protected Jarvis-bar card H2 renders there in edit mode) were
+  // unreachable. It now uses the same drawer + [Navigation] toggle as
+  // two-column-right and single-stage-bento.
+  assert.equal(page.includes('html[data-hud-shell="center-core"] .rail.left{display:none;}'),
+    false, "Ambient still hides the left rail outright");
+  assert.match(page,
+    /html\[data-hud-shell="center-core"\] \.rail\.left\{[^}]*transform:translateX\(-100%\)/,
+    "Ambient has no off-canvas left drawer");
+  assert.match(page,
+    /html\[data-hud-shell="center-core"\] \.rail\.left\.open\{transform:none;\}/,
+    "Ambient has no open left drawer");
+  assert.match(page,
+    /html\[data-hud-shell="center-core"\] \.left-toggle\{display:flex;\}/,
+    "Ambient offers no [Navigation] toggle");
+  assert.match(page, /two-column-right, single-stage-bento and center-core hide the left rail/,
+    "the left-drawer comment does not list Ambient");
+  // Gemini's PM-2 ruling: while Edit HUD is active, every hidden rail is
+  // revealed (slide-over drawers home; split-stage's tab rail forced back), so
+  // no protected control can sit behind a closed rail.
+  assert.match(page, /body\[data-hud-edit="on"\] \.rail\.edit-reveal\{transform:none !important;\}/,
+    "edit mode does not bring slide-over rails home");
+  assert.match(page, /body\[data-hud-edit="on"\] \.rail\.edit-reveal\.right\{display:flex !important;/,
+    "edit mode does not force the tab-revealed rail back on");
+  assert.match(editSrc, /revealRailsForEditing/, "the editor does not reveal hidden rails");
+  assert.match(editSrc, /edit-reveal/, "the editor does not mark the revealed rails");
 });
 
 await check("H3: the bootstrap renders shell/density/tab and writes the first-paint mirror", () => {

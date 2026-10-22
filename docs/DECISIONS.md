@@ -2895,8 +2895,11 @@ are gone, and the window keeps the owner's own layouts:
    `density` (three steps) and `default_stage_tab` are rendered: the injected
    bootstrap puts `data-hud-shell`/`data-hud-density` on the page and announces
    `jarvis:hud-shell`; the page opens the mapped view or inspector tab. Every
-   shell that hides a rail has a working drawer, so no control becomes
-   unreachable. The 4-into-3 `LOOKS` alias map, `LOOK_BY_PRESET`,
+   shell that hides a rail has a way back - a slide-over drawer (Ambient
+   `center-core`, `two-column-right`, `single-stage-bento`) or the stage tabs
+   (`split-stage`'s right rail via Telemetry/Memory/Today). Entering Edit HUD
+   auto-reveals every hidden rail, so all four protected cards stay visible and
+   reachable while editing. The 4-into-3 `LOOKS` alias map, `LOOK_BY_PRESET`,
    `lookForPreset`, `data-hud-layout` and the stale "until H2" comments are
    **deleted**, pinned by a source test. Only a three-field
    `jarvis.hud.preview` localStorage mirror remains, for the first frame only -
