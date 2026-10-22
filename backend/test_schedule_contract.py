@@ -14,21 +14,20 @@ table and a cross-surface proof.
 WHAT THIS ADDS, AND WHAT IT DOES NOT TOUCH. `contract/schedule-cases.json` is the
 one table (kind -> the allowed action names in button order, plus the exact labels
 and the `ready_for_review` state). `contract/README.md` is the one note that says
-who still has to consume it. `tools/check_schedule_actions.py` extracts each
-surface's own table (HUD inline `actionsFor`, `coming-up.js` `actionsOf`/`labelOf`,
-`Schedule.kt` `actionsOf`/`labelOf`) and compares it to the contract, printing the
-progress. **This suite changes no surface, no backend module and no patch-carried
-file.** The surfaces are owned by other PRs; the contract's `surfaces` entries
-name the owner of each and carry the `reason` it is `pending`.
+who has consumed it. `tools/check_schedule_actions.py` reads the ONE shared
+desktop table `jarvis-desktop/src/hud-actions.js` (coherence slice #729) plus the
+HUD's browser-served `fallbackActionsFor`, the Brain's `coming-up.js` consumer and
+the phone's hand-written `Schedule.kt` table, and compares each to the contract.
+**This suite changes no surface, no backend module and no patch-carried file.**
 
-THE XFAIL-WITH-REASON, stated exactly: a surface whose `status` is `"pending"` in
-the contract is compared and every difference is printed as `EXPECTED-GAP`, but
-this suite reports that surface with `skip(...)` (the repository's honest
-equivalent of xfail: a skip is counted on its own line and is never a pass). The
-surfaces' owner PRs flip `status` to `"enforced"` when they land; this suite then
-requires that surface to match, and `tools/check_schedule_actions.py --strict`
-turns the pending gaps into failures immediately (`strict` is exercised below, so
-the one-switch flip is proven even while CI is kept green today).
+THE XFAIL-WITH-REASON, stated exactly: a surface whose `status` is `"pending"` and
+`"xfail": true` in the contract (only the phone now) is still compared and every
+difference is printed as `EXPECTED-GAP`; this suite reports that surface with
+`skip(...)` - a skip is counted on its own line and is never a pass. `--strict`
+turns a pending gap WITHOUT `xfail` (or any enforced-surface difference) into a
+failure; the suite proves that one-switch flip by removing the phone's xfail on a
+copy of the contract. When Session B's phone PR lands it removes the xfail and
+flips the status, and the same checker becomes the complete cross-surface test.
 
 WHAT IS PROVED AGAINST THE REAL AUTHORITY, not copied prose:
   * the contract's kind list and flags against the REAL `jarvis_schedule.KINDS`
@@ -62,6 +61,7 @@ live write, no card, no deploy.
 """
 from __future__ import annotations
 
+import copy
 import importlib
 import importlib.util
 import json
@@ -238,6 +238,27 @@ def t_contract_is_one_complete_table():
     check("every surface has a status, an owner and a reason",
           all(s.get("status") in ("pending", "enforced") and s.get("owner") and s.get("reason")
               for s in contract["surfaces"].values()), contract["surfaces"])
+    check("the shared desktop table is named in the contract and exists",
+          (contract.get("shared") or {}).get("file") == "jarvis-desktop/src/hud-actions.js"
+          and (REPO / contract["shared"]["file"]).is_file(), contract.get("shared"))
+    shared = CHECKER.parse_shared((REPO / contract["shared"]["file"]).read_text(encoding="utf-8"))
+    check("the shared table's labels are the contract's labels",
+          all(shared["labels"].get(action) == spec["label"]
+              for action, spec in contract["labels"].items()), shared["labels"])
+    check("the shared table's went-off list and no-pause list are the contract's ordering",
+          shared["went_off"] == ["snooze", "delete"] and shared["no_pause"] == {"nexttime"},
+          (shared["went_off"], sorted(shared["no_pause"])))
+    check("HUD and the Brain are ENFORCED on the shared table; only the phone stays pending xfail",
+          contract["surfaces"]["hud"]["status"] == "enforced"
+          and contract["surfaces"]["coming_up"]["status"] == "enforced"
+          and contract["surfaces"]["phone"]["status"] == "pending"
+          and contract["surfaces"]["phone"].get("xfail") is True, contract["surfaces"])
+    check("the two deliberately-uncompared entries state their reason and owner",
+          contract["kinds"]["goal_checkin"].get("surface_compare") is False
+          and "surface_note" in contract["kinds"]["goal_checkin"]
+          and (contract["states"]["ready_for_review"].get("surface_status")
+               == "pending-d1-surfacing")
+          and "surface_note" in contract["states"]["ready_for_review"])
 
 
 # ==========================================================================
@@ -386,38 +407,48 @@ def t_cross_surface_checker():
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     check("the checker tool exists", CHECKER_PATH.is_file())
     result = CHECKER.run(contract, REPO)
-    check("the checker runs over the real surface files and reports the contract OK",
+    check("the checker runs over the real files and reports the contract OK",
           result["ok"] is True, result)
     check("every surface in the contract was checked",
           {s["name"] for s in result["surfaces"]} == set(contract["surfaces"]))
-    for report in result["surfaces"]:
-        check(f"{report['name']}: its source was parsed in the known shape",
+    reports = {s["name"]: s for s in result["surfaces"]}
+    for name in ("hud", "coming_up"):
+        report = reports[name]
+        check(f"{name}: its source was parsed in the known shape",
               report["parse_error"] == "", report["parse_error"])
-        check(f"{report['name']}: it was compared on at least one real case",
+        check(f"{name}: status is enforced and every case matches the contract",
+              report["status"] == "enforced" and not report["mismatches"],
+              report["mismatches"])
+        check(f"{name}: it was compared on at least ten real cases",
               report["cases"] >= 10, report["cases"])
-        if report["status"] == "pending":
-            check(f"{report['name']}: the pending gap is named (never a silent pass)",
-                  bool(report["mismatches"]), report)
-            skip(f"{report['name']}: XFAIL-WITH-REASON until {report['owner']} consumes "
-                 f"the contract - {report['reason']}")
-        else:
-            check(f"{report['name']}: status is enforced and every case matches",
-                  not report["mismatches"], report["mismatches"])
+    phone = reports["phone"]
+    check("phone: its source was parsed in the known shape", phone["parse_error"] == "",
+          phone["parse_error"])
+    check("phone: the pending gap is named (never a silent pass)",
+          phone["status"] == "pending" and phone["xfail"] is True
+          and bool(phone["mismatches"]), phone)
+    skip(f"phone: XFAIL-WITH-REASON until {phone['owner']} consumes the contract - "
+         f"{phone['reason']}")
+    check("the D-1 marker and the Goals-only kind are reported as notes, not failures",
+          any("ready_for_review" in note for note in result["notes"])
+          and any("goal_checkin" in note for note in result["notes"]), result["notes"])
+
     strict = CHECKER.run(contract, REPO, strict=True)
-    pending = [s for s in strict["surfaces"] if s["status"] == "pending"]
-    if pending:
-        check("--strict turns every pending gap into a failure (the one-switch flip)",
-              strict["ok"] is False, strict)
-    else:
-        check("no surface is pending, so --strict agrees with the default run",
-              strict["ok"] is True)
+    check("--strict is GREEN while the only pending surface is an explicit xfail",
+          strict["ok"] is True, strict)
+    without_xfail = copy.deepcopy(contract)
+    without_xfail["surfaces"]["phone"].pop("xfail", None)
+    flipped = CHECKER.run(without_xfail, REPO, strict=True)
+    check("--strict bites the moment the phone's xfail is removed (the one-switch flip)",
+          flipped["ok"] is False, flipped)
+
     readme = README_PATH.read_text(encoding="utf-8") if README_PATH.is_file() else ""
-    check("the contract's README is the one short note the surface PRs start from",
+    check("the contract's README is the one short note the surface owners start from",
           README_PATH.is_file()
           and all(text in readme for text in (
-              "schedule-cases.json", "check_schedule_actions.py",
+              "schedule-cases.json", "check_schedule_actions.py", "hud-actions.js",
               "HUD Reminders", "coming-up.js", "Schedule.kt",
-              "pending", "enforced")), sorted(readme)[:20] if readme else "missing")
+              "enforced", "xfail")), sorted(readme)[:20] if readme else "missing")
     # The HUD page is bundled in the app AND served by the backend: three copies.
     hud = [REPO / "jarvis-desktop" / "src" / "jarvis_hud.html",
            REPO / "backend" / "jarvis_hud.html",
