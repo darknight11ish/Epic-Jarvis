@@ -466,6 +466,68 @@ def t_the_words():
           PCH.FAST_STARTUP not in PCH.restart_words(fake(uptime=600.0)))
 
 
+def t_gpu_words_use_windows_counter_when_the_driver_gives_no_amount():
+    """R5 (Ruling 13, 2026-10-21): the driver answers [N/A] for every program
+    on this PC, so the doctor asks Windows' own GPU-process counter. Its number
+    is a program's TOTAL ACROSS THE CARDS - Windows exposes no clean non-admin
+    way to map its LUID/phys index to one card - so the words must say that."""
+    apps = [
+        {"pid": 18120, "name": _OLLAMA, "uuid": U_2060, "used_mib": 205,
+         "used_source": PCH.WDDM_SOURCE},
+        {"pid": 17548, "name": r"C:\Windows\explorer.exe", "uuid": U_2080S,
+         "used_mib": 31, "used_source": PCH.WDDM_SOURCE},
+    ]
+    gpu, gnames = PCH.gpu_words(fake(programs=PROGRAMS, cards=[WORKING], apps=apps,
+                                     models=[{"name": "qwen3:8b", "vram_bytes": 5.0 * GB}]))
+    check("a Windows-counter amount is said as a total across the cards, never a card's "
+          "own number",
+          "in total across the cards" in gpu, gpu)
+    check("... explained once, after the cards", gpu.count(
+        "each program's total across all the cards") == 1, gpu)
+    check("... and the driver's no-amount sentence is NOT printed when every program "
+          "has a number from either source",
+          "does not report how much graphics memory" not in gpu, gpu)
+    check("the program names are still the card's own list", gnames, gpu)
+
+    no_rows = PCH.gpu_words(fake(programs=PROGRAMS, cards=[WORKING], apps=APPS))
+    check("no amount from either source: the existing honest fallback is kept, and no "
+          "counter caveat appears",
+          "does not report how much graphics memory each program uses" in no_rows[0]
+          and "in total across the cards" not in no_rows[0], no_rows[0])
+
+    mixed = PCH.gpu_words(fake(programs=PROGRAMS, cards=[WORKING], apps=[
+        dict(apps[0], used_mib=None), apps[1]]))
+    check("a driver amount beside a missing one: nothing is invented, the fallback wins",
+          "does not report how much graphics memory each program uses" in mixed[0]
+          and "in total across the cards" not in mixed[0], mixed[0])
+
+
+def t_the_default_apps_reader_fills_a_missing_amount_and_marks_it():
+    import jarvis_compute as CP
+    import jarvis_hardware as HW
+    saved = (CP.query_apps, HW.wddm_process_memory, HW.wddm_mib_for)
+    try:
+        CP.query_apps = lambda: [
+            {"pid": 1, "name": "a.exe", "uuid": "GPU-1", "used_mib": None},
+            {"pid": 2, "name": "b.exe", "uuid": "GPU-1", "used_mib": 7},
+        ]
+        HW.wddm_process_memory = lambda: {"readable": True, "processes": {1: 3 * 1024 ** 2}}
+        HW.wddm_mib_for = lambda pid, reading: (
+            3 if int(pid) == 1 else None)
+        rows = PCH._read_apps()
+        check("the default apps reader asks Windows' counter only for the amounts the "
+              "driver left empty",
+              rows[0]["used_mib"] == 3 and rows[0]["used_source"] == PCH.WDDM_SOURCE, rows)
+        check("... and a driver's own number is left exactly as it was",
+              rows[1]["used_mib"] == 7 and "used_source" not in rows[1], rows)
+        HW.wddm_mib_for = lambda pid, reading: None
+        rows = PCH._read_apps()
+        check("when the counter has no row either, the amount stays None - never 0",
+              rows[0]["used_mib"] is None and "used_source" not in rows[0], rows)
+    finally:
+        CP.query_apps, HW.wddm_process_memory, HW.wddm_mib_for = saved
+
+
 def t_reading_compute_apps():
     """The per-process query the doctor reads: which card a program is on is
     real; the amount is [N/A] on this PC (measured 2026-10-17), and must stay
