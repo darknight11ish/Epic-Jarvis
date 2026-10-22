@@ -1378,6 +1378,18 @@ _IATA_PAIR = re.compile(
     r"\b[A-Z]{3}\b\s*(?:->|→|—>|-|to)\s*\b[A-Z]{3}\b")
 #: A place the owner is already at does not count as a physical transition.
 _HOME_WORDS = {"home", "my home", "office", "my office", "here", "work"}
+#: A virtual meeting place is not a physical transition (D-1.1 gate): a URL or
+#: an online room name ("Zoom", "Google Meet", "Teams", a video call) cannot be
+#: "30 minutes away" from anywhere.
+_VIRTUAL_RE = re.compile(
+    r"https?://|www\.|"
+    r"\b(zoom|meet|teams|webex|skype|hangouts?|virtual|online|remote|"
+    r"video\s*call|conference\s*call|phone\s*call|call|dial[- ]?in)\b",
+    re.IGNORECASE)
+#: SecAlign / chat-template markers the gate names: stripped BEFORE a claim is
+#: read, so an invisible marker can never hide or fake a weekday or a date.
+_SEC_ALIGN_RE = re.compile(r"<\|?\s*/?\s*(im_start|im_end|tool_call|think)\s*\|?>",
+                           re.IGNORECASE)
 
 _DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
              "Saturday", "Sunday")
@@ -1456,7 +1468,19 @@ def _address(e: dict) -> str:
 
 def _physical(e: dict) -> str:
     loc = _address(e)
-    return loc if loc and loc not in _HOME_WORDS else ""
+    if not loc or loc in _HOME_WORDS:
+        return ""
+    if _VIRTUAL_RE.search(loc):
+        return ""
+    return loc
+
+
+def _claim_text(value) -> str:
+    """One title/description with invisible chat-template markers removed, for
+    reading a claim. `_outside_plain` already strips the invisible tricks the
+    calendar's own reader removes; this adds the gate's named marker shapes."""
+    plain = _outside_plain(str(value or ""))
+    return " ".join(_SEC_ALIGN_RE.sub(" ", plain).split())
 
 
 def detect_travel_and_flight_collisions(
@@ -1572,7 +1596,7 @@ def _claimed_days(text: str) -> list:
     return got
 
 
-def detect_calendar_anomalies(events: list, source_texts=None) -> list:
+def detect_wrong_day_anomalies(events: list, source_texts=None) -> list:
     """Where a calendar entry and a claim disagree about WHICH DAY it is on.
 
     Two sources, both already in hand (no new read):
@@ -1608,7 +1632,13 @@ def detect_calendar_anomalies(events: list, source_texts=None) -> list:
         start, _end = _event_bounds(e)
         if start is None:
             continue
-        claimed = _claimed_days(_travel_name(e))
+        claimed = _claimed_days(_claim_text(_travel_name(e)))
+        description = e.get("description")
+        if description:
+            # The calendar reader deliberately never fetches DESCRIPTION; this
+            # only looks at one a caller already holds (a source-email panel
+            # or a test fixture), after the same marker strip.
+            claimed += _claimed_days(_claim_text(description))
         if not claimed:
             continue
         actual_weekday = _DAY_NAMES[start.weekday()]
@@ -1660,6 +1690,12 @@ def detect_calendar_anomalies(events: list, source_texts=None) -> list:
         unique.append(r)
     unique.sort(key=lambda r: (r["event_start"], r["kind"], r["event"], r["claimed"]))
     return unique
+
+
+#: The earlier name of the same rule (the PR that added it, #722, used this
+#: one); the gate names `detect_wrong_day_anomalies`, so that is canonical now
+#: and this stays as the compatibility name for any caller already written.
+detect_calendar_anomalies = detect_wrong_day_anomalies
 
 
 def external_meetings(events: list) -> list:

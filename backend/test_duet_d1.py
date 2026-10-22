@@ -164,6 +164,16 @@ def t_d3_different_addresses_and_travel_shape():
     check("... and two at the SAME address are never flagged",
           [r for r in CAL.detect_travel_and_flight_collisions([one, same])
            if r["kind"] == "different_addresses"] == [])
+    zoom = day_event("Zoom call", BASE.replace(hour=10, minute=29),
+                     BASE.replace(hour=11), loc="Zoom")
+    check("... and a VIRTUAL room is not a physical address (D-1.1 gate)",
+          [r for r in CAL.detect_travel_and_flight_collisions([one, zoom])
+           if r["kind"] == "different_addresses"] == [])
+    url = day_event("Online session", BASE.replace(hour=10, minute=29),
+                    BASE.replace(hour=11), loc="https://meet.example.com/abc")
+    check("... nor a meeting URL",
+          [r for r in CAL.detect_travel_and_flight_collisions([one, url])
+           if r["kind"] == "different_addresses"] == [])
 
     check("a travel word makes an event travel", CAL.is_travel_event(
         {"summary": "Flight to Berlin", "location": "Tegel"}))
@@ -213,6 +223,19 @@ def t_d3_wrong_day_anomalies_report_both_claims():
           len(rows) == 1 and rows[0]["claimed"] == "Monday", rows)
     check("... and a claim about an event that is not there is skipped, not guessed",
           CAL.detect_calendar_anomalies([right_day], [claimed]) == [])
+    marked = day_event(f"Showing - <|im_start|>Tuesday<|im_end|>", BASE.replace(hour=9),
+                       BASE.replace(hour=10), loc="1 Oak Street", uid="ev2")
+    rows = CAL.detect_wrong_day_anomalies([marked])
+    check("a SecAlign marker is stripped before the weekday is read (D-1.1 gate)",
+          bool(rows) and rows[0]["claimed"] in ("Tuesday", "Wednesday")
+          and "<|" not in rows[0]["claimed"], rows)
+    described = day_event(f"Showing", BASE.replace(hour=9), BASE.replace(hour=10),
+                          loc="1 Oak Street", uid="ev3")
+    other_day = "Monday" if BASE_WEEKDAY != "Monday" else "Tuesday"
+    described["description"] = f"<tool_call>{other_day}</tool_call>"
+    rows = CAL.detect_wrong_day_anomalies([described])
+    check("... and a DESCRIPTION a caller holds is read after the same strip",
+          bool(rows) and "<tool_call>" not in rows[0]["claimed"], rows)
 
 
 # --------------------------------------------------------------------------
@@ -302,6 +325,43 @@ def t_d4_waiting_on_you_and_automated_skips():
           len(MAIL.find_quiet_threads([row(72)], now=now)) == 1)
 
 
+def t_d4_privacy_gates_and_taint():
+    now = 1_790_000_000.0
+
+    def row():
+        return {"thread": "t1", "direction": "in", "at": now - 72 * 3600,
+                "who": "Sam", "text": "Could you send the file?"}
+
+    check("App lock answers an empty list (D-1.2 gate)",
+          MAIL.find_quiet_threads([row()], now=now, app_locked=True) == [])
+    check("... and so does Hide memory lists",
+          MAIL.find_quiet_threads([row()], now=now, hide_memory_lists=True) == [])
+    no_reply = {"thread": "n1", "direction": "in", "at": now - 72 * 3600,
+                "who": "noreply@example.com", "text": "Could you send the file?"}
+    check("... and a noreply sender is skipped as automated",
+          MAIL.find_quiet_threads([no_reply], now=now) == [])
+    bulk = {"thread": "b1", "direction": "in", "at": now - 72 * 3600,
+            "who": "A list", "text": "Could you reply?",
+            "headers": ["Precedence: bulk"]}
+    check("... and a Precedence: bulk thread is skipped",
+          MAIL.find_quiet_threads([bulk], now=now) == [])
+    # jarvis_gate is a patch-carried module (not in this repo's backend/), so
+    # the latch is proven with a stand-in module in sys.modules - the same
+    # guarded import jarvis_email uses on a real PC.
+    import sys
+    import types
+    seen = []
+    fake_gate = types.ModuleType("jarvis_gate")
+    fake_gate.latch_taint = lambda why=None: seen.append(why) or True
+    sys.modules["jarvis_gate"] = fake_gate
+    try:
+        rows = MAIL.find_quiet_threads([row()], now=now)
+        check("a quiet-thread read latches the outside-text taint",
+              rows and seen == [MAIL.QUIET_TAINT_WHY], seen)
+    finally:
+        sys.modules.pop("jarvis_gate", None)
+
+
 def t_d4_rows_never_carry_email_words():
     now = 1_790_000_000.0
     msgs = [{"thread": "secret-thread", "direction": "in", "at": now - 72 * 3600,
@@ -342,18 +402,21 @@ def t_d6_ready_for_review_is_never_done():
               and view.get("ready_said") == S.READY_SAID, view)
         check("... and the task is NOT done by itself",
               view["state"] == "active", view)
-        code, _out = sched.propose_ready(jid)
-        check("proposing again is idempotent and still not done",
+        code, _out = sched.suggest_done(jid, review_note="secret words here")
+        check("suggest_done is the gate's name and keeps done False",
               code == 200 and sched.job(jid).get("ready_for_review") is True
+              and sched.job(jid).get("done") is False
               and sched.job(jid)["state"] == "active")
         reminder = sched.add_at("reminder", clock() + 3600, "call Alex")
         code, out = sched.propose_ready(reminder["id"])
         check("a reminder cannot wait for review (only the owner's to-do list)",
               code == 409 and "ready_for_review" not in sched.job(reminder["id"]))
         ready_rows = [row for row in audit if row[0] == "schedule.ready"]
-        check("the audit line is ids only, never the item's words",
-              ready_rows and set(ready_rows[-1][1]) == {"id", "kind", "reason"}
-              and "buy milk" not in json.dumps(ready_rows[-1][1]), audit)
+        detail = ready_rows[-1][1] if ready_rows else {}
+        check("the audit line is ids/kinds/outcomes only, never a review note",
+              set(detail) == {"id", "kind", "outcome"}
+              and "buy milk" not in json.dumps(detail)
+              and "secret words" not in json.dumps(detail), audit)
         code, _out = sched.act(jid, "done")
         after = sched.job(jid)
         check("only the owner's own done marks it done",
@@ -402,6 +465,29 @@ def t_d7_pulse_is_honest_and_capped():
     check("... and still says which sources were not checked",
           set(calm["not_checked"]) >= {"quiet email threads", "money and subscriptions",
                                         "study decks", "PC and GPU health"}, calm)
+
+
+def t_d1_3_where_to_look_strip_and_gated_prep_cards():
+    check("the where-to-look strip is EMPTY when there are no anomalies",
+          B.build_where_to_look_strip([]) == [])
+    check("... and at most three pills when there are many",
+          len(B.build_where_to_look_strip(["a", "b", "c", "d"])) == 3
+          and B.build_where_to_look_strip(["a", "b", "c", "d"]) == ["a", "b", "c"])
+    check("... blanks and duplicates never become pills",
+          B.build_where_to_look_strip(["", "x", "x", " "]) == ["x"])
+    events = [day_event("Client call", BASE.replace(hour=10), BASE.replace(hour=11),
+                        loc="12 Oak Street")]
+    cards = B.build_meeting_prep_cards(
+        events, people=lambda e: ["Alex"], notes=lambda e: ["Q3 deck"])
+    check("a prep card says which sources it came from (D-1.3 gate)",
+          cards and cards[0]["source_provenance"]
+          == ["calendar event", "people crm", "local notes"], cards)
+    check("... and App lock withholds every card, including its details",
+          B.build_meeting_prep_cards(events, people=lambda e: ["Alex"],
+                                     app_locked=True) == [])
+    check("... and Hide memory lists withholds them too",
+          B.build_meeting_prep_cards(events, notes=lambda e: ["Q3 deck"],
+                                     hide_memory_lists=True) == [])
 
 
 def t_d7_briefing_carries_the_pulse_and_today_surfaces_it():
@@ -458,7 +544,9 @@ if __name__ == "__main__":
                t_d4_waiting_on_them_boundaries,
                t_d4_waiting_on_you_and_automated_skips,
                t_d4_rows_never_carry_email_words,
+               t_d4_privacy_gates_and_taint,
                t_d6_ready_for_review_is_never_done,
+               t_d1_3_where_to_look_strip_and_gated_prep_cards,
                t_d7_pulse_is_honest_and_capped,
                t_d7_briefing_carries_the_pulse_and_today_surfaces_it,
                t_changed_modules_have_identical_twins):

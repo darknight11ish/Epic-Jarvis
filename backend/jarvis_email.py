@@ -637,8 +637,14 @@ _REQUEST_WORDS = (
 #: Header markers of a newsletter/automated mail. A human thread has none.
 _AUTOMATED_MARKERS = (
     "list-unsubscribe", "list-id", "auto-submitted", "precedence: bulk",
-    "precedence: list", "x-autoreply", "x-auto-response-suppress",
+    "precedence: list", "precedence: junk", "x-autoreply",
+    "x-auto-response-suppress", "noreply", "no-reply", "do-not-reply",
+    "mailer-daemon", "donotreply",
 )
+
+#: The reason named on the taint latch when a quiet-thread read happens: the
+#: same one-word reason shape jarvis_calendar uses ("calendar_read").
+QUIET_TAINT_WHY = "quiet_threads"
 
 
 def _at_epoch(value) -> Optional[float]:
@@ -667,11 +673,13 @@ def _is_automated(m: dict) -> bool:
     if m.get("automated") is True or m.get("list_unsubscribe") is True:
         return True
     headers = m.get("headers")
+    blob = ""
     if isinstance(headers, (list, tuple)):
         blob = "\n".join(str(h) for h in headers).lower()
-        if any(mark in blob for mark in _AUTOMATED_MARKERS):
-            return True
-    return False
+    # The sender name is where "noreply" and "mailer-daemon" actually appear.
+    blob += "\n" + " ".join(str(m.get(k) or "") for k in
+                             ("who", "name", "from_name", "from")).lower()
+    return any(mark in blob for mark in _AUTOMATED_MARKERS)
 
 
 def _has_ask(text) -> bool:
@@ -687,9 +695,34 @@ def _who(m: dict) -> str:
     return " ".join(str(m.get("who") or m.get("name") or m.get("from_name") or "").split())[:60]
 
 
+def _scrub_name(name: str) -> str:
+    try:
+        import jarvis_scrub
+        return str(jarvis_scrub.scrub_text(name))[:60]
+    except Exception:
+        return name
+
+
+def _quiet_locked(*, app_locked: bool, hide_memory_lists: bool) -> bool:
+    """The privacy invariant FIRST (D-1.2 gate): while App lock or "Hide memory
+    lists and chat history" is on, this read answers an empty list - it never
+    lowers the trusted state, it only adds a reason to withhold."""
+    try:
+        import jarvis_private_view as PV
+        got = PV.effective(app_locked=app_locked,
+                           hide_memory_lists=hide_memory_lists)
+        return bool(got.get("locked") or got.get("app_locked")
+                    or got.get("hide_memory_lists"))
+    except Exception:
+        return bool(app_locked or hide_memory_lists)
+
+
 def find_quiet_threads(messages, *, now=None, days_quiet_min: float = QUIET_MIN_DAYS,
                        days_quiet_max: float = QUIET_MAX_DAYS,
-                       waiting_on_you_hours: float = QUIET_WAITING_ON_YOU_HOURS) -> list:
+                       waiting_on_you_hours: float = QUIET_WAITING_ON_YOU_HOURS,
+                       app_locked: bool = False,
+                       hide_memory_lists: bool = False,
+                       latch: bool = True) -> list:
     """The two classes of quiet email thread this PC can see without reading
     the server again:
 
@@ -704,6 +737,8 @@ def find_quiet_threads(messages, *, now=None, days_quiet_min: float = QUIET_MIN_
     no body and no address is ever returned. Boundaries are inclusive: exactly
     3 days or exactly 14 days still counts as waiting-on-them; exactly 48
     hours does NOT count as waiting-on-you (the text says "longer than")."""
+    if _quiet_locked(app_locked=app_locked, hide_memory_lists=hide_memory_lists):
+        return []
     now = time.time() if now is None else float(now)
     threads = {}
     for m in messages or ():
@@ -753,6 +788,22 @@ def find_quiet_threads(messages, *, now=None, days_quiet_min: float = QUIET_MIN_
                              f"no reply."),
                 })
     rows.sort(key=lambda r: (r["kind"], -(r.get("days") or r.get("hours") or 0), r["thread"]))
+    for row in rows:
+        # A display name can itself carry a secret shape; scrub it. The row
+        # never carries a subject or a snippet, which is stronger than
+        # scrubbing those (D-1.2 gate says scrub them if they are returned -
+        # they are not returned at all).
+        row["who"] = _scrub_name(row.get("who") or "")
+    if rows and latch:
+        # These rows name the owner's private correspondence, so the read is
+        # outside text: latch the SAME taint jarvis_calendar's own read does,
+        # with its own one-word reason. Guarded: an older PC without the gate
+        # still gets the rows, and nothing here raises.
+        try:
+            import jarvis_gate
+            jarvis_gate.latch_taint(why=QUIET_TAINT_WHY)
+        except Exception:
+            pass
     return rows
 
 

@@ -5764,16 +5764,18 @@ nothing.
 
 
 **"Ready for your review" (Wave D-1, 2026-10-22).** Jarvis can propose that a
-to-do's part is finished without ever completing it: `Scheduler.propose_ready(id)`
-sets a `ready_for_review` marker (a timestamp, added to the database the same
+to-do's part is finished without ever completing it: `Scheduler.suggest_done(id,
+review_note=...)` (the Wave D-1 gate name; `propose_ready` is the same method's
+older spelling) sets a `ready_for_review` marker (a timestamp, added to the database the same
 way every later column is), and a job's view carries `ready_for_review: true`,
-`ready_at` and the one sentence `ready_said` - additively, so an item nobody
-proposed is byte-for-byte the old payload. The state does NOT change: the item
+`ready_at`, `done: false` and the one sentence `ready_said` - additively, so an
+item nobody proposed is byte-for-byte the old payload. The state does NOT change: the item
 stays `active`/`paused` until the owner's own `POST /api/schedule/act
 {"do": "done"}` (the existing action), which also clears the marker. Only a
 to-do can wait for review; a reminder is refused in plain words. The audit line
-is `schedule.ready` with the id, kind and a short reason only - never the
-item's words. **Honest limit:** this is the backend method and view; a caller
+is `schedule.ready` with the id, kind and the outcome `ready_for_review` only -
+a `review_note` a caller passes is deliberately never logged, so the item's
+words cannot reach the audit. **Honest limit:** this is the backend method and view; a caller
 that proposes it automatically is deferred (no route was added, and nothing in
 v1 calls it yet).
 
@@ -6166,13 +6168,25 @@ built only from reads this briefing already makes (no new socket, no model, no
 card): a **Travel and next steps** section (a meeting inside 120 minutes before
 a flight/train departure, inside 60 after landing, or two events less than 30
 minutes apart at different addresses -
-`jarvis_calendar.detect_travel_and_flight_collisions`); a **2-minute prep**
-section for external meetings (people and notes come from a caller; a card says
-"missing: ..." rather than showing a blank one); and a **Quiet threads** section
+`jarvis_calendar.detect_travel_and_flight_collisions`; virtual places such as a
+Zoom/Meet/Teams room or a meeting URL are NOT physical addresses, and a
+wrong-day claim is read only after the SecAlign/chat-template markers are
+stripped, by `detect_wrong_day_anomalies`, which also reads a description only
+when the caller already holds it); a **2-minute prep**
+section built by `build_meeting_prep_cards` for external meetings (people and
+notes come from a caller; each card carries its `source_provenance`; a card says
+"missing: ..." rather than showing a blank one, and App lock / "Hide memory
+lists and chat history" withholds every card and its details); and a **Quiet
+threads** section
 (owner sent last 3-14 days ago with a question/request, or a human's question
-unanswered for more than 48 hours - `jarvis_email.find_quiet_threads`). The
+unanswered for more than 48 hours - `jarvis_email.find_quiet_threads`, which
+skips List-Unsubscribe/List-Id/Auto-Submitted/Precedence bulk-list-junk mail and
+`noreply`-style senders, scrubs the display name through `jarvis_scrub`, latches
+the outside-text taint with reason `quiet_threads`, and returns an EMPTY list
+while App lock or the hide-lists setting is on). The
 briefing answer also carries a **`pulse`** object (`lines`, `where_to_look` - at
-most 3, a calendar collision first - and `not_checked`), and its text carries
+most 3, a calendar collision first, EMPTY on a normal day - built by
+`build_where_to_look_strip` - and `not_checked`), and its text carries
 "Where to look today: ...". `where_to_look` is empty on a normal day.
 **Honest limits:** the quiet-thread list is only rendered when a caller supplies
 it (no live mailbox thread read is wired in v1); the prep people/notes and the

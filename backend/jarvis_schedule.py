@@ -1322,14 +1322,16 @@ class Scheduler:
 
     #: Waves of work finish; the owner decides when a TASK finished.
     #: "Ready for your review" is therefore its own marker, never `done`.
-    def propose_ready(self, jid: str, *, reason: str = "") -> tuple:
+    def propose_ready(self, jid: str, *, review_note: str = "") -> tuple:
         """Jarvis has done its part: mark a to-do READY FOR THE OWNER.
 
-        Nothing is completed here, and there is no route that marks a task done
-        except the owner's own `act("done")`. Idempotent: proposing again only
-        refreshes the time. Only a to-do item can wait for review (a reminder
-        or alarm is not the owner's task list). The audit line carries ids only
-        - never the item's words (Wave D-1, Upgrades D6)."""
+        Nothing is completed here (`done` stays False), and there is no route
+        that marks a task done except the owner's own `act("done")`.
+        Idempotent: proposing again only refreshes the time. Only a to-do item
+        can wait for review (a reminder or alarm is not the owner's task
+        list). The audit line carries the id, the kind and the outcome ONLY -
+        a `review_note` is accepted for callers to pass words along but is
+        deliberately NOT logged (Wave D-1, Upgrades D6; D-1.4 gate)."""
         now = self.now()
         with self._lock, self._db() as c:
             row = self._row(c, jid)
@@ -1345,10 +1347,17 @@ class Scheduler:
             c.execute("UPDATE jobs SET ready_for_review = ?, changed = ? WHERE id = ?",
                       (now, now, jid))
         _audit("schedule.ready", {"id": jid, "kind": "todo",
-                                  "reason": str(reason or "")[:40]})
+                                  "outcome": "ready_for_review"})
         self._changed(jid, "todo")
         return 200, {"ok": True, "ready_for_review": True,
                      "said": READY_SAID}
+
+    def suggest_done(self, jid: str, *, review_note: str = "") -> tuple:
+        """The name the Wave D-1 gate uses for the same proposal: "this looks
+        finished - you decide". It NEVER sets done; it only marks the item
+        ready for the owner's review, and any `review_note` words are not
+        logged. `propose_ready` is the older spelling of the one method."""
+        return self.propose_ready(jid, review_note=review_note)
 
     def act(self, jid: str, do: str, seconds: Optional[float] = None) -> tuple:
         """ONE job: pause, resume, delete, done, add_time, snooze. (code, answer)."""
@@ -1917,6 +1926,9 @@ class Scheduler:
             v["ready_for_review"] = True
             v["ready_at"] = float(ready_at)
             v["ready_said"] = READY_SAID
+            # D-1.4 gate: the marker never means done. Said as a field too, so
+            # an app/test can assert the owner-only rule without reading state.
+            v["done"] = False
         v["lock_screen"] = k.lock_screen if k else "Jarvis: something is due."
         # GTD-1 (2026-10-18): additive, and only when there is something to
         # say - an old row (or a plain timer/alarm) grows no keys, so every

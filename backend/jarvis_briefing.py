@@ -425,6 +425,11 @@ class Deps:
     #: those sources are reported "not checked today", never filled with a
     #: made-up number.
     pulse_sources: Optional[Callable[[], dict]] = None
+    #: D-1.3 gate: when the caller already knows the private view is locked or
+    #: hidden, the prep cards carry NO dossier/email/reminder details at all.
+    #: Additive defaults: False means "the caller did not report a lock".
+    app_locked: bool = False
+    hide_memory_lists: bool = False
     senders_on: Callable[[], bool] = lambda: senders_setting()["on"]
     publish: Callable[[str, dict], None] = _publish
     deadline: float = READ_DEADLINE
@@ -874,6 +879,58 @@ def _people_section(events: list, now: float, deps: Deps) -> Optional[dict]:
 #: waiting; three at most, so the strip stays a glance.
 PULSE_MAX_ANOMALIES = 3
 
+
+def build_where_to_look_strip(anomalies) -> list:
+    """The "Where to look today" pills: the top PULSE_MAX_ANOMALIES at most,
+    in priority order, with blanks and duplicates removed.
+
+    D-1.3 gate: NO anomalies means an EMPTY list - the strip is completely
+    silent on a normal day, not a "nothing to report" line."""
+    out = []
+    for item in anomalies or ():
+        text = str(item or "").strip()
+        if text and text not in out:
+            out.append(text)
+        if len(out) >= PULSE_MAX_ANOMALIES:
+            break
+    return out
+
+
+def build_meeting_prep_cards(events, *, people=None, notes=None,
+                             app_locked: bool = False,
+                             hide_memory_lists: bool = False,
+                             max_cards: int = 5) -> list:
+    """The 2-minute prep cards, each with `source_provenance`, and NONE at all
+    while App lock or "Hide memory lists and chat history" is on (D-1.3 gate:
+    the privacy invariant runs FIRST, before any dossier/email/reminder text
+    is even assembled)."""
+    locked = bool(app_locked or hide_memory_lists)
+    if not locked:
+        try:
+            import jarvis_private_view as PV
+            got = PV.effective(app_locked=app_locked,
+                               hide_memory_lists=hide_memory_lists)
+            locked = bool(got.get("locked") or got.get("app_locked")
+                          or got.get("hide_memory_lists"))
+        except Exception:
+            locked = bool(app_locked or hide_memory_lists)
+    if locked:
+        return []
+    try:
+        import jarvis_calendar as CAL
+        cards = CAL.meeting_prep(events, people=people, notes=notes,
+                                 max_cards=max_cards)
+    except Exception:
+        return []
+    for card in cards:
+        used = ["calendar event"]
+        if card.get("people"):
+            used.append("people crm")
+        if card.get("notes"):
+            used.append("local notes")
+        card["source_provenance"] = used
+    return cards
+
 #: Titles of the two D3 sections, kept here so a test and the apps agree.
 TRAVEL_TITLE = "Travel and next steps"
 PREP_TITLE = "2-minute prep"
@@ -892,8 +949,10 @@ def _calendar_duet(events: list, now: float, deps: Deps) -> tuple:
     try:
         import jarvis_calendar as CAL
         warnings = CAL.detect_travel_and_flight_collisions(events)
-        cards = CAL.meeting_prep(events, people=deps.prep_people,
-                                 notes=deps.prep_notes)
+        cards = build_meeting_prep_cards(
+            events, people=deps.prep_people, notes=deps.prep_notes,
+            app_locked=bool(getattr(deps, "app_locked", False)),
+            hide_memory_lists=bool(getattr(deps, "hide_memory_lists", False)))
     except Exception:
         return [], []
     return warnings, cards
@@ -914,7 +973,11 @@ def _prep_section(cards: list) -> Optional[dict]:
         return None
     items = []
     for c in rows[:MAX_ITEMS]:
-        items.append(str(c.get("said") or c.get("summary") or "meeting"))
+        line = str(c.get("said") or c.get("summary") or "meeting")
+        sources = [str(x) for x in (c.get("source_provenance") or ()) if x]
+        if sources:
+            line += " (from: " + ", ".join(sources) + ")"
+        items.append(line)
     missing = sorted({m for c in rows for m in (c.get("missing") or ())})
     summary = _plural(len(rows), "meeting") + " has a 2-minute prep."
     if missing:
@@ -1007,7 +1070,7 @@ def pulse_from(*, sections: list, warnings: list, quiet_rows: list, approvals: i
             anomalies.append(str(one).strip())
     return {
         "lines": lines,
-        "where_to_look": anomalies[:PULSE_MAX_ANOMALIES],
+        "where_to_look": build_where_to_look_strip(anomalies),
         "not_checked": not_checked,
     }
 
