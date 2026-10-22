@@ -3055,6 +3055,70 @@ _SETTING_UNKNOWN = re.compile(
     r"|(?:change|edit|adjust|update)\s+(?:my|the|a)\s+settings"
     r"|(?:turn|switch)\s+(?:on|off)\s+(?:my|the|a)\s+settings")
 
+#: "set the hand-off to patient", "set how long my chats are kept to 30 days"
+#: (2026-10-22, the owner's universal-controls requirement). ONLY a name from
+#: jarvis_settings_registry.CHOICE_SETTINGS may match: a tail naming anything
+#: else returns None and falls through exactly as it did before - this must not
+#: become a second way to rewrite sentences other grammars own.
+_SET_CHOICE_TO = re.compile(
+    r"(?:set|change|switch|adjust|make|put)\s+(?:the\s+|my\s+|a\s+)?(.+?)\s+to\s+(.+)")
+
+#: The captcha hand-off's two choices, in the words the owner already reads on
+#: its Settings card ("Stop early" / "Keep offering it") - never a guess.
+_SET_HANDOFF_MODE = re.compile(
+    r"keep\s+(?:the\s+)?(?:captcha\s+|hand[\s-]?off\s+)*(?:hand[\s-]?off|captcha)"
+    r"\s+on\s+offer(?:\s+for\s+(?:the\s+)?(?:full\s+)?15\s+minutes?)?"
+    r"|keep\s+offering(?:\s+it)?(?:\s+for\s+(?:the\s+)?(?:full\s+)?15\s+minutes?)?"
+    r"|be\s+patient\s+(?:with\s+)?(?:the\s+)?(?:hand[\s-]?off|captcha)"
+    r"|stop\s+early\s+(?:with\s+)?(?:the\s+)?(?:hand[\s-]?off|captcha)"
+    r"|set\s+(?:the\s+)?(?:hand[\s-]?off|captcha)(?:\s+mode)?\s+to\s+"
+    r"(?P<value>patient|quick|stop\s+early|keep\s+offering(?:\s+it)?)")
+
+#: Whether the captcha's own window comes to the front.
+_SET_HANDOFF_FRONT = re.compile(
+    r"bring\s+(?:the\s+)?(?:captcha|hand[\s-]?off)\s+window\s+to\s+(?:the\s+)?front"
+    r"|leave\s+(?:the\s+)?(?:captcha|hand[\s-]?off)\s+window\s+"
+    r"(?:where\s+it\s+is|in\s+place)"
+    r"|set\s+(?:the\s+)?(?:captcha|hand[\s-]?off)\s+window\s+to\s+"
+    r"(?P<value>bring\s+(?:it\s+)?to\s+(?:the\s+)?front|"
+    r"leave\s+(?:it\s+)?(?:where\s+it\s+is|in\s+place))")
+
+#: "use the coding focus preset", "switch to the coding preset".
+_SET_PRESET_NATURAL = re.compile(
+    r"(?:use|apply|switch\s+to)\s+(?:the\s+)?(.+?)\s+(?:focus\s+)?preset")
+
+#: The ONE generic multi-field grammar (Gemini ruling Q3, 2026-10-22):
+#: "set <control> <field> to <value>" / "change ...". The closed control/field
+#: vocabulary lives in jarvis_settings_registry.CONTROL_FIELDS; a sentence that
+#: names no control there falls through exactly as before. A named control with
+#: a missing/ambiguous field or an invalid value is answered deterministically
+#: (fields + current values, or the valid values) - never handed to the model.
+_CONTROL_TO = re.compile(
+    r"(?:set|change|adjust|switch|put)\s+(?:the\s+|my\s+|a\s+)?(.+?)\s+to\s+(.+)")
+_CONTROL_ADJUST_ONLY = re.compile(
+    r"(?:adjust|change|set)\s+(?:the\s+|my\s+|a\s+)?(.+)")
+
+#: The owner's two Settings-only exceptions (ruling Q3.3): a typed change to
+#: credentials or to Restore backup is refused in plain words with the Settings
+#: pointer. The patterns are deliberately narrow (a backup restore, or a named
+#: key/password) so ordinary asks are not swallowed.
+_SETTINGS_ONLY_RESTORE = re.compile(
+    r"(?:restore|put\s+back|bring\s+back|roll\s+back)\s+(?:my\s+|the\s+|a\s+)?"
+    r"(?:backup|save|snapshot)(?:\s+(?:file|copy))?"
+    r"|restore\s+from\s+(?:my\s+|the\s+|a\s+)?backup")
+_SETTINGS_ONLY_ACCOUNTS = re.compile(
+    r"(?:set|change|update|add|edit|enter|save|show|tell|what\s+is|what's)\s+"
+    r"(?:me\s+)?"
+    r"(?:(?:my|the|a)\s+)?(?:(?:[a-z]+\s+)?(?:api\s*keys?|account\s*keys?|"
+    r"chatbot\s*keys?)|openai\s*key|github\s*token|password|passphrase|"
+    r"pairing\s*(?:token|key)|credentials?)(?:\s+(?:to|for|please))?")
+
+#: "what are the choices for the hand-off?", "what can I set the voice speed
+#: to?" - the ask-don't-guess answer for a known choice setting.
+_SET_CHOICE_HELP = re.compile(
+    r"(?:what\s+are\s+)?(?:the\s+)?(?:choices|options)\s+for\s+(?:the\s+|my\s+|a\s+)?(.+)"
+    r"|what\s+can\s+i\s+set\s+(?:the\s+|my\s+|a\s+)?(.+?)\s+to")
+
 #: "What asks first" (jarvis_asks_first.LOOSE): stricter (ask again) or
 #: looser (stop asking - the PC only, one card plus Windows Hello). An
 #: optional "jarvis reads/accesses/checks/writes" is taken off first, so
@@ -3145,6 +3209,108 @@ def _card_mode_intent(s: str) -> Optional[Intent]:
     return Intent("settings_card_mode", {"mode": mode})
 
 
+def _settings_only(s: str) -> Optional[Intent]:
+    """The owner's two Settings-only exceptions, refused deterministically."""
+    if _SETTINGS_ONLY_RESTORE.fullmatch(s):
+        return Intent("settings_only", {"which": "restore"})
+    if _SETTINGS_ONLY_ACCOUNTS.fullmatch(s):
+        return Intent("settings_only", {"which": "accounts"})
+    return None
+
+
+def _settings_control(s: str) -> Optional[Intent]:
+    """The generic "set <control> <field> to <value>" handler (ruling Q3).
+
+    Closed-world: no control in jarvis_settings_registry.CONTROL_FIELDS -> None
+    (falls through exactly as before). A named control answers deterministically:
+    set, ask (fields + current values), or bad (valid values)."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    m = _CONTROL_TO.fullmatch(s)
+    if m:
+        got = R.resolve_control_sentence(m.group(1), m.group(2))
+    else:
+        m = _CONTROL_ADJUST_ONLY.fullmatch(s)
+        if not m:
+            return None
+        got = R.resolve_control_sentence(m.group(1), None)
+    kind = got.get("kind")
+    if kind == "none":
+        return None
+    if kind == "set":
+        return Intent("control_set", {"key": got["key"], "value": got["value"]})
+    if kind == "ask":
+        return Intent("control_ask", {"control": got["control"]})
+    if kind == "bad":
+        return Intent("control_bad", {"control": got["control"],
+                                      "field": got["field"], "value": ""})
+    return Intent("control_bad", {"control": got["control"], "field": "",
+                                  "value": got.get("value") or ""})
+
+
+def _settings_choice(s: str) -> Optional[Intent]:
+    """The named-choice settings ("set it to a value"), 2026-10-22.
+
+    Only a name in jarvis_settings_registry.CHOICE_SETTINGS may match. The
+    value is looked up in that setting's OWN list; a value it does not have is
+    answered with the real options ("settings_choice_bad"), never guessed at
+    and never handed to the model. Anything else here returns None and falls
+    through exactly as before."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+
+    def one(key: str, name_words: str, value_words: str) -> Optional[Intent]:
+        setting = next((c for c in R.CHOICE_SETTINGS if c.key == key), None)
+        if setting is None:
+            return None
+        value = R.choice_from_words(setting, value_words)
+        if value is None:
+            return Intent("settings_choice_bad",
+                          {"key": key, "words": " ".join(str(value_words).split())})
+        return Intent("settings_choice", {"key": key, "value": value})
+
+    m = _SET_HANDOFF_MODE.fullmatch(s)
+    if m:
+        value = m.group("value") if "value" in (m.groupdict() or {}) else ""
+        if value:
+            return one("handoff_mode", "the captcha hand-off", value)
+        # "keep offering", "stop early", "be patient" without a named value.
+        return one("handoff_mode", "the captcha hand-off",
+                   "stop early" if "stop early" in s else "keep offering")
+    m = _SET_HANDOFF_FRONT.fullmatch(s)
+    if m:
+        value = m.group("value") if "value" in (m.groupdict() or {}) else ""
+        if value:
+            return one("handoff_front", "the captcha window", value)
+        return one("handoff_front", "the captcha window",
+                   "leave it where it is" if s.startswith("leave") else "bring it to the front")
+    m = _SET_PRESET_NATURAL.fullmatch(s)
+    if m:
+        value = " ".join(m.group(1).split())
+        setting = next((c for c in R.CHOICE_SETTINGS if c.key == "focus_preset"), None)
+        if setting is None:
+            return None
+        preset = R.choice_from_words(setting, value)
+        if preset is not None:
+            return Intent("settings_choice", {"key": "focus_preset", "value": preset})
+    m = _SET_CHOICE_HELP.fullmatch(s)
+    if m:
+        name = (m.group(1) or m.group(2) or "").strip()
+        setting = R.find_choice_setting(name)
+        if setting is not None:
+            return Intent("settings_choice_help", {"key": setting.key})
+    m = _SET_CHOICE_TO.fullmatch(s)
+    if m:
+        setting = R.find_choice_setting(m.group(1))
+        if setting is not None:
+            return one(setting.key, m.group(1), m.group(2))
+    return None
+
+
 def _settings_adjust(s: str) -> Optional[Intent]:
     try:
         import jarvis_settings_registry as R
@@ -3191,6 +3357,21 @@ def _settings_adjust(s: str) -> Optional[Intent]:
         dom_id = R.find_not_by_asking(name)
         if dom_id is not None:
             return Intent("settings_not_by_asking", {"dom_id": dom_id})
+    # The owner's two Settings-only exceptions are refused before anything
+    # else can read them as a setting (ruling Q3.3, 2026-10-22).
+    got = _settings_only(s)
+    if got is not None:
+        return got
+    # The ONE generic multi-field grammar (ruling Q3): closed vocabulary, asks
+    # on ambiguity, never falls through to the model for a named control.
+    got = _settings_control(s)
+    if got is not None:
+        return got
+    # The named-choice settings ("set the voice speed to faster", "keep my
+    # chats for 30 days", "bring the captcha window to the front") - 2026-10-22.
+    got = _settings_choice(s)
+    if got is not None:
+        return got
     # A sentence that clearly asks to change A SETTING, naming one nothing
     # above knows: "turn off the turbo setting", "change my security settings",
     # "enable the settings thing". Answered honestly rather than handed to the
@@ -4518,6 +4699,76 @@ def _run_settings_bool(f: dict, peer, local) -> Result:
     return Result(out.said, "settings_bool")
 
 
+def _run_settings_choice(f: dict, peer, local) -> Result:
+    """One named-choice setting, through its own setter (2026-10-22).
+
+    The setter is the EXACT function the Settings control/route calls, so its
+    card, tier, stale-link hold and PC-only refusal are the control's own."""
+    import jarvis_settings_registry as R
+    setting = next((c for c in R.CHOICE_SETTINGS if c.key == f["key"]), None)
+    if setting is None:
+        return Result(SETTINGS_MISSING, "settings_choice")
+    out = setting.set(f["value"], peer=peer, local=local)
+    return Result(out.said, "settings_choice")
+
+
+def _run_settings_choice_bad(f: dict) -> Result:
+    """A value the named setting does not have: say the real options."""
+    import jarvis_settings_registry as R
+    setting = next((c for c in R.CHOICE_SETTINGS if c.key == f["key"]), None)
+    if setting is None:
+        return Result(SETTINGS_MISSING, "settings_choice_bad")
+    return Result(R.choice_bad_words(setting), "settings_choice_bad")
+
+
+def _run_settings_choice_help(f: dict) -> Result:
+    """Which values a named setting has, without changing anything."""
+    import jarvis_settings_registry as R
+    setting = next((c for c in R.CHOICE_SETTINGS if c.key == f["key"]), None)
+    if setting is None:
+        return Result(SETTINGS_MISSING, "settings_choice_help")
+    options = setting.option_words()
+    name = setting.names[0] if setting.names else setting.key
+    if not options:
+        return Result(f"{name} has no choices on this PC yet.", "settings_choice_help")
+    return Result(f"For {name}, you can say: {options}.", "settings_choice_help")
+
+
+def _run_settings_only(f: dict) -> Result:
+    """The two own-approved Settings-only exceptions: plain words, no card,
+    nothing changed (ruling Q3.3)."""
+    import jarvis_settings_registry as R
+    return Result(R.settings_only_words(f.get("which") or "accounts"), "settings_only")
+
+
+def _run_control_set(f: dict, peer, local) -> Result:
+    """The one generic multi-field setter: the SAME ChoiceSetting.set the
+    Settings control calls - no second mutation path."""
+    import jarvis_settings_registry as R
+    setting = next((c for c in R.CHOICE_SETTINGS if c.key == f.get("key")), None)
+    if setting is None:
+        return Result(SETTINGS_MISSING, "control_set")
+    out = setting.set(f.get("value"), peer=peer, local=local)
+    return Result(out.said, "control_set")
+
+
+def _run_control_ask(f: dict) -> Result:
+    """Deterministic clarifying question: valid fields + their current values."""
+    import jarvis_settings_registry as R
+    return Result(R.control_ask_words(str(f.get("control") or "")), "control_ask")
+
+
+def _run_control_bad(f: dict) -> Result:
+    """A named field with an invalid value, or a value matching no field."""
+    import jarvis_settings_registry as R
+    control = str(f.get("control") or "")
+    field = str(f.get("field") or "")
+    if field:
+        return Result(R.control_bad_words(control, field), "control_bad")
+    return Result(R.control_invalid_words(control, str(f.get("value") or "")),
+                  "control_bad")
+
+
 def _run_settings_not_by_asking(f: dict) -> Result:
     """A real setting this backend has no route to change (2026-10-13).
 
@@ -4752,6 +5003,20 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_menu_visibility(f)
     if n == "settings_bool":
         return _run_settings_bool(f, peer, local)
+    if n == "settings_choice":
+        return _run_settings_choice(f, peer, local)
+    if n == "settings_choice_bad":
+        return _run_settings_choice_bad(f)
+    if n == "settings_choice_help":
+        return _run_settings_choice_help(f)
+    if n == "settings_only":
+        return _run_settings_only(f)
+    if n == "control_set":
+        return _run_control_set(f, peer, local)
+    if n == "control_ask":
+        return _run_control_ask(f)
+    if n == "control_bad":
+        return _run_control_bad(f)
     if n == "settings_not_by_asking":
         return _run_settings_not_by_asking(f)
     if n == "settings_unknown":

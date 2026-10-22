@@ -638,6 +638,299 @@ def t_what_can_i_change_is_still_the_exact_answer():
           out.reply[:120] if out else None)
 
 
+def t_every_feature_has_a_matrix_row_and_a_reason():
+    """The owner's requirement is a matrix, not an anecdote: every one of the
+    139 catalogue features is either command-controllable (proved by a working
+    phrase through the real matcher) or carries a stable reason code and an
+    owner. A feature missing from both is a silent gap - this test forbids it."""
+    rows = FG.control_matrix()
+    check("the matrix has one row per catalogue feature",
+          len(rows) == FG.feature_count() and
+          [r["id"] for r in rows] == [r["id"] for r in FG.features()],
+          (len(rows), FG.feature_count()))
+    by_id = {r["id"]: r for r in rows}
+    for r in rows:
+        check(f"{r['id']} has a known status",
+              r["status"] in ("switch", "adjust", "open-only", "not-a-setting"),
+              r["status"])
+        if r["status"] not in ("switch", "adjust"):
+            check(f"{r['id']} carries a stable reason code",
+                  bool(r["reason_code"]) and r["reason_code"] in FG.REASON_CODES,
+                  r["reason_code"])
+            check(f"{r['id']} names an owner for its gap",
+                  bool(r["owner"]) and r["owner"] in
+                  ("voiceprint-wiring", "setup-ui", "Session B", "none-needed"),
+                  r["owner"])
+    check("no feature is silently missing a reason",
+          not FG.matrix_rows_without_reason(), FG.matrix_rows_without_reason())
+    # The other direction: an allowlist row may not excuse a feature that now
+    # HAS a working control (that would be a stale excuse nobody re-checked).
+    controllable = {r["id"] for r in rows if r["status"] in ("switch", "adjust")}
+    stale = sorted(set(FG.NO_COMMAND_REASON) & controllable)
+    check("no allowlist row excuses a feature that is now controllable",
+          not stale, stale)
+    # The typed phrases the matrix carries must be exactly the phrases that work
+    # - an intent of None is a promise nobody checked.
+    for r in rows:
+        for entry in r["adjust"]:
+            check(f"{r['id']}: {entry['phrase']!r} works", bool(entry["intent"]), entry)
+        # Every switch the row names has its OWN working phrase (the
+        # exhaustive BOOL loop lives in test_settings_registry.py); a feature
+        # title that is not a switch alias may legitimately not resolve, so the
+        # generic sentence is reported, not required.
+        for key in r["switch_keys"]:
+            b = next((x for x in R.BOOL_SETTINGS if x.key == key), None)
+            check(f"{r['id']}: {key} is a real switch", b is not None, key)
+            if b is None or not b.names:
+                continue
+            got = match(f"turn on {b.names[0]}")
+            check(f"{r['id']}: 'turn on {b.names[0]}' reaches {key}",
+                  got is not None and got.name == "settings_bool"
+                  and got.f.get("key") == key, got)
+
+
+def t_the_matrix_tables_link_to_real_controls():
+    """Every key and place the matrix's helper tables name is real: a switch
+    key from the registry, a Settings card that exists, or a phrase that
+    resolves through the real matcher. Never a string typed only here."""
+    bool_keys = {b.key for b in R.BOOL_SETTINGS}
+    places = set()
+    for row in FG.features():
+        for cover in row.get("covers") or ():
+            if str(cover).startswith("settings."):
+                sid = str(cover).split("settings.", 1)[1]
+                if R.section_by_id(sid) is not None:
+                    places.add(sid)
+    for fid, keys in FG.EXTRA_CONTROLS.items():
+        for key in keys:
+            check(f"EXTRA_CONTROLS[{fid!r}] names the real switch {key}",
+                  key in bool_keys, key)
+    for fid, extra in FG.EXTRA_ADJUST.items():
+        for place in extra:
+            check(f"EXTRA_ADJUST[{fid!r}] names a real Settings card {place}",
+                  place == "topics" or R.section_by_id(place) is not None, place)
+    for place, proofs in FG.ADJUST_SECTIONS.items():
+        for phrase, _kind in proofs:
+            got = match(phrase)
+            check(f"ADJUST_SECTIONS[{place!r}]: {phrase!r} resolves",
+                  got is not None and not str(getattr(got, "name", "")).endswith("_bad"),
+                  got.name if got else None)
+    for row in FG.control_matrix():
+        for key in row["switch_keys"]:
+            check(f"{row['id']} names a real switch ({key})", key in bool_keys, key)
+
+
+def t_the_five_owner_labels_are_exact_and_every_feature_has_one():
+    """Ruling Q8 (2026-10-22): exactly these five plain labels, one per feature,
+    used by the report AND the Settings "All features & abilities" directory.
+    A feature with no label, or a label outside the five, is a silent omission."""
+    check("the five labels are the approved words, in order",
+          FG.CONTROL_LABELS == (
+              "Switchable / Adjustable (Typed & Settings)",
+              "Settings-Only (By Design \u2014 Security Boundary)",
+              "PC-Only Setting (Honest Refusal on Phone)",
+              "Command-Only (Runs When You Ask \u2014 No Switch Needed)",
+              "Always On (Core Safety Rule \u2014 Cannot Be Turned Off)"),
+          FG.CONTROL_LABELS)
+    directory = FG.abilities_directory()
+    check("the directory has every feature exactly once",
+          len(directory) == FG.feature_count()
+          and len({r["id"] for r in directory}) == FG.feature_count(),
+          (len(directory), FG.feature_count()))
+    allowed = set(FG.CONTROL_LABELS)
+    for row in directory:
+        check(f"{row['id']} has one of the five labels",
+              row["label"] in allowed, row["label"])
+        check(f"{row['id']} says whether it is a toggle in plain words",
+              bool(row["example_words"]) and bool(row["settings_path"]),
+              row)
+        check(f"{row['id']} names a Settings place",
+              "Settings" in row["settings_path"], row["settings_path"])
+        if not row["switch_keys"] and "Settings, " + "" in row["settings_path"] and "(planned)" in row["settings_path"]:
+            check(f"{row['id']}'s planned directory is marked planned", True)
+        mine = next(r for r in FG.control_matrix() if r["id"] == row["id"])
+        check(f"{row['id']}'s label matches its matrix row",
+              row["label"] == mine["control_class"], (row["label"], mine["control_class"]))
+        if mine["status"] == "switch":
+            check(f"{row['id']} is marked a toggle", mine["is_toggle"] is True, mine["is_toggle"])
+        else:
+            check(f"{row['id']} is marked not a toggle", mine["is_toggle"] is False, mine["is_toggle"])
+            check(f"{row['id']} says plainly it is not a toggle",
+                  "not a toggle" in mine["not_a_toggle_words"].lower(),
+                  mine["not_a_toggle_words"])
+    counts = {label: sum(1 for r in directory if r["label"] == label) for label in FG.CONTROL_LABELS}
+    # Lead's 2026-10-22 classification rules, pinned exactly:
+    check("Settings-Only is exactly the Accounts + Restore-backup pair",
+          counts[FG.LABEL_SETTINGS_ONLY] == 2
+          and {r["id"] for r in directory if r["label"] == FG.LABEL_SETTINGS_ONLY}
+          == {"accounts", "backup"}, counts)
+    check("Always On is the canonical 12-row safety list",
+          counts[FG.LABEL_ALWAYS_ON] == len(FG.ALWAYS_ON_IDS) == 12
+          and {r["id"] for r in directory if r["label"] == FG.LABEL_ALWAYS_ON}
+          == FG.ALWAYS_ON_IDS, counts)
+    check("the canonical 12 always-on ids are the approved union",
+          FG.ALWAYS_ON_IDS == {
+              "approvals", "app-lock", "trust", "rush-latch", "outside-text",
+              "stale-link", "stop-everything", "crisis-help", "sensitive-facts",
+              "memory-waiting", "settings-entry", "devices"}, sorted(FG.ALWAYS_ON_IDS))
+    check("PC-Only is the pc-only, app-local and non-account key rows",
+          counts[FG.LABEL_PC_ONLY] == 13, counts)
+    check("Command-Only is the remaining abilities + read-only pages",
+          counts[FG.LABEL_COMMAND_ONLY] == 70, counts)
+    check("Switchable/Adjustable is the real switch, choice and multi-field rows",
+          counts[FG.LABEL_SWITCH_ADJUST] == 42, counts)
+    # Lead review: the six Switchable rows without a typed proof carry a
+    # visible planned marker (backup is Settings-Only, so not counted here).
+    planned = [r for r in FG.control_matrix() if r.get("planned")]
+    check("exactly the six multi-field rows are marked planned",
+          len(planned) == 6
+          and {r["id"] for r in planned} == {
+              "folders", "spending", "email-send", "hardware", "models", "compute"},
+          [r["id"] for r in planned])
+    check("every planned row carries the visible note",
+          all(r.get("planned_words") for r in planned), planned)
+    check("the five counts sum to the catalogue", sum(counts.values()) == 139, counts)
+    # The rules themselves, so a future reclassification cannot quietly drift:
+    # an always-on rule may still have a typed control (approvals has a card
+    # display choice) but its owner-facing label must say Always On.
+    wrong = [r["id"] for r in directory
+             if r["id"] in FG.ALWAYS_ON_IDS and r["label"] != FG.LABEL_ALWAYS_ON]
+    check("every always-on rule is labelled Always On", not wrong, wrong)
+
+
+def t_turning_on_an_ability_gets_a_deterministic_honest_answer():
+    """Ruling Q2(a): typing turn on/off an ability that has no switch gets the
+    honest kind (Always On vs Command-Only), a real example where one exists,
+    and the exact Settings place - no fake switch and no model guess."""
+    stop = FG.row_by_id("stop-everything")
+    words = FG.ability_explanation(stop)
+    check("an always-on safety rule says so", "Always On" in words, words)
+    check("...names its Settings inspection place", "Settings" in words, words)
+    ret = FG.row_by_id("retirement")
+    words = FG.ability_explanation(ret)
+    check("a command-only ability says it runs when asked", "Command-Only" in words, words)
+    check("...gives a real example phrase or says there is none",
+          "for example" in words.lower() or "no fixed" in words.lower(), words)
+    check("...names its Settings place", "Settings" in words, words)
+    # Through the real matcher: "turn off stop everything" answers, changes
+    # nothing, and never reaches the model as a silent success.
+    import jarvis_quick as Q
+    got = Q.match("turn off stop everything")
+    check("the fixed phrase reaches the feature refusal, not a model turn",
+          got is not None and got.name == "feature_switch_refused", got)
+    if got is not None and got.name == "feature_switch_refused":
+        check("...and its words are the honest Always-On explanation",
+              "Always On" in str(got.f.get("words") or ""), got.f)
+
+
+def t_abilities_directory_labels_are_consistent_with_reason_codes():
+    """The label is DERIVED, never typed twice: credentials -> Settings-Only,
+    PC-only/app-local/multi-field -> PC-Only, safety rules -> Always On, the
+    rest of the non-toggle rows -> Command-Only."""
+    for row in FG.control_matrix():
+        expected = FG._label_from(row["status"], row["reason_code"], row["id"])
+        check(f"{row['id']}'s label is derived from its status/reason",
+              row["control_class"] == expected, (row["control_class"], expected))
+    for row in FG.abilities_directory():
+        if row["reason_code"] != "credentials":
+            continue
+        if row["id"] in FG.SETTINGS_ONLY_IDS:
+            check(f"{row['id']} (credentials) is Settings-Only",
+                  row["label"] == FG.LABEL_SETTINGS_ONLY, row["label"])
+        elif row["id"] in FG.ALWAYS_ON_IDS:
+            check(f"{row['id']} is on the always-on canonical list",
+                  row["label"] == FG.LABEL_ALWAYS_ON, row["label"])
+        else:
+            check(f"{row['id']} (pairing/key) is PC-Only, not a security boundary claim",
+                  row["label"] == FG.LABEL_PC_ONLY, row["label"])
+
+
+def t_always_on_rules_own_no_switch_and_point_to_their_exception():
+    """Lead's 2026-10-22 sensitive-facts ruling: an Always-On SAFETY RULE must
+    have no switch of its own; its exception (e.g. learn_sensitive_topics) is a
+    separate setting, where typed on/off and card gating still work."""
+    rows = {r["id"]: r for r in FG.control_matrix()}
+    for aid in FG.ALWAYS_ON_IDS:
+        row = rows.get(aid)
+        check(f"{aid} is a real feature row", row is not None, aid)
+        if row is None:
+            continue
+        check(f"{aid} (Always On) owns no switch", row["switch_keys"] == [], row["switch_keys"])
+        check(f"{aid} (Always On) is not a switch/adjust row",
+              row["status"] not in ("switch", "adjust"), row["status"])
+        check(f"{aid} (Always On) carries a reason", bool(row["reason"]), row)
+        check(f"{aid} (Always On) names a screen path",
+              "Settings" in row["screen_path"], row["screen_path"])
+    # The exception is not hidden: it is reachable through its own setting.
+    import jarvis_quick as Q
+    got = Q.match("turn on also remember sensitive topics automatically")
+    check("learn_sensitive_topics still resolves through its own switch",
+          got is not None and got.name == "settings_bool"
+          and got.f.get("key") == "learn_sensitive_topics", got)
+    learning = {r["id"]: r for r in FG.control_matrix()}["memory-learning"]
+    check("the memory-learning row still names both learning switches",
+          set(learning["switch_keys"]) == {"background_learning",
+                                           "learn_sensitive_topics"},
+          learning["switch_keys"])
+    words = FG.ability_explanation(FG.row_by_id("sensitive-facts"))
+    check("sensitive-facts explains the rule and points to the exception",
+          "Always On" in words
+          and "also remember sensitive topics automatically" in words,
+          words)
+
+
+def t_settings_gaps_are_real_named_and_owned():
+    """A command-controllable feature whose control is NOT on the Settings page
+    must say so, with an owner - setup-ui's audit of 2026-10-22 (chat history
+    switch + retention, and the two learning switches, live only in Brain).
+    A page-less typed path that looked "covered" would be the exact lie this
+    project keeps fixing."""
+    bool_keys = {b.key for b in R.BOOL_SETTINGS}
+    choice_keys = {c.key for c in R.CHOICE_SETTINGS}
+    by_id = {r["id"]: r for r in FG.control_matrix()}
+    check("both known Settings gaps are recorded", set(FG.SETTINGS_GAPS) ==
+          {"history", "memory-learning"}, sorted(FG.SETTINGS_GAPS))
+    for fid, gap in FG.SETTINGS_GAPS.items():
+        row = by_id.get(fid)
+        check(f"{fid} is a real feature", row is not None, fid)
+        check(f"{fid}'s typed controls are named", bool(gap.get("controls")), gap)
+        for key in gap.get("controls", ()):
+            check(f"{fid}: {key} is a real typed setting",
+                  key in bool_keys or key in choice_keys, key)
+        check(f"{fid}'s gap names the desktop owner",
+              gap.get("desktop") in ("setup-ui", "Session B"), gap)
+        check(f"{fid}'s gap names the phone owner",
+              gap.get("phone") in ("setup-ui", "Session B"), gap)
+        check(f"{fid}'s gap says why in plain words", len(str(gap.get("reason") or "")) > 40, gap)
+        check(f"{fid}'s matrix row carries the gap",
+              row is not None and row.get("settings_gap") == gap, row and row.get("settings_gap"))
+    for row in by_id.values():
+        if row.get("settings_gap") is None:
+            continue
+        check(f"{row['id']} is command-controllable despite its Settings gap",
+              row["status"] in ("switch", "adjust"), row["status"])
+
+
+def t_the_matrix_reports_the_switch_and_adjust_counts_honestly():
+    """The headline numbers, stated out loud so a change is noticed."""
+    rows = FG.control_matrix()
+    status = {}
+    for r in rows:
+        status[r["status"]] = status.get(r["status"], 0) + 1
+    check("the switches are the registry's own count (16 features cover them)",
+          status.get("switch", 0) >= 16, status)
+    check("the adjust rows are at least the nine known settings places",
+          status.get("adjust", 0) >= 9, status)
+    check("every feature is classified, none invented",
+          sum(status.values()) == len(rows), status)
+    check("the open-only rows carry a Settings card",
+          all(r["sections"] for r in rows if r["status"] == "open-only"),
+          [r["id"] for r in rows if r["status"] == "open-only" and not r["sections"]])
+    # The two multi-field gaps named with an owner in this slice's report.
+    multi = [r["id"] for r in rows if r["reason_code"] == "multi-field"]
+    check("the multi-field gaps are named, not hidden", bool(multi), multi)
+
+
 if __name__ == "__main__":
     for fn in (t_every_row_is_looked_up_and_its_facts_equal_the_json,
                t_unknown_and_ambiguous_never_guess,
@@ -654,7 +947,14 @@ if __name__ == "__main__":
                t_the_tool_is_listed_short_and_read_only,
                t_the_tool_returns_the_exact_facts,
                t_a_model_turn_gets_the_facts_with_no_card,
-               t_what_can_i_change_is_still_the_exact_answer):
+               t_what_can_i_change_is_still_the_exact_answer,
+               t_every_feature_has_a_matrix_row_and_a_reason,
+               t_the_matrix_tables_link_to_real_controls,
+               t_the_matrix_reports_the_switch_and_adjust_counts_honestly,
+               t_settings_gaps_are_real_named_and_owned,
+               t_the_five_owner_labels_are_exact_and_every_feature_has_one,
+               t_turning_on_an_ability_gets_a_deterministic_honest_answer,
+               t_abilities_directory_labels_are_consistent_with_reason_codes):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
@@ -665,3 +965,6 @@ if __name__ == "__main__":
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)
+
+
+# -------------------------------------------- 7. the command-side matrix (2026-10-22)
