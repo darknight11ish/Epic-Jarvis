@@ -229,6 +229,28 @@ def main():
               NOTHING_CALLS_IT in third,
               "the declaration holds, so the tool must keep naming the missing "
               "half rather than going quiet about the route:\n" + third[-600:])
+
+        # F11 (2026-10-22): the dead phone work-offer surface is removed WHOLE.
+        # The declaration is then obsolete, not stale: it must be dropped
+        # silently, on both trees, so the parity fix can land before or after
+        # the phone PR without a deadlock. This is the shape #727 produces.
+        _put(root, "jarvis-client/app/src/main/java/com/jarvis/client/net/WorkSetups.kt",
+             CONSTS.replace('    const val RECOMMEND_PATH = "/api/work/recommend"\n', ""))
+        _put(root, "jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+             "package com.jarvis.client\n\nobject JarvisRuntime {\n"
+             "    private val api: Api = Api()\n}\n")
+        fourth = _run(root)
+        check("the removed-surface tree does not call the declaration stale",
+              DECLARED_GONE not in fourth,
+              "the declaration describes a surface that no longer exists; it must "
+              "not fail the tree it is obsolete on:\n" + fourth[-600:])
+        check("... and it is dropped silently rather than named as a missing half",
+              NOTHING_CALLS_IT not in fourth,
+              "the route is not in either app at all, so there is no missing half "
+              "to name:\n" + fourth[-600:])
+        check("... and the route is not put back into the phone's set",
+              "/api/work/recommend is 'planned' and the phone calls it" not in fourth,
+              fourth[-600:])
     finally:
         shutil.rmtree(str(root), ignore_errors=True)
 
