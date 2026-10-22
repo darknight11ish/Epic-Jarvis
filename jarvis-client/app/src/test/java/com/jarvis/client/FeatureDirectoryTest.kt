@@ -52,7 +52,7 @@ class FeatureDirectoryTest {
     @Test
     fun `Settings-Only is exactly Accounts and Restore backup`() {
         val ids = rows.filter { it.label.startsWith("Settings-Only") }.map { it.id }.sorted()
-        assertEquals(listOf("accounts-secrets", "backup"), ids)
+        assertEquals(listOf("accounts", "backup"), ids)
     }
 
     @Test
