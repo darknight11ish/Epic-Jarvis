@@ -469,7 +469,13 @@ _ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "
                   # Jarvis finished its part and is waiting for the OWNER. It
                   # is never a done state; only act("done") moves a to-do to
                   # done, exactly as before.
-                  ("ready_for_review", "REAL"))
+                  ("ready_for_review", "REAL"),
+                  # HUD Reminders Phase 2 (2026-10-22): a to-do item's position
+                  # WITHIN its list (0-based). NULL for every row written before
+                  # this and for done/fired rows; the open path below backfills
+                  # each list 0..n-1 once, deterministically, and old code
+                  # ignores the column, so a code rollback stays safe.
+                  ("rank", "INTEGER"))
 
 #: States. `active` and `paused` are on the list; `waiting` is a repeating
 #: job whose card has not been answered; `fired` is a one-off that went off
@@ -965,9 +971,51 @@ class Scheduler:
         with self._db() as c:
             c.executescript(_SCHEMA)
             have = {r[1] for r in c.execute("PRAGMA table_info(jobs)").fetchall()}
-            for name, typ in _ADDED_COLUMNS:
-                if name not in have:
+            missing = [(name, typ) for name, typ in _ADDED_COLUMNS if name not in have]
+            # Phase 2 (2026-10-22): the ALTERs and the one-time rank backfill
+            # run in ONE explicit transaction, so a crash can leave neither half
+            # behind - probe-proven on this PC that SQLite rolls the added
+            # column back with the rows. Missing columns are what an older
+            # schedule.db needs; a rank NULL left by an older build (or by a
+            # to-do written before this code) is topped up on the next open.
+            needs_backfill = False
+            if "rank" in have and not missing:
+                needs_backfill = c.execute(
+                    "SELECT 1 FROM jobs WHERE kind = 'todo' AND state IN ('active','paused') "
+                    "AND rank IS NULL LIMIT 1").fetchone() is not None
+            if missing or needs_backfill:
+                c.execute("BEGIN IMMEDIATE")
+                for name, typ in missing:
                     c.execute(f"ALTER TABLE jobs ADD COLUMN {name} {typ}")
+                self._backfill_ranks(c)
+
+    def _backfill_ranks(self, c) -> None:
+        """One-time rank backfill (HUD Reminders Phase 2, 2026-10-22).
+
+        Every OPEN to-do that has no rank gets the next free number IN ITS OWN
+        LIST, in (created, rowid) order - so the first run on an old DB gives
+        each list exactly 0..n-1 deterministically, while a row that already
+        has a rank keeps it (a new item appended by a later version sorts after
+        the ranked ones). Done and fired rows are never ranked: they are not on
+        a list. Idempotent by construction: with no NULL remaining it writes
+        nothing. Runs inside the same explicit transaction as the ALTERs."""
+        rows = c.execute(
+            "SELECT id, list_name FROM jobs WHERE kind = 'todo' "
+            "AND state IN ('active','paused') AND rank IS NULL "
+            "ORDER BY (list_name IS NOT NULL), list_name, created, rowid").fetchall()
+        if not rows:
+            return
+        nxt: dict = {}
+        for key, top in c.execute(
+                "SELECT ifnull(list_name, ''), COALESCE(MAX(rank), -1) FROM jobs "
+                "WHERE kind = 'todo' AND state IN ('active','paused') "
+                "AND rank IS NOT NULL GROUP BY ifnull(list_name, '')").fetchall():
+            nxt[str(key)] = int(top) + 1
+        for r in rows:
+            key = str(r["list_name"] or "")
+            value = nxt.get(key, 0)
+            c.execute("UPDATE jobs SET rank = ? WHERE id = ?", (value, r["id"]))
+            nxt[key] = value + 1
 
     # ---- storage ------------------------------------------------------------
 
@@ -998,19 +1046,28 @@ class Scheduler:
                 snooze_of: Optional[str] = None, extra: Optional[dict] = None,
                 context_bundle: Optional[dict] = None, trigger: Optional[str] = None,
                 condition_kind: Optional[str] = None,
-                condition_target: Optional[str] = None) -> str:
+                condition_target: Optional[str] = None,
+                rank: Optional[int] = None) -> str:
         jid = "s" + uuid.uuid4().hex[:10]
         now = self.now()
         with self._lock, self._db() as c:
+            if kind == "todo" and rank is None:
+                # Phase 2: a new to-do appends to the end of its list, so the
+                # column is never NULL for a row this code writes.
+                top = c.execute(
+                    "SELECT COALESCE(MAX(rank), -1) FROM jobs WHERE kind = 'todo' "
+                    "AND state IN ('active','paused') AND ifnull(list_name, '') = ?",
+                    (str(list_name or ""),)).fetchone()[0]
+                rank = int(top) + 1
             c.execute("INSERT INTO jobs (id, kind, text, state, due, rule, duration, created, "
                       "changed, source, list_name, snooze_of, extra, context_bundle, trigger, "
-                      "condition_kind, condition_target) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      "condition_kind, condition_target, rank) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (jid, kind, text, state, due,
                        json.dumps(rule) if rule else None, duration, now, now, source,
                        list_name, snooze_of, json.dumps(extra) if extra else None,
                        json.dumps(context_bundle) if context_bundle else None,
-                       trigger or "time", condition_kind, condition_target))
+                       trigger or "time", condition_kind, condition_target, rank))
         _audit("schedule.add", {"id": jid, "kind": kind, "repeats": bool(rule)})
         self._changed(jid, kind)
         return jid
@@ -1266,6 +1323,28 @@ class Scheduler:
         ])
         return "\n".join(lines)
 
+    def _edit_card_text(self, kind: str, rule: dict, text: str, now: float) -> str:
+        """The ONE card a repeat change raises (Phase 2), in the same shape as
+        the "set up" card: what will change, the new rule, the next three
+        times, and the honest line that the CURRENT schedule stays in force
+        until the owner says yes. Never logged, and the audit line that goes
+        with the request carries field names only."""
+        k = KINDS[kind]
+        runs = next_runs(rule, now)
+        lines = [f"Change a repeating {k.noun}.", ""]
+        if text:
+            lines.extend([f"What: {text}", ""])
+        lines.append(f"When: {rule_words(rule)}.")
+        lines.extend(["", "The next three times it will go off:"])
+        lines.extend(f"  - {long_date(t)}" for t in runs)
+        lines.extend([
+            "",
+            "Until you say yes, the current schedule stays exactly as it is.",
+            "",
+            "If you say no: nothing changes.",
+        ])
+        return "\n".join(lines)
+
     def _ask(self, jid: str) -> None:
         with self._lock, self._db() as c:
             row = self._row(c, jid)
@@ -1318,6 +1397,68 @@ class Scheduler:
         finish("approved")
         self._changed(jid, row["kind"])
 
+    def _ask_edit(self, jid: str, plan: dict) -> None:
+        """The ONE `schedule_repeat` card a Phase 2 repeat change raises.
+
+        The job itself is NOT touched before the answer: its old rule keeps
+        running exactly as it did. Approved: the new rule (and the edit's own
+        new words, when it had any) are applied in one transaction and the next
+        run is recomputed from the new rule. Denied/timed-out/refused: nothing
+        changes at all. The audit lines carry ids and outcomes only."""
+        with self._lock, self._db() as c:
+            row = self._row(c, jid)
+        if row is None or row["state"] not in ("active", "paused"):
+            return
+        kind, rule = row["kind"], plan["rule"]
+        text = row["text"] if plan.get("text") is None else plan["text"]
+        prompt = self._edit_card_text(kind, rule, text, self.now())
+
+        def finish(outcome: str) -> None:
+            _audit("schedule.card", {"id": jid, "outcome": outcome})
+            if outcome != "approved":
+                self.last_card[jid] = outcome
+                return
+            with self._lock, self._db() as c:
+                cur = self._row(c, jid)
+                if cur is None or cur["state"] not in ("active", "paused"):
+                    # Changed or deleted while the card waited: applying it
+                    # would overwrite something else, so it withdraws.
+                    self.last_card[jid] = "withdrawn"
+                    return
+                now = self.now()
+                sets, args = ["rule = ?", "changed = ?"], [json.dumps(rule), now]
+                if plan.get("text") is not None:
+                    sets.insert(0, "text = ?")
+                    args.insert(0, plan["text"])
+                if cur["state"] == "active":
+                    sets.append("due = ?")
+                    args.append(next_run(rule, now))
+                c.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", (*args, jid))
+            self.last_card[jid] = "approved"
+            self._changed(jid, kind)
+
+        if self._tier_of(ACTION) != "ask":
+            return finish("refused")
+        try:
+            k = KINDS[kind]
+            verdict = self._gate(ACTION, {"text": prompt,
+                                          "what": "change a repeating " + k.noun,
+                                          "leaves_this_pc": bool(k.leaves), "job": jid},
+                                 prompt)
+        except Exception:
+            return finish("refused")
+        vtier = getattr(verdict, "tier", "unknown")
+        allowed = getattr(verdict, "allowed", False) is True
+        outcome = getattr(verdict, "outcome", None)
+        if outcome is None:
+            outcome = "approved" if (allowed and vtier == "ask") else "refused"
+        if vtier != "ask" or self._tier_of(ACTION) != "ask":
+            # allowed on "auto" or "notify" is not a person saying yes.
+            return finish("refused")
+        if not (allowed and outcome == "approved"):
+            return finish(outcome if outcome in ("denied", "timed_out") else "refused")
+        finish("approved")
+
     # ---- changing one job ---------------------------------------------------------
 
     #: Waves of work finish; the owner decides when a TASK finished.
@@ -1359,8 +1500,17 @@ class Scheduler:
         logged. `propose_ready` is the older spelling of the one method."""
         return self.propose_ready(jid, review_note=review_note)
 
-    def act(self, jid: str, do: str, seconds: Optional[float] = None) -> tuple:
-        """ONE job: pause, resume, delete, done, add_time, snooze. (code, answer)."""
+    #: Phase 2: the field names an edit may carry. `list` is a move made inside
+    #: an edit (to-dos only); `seconds` is a timer's new length; the rest are
+    #: a one-off job's own time.
+    EDIT_KEYS = ("text", "when", "date", "time", "at", "repeat", "list", "seconds")
+
+    def act(self, jid: str, do: str, seconds: Optional[float] = None,
+            fields: Optional[dict] = None) -> tuple:
+        """ONE job: pause, resume, delete, done, add_time, snooze, edit, move,
+        reorder. (code, answer). `fields` is the request body for the three
+        Phase 2 verbs; every older verb ignores it, so existing callers are
+        unchanged."""
         do = str(do or "").strip().lower()
         if do == "snooze":
             return self.snooze(jid, seconds)
@@ -1371,6 +1521,10 @@ class Scheduler:
             # that an entry the apps list must be one they can clear. Every
             # other verb still refuses a fired job - see delete()'s docstring.
             return self.delete(jid)
+        if do in ("edit", "move", "reorder"):
+            body = {key: value for key, value in (fields or {}).items()
+                    if key not in ("id", "do")}
+            return self._act_phase2(jid, do, body)
         now = self.now()
         with self._lock, self._db() as c:
             row = self._row(c, jid)
@@ -1457,10 +1611,316 @@ class Scheduler:
                 said = f"{length_words(left)} left."
             else:
                 return 400, {"ok": False, "error": "do is one of: pause, resume, delete, done, "
-                                                   "add_time, snooze"}
+                                                   "add_time, snooze, edit, move, reorder"}
         _audit("schedule.act", {"id": jid, "kind": kind, "do": do})
         self._changed(jid, kind)
         return 200, {"ok": True, "id": jid, "said": said}
+
+    # ---- Phase 2: edit / move / reorder (2026-10-22) --------------------------------
+    #
+    # ONE job per call, no card except a repeat change (which raises the SAME
+    # `schedule_repeat` card a new repeating job does, with the OLD rule still
+    # running until the owner says yes), and never a list form. The order is
+    # act()'s: clear_list is routed earlier in handle_act(), snooze/delete are
+    # routed before the row gate, and these three run after it - so a fired,
+    # waiting or done job gets that refusal first.
+
+    def _act_phase2(self, jid: str, do: str, fields: dict) -> tuple:
+        now = self.now()
+        with self._lock, self._db() as c:
+            row = self._row(c, jid)
+            if row is None:
+                return 404, {"ok": False, "reason": "no_such_job",
+                             "error": "That is not on the list any more."}
+            if row["state"] == "fired":
+                return 409, {"ok": False, "error": "It has already gone off."}
+            if row["state"] not in ("active", "paused", "waiting"):
+                return 404, {"ok": False, "reason": "no_such_job",
+                             "error": "That is not on the list any more."}
+            if row["state"] == "waiting":
+                return 409, {"ok": False,
+                             "error": "That job is waiting for its card - answer it first."}
+            kind = row["kind"]
+            if do == "edit":
+                result = self._edit(c, row, now, fields)
+            elif do == "move":
+                result = self._move(c, row, now, fields)
+            else:
+                result = self._reorder(c, row, now, fields)
+            if isinstance(result, tuple):
+                return result
+        if "card" in result:
+            plan = result["card"]
+            # Audited now, ids and field NAMES only - never a value, a list's
+            # words or the rule. The OLD schedule keeps running until the card
+            # is answered; the card's own line is audited by `_ask_edit`.
+            _audit("schedule.act", {"id": jid, "kind": kind, "do": "edit",
+                                    "fields": plan["fields"]})
+            self._spawn(lambda: self._ask_edit(jid, plan))
+            return 202, {"ok": True, "waiting": True, "job": self.job(jid)}
+        detail = {"id": jid, "kind": kind, "do": do}
+        detail.update(result.get("audit") or {})
+        _audit("schedule.act", detail)
+        if result.get("changed", True):
+            self._changed(jid, kind)
+        return 200, {"ok": True, "id": jid,
+                    "said": result.get("said") or result.get("ok")}
+
+    def _edit(self, c, row, now: float, fields: dict):
+        """Validate ONE edit, then either write it (cardless) or return the
+        pending plan for the ONE repeat card. Never writes before every given
+        field has been checked: all-or-nothing."""
+        kind, state = row["kind"], row["state"]
+        k = KINDS.get(kind)
+        if k is not None and k.add is not None:
+            # tellme/standby/briefing/today...: their module owns the body.
+            return 409, {"ok": False, "error": "That is changed where it was set up."}
+        unknown = sorted(set(fields) - set(self.EDIT_KEYS))
+        if unknown:
+            return 400, {"ok": False,
+                         "error": "edit changes only text, when, date/time, at, "
+                                  "repeat, list and seconds"}
+        if not fields:
+            return 400, {"ok": False, "error": "an edit needs at least one field to change"}
+        has_text = "text" in fields
+        has_repeat = "repeat" in fields
+        has_list = "list" in fields
+        timed = [key for key in ("when", "at", "date", "time", "seconds") if key in fields]
+        if len(timed) > 1 and set(timed) != {"date", "time"}:
+            return 400, {"ok": False,
+                         "error": "give one time: when, at, date+time or seconds"}
+        if timed and kind == "todo":
+            return 409, {"ok": False, "error": "A to-do item has no time of its own."}
+        if "seconds" in timed and kind != "timer":
+            return 409, {"ok": False, "error": "Only a timer is set in seconds."}
+        if timed and kind == "timer" and "seconds" not in timed:
+            return 409, {"ok": False,
+                         "error": "A timer's length is changed in seconds, not a time."}
+        if has_list and kind != "todo":
+            return 409, {"ok": False, "error": "Only a to-do item can move between lists."}
+        if has_repeat:
+            if not _repeatable(kind):
+                return 409, {"ok": False,
+                             "error": "Only alarms, reminders and briefings can repeat."}
+            if timed:
+                return 400, {"ok": False,
+                             "error": "a repeat change sets its own times - give either a "
+                                      "repeat or a time, not both"}
+        if timed and kind != "timer" and row["rule"]:
+            # A repeating rule is changed by editing its repeat, never by moving
+            # its next run - so this is a plain refusal, not a silent move.
+            return 409, {"ok": False,
+                         "error": "That job repeats - change its repeat, not its next time."}
+        new_text = None
+        if has_text:
+            if not isinstance(fields.get("text"), str):
+                return 400, {"ok": False, "error": "text is words"}
+            try:
+                new_text = self._clean_text(fields["text"], kind)
+            except ValueError as exc:
+                return 400, {"ok": False, "error": _sentence(exc)}
+        new_rule = None
+        if has_repeat:
+            try:
+                raw = fields.get("repeat")
+                new_rule = k.check(raw, now) if (k is not None and k.check is not None) \
+                    else check_rule(raw, now)
+            except ValueError as exc:
+                return 400, {"ok": False, "error": _sentence(exc)}
+        new_due = new_left = new_duration = None
+        if "seconds" in timed:
+            if isinstance(fields.get("seconds"), bool):
+                return 400, {"ok": False, "error": "a timer needs a length"}
+            try:
+                seconds = float(fields["seconds"])
+            except (TypeError, ValueError):
+                return 400, {"ok": False, "error": "a timer needs a length"}
+            if seconds != seconds or seconds < MIN_TIMER:
+                return 400, {"ok": False,
+                             "error": "a timer needs a length of at least a second"}
+            if seconds > MAX_TIMER:
+                return 400, {"ok": False,
+                             "error": "a timer can be up to 24 hours - for later than "
+                                      "that, set a reminder"}
+            new_duration = seconds
+            if state == "paused":
+                new_left = seconds
+            else:
+                new_due = now + seconds
+        elif timed:
+            try:
+                if "when" in fields:
+                    when = fields["when"]
+                    if isinstance(when, dict):
+                        at = wall_at(when.get("date"), when.get("time"))
+                    elif isinstance(when, bool) or not isinstance(when, (int, float)):
+                        raise ValueError("when is a timestamp, or an object with date and time")
+                    else:
+                        at = float(when)
+                elif "at" in fields:
+                    at = _num(fields["at"])
+                    if at is None:
+                        raise ValueError("at is a timestamp")
+                else:
+                    at = wall_at(fields.get("date"), fields.get("time"))
+            except ValueError as exc:
+                return 400, {"ok": False, "error": _sentence(exc)}
+            if at <= now:
+                return 400, {"ok": False, "error": "that time has already passed"}
+            if at - now > MAX_AHEAD:
+                return 400, {"ok": False, "error": "that is more than a year away"}
+            new_due = at
+        if has_repeat:
+            # ONE card, old rule still active until it is answered. Only the
+            # field NAMES go in the audit line, in a fixed order.
+            named = [name for name, present in
+                     (("repeat", True), ("text", has_text), ("when", False)) if present]
+            return {"card": {"rule": new_rule, "text": new_text, "fields": named}}
+        target_key = None
+        if has_list:
+            target = self._list_target(c, fields.get("list"))
+            if isinstance(target, tuple):
+                return target
+            target_key = target
+        sets, args = ["changed = ?"], [now]
+        if has_text:
+            sets.append("text = ?")
+            args.append(new_text)
+        if new_due is not None:
+            sets.append("due = ?")
+            args.append(new_due)
+        if new_left is not None:
+            sets.append("left_s = ?")
+            args.append(new_left)
+        if new_duration is not None:
+            sets.append("duration = ?")
+            args.append(new_duration)
+        c.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", (*args, row["id"]))
+        if has_list:
+            self._move_in_tx(c, row, target_key, now)
+        named = [name for name, present in
+                 (("repeat", False), ("text", has_text), ("when", bool(timed)))
+                 if present]
+        audit = {"fields": named}
+        if has_list:
+            # A list change inside an edit is a move; the boolean says it was
+            # a NAMED list without ever logging its words.
+            audit["named_list"] = target_key is not None
+        return {"ok": "Changed.", "audit": audit, "changed": True}
+
+    def _list_target(self, c, raw):
+        """A move target: None is the to-do list itself; a new name counts
+        against MAX_LISTS. The key, or a (code, body) error tuple."""
+        if raw is None:
+            return None
+        if isinstance(raw, str) and raw.strip().lower() in ("", "todo", "to-do"):
+            return None
+        if not isinstance(raw, str):
+            return 400, {"ok": False, "error": "a list's name is words"}
+        try:
+            key = list_key(raw)
+        except ValueError as exc:
+            return 400, {"ok": False, "error": _sentence(exc)}
+        names = {str(r[0]) for r in c.execute(
+            "SELECT DISTINCT list_name FROM jobs WHERE kind = 'todo' AND state IN "
+            "('active','paused') AND list_name IS NOT NULL").fetchall()}
+        if key not in names and len(names) >= MAX_LISTS:
+            return 409, {"ok": False,
+                         "error": f"there are already {MAX_LISTS} lists - finish one first"}
+        return key
+
+    def _move_in_tx(self, c, row, target_key, now: float) -> bool:
+        """Move ONE to-do to the END of its target list and renumber both lists
+        0..n-1 inside the caller's transaction. False when it is already there."""
+        jid = row["id"]
+        old_key = row["list_name"] or ""
+        new_key = target_key or ""
+        if new_key == old_key:
+            return False
+        c.execute("UPDATE jobs SET list_name = ? WHERE id = ?", (target_key, jid))
+        count = c.execute(
+            "SELECT COUNT(*) FROM jobs WHERE kind = 'todo' AND state IN ('active','paused') "
+            "AND ifnull(list_name, '') = ? AND id != ?", (new_key, jid)).fetchone()[0]
+        c.execute("UPDATE jobs SET rank = ? WHERE id = ?", (int(count), jid))
+        self._renumber_list(c, new_key)
+        self._renumber_list(c, old_key)
+        return True
+
+    def _renumber_list(self, c, key: str) -> None:
+        """Rewrite ONE list's open to-dos to ranks 0..n-1, in the order they
+        already read, so ordering never depends on gaps or insertion order."""
+        rows = c.execute(
+            "SELECT id, rank FROM jobs WHERE kind = 'todo' AND state IN ('active','paused') "
+            "AND ifnull(list_name, '') = ? ORDER BY (rank IS NULL), rank, created, rowid",
+            (key,)).fetchall()
+        for i, r in enumerate(rows):
+            if r["rank"] != i:
+                c.execute("UPDATE jobs SET rank = ? WHERE id = ?", (i, r["id"]))
+
+    def _move(self, c, row, now: float, fields: dict):
+        if row["kind"] != "todo":
+            return 409, {"ok": False, "error": "Only a to-do item can move between lists."}
+        if set(fields) - {"list"}:
+            return 400, {"ok": False, "error": "move changes only the list"}
+        if "list" not in fields:
+            return 400, {"ok": False,
+                         "error": "move needs a list (null for the to-do list)"}
+        target = self._list_target(c, fields.get("list"))
+        if isinstance(target, tuple):
+            return target
+        said = "Moved to the to-do list." if target is None else "Moved to that list."
+        if (target or "") == (row["list_name"] or ""):
+            return {"ok": said, "audit": {"named_list": target is not None},
+                    "changed": False}
+        self._move_in_tx(c, row, target, now)
+        c.execute("UPDATE jobs SET changed = ? WHERE id = ?", (now, row["id"]))
+        return {"ok": said, "audit": {"named_list": target is not None}, "changed": True}
+
+    def _reorder(self, c, row, now: float, fields: dict):
+        if row["kind"] != "todo":
+            return 409, {"ok": False, "error": "Only a to-do item can be reordered."}
+        if set(fields) - {"rank", "before", "after"}:
+            return 400, {"ok": False,
+                         "error": "reorder changes only rank (or before/after)"}
+        key = row["list_name"] or ""
+        rows = c.execute(
+            "SELECT id FROM jobs WHERE kind = 'todo' AND state IN ('active','paused') "
+            "AND ifnull(list_name, '') = ? ORDER BY (rank IS NULL), rank, created, rowid",
+            (key,)).fetchall()
+        ids = [r["id"] for r in rows]
+        n = len(ids)
+        if n == 0:
+            return 409, {"ok": False, "error": "There is nothing on that list to reorder."}
+        if "rank" in fields:
+            if "before" in fields or "after" in fields:
+                return 400, {"ok": False,
+                             "error": "give rank, or before, or after - one of them"}
+            value = fields["rank"]
+            if isinstance(value, bool) or not isinstance(value, int):
+                return 400, {"ok": False,
+                             "error": f"rank is a whole position, 0 to {n - 1}"}
+            target = value
+        elif "before" in fields or "after" in fields:
+            anchor = fields.get("before") if "before" in fields else fields.get("after")
+            rest = [jid for jid in ids if jid != row["id"]]
+            if not isinstance(anchor, str) or anchor not in rest:
+                return 400, {"ok": False,
+                             "error": "before/after is another item on that list"}
+            target = rest.index(anchor) + (1 if "after" in fields else 0)
+        else:
+            return 400, {"ok": False, "error": "reorder needs rank, before or after"}
+        if target < 0 or target > n - 1:
+            return 400, {"ok": False, "error": f"rank is a whole position, 0 to {n - 1}"}
+        current = ids.index(row["id"])
+        if target == current:
+            # Idempotent: the second identical request writes nothing at all.
+            return {"ok": "Reordered.", "audit": {"rank": target}, "changed": False}
+        rest = [jid for i, jid in enumerate(ids) if i != current]
+        order = rest[:target] + [row["id"]] + rest[target:]
+        for i, other in enumerate(order):
+            c.execute("UPDATE jobs SET rank = ? WHERE id = ?", (i, other))
+        c.execute("UPDATE jobs SET changed = ? WHERE id = ?", (now, row["id"]))
+        return {"ok": "Reordered.", "audit": {"rank": target}, "changed": True}
 
     # ---- delete -----------------------------------------------------------------------
 
@@ -1918,6 +2378,14 @@ class Scheduler:
             v["list"] = row["list_name"] or ""
         if row["snooze_of"]:
             v["snoozed"] = True
+        # Phase 2: a to-do's position within its list, a number (None for an
+        # item written by an old build before the backfill ran, and for every
+        # kind that is not on a list). Apps can draw Up/Down from it.
+        try:
+            rank = row["rank"]
+        except (IndexError, KeyError):
+            rank = None
+        v["rank"] = int(rank) if rank is not None else None
         try:
             ready_at = row["ready_for_review"]
         except (IndexError, KeyError):
@@ -2049,7 +2517,8 @@ class Scheduler:
         now = self.now()
         with self._lock, self._db() as c:
             rows = c.execute("SELECT * FROM jobs WHERE kind = 'todo' AND state IN "
-                             "('active','paused') ORDER BY created").fetchall()
+                             "('active','paused') ORDER BY (rank IS NULL), rank, "
+                             "created, rowid").fetchall()
         return [self._view(r, now) for r in rows]
 
     def timers(self) -> list:
@@ -2057,7 +2526,10 @@ class Scheduler:
 
     def status(self) -> dict:
         now = self.now()
-        return {"available": True, "now": now, "tz": _tz_name(now),
+        return {# Phase 2 (2026-10-22): ONE additive boolean capability marker -
+                # a newer UI hides edit/move/reorder controls when it is absent
+                # (an older backend), and every old client ignores it.
+                "available": True, "phase2": True, "now": now, "tz": _tz_name(now),
                 "jobs": self.listed(), "todo": self.todos(),
                 # 2026-09-25: what went off in the last hour (Snooze), and
                 # the named lists. An app from before them ignores both.
@@ -2373,8 +2845,16 @@ def _repeat_answer(job: dict, now: float) -> tuple:
 
 
 def handle_act(body: dict) -> tuple:
-    """POST /api/schedule/act {"id", "do", "seconds"?} - ONE job; "snooze"
-    takes `seconds` (10 minutes when not said). The one other form:
+    """POST /api/schedule/act - ONE job.
+
+    {"id", "do", "seconds"?}: pause, resume, delete, done, add_time, snooze.
+    Phase 2 (2026-10-22) adds three verbs, each ONE job with the same checks:
+    {"id", "do": "edit", "text"?, "when"?, "date"?+"time"?, "at"?,
+     "repeat"?, "list"?, "seconds"?} - change the words / a one-off's own time
+     (cardless) / repeat (ONE card, old rule active until approved) / a to-do's
+    list; {"id", "do": "move", "list"?} - a to-do to a named list or null for
+    the to-do list; {"id", "do": "reorder", "rank"?|"before"?|"after"?} - a
+    to-do's position within its list. The one other form:
     {"do": "clear_list", "list", "count"} - one NAMED list, cleared after the
     app's "are you sure?"."""
     if not isinstance(body, dict):
@@ -2387,7 +2867,7 @@ def handle_act(body: dict) -> tuple:
     jid = body.get("id")
     if not isinstance(jid, str) or not re.fullmatch(r"s[0-9a-f]{10}", jid):
         return 400, {"ok": False, "error": "need one job id"}
-    return get().act(jid, body.get("do"), _num(body.get("seconds")))
+    return get().act(jid, body.get("do"), _num(body.get("seconds")), fields=body)
 
 
 def _sentence(exc: BaseException) -> str:
