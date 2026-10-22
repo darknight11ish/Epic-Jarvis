@@ -2671,7 +2671,18 @@ are deliberate and recorded rather than left to be discovered:
 | The Jarvis Live Quick Settings tile, the headset button in Live, and the 10-minute "Live ended - Resume" notification (the Jarvis Live extras), 2026-09-28 | Phone things: a tile lives in Android's pulled-down shade, a headset button reaches a phone's media session, and a notification is how a phone in a pocket offers Resume. The PC has the tray row and the Live hotkey (the desktop table) and its badge shows "Resume Live" for 15 seconds, in the Jarvis bar until the 10 minutes are up. |
 | Preferring a Bluetooth headset's microphone in Live, and saying which microphone is in use (the Jarvis Live extras), 2026-09-28 | On the phone Jarvis picks the microphone (Android's communication device; no Bluetooth permission). On the PC Windows picks it - Live opens the default microphone, both the plain and the echo-cancelled way (`aec.rs`) - so a Bluetooth headset is used when Windows makes it the default, and the Voice settings already say which microphone that is. Choosing a different microphone on the PC is a larger change to both capture paths, not made here. |
 | "Talk about this in Live" in Android's Share sheet (the Jarvis Live extras), 2026-09-28 | A Share sheet is Android's. The text is outside text exactly as a share to Home is (`provenance: "shared"`, JARVIS-API §18); the PC's quickbar already takes clipboard text with its own "clipboard" tag, in Live as anywhere. |
-| **The fading-card radar under "My study decks" and the "Mark my answer" button in the review card** (slice 22B, 2026-10-17; `Decks.kt` `DeckList.radar`, `Decks.Reveal.grade`, `DecksPlate.kt`; JARVIS-API §102.2) | The two PC fields are additive and are read by BOTH apps' net layers from the one shared fixture (`tools/gen_decks_cases.py`: `samples.decks.radar`, `samples.graded_reveal`; `src/decks.js` `readRadar`/`readGrade`), but **this slice builds only the phone screens**: the desktop's review card draws neither yet, and no desktop behaviour changed. The typed box's word differs on purpose, too: the phone can send its typed answer to the PC's deterministic grader on one tap ("Mark my answer"), so its word says so, while the desktop's box is unchanged and still sends nothing. **A phone must not do speech-to-text** (`CLAUDE.md`), so there is no microphone and nothing "spoken" here; the 22A voice-review receipt waits for a slice that records a clip and lets the PC transcribe it. |
+
+**The fading-card radar and the "Mark my answer" button were phone-only in
+slice 22B (2026-10-17) and are on BOTH apps since 2026-10-21.** The two PC
+fields are additive and both apps read them from the one shared fixture
+(`tools/gen_decks_cases.py`: `samples.decks.radar`, `samples.graded_reveal`).
+The desktop draws the same radar rows under the deck list, sends the typed box's
+words to the PC's deterministic grader only on the "Mark my answer" tap ("Show
+answer" still sends nothing), and shows the grader's own sentence word for
+word - the same sentence the phone shows. No route, key or word differs between
+the apps. **A phone must not do speech-to-text** (`CLAUDE.md`), so there is no
+microphone and nothing "spoken" here; the 22A voice-review receipt waits for a
+slice that records a clip and lets the PC transcribe it.
 
 **The picture-in-picture idea landed on both apps, on 2026-09-27, by two
 different sessions working at the same time - not one shared mechanism,

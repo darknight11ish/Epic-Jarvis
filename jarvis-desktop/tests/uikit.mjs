@@ -2311,6 +2311,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 decks: d.available === false ? [] : d.decks.map(deckOut), ready: total(), new_per_day: d.newPerDay,
                 new_left: 2, next_ready_day: d.nextReadyDay || null, line: d.decks.length ? line(total()) : "",
                 limits: { decks: 20, cards: 1000, name: 60, front: 500, back: 2000, new_per_day: 20 },
+                // Slice 22B: the fading-deck rows, when the scenario names them.
+                // Blanked with the private lists, exactly as brain/decks.rs does.
+                ...(d.radar ? { radar: d.radar.map((r) => ({ ...r, topic: hideIt() ? "" : r.topic,
+                  words: hideIt() ? "" : r.words })) } : {}),
                 ...(hideIt() ? { hidden: true } : {}) };
             }
             if (cmd === "brain_decks_create") {
@@ -2353,7 +2357,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (!card) return no("card_not_found");
             if (cmd === "brain_review_reveal") {
               d.revealed = card.id;
-              return { ok: true, back: { answer: card.back, passage: card.passage || "" }, key_label: card.keyLabel || null };
+              // Slice 22B, wired on the desktop 2026-10-21: a typed answer marked
+              // by the PC comes back with the PC's own grade sentence.
+              const typed = typeof args.answer === "string" ? args.answer.trim() : "";
+              return { ok: true, back: { answer: card.back, passage: card.passage || "" },
+                key_label: card.keyLabel || null,
+                ...(typed && d.grade ? { grade: { ...d.grade } } : {}) };
             }
             if (d.revealed !== card.id) return no("not_revealed");
             if (!["again", "hard", "good", "easy"].includes(args.rating)) return no("bad_rating");
