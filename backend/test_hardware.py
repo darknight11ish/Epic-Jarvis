@@ -1262,13 +1262,20 @@ def t_the_wddm_counter_on_this_pc():
         skip("the Windows GPU-process counter is not readable here: " + reading["why"])
         return
     totals = [b for b in (reading["processes"] or {}).values() if b > 0]
-    check("the counter answers on this PC (probe 2026-10-21: 63 instances over 43 PIDs)",
+    check("the counter answers on this PC, with at least one program instance in it",
           reading["instances"] >= 1 and len(reading["processes"]) >= 1, reading["instances"])
-    check("at least one program has a nonzero dedicated total", bool(totals), totals[:3])
-    if totals:
-        largest = max(totals)
-        check("the largest total is a plausible number of bytes (under 64 GiB)",
-              largest < 64 * 1024 ** 3, largest)
+    # A CI Windows runner has the counter but nothing using a GPU, so a nonzero
+    # total is NOT guaranteed on Windows in general - it was measured on the
+    # owner's PC (2026-10-21: dwm 1,231.52 MiB and others). When nothing has a
+    # nonzero total, say so as a skip (never a pass); when something does, check
+    # the number is plausible. Either way the STRUCTURAL checks above passed.
+    if not totals:
+        skip("no program has a nonzero dedicated total here (nothing is using a "
+             "GPU on this machine); the counter itself answered")
+        return
+    largest = max(totals)
+    check("a program with a nonzero total is summed into bytes, and the largest is "
+          "plausible (under 64 GiB)", largest < 64 * 1024 ** 3, largest)
 
 
 def main():
