@@ -17,9 +17,10 @@ It is also **working software with honest gaps**, not a finished product. Sectio
 5. What asks first
 6. Feature highlights
 7. Honest limits
-8. Repository structure
-9. Where to read next
-10. License and credits
+8. How Jarvis compares to other personal assistants
+9. Repository structure
+10. Where to read next
+11. License and credits
 
 ## What Jarvis is
 
@@ -211,6 +212,29 @@ This project's habit is to say what is not done. One of its own architecture rul
 - **`Alt+Space` can still be held by another program.** Jarvis retries `Alt+Space` registration at 2, 6, and 15 seconds after startup and offers a **Re-claim `Alt+Space`** button in **Settings → Shortcuts**, and the tray icon's "Show or hide the Jarvis bar" is always there when another program keeps the key.
 - **Do not run a downloaded OpenJarvis copy.** It writes into the same `%USERPROFILE%\.openjarvis\` folder as Jarvis.
 - **`docs/INSTALL.md` → "Known rough edges"** is the fuller, live list. Read it before reporting a problem.
+
+## How Jarvis compares to other personal assistants
+
+This is not a claim that Jarvis is better. It is a map of the choices each project made, so a reader can see which trade-off fits them. The other systems are commercial or research products; Jarvis is one person's self-hosted project. Where Jarvis is behind, this table says so. The descriptions are from the projects' public pages as of **22 October 2026** and are not a hands-on benchmark — all of them change quickly.
+
+| | **Epic Jarvis** | **Meta Muse** | **ChatGPT Dots** | **OpenJarvis** (Stanford) | **Claude Duet** (Anthropic) |
+| --- | --- | --- | --- | --- | --- |
+| **What it is** | One person's self-hosted assistant: a Python backend on the PC, a Windows desktop app, an Android companion | Consumer personal-agent app (the "Muse" here is Meta's app, not the small open-source `muse-agent` project) | Persistent cloud agents inside ChatGPT | Open-source framework for building personal AI that runs on-device | Proactive cloud agent app, research preview |
+| **Where the model runs** | **Your PC**, through Ollama on one or two graphics cards | Meta's cloud (Muse Spark models) | OpenAI's cloud (GPT-6 Astra) | **On your device** by default; cloud only when you choose | Anthropic's cloud (Claude Opus 5.5) |
+| **Where your data lives** | **Your folders and your PC**; no account; memory and chat history on the PC | Meta's infrastructure | OpenAI's infrastructure | On-device by design | Anthropic's infrastructure |
+| **Apps you get** | Windows desktop (bar + HUD) and Android app over Tailscale or NordVPN Meshnet | iOS, Android and web | ChatGPT desktop and browser, plus mobile messaging with the dot | CLI, browser dashboard and a Tauri desktop app (macOS, Linux, Windows); no phone app | iOS, Android and claude.ai |
+| **Works without internet** | **Yes for the local parts** — chat, memory, files and PC help; web features need the network | No | No | Yes by default | No |
+| **Memory and continuity** | Your own memory store and files; learning is approval-gated | Managed by Meta | Managed by OpenAI, per dot | Local traces and memory primitives you build on | Carries Claude memory, skills and connectors |
+| **Before it acts** | Per-action approval cards; **two presses** for destructive actions; no bulk approve; acts stop when the event stream is stale | Sensitive tasks ask for verification; separated environment; no password or payment access | Rules to allow, require approval or block; auto-review; sensitive actions stay with you | Open tool and agent framework — guardrails are the builder's responsibility | Approves sends, payments and deletes; auto-mode classifier; sensitive-information classifier |
+| **Extensibility** | Plug-ins, patches and a tested HTTP API; **MIT**; self-hosted | Closed; connects Meta's apps | Closed; connects apps through ChatGPT controls | **Apache-2.0**; MCP and A2A; 26+ messaging channels; learning loop | Closed; 6,000+ connectors and plugins |
+| **Cost** | Your hardware and electricity; **no subscription** | Free tier; $20 and $100 monthly plans | First dot included in ChatGPT Pro or Business Premium; usage limits apply | Free open source plus your own hardware | Claude Pro or Max plan |
+| **Best fit for** | One owner who wants their data, model and approvals on their own PC | People who want a polished consumer agent and accept the cloud | People already in ChatGPT who want agents working in the background | Developers and researchers building local-first agents | Professionals and small businesses already using Claude |
+
+**Where Jarvis is behind:** the commercial products have hundreds or thousands of managed integrations, mobile apps that need no setup, hosted updates and support teams; Jarvis has hand-built connectors, a self-hosted install, and its voice latency and echo cancellation are **not yet measured on real hardware**. OpenJarvis is a framework, not a finished one-person assistant, but it is a much better base for a developer who wants to build their own.
+
+**Where Jarvis is genuinely different:** the model, the memory and the files stay on the owner's PC; there is no account and no public tunnel; every action that changes something raises an approval card first; and the whole thing is MIT-licensed and readable end to end. Those are design choices, not automatic wins — they are why it is slower to set up and narrower in reach than the cloud products.
+
+The comparison is grounded on these public pages: [Meta's Muse](https://www.cnn.com/2026/09/23/tech/meta-muse-ai-agent), [OpenAI's Dots](https://openai.com/index/introducing-dots/), [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) and [Claude Duet](https://claude.com/product/claude-duet).
 
 ## Repository structure
 
