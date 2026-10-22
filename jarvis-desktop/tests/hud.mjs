@@ -2480,6 +2480,152 @@ await check("GALAXY v2: the lens is remembered, like the other cosmetic view cho
   await page.close();
 });
 
+/* =========================================================================
+ * GALAXY v2 node budget (Wave 3 slice G2, 2026-10-21, Ruling 11.5)
+ *
+ * The inline HUD's Galaxy is capped at 120 nodes; the full-size Brain view
+ * keeps 240. The counts line says "showing N of M nodes" when the cap bites,
+ * the cap is deterministic (weight then id), labels and the glow pass degrade
+ * before a dot does, every drawn node stays a real HTML button - and the whole
+ * thing holds 16.7 ms p95 at deviceScaleFactor 1.5 in a 1920x1230 window.
+ *
+ * The cap is chosen by the SURFACE'S OWN SIZE, so these tests drive two real
+ * sizes rather than pretending a view name decides it.
+ * ======================================================================= */
+
+function bigGalaxyGraph(){
+  const nodes = [
+    { id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 },
+    { id: "model:local", label: "qwen3.5:9b", group: "model", weight: 3 },
+  ];
+  for(let i = 0; i < 294; i += 1){
+    nodes.push({ id: `tool:t${String(i).padStart(3, "0")}`, label: `ability ${i}`,
+      group: "tool", detail: "Enabled ability", weight: 1 });
+  }
+  const links = nodes.slice(1).map((n) => ({ source: "core", target: n.id, kind: "has" }));
+  return { nodes, links, counts: {} };
+}
+
+async function openGalaxyAt(browser, graph, options){
+  const opened = await openHud(browser, { jarvis: true, ollama: true, proxy: false, graph }, options);
+  await opened.page.click('[data-view="brain"]');
+  await opened.page.waitForTimeout(700);
+  return opened;
+}
+
+function budgetSnap(page){
+  return page.evaluate(() => {
+    const el = document.getElementById("galaxy-counts");
+    const buttons = [...document.querySelectorAll(".galaxy-node-btn")].filter((b) => !b.hidden);
+    return {
+      text: el.textContent,
+      state: el.getAttribute("data-galaxy-budget"),
+      shown: Number(el.getAttribute("data-galaxy-shown")),
+      total: Number(el.getAttribute("data-galaxy-total")),
+      labels: Number(el.getAttribute("data-galaxy-labels")),
+      buttons: buttons.length,
+      ids: buttons.map((b) => b.getAttribute("data-galaxy-node")).sort(),
+      w: innerWidth, h: innerHeight, dsf: devicePixelRatio,
+    };
+  });
+}
+
+await check("G2: the inline HUD caps the Galaxy at 120 nodes, says so, and keeps every dot a button", async () => {
+  const { page, problems } = await openGalaxyAt(browser, bigGalaxyGraph(),
+    { viewport: { width: 760, height: 600 } });
+  const snap = await budgetSnap(page);
+  assert.equal(snap.state, "capped", `the small surface did not cap: ${JSON.stringify(snap)}`);
+  assert.equal(snap.shown, 120, `the inline cap is not 120: ${snap.shown}`);
+  assert.equal(snap.total, 296, `the lens's real node count is not reported: ${snap.total}`);
+  assert.match(snap.text, /showing 120 of 296 nodes/,
+    `the counts line does not say the graph was cut: ${snap.text}`);
+  assert.equal(snap.labels, 18, `the inline label budget is not the smaller one: ${snap.labels}`);
+  assert.equal(snap.buttons, 120, "the overlay buttons and the budget disagree");
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+await check("G2: the full Brain view keeps 240 nodes and the larger label budget, at dsf 1.5", async () => {
+  const { page } = await openGalaxyAt(browser, bigGalaxyGraph(),
+    { viewport: { width: 1920, height: 1230 }, deviceScaleFactor: 1.5 });
+  const snap = await budgetSnap(page);
+  assert.ok(snap.dsf >= 1.49 && snap.dsf <= 1.51, `the page is not at deviceScaleFactor 1.5: ${snap.dsf}`);
+  assert.equal(snap.state, "capped", `the full surface did not cap its 296 nodes: ${JSON.stringify(snap)}`);
+  assert.equal(snap.shown, 240, `the full view's cap is not 240: ${snap.shown}`);
+  assert.equal(snap.total, 296);
+  assert.match(snap.text, /showing 240 of 296 nodes/);
+  assert.equal(snap.labels, 36, `the full view's label budget is not 36: ${snap.labels}`);
+  assert.equal(snap.buttons, 240, "the overlay buttons and the full-view budget disagree");
+  await page.close();
+});
+
+await check("G2: the cap is deterministic - the same graph draws the same nodes, the best first", async () => {
+  const first = await openGalaxyAt(browser, bigGalaxyGraph(),
+    { viewport: { width: 760, height: 600 } });
+  const a = await budgetSnap(first.page);
+  await first.page.close();
+  const second = await openGalaxyAt(browser, bigGalaxyGraph(),
+    { viewport: { width: 760, height: 600 } });
+  const b = await budgetSnap(second.page);
+  await second.page.close();
+  assert.deepEqual(a.ids, b.ids, "two loads of the same graph drew different nodes");
+  // The core and the model are the two highest-ranked nodes, so they are never
+  // the ones cut; the tools are a tie broken by id, so the first 118 survive.
+  assert.ok(a.ids.includes("core") && a.ids.includes("model:local"),
+    `the cap cut a node it must keep: ${a.ids.slice(0, 4)}`);
+  assert.ok(a.ids.includes("tool:t000") && !a.ids.includes("tool:t293"),
+    "the tie-break order was not the id");
+});
+
+await check("G2: a keyboard user can still reach and open a node when the cap is in force", async () => {
+  const { page } = await openGalaxyAt(browser, bigGalaxyGraph(),
+    { viewport: { width: 760, height: 600 } });
+  await page.focus('button[data-galaxy-lens="neural"]');
+  let reached = false;
+  for (let i = 0; i < 40; i += 1) {
+    await page.keyboard.press("Tab");
+    reached = await page.evaluate(() => {
+      const a = document.activeElement;
+      return Boolean(a && a.classList && a.classList.contains("galaxy-node-btn") && !a.hidden);
+    });
+    if (reached) break;
+  }
+  assert.equal(reached, true, "Tab never reached a capped node button");
+  const before = await page.evaluate(() => document.activeElement.getAttribute("aria-label"));
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+  const opened = await page.evaluate(() => ({
+    on: document.getElementById("inspector").classList.contains("on"),
+    title: document.getElementById("insp-title").textContent.trim(),
+  }));
+  assert.equal(opened.on, true, "Enter on a capped node did not open the inspector");
+  assert.equal(opened.title, before.split(" (")[0], "the inspector opened the wrong node");
+  await page.close();
+});
+
+await check("G2: the capped Galaxy holds 16.7 ms p95 at deviceScaleFactor 1.5 in a 1920x1230 window", async () => {
+  const { page } = await openGalaxyAt(browser, bigGalaxyGraph(),
+    { viewport: { width: 1920, height: 1230 }, deviceScaleFactor: 1.5 });
+  await page.waitForTimeout(500);
+  const deltas = await page.evaluate(() => new Promise((resolve) => {
+    const out = [];
+    let last = performance.now();
+    const tick = (now) => {
+      out.push(now - last);
+      last = now;
+      if (out.length < 120) requestAnimationFrame(tick);
+      else resolve(out);
+    };
+    requestAnimationFrame(tick);
+  }));
+  const sorted = deltas.slice().sort((x, y) => x - y);
+  const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
+  await page.close();
+  assert.equal(deltas.length, 120, `only ${deltas.length} frames were measured`);
+  assert.ok(Number.isFinite(p95) && p95 <= 16.7,
+    `p95 frame time was ${p95.toFixed(2)} ms, over the 16.7 ms budget (dsf 1.5, 1920x1230)`);
+});
+
 await browser.close();
 if (fails.length) {
   console.log(`\n${fails.length} failed: ${fails.join(", ")}`);
