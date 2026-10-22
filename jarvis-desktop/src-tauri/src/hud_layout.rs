@@ -57,10 +57,23 @@ pub const SHELL_TEMPLATES: &[&str] = &[
 ];
 /// The densities the renderer understands.
 pub const DENSITIES: &[&str] = &["comfortable", "compact", "spacious"];
-/// The themes the rest of the desktop already ships, plus "system".
-pub const THEMES: &[&str] = &["system", "deep-space", "paper", "high-contrast"];
-/// The stage tabs a layout can open on.
-pub const STAGE_TABS: &[&str] = &["talk", "galaxy", "today", "memory", "telemetry"];
+/// The stage tabs a layout can open on (H3: the page's own five plus Talk).
+pub const STAGE_TABS: &[&str] = &[
+    "talk",
+    "galaxy",
+    "today",
+    "reminders",
+    "memory",
+    "telemetry",
+];
+/// The most owner-saved layouts one document may carry (H3, bounded here and
+/// in `hud-layout.js`). A library is appearance data, not a dumping ground.
+pub const MAX_USER_PRESETS: usize = 20;
+/// The longest owner-typed layout name.
+pub const MAX_USER_NAME: usize = 60;
+/// The largest saved document this build accepts (H3): a layout library is a
+/// few dozen tiny records, never a payload.
+pub const MAX_DOCUMENT_BYTES: usize = 64 * 1024;
 /// The four cards no layout may hide (ruling 25).
 pub const PROTECTED_IDS: &[&str] = &[
     "approvals",
@@ -104,8 +117,18 @@ fn card(value: &serde_json::Value) -> Option<serde_json::Value> {
     }
     let region = allowed(object.get("region"), REGIONS)?;
     let order = int_in(object.get("order"), 0, 50)?;
-    let col_span = int_in(object.get("col_span"), 1, 12)?;
-    let row_span = int_in(object.get("row_span"), 1, 4)?;
+    // H3/Q5: the seven fixed cards carry no col_span/row_span in the contract
+    // (the renderer ignores their spans), so a missing span is defaulted to
+    // the full-width value instead of refusing the document. A PRESENT span is
+    // still bounded; a hostile one is refused.
+    let col_span = match object.get("col_span") {
+        None => 12,
+        Some(value) => int_in(Some(value), 1, 12)?,
+    };
+    let row_span = match object.get("row_span") {
+        None => 1,
+        Some(value) => int_in(Some(value), 1, 4)?,
+    };
     let visible = bool_of(object.get("visible"))?;
     let collapsed = bool_of(object.get("collapsed"))?;
     if PROTECTED_IDS.contains(&id) && !visible {
@@ -131,46 +154,11 @@ fn card(value: &serde_json::Value) -> Option<serde_json::Value> {
     }))
 }
 
-fn region_index(region: &str) -> i64 {
-    REGIONS
-        .iter()
-        .position(|name| *name == region)
-        .unwrap_or(99) as i64
-}
-
-/// Validate and rewrite one layout document into its canonical, closed-world
-/// form. Unknown keys and `x`/`y` are dropped, never copied; a document that
-/// would hide or omit a protected card is refused outright.
-pub fn sanitise(value: &serde_json::Value) -> Result<serde_json::Value, String> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| "the layout is not a JSON object".to_string())?;
-    if object.get("version").and_then(|v| v.as_u64()) != Some(LAYOUT_VERSION) {
-        return Err(format!(
-            "the layout is version {:?}, but this build reads version {LAYOUT_VERSION}",
-            object.get("version")
-        ));
-    }
-    let base_preset = text_of(object.get("base_preset"), MAX_TEXT)
-        .ok_or_else(|| "the layout names no base preset".to_string())?;
-    let id =
-        text_of(object.get("id"), MAX_TEXT).ok_or_else(|| "the layout has no id".to_string())?;
-    let name = text_of(object.get("name"), MAX_TEXT)
-        .ok_or_else(|| "the layout has no name".to_string())?;
-    let shell_template = allowed(object.get("shell_template"), SHELL_TEMPLATES)
-        .ok_or_else(|| "the layout names an unknown shell template".to_string())?;
-    let theme = allowed(object.get("theme"), THEMES)
-        .ok_or_else(|| "the layout names an unknown theme".to_string())?;
-    let density = allowed(object.get("density"), DENSITIES)
-        .ok_or_else(|| "the layout names an unknown density".to_string())?;
-    let default_stage_tab = allowed(object.get("default_stage_tab"), STAGE_TABS)
-        .ok_or_else(|| "the layout names an unknown stage tab".to_string())?;
-    let updated_at = int_in(object.get("updated_at"), 0, i64::MAX / 2)
-        .ok_or_else(|| "the layout has no sane updated_at".to_string())?;
-    let raw_cards = object
-        .get("cards")
-        .and_then(|cards| cards.as_array())
-        .ok_or_else(|| "the layout has no card list".to_string())?;
+/// Every card list, from the active document or from one saved user layout, is
+/// validated by the same closed-world pass and sorted into the one canonical
+/// order. Shared so the four protected cards can never be enforced differently
+/// in the two places.
+fn sanitise_cards(raw_cards: &[serde_json::Value]) -> Result<Vec<serde_json::Value>, String> {
     if raw_cards.is_empty() || raw_cards.len() > MAX_CARDS {
         return Err(format!(
             "the layout has {} cards; this build reads 1 to {MAX_CARDS}",
@@ -214,18 +202,147 @@ pub fn sanitise(value: &serde_json::Value) -> Result<serde_json::Value, String> 
                     .cmp(b["id"].as_str().unwrap_or_default())
             })
     });
+    Ok(cards)
+}
+
+/// Whether an owner-saved layout id is in the one shape both sides write:
+/// `custom-` plus lowercase letters/digits/hyphens (max 40 characters).
+fn custom_id_ok(id: &str) -> bool {
+    let Some(rest) = id.strip_prefix("custom-") else {
+        return false;
+    };
+    !rest.is_empty()
+        && id.len() <= 40
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// One owner-saved layout entry, in the closed-world shape.
+fn sanitise_user_preset(entry: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let object = entry
+        .as_object()
+        .ok_or_else(|| "one saved layout is not a JSON object".to_string())?;
+    let id = text_of(object.get("id"), 40).ok_or_else(|| "a saved layout has no id".to_string())?;
+    if !custom_id_ok(&id) {
+        return Err(format!(
+            "the saved layout id `{id}` is not one this build writes"
+        ));
+    }
+    let name = text_of(object.get("name"), MAX_USER_NAME)
+        .ok_or_else(|| "a saved layout has no name".to_string())?;
+    let base_preset = text_of(object.get("base_preset"), MAX_TEXT)
+        .ok_or_else(|| "a saved layout names no base preset".to_string())?;
+    let shell_template = allowed(object.get("shell_template"), SHELL_TEMPLATES)
+        .ok_or_else(|| "a saved layout names an unknown shell template".to_string())?;
+    let density = allowed(object.get("density"), DENSITIES)
+        .ok_or_else(|| "a saved layout names an unknown density".to_string())?;
+    let default_stage_tab = allowed(object.get("default_stage_tab"), STAGE_TABS)
+        .ok_or_else(|| "a saved layout names an unknown stage tab".to_string())?;
+    let raw_cards = object
+        .get("cards")
+        .and_then(|cards| cards.as_array())
+        .ok_or_else(|| "a saved layout has no card list".to_string())?;
+    let cards = sanitise_cards(raw_cards)?;
     Ok(serde_json::json!({
+        "id": id,
+        "name": name,
+        "base_preset": base_preset,
+        "shell_template": shell_template,
+        "density": density,
+        "default_stage_tab": default_stage_tab,
+        "cards": cards,
+    }))
+}
+
+fn region_index(region: &str) -> i64 {
+    REGIONS
+        .iter()
+        .position(|name| *name == region)
+        .unwrap_or(99) as i64
+}
+
+/// Validate and rewrite one layout document into its canonical, closed-world
+/// form. Unknown keys and `x`/`y` are dropped, never copied; a document that
+/// would hide or omit a protected card is refused outright.
+pub fn sanitise(value: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| "the layout is not a JSON object".to_string())?;
+    if object.get("version").and_then(|v| v.as_u64()) != Some(LAYOUT_VERSION) {
+        return Err(format!(
+            "the layout is version {:?}, but this build reads version {LAYOUT_VERSION}",
+            object.get("version")
+        ));
+    }
+    let base_preset = text_of(object.get("base_preset"), MAX_TEXT)
+        .ok_or_else(|| "the layout names no base preset".to_string())?;
+    let id =
+        text_of(object.get("id"), MAX_TEXT).ok_or_else(|| "the layout has no id".to_string())?;
+    let name = text_of(object.get("name"), MAX_TEXT)
+        .ok_or_else(|| "the layout has no name".to_string())?;
+    let shell_template = allowed(object.get("shell_template"), SHELL_TEMPLATES)
+        .ok_or_else(|| "the layout names an unknown shell template".to_string())?;
+    let density = allowed(object.get("density"), DENSITIES)
+        .ok_or_else(|| "the layout names an unknown density".to_string())?;
+    let default_stage_tab = allowed(object.get("default_stage_tab"), STAGE_TABS)
+        .ok_or_else(|| "the layout names an unknown stage tab".to_string())?;
+    let updated_at = int_in(object.get("updated_at"), 0, i64::MAX / 2)
+        .ok_or_else(|| "the layout has no sane updated_at".to_string())?;
+    let raw_cards = object
+        .get("cards")
+        .and_then(|cards| cards.as_array())
+        .ok_or_else(|| "the layout has no card list".to_string())?;
+    let cards = sanitise_cards(raw_cards)?;
+    // The owner-saved layouts travel with the active document (H3). They are
+    // validated by the SAME card pass; the library is bounded; and a document
+    // whose active id is a saved layout must actually carry that entry.
+    let empty = Vec::new();
+    let raw_users = object
+        .get("user_presets")
+        .and_then(|value| value.as_array())
+        .unwrap_or(&empty);
+    if raw_users.len() > MAX_USER_PRESETS {
+        return Err(format!(
+            "the layout carries {} saved layouts; this build keeps up to {MAX_USER_PRESETS}",
+            raw_users.len()
+        ));
+    }
+    let mut users = Vec::with_capacity(raw_users.len());
+    let mut user_ids = std::collections::BTreeSet::new();
+    for entry in raw_users {
+        let clean = sanitise_user_preset(entry)?;
+        let entry_id = clean["id"].as_str().unwrap_or_default().to_string();
+        if !user_ids.insert(entry_id.clone()) {
+            return Err(format!("the saved layout `{entry_id}` is listed twice"));
+        }
+        users.push(clean);
+    }
+    if custom_id_ok(&id) && !user_ids.contains(&id) {
+        return Err(format!(
+            "the active layout `{id}` is not in the saved-layout list"
+        ));
+    }
+    let clean = serde_json::json!({
         "version": LAYOUT_VERSION,
         "id": id,
         "name": name,
         "base_preset": base_preset,
         "shell_template": shell_template,
-        "theme": theme,
         "density": density,
         "default_stage_tab": default_stage_tab,
         "cards": cards,
+        "user_presets": users,
         "updated_at": updated_at,
-    }))
+    });
+    if serde_json::to_vec(&clean)
+        .map(|bytes| bytes.len())
+        .unwrap_or(0)
+        > MAX_DOCUMENT_BYTES
+    {
+        return Err("the saved layouts are larger than this build allows".to_string());
+    }
+    Ok(clean)
 }
 
 /// What the picker/HUD gets back, and where it came from.
@@ -342,7 +459,6 @@ mod tests {
             "name": "Cockpit",
             "base_preset": "cockpit",
             "shell_template": "three-column",
-            "theme": "system",
             "density": "comfortable",
             "default_stage_tab": "talk",
             "cards": [
@@ -353,6 +469,7 @@ mod tests {
                 protected("approvals", "stage_top"),
                 protected("voice_controls", "stage_top"),
             ],
+            "user_presets": [],
             "updated_at": 0,
         })
     }
@@ -402,7 +519,7 @@ mod tests {
             doc["cards"][2][path] = bad.clone();
             assert!(sanitise(&doc).is_err(), "{path}={bad} was accepted");
         }
-        for path in ["shell_template", "theme", "density", "default_stage_tab"] {
+        for path in ["shell_template", "density", "default_stage_tab"] {
             let mut doc = base();
             doc[path] = serde_json::json!("neon");
             assert!(sanitise(&doc).is_err(), "{path} accepted an unknown token");
@@ -511,6 +628,128 @@ mod tests {
         );
         for preset in presets {
             sanitise(preset).unwrap_or_else(|e| panic!("{}: {e}", preset["id"]));
+            assert!(
+                preset.get("theme").is_none(),
+                "the contract still carries theme"
+            );
+            for card in preset["cards"].as_array().unwrap() {
+                let id = card["id"].as_str().unwrap();
+                let fixed = [
+                    "emergency_stop",
+                    "voice_controls",
+                    "conversation",
+                    "composer",
+                    "galaxy",
+                    "reminders",
+                    "memory",
+                ];
+                if fixed.contains(&id) {
+                    assert!(
+                        card.get("col_span").is_none(),
+                        "the contract still carries an inert span for {id}"
+                    );
+                    assert!(
+                        card.get("row_span").is_none(),
+                        "the contract still carries an inert span for {id}"
+                    );
+                }
+            }
         }
+    }
+
+    fn card_row(id: &str, region: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id, "region": region, "order": 0, "col_span": 12,
+            "row_span": 1, "visible": true, "collapsed": false, "options": {},
+        })
+    }
+
+    fn user_layout(id: &str, name: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "name": name,
+            "base_preset": "cockpit",
+            "shell_template": "three-column",
+            "density": "comfortable",
+            "default_stage_tab": "talk",
+            "cards": [
+                card_row("emergency_stop", "header"),
+                card_row("bar_launcher", "left_rail"),
+                card_row("nav", "left_rail"),
+                card_row("approvals", "stage_top"),
+                card_row("voice_controls", "stage_top"),
+            ],
+        })
+    }
+
+    #[test]
+    fn a_saved_layout_library_round_trips_and_is_bounded() {
+        let mut doc = base();
+        let layout = user_layout("custom-cockpit-1", "Evening");
+        doc["id"] = serde_json::json!("custom-cockpit-1");
+        doc["name"] = serde_json::json!("Evening");
+        doc["user_presets"] = serde_json::json!([layout]);
+        let clean = sanitise(&doc).unwrap();
+        assert_eq!(clean["id"], "custom-cockpit-1");
+        assert_eq!(clean["user_presets"].as_array().unwrap().len(), 1);
+        assert_eq!(sanitise(&clean).unwrap(), clean);
+    }
+
+    #[test]
+    fn hostile_or_unbounded_saved_layouts_are_refused() {
+        // 21 layouts.
+        let mut doc = base();
+        let many: Vec<serde_json::Value> = (1..=21)
+            .map(|n| user_layout(&format!("custom-cockpit-{n}"), "Mine"))
+            .collect();
+        doc["user_presets"] = serde_json::json!(many);
+        assert!(sanitise(&doc).is_err(), "21 saved layouts were accepted");
+
+        // A custom active id with no entry.
+        let mut doc = base();
+        doc["id"] = serde_json::json!("custom-missing-1");
+        assert!(sanitise(&doc).is_err(), "an orphan active id was accepted");
+
+        // A bad id shape and a duplicate id.
+        for id in ["mine-1", "custom-", "custom-UPPER"] {
+            let mut doc = base();
+            doc["user_presets"] = serde_json::json!([user_layout(id, "Mine")]);
+            assert!(sanitise(&doc).is_err(), "{id} was accepted as a saved id");
+        }
+        let mut doc = base();
+        let one = user_layout("custom-cockpit-1", "Mine");
+        doc["user_presets"] = serde_json::json!([one.clone(), one]);
+        assert!(
+            sanitise(&doc).is_err(),
+            "a duplicate saved layout was accepted"
+        );
+
+        // A saved layout that hides a protected card.
+        let mut doc = base();
+        let mut bad = user_layout("custom-cockpit-1", "Mine");
+        bad["cards"][3]["visible"] = serde_json::json!(false);
+        doc["user_presets"] = serde_json::json!([bad]);
+        assert!(
+            sanitise(&doc).is_err(),
+            "a saved layout could hide approvals"
+        );
+
+        // An empty name.
+        let mut doc = base();
+        doc["user_presets"] = serde_json::json!([user_layout("custom-cockpit-1", "   ")]);
+        assert!(
+            sanitise(&doc).is_err(),
+            "an empty saved-layout name was accepted"
+        );
+    }
+
+    #[test]
+    fn a_layouts_theme_is_dropped_not_required() {
+        // H3/Q5: colour theme belongs to Appearance; an old saved document that
+        // still carries one must keep loading, with the key dropped.
+        let mut doc = base();
+        doc["theme"] = serde_json::json!("paper");
+        let clean = sanitise(&doc).unwrap();
+        assert!(clean.get("theme").is_none(), "theme was copied through");
     }
 }

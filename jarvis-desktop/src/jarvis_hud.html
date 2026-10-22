@@ -31,16 +31,34 @@
   } catch (e) {
     /* private mode, cleared site data - the default theme is correct */
   }
-  /* The HUD's layout, before first paint (F1 of the 2026-10-22 coherence
-     slice). ONE truth: the saved layout document in the desktop settings store
-     (H1/H2). This page no longer reads or writes the old
-     localStorage["jarvis.hud.layout"] key - that control and its pills were
-     the second truth and are gone. Cockpit is painted here; the injected
-     shell bootstrap reads the store and, when the owner chose another HUD
-     layout, publishes it on `jarvis:hud-look`, which the page's own script
-     obeys (see applyLayout at the end of this file). A browser-served page
-     with no shell keeps Cockpit. */
-  document.documentElement.setAttribute("data-hud-layout", "cockpit");
+  /* The HUD's shell and density, before first paint (H3, 2026-10-22; Q5).
+     ONE truth is the saved layout document in the desktop settings store
+     (H1/H2/H3). The async store read may land after this frame, so the shell
+     bootstrap mirrors the last known shell/density/opening-tab into
+     localStorage["jarvis.hud.preview"] after every read and save; this head
+     reads that mirror ONCE, only to avoid painting the wrong shell for a
+     frame. When the store answers it wins (see jarvis:hud-shell at the end
+     of this file). A browser-served page with no shell keeps the defaults. */
+  (function () {
+    var shells = ["three-column", "split-stage", "center-core",
+      "two-column-left", "two-column-right", "single-stage-bento"];
+    var densities = ["comfortable", "compact", "spacious"];
+    var shell = "three-column";
+    var density = "comfortable";
+    try {
+      var preview = JSON.parse(localStorage.getItem("jarvis.hud.preview") || "null");
+      if (preview && shells.indexOf(preview.shell_template) >= 0) {
+        shell = preview.shell_template;
+      }
+      if (preview && densities.indexOf(preview.density) >= 0) {
+        density = preview.density;
+      }
+    } catch (e) {
+      /* private mode / cleared data: the defaults are correct */
+    }
+    document.documentElement.setAttribute("data-hud-shell", shell);
+    document.documentElement.setAttribute("data-hud-density", density);
+  }());
 </script>
 <link rel="stylesheet" href="theme.css">
 
@@ -651,7 +669,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
  *  2026-10-20 - THE HUD'S THREE LAYOUTS (the owner's request; the work
  *  order's PART III+IV). Everything below is layout and paint ONLY:
  *
- *   * switched by `html[data-hud-layout="cockpit" | "studio" | "ambient"]`;
+ *   * switched by `html[data-hud-shell="three-column" | "studio" | "ambient"]`;
  *   * the SAME DOM nodes and ids in every mode - nothing is deleted, built
  *     twice or moved between parents, so every control the page's tests
  *     reach for is in the document whichever layout is showing;
@@ -767,9 +785,9 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
  *  inspector - waiting cards, the second brain's tiles, last-turn
  *  telemetry - each a card in its own right.
  * --------------------------------------------------------------------- */
-html[data-hud-layout="cockpit"] #shell{grid-template-columns:220px minmax(0,1fr) 260px;}
-html[data-hud-layout="cockpit"] #rail-right{padding:12px 10px 18px; gap:10px; overflow-y:auto;}
-html[data-hud-layout="cockpit"] #rail-right .rail-section{
+html[data-hud-shell="three-column"] #shell{grid-template-columns:220px minmax(0,1fr) 260px;}
+html[data-hud-shell="three-column"] #rail-right{padding:12px 10px 18px; gap:10px; overflow-y:auto;}
+html[data-hud-shell="three-column"] #rail-right .rail-section{
   border:1px solid var(--line); border-bottom:1px solid var(--line); border-radius:8px;
   padding:12px 12px 13px;
   background:
@@ -777,66 +795,66 @@ html[data-hud-layout="cockpit"] #rail-right .rail-section{
     linear-gradient(180deg, var(--plate-2), var(--plate));
   box-shadow:0 8px 22px rgb(var(--shade-rgb) / .22);
 }
-html[data-hud-layout="cockpit"] .bento-waiting{display:flex; flex-direction:column;}
-html[data-hud-layout="cockpit"] #rail-telemetry:not([data-has-turn]) .readout,
-html[data-hud-layout="cockpit"] #rail-telemetry:not([data-has-turn]) .meter{
+html[data-hud-shell="three-column"] .bento-waiting{display:flex; flex-direction:column;}
+html[data-hud-shell="three-column"] #rail-telemetry:not([data-has-turn]) .readout,
+html[data-hud-shell="three-column"] #rail-telemetry:not([data-has-turn]) .meter{
   display:none;
 }
-html[data-hud-layout="cockpit"] #rail-telemetry:not([data-has-turn]) .bento-empty{display:block;}
-html[data-hud-layout="cockpit"] #rail-telemetry[data-has-turn] .bento-empty{display:none;}
-html[data-hud-layout="cockpit"] .bento-brain{
+html[data-hud-shell="three-column"] #rail-telemetry:not([data-has-turn]) .bento-empty{display:block;}
+html[data-hud-shell="three-column"] #rail-telemetry[data-has-turn] .bento-empty{display:none;}
+html[data-hud-shell="three-column"] .bento-brain{
   display:grid; grid-template-columns:1fr 1fr; gap:7px; align-items:stretch;
 }
-html[data-hud-layout="cockpit"] .bento-brain .hud-label{grid-column:1 / -1;}
-html[data-hud-layout="cockpit"] .bento-brain .readout{
+html[data-hud-shell="three-column"] .bento-brain .hud-label{grid-column:1 / -1;}
+html[data-hud-shell="three-column"] .bento-brain .readout{
   flex-direction:column; align-items:flex-start; gap:3px; padding:9px 10px;
   border:1px solid var(--line); border-radius:6px;
   background:linear-gradient(160deg, rgb(var(--accent-rgb) / .07), rgb(var(--accent-rgb) / .01));
   transition:border-color .15s, background .15s;
 }
-html[data-hud-layout="cockpit"] .bento-brain .readout.bento-tile-link{cursor:pointer;}
-html[data-hud-layout="cockpit"] .bento-brain .readout.bento-tile-link:hover,
-html[data-hud-layout="cockpit"] .bento-brain .readout.bento-tile-link:focus-visible{
+html[data-hud-shell="three-column"] .bento-brain .readout.bento-tile-link{cursor:pointer;}
+html[data-hud-shell="three-column"] .bento-brain .readout.bento-tile-link:hover,
+html[data-hud-shell="three-column"] .bento-brain .readout.bento-tile-link:focus-visible{
   border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .12);
 }
-html[data-hud-layout="cockpit"] .bento-brain .readout:last-child{
+html[data-hud-shell="three-column"] .bento-brain .readout:last-child{
   grid-column:1 / -1; cursor:default;
 }
-html[data-hud-layout="cockpit"] .bento-brain .readout .v{font-size:18px; color:var(--ice);}
-html[data-hud-layout="cockpit"] .bento-brain .readout:last-child .v{font-size:13px;}
-html[data-hud-layout="cockpit"] .lanes{
+html[data-hud-shell="three-column"] .bento-brain .readout .v{font-size:18px; color:var(--ice);}
+html[data-hud-shell="three-column"] .bento-brain .readout:last-child .v{font-size:13px;}
+html[data-hud-shell="three-column"] .lanes{
   flex-direction:row; flex-wrap:wrap; gap:4px; margin-top:8px;
 }
-html[data-hud-layout="cockpit"] .lane{
+html[data-hud-shell="three-column"] .lane{
   flex:1 1 auto; justify-content:center; gap:5px; padding:5px 7px;
   border-radius:2px; font-size:10px;
 }
-html[data-hud-layout="cockpit"] .lane .tag{display:none;}
-html[data-hud-layout="cockpit"] .presets{flex-direction:row; flex-wrap:wrap; gap:4px; margin-top:8px;}
-html[data-hud-layout="cockpit"] .preset{
+html[data-hud-shell="three-column"] .lane .tag{display:none;}
+html[data-hud-shell="three-column"] .presets{flex-direction:row; flex-wrap:wrap; gap:4px; margin-top:8px;}
+html[data-hud-shell="three-column"] .preset{
   flex:1 1 46%; justify-content:center; padding:5px 7px; border-radius:2px; font-size:10px;
 }
-html[data-hud-layout="cockpit"] .preset-cloud{margin-top:5px; padding:5px 7px; font-size:10px;}
-html[data-hud-layout="cockpit"] .preset-words{font-size:9px;}
-html[data-hud-layout="cockpit"] #reactor{width:220px; height:220px;}
-html[data-hud-layout="cockpit"] .core-expand{
+html[data-hud-shell="three-column"] .preset-cloud{margin-top:5px; padding:5px 7px; font-size:10px;}
+html[data-hud-shell="three-column"] .preset-words{font-size:9px;}
+html[data-hud-shell="three-column"] #reactor{width:220px; height:220px;}
+html[data-hud-shell="three-column"] .core-expand{
   /* Beside the core, not at the far edge of a full-width wrap: the wrap is
      the whole stage row, so a right:0 button floated far from what it
      expands. Half the stage plus the core's own half, then a gap. */
   display:inline-flex; position:absolute; left:calc(50% + 118px); bottom:10px;
   font-size:10px; padding:4px 8px;
 }
-html[data-hud-layout="cockpit"] #shell[data-core="pinned"] #reactor{width:96px; height:96px;}
-html[data-hud-layout="cockpit"] #shell[data-core="pinned"] .reactor-wrap{
+html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:96px; height:96px;}
+html[data-hud-shell="three-column"] #shell[data-core="pinned"] .reactor-wrap{
   flex-direction:row; justify-content:flex-start; gap:16px; padding:6px 22px 4px;
 }
-html[data-hud-layout="cockpit"] #shell[data-core="pinned"] .reactor-state{
+html[data-hud-shell="three-column"] #shell[data-core="pinned"] .reactor-state{
   position:static; transform:none; font-size:9px;
 }
-html[data-hud-layout="cockpit"] #shell[data-core="pinned"] .core-expand{
+html[data-hud-shell="three-column"] #shell[data-core="pinned"] .core-expand{
   position:static; margin-left:auto;
 }
-html[data-hud-layout="cockpit"] #rail-quickbar .qp-glyph{color:var(--gold);}
+html[data-hud-shell="three-column"] #rail-quickbar .qp-glyph{color:var(--gold);}
 
 /* ---- STUDIO --------------------------------------------------------- *
  *  A 60px icon dock; the conversation on the left; on the right a 45%
@@ -846,81 +864,81 @@ html[data-hud-layout="cockpit"] #rail-quickbar .qp-glyph{color:var(--gold);}
  *  tabs show panels this page already has, as an overlay on the same
  *  column: telemetry/systems, the memory readouts, and the waiting cards.
  * --------------------------------------------------------------------- */
-html[data-hud-layout="studio"] #shell{grid-template-columns:60px minmax(0,1fr) 0;}
-html[data-hud-layout="studio"] .rail.left{border-right:1px solid var(--line);}
-html[data-hud-layout="studio"] .rail.left .brand{padding:14px 0 10px; text-align:center;}
-html[data-hud-layout="studio"] .rail.left .brand h1{font-size:0; letter-spacing:0;}
-html[data-hud-layout="studio"] .rail.left .brand h1::before{
+html[data-hud-shell="split-stage"] #shell{grid-template-columns:60px minmax(0,1fr) 0;}
+html[data-hud-shell="split-stage"] .rail.left{border-right:1px solid var(--line);}
+html[data-hud-shell="split-stage"] .rail.left .brand{padding:14px 0 10px; text-align:center;}
+html[data-hud-shell="split-stage"] .rail.left .brand h1{font-size:0; letter-spacing:0;}
+html[data-hud-shell="split-stage"] .rail.left .brand h1::before{
   content:"\25C8"; font-size:16px; letter-spacing:0; color:var(--ice);
   text-shadow:0 0 16px rgb(var(--accent-rgb) / .45);
 }
-html[data-hud-layout="studio"] .rail.left .brand .sub{display:none;}
-html[data-hud-layout="studio"] .rail-nav{display:none;}
-html[data-hud-layout="studio"] .studio-dock{
+html[data-hud-shell="split-stage"] .rail.left .brand .sub{display:none;}
+html[data-hud-shell="split-stage"] .rail-nav{display:none;}
+html[data-hud-shell="split-stage"] .studio-dock{
   display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px 0;
 }
-html[data-hud-layout="studio"] .dock-btn{
+html[data-hud-shell="split-stage"] .dock-btn{
   width:42px; height:38px; display:flex; align-items:center; justify-content:center;
   border:1px solid transparent; border-radius:5px; color:var(--dim); font-size:16px;
   transition:color .15s, border-color .15s, background .15s;
 }
-html[data-hud-layout="studio"] .dock-btn:hover{
+html[data-hud-shell="split-stage"] .dock-btn:hover{
   color:var(--text); background:rgb(var(--accent-rgb) / .07);
 }
-html[data-hud-layout="studio"] .dock-btn[aria-pressed="true"]{
+html[data-hud-shell="split-stage"] .dock-btn[aria-pressed="true"]{
   color:var(--ice); border-color:rgb(var(--accent-rgb) / .3);
   background:rgb(var(--accent-rgb) / .12);
 }
-html[data-hud-layout="studio"] .rail-left .rail-lanes,
-html[data-hud-layout="studio"] .rail-lanes,
-html[data-hud-layout="studio"] .rail-systems{display:none;}
-html[data-hud-layout="studio"] .rail-foot{padding:8px 6px 12px;}
-html[data-hud-layout="studio"] .quickbar-pill{justify-content:center; padding:9px 0;}
-html[data-hud-layout="studio"] .quickbar-pill .qp-label{display:none;}
-html[data-hud-layout="studio"] .rail.right{display:none;}
-html[data-hud-layout="studio"] #stage{
+html[data-hud-shell="split-stage"] .rail-left .rail-lanes,
+html[data-hud-shell="split-stage"] .rail-lanes,
+html[data-hud-shell="split-stage"] .rail-systems{display:none;}
+html[data-hud-shell="split-stage"] .rail-foot{padding:8px 6px 12px;}
+html[data-hud-shell="split-stage"] .quickbar-pill{justify-content:center; padding:9px 0;}
+html[data-hud-shell="split-stage"] .quickbar-pill .qp-label{display:none;}
+html[data-hud-shell="split-stage"] .rail.right{display:none;}
+html[data-hud-shell="split-stage"] #stage{
   display:grid; min-height:0;
   grid-template-columns:minmax(0,1fr) 45%;
   grid-template-rows:auto auto auto auto auto auto minmax(0,1fr);
 }
-html[data-hud-layout="studio"] #stage > .stage-bar{
+html[data-hud-shell="split-stage"] #stage > .stage-bar{
   grid-column:1 / -1; grid-row:1; padding:10px 16px; min-height:0;
   /* L2/FT-2 (2026-10-22): the header band is above the Studio right-rail
      overlay, so [Edit HUD] and the layout badge can never be covered by it. */
   position:relative; z-index:45;
 }
-html[data-hud-layout="studio"] #stage-title{display:none;}
-html[data-hud-layout="studio"] #stage-tabs{
+html[data-hud-shell="split-stage"] #stage-title{display:none;}
+html[data-hud-shell="split-stage"] #stage-tabs{
   display:flex; grid-column:1 / -1; grid-row:2;
   gap:2px; padding:0 16px; border-bottom:1px solid var(--line);
 }
-html[data-hud-layout="studio"] #approvals{
+html[data-hud-shell="split-stage"] #approvals{
   grid-column:1 / -1; grid-row:3; margin:10px 16px 0;
 }
-html[data-hud-layout="studio"] #initiative{
+html[data-hud-shell="split-stage"] #initiative{
   grid-column:1 / -1; grid-row:4; margin:10px 16px 0;
 }
-html[data-hud-layout="studio"] #banner{grid-column:1 / -1; grid-row:5;}
-html[data-hud-layout="studio"] #model-warn{grid-column:1 / -1; grid-row:6;}
-html[data-hud-layout="studio"] #ambient-status{display:none;}
-html[data-hud-layout="studio"] #talk{
+html[data-hud-shell="split-stage"] #banner{grid-column:1 / -1; grid-row:5;}
+html[data-hud-shell="split-stage"] #model-warn{grid-column:1 / -1; grid-row:6;}
+html[data-hud-shell="split-stage"] #ambient-status{display:none;}
+html[data-hud-shell="split-stage"] #talk{
   display:flex; grid-column:1; grid-row:7; min-width:0; min-height:0;
 }
-html[data-hud-layout="studio"] #brain{
+html[data-hud-shell="split-stage"] #brain{
   display:none; grid-column:2; grid-row:7; min-width:0; min-height:0;
 }
-html[data-hud-layout="studio"][data-hud-tab="galaxy"] #brain{display:flex;}
-html[data-hud-layout="studio"] .reactor-wrap{
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"] #brain{display:flex;}
+html[data-hud-shell="split-stage"] .reactor-wrap{
   flex-direction:row; justify-content:flex-start; gap:14px; padding:10px 18px 4px;
 }
-html[data-hud-layout="studio"] #reactor{width:48px; height:48px;}
-html[data-hud-layout="studio"] .reactor-state{
+html[data-hud-shell="split-stage"] #reactor{width:48px; height:48px;}
+html[data-hud-shell="split-stage"] .reactor-state{
   position:static; transform:none; font-size:9px;
 }
-html[data-hud-layout="studio"] .lane-compact{display:block;}
-html[data-hud-layout="studio"] .rail-toggle{display:none;}
-html[data-hud-layout="studio"] .appr-badge:not([hidden]){display:inline-flex;}
-html[data-hud-layout="studio"] #rail-right{
+html[data-hud-shell="split-stage"] .lane-compact{display:block;}
+html[data-hud-shell="split-stage"] .rail-toggle{display:none;}
+html[data-hud-shell="split-stage"] .appr-badge:not([hidden]){display:inline-flex;}
+html[data-hud-shell="split-stage"] #rail-right{
   display:none; position:fixed; top:56px; right:0; bottom:0; width:45%; z-index:30;
   /* L2/FT-2 (2026-10-22): the rail starts BELOW the header band. z-index alone
      was not enough: the rail still visually covered the card toolbars. */
@@ -929,26 +947,26 @@ html[data-hud-layout="studio"] #rail-right{
   background:linear-gradient(180deg, var(--plate), var(--void));
   box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .5);
 }
-html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right,
-html[data-hud-layout="studio"][data-hud-tab="memory"] #rail-right,
-html[data-hud-layout="studio"][data-hud-tab="today"] #rail-right{display:flex; flex-direction:column;}
-html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right .rail-section,
-html[data-hud-layout="studio"][data-hud-tab="memory"] #rail-right .rail-section,
-html[data-hud-layout="studio"][data-hud-tab="today"] #rail-right .rail-section{
+html[data-hud-shell="split-stage"][data-hud-tab="telemetry"] #rail-right,
+html[data-hud-shell="split-stage"][data-hud-tab="memory"] #rail-right,
+html[data-hud-shell="split-stage"][data-hud-tab="today"] #rail-right{display:flex; flex-direction:column;}
+html[data-hud-shell="split-stage"][data-hud-tab="telemetry"] #rail-right .rail-section,
+html[data-hud-shell="split-stage"][data-hud-tab="memory"] #rail-right .rail-section,
+html[data-hud-shell="split-stage"][data-hud-tab="today"] #rail-right .rail-section{
   display:none;
 }
 /* Two ids (#rail-right then the section) so these beat the "hide every
    section in this panel" rule above on specificity, whichever way round they
    are read; the section is what shows, the panel itself stays flex. */
-html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right #rail-telemetry,
-html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right #rail-tools,
-html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right #rail-voice,
-html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right #rail-budget,
-html[data-hud-layout="studio"][data-hud-tab="memory"] #rail-right #rail-memory,
-html[data-hud-layout="studio"][data-hud-tab="today"] #rail-right #rail-waiting{
+html[data-hud-shell="split-stage"][data-hud-tab="telemetry"] #rail-right #rail-telemetry,
+html[data-hud-shell="split-stage"][data-hud-tab="telemetry"] #rail-right #rail-tools,
+html[data-hud-shell="split-stage"][data-hud-tab="telemetry"] #rail-right #rail-voice,
+html[data-hud-shell="split-stage"][data-hud-tab="telemetry"] #rail-right #rail-budget,
+html[data-hud-shell="split-stage"][data-hud-tab="memory"] #rail-right #rail-memory,
+html[data-hud-shell="split-stage"][data-hud-tab="today"] #rail-right #rail-waiting{
   display:block;
 }
-html[data-hud-layout="studio"] .bento-waiting{display:flex; flex-direction:column;}
+html[data-hud-shell="split-stage"] .bento-waiting{display:flex; flex-direction:column;}
 
 
 /* ---- REMINDERS (2026-10-21, the owner's dedicated Reminders menu) ----- *
@@ -1002,15 +1020,15 @@ html[data-hud-layout="studio"] .bento-waiting{display:flex; flex-direction:colum
    rail-only selection. The page's own script docks #rail-reminders into
    #stage while this tab is chosen and puts it back when the owner leaves, so
    there is still ONE reminders panel and no second list. */
-html[data-hud-layout="studio"][data-hud-tab="reminders"] #talk,
-html[data-hud-layout="studio"][data-hud-tab="reminders"] #brain{display:none !important;}
-html[data-hud-layout="studio"][data-hud-tab="reminders"] #stage > #rail-reminders{
+html[data-hud-shell="split-stage"][data-hud-tab="reminders"] #talk,
+html[data-hud-shell="split-stage"][data-hud-tab="reminders"] #brain{display:none !important;}
+html[data-hud-shell="split-stage"][data-hud-tab="reminders"] #stage > #rail-reminders{
   display:flex; flex-direction:column; gap:10px;
   grid-column:1 / -1; grid-row:7; min-height:0; overflow-y:auto;
   padding:12px 18px 22px; border-top:1px solid var(--line); background:var(--void);
 }
-html[data-hud-layout="cockpit"] #rail-reminders{display:flex; flex-direction:column; gap:8px;}
-html[data-hud-layout="ambient"] #rail-reminders{display:flex; flex-direction:column; gap:8px;}
+html[data-hud-shell="three-column"] #rail-reminders{display:flex; flex-direction:column; gap:8px;}
+html[data-hud-shell="center-core"] #rail-reminders{display:flex; flex-direction:column; gap:8px;}
 
 /* ---- AMBIENT -------------------------------------------------------- *
  *  No sidebars. Two floating glass pills carry what a rail would have
@@ -1022,18 +1040,18 @@ html[data-hud-layout="ambient"] #rail-reminders{display:flex; flex-direction:col
  *  themselves STAY, full size, at the top of the stage: a card never
  *  hides because of a layout.
  * --------------------------------------------------------------------- */
-html[data-hud-layout="ambient"] #shell{grid-template-columns:minmax(0,1fr);}
-html[data-hud-layout="ambient"] .rail.left{display:none;}
-html[data-hud-layout="ambient"] .rail.right{
+html[data-hud-shell="center-core"] #shell{grid-template-columns:minmax(0,1fr);}
+html[data-hud-shell="center-core"] .rail.left{display:none;}
+html[data-hud-shell="center-core"] .rail.right{
   position:fixed; right:0; top:0; bottom:0; width:300px; z-index:40;
   transform:translateX(100%); transition:transform .22s ease;
   border-left:1px solid var(--line-hot);
   box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .55);
 }
-html[data-hud-layout="ambient"] .rail.right.open{transform:none;}
-html[data-hud-layout="ambient"] .rail.right.open #rail-close{display:inline-flex; top:62px;}
-html[data-hud-layout="ambient"] .rail-toggle{display:flex;}
-html[data-hud-layout="ambient"] .stage-bar{
+html[data-hud-shell="center-core"] .rail.right.open{transform:none;}
+html[data-hud-shell="center-core"] .rail.right.open #rail-close{display:inline-flex; top:62px;}
+html[data-hud-shell="center-core"] .rail-toggle{display:flex;}
+html[data-hud-shell="center-core"] .stage-bar{
   /* Above the Ambient drawer's z-index:40, so the Telemetry toggle in this
      pill can always be clicked to close it (field bug 2026-10-21). */
   position:fixed; top:14px; right:16px; z-index:45;
@@ -1043,13 +1061,13 @@ html[data-hud-layout="ambient"] .stage-bar{
   backdrop-filter:blur(16px);
   box-shadow:0 12px 32px rgb(var(--shade-rgb) / .38);
 }
-html[data-hud-layout="ambient"] .stage-bar h2,
-html[data-hud-layout="ambient"] #chip-model,
-html[data-hud-layout="ambient"] #chip-state,
-html[data-hud-layout="ambient"] .lane-compact{display:none;}
-html[data-hud-layout="ambient"] .ambient-view{display:inline-flex;}
-html[data-hud-layout="ambient"] .appr-badge:not([hidden]){display:inline-flex;}
-html[data-hud-layout="ambient"] #ambient-status{
+html[data-hud-shell="center-core"] .stage-bar h2,
+html[data-hud-shell="center-core"] #chip-model,
+html[data-hud-shell="center-core"] #chip-state,
+html[data-hud-shell="center-core"] .lane-compact{display:none;}
+html[data-hud-shell="center-core"] .ambient-view{display:inline-flex;}
+html[data-hud-shell="center-core"] .appr-badge:not([hidden]){display:inline-flex;}
+html[data-hud-shell="center-core"] #ambient-status{
   display:block; position:fixed; top:14px; left:16px; z-index:25;
   padding:10px 16px; border:1px solid rgb(var(--accent-rgb) / .22); border-radius:12px;
   background:linear-gradient(180deg, rgb(var(--surface-2) / .86), rgb(var(--surface-1) / .72));
@@ -1069,35 +1087,35 @@ html[data-hud-layout="ambient"] #ambient-status{
   box-shadow:0 0 9px var(--ok); flex-shrink:0;
 }
 .as-sep{color:var(--text-faint);}
-html[data-hud-layout="ambient"] #stage{align-items:center;}
-html[data-hud-layout="ambient"] #approvals{
+html[data-hud-shell="center-core"] #stage{align-items:center;}
+html[data-hud-shell="center-core"] #approvals{
   width:min(720px, 94%); margin:76px auto 0;
 }
-html[data-hud-layout="ambient"] #initiative{width:min(720px, 94%); margin:0 auto;}
-html[data-hud-layout="ambient"] #banner,
-html[data-hud-layout="ambient"] #model-warn{
+html[data-hud-shell="center-core"] #initiative{width:min(720px, 94%); margin:0 auto;}
+html[data-hud-shell="center-core"] #banner,
+html[data-hud-shell="center-core"] #model-warn{
   width:min(720px, 94%); margin:76px auto 0; border-radius:10px;
 }
-html[data-hud-layout="ambient"] #talk{align-items:center; position:relative;}
-html[data-hud-layout="ambient"] .reactor-wrap{
+html[data-hud-shell="center-core"] #talk{align-items:center; position:relative;}
+html[data-hud-shell="center-core"] .reactor-wrap{
   margin-top:58px; padding:0; flex-shrink:0;
 }
-html[data-hud-layout="ambient"] #reactor{width:320px; height:320px;}
-html[data-hud-layout="ambient"] .reactor-rings{display:block;}
-html[data-hud-layout="ambient"] .reactor-state{bottom:-8px; letter-spacing:.34em;}
-html[data-hud-layout="ambient"] .core-expand{display:none;}
-html[data-hud-layout="ambient"] #log{
+html[data-hud-shell="center-core"] #reactor{width:320px; height:320px;}
+html[data-hud-shell="center-core"] .reactor-rings{display:block;}
+html[data-hud-shell="center-core"] .reactor-state{bottom:-8px; letter-spacing:.34em;}
+html[data-hud-shell="center-core"] .core-expand{display:none;}
+html[data-hud-shell="center-core"] #log{
   flex:0 1 auto; max-height:30vh; width:100%; align-items:center;
   padding:18px 22px 4px;
 }
-html[data-hud-layout="ambient"] #log .msg{max-width:680px; width:100%;}
-html[data-hud-layout="ambient"] #log:not(.full) .msg:not(:last-child){display:none;}
-html[data-hud-layout="ambient"] #log.full{max-height:48vh;}
-html[data-hud-layout="ambient"] .history-bar{
+html[data-hud-shell="center-core"] #log .msg{max-width:680px; width:100%;}
+html[data-hud-shell="center-core"] #log:not(.full) .msg:not(:last-child){display:none;}
+html[data-hud-shell="center-core"] #log.full{max-height:48vh;}
+html[data-hud-shell="center-core"] .history-bar{
   display:flex; justify-content:center; padding:4px 0 10px; flex-shrink:0;
 }
-html[data-hud-layout="ambient"] .history-toggle{display:inline-flex;}
-html[data-hud-layout="ambient"] .composer{
+html[data-hud-shell="center-core"] .history-toggle{display:inline-flex;}
+html[data-hud-shell="center-core"] .composer{
   width:min(680px, 92%); margin:0 auto 18px; padding:10px 12px;
   border:1px solid var(--line-hot); border-radius:14px;
   background:linear-gradient(180deg, rgb(var(--surface-2) / .9), rgb(var(--surface-1) / .8));
@@ -1115,7 +1133,7 @@ html[data-hud-layout="ambient"] .composer{
  *   - the stage header WRAPS instead of pushing its right-hand controls (the
  *     layout picker, the rail toggle) past the window edge;
  *   - below 720px the Cockpit's own column rule is re-stated as one column,
- *     because `html[data-hud-layout="cockpit"] #shell` would otherwise beat
+ *     because `html[data-hud-shell="three-column"] #shell` would otherwise beat
  *     the base stylesheet's narrow-window single-column rule on specificity.
  *  Nothing is hidden or removed: every control keeps its id and its place in
  *  the tab order, and below 1080px the right rail is the drawer the base
@@ -1131,37 +1149,37 @@ html[data-hud-layout="ambient"] .composer{
  *  over, exactly as the base stylesheet already does below 1080px.
  * --------------------------------------------------------------------- */
 @media (max-width:1080px){
-  html[data-hud-layout="cockpit"] #shell{grid-template-columns:188px minmax(0,1fr);}
-  html[data-hud-layout="cockpit"] .bento-brain{grid-template-columns:1fr 1fr;}
-  html[data-hud-layout="studio"] #stage{grid-template-columns:minmax(0,1fr);}
-  html[data-hud-layout="studio"] #brain{display:none !important;}
-  html[data-hud-layout="studio"][data-hud-tab="galaxy"] #rail-right{display:none;}
-  html[data-hud-layout="ambient"] #reactor{width:240px; height:240px;}
-  html[data-hud-layout="ambient"] #log{max-height:26vh;}
+  html[data-hud-shell="three-column"] #shell{grid-template-columns:188px minmax(0,1fr);}
+  html[data-hud-shell="three-column"] .bento-brain{grid-template-columns:1fr 1fr;}
+  html[data-hud-shell="split-stage"] #stage{grid-template-columns:minmax(0,1fr);}
+  html[data-hud-shell="split-stage"] #brain{display:none !important;}
+  html[data-hud-shell="split-stage"][data-hud-tab="galaxy"] #rail-right{display:none;}
+  html[data-hud-shell="center-core"] #reactor{width:240px; height:240px;}
+  html[data-hud-shell="center-core"] #log{max-height:26vh;}
 }
 @media (max-width:760px){
-  html[data-hud-layout="cockpit"] #reactor{width:150px; height:150px;}
-  html[data-hud-layout="cockpit"] .core-expand{left:calc(50% + 84px);}
-  html[data-hud-layout="cockpit"] #shell[data-core="pinned"] #reactor{width:88px; height:88px;}
-  html[data-hud-layout="studio"] #shell{grid-template-columns:52px minmax(0,1fr);}
-  html[data-hud-layout="ambient"] .stage-bar{max-width:calc(100vw - 32px); flex-wrap:wrap; border-radius:16px;}
-  html[data-hud-layout="ambient"] #ambient-status{max-width:calc(100vw - 32px);}
-  html[data-hud-layout="ambient"] #reactor{width:190px; height:190px;}
+  html[data-hud-shell="three-column"] #reactor{width:150px; height:150px;}
+  html[data-hud-shell="three-column"] .core-expand{left:calc(50% + 84px);}
+  html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:88px; height:88px;}
+  html[data-hud-shell="split-stage"] #shell{grid-template-columns:52px minmax(0,1fr);}
+  html[data-hud-shell="center-core"] .stage-bar{max-width:calc(100vw - 32px); flex-wrap:wrap; border-radius:16px;}
+  html[data-hud-shell="center-core"] #ambient-status{max-width:calc(100vw - 32px);}
+  html[data-hud-shell="center-core"] #reactor{width:190px; height:190px;}
 }
 /* The <=720 rules go LAST: the layout blocks above (`narrower windows`, whose
    <=1080 rule sets the Cockpit's two columns) are just as specific, so the
    single-column rule only wins by coming after them. */
 @media (max-width:720px){
-  html[data-hud-layout="cockpit"] #shell{grid-template-columns:minmax(0,1fr);}
-  html[data-hud-layout="cockpit"] #stage-title{display:none;}
+  html[data-hud-shell="three-column"] #shell{grid-template-columns:minmax(0,1fr);}
+  html[data-hud-shell="three-column"] #stage-title{display:none;}
   /* The expand toggle is positioned beside the core at full width; in a
      single column at this size that puts it past the right edge, so it flows
      under the core instead. Same control, same id, still visible. */
-  html[data-hud-layout="cockpit"] .core-expand{
+  html[data-hud-shell="three-column"] .core-expand{
     position:static; left:auto; right:auto; margin:6px auto 0;
   }
   .stage-bar{padding:8px 12px; gap:8px;}
-  html[data-hud-layout="studio"] .stage-tab{padding-left:8px; padding-right:8px;}
+  html[data-hud-shell="split-stage"] .stage-tab{padding-left:8px; padding-right:8px;}
 }
 
 
@@ -1239,36 +1257,200 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
 @media (max-width:720px){
   .hud-edit-words{display:none;}
 }
+
+  /* ==================================================================== *
+   * H3 (2026-10-22): the preset's shell, density and opening tab are REAL.
+   * The three old look blocks above are now
+   * `html[data-hud-shell="three-column" | "split-stage" | "center-core"]`
+   * (H3 renamed the selectors, it did not add a second set). These are the
+   * three shells the built-in presets did not use before, plus density.
+   * ==================================================================== */
+
+  /* ---- density: a small, bounded step in spacing and type -------------- */
+  html[data-hud-density="comfortable"]{
+    --hud-pad:12px; --hud-gap:10px; --hud-card-pad:10px; --hud-type:0px;
+  }
+  html[data-hud-density="compact"]{
+    --hud-pad:8px; --hud-gap:6px; --hud-card-pad:6px; --hud-type:-1px;
+  }
+  html[data-hud-density="spacious"]{
+    --hud-pad:16px; --hud-gap:14px; --hud-card-pad:14px; --hud-type:1px;
+  }
+  .stage-bar{padding:var(--hud-pad,8px) 12px; gap:var(--hud-gap,8px);}
+  .rail-section{margin-top:var(--hud-gap,10px);}
+  .rail-section:first-child{margin-top:0;}
+  html[data-hud-density] .bento-waiting,
+  html[data-hud-density] .bento-telemetry,
+  html[data-hud-density] .bento-tools,
+  html[data-hud-density] .bento-brain,
+  html[data-hud-density] .bento-budget,
+  html[data-hud-density] .bento-voice{padding:var(--hud-card-pad,10px);}
+  html[data-hud-density] .chip,
+  html[data-hud-density] .rail-label,
+  html[data-hud-density] .bento-label{font-size:calc(10.5px + var(--hud-type,0px));}
+  html[data-hud-density] #log .msg{font-size:calc(13.5px + var(--hud-type,0px));}
+  html[data-hud-density] .stage-tab{padding:calc(6px + var(--hud-pad,8px) / 4) 10px;}
+
+  /* ---- the drawer rails: reachable in every shell ---------------------- */
+  .left-toggle{display:none; position:relative; z-index:30;}
+  html[data-hud-shell="two-column-right"] .left-toggle,
+  html[data-hud-shell="single-stage-bento"] .left-toggle{display:flex;}
+  html[data-hud-shell="two-column-left"] .rail-toggle,
+  html[data-hud-shell="single-stage-bento"] .rail-toggle{display:flex;}
+  .left-close{display:none; position:absolute; top:8px; right:8px; z-index:3;
+    align-items:center; justify-content:center; width:30px; height:30px;
+    padding:0; font-size:16px; line-height:1;}
+  .rail.left.open .left-close{display:inline-flex;}
+
+  /* ---- two-column-left: left rail + stage; right rail is a drawer ----- */
+  html[data-hud-shell="two-column-left"] #shell{
+    grid-template-columns:220px minmax(0,1fr);
+  }
+  html[data-hud-shell="two-column-left"] .rail.right{
+    position:fixed; top:0; right:0; bottom:0; width:min(320px, 88vw);
+    z-index:26; background:var(--surface-sunken);
+    border-left:1px solid var(--line); padding:12px 10px 18px;
+    overflow-y:auto; transform:translateX(100%); transition:transform .18s ease;
+  }
+  html[data-hud-shell="two-column-left"] .rail.right.open{transform:none;}
+  html[data-hud-shell="two-column-left"] .rail.right.open #rail-close{display:inline-flex; top:10px;}
+
+  /* ---- two-column-right: stage + right rail; left rail is a drawer ---- */
+  html[data-hud-shell="two-column-right"] #shell{
+    grid-template-columns:minmax(0,1fr) 260px;
+  }
+  html[data-hud-shell="two-column-right"] .rail.left{
+    position:fixed; top:0; left:0; bottom:0; width:min(260px, 84vw);
+    z-index:26; background:var(--surface-sunken);
+    border-right:1px solid var(--line); padding:12px 10px 18px;
+    overflow-y:auto; transform:translateX(-100%); transition:transform .18s ease;
+  }
+  html[data-hud-shell="two-column-right"] .rail.left.open{transform:none;}
+
+  /* ---- single-stage-bento: one column; both rails are drawers --------- */
+  html[data-hud-shell="single-stage-bento"] #shell{
+    grid-template-columns:minmax(0,1fr);
+    padding:var(--hud-pad,12px);
+  }
+  html[data-hud-shell="single-stage-bento"] .rail.left,
+  html[data-hud-shell="single-stage-bento"] .rail.right{
+    position:fixed; top:0; bottom:0; width:min(300px, 86vw);
+    z-index:26; background:var(--surface-sunken);
+    padding:12px 10px 18px; overflow-y:auto; transition:transform .18s ease;
+  }
+  html[data-hud-shell="single-stage-bento"] .rail.left{
+    left:0; border-right:1px solid var(--line); transform:translateX(-100%);
+  }
+  html[data-hud-shell="single-stage-bento"] .rail.right{
+    right:0; border-left:1px solid var(--line); transform:translateX(100%);
+  }
+  html[data-hud-shell="single-stage-bento"] .rail.left.open,
+  html[data-hud-shell="single-stage-bento"] .rail.right.open{transform:none;}
+  html[data-hud-shell="single-stage-bento"] #stage{max-width:1080px; margin:0 auto;}
+  html[data-hud-shell="single-stage-bento"] .hud-region{
+    grid-template-columns:repeat(12, minmax(0,1fr));
+  }
+
+  /* ---- Layouts menu + copy/paste JSON dialogs (H3) --------------------- */
+  .hud-presets-menu{
+    position:fixed; z-index:70; width:min(352px, calc(100vw - 16px));
+    max-height:min(72vh, 620px); display:flex; flex-direction:column;
+    background:var(--surface-sunken); border:1px solid var(--line-hot);
+    border-radius:6px; box-shadow:0 18px 48px rgba(0,0,0,.55);
+    padding:10px; font-family:var(--f-mono); color:var(--text);
+  }
+  .hud-presets-menu[hidden]{display:none !important;}
+  .hud-presets-title{margin:0 0 6px; font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ice);}
+  .hud-presets-scroll{overflow-y:auto; min-height:0;}
+  .hud-presets-group{border-top:1px solid var(--line); padding-top:6px; margin-top:6px;}
+  .hud-presets-group:first-child{border-top:0; margin-top:0; padding-top:0;}
+  .hud-presets-head{margin:2px 0 4px; font-size:9.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--dimmer);}
+  .hud-presets-item{
+    display:block; width:100%; text-align:left; margin:1px 0; padding:5px 7px;
+    border:1px solid transparent; border-radius:3px; background:transparent;
+    color:var(--text); font-family:inherit; font-size:11.5px; cursor:pointer;
+  }
+  .hud-presets-item:hover,.hud-presets-item:focus-visible{
+    border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice); outline:none;
+  }
+  .hud-presets-row{display:flex; align-items:center; gap:2px;}
+  .hud-presets-row .hud-presets-item{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;}
+  .hud-presets-small{
+    padding:3px 6px; border:1px solid var(--line); border-radius:3px;
+    background:var(--plate-2); color:var(--dim); font-family:inherit; font-size:10px;
+  }
+  .hud-presets-small:hover{color:var(--text); border-color:var(--line-hot);}
+  .hud-presets-danger{color:var(--warn); border-color:rgb(var(--warn-rgb, 255 140 90) / .4);}
+  .hud-presets-empty{margin:3px 0; font-size:10.5px; color:var(--dim); line-height:1.5;}
+  .hud-presets-line{margin:6px 0 0; min-height:1.2em; font-size:10px; color:var(--dim);}
+  .hud-presets-close{
+    align-self:flex-end; margin-top:8px; padding:3px 10px;
+    border:1px solid var(--line); border-radius:3px; background:var(--plate-2);
+    color:var(--dim); font-family:inherit; font-size:10.5px;
+  }
+  .hud-presets-close:hover{color:var(--text); border-color:var(--line-hot);}
+  .hud-presets-dialog{
+    width:min(560px, calc(100vw - 32px)); max-height:82vh; overflow:auto;
+    border:1px solid var(--line-hot); border-radius:6px; padding:14px;
+    background:var(--surface-sunken); color:var(--text); font-family:var(--f-mono);
+  }
+  .hud-presets-dialog::backdrop{background:rgba(0,0,0,.6);}
+  .hud-presets-dialog-title{margin:0 0 8px; font-size:14px; color:var(--ice);}
+  .hud-presets-dialog-line{font-size:11px; color:var(--dim); line-height:1.5; margin:6px 0;}
+  .hud-presets-label{display:block; margin:10px 0 4px; font-size:10px;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--dimmer);}
+  .hud-presets-label + input,
+  .hud-presets-dialog input{
+    width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:3px;
+    background:var(--plate-2); color:var(--text); font-family:inherit; font-size:12px;
+  }
+  .hud-presets-json{
+    width:100%; box-sizing:border-box; resize:vertical; min-height:96px;
+    padding:8px; border:1px solid var(--line); border-radius:3px;
+    background:var(--plate-2); color:var(--text);
+    font-family:var(--f-mono); font-size:10.5px; line-height:1.45;
+  }
+  .hud-presets-dialog-actions{display:flex; justify-content:flex-end; gap:6px; margin-top:12px;}
+  .hud-presets-dialog-actions button{
+    padding:5px 10px; border:1px solid var(--line); border-radius:3px;
+    background:var(--plate-2); color:var(--text); font-family:inherit; font-size:11px;
+  }
+  .hud-presets-dialog-actions .hud-presets-save{border-color:var(--ice); color:var(--ice);}
+  .hud-presets-dialog-actions .hud-presets-danger{color:var(--warn);}
+  .hud-presets-status.sr-only{
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+  }
 </style>
 
 <!-- ==================================================================== *
- *  THE HUD'S LAYOUT, BEFORE FIRST PAINT (2026-10-20)
+ *  THE HUD'S SHELL AND DENSITY, BEFORE FIRST PAINT (H3, 2026-10-22)
  *
- *  The owner asked for a choice of three UIs for this window (the work
- *  order's PART III+IV). All three are THIS page, switched by
- *  `document.body.dataset.hudLayout`; the value is read synchronously, here,
- *  for the same reason the theme is read in the head: a first paint in
- *  Cockpit followed by a jump into Studio would be a flash the owner sees.
+ *  One truth: the saved HUD layout document in the desktop settings store.
+ *  Its `shell_template` (one of six) and `density` (one of three) are the
+ *  values the stylesheet keys off, on <html> and mirrored onto <body> as
+ *  `data-hud-shell` / `data-hud-density`. The head reads the last-saved
+ *  shell/density/opening-tab from `localStorage["jarvis.hud.preview"]`
+ *  ONCE, only so the first frame is not the wrong shell; the injected
+ *  shell bootstrap reads the store and its `jarvis:hud-shell` event wins.
+ *  A browser-served page with no shell keeps the defaults.
  *
- *  Where it is kept: this window origin's localStorage, under the key
- *  src/hud-window.js spells as HUD_LAYOUT_KEY (this page cannot import that
- *  module - it is served by the Python backend as well as bundled in the
- *  shell - so the key and the three ids are spelled again here, exactly as
- *  hud_bootstrap.js spells OPEN_BAR_KEY; tests/hud.mjs proves the two agree
- *  by driving the real page, and it is the same mechanism the "Open the
- *  Jarvis bar" switch already uses). Cosmetic: no approval card, changes at
- *  once, and it changes nothing about what Jarvis does.
- *
- *  NOTHING is removed for any layout: every id below is in the document in
- *  all three modes; the layouts are CSS Grid/Flexbox, order and visibility
- *  only (the page's own tests query those ids).
+ *  NOTHING is removed for any shell: every id below is in the document in
+ *  all six shells; they are CSS Grid/Flexbox, order and visibility only
+ *  (the page's own tests query those ids). The shell-created controls the
+ *  bootstrap injects - the "Open the Jarvis bar" button, the link line -
+ *  keep their ids and words in every shell too.
  * ==================================================================== -->
-<body data-hud-layout="cockpit">
+<body data-hud-shell="three-column" data-hud-density="comfortable">
 
 <div id="shell">
 
   <!-- ============ LEFT RAIL ============ -->
-  <aside class="rail left">
+  <aside class="rail left" id="rail-left">
+    <button class="ghost left-close" id="left-close" type="button"
+            aria-label="Close navigation">&#215;</button>
     <div class="brand rail-brand">
       <h1>J.A.R.V.I.S.</h1>
       <div class="sub" id="brand-sub">local · standing by</div>
@@ -1422,6 +1604,8 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
            H1/H2 document in the desktop settings store, and the window shows a
            read-only `Layout: <Preset Name>` badge next to [Edit HUD] instead
            (hud-edit.js). Nothing in this page writes a layout. -->
+      <button class="ghost left-toggle" id="left-toggle" type="button"
+              aria-controls="rail-left" aria-expanded="false">Navigation</button>
       <button class="ghost rail-toggle" id="rail-toggle" type="button"
               aria-controls="rail-right" aria-expanded="false">Telemetry</button>
     </div>
@@ -4512,80 +4696,153 @@ if (window.__jarvisPower) onPower({ detail: window.__jarvisPower });
 subscribe();
 
 /* ====================================================================== *
- *  THE HUD'S THREE LAYOUTS - the behaviour half (2026-10-20)
+ *  THE HUD'S SIX SHELLS - the behaviour half (H3, 2026-10-22; ruling Q5)
  *
- *  The layout itself is CSS (html[data-hud-layout=...]); this script only
- *  keeps the page's own facts in step with the extra places a layout shows
- *  them, and it owns the pieces a stylesheet cannot:
+ *  The shell and density are CSS (html[data-hud-shell=...] /
+ *  html[data-hud-density=...]). This script keeps the page's own facts in
+ *  step with them and owns the pieces a stylesheet cannot:
  *
- *   * the picker in the stage bar (and the Settings picker's own key) -
- *     save the choice, apply it, and follow a change made in Settings while
- *     this window is open (the shared `storage` event, exactly the road the
- *     "Open the Jarvis bar" button already follows);
- *   * the Studio layout's Inspector Stage tabs (Galaxy / Approvals / Memory
- *     / Telemetry) - one selected tab, mirrored on the stage's tab bar and
- *     the dock's icons, remembered for the session in `body[data-hud-tab]`;
- *   * the Cockpit's live pieces: the waiting-cards count (from the cards
- *     the page already drew in #approvals), the last-turn telemetry's
- *     "no turns yet" state, the second-brain tiles' click-through to the
- *     Galaxy map, the compact core docking when the conversation grows, and
- *     the footer "Jarvis bar" pill;
- *   * the Ambient layout's mirrored status pill and the history drawer;
- *   * the Studio dock's brain dropdown, built from the SAME #lanes buttons
- *     renderLanes() already drew (choosing an option clicks that button -
- *     one list of lanes, never two).
+ *   * the opening view/tab of a preset (`default_stage_tab`): "talk" is the
+ *     conversation view, "galaxy" is the Brain view plus its inspector tab,
+ *     and the other tabs open the conversation with the inspector on them.
+ *     It runs only when a preset is applied - clicking a tab afterwards wins;
+ *   * the left-rail drawer the two shells that hide the left rail need
+ *     (`two-column-right`, `single-stage-bento`), so no card becomes
+ *     unreachable when a preset hides a rail;
+ *   * the Studio/split-stage Inspector Stage tabs (Galaxy / Approvals /
+ *     Reminders / Memory / Telemetry) - one selected tab, mirrored on the
+ *     stage's tab bar and the dock's icons, remembered for the session in
+ *     `body[data-hud-tab]`;
+ *   * the Cockpit's live pieces: the waiting-cards count, the last-turn
+ *     telemetry's "no turns" state, the second-brain tiles' click-through to
+ *     the Galaxy map, the compact core docking and the footer bar pill;
+ *   * the Ambient/center-core mirrored status pill and the history drawer;
+ *   * the split-stage dock's brain dropdown, built from the SAME #lanes
+ *     buttons renderLanes() already drew.
  *
  *  It reads the DOM, never rebuilds it: every id, listener and element the
  *  page's own script owns is untouched, and this file adds no HTML sinks
  *  (textContent only - the content it shows is already in the page).
- *
- *  What this CANNOT be tested at a desk: how it LOOKS. Playwright proves the
- *  document, the visibility and the computed layout at one window size; the
- *  colours on a real WebView2, on the owner's two monitors, are not tested
- *  here - NOT-TESTABLE, said plainly in the pull request.
  * ====================================================================== */
 (function () {
   "use strict";
 
-  /* F1 (2026-10-22 coherence slice): ONE truth is the H1/H2 layout document
-   * in the desktop settings store. This page no longer reads or writes the old
-   * localStorage["jarvis.hud.layout"] key, and the three header pills that
-   * wrote it are gone. The shell bootstrap reads the store and publishes the
-   * matching VIEW shape on `jarvis:hud-look`; a browser-served page (no shell)
-   * stays on Cockpit. The read-only `Layout: <Preset Name>` badge beside
-   * [Edit HUD] names the saved preset (hud-edit.js). */
-  var LAYOUTS = ["cockpit", "studio", "ambient"];
+  /* ONE truth is the H1/H2/H3 layout document in the desktop settings store.
+   * The page reads no layout key and writes none; the shell bootstrap reads
+   * the store, puts the shell/density on <html>/<body> and announces
+   * `jarvis:hud-shell`. The same facts were mirrored into
+   * localStorage["jarvis.hud.preview"] after the last save/read, and this
+   * page reads that mirror ONCE so the first frame is not the wrong shell;
+   * the store's answer always wins when it arrives. */
   var TABS = ["galaxy", "today", "reminders", "memory", "telemetry"];
+  var DENSITIES = ["comfortable", "compact", "spacious"];
+  var SHELLS = ["three-column", "split-stage", "center-core",
+    "two-column-left", "two-column-right", "single-stage-bento"];
   var body = document.body;
   var $ = function (id) { return document.getElementById(id); };
 
-  function normalLayout(name) {
-    return LAYOUTS.indexOf(name) >= 0 ? name : LAYOUTS[0];
-  }
   function normalTab(name) {
     return TABS.indexOf(name) >= 0 ? name : TABS[0];
   }
 
-  function applyLayout(name) {
-    var id = normalLayout(name);
-    // <body> is the contract (document.body.dataset.hudLayout); <html> is put
-    // in step too because the stylesheet keys every layout rule off it, so
-    // there is one value the two can never disagree about.
-    body.dataset.hudLayout = id;
-    document.documentElement.setAttribute("data-hud-layout", id);
-    if (id === "studio" && TABS.indexOf(body.dataset.hudTab) < 0) setTab("galaxy");
-    if (id !== "ambient") setHistory(false);
+  /** Open the view or tab a preset asks for (H3: default_stage_tab). */
+  function openDefaultTab(name) {
+    if (name === "talk") { setView("talk"); return; }
+    if (name === "galaxy") {
+      setView("brain");
+      setTab("galaxy");
+      return;
+    }
+    if (TABS.indexOf(name) >= 0) {
+      setView("talk");
+      setTab(name);
+    }
+  }
+
+  function applyShell(facts) {
+    if (!facts || typeof facts !== "object") return;
+    var shell = SHELLS.indexOf(facts.shell_template) >= 0
+      ? facts.shell_template : "three-column";
+    var density = DENSITIES.indexOf(facts.density) >= 0
+      ? facts.density : "comfortable";
+    // <body> is the DOM contract; <html> is what the stylesheet keys off, so
+    // the two are put in step and can never disagree.
+    body.dataset.hudShell = shell;
+    body.dataset.hudDensity = density;
+    document.documentElement.setAttribute("data-hud-shell", shell);
+    document.documentElement.setAttribute("data-hud-density", density);
+    if (shell === "split-stage" && TABS.indexOf(body.dataset.hudTab) < 0) {
+      setTab("galaxy");
+    }
+    if (shell !== "center-core") setHistory(false);
     placeReminders();
-    if (id === "studio") refreshTab();
+    if (shell === "split-stage") refreshTab();
     paintCore();
     paintAmbient();
+    if (facts.default_stage_tab) openDefaultTab(String(facts.default_stage_tab));
   }
 
   // The shell bootstrap owns the saved layout; this is how it hands the
-  // matching view shape to the page. No page code writes a layout.
-  window.addEventListener("jarvis:hud-look", function (e) {
-    if (e && e.detail) applyLayout(e.detail);
+  // preset's shell/density/opening-tab to the page. No page code writes one.
+  window.addEventListener("jarvis:hud-shell", function (e) {
+    if (e && e.detail) applyShell(e.detail);
   });
+
+  function previewFacts() {
+    try {
+      var preview = JSON.parse(localStorage.getItem("jarvis.hud.preview") || "null");
+      if (preview && typeof preview === "object") return preview;
+    } catch (e) { /* private mode / cleared data: defaults below */ }
+    return { shell_template: "three-column", density: "comfortable",
+      default_stage_tab: "talk" };
+  }
+
+  /* ── the left-rail drawer (H3) ──────────────────────────────────────── *
+   * two-column-right and single-stage-bento hide the left rail, so the same
+   * reachability rule the right rail already has (field fix 2026-10-21)
+   * applies here: a visible toggle, a close button, Escape, and focus
+   * returned to the toggle. No shell may hide a card with no way back. */
+  (function leftDrawer() {
+    var toggle = $("left-toggle");
+    var rail = $("rail-left");
+    var close = $("left-close");
+    if (!toggle || !rail) return;
+    function isOpen() { return rail.classList.contains("open"); }
+    function paint() {
+      var open = isOpen();
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      toggle.textContent = open ? "Hide navigation" : "Navigation";
+      if (close) {
+        close.setAttribute("aria-hidden", open ? "false" : "true");
+        close.tabIndex = open ? 0 : -1;
+      }
+    }
+    function closeRail(returnFocus) {
+      if (!isOpen()) return;
+      rail.classList.remove("open");
+      paint();
+      if (returnFocus) toggle.focus();
+    }
+    function openRail() {
+      rail.classList.add("open");
+      paint();
+      if (close) close.focus();
+    }
+    paint();
+    toggle.addEventListener("click", function () {
+      if (isOpen()) closeRail(true); else openRail();
+    });
+    if (close) close.addEventListener("click", function () { closeRail(true); });
+    window.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || !isOpen()) return;
+      var target = event.target;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+          || target.isContentEditable)) return;
+      if (document.querySelector("dialog[open], [data-overlay].open")) return;
+      event.preventDefault();
+      closeRail(true);
+    });
+  }());
 
   /* ── the Studio Inspector Stage tabs ────────────────────────────────── */
 
@@ -4614,7 +4871,7 @@ subscribe();
 
   function refreshTab() {
     paintTabs();
-    if (body.dataset.hudLayout === "studio" && body.dataset.hudTab === "galaxy") {
+    if (body.dataset.hudShell === "split-stage" && body.dataset.hudTab === "galaxy") {
       window.requestAnimationFrame(resizeGalaxy);
     }
   }
@@ -4635,7 +4892,7 @@ subscribe();
     var rem = $("rail-reminders");
     var stage = $("stage");
     if (!rem || !stage || !remindersHome) return;
-    var inStage = body.dataset.hudLayout === "studio"
+    var inStage = body.dataset.hudShell === "split-stage"
       && body.dataset.hudTab === "reminders";
     if (inStage && rem.parentNode !== stage) {
       stage.appendChild(rem);
@@ -4950,9 +5207,9 @@ var laneSelect = $("lane-compact");
   });
 
   /* ── first paint, and the retry for the shell's own function ────────── */
-  // F1: the page paints Cockpit; the shell bootstrap publishes the saved
-  // preset's view shape on jarvis:hud-look when it arrives.
-  applyLayout("cockpit");
+  // H3: paint from the preview mirror at once; the store's answer arrives on
+  // jarvis:hud-shell and corrects it (usually before the first turn).
+  window.setTimeout(function () { applyShell(previewFacts()); }, 0);
   makeTiles();
   paintWaiting();
   paintTelemetry();
@@ -5392,12 +5649,19 @@ window.__hudActionsFor = hudActionsFor;
  * untouched. In a plain browser the mount succeeds but the [Edit HUD] button
  * hides itself: there is no shell to save a layout through. */
 import { mountHudEditor } from "./hud-edit.js";
+import { mountHudPresets } from "./hud-presets.js";
 mountHudEditor({
   shellPresent: Boolean(window.__TAURI__ && window.__TAURI__.core),
 }).then((editor) => {
   window.__jarvisHudEdit = editor;
 }).catch(() => {
   /* An older shell/page pairing: the HUD keeps working without the editor. */
+});
+/* H3: the Layouts menu owns the "Layout: <name>" badge H2's editor creates
+ * (duplicate / rename / delete / reset / copy-paste JSON). Another external
+ * module, so the page's inline-script count and CSP are unchanged. */
+mountHudPresets({
+  shellPresent: Boolean(window.__TAURI__ && window.__TAURI__.core),
 });
 </script>
 

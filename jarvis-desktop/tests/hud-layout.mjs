@@ -136,7 +136,7 @@ await check("each preset uses only registry cards, once each, and keeps every pr
     }
     assert.ok(TEMPLATES.has(preset.shell_template), `${preset.id} shell ${preset.shell_template}`);
     assert.ok(L.DENSITIES.includes(preset.density), `${preset.id} density ${preset.density}`);
-    assert.ok(L.THEMES.includes(preset.theme), `${preset.id} theme ${preset.theme}`);
+    assert.equal("theme" in preset, false, `${preset.id} still carries a colour theme`);
     assert.ok(L.STAGE_TABS.includes(preset.default_stage_tab),
       `${preset.id} tab ${preset.default_stage_tab}`);
   }
@@ -234,13 +234,34 @@ await check("FT-1/L1: Focus presets start OPEN in Cockpit and Studio (owner coll
 
 /* ── 3. The contract mirror ─────────────────────────────────────────────── */
 
+/** The contract's shape of one preset: no colour theme, and no spans on the
+ * seven fixed cards (the renderer ignores them; Q5 removed them). */
+const FIXED_CONTRACT_IDS = new Set([
+  "emergency_stop", "voice_controls", "conversation", "composer",
+  "galaxy", "reminders", "memory",
+]);
+function contractShape(preset) {
+  const { user_presets, ...rest } = preset;
+  return {
+    ...rest,
+    cards: preset.cards.map((card) => {
+      if (!FIXED_CONTRACT_IDS.has(card.id)) return card;
+      const { col_span, row_span, ...rest } = card;
+      return rest;
+    }),
+  };
+}
+
 await check("contract/hud-presets.json mirrors the JS presets exactly", () => {
   assert.equal(CONTRACT.version, L.LAYOUT_VERSION);
-  assert.deepEqual(CONTRACT.presets, L.PRESETS);
+  assert.deepEqual(CONTRACT.presets, L.PRESETS.map(contractShape));
   assert.deepEqual(CONTRACT.regions, L.REGIONS);
   assert.deepEqual(CONTRACT.shell_templates, L.SHELL_TEMPLATES);
   assert.match(CONTRACT.note, /desktop-only/i,
     "the contract does not say it is desktop-only");
+  for (const preset of CONTRACT.presets) {
+    assert.equal("theme" in preset, false, `${preset.id} contract carries theme`);
+  }
 });
 
 /* ── 4. The closed-world normalizer ─────────────────────────────────────── */
@@ -317,14 +338,13 @@ await check("out-of-range numbers and booleans are repaired, not trusted", () =>
 await check("unknown enum tokens fall back to the preset's own tokens", () => {
   const doc = baseDoc();
   doc.shell_template = "hexagon";
-  doc.theme = "neon";
   doc.density = "tiny";
   doc.default_stage_tab = "rain";
   const out = L.normalizeLayout(doc);
   assert.ok(TEMPLATES.has(out.shell_template));
-  assert.ok(L.THEMES.includes(out.theme));
   assert.ok(L.DENSITIES.includes(out.density));
   assert.ok(L.STAGE_TABS.includes(out.default_stage_tab));
+  assert.equal("theme" in out, false, "an unknown theme was kept");
 });
 
 await check("a protected card cannot be hidden by the document", () => {
@@ -364,15 +384,34 @@ await check("cards come out in one canonical region/order order", () => {
   assert.deepEqual(order, sorted);
 });
 
-await check("a custom layout keeps its id and name but still passes the closed world", () => {
+await check("a custom layout is only served when its saved copy is in the library", () => {
   const doc = baseDoc();
   doc.id = "custom-ops-deck";
   doc.name = "My Ops Deck";
   doc.base_preset = "cockpit";
+  // H3: an active id with no matching saved copy cannot be served - the
+  // document falls back to its base built-in instead of rendering a layout
+  // the Layouts menu does not contain.
+  const orphan = L.normalizeLayout(doc);
+  assert.equal(orphan.id, "cockpit");
+  assert.equal(orphan.user_presets.length, 0);
+
+  doc.user_presets = [{
+    id: "custom-ops-deck",
+    name: "My Ops Deck",
+    base_preset: "cockpit",
+    shell_template: doc.shell_template,
+    density: doc.density,
+    default_stage_tab: doc.default_stage_tab,
+    cards: doc.cards,
+  }];
   const out = L.normalizeLayout(doc);
   assert.equal(out.id, "custom-ops-deck");
   assert.equal(out.name, "My Ops Deck");
   assert.equal(out.base_preset, "cockpit");
+  assert.deepEqual(out.user_presets, [doc.user_presets[0]]);
+  const removed = L.normalizeLayout({ ...out, id: "cockpit" });
+  assert.equal(removed.id, "cockpit", "a built-in document must stay built-in");
 });
 
 await check("a whole import document round-trips through parseLayoutText", () => {
@@ -547,15 +586,30 @@ await check("a refused save is reported as not saved, with the shell's reason", 
   noShell();
 });
 
-await check("LOOK_BY_PRESET covers all seven presets and only the page's three looks", () => {
-  assert.deepEqual(Object.keys(store.LOOK_BY_PRESET).sort(),
-    L.PRESETS.map((preset) => preset.id).sort());
-  for (const look of Object.values(store.LOOK_BY_PRESET)) {
-    assert.ok(["cockpit", "studio", "ambient"].includes(look), `unknown look ${look}`);
-  }
-  for (const preset of L.PRESETS) {
-    assert.equal(store.lookForPreset(preset.id), store.LOOK_BY_PRESET[preset.id]);
-  }
+await check("H3: the LOOKS alias map is retired and only a first-paint preview remains", () => {
+  // Q5: four presets no longer map down to three looks. The bootstrap renders
+  // the preset's own shell, and the store keeps ONLY a first-paint preview.
+  assert.equal(store.LOOK_BY_PRESET, undefined);
+  assert.equal(store.lookForPreset, undefined);
+  assert.equal(store.LEGACY_LOOKS, undefined);
+  assert.equal(store.PREVIEW_KEY, "jarvis.hud.preview");
+  assert.deepEqual(store.previewOf(L.presetLayout("quiet")), {
+    shell_template: "two-column-left",
+    density: "comfortable",
+    default_stage_tab: "talk",
+  });
+  assert.deepEqual(store.previewOf(L.presetLayout("telemetry")), {
+    shell_template: "three-column",
+    density: "compact",
+    default_stage_tab: "telemetry",
+  });
+  // A corrupt/hostile preview can only mis-paint the first frame: it is
+  // clamped here and the store's answer replaces it on load.
+  assert.deepEqual(store.previewOf({ shell_template: "hexagon", density: "tiny",
+    default_stage_tab: "rain" }), {
+    shell_template: "three-column", density: "comfortable", default_stage_tab: "talk",
+  });
+  assert.equal(store.previewOf(null), null);
 });
 
 if (fails.length) {

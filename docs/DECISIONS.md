@@ -2884,3 +2884,46 @@ reparented; no import/export (copy/paste JSON is H3), no user-preset management
 `settings.html`/`hud-window-settings.js` and the capability files; proven by
 `tests/hud-edit.mjs` and `tests/hud.mjs`; documented in `docs/ARCHITECTURE.md`
 §8.
+
+## 2026-10-22 - H3: the HUD renders the preset's own shell, and the owner keeps layouts
+
+H3 of the owner-approved editable-HUD design (Gemini ruling Q5; Rulings 9, 27
+and 28). Four fields H2 stored but never drew are now real, four inert things
+are gone, and the window keeps the owner's own layouts:
+
+1. **The preset is what you see.** `shell_template` (six shells),
+   `density` (three steps) and `default_stage_tab` are rendered: the injected
+   bootstrap puts `data-hud-shell`/`data-hud-density` on the page and announces
+   `jarvis:hud-shell`; the page opens the mapped view or inspector tab. Every
+   shell that hides a rail has a working drawer, so no control becomes
+   unreachable. The 4-into-3 `LOOKS` alias map, `LOOK_BY_PRESET`,
+   `lookForPreset`, `data-hud-layout` and the stale "until H2" comments are
+   **deleted**, pinned by a source test. Only a three-field
+   `jarvis.hud.preview` localStorage mirror remains, for the first frame only -
+   the saved document is still the one truth.
+2. **Inert fields pruned.** Colour `theme` is out of the document and the
+   contract (Appearance owns colour; a saved document that still carries it
+   loads with the key dropped, and LAYOUT_VERSION stays 1 so nobody's layout is
+   discarded), and the seven fixed cards' 68 dead span values are out of
+   `contract/hud-presets.json`. The vocabulary -> DOM mapping test is
+   closed-world both ways: every shell/density/region/tab/card the model can say
+   has a page target, and the page cannot say a token the model does not know.
+3. **My layouts, through the ONE write.** The library lives inside the same
+   layout document (`user_presets`, <=20, Rust-bounded: ids, names, base
+   presets, protected cards forced visible, 64 KB cap) and saves through the
+   SAME `set_hud_layout` command - **no new capability, no new command, no
+   approval card**, so H2's owner-approved one-write invariant still holds. The
+   Layouts menu does duplicate/rename/delete/reset; editing a shipped layout
+   starts the owner's copy (Ruling 27); moving a layout between PCs is
+   **copy/paste JSON only** (Ruling 9: no file picker, no `blob:`, CSP
+   untouched), and Settings lists the same library with a one-click Reset.
+4. **Honest limits, said plainly:** the library is per-computer (no sync; the
+   JSON is the manual move path); the owner's real monitor look and touch/pen
+   are NOT-TESTABLE here; the non-hideable safety rail (rush/outside-text,
+   stale-link with Deny enabled, App lock) remains **H4** and H3 makes no new
+   promise about it. Built in `hud-layout.js`/`hud-layout-store.js`/`hud-presets.js`,
+   `hud_bootstrap.js`, `jarvis_hud.html` (three byte-identical copies),
+   `hud_layout.rs`, the contract, `settings.html`/`hud-window-settings.js`;
+   proven by `tests/hud-shell.mjs`, `hud-layout.mjs`, `hud-window.mjs`, and the
+   H3 checks in `tests/hud.mjs`.
+

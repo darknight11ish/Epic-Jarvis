@@ -2444,7 +2444,7 @@ H1 of the editable-HUD design, Gemini rulings 23-28; `jarvis-desktop/src/hud-lay
 window is a 1280x820 widescreen WebView2 cockpit whose named regions
 (`header`, `left_rail`, `stage_top`, `stage_main`, `right_rail`) and card ids
 exist only there. The seven built-in layouts - **Cockpit** (the default),
-**Studio**, **Ambient**, **Focus**, **Telemetry & Ops**, **Second Brain &
+**Studio**, **Ambient**, **Quiet**, **Telemetry & Ops**, **Second Brain &
 Planner** and **Minimal** - are therefore desktop-only data, mirrored in
 `contract/hud-presets.json` for the desktop's own Rust and tests. **The phone
 does not read this file and has no editable-HUD layouts: the Android home-HUD
@@ -2495,6 +2495,47 @@ user-preset management (`Duplicate to My Presets` is H3), and touch/pen drag is
 NOT-TESTABLE on real hardware here (keyboard/click paths are the guaranteed
 alternatives). Desktop-only, like H1: the phone keeps its own home screen and
 never reads this.
+
+**H3 renders the preset, and the owner can keep their own (2026-10-22; H3 of
+the editable-HUD design, Gemini ruling Q5, Rulings 9/27/28;
+`jarvis-desktop/src/hud-layout.js`, `hud-presets.js`,
+`src-tauri/src/hud_bootstrap.js`, `contract/hud-presets.json`, the HUD page).**
+A preset's own `shell_template` (six shells), `density` (comfortable / compact /
+spacious) and `default_stage_tab` are now drawn: the bootstrap puts
+`data-hud-shell`/`data-hud-density` on the page and announces `jarvis:hud-shell`,
+the page opens the mapped view or inspector tab, and the six shells are CSS
+Grid/Flexbox variants with a working drawer for every rail a shell hides (no
+card becomes unreachable). The four-into-three `LOOKS` alias map, the
+`data-hud-layout` look attribute and `lookForPreset` are **retired**; the only
+survivor of the old road is a `jarvis.hud.preview` localStorage mirror holding
+three facts purely so the FIRST frame is not the wrong shell (the store's answer
+always wins). The colour `theme` is no longer part of a layout document at all
+(Appearance owns colour), and the seven fixed cards carry no inert `col_span`/
+`row_span` in the contract (68 dead values removed); a saved document that still
+carries `theme` keeps loading with the key dropped, and `LAYOUT_VERSION` stays 1
+so no owner layout is discarded. The seven presets are renamed where the
+coherence slice renamed them: **Quiet** (silently migrated from the old
+"focus"), and the registry label `lanes` is "Focus presets", matching the page.
+
+**"My layouts", one document and one write.** The owner's own saved layouts
+travel INSIDE the same layout document (`user_presets`, at most 20, each a
+closed-world copy of cards plus its shell/density/tab) and are saved through the
+**same existing `set_hud_layout` command** - no new capability, no new command,
+no approval card, no backend, no phone. Rust `sanitise` bounds and validates the
+library (ids, names, base presets, protected cards forced visible, 64 KB cap),
+exactly as it does the active document. The window's header **Layout: <name>**
+badge opens the **Layouts** menu: built-in layouts, My layouts, Duplicate to My
+layouts (the first edit of a shipped layout becomes the owner's copy - Ruling
+27), rename, delete, Reset to the shipped layout, and **Export / Import JSON** as
+copy/paste text only (Ruling 9: no file picker, no `blob:`, no Tauri dialog
+capability, CSP untouched). Settings lists the same library and adds a one-click
+"Reset HUD to Cockpit" row. **Honest limits, in the PR:** the library is
+per-computer (export/import is the manual move path; no sync), touch/pen and the
+real monitor look are NOT-TESTABLE in CI, and H4's non-hideable safety rail
+(outside-text/rush-latch, stale-link/catching-up with Deny kept live, App lock)
+is still H4 - H3 does not draw it and makes no new guarantee about it.
+Desktop-only, like H1/H2: the phone has its own home screen and no editable-HUD
+layouts (A1-A4 planned, not built).
 
 **The HUD Reminders tab is the desktop HUD's, on purpose** (2026-10-21; the
 owner's dedicated Reminders menu). The HUD page (`jarvis_hud.html`, vendored
