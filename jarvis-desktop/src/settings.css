@@ -672,6 +672,31 @@ select:focus-visible {
    to do about it.
    -------------------------------------------------------------------------- */
 
+.alt-space {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.alt-space-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  font-size: var(--text-sm);
+}
+
+.alt-space-line strong {
+  color: var(--text);
+}
+
+.alt-space-line [role="status"] {
+  color: var(--text-muted);
+}
+
+.alt-space .note {
+  margin: 6px 0 8px;
+}
+
 .hotkey {
   display: grid;
   grid-template-columns: 1fr auto;

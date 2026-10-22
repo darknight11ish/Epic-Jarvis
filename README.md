@@ -334,9 +334,12 @@ rules is that **nothing is claimed that is not true**. The short list:
   Windows Hello for risky approvals, and stamps each real approval so a row
   written straight into the database does not count. A program written
   specifically to attack Jarvis can still get around it.
-- **The updater's own log is not scrubbed.** `backend.log` is (passwords,
-  keys and the pairing key are taken out), but `jarvis-desktop.log` is not, and
-  neither catches everything — read one before sending it anywhere.
+- **The logs are scrubbed best-effort, not perfectly.** `backend.log`,
+  `jarvis-desktop.log` and the updater's own log now pass pairing tokens, auth
+  headers, query secrets and the known key shapes (`sk-`, `ghp_`, `AIza`) through
+  a redactor before those lines are written - the desktop log in Rust
+  (`log_scrub.rs`), the updater log in `scripts/update-jarvis.ps1`. A list of
+  patterns never catches everything, so read one before sending it anywhere.
 - **A token in Windows Credential Manager can still be read by any program
   running as you.** What changed is that it no longer sits on disk as readable
   text.

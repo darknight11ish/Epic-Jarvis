@@ -607,6 +607,7 @@ export const UPDATE_BOTH = {
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
+  altSpace, reclaimAltSpace,
   tutorials, faq }) {
   const listeners = {};
   window.__calls = [];
@@ -909,6 +910,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__memoryWrites.push({ cmd, ...args });
             return { ok: true };
           case "get_hotkeys": return window.__hotkeys;
+    // R6: the honest Alt+Space state and the one-click re-claim; mirrors
+    // hotkeys.rs's `alt_space_status` / `reclaim_alt_space`.
+    case "alt_space_status":
+      return window.__altSpace ? JSON.parse(JSON.stringify(window.__altSpace)) : null;
+    case "reclaim_alt_space": {
+      window.__reclaimCalls = (window.__reclaimCalls || 0) + 1;
+      if (window.__reclaimAltSpace) {
+        window.__altSpace = JSON.parse(JSON.stringify(window.__reclaimAltSpace));
+      }
+      return window.__altSpace ? JSON.parse(JSON.stringify(window.__altSpace)) : null;
+    }
           // Matches commands.rs's get_autostart/set_autostart shape - falling
           // through to the bare `default: return null` below made
           // settings.js's `Boolean(info.enabled)` throw on `null.enabled`,
@@ -3425,6 +3437,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     }
   }
   window.__hotkeys = JSON.parse(JSON.stringify(hotkeys));
+  // R6 (2026-10-21): the Alt+Space startup verdict the Settings page
+  // reads, and what a scenario wants the Re-claim call to answer.
+  window.__altSpace = altSpace ? JSON.parse(JSON.stringify(altSpace)) : null;
+  window.__reclaimAltSpace = reclaimAltSpace
+    ? JSON.parse(JSON.stringify(reclaimAltSpace)) : null;
   window.__update = JSON.parse(JSON.stringify(update));
   window.__appearance = JSON.parse(JSON.stringify(appearance));
   window.__noRoute = Boolean(noRoute);
@@ -3758,6 +3775,8 @@ export async function open(browser, base, file, data, viewport) {
     link: {}, pending: [], attention: ATTENTION_CLEAR, digest: DIGEST,
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
+    altSpace: { registered: true, attempts: 0, accelerator: "Alt+Space",
+                reason: "" },
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
     taskActionFails: null, taskNoteFails: null, noteJobs: null,
     noteTargets: NOTE_TARGETS.all,

@@ -1,0 +1,1248 @@
+{
+  "version": 1,
+  "note": "The desktop HUD's built-in layout presets (H1). Mirror of BUILT-IN PRESETS in jarvis-desktop/src/hud-layout.js; tests/hud-layout.mjs fails if the two drift. Desktop-only on purpose: the phone has its own MenuCatalog-backed presets and does not read this file (docs/ARCHITECTURE.md section 8).",
+  "regions": [
+    "header",
+    "left_rail",
+    "stage_top",
+    "stage_main",
+    "right_rail"
+  ],
+  "shell_templates": [
+    "three-column",
+    "split-stage",
+    "center-core",
+    "two-column-left",
+    "two-column-right",
+    "single-stage-bento"
+  ],
+  "presets": [
+    {
+      "version": 1,
+      "id": "cockpit",
+      "name": "Cockpit",
+      "base_preset": "cockpit",
+      "shell_template": "three-column",
+      "theme": "system",
+      "density": "comfortable",
+      "default_stage_tab": "talk",
+      "cards": [
+        {
+          "id": "emergency_stop",
+          "region": "header",
+          "order": 0,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "nav",
+          "region": "left_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "lanes",
+          "region": "left_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "systems",
+          "region": "left_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "bar_launcher",
+          "region": "left_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "approvals",
+          "region": "stage_top",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_controls",
+          "region": "stage_top",
+          "order": 1,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "conversation",
+          "region": "stage_main",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "talk"
+          }
+        },
+        {
+          "id": "composer",
+          "region": "stage_main",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "tools",
+          "region": "right_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "brain_stats",
+          "region": "right_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "budget",
+          "region": "right_rail",
+          "order": 4,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_stats",
+          "region": "right_rail",
+          "order": 5,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        }
+      ],
+      "updated_at": 0
+    },
+    {
+      "version": 1,
+      "id": "studio",
+      "name": "Studio",
+      "base_preset": "studio",
+      "shell_template": "split-stage",
+      "theme": "system",
+      "density": "comfortable",
+      "default_stage_tab": "talk",
+      "cards": [
+        {
+          "id": "emergency_stop",
+          "region": "header",
+          "order": 0,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "nav",
+          "region": "left_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": true,
+          "options": {}
+        },
+        {
+          "id": "lanes",
+          "region": "left_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": true,
+          "options": {}
+        },
+        {
+          "id": "systems",
+          "region": "left_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "bar_launcher",
+          "region": "left_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "approvals",
+          "region": "stage_top",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_controls",
+          "region": "stage_top",
+          "order": 1,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "conversation",
+          "region": "stage_main",
+          "order": 0,
+          "col_span": 6,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "talk"
+          }
+        },
+        {
+          "id": "composer",
+          "region": "stage_main",
+          "order": 1,
+          "col_span": 6,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "galaxy",
+          "region": "stage_main",
+          "order": 2,
+          "col_span": 6,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "galaxy"
+          }
+        },
+        {
+          "id": "reminders",
+          "region": "stage_main",
+          "order": 3,
+          "col_span": 6,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "today"
+          }
+        },
+        {
+          "id": "memory",
+          "region": "stage_main",
+          "order": 4,
+          "col_span": 6,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "memory"
+          }
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "tools",
+          "region": "right_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "brain_stats",
+          "region": "right_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "budget",
+          "region": "right_rail",
+          "order": 4,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_stats",
+          "region": "right_rail",
+          "order": 5,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        }
+      ],
+      "updated_at": 0
+    },
+    {
+      "version": 1,
+      "id": "ambient",
+      "name": "Ambient",
+      "base_preset": "ambient",
+      "shell_template": "center-core",
+      "theme": "system",
+      "density": "spacious",
+      "default_stage_tab": "talk",
+      "cards": [
+        {
+          "id": "emergency_stop",
+          "region": "header",
+          "order": 0,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "nav",
+          "region": "left_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "lanes",
+          "region": "left_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "systems",
+          "region": "left_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "bar_launcher",
+          "region": "left_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": true,
+          "options": {}
+        },
+        {
+          "id": "approvals",
+          "region": "stage_top",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": true,
+          "options": {}
+        },
+        {
+          "id": "voice_controls",
+          "region": "stage_top",
+          "order": 1,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "conversation",
+          "region": "stage_main",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "talk"
+          }
+        },
+        {
+          "id": "composer",
+          "region": "stage_main",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "tools",
+          "region": "right_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "brain_stats",
+          "region": "right_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "budget",
+          "region": "right_rail",
+          "order": 4,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_stats",
+          "region": "right_rail",
+          "order": 5,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        }
+      ],
+      "updated_at": 0
+    },
+    {
+      "version": 1,
+      "id": "focus",
+      "name": "Focus",
+      "base_preset": "focus",
+      "shell_template": "two-column-left",
+      "theme": "paper",
+      "density": "comfortable",
+      "default_stage_tab": "talk",
+      "cards": [
+        {
+          "id": "emergency_stop",
+          "region": "header",
+          "order": 0,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "nav",
+          "region": "left_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "lanes",
+          "region": "left_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "systems",
+          "region": "left_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "bar_launcher",
+          "region": "left_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": true,
+          "options": {}
+        },
+        {
+          "id": "approvals",
+          "region": "stage_top",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_controls",
+          "region": "stage_top",
+          "order": 1,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "conversation",
+          "region": "stage_main",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "talk"
+          }
+        },
+        {
+          "id": "composer",
+          "region": "stage_main",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "tools",
+          "region": "right_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "brain_stats",
+          "region": "right_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "budget",
+          "region": "right_rail",
+          "order": 4,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_stats",
+          "region": "right_rail",
+          "order": 5,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        }
+      ],
+      "updated_at": 0
+    },
+    {
+      "version": 1,
+      "id": "telemetry",
+      "name": "Telemetry & Ops",
+      "base_preset": "telemetry",
+      "shell_template": "three-column",
+      "theme": "deep-space",
+      "density": "compact",
+      "default_stage_tab": "telemetry",
+      "cards": [
+        {
+          "id": "emergency_stop",
+          "region": "header",
+          "order": 0,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "nav",
+          "region": "left_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "lanes",
+          "region": "left_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "systems",
+          "region": "left_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "bar_launcher",
+          "region": "left_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "approvals",
+          "region": "stage_top",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_controls",
+          "region": "stage_top",
+          "order": 1,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "conversation",
+          "region": "stage_main",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "talk"
+          }
+        },
+        {
+          "id": "composer",
+          "region": "stage_main",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "tools",
+          "region": "right_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "brain_stats",
+          "region": "right_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "budget",
+          "region": "right_rail",
+          "order": 4,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_stats",
+          "region": "right_rail",
+          "order": 5,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        }
+      ],
+      "updated_at": 0
+    },
+    {
+      "version": 1,
+      "id": "second_brain",
+      "name": "Second Brain & Planner",
+      "base_preset": "second_brain",
+      "shell_template": "three-column",
+      "theme": "system",
+      "density": "comfortable",
+      "default_stage_tab": "galaxy",
+      "cards": [
+        {
+          "id": "emergency_stop",
+          "region": "header",
+          "order": 0,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "nav",
+          "region": "left_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "lanes",
+          "region": "left_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "systems",
+          "region": "left_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "bar_launcher",
+          "region": "left_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "approvals",
+          "region": "stage_top",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_controls",
+          "region": "stage_top",
+          "order": 1,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "conversation",
+          "region": "stage_main",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "talk"
+          }
+        },
+        {
+          "id": "composer",
+          "region": "stage_main",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "galaxy",
+          "region": "stage_main",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "galaxy"
+          }
+        },
+        {
+          "id": "reminders",
+          "region": "stage_main",
+          "order": 3,
+          "col_span": 6,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "today"
+          }
+        },
+        {
+          "id": "memory",
+          "region": "stage_main",
+          "order": 4,
+          "col_span": 6,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "memory"
+          }
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "tools",
+          "region": "right_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "brain_stats",
+          "region": "right_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "budget",
+          "region": "right_rail",
+          "order": 4,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_stats",
+          "region": "right_rail",
+          "order": 5,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        }
+      ],
+      "updated_at": 0
+    },
+    {
+      "version": 1,
+      "id": "minimal",
+      "name": "Minimal",
+      "base_preset": "minimal",
+      "shell_template": "single-stage-bento",
+      "theme": "system",
+      "density": "compact",
+      "default_stage_tab": "talk",
+      "cards": [
+        {
+          "id": "emergency_stop",
+          "region": "header",
+          "order": 0,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "nav",
+          "region": "left_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "lanes",
+          "region": "left_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "systems",
+          "region": "left_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "bar_launcher",
+          "region": "left_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": true,
+          "options": {}
+        },
+        {
+          "id": "approvals",
+          "region": "stage_top",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": true,
+          "options": {}
+        },
+        {
+          "id": "voice_controls",
+          "region": "stage_top",
+          "order": 1,
+          "col_span": 4,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "conversation",
+          "region": "stage_main",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 4,
+          "visible": true,
+          "collapsed": false,
+          "options": {
+            "tab": "talk"
+          }
+        },
+        {
+          "id": "composer",
+          "region": "stage_main",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 1,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "tools",
+          "region": "right_rail",
+          "order": 2,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "brain_stats",
+          "region": "right_rail",
+          "order": 3,
+          "col_span": 12,
+          "row_span": 2,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "budget",
+          "region": "right_rail",
+          "order": 4,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "voice_stats",
+          "region": "right_rail",
+          "order": 5,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        }
+      ],
+      "updated_at": 0
+    }
+  ]
+}

@@ -712,6 +712,253 @@ def _config_dir() -> Path:
 
 
 # --------------------------------------------------------------------------
+#   Windows' own GPU-process counter: the number nvidia-smi will not give
+# --------------------------------------------------------------------------
+#
+# R5 (Ruling 13, 2026-10-21). nvidia-smi names the programs holding a card and
+# answers `[N/A]` for every one of their memory amounts on this PC (measured
+# 2026-10-17, and again on 2026-10-21). Windows' own performance counter
+# `\GPU Process Memory(*)\Dedicated Usage` DOES answer - for the same PC, as a
+# normal user, with no elevation: measured through PDH on 2026-10-21 in
+# 0.783 s, 63 instances over 43 PIDs (dwm 1,231.52 MiB; explorer 334.91 MiB
+# summed across its processes). `jarvis_pc_help` already reads the same counter
+# for its "other programs" line; this section is the reusable, cached reader
+# the card/app answers use when the driver gives nothing.
+#
+# WHAT THE NUMBER IS, AND WHAT IT IS NOT. Each instance is one program on one
+# adapter - `pid_<PID>_luid_<high>_<low>_phys_<n>`. Windows exposes no clean,
+# non-admin way to map an instance's LUID/phys index to nvidia-smi's card
+# number (nvidia-smi gives a PCI bus, not a LUID), so this sums a program's
+# instances and reports THE PROGRAM'S TOTAL ACROSS THE CARDS - the same shape
+# `jarvis_pc_help` already labels "their total, not one card". A per-card
+# number would be a guess, and a guess is not a reading (the owner's rule).
+# A future per-card attempt needs its own design; it is deliberately not
+# guessed at here.
+#
+# IT NEVER RAISES, NEVER NEEDS ADMIN, AND SAYS WHEN IT CANNOT READ. The read is
+# bounded at WDDM_TIMEOUT (2 s) and cached for WDDM_CACHE_SECONDS (30 s, the
+# same period jarvis_compute.query_apps uses), so an answer pays for it at most
+# once per half minute. Callers keep the honest "cannot show the amounts"
+# fallback when `readable` is False.
+
+WDDM_COUNTER = r"\GPU Process Memory(*)\Dedicated Usage"
+#: What a caller writes beside a number it got from here, so the two apps and
+#: the owner can tell Windows' figure from nvidia-smi's.
+WDDM_SOURCE = "windows_wddm_counter"
+WDDM_TIMEOUT = 2.0
+WDDM_CACHE_SECONDS = 30.0
+WDDM_MIB = 1024 * 1024
+_WDDM_PID = re.compile(r"^pid_(\d+)_", re.I)
+_WDDM_CACHE: dict = {"monotonic": -1e9, "value": None}
+_WDDM_LOCK = threading.Lock()
+
+
+def _parse_wddm_instances(rows) -> dict:
+    """{"processes": {pid: bytes}, "instances": n} from PDH's rows.
+
+    `rows` is [(instance name, bytes)]. Malformed rows and anything that is not
+    `pid_<number>_...` (including `_Total`) are skipped, never guessed at. One
+    program with instances on two adapters is summed into one total - see the
+    section comment for why that is the honest shape, not a simplification.
+    """
+    processes: dict = {}
+    instances = 0
+    for row in rows or ():
+        try:
+            name, value = row
+        except (TypeError, ValueError):
+            continue
+        match = _WDDM_PID.match(str(name or ""))
+        if not match:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if number != number or number < 0:      # NaN, or a nonsense negative
+            continue
+        instances += 1
+        pid = int(match.group(1))
+        processes[pid] = processes.get(pid, 0) + int(round(number))
+    return {"processes": processes, "instances": instances}
+
+
+def _pdh_gpu_rows() -> list:
+    """[(instance name, bytes)] from PDH. Raises RuntimeError only when the
+    interface itself is unusable; `_read_wddm_rows` turns that into a plain
+    `why`.
+
+    Standard library only (ctypes); `PdhAddEnglishCounterW` asks the English
+    counter name whatever language Windows is set to. One query, two
+    collections (the shape Microsoft documents for a formatted counter), then
+    the formatted array - the only call that also gives the instance names. The
+    buffer must stay alive while the array is read: PDH writes the
+    instance-name POINTERS into it, so the copy to `out` happens before it can
+    be freed.
+    """
+    import ctypes
+    import ctypes.wintypes as wt
+
+    class FmtValue(ctypes.Structure):          # noqa: N801 - Microsoft's name
+        class _U(ctypes.Union):
+            _fields_ = [("longValue", ctypes.c_long),
+                        ("doubleValue", ctypes.c_double),
+                        ("largeValue", ctypes.c_longlong),
+                        ("AnsiStringValue", ctypes.c_char_p),
+                        ("WideStringValue", ctypes.c_wchar_p),
+                        ("cStatus", wt.DWORD)]
+        _anonymous_ = ("u",)
+        _fields_ = [("CStatus", wt.DWORD), ("u", _U)]
+
+    class Item(ctypes.Structure):              # noqa: N801
+        _fields_ = [("szName", ctypes.c_wchar_p), ("FmtValue", FmtValue)]
+
+    PDH_FMT_DOUBLE = 0x00000200
+    PDH_FMT_NOCAP100 = 0x00008000
+    MORE_DATA = 0x800007D2
+    pdh = ctypes.WinDLL("pdh.dll")
+    pdh.PdhOpenQueryW.argtypes = [ctypes.c_wchar_p, ctypes.c_void_p,
+                                  ctypes.POINTER(ctypes.c_void_p)]
+    pdh.PdhOpenQueryW.restype = ctypes.c_long
+    pdh.PdhAddEnglishCounterW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p,
+                                          ctypes.c_void_p,
+                                          ctypes.POINTER(ctypes.c_void_p)]
+    pdh.PdhAddEnglishCounterW.restype = ctypes.c_long
+    pdh.PdhCollectQueryData.argtypes = [ctypes.c_void_p]
+    pdh.PdhCollectQueryData.restype = ctypes.c_long
+    pdh.PdhGetFormattedCounterArrayW.argtypes = [
+        ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_ulong), ctypes.c_void_p]
+    pdh.PdhGetFormattedCounterArrayW.restype = ctypes.c_long
+    pdh.PdhCloseQuery.argtypes = [ctypes.c_void_p]
+
+    query = ctypes.c_void_p()
+    status = pdh.PdhOpenQueryW(None, None, ctypes.byref(query))
+    if status & 0xFFFFFFFF:
+        raise RuntimeError(f"PdhOpenQueryW 0x{status & 0xFFFFFFFF:08x}")
+    try:
+        counter = ctypes.c_void_p()
+        status = pdh.PdhAddEnglishCounterW(query, WDDM_COUNTER, None,
+                                           ctypes.byref(counter))
+        if status & 0xFFFFFFFF:
+            raise RuntimeError(f"PdhAddEnglishCounterW 0x{status & 0xFFFFFFFF:08x}")
+        status = pdh.PdhCollectQueryData(query)
+        if status & 0xFFFFFFFF:
+            raise RuntimeError(f"PdhCollectQueryData 0x{status & 0xFFFFFFFF:08x}")
+        time.sleep(0.2)                        # the second sample the docs ask for
+        status = pdh.PdhCollectQueryData(query)
+        if status & 0xFFFFFFFF:
+            raise RuntimeError(f"PdhCollectQueryData 0x{status & 0xFFFFFFFF:08x}")
+        size, count = ctypes.c_ulong(0), ctypes.c_ulong(0)
+        status = pdh.PdhGetFormattedCounterArrayW(
+            counter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100,
+            ctypes.byref(size), ctypes.byref(count), None)
+        if (status & 0xFFFFFFFF) != MORE_DATA:
+            raise RuntimeError(f"PdhGetFormattedCounterArrayW size 0x{status & 0xFFFFFFFF:08x}")
+        buffer = ctypes.create_string_buffer(size.value)
+        status = pdh.PdhGetFormattedCounterArrayW(
+            counter, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100,
+            ctypes.byref(size), ctypes.byref(count), buffer)
+        if status & 0xFFFFFFFF:
+            raise RuntimeError(f"PdhGetFormattedCounterArrayW read 0x{status & 0xFFFFFFFF:08x}")
+        array = ctypes.cast(buffer, ctypes.POINTER(Item))
+        out = []
+        for i in range(count.value):
+            item = array[i]
+            out.append((item.szName or "", float(item.FmtValue.doubleValue)))
+        return out
+    finally:
+        pdh.PdhCloseQuery(query)
+
+
+def _read_wddm_rows(timeout: float = WDDM_TIMEOUT, counter=None):
+    """(rows, why): the counter's [(instance name, bytes)], or ([], reason).
+
+    The PDH call runs in a daemon thread and is abandoned after `timeout`: a
+    counter that stops answering must never hold a doctor answer. `counter` is
+    the test seam (it returns the rows); the live reader is `_pdh_gpu_rows`.
+    This machine (a Linux CI job, say) says so in plain words instead of
+    pretending it read something.
+    """
+    if counter is None:
+        if os.name != "nt":
+            return [], "Windows' GPU-process counter exists only on Windows"
+        counter = _pdh_gpu_rows
+    box: dict = {}
+
+    def work():
+        try:
+            box["rows"] = counter()
+        except Exception as exc:              # noqa: BLE001 - reported, never raised
+            box["why"] = f"the counter could not be read ({type(exc).__name__})"
+
+    thread = threading.Thread(target=work, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        return [], f"the counter did not answer within {timeout:g} s"
+    if "why" in box:
+        return [], box["why"]
+    rows = box.get("rows")
+    if not rows:
+        return [], "the counter answered with no instances"
+    return rows, ""
+
+
+def wddm_process_memory(now: float = None, fresh: bool = False, reader=None) -> dict:
+    """Windows' dedicated GPU memory per program, cached for 30 s.
+
+    Shape: {"readable": bool, "why": str, "source": "windows_wddm_counter",
+            "read_at": float, "processes": {pid: bytes}, "instances": int}
+
+    `readable` is True only when the counter answered with at least one
+    program; otherwise `why` says what happened in plain words and `processes`
+    is {}. A program with instances on two cards appears once, with its total
+    (see the section comment). `reader` is the test seam: it returns
+    (rows, why), exactly what `_read_wddm_rows` returns.
+    """
+    moment = time.monotonic() if now is None else float(now)
+    reader = _read_wddm_rows if reader is None else reader
+    with _WDDM_LOCK:
+        value = _WDDM_CACHE["value"]
+        if (not fresh and value is not None
+                and moment - _WDDM_CACHE["monotonic"] < WDDM_CACHE_SECONDS):
+            return dict(value)
+    rows, why = reader()
+    parsed = _parse_wddm_instances(rows)
+    if parsed["processes"]:
+        value = {"readable": True, "why": "", "source": WDDM_SOURCE,
+                 "read_at": time.time(), "processes": parsed["processes"],
+                 "instances": parsed["instances"]}
+    else:
+        value = {"readable": False, "why": why or "the counter named no programs",
+                 "source": WDDM_SOURCE, "read_at": time.time(),
+                 "processes": {}, "instances": parsed["instances"]}
+    with _WDDM_LOCK:
+        _WDDM_CACHE.update(monotonic=moment, value=dict(value))
+    return value
+
+
+def wddm_mib_for(pid: int, reading: dict = None) -> Optional[int]:
+    """A program's total dedicated GPU memory in MiB from Windows' counter.
+
+    None - never a made-up 0 - when the counter cannot be read or names no
+    instance for that PID. Callers print their existing honest fallback then.
+    """
+    reading = reading if reading is not None else wddm_process_memory()
+    if not reading.get("readable"):
+        return None
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return None
+    raw = (reading.get("processes") or {}).get(pid)
+    if raw is None:
+        return None
+    return max(0, int(round(float(raw) / WDDM_MIB)))
+
+
+# --------------------------------------------------------------------------
 #   Ollama on this PC
 # --------------------------------------------------------------------------
 

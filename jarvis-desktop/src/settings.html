@@ -1345,24 +1345,29 @@
         </label>
         <p class="note" id="hud-open-bar-status" role="status"></p>
 
-        <!-- The HUD's three layouts (the owner's request of 2026-10-20, the
-             HUD work order's PART III+IV): one page, three UIs, switched by
-             document.body.dataset.hudLayout. The rows are built from
-             HUD_LAYOUT_INFO in hud-window.js - the same module the
-             "Open the Jarvis bar" switch above lives in - and saved under its
-             own localStorage key, which the HUD window itself reads. Cosmetic:
-             no approval card, no Rust command, and it changes at once. The
-             in-HUD picker in the big window's own header switches it too. -->
+        <!-- The HUD's seven layout presets (H1 of the editable-HUD design,
+             Gemini rulings 23-28, 2026-10-21): Cockpit, Studio, Ambient,
+             Focus, Telemetry & Ops, Second Brain & Planner and Minimal. The
+             rows are built from the preset table in hud-layout.js through
+             hud-layout-store.js, and the choice is saved in this computer's
+             desktop settings (the same appearance class as the theme; no
+             approval card, no backend, no phone). The old three-way choice is
+             migrated on the first load, so an owner who picked Studio keeps
+             Studio. Everything here is the STARTING layout; the editor that
+             drags cards between regions is H2, and the page's three existing
+             in-header pills still switch its look until then. -->
         <fieldset class="theme-list" id="hud-layout-list">
           <legend class="label" id="hud-layout-legend">HUD layout</legend>
-          <!-- Rows, built from HUD_LAYOUT_INFO in hud-window.js so the names
-               and one-line descriptions are written in one place. Radios,
-               because a screen reader then says which is chosen. -->
+          <!-- Rows, built from the preset table so the names and one-line
+               descriptions are written in one place. Radios, because a screen
+               reader then says which is chosen. -->
         </fieldset>
         <p class="note">
-          This is the look of the big "Jarvis" window only, on this computer.
-          You can also switch it from the pill in that window's own header.
-          It changes the moment you pick one.
+          These seven starting layouts are for the big "Jarvis" window on this
+          computer only, and picking one saves it at once - no approval card.
+          They are read-only starting points for now; the full editor, where
+          you move and resize cards yourself, comes later. The three pills in
+          that window's own header still switch its look in the meantime.
         </p>
         <p class="status" id="hud-layout-status" role="status"></p>
       </section>
@@ -1383,6 +1388,26 @@
           Each shortcut needs Ctrl, Alt, Shift or Win. A single key on its own
           would stop working everywhere else on the computer.
         </p>
+
+        <div class="alt-space" id="alt-space">
+          <div class="alt-space-line">
+            <strong>Alt+Space at startup</strong>
+            <span id="alt-space-state" role="status">Checking Alt+Space…</span>
+          </div>
+          <p class="note" id="alt-space-hint">
+            Windows decides which program gets <code>Alt+Space</code> first at
+            logon, so another launcher can hold it for a few seconds — or for
+            good if it keeps it. Jarvis retries automatically for the first
+            minute after login; if the key is still held, claim it back here
+            once that program lets go. The tray&rsquo;s <em>Show or hide the
+            Jarvis bar</em> always works, and Win+Shift+J and the other
+            shortcuts are not affected.
+          </p>
+          <div class="row">
+            <button class="btn" id="reclaim-alt-space" type="button" hidden>Re-claim Alt+Space</button>
+            <span class="status" id="alt-space-status" role="status"></span>
+          </div>
+        </div>
 
         <div id="hotkey-rows"></div>
 

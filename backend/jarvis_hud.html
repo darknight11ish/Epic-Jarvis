@@ -74,6 +74,7 @@
   --line-hot:var(--border-accent);
 
   --ice:var(--accent);
+  --ice-rgb:var(--accent-rgb);
   --ice-deep:var(--accent-dim);
   --gold:var(--warn);
   --dim:var(--text-muted);
@@ -338,6 +339,40 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 #brain{position:relative;}
 #galaxy{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab;}
 #galaxy.dragging{cursor:grabbing;}
+
+/* ---- GALAXY v2: lenses + the button overlay (2026-10-21, G1) ------------- */
+.lens-group{
+  display:flex; gap:2px; padding:2px; border:1px solid var(--line);
+  border-radius:3px; background:var(--plate-2); flex-wrap:wrap; max-width:100%;
+}
+.lens-button{
+  padding:6px 9px; border-radius:2px; font-family:var(--f-mono); font-size:10.5px;
+  letter-spacing:.06em; color:var(--dim); white-space:nowrap;
+}
+.lens-button:hover{color:var(--text);}
+.lens-button[aria-pressed="true"]{background:rgb(var(--ice-rgb) / .12); color:var(--ice);}
+.lens-button:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.lens-counts{
+  font-family:var(--f-mono); font-size:10px; color:var(--dimmer);
+  white-space:nowrap; flex-basis:100%; padding-left:2px;
+}
+.galaxy-overlay{
+  position:absolute; inset:0; z-index:2; pointer-events:none;
+}
+.galaxy-node-btn{
+  position:absolute; transform:translate(-50%, -50%);
+  width:22px; height:22px; padding:0; border-radius:50%;
+  background:transparent; border:1px solid transparent;
+  color:transparent; pointer-events:auto; cursor:pointer;
+}
+.galaxy-node-btn:hover{border-color:var(--line-hot);}
+.galaxy-node-btn:focus-visible{
+  outline:2px solid var(--ice); outline-offset:2px;
+  background:rgb(var(--ice-rgb) / .16);
+}
+.galaxy-node-btn[aria-pressed="true"]{
+  border-color:var(--ice); background:rgb(var(--ice-rgb) / .12);
+}
 
 .brain-search{
   position:absolute; top:14px; left:16px; z-index:3;
@@ -1343,10 +1378,37 @@ html[data-hud-layout="ambient"] .composer{
       <canvas id="galaxy"></canvas>
 
       <div class="brain-search">
+        <!-- GALAXY v2 (2026-10-21, Wave 3 slice G1): three lenses over the ONE
+             graph the HUD already reads. Memory and Neural are the same
+             /api/graph payload split by node group; the counts are computed
+             from the payload (never typed here), and the graph itself is the
+             PC's own computed data (jarvis_hud.py build_graph: collect_models,
+             collect_tools, facts, documents, knowledge, skills). No new route,
+             no new permission; the memory half arrives already redacted by
+             the PC's lock rules when the owner has hidden memory lists. -->
+        <span class="lens-group" role="group" aria-label="Galaxy lens">
+          <button type="button" class="lens-button" data-galaxy-lens="memory"
+                  aria-pressed="false"
+                  title="Your saved facts, notes and the people and things Jarvis knows - exactly what the PC lets this window see (memory lists can be hidden by the PC's lock rules)">Memory</button>
+          <button type="button" class="lens-button" data-galaxy-lens="neural"
+                  aria-pressed="true"
+                  title="The PC's brains, ability groups and the abilities they hold, from this PC's own config">Neural</button>
+          <button type="button" class="lens-button" data-galaxy-lens="unified"
+                  aria-pressed="false"
+                  title="Both lenses side by side, memory first - the counts line says which half is which">Unified</button>
+        </span>
         <input id="gsearch" type="text" placeholder="Search the brain…" autocomplete="off">
         <button class="ghost" id="g-reset">Reset view</button>
         <button class="ghost" id="g-spin">Pause spin</button>
+        <span class="lens-counts" id="galaxy-counts" aria-live="polite">—</span>
       </div>
+
+      <!-- Every dot in every lens is also a real HTML button (the "nothing is
+           drawn only on the canvas" rule). Positions come from the same
+           projection the canvas uses; the buttons are the keyboard and
+           screen-reader surface, the canvas is the picture. -->
+      <div class="galaxy-overlay" id="galaxy-overlay" role="group"
+           aria-label="Galaxy nodes, as buttons"></div>
 
       <div class="trace-bar off" id="trace-bar">
         <span class="q" id="trace-q">—</span>
@@ -2034,6 +2096,154 @@ const galaxy = (() => {
   let dpr = 1, W = 0, H = 0, running = false;
 
   let fitted = false;
+
+  // ---- GALAXY v2 lenses (2026-10-21, G1) -------------------------------
+  // ONE graph, three views of it. The capability half (models/clusters/tools)
+  // and the memory half (facts/documents/knowledge/projects/skills/personas)
+  // are node groups the PC's build_graph() already computed; splitting the
+  // payload here is a view, not a second source of truth.
+  const LENS_KEY = "jarvis.galaxy.lens";
+  const LENS_GROUPS = {
+    neural: ["model", "cluster", "tool"],
+    memory: ["fact", "document", "entity", "project", "skill", "persona", "source"],
+    unified: null,          // everything, in one picture
+  };
+  const LENS_LABEL = { memory: "Memory", neural: "Neural", unified: "Unified" };
+  const CORES = new Set(["core"]);
+  let lens = "neural";
+  let sourceGraph = { nodes: [], links: [] };
+  let overlayEl = null;
+  let lastOverlaySync = 0;
+
+  /** A stable seed per node id, so a lens switch re-seeds the same shell. */
+  function seedOf(id){
+    let h = 2166136261;
+    const s = String(id);
+    for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0) / 4294967296;
+  }
+
+  function storedLens(){
+    try{
+      const got = localStorage.getItem(LENS_KEY);
+      return Object.prototype.hasOwnProperty.call(LENS_GROUPS, got) ? got : "neural";
+    }catch(e){ return "neural"; }
+  }
+
+  function updateLensButtons(){
+    document.querySelectorAll("button[data-galaxy-lens]").forEach(b => {
+      const on = b.getAttribute("data-galaxy-lens") === lens;
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function lensNodes(){
+    const groups = LENS_GROUPS[lens];
+    if(!groups) return sourceGraph.nodes.slice();
+    return sourceGraph.nodes.filter(n => CORES.has(n.group) || groups.includes(n.group));
+  }
+
+  function lensLinks(nodesIn){
+    const keep = new Set(nodesIn.map(n => n.id));
+    return sourceGraph.links.filter(l => keep.has(l.source) && keep.has(l.target));
+  }
+
+  function plural(n, one, many){ return `${n} ${n === 1 ? one : many}`; }
+
+  /** Which node groups this lens shows, as the legend row names. */
+  function countLine(nodesIn){
+    const byGroup = {};
+    for(const n of nodesIn) byGroup[n.group] = (byGroup[n.group] || 0) + 1;
+    const brains = byGroup.model || 0;
+    const groups = byGroup.cluster || 0;
+    const abilities = byGroup.tool || 0;
+    const memory = (byGroup.fact || 0) + (byGroup.document || 0) + (byGroup.entity || 0)
+      + (byGroup.project || 0) + (byGroup.skill || 0) + (byGroup.persona || 0);
+    if(lens === "neural"){
+      if(!brains && !groups && !abilities) return "Neural: no capability data from this PC yet";
+      return `Neural: ${plural(brains, "brain", "brains")} · `
+        + `${plural(groups, "ability group", "ability groups")} · `
+        + `${plural(abilities, "ability", "abilities")}`;
+    }
+    if(lens === "memory"){
+      if(!memory) return "Memory: no saved facts on this PC yet";
+      return `Memory: ${plural(byGroup.fact || 0, "fact", "facts")} · `
+        + `${plural(byGroup.document || 0, "document", "documents")} · `
+        + `${plural(byGroup.entity || 0, "knowledge entry", "knowledge entries")} · `
+        + `${plural(byGroup.project || 0, "project", "projects")}`;
+    }
+    return `Unified: ${memory} memory · ${brains + groups + abilities} capability nodes · `
+      + `${nodesIn.length} nodes in all`;
+  }
+
+  /** Tell assistive tech what is on screen now (the counts are computed). */
+  function renderCounts(nodesIn){
+    const el = document.getElementById("galaxy-counts");
+    if(!el) return;
+    el.textContent = countLine(nodesIn);
+    el.setAttribute("data-galaxy-counts", lens);
+  }
+
+  /** The node buttons: one per visible node, sorted by id so tab order is
+   *  deterministic (the same graph always tabs the same way). */
+  function syncOverlay(){
+    if(!overlayEl) return;
+    if(!overlayEl.isConnected) overlayEl = document.getElementById("galaxy-overlay");
+    if(!overlayEl) return;
+    const seen = new Set();
+    const sorted = nodes.slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    for(const n of sorted){
+      const s = project(n);
+      seen.add(n.id);
+      let btn = overlayEl.querySelector(`[data-galaxy-node="${CSS.escape(n.id)}"]`);
+      if(!btn){
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "galaxy-node-btn";
+        btn.setAttribute("data-galaxy-node", n.id);
+        btn.addEventListener("click", () => {
+          const node = nodes.find(x => x.id === n.id);
+          if(node) focus(node);
+        });
+        overlayEl.appendChild(btn);
+      }
+      const label = n.label || n.id;
+      const kind = (GROUPS[n.group] && GROUPS[n.group].label) || n.group;
+      btn.setAttribute("aria-label", `${label} (${kind})`);
+      btn.setAttribute("aria-pressed", n.id === focusId ? "true" : "false");
+      if(!s || s.k <= 0.02){
+        btn.hidden = true;
+        continue;
+      }
+      btn.hidden = false;
+      btn.style.left = `${s.x}px`;
+      btn.style.top = `${s.y}px`;
+    }
+    for(const btn of Array.from(overlayEl.children)){
+      if(!seen.has(btn.getAttribute("data-galaxy-node"))) btn.remove();
+    }
+  }
+
+  /** Show one lens. Persisted like the other cosmetic view choices. */
+  function setLens(name, { save = true } = {}){
+    if(!Object.prototype.hasOwnProperty.call(LENS_GROUPS, name)) return lens;
+    lens = name;
+    if(save){
+      try{ localStorage.setItem(LENS_KEY, lens); }catch(e){ /* private mode: view only */ }
+    }
+    updateLensButtons();
+    applyLens();
+    return lens;
+  }
+
+  function applyLens(){
+    const use = lensNodes();
+    const linksIn = lensLinks(use);
+    rebuild({ nodes: use, links: linksIn });
+    renderCounts(use);
+    syncOverlay();
+  }
+
   function resize(){
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const r = cv.getBoundingClientRect();
@@ -2047,12 +2257,22 @@ const galaxy = (() => {
   new ResizeObserver(resize).observe(cv);
 
   function load(graph){
+    sourceGraph = (graph && Array.isArray(graph.nodes))
+      ? { nodes: graph.nodes.slice(), links: Array.isArray(graph.links) ? graph.links.slice() : [] }
+      : { nodes: [], links: [] };
+    lens = storedLens();
+    updateLensButtons();
+    applyLens();
+  }
+
+  /** The simulation and camera for whatever the current lens shows. */
+  function rebuild(graph){
     const byId = new Map();
     nodes = graph.nodes.map((n,i) => {
       // Golden-spiral seed: an even shell, so the sim untangles fast.
       const phi = Math.acos(1 - 2*(i+0.5)/graph.nodes.length);
       const theta = Math.PI * (1 + Math.sqrt(5)) * (i+0.5);
-      const r = 260 + Math.random()*120;
+      const r = 260 + seedOf(n.id) * 120;   // stable across lens switches
       const node = Object.assign({}, n, {
         x: r*Math.sin(phi)*Math.cos(theta),
         y: r*Math.sin(phi)*Math.sin(theta),
@@ -2083,6 +2303,8 @@ const galaxy = (() => {
     fitCamera();
     if(!running){ running = true; requestAnimationFrame(draw); }
     buildLegend(graph);
+    if(!overlayEl) overlayEl = document.getElementById("galaxy-overlay");
+    syncOverlay();
   }
 
   // Pull the camera back far enough that the whole galaxy lands on screen,
@@ -2149,7 +2371,7 @@ const galaxy = (() => {
     return { x: W/2 + x*k, y: H/2 + y*k, k, depth };
   }
 
-  function draw(){
+  function draw(ts){
     if(nodes.length){
       step(0.32);
       if(spin && !dragging && !S.reduced) yaw += 0.0016;
@@ -2268,6 +2490,13 @@ const galaxy = (() => {
     }
     ctx.globalAlpha = 1;
 
+    // The buttons follow the picture, but a few times a second is enough for
+    // a pointer target - not once a frame (which would reflow on every tick).
+    const now = ts || (typeof performance !== "undefined" ? performance.now() : 0);
+    if(now - lastOverlaySync > 90){
+      lastOverlaySync = now;
+      syncOverlay();
+    }
     requestAnimationFrame(draw);
   }
 
@@ -2328,6 +2557,26 @@ const galaxy = (() => {
   }, {passive:false});
   cv.addEventListener("touchend", () => { pinch = 0; });
 
+  // The lens pills and the node buttons: real controls, keyboard included.
+  document.querySelectorAll("button[data-galaxy-lens]").forEach(btn => {
+    btn.addEventListener("click", () => setLens(btn.getAttribute("data-galaxy-lens")));
+  });
+  // Arrow keys move between node buttons in their deterministic order, so a
+  // keyboard user can walk the graph instead of tabbing through every node;
+  // Home/End jump to either end. Enter/Space are the button's own click.
+  document.addEventListener("keydown", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest(".galaxy-node-btn") : null;
+    if(!btn) return;
+    const all = Array.from(document.querySelectorAll(".galaxy-node-btn")).filter(b => !b.hidden);
+    const at = all.indexOf(btn);
+    let next = null;
+    if(e.key === "ArrowRight" || e.key === "ArrowDown") next = all[Math.min(all.length - 1, at + 1)];
+    else if(e.key === "ArrowLeft" || e.key === "ArrowUp") next = all[Math.max(0, at - 1)];
+    else if(e.key === "Home") next = all[0];
+    else if(e.key === "End") next = all[all.length - 1];
+    if(next && next !== btn){ e.preventDefault(); next.focus(); }
+  });
+
   function focus(n){
     focusId = n.id;
     camTarget = {x:n.x, y:n.y, z:n.z};
@@ -2383,6 +2632,7 @@ const galaxy = (() => {
     reset(){ clearFocus(); yaw=.5; pitch=-.25; fitCamera(); },
     search(v){ query = v; },
     toggleSpin(){ spin = !spin; return spin; },
+    lens(){ return lens; },
     focused(){ return focusId ? nodes.find(n => n.id === focusId) : null; }
   };
 })();

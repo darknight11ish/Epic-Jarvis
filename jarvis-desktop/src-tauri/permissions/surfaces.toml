@@ -55,6 +55,23 @@ identifier = "theme-write"
 description = "Change the theme for every window."
 permissions = ["allow-set-theme", "allow-set-theme-follow-system"]
 
+# The HUD's saved layout (H1 of the editable-HUD design, 2026-10-21; Gemini
+# rulings 23-28). Read-only for the HUD window, whose injected bootstrap reads
+# the saved document so the page can wear it; the Settings window's picker
+# holds both, and it is the only surface that writes - the HUD page itself
+# still holds no settings-writing command and no pairing token. A layout is
+# the appearance class the theme is: card positions, visibility and names,
+# nothing private, so it raises no approval card.
+[[set]]
+identifier = "hud-layout-read"
+description = "Read the HUD's saved layout."
+permissions = ["allow-get-hud-layout"]
+
+[[set]]
+identifier = "hud-layout-write"
+description = "Choose the HUD's layout preset (Settings' picker)."
+permissions = ["allow-set-hud-layout"]
+
 # Answering a gate is a decision with consequences, so it is separate from
 # reading the stream. The quickbar and the widget both render approvals and
 # both get it; the settings window reads the link state to show a connection
@@ -474,6 +491,13 @@ permissions = [
   "allow-get-hotkeys",
   "allow-set-hotkeys",
   "allow-reset-hotkeys",
+  # R6 (2026-10-21): the startup verdict for Alt+Space and its one-click
+  # re-claim. READ-ONLY (the status) plus ONE registration attempt (the
+  # button) - it never rebinds, never changes another key, and can only try
+  # the key already configured for the summon action. Settings-only for the
+  # same reason the three above are: a key is a machine-wide binding.
+  "allow-alt-space-status",
+  "allow-reclaim-alt-space",
   # Updates. `install_update` replaces the running executable, which is the
   # largest single thing this app can do to the machine — so it lives here,
   # behind the window a person has to open deliberately, and it is a separate
@@ -814,10 +838,11 @@ permissions = [
   "allow-start-backend",
   "allow-stop-backend",
   # Diagnostics. `get_log_info` returns paths and sizes, never contents - the
-  # log is plain text with no redaction pass and must not become readable by a
-  # page just because the page can ask where it is. `open_log_folder` hands a
-  # directory to Explorer and takes no argument at all, so there is nothing a
-  # caller can point it at.
+  # log is plain text (desktop lines pass a best-effort redactor, R4; a pattern
+  # list is not a guarantee) and must not become readable by a page just because
+  # the page can ask where it is. `open_log_folder` hands a directory to
+  # Explorer and takes no argument at all, so there is nothing a caller can
+  # point it at.
   "allow-get-log-info",
   "allow-open-log-folder",
   # Starting with Windows. A registry write under HKEY_CURRENT_USER\...\Run,

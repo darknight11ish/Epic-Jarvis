@@ -2814,3 +2814,28 @@ to `jarvis-backend/`), proven by `backend/test_voice_parallel.py`,
 `backend/test_live.py` and `backend/test_turn.py`; documented in
 `docs/JARVIS-API.md` (the turn route and the owner check) and
 `docs/ARCHITECTURE.md` §8's Smart Turn row.
+
+
+## 2026-10-21 - the Galaxy gets three lenses, as a view over the graph it already reads
+
+Galaxy v2's first slice (G1, approved by the Lead after the premise check). The owner's HUD window had
+ONE brain map fed by `GET /api/graph`; it now has a **Memory | Neural | Unified** lens picker over that
+same payload. **Neural** is the capability half the PC's own `build_graph()` already computes
+(`collect_models` for the brains and cloud lanes, `collect_tools` for the ability groups and the
+abilities their config enables); **Memory** is the memory half (facts, documents, knowledge entities,
+projects, skills, personas); **Unified** draws both and its counts line names each half. The decision
+that matters: **this is a view, not a second source of truth, and it adds no API.** It needs no new
+route, no widening of the shell's five-read allow-list in `hud_proxy.rs`, and no Rust change, because
+the page already receives that graph; the counts are computed from the nodes, so they cannot drift from
+what the PC actually reports. Every dot is also a real focusable HTML `<button>` with an accessible
+label (the "nothing drawn only on the canvas" rule), outside the canvas, so keyboard and screen-reader
+users get the same inspector the mouse opens. The chosen lens is cosmetic, kept in the HUD origin's
+`localStorage` (`jarvis.galaxy.lens`), with no approval card and no Settings entry.
+
+**Honest limits, said rather than glossed:** the Memory lens renders the HUD's REDACTED memory nodes -
+the PC's lock rules decide whether the dots are sent at all - and it shows names and counts, not the
+per-entity facts list, because `/api/memory/entities` is deliberately not reachable from this window
+(Brain keeps that list); and no lens can mark the active lane/preset because `/api/presets` is not
+reachable either. It is the desktop HUD's alone: a phone has no HUD window, and the memory graph stays
+off the phone. Built in `jarvis-desktop/src/jarvis_hud.html` (copied byte-identically to `backend/` and
+`jarvis-backend/`), proven by `jarvis-desktop/tests/hud.mjs`, documented in `docs/ARCHITECTURE.md` §8.

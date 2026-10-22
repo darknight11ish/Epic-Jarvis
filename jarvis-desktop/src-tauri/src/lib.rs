@@ -43,11 +43,15 @@ pub mod frame_feed;
 pub mod handoff;
 pub mod hardware;
 pub mod hotkeys;
+pub mod hud_layout;
 pub mod hud_proxy;
 pub mod limits;
 pub mod live;
 pub mod lock;
 pub mod logfile;
+// Best-effort scrubbing for the lines this app writes to its own log
+// (R4, 2026-10-21; README section 8 bullet 15). Pure, no dependency.
+pub mod log_scrub;
 pub mod look;
 // The searchable recordings and videos switch (media_index.rs; F5 S2, the
 // owner's decision of 2026-10-19). Settings only: the stored-word counts, the
@@ -881,6 +885,9 @@ pub fn run() {
         // shortcut handler reads it and would panic on an unregistered state
         // if a fallible call above it ever returned early.
         .manage(hotkeys::HotkeyState::default())
+        // R6 (2026-10-21): the live Alt+Space verdict + retry count,
+        // shared by startup, the retry watcher and the Settings page.
+        .manage(hotkeys::AltSpaceState::default())
         .manage(update::UpdateState::default())
         .manage(appearance::AppearanceState::default())
         .manage(system_theme::AppliedTheme::default())
@@ -1121,6 +1128,11 @@ pub fn run() {
             commands::get_theme_prefs,
             commands::set_theme_follow_system,
             commands::open_faces,
+            // The desktop HUD's saved layout (H1 of the editable-HUD design,
+            // 2026-10-21): the same appearance-class settings store the theme
+            // uses. The Settings picker writes; the HUD bootstrap only reads.
+            hud_layout::get_hud_layout,
+            hud_layout::set_hud_layout,
             // "Everything Jarvis can do" (2026-10-08): the whole feature set,
             // read-only, opened from Settings and the tray.
             commands::open_features,
@@ -1260,6 +1272,8 @@ pub fn run() {
             hotkeys::get_hotkeys,
             hotkeys::set_hotkeys,
             hotkeys::reset_hotkeys,
+            hotkeys::alt_space_status,
+            hotkeys::reclaim_alt_space,
             commands::hide_widget,
             commands::resize_desktop_widget,
             commands::set_widget_always_on_top,
@@ -1785,6 +1799,16 @@ pub fn run() {
                     );
                     commands::notify(&handle, "Jarvis Desktop: hotkeys in use", &body);
                 }
+                // R6 (2026-10-21): the Alt+Space race is now SELF-HEALING for the
+                // first minute of logon. The summon key refused above is retried
+                // in the background at 2 s / 6 s / 15 s on the existing async
+                // runtime (never blocking setup, never touching the other keys),
+                // the OS verdict is kept in `AltSpaceState`, and Settings gets an
+                // honest status + [Re-claim Alt+Space]. The tray stays the
+                // fallback exactly as before. Windows can still refuse it for
+                // good if another program keeps the key - that is the honest
+                // limit, documented in docs/ARCHITECTURE.md.
+                hotkeys::start_alt_space_watch(&handle, &bound);
             }
 
             println!(

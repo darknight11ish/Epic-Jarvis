@@ -36,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -1183,6 +1184,98 @@ def t_three_cards_plan_names_the_one_left_out():
     one = P.plan([cards[1]], "smart")
     check("one card: the plan still works and no card is called left out",
           len(one.cards) == 1 and not any("left out" in n for n in one.notes), one.notes)
+
+
+# --------------------------------------------------------------------------
+#   R5: Windows' own GPU-process counter (Ruling 13, 2026-10-21)
+# --------------------------------------------------------------------------
+# The probe, measured on this PC on 2026-10-21 as a NORMAL user with no
+# elevation: \GPU Process Memory(*)\Dedicated Usage answers through PDH in
+# 0.783 s with 63 instances over 43 PIDs - dwm 1,231.52 MiB, explorer 334.91
+# MiB summed over its processes, "DeepSeek Harness" 58.32 MiB - while nvidia-smi
+# says [N/A] for every compute app on the same PC. The live check at the end
+# re-reads it; on a machine without the counter it prints `skip`, which is never
+# a pass.
+
+def t_the_wddm_rows_are_summed_per_program():
+    rows = [
+        ("pid_1234_luid_0x00000000_0x00012524_phys_0", 3 * H.WDDM_MIB),
+        ("pid_1234_luid_0x00000000_0x000134ff_phys_0", 2 * H.WDDM_MIB),
+        ("pid_4321_luid_0x00000000_0x00012524_phys_0", 512 * 1024.0),
+        ("_Total", 99 * H.WDDM_MIB),
+        ("pid_not_a_number", 1.0),
+        ("display-adapter-0", 7.0),
+    ]
+    parsed = H._parse_wddm_instances(rows)
+    check("one program's instances on two cards are summed into its own total",
+          parsed["processes"][1234] == 5 * H.WDDM_MIB, parsed)
+    check("a second program is its own row, and _Total / malformed rows are skipped",
+          parsed["processes"][4321] == 512 * 1024
+          and sorted(parsed["processes"]) == [1234, 4321]
+          and parsed["instances"] == 3, parsed)
+    check("the MiB helper rounds a total for a named PID, and answers None for one "
+          "the counter did not name",
+          H.wddm_mib_for(1234, {"readable": True, "processes": parsed["processes"]}) == 5
+          and H.wddm_mib_for(777, {"readable": True, "processes": parsed["processes"]}) is None)
+    check("... and None - never a made-up 0 - when the counter is not readable",
+          H.wddm_mib_for(1234, {"readable": False, "processes": parsed["processes"]}) is None)
+    check("a negative or NaN reading is dropped, not summed as a number",
+          H._parse_wddm_instances([("pid_5_x", -1.0), ("pid_5_y", float("nan")),
+                                   ("pid_5_z", 2.0)])["processes"] == {5: 2}, "bad rows")
+
+
+def t_the_wddm_reader_never_raises_and_says_why():
+    value = H.wddm_process_memory(now=1.0, fresh=True, reader=lambda: ([], "no such counter"))
+    check("an empty answer is unreadable, keeps the reason in plain words, and carries "
+          "the source marker",
+          value["readable"] is False and "no such counter" in value["why"]
+          and value["processes"] == {} and value["source"] == H.WDDM_SOURCE, value)
+    slow = H._read_wddm_rows(timeout=0.05, counter=lambda: time.sleep(0.6))
+    check("a counter that stops answering is abandoned at the timeout, not waited on",
+          slow[0] == [] and "did not answer within" in slow[1], slow)
+    raised = H._read_wddm_rows(timeout=1.0,
+                               counter=lambda: (_ for _ in ()).throw(OSError("boom")))
+    check("a reader that raises is reported, not propagated",
+          raised[0] == [] and "could not be read" in raised[1], raised)
+
+
+def t_the_wddm_read_is_cached_for_thirty_seconds():
+    calls = {"n": 0}
+
+    def reader():
+        calls["n"] += 1
+        return ([("pid_5_luid_0x0_0x1_phys_0", 1 * H.WDDM_MIB)], "")
+
+    H.wddm_process_memory(now=10.0, fresh=True, reader=reader)
+    inside = H.wddm_process_memory(now=39.0, reader=reader)
+    check("a second ask inside 30 s is the cache: the counter is asked once",
+          calls["n"] == 1 and inside["readable"] is True, calls)
+    H.wddm_process_memory(now=41.0, reader=reader)
+    check("after the cache window the counter is asked again", calls["n"] == 2, calls)
+    check("the cache never turns a reading into an invented one: the same PID and total "
+          "come back", inside["processes"] == {5: H.WDDM_MIB}, inside)
+
+
+def t_the_wddm_counter_on_this_pc():
+    reading = H.wddm_process_memory(fresh=True)
+    if not reading["readable"]:
+        skip("the Windows GPU-process counter is not readable here: " + reading["why"])
+        return
+    totals = [b for b in (reading["processes"] or {}).values() if b > 0]
+    check("the counter answers on this PC, with at least one program instance in it",
+          reading["instances"] >= 1 and len(reading["processes"]) >= 1, reading["instances"])
+    # A CI Windows runner has the counter but nothing using a GPU, so a nonzero
+    # total is NOT guaranteed on Windows in general - it was measured on the
+    # owner's PC (2026-10-21: dwm 1,231.52 MiB and others). When nothing has a
+    # nonzero total, say so as a skip (never a pass); when something does, check
+    # the number is plausible. Either way the STRUCTURAL checks above passed.
+    if not totals:
+        skip("no program has a nonzero dedicated total here (nothing is using a "
+             "GPU on this machine); the counter itself answered")
+        return
+    largest = max(totals)
+    check("a program with a nonzero total is summed into bytes, and the largest is "
+          "plausible (under 64 GiB)", largest < 64 * 1024 ** 3, largest)
 
 
 def main():
