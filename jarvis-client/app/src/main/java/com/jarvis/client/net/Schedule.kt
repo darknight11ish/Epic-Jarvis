@@ -118,6 +118,19 @@ object Schedule {
     const val SNOOZE_SECONDS = 600
 
     /**
+     * "+5 minutes" - the desktop HUD's one add-time action
+     * (jarvis_hud.html's `{ do: "add_time", label: "+5 minutes" }`, and the
+     * body it posts is `seconds: 300`). `jarvis_schedule.act()` accepts
+     * add_time for a TIMER only ("Time can only be added to a timer."), in
+     * both the active and paused states, so this action is offered on a
+     * timer's row and nowhere else - never an action the PC refuses.
+     * HUD Reminders, Brain's Coming up and this phone row say the same words
+     * for it (Q2/F5, 2026-10-22).
+     */
+    const val ADD_TIME = "+5 minutes"
+    const val ADD_TIME_SECONDS = 300
+
+    /**
      * Under "Just went off", two buttons: Snooze and Delete - ONE job per tap.
      *
      * Delete is the same word and the same `delete` the live rows offer (both
@@ -189,7 +202,7 @@ object Schedule {
     const val ALREADY_GONE = "That is not on the list any more."
 
     /** The only things one job can be asked to do. Never "all", never a list. */
-    val ACTIONS = listOf("pause", "resume", "delete", "done", "snooze")
+    val ACTIONS = listOf("pause", "resume", "delete", "done", "snooze", "add_time")
 
     /** The longest to-do item the PC keeps (jarvis_schedule.MAX_TEXT). */
     const val MAX_TEXT = 300
@@ -653,6 +666,13 @@ object Schedule {
         job.state == "waiting" -> listOf("delete")
         // A reminder for next time has no time of its own to pause.
         job.kind == NEXT_TIME -> listOf("delete")
+        // add_time is a timer's alone (jarvis_schedule.act), in both
+        // its active and paused states - the HUD draws it on the same row.
+        job.kind == "timer" -> listOf(
+            "add_time",
+            if (job.state == "paused") "resume" else "pause",
+            "delete",
+        )
         job.state == "paused" -> listOf("resume", "delete")
         else -> listOf("pause", "delete")
     }
@@ -663,6 +683,7 @@ object Schedule {
         "delete" -> DELETE
         "done" -> DONE
         "snooze" -> SNOOZE
+        "add_time" -> ADD_TIME
         else -> action
     }
 
@@ -671,11 +692,13 @@ object Schedule {
 
     /**
      * The body of one change: one id, one action - or null when it is not
-     * one. Snooze says how long: ten minutes, as the button says.
+     * one. Snooze says how long: ten minutes, as the button says; add_time
+     * says five minutes, exactly as the HUD's button says.
      */
     fun actBody(id: String, action: String): String? {
         if (!validId(id) || action !in ACTIONS) return null
         if (action == "snooze") return "{\"id\":\"$id\",\"do\":\"snooze\",\"seconds\":$SNOOZE_SECONDS}"
+        if (action == "add_time") return "{\"id\":\"$id\",\"do\":\"add_time\",\"seconds\":$ADD_TIME_SECONDS}"
         return "{\"id\":\"$id\",\"do\":\"$action\"}"
     }
 

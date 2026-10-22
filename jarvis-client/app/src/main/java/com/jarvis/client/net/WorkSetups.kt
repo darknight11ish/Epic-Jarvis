@@ -16,7 +16,7 @@ import kotlinx.serialization.json.put
  * The work setups: combinations of local models, each chosen for a kind of
  * work, each explained in plain words **before** the owner starts.
  *
- * `GET /api/work`, `POST /api/work/recommend`, `POST /api/work/choose` -
+ * `GET /api/work`, `POST /api/work/choose` -
  * `backend/work.patch` and `backend/jarvis_work.py`, and the design note
  * `.dsh-scratch/android-verify/WORK-SETUPS-DESIGN-2026-10-10.md`. The owner
  * asked for it on 2026-10-10: *"like if i was going to code an android app, or
@@ -39,8 +39,10 @@ import kotlinx.serialization.json.put
  *  - It never downloads anything. A setup whose model is not on the PC says so,
  *    in the PC's own words, and points at the ordinary download card; there is
  *    no download route here to post to.
- *  - [offer] never changes anything either. It reports what the PC answered to
- *    the owner's own words, and the PC's answer carries `switched: false`.
+ *  - It never asks the PC what to suggest. The dead phone-side work-offer
+ *    surface (`POST /api/work/recommend`) was removed on 2026-10-22 (F11):
+ *    neither app called it and it can never populate. The PC's own
+ *    `POST /api/work/choose` is the one write this file posts.
  *  - It is not a catalogue. Five combinations of models already on this PC,
  *    as words the PC wrote - no list of what could be installed, no search
  *    (CLAUDE.md), and [STEP_ROUTES] is the only set of routes a step may name.
@@ -53,7 +55,6 @@ import kotlinx.serialization.json.put
 object WorkSetups {
 
     const val PATH = "/api/work"
-    const val RECOMMEND_PATH = "/api/work/recommend"
     const val CHOOSE_PATH = "/api/work/choose"
 
     /** The model switch the owner already approves. The only step route. */
@@ -98,10 +99,6 @@ object WorkSetups {
     const val UPDATE =
         "This PC's Jarvis does not have the work setups yet. Update the backend by " +
             "running apply-patches.ps1, then open this again."
-
-    /** The offer: what Jarvis says when the owner's words name a kind of work. */
-    const val OFFER_TITLE = "Jarvis suggests a setup"
-    const val OFFER_TAIL = "Nothing has changed. Open Work setups to see it in full."
 
     /** While a step's card waits. The same line as every other card on the phone. */
     const val WAITING = "Waiting for your approval. " + Approvals.WHERE
@@ -176,17 +173,6 @@ object WorkSetups {
         fun setup(id: String): Setup? = setups.firstOrNull { it.id == id }
         val chosenSetup: Setup? get() = chosen?.let { setup(it) }
     }
-
-    /** What the PC answered about the owner's own words. */
-    data class Offer(
-        val offered: Boolean,
-        val id: String?,
-        val name: String?,
-        val words: String,
-        /** Always false from the PC: the offer itself changes nothing. */
-        val switched: Boolean,
-        val step: Step?,
-    )
 
     /** How the last read came back. The screen draws each one differently. */
     sealed interface Read {
@@ -266,21 +252,6 @@ object WorkSetups {
             body = o["body"] as? JsonObject,
             done = o.bool("done"),
             words = o.str("words").orEmpty(),
-        )
-    }
-
-    /** The PC's answer to [RECOMMEND_PATH], or null when it is not that shape. */
-    fun parseOffer(obj: JsonObject): Offer {
-        val offered = obj.bool("offered") == true
-        return Offer(
-            offered = offered,
-            id = obj.str("id"),
-            name = obj.str("name"),
-            words = obj.str("words").orEmpty(),
-            // Only ever true if a future PC said so; today it is false, and the
-            // screen says "Nothing has changed" from this value, never from hope.
-            switched = obj.bool("switched") == true,
-            step = (obj["step"] as? JsonObject)?.let { step(it) },
         )
     }
 
@@ -390,10 +361,6 @@ object WorkSetups {
     fun chooseBody(id: String?): String = buildJsonObject {
         if (id == null) put("setup", JsonNull) else put("setup", id)
     }.toString()
-
-    /** `{"words": "..."}`, built as JSON. */
-    fun recommendBody(words: String): String =
-        buildJsonObject { put("words", words) }.toString()
 
     /** A POST's answer, as the screen's states - the same rules as Hardware's. */
     fun classifyPost(code: Int, body: JsonObject?): ApiResult<JsonObject> = when {
