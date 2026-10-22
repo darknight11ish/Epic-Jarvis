@@ -1921,6 +1921,16 @@ tool_limit = 6
 trust_window_s = 120
 trust_max_short_clips = 16
 max_pause_ms = 1500
+# The persistent-stream switch (Slice G design, docs/DESIGN-PHONE-LIVE-STREAM.md,
+# 2026-10-21). OFF by default, and a missing key or a missing [live] table is
+# also OFF - never read as permission. This slice freezes the contract only:
+# GET/POST /api/live/stream answers 501 with {"enabled": false} and the audio
+# path does not exist. The transport is tailnet-only (no public listener, no
+# relay). The owner's decision of 2026-10-21: EITHER app may turn it ON, each
+# with its own approval card - the PC path decided by the PC's
+# Windows-Hello-class check, the phone path on the phone with its own lock -
+# and OFF takes effect immediately from either side and closes any open stream.
+stream = false
 
 # ------------------------------------------------------------------------
 # APP CONTROL - the PC side of the phone's accessibility option (2026-10-19)
