@@ -1222,13 +1222,20 @@ await check("a HUD card that REPLACES data takes TWO presses in the injected win
   // `delete_file` is here beside `restore_backup` so the EXTENDED set is driven
   // through the real wiring, not only the original four.
   const cards = [
-    { id: "7", action: "restore_backup" },
-    { id: "8", action: "delete_file" },
+    { id: "7", action: "restore_backup", kind: "replaces_code_or_state",
+      heading: "REPLACES LIVE CODE OR STATE",
+      note: "your CURRENT data is backed up first, with a fresh recovery code" },
+    { id: "8", action: "delete_file", kind: "deletes_data",
+      heading: "DELETES OR REPLACES DATA",
+      note: "deletes the file; there is no undo from here" },
   ];
   const { page, decisions } = await openHud(browser,
     { jarvis: false, ollama: true, proxy: false,
       pending: cards.map((c) => ({ id: c.id, action: c.action, tier: "ask",
                                     replaces: true,
+                                    replaces_kind: c.kind,
+                                    replaces_heading: c.heading,
+                                    replaces_note: c.note,
                                     risk: { reversible: "no", reach: "local",
                                             swipe_ok: false } })) });
   const place = (card) => page.evaluate((c) => {
@@ -1257,8 +1264,10 @@ await check("a HUD card that REPLACES data takes TWO presses in the injected win
     }));
     assert.equal(afterFirst.count, before,
       `${card.action}: the first press sent an approval`);
-    assert.match(afterFirst.said, /REPLACES what is on your PC/,
-      `${card.action}: the first press did not say plainly what the next one does: ${afterFirst.said}`);
+    assert.match(afterFirst.said, new RegExp(card.heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      `${card.action}: the first press did not draw the PC's ${card.heading}: ${afterFirst.said}`);
+    assert.ok(afterFirst.said.includes(card.note),
+      `${card.action}: the first press did not say the PC's honest consequence: ${afterFirst.said}`);
 
     await page.evaluate(() => document.querySelector("#approvals .yes").click());
     await K.until(page, `exactly one more decide_approval for ${card.action}`, async () =>

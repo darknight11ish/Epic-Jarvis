@@ -802,6 +802,20 @@ places between screens. Presentation only - no approval logic changed.
      The backend table is `jarvis-backend/jarvis_gate.py`'s `_REPLACES_ACTIONS`
      (carried by `backend/gate-touches.patch`); this PR's own deploy-delta
      follow-up carries the extended table to the live PC.
+     **THREE ACCURATE LABELS (review ruling 8.1, 2026-10-21):** the heading is
+     not one generic sentence. The PC classifies each marked action -
+     `deletes_data` (`delete_file`/`delete_joplin_note`/`delete_logseq_page`,
+     `memory_forget_range`, and the detail-marked voice-training clear),
+     `overwrites_note` (`edit_joplin_note`, `edit_logseq_page`) or
+     `replaces_code_or_state` (`restore_backup`, `register_approval_key`,
+     `modify_own_code`, `app_merge_change`) - and sends `replaces_kind`,
+     `replaces_heading` and `replaces_note` on every waiting row, with the
+     words owned by `jarvis_card_words.py` and drawn by every surface. A kept
+     copy is promised only where one is really kept (the backup of current
+     data before a restore, the app's git history, a device removable in
+     Settings); the note edits and deletions say plainly that Jarvis keeps no
+     copy. The backend suite asserts the exact words per action against the
+     gate's `_RISK` why.
 
 ---
 

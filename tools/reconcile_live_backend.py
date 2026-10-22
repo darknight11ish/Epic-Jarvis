@@ -192,6 +192,10 @@ GATE_DIGEST_PENDING_OLD_FILE = "gate-digest-pending-old.txt"
 GATE_DIGEST_PENDING_NEW_FILE = "gate-digest-pending-new.txt"
 GATE_DIGEST_INSERT_OLD_FILE = "gate-digest-insert-old.txt"
 GATE_DIGEST_INSERT_NEW_FILE = "gate-digest-insert-new.txt"
+GATE_FINAL_HELPERS_OLD_FILE = "gate-final-helpers-old.txt"
+GATE_FINAL_HELPERS_NEW_FILE = "gate-final-helpers-new.txt"
+GATE_FINAL_PENDING_OLD_FILE = "gate-final-pending-old.txt"
+GATE_FINAL_PENDING_NEW_FILE = "gate-final-pending-new.txt"
 
 #: The line the two guard helpers are inserted in front of. `check()` is
 #: defined once in `jarvis_gate.py`; the tool refuses if that is not true in
@@ -322,6 +326,33 @@ DELTA_TABLE = {
             "probes": ("created,raised,target_digest)",),
             "file": GATE_DIGEST_INSERT_NEW_FILE,
             "replace_file": GATE_DIGEST_INSERT_OLD_FILE,
+        },
+    },
+    # The extended two-press set (#688) and review ruling 8.1's three accurate
+    # labels, carried to the live gate in the SAME PR that changes it (Ruling
+    # 8.2's standing rule). TWO literal deltas over what the entries above leave
+    # behind: the guard entries are already present on this PC, so the digest
+    # entries rewrite the old four-action text, and these two then bring the
+    # live gate to the published text - the ten-action set, the kind/heading/
+    # note payload and the digest-aware dedupe function in one helpers block.
+    # OLD blocks were taken from `9cfe49920`'s carried blocks (what the #687
+    # deploy wrote) with the digest function substituted, i.e. exactly the
+    # staged text at this point in the order; NEW blocks are the published
+    # gate's own text. Post-image probes make a second deploy ALREADY_PRESENT.
+    "gate-final-helpers.patch": {
+        "jarvis_gate.py": {
+            "probes": ("_REPLACES_KINDS = {",
+                       "def replaces_kind_for(action, detail=None):"),
+            "file": GATE_FINAL_HELPERS_NEW_FILE,
+            "replace_file": GATE_FINAL_HELPERS_OLD_FILE,
+        },
+    },
+    "gate-final-pending.patch": {
+        "jarvis_gate.py": {
+            "probes": ('d["replaces_kind"] = _kinds.get("kind")',
+                       'd["replaces_note"] = _kinds.get("note", "")'),
+            "file": GATE_FINAL_PENDING_NEW_FILE,
+            "replace_file": GATE_FINAL_PENDING_OLD_FILE,
         },
     },
 }

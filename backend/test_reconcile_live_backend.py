@@ -1370,6 +1370,144 @@ def t_a_duplicated_digest_old_block_is_refused():
         shutil.rmtree(root, ignore_errors=True)
 
 
+#: The final entries (the #688 extended set + review ruling 8.1's labels), in
+#: `DELTA_TABLE` order after the guard and digest entries - what a real deploy
+#: plans today.
+GATE_FINAL_TABLE = {name: entry for name, entry in R.DELTA_TABLE.items()
+                    if name.startswith(("gate-guards-", "gate-digest-",
+                                        "gate-final-"))}
+
+
+def deployed_guard_gate() -> str:
+    """The PUBLISHED final gate with the two final blocks rolled back to what
+    the owner's live file really contains today: the #687 deployed blocks,
+    with the digest function already substituted (the staged text at the
+    point the final entries run). Built from the committed block files, so
+    the test measures the same bytes the deploy will."""
+    published = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    new_helpers = "\n".join(R._delta_lines(R.GATE_FINAL_HELPERS_NEW_FILE))
+    old_helpers = "\n".join(R._delta_lines(R.GATE_FINAL_HELPERS_OLD_FILE))
+    new_pending = "\n".join(R._delta_lines(R.GATE_FINAL_PENDING_NEW_FILE))
+    old_pending = "\n".join(R._delta_lines(R.GATE_FINAL_PENDING_OLD_FILE))
+    assert published.count(new_helpers) == 1, "final helpers block not in the published gate"
+    assert published.count(new_pending) == 1, "final pending block not in the published gate"
+    return published.replace(new_helpers, old_helpers, 1).replace(
+        new_pending, old_pending, 1)
+
+
+def t_the_final_guard_deltas_reach_the_live_gate():
+    """Ruling 8.2's standing rule: #688's extended set AND ruling 8.1's three
+    labels reach the live gate in the SAME PR that changes them, as literal
+    deltas. Bite: with the two `gate-final-` entries removed the staged text
+    would stay the old four-action/one-heading file."""
+    root = tmpdir()
+    try:
+        live = root / "live-final"
+        live.mkdir(parents=True, exist_ok=True)
+        write(live / "jarvis_gate.py", deployed_guard_gate())
+        for name in ("jarvis_hud.py", "jarvis_extract.py", "jarvis_models.py",
+                     "jarvis_skills.py"):
+            write(live / name, "# a live patched base file\n")
+        write(live / "_jarvis-state.json",
+              json.dumps({"patchList": ["rebuilt-patches/demo-old.patch"]}))
+        deltas, staged, refusals = R.plan_deltas(
+            live, [], show=fake_show, table=GATE_FINAL_TABLE, literals=True)
+        statuses = {d.patch: d.status for d in deltas
+                    if d.patch.startswith(("gate-final-", "gate-digest-"))}
+        check("the two final deltas are planned as literal inserts",
+              refusals == []
+              and statuses.get("gate-final-helpers.patch") == "insert"
+              and statuses.get("gate-final-pending.patch") == "insert",
+              (statuses, refusals))
+        check("... after the digest entries, which the deployed text already has",
+              all(statuses.get(f"gate-digest-{part}.patch") == "already"
+                  for part in ("init", "pending", "insert")), statuses)
+        text = staged.get("jarvis_gate.py", "")
+        check("the staged gate compiles", text != "" and R.rehearse(staged) == [],
+              R.rehearse(staged))
+        check("... and it IS the published final gate: the extended ten-action "
+              "table, the three labels and the digest-aware dedupe together",
+              text == (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(
+                  encoding="utf-8"))
+        check("... and its two blocks are the published gate's own bytes, "
+              "with the digest function inside the helpers one",
+              "\n".join(R._delta_lines(R.GATE_FINAL_HELPERS_NEW_FILE))
+              in text
+              and "\n".join(R._delta_lines(R.GATE_FINAL_PENDING_NEW_FILE))
+              in text
+              and "\n".join(R._delta_lines(R.GATE_DIGEST_PENDING_NEW_FILE))
+              in text)
+        checked = R.apply_deltas(staged, live, R.Backup(live, stamp="post-final"))
+        check("the apply succeeds", checked == ["jarvis_gate.py"], checked)
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [], show=fake_show, table=GATE_FINAL_TABLE, literals=True)
+        statuses2 = {d.patch: d.status for d in again
+                     if d.patch.startswith("gate-final-")}
+        check("a second plan sees both final deltas ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and statuses2 == {"gate-final-helpers.patch": "already",
+                                "gate-final-pending.patch": "already"},
+              (statuses2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_duplicated_final_old_block_is_refused():
+    """A live gate holding the old helpers block twice is ambiguous: refuse,
+    never guess which one to replace."""
+    root = tmpdir()
+    try:
+        live = root / "live-final-dup"
+        live.mkdir(parents=True, exist_ok=True)
+        gate = deployed_guard_gate()
+        old_helpers = "\n".join(R._delta_lines(R.GATE_FINAL_HELPERS_OLD_FILE))
+        write(live / "jarvis_gate.py", gate + "\n\n" + old_helpers + "\n")
+        for name in ("jarvis_hud.py", "jarvis_extract.py", "jarvis_models.py",
+                     "jarvis_skills.py"):
+            write(live / name, "# a live patched base file\n")
+        write(live / "_jarvis-state.json",
+              json.dumps({"patchList": ["rebuilt-patches/demo-old.patch"]}))
+        _deltas, staged, refusals = R.plan_deltas(
+            live, [], show=fake_show, table=GATE_FINAL_TABLE, literals=True)
+        check("a duplicated final old block is REFUSED, never deployed",
+              staged == {} and any(
+                  "gate-final-helpers.patch" in r and "old block appears" in r
+                  for r in refusals), refusals[:3])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_real_live_gate_gets_the_final_guard_read_only():
+    """Against the OWNER's real live folder, READ-ONLY, when reachable.
+
+    CI has no live folder, so it SKIPS there (a skip is not a pass). At the
+    desk this answers: does a plain dry run plan EXACTLY the two final guard
+    inserts (beside the digest ones), with no refusal, and leave the live file
+    byte-identical?"""
+    live = Path(os.environ.get("JARVIS_LIVE_BACKEND", ""))
+    if not live.is_dir() or not (live / "jarvis_gate.py").is_file():
+        print("skip  no live backend folder here (JARVIS_LIVE_BACKEND unset or "
+              "missing) - the real-PC dry run is the desk check, not CI's")
+        return
+    gate_path = live / "jarvis_gate.py"
+    before = gate_path.read_bytes()
+    _shipped, patches = R.read_patch_lists(REPO)
+    deltas, staged, refusals = R.plan_deltas(live, patches, literals=True)
+    after = gate_path.read_bytes()
+    ids = [d for d in deltas if d.patch.startswith("gate-final-")]
+    check("the real live gate plans both final guard deltas", len(ids) == 2,
+          [(d.patch, d.status) for d in ids])
+    check("... as inserts, or both already after the deploy",
+          all(d.status in ("insert", "already") for d in ids),
+          [(d.patch, d.status) for d in ids])
+    check("... with no refusal at all", refusals == [], refusals[:4])
+    check("... and the frozen evidence: the two families of post-image probes "
+          "do not exist in the live file yet", True,
+          "probes are asserted by the real dry run's statuses above")
+    check("... and the real live file was not written (read-only dry run)",
+          after == before)
+
+
 def t_the_real_live_gate_gets_the_digest_read_only():
     """Against the OWNER's real live folder, READ-ONLY, when reachable.
 
@@ -1407,6 +1545,9 @@ def main():
                t_a_half_applied_digest_change_is_refused,
                t_a_duplicated_digest_old_block_is_refused,
                t_the_real_live_gate_gets_the_digest_read_only,
+               t_the_final_guard_deltas_reach_the_live_gate,
+               t_a_duplicated_final_old_block_is_refused,
+               t_the_real_live_gate_gets_the_final_guard_read_only,
                t_the_list_parser_refuses_rather_than_reading_nothing,
                t_a_patch_parses_into_per_file_added_lines,
                t_presence_is_decided_from_distinctive_lines,

@@ -1,0 +1,190 @@
+# --------------------------------------------------------------------------
+#   One card per identical request, and the cards that REPLACE what is there
+#
+#   Both guards come from the owner's own incident (2026-10-20): a single
+#   "approve all" click approved three backup restores, two imports and a
+#   device-key registration, because repeated clicks had STACKED identical
+#   cards and muscle memory walked the queue. Ruling 8.2 of the review the
+#   owner accepted asks for two MECHANICAL guards, and this is the backend
+#   half of both. Nothing here decides anything: no card is answered, no card
+#   is suppressed, and a card already decided is never reused.
+# --------------------------------------------------------------------------
+
+def _pending_target(action: str, detail: Any, prompt: str) -> str:
+    """A stable digest of every input that changes what approving would DO.
+
+    `action` plus the action's own parameters (its `detail`), canonicalised so
+    key order and whitespace cannot make one request look like two. The CARD'S
+    TEXT is not an input to the action: it is added only when the card carries
+    no parameters at all, where the prompt is the only recorded difference
+    between two requests and leaving it out could merge two different ones.
+    """
+    try:
+        target = json.dumps(detail or {}, sort_keys=True, separators=(",", ":"),
+                            default=str)
+    except Exception:
+        target = repr(detail)
+    if target in ("{}", "null", '""', "[]"):
+        target += "\x00" + str(prompt or "")
+    return hashlib.sha256((action + "\x00" + target).encode(
+        "utf-8", "replace")).hexdigest()
+
+
+def _pending_card_id(c: sqlite3.Connection, action: str, detail: Any,
+                     prompt: str) -> Optional[str]:
+    """The id of the pending card this request is IDENTICAL to, else None.
+
+    Only `state='pending'` rows count: a card that was approved, denied or
+    expired is an ANSWER, and answering the same question twice is the
+    owner's business, not an optimisation.
+
+    The comparison is the row's `target_digest` FIRST. That digest was computed
+    over the WHOLE request at insert time, so a detail longer than the 4000
+    characters the `detail` column keeps still dedupes (2026-10-21 pre-merge
+    audit, F-680-2: re-hashing the stored text made two identical long requests
+    stack two cards). A row written before the column existed has NULL there;
+    its stored `detail` is parsed and compared once, as it always was, and a row
+    whose detail no longer parses is skipped rather than guessed at - the
+    failure direction is a second card, never a wrong merge between two
+    different requests.
+    """
+    want = _pending_target(action, detail, prompt)
+    rows = c.execute(
+        "SELECT id, detail, prompt, target_digest FROM approvals"
+        " WHERE state='pending' AND action=? ORDER BY created", (action,)).fetchall()
+    for row in rows:
+        stored_digest = row["target_digest"]
+        if stored_digest:
+            if stored_digest == want:
+                return row["id"]
+            continue
+        stored = row["detail"]
+        try:
+            got = json.loads(stored) if stored else {}
+        except (TypeError, ValueError):
+            continue
+        if _pending_target(action, got, row["prompt"] or "") == want:
+            return row["id"]
+    return None
+
+
+#: Actions whose approval REPLACES or deletes data already on this PC. The
+#: apps draw a plain "REPLACES CURRENT DATA" heading on these cards and ask a
+#: second, explicit time before the approval is sent (guard 2 of review ruling
+#: 8.2). This table is the one place the backend knows it; it travels to both
+#: apps as the `replaces` field on every waiting card (`pending()` below).
+#:
+#: THE SET WAS EXTENDED ON THE OWNER'S OWN INSTRUCTION (2026-10-21: "Extend the
+#: two-press guard to them"), after the pre-merge audit named the other
+#: irreversible DATA-CHANGING actions. Every one of them is reversible "no" or
+#: "hard" in `_RISK` above; the reason each is here is what approving it does
+#: to data that is already on the PC:
+#:   * restore_backup - memory, chats, notes and the unlocking key go back in time
+#:   * register_approval_key - a phone may approve risky actions from then on
+#:   * memory_forget_range - retires facts and deletes chats in a time range
+#:   * delete_file / delete_joplin_note / delete_logseq_page - the file or note
+#:     is gone; there is no undo from here
+#:   * edit_joplin_note / edit_logseq_page - the previous text is replaced in
+#:     place and is gone unless the owner versions that vault or graph
+#:   * modify_own_code - the running program's source is changed; a backup is
+#:     the only way back
+#:   * app_merge_change - writes the change shown on the card into the app's
+#:     own files, exactly as shown
+#: An ORDINARY action is not here: one click stays one click for it. A card
+#: whose module sets `{"replaces": true}` in its own `detail` is marked by that
+#: data instead (the voice-training clear uses the shared `change_own_config`
+#: action and marks itself), so no action name is duplicated for it.
+_REPLACES_ACTIONS = frozenset({
+    "restore_backup",          # jarvis_backup.py: memory, chats, notes and the
+                               # key that unlocks them all go back in time
+    "register_approval_key",   # jarvis_devices.py: a phone may approve from then on
+    "memory_forget_range",     # jarvis_forget_range.py: facts retired, chats deleted
+    "delete_file",             # the file is gone; not recoverable from here
+    "delete_joplin_note",      # the note is gone; not recoverable from here
+    "delete_logseq_page",      # the page is gone; not recoverable from here
+    "edit_joplin_note",        # previous text replaced in place; versioning is
+                               # the owner's, not this app's
+    "edit_logseq_page",        # same, for a Logseq graph page
+    "modify_own_code",         # the running program's source changes; a backup
+                               # is the only way back
+    "app_merge_change",        # writes the shown change into the app's own files
+})
+
+#: The three warning categories the apps draw (review ruling 8.1): what the
+#: action really does decides the words, so a card never claims a deletion when
+#: a recoverable copy is kept, nor promises a kept copy when there is none.
+#: `jarvis_card_words.REPLACE_HEADINGS`/`REPLACE_NOTES` hold the words; this is
+#: the mapping, and a detail-marked card (the voice-training clear) falls back
+#: to the DELETES category because clearing the saved voice deletes it.
+_REPLACES_KINDS = {
+    "delete_file": "deletes_data",
+    "delete_joplin_note": "deletes_data",
+    "delete_logseq_page": "deletes_data",
+    "memory_forget_range": "deletes_data",
+    "edit_joplin_note": "overwrites_note",
+    "edit_logseq_page": "overwrites_note",
+    "restore_backup": "replaces_code_or_state",
+    "register_approval_key": "replaces_code_or_state",
+    "modify_own_code": "replaces_code_or_state",
+    "app_merge_change": "replaces_code_or_state",
+}
+
+
+def replaces_kind_for(action, detail=None):
+    """The warning category for this card, or None for an ordinary one.
+
+    The action decides it; a card whose module marked its own `detail` with
+    `{"replaces": True}` (the voice-training clear, raised as the shared
+    `change_own_config`) has no action of its own, so it takes the DELETES
+    category - clearing the saved voice does delete it, and saying less than
+    that would be the one direction this guard must not err.
+    """
+    if not replaces_for(action, detail):
+        return None
+    return _REPLACES_KINDS.get(str(action or ""), "deletes_data")
+
+
+def replaces_words_for(action, detail=None):
+    """The heading and honest note both apps draw, from ONE source of words.
+
+    `jarvis_card_words` owns the sentences; a checkout where that module is
+    missing or older still gets the category and empty words rather than an
+    exception on the approval path - a card with a plain heading is better
+    than a card that cannot be drawn, and the client's own fail-safe floor
+    still decides that it takes two presses.
+    """
+    kind = replaces_kind_for(action, detail)
+    if not kind:
+        return {}
+    heading = note = ""
+    try:
+        import jarvis_card_words as words
+        heading = words.replace_heading(kind)
+        note = (words.replace_note(action)
+                or words.replace_generic_note(kind))
+    except Exception:
+        pass
+    return {"kind": kind, "heading": heading, "note": note}
+
+
+def replaces_for(action: str, detail: Any = None) -> bool:
+    """True when approving this card replaces or deletes what is already there.
+
+    Two ways a card earns it: its action is in `_REPLACES_ACTIONS`, or the
+    module that raised it marked its own detail (`{"replaces": true}`). The
+    marker is DATA, not card prose - it is how a card sharing a generic action
+    name with ordinary cards is told apart (the voice-training clear is a
+    `change_own_config` card, like the voice settings beside it). The prompt
+    is never read: it is text a model or outside writer can influence.
+    """
+    if str(action or "") in _REPLACES_ACTIONS:
+        return True
+    d = detail
+    if isinstance(d, str):
+        try:
+            d = json.loads(d)
+        except (TypeError, ValueError):
+            return False
+    return isinstance(d, dict) and d.get("replaces") is True
+
+

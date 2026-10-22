@@ -3176,6 +3176,22 @@ const APPR = { seen:new Set(), timer:null };
 const REPLACES_WARNING = "REPLACES CURRENT DATA";
 const REPLACES_NOTE = "Approving this replaces what is there now. " +
   "Press Approve again to confirm.";
+/* Review ruling 8.1: the PC sends the category and the honest words on the
+ * row (replaces_kind / replaces_heading / replaces_note); these three are the
+ * older-PC fallback, chosen by category, never a claim of a kept copy that
+ * does not exist. */
+const REPLACE_HEADINGS = {deletes_data: "DELETES OR REPLACES DATA",
+                          overwrites_note: "OVERWRITES EXISTING NOTE",
+                          replaces_code_or_state: "REPLACES LIVE CODE OR STATE"};
+function apprReplaceHeading(p){
+  if(!apprReplace(p)) return "";
+  if(p.replaces_heading) return String(p.replaces_heading);
+  return REPLACE_HEADINGS[String(p.replaces_kind || "")] || REPLACES_WARNING;
+}
+function apprReplaceNote(p){
+  if(!apprReplace(p)) return "";
+  return p.replaces_note ? String(p.replaces_note) : REPLACES_NOTE;
+}
 const REPLACE_ACTIONS = ["restore_backup", "register_approval_key",
                          "memory_forget_range", "delete_file",
                          "delete_joplin_note", "delete_logseq_page",
@@ -3252,7 +3268,7 @@ async function apprPoll(){
         if(!armed){
           armed = true;
           yes.textContent = "Confirm replace";
-          yes.title = REPLACES_NOTE;
+          yes.title = apprReplaceNote(p);
           return;
         }
         apprDecide(p.id, true, el);
@@ -3298,8 +3314,8 @@ function apprCardHtml(p, now){
   if(apprReplace(p)){
     // Plain words, never colour alone - and the same words the quickbar and
     // the phone show (replace-confirm.js / the Kotlin ReplaceConfirm).
-    html += `<div class="risk"><b>${apprEscape(REPLACES_WARNING)}</b> \u2014 `
-      + `${apprEscape(REPLACES_NOTE)}</div>`;
+    html += `<div class="risk"><b>${apprEscape(apprReplaceHeading(p))}</b> \u2014 `
+      + `${apprEscape(apprReplaceNote(p))}</div>`;
   }
   if(apprCutOff(p)){
     html += `<div class="risk">This request was cut off before it reached this card, `

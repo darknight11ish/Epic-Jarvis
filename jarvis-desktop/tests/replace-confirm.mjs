@@ -27,6 +27,9 @@ import { fileURLToPath } from "node:url";
 import {
   REPLACES_WARNING,
   REPLACES_NOTE,
+  REPLACE_HEADINGS,
+  replacesHeading,
+  replacesNote,
   ReplaceGate,
   approveLabel,
   isReplaceCard,
@@ -78,6 +81,49 @@ async function main() {
     assert.ok(!/^[#\d]/.test(REPLACES_WARNING), "not a colour token or a code");
   });
 
+  await check("RULING 8.1: the PC's own category words are drawn unchanged", () => {
+    // The backend sends the category and its honest words on the row; every
+    // surface draws exactly those, so the wording cannot drift between them.
+    const card = {
+      id: "1", action: "edit_joplin_note", replaces: true,
+      replacesKind: "overwrites_note",
+      replacesHeading: "OVERWRITES EXISTING NOTE",
+      replacesNote: "replaces the note's current text; Jarvis keeps no copy of the old version",
+    };
+    assert.equal(replacesHeading(card), "OVERWRITES EXISTING NOTE");
+    assert.match(replacesNote(card), /keeps no copy/);
+    assert.ok(!/DELETES/.test(replacesHeading(card)),
+      "a note edit claimed a deletion");
+  });
+
+  await check("RULING 8.1: an older PC's marked row falls back by category", () => {
+    // No words from the PC: the category still chooses the right heading, so a
+    // delete card never says OVERWRITES EXISTING NOTE and vice versa.
+    assert.equal(replacesHeading({ action: "delete_file", replaces: true,
+                                   replacesKind: "deletes_data" }),
+                 "DELETES OR REPLACES DATA");
+    assert.equal(replacesHeading({ action: "restore_backup", replaces: true,
+                                   replacesKind: "replaces_code_or_state" }),
+                 "REPLACES LIVE CODE OR STATE");
+    assert.equal(replacesHeading({ action: "send_email" }), "");
+    assert.equal(replacesNote({ action: "send_email" }), "");
+    // A card with the category missing keeps the one generic sentence, never a
+    // made-up claim about a kept copy.
+    assert.equal(replacesHeading({ action: "delete_file", replaces: true }),
+                 REPLACES_WARNING);
+    assert.equal(replacesHeading({ action: "delete_file", replaces: true,
+                                   replacesKind: "not_a_category" }),
+                 REPLACES_WARNING);
+  });
+
+  await check("RULING 8.1: the three headings are the ruling's own words", () => {
+    assert.deepEqual(REPLACE_HEADINGS, {
+      deletes_data: "DELETES OR REPLACES DATA",
+      overwrites_note: "OVERWRITES EXISTING NOTE",
+      replaces_code_or_state: "REPLACES LIVE CODE OR STATE",
+    });
+  });
+
   await check("isReplaceCard: the PC's own `replaces: true` is the answer", () => {
     assert.equal(isReplaceCard({ id: "a", replaces: true }), true);
     assert.equal(isReplaceCard({ id: "a", replaces: false }), false);
@@ -121,7 +167,7 @@ async function main() {
     assert.equal(isReplaceCard({ action: "send_email" }), false);
   });
 
-  await check("normaliseApproval keeps `replaces` exactly as the PC sent it", () => {
+  await check("normaliseApproval keeps `replaces` AND the label words as sent", () => {
     assert.equal(card({ replaces: true }).replaces, true);
     assert.equal(card({ replaces: false }).replaces, false);
     assert.equal(card({}).replaces, false, "an older PC's row is ordinary");
