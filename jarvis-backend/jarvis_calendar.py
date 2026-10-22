@@ -1350,6 +1350,413 @@ def _window(stamp: str) -> float:
     return float(_cal.timegm(datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").timetuple()))
 
 
+# --------------------------------------------------------------------------
+#   Wave D-1 (2026-10-22): proactive first-step prep, read-only
+#
+#   Claude Duet's "first-step prep" morning brief, adapted to this PC with no
+#   new way out: these are PURE functions over events jarvis_calendar already
+#   read (plus whatever the caller already holds). Nothing here opens a socket,
+#   changes a calendar, raises a card or writes anything. The briefing/today
+#   layer is what turns the returned dicts into plain lines.
+# --------------------------------------------------------------------------
+
+#: A meeting that ends (or is still going) this close to a departure is a
+#: collision the owner should be told about before the day starts.
+FLIGHT_BEFORE_MINUTES = 120
+#: ...and this close after landing.
+FLIGHT_AFTER_MINUTES = 60
+#: Two events at different physical addresses closer together than this.
+PHYSICAL_GAP_MINUTES = 30
+
+_TRAVEL_WORDS = re.compile(
+    r"\b(flight|flights|airport|airline|boarding|boards?|departs?|departure|"
+    r"terminal|check.?in|train|trains|station|platform|rail|amtrak|eurostar|"
+    r"ferry|port|gate)\b",
+    re.IGNORECASE)
+#: "LHR -> JFK", "LHR → JFK", "LHR to JFK": two airport codes with a direction.
+_IATA_PAIR = re.compile(
+    r"\b[A-Z]{3}\b\s*(?:->|→|—>|-|to)\s*\b[A-Z]{3}\b")
+#: A place the owner is already at does not count as a physical transition.
+_HOME_WORDS = {"home", "my home", "office", "my office", "here", "work"}
+#: A virtual meeting place is not a physical transition (D-1.1 gate): a URL or
+#: an online room name ("Zoom", "Google Meet", "Teams", a video call) cannot be
+#: "30 minutes away" from anywhere.
+_VIRTUAL_RE = re.compile(
+    r"https?://|www\.|"
+    r"\b(zoom|meet|teams|webex|skype|hangouts?|virtual|online|remote|"
+    r"video\s*call|conference\s*call|phone\s*call|call|dial[- ]?in)\b",
+    re.IGNORECASE)
+#: SecAlign / chat-template markers the gate names: stripped BEFORE a claim is
+#: read, so an invisible marker can never hide or fake a weekday or a date.
+_SEC_ALIGN_RE = re.compile(r"<\|?\s*/?\s*(im_start|im_end|tool_call|think)\s*\|?>",
+                           re.IGNORECASE)
+
+_DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+             "Saturday", "Sunday")
+_WEEKDAY_RE = re.compile(r"\b(" + "|".join(_DAY_NAMES) + r")\b", re.IGNORECASE)
+_MONTHS = {name.lower(): i for i, name in enumerate(
+    ("January", "February", "March", "April", "May", "June", "July",
+     "August", "September", "October", "November", "December"), 1)}
+_MONTH_RE = "|".join(_MONTHS)
+_DATE_WORDS_RE = re.compile(
+    r"\b(" + _MONTH_RE + r")\s+(\d{1,2})\b|\b(\d{1,2})\s+(" + _MONTH_RE + r")\b",
+    re.IGNORECASE)
+_LOCAL_STAMP_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$")
+
+
+def _local_start(raw) -> Optional[datetime]:
+    """An event's own start as a naive datetime on this PC's clock.
+
+    The strings are the ones `_out()` already gives every app (the same shape
+    jarvis_briefing.event_when reads): YYYYMMDD or YYYYMMDDTHHMMSS[Z]. A "Z"
+    value is UTC and is turned into this PC's local time, exactly as the
+    briefing does."""
+    m = _LOCAL_STAMP_RE.fullmatch(str(raw or "").strip())
+    if not m:
+        return None
+    y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if m.group(4) is None:
+        try:
+            return datetime(y, mo, d)
+        except ValueError:
+            return None
+    hh, mi, ss = int(m.group(4)), int(m.group(5)), int(m.group(6) or 0)
+    try:
+        if m.group(7):
+            return datetime.fromtimestamp(_cal.timegm((y, mo, d, hh, mi, ss, 0, 0, 0)))
+        return datetime(y, mo, d, hh, mi, ss)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _event_bounds(e: dict):
+    start = _local_start(e.get("start"))
+    if start is None:
+        return None, None
+    return start, (_local_start(e.get("end")) or start)
+
+
+def is_travel_event(e: dict) -> bool:
+    """True for a flight/train/airport-shaped event.
+
+    Shape, not a guess about intent: a travel word in the title or location, or
+    two airport codes with a direction between them ("LHR → JFK"). A lone
+    three-letter token is NOT enough - "Gym" and "Tax" would start matching."""
+    if not isinstance(e, dict):
+        return False
+    text = " ".join(str(e.get(k) or "") for k in ("summary", "location"))
+    if not text.strip():
+        return False
+    return bool(_TRAVEL_WORDS.search(text) or _IATA_PAIR.search(text))
+
+
+def _travel_name(e: dict) -> str:
+    return str(e.get("summary") or "(no title)").strip() or "(no title)"
+
+
+def _minutes_words(n: int) -> str:
+    return f"{n} minute" if n == 1 else f"{n} minutes"
+
+
+def _when_words(dt: datetime) -> str:
+    return f"{dt:%Y-%m-%d %H:%M}" if (dt.hour or dt.minute) else f"{dt:%Y-%m-%d}"
+
+
+def _address(e: dict) -> str:
+    return " ".join(str(e.get("location") or "").split()).casefold()
+
+
+def _physical(e: dict) -> str:
+    loc = _address(e)
+    if not loc or loc in _HOME_WORDS:
+        return ""
+    if _VIRTUAL_RE.search(loc):
+        return ""
+    return loc
+
+
+def _claim_text(value) -> str:
+    """One title/description with invisible chat-template markers removed, for
+    reading a claim. `_outside_plain` already strips the invisible tricks the
+    calendar's own reader removes; this adds the gate's named marker shapes."""
+    plain = _outside_plain(str(value or ""))
+    return " ".join(_SEC_ALIGN_RE.sub(" ", plain).split())
+
+
+def detect_travel_and_flight_collisions(
+        events: list, *, before_minutes: float = FLIGHT_BEFORE_MINUTES,
+        after_minutes: float = FLIGHT_AFTER_MINUTES,
+        gap_minutes: float = PHYSICAL_GAP_MINUTES) -> list:
+    """Meetings that sit uncomfortably close to a flight/train, or to a
+    different address. Read-only; returns dicts, never a sentence-only blob.
+
+    Each row: `kind` ("before_departure" | "after_landing" |
+    "different_addresses"), `minutes`, `event`/`other` (the two summaries),
+    `event_start`/`other_start` (as the calendar's own strings) and `said`
+    (one plain sentence naming both, with times). Deterministic order: kind,
+    then first event's start, then summary.
+
+    Boundaries are inclusive (`120` minutes collides; `121` does not)."""
+    rows = [e for e in (events or []) if isinstance(e, dict)]
+    timed = []
+    for e in rows:
+        start, end = _event_bounds(e)
+        if start is not None:
+            timed.append((e, start, end))
+    out = []
+    for e, start, end in timed:
+        if not is_travel_event(e):
+            continue
+        for m, m_start, m_end in timed:
+            if m is e:
+                continue
+            if m_start < start:
+                # The meeting is still going, or ended, inside the buffer
+                # before departure.
+                if m_end is not None and m_end < start - timedelta(minutes=before_minutes):
+                    continue
+                if m_end is None:
+                    continue
+                gap = max(0, round((start - m_end).total_seconds() / 60))
+                if gap <= before_minutes:
+                    out.append({
+                        "kind": "before_departure",
+                        "minutes": gap,
+                        "event": _travel_name(e),
+                        "other": _travel_name(m),
+                        "event_start": e.get("start") or "",
+                        "other_start": m.get("start") or "",
+                        "said": (f'Your {_when_words(m_start)} meeting "{_travel_name(m)}" '
+                                 f'{"overlaps" if m_end > start else "ends"} {_minutes_words(gap)} '
+                                 f'before "{_travel_name(e)}" at {_when_words(start)} - '
+                                 f"want to draft a reschedule note?"),
+                    })
+            elif end is not None and end <= m_start:
+                gap = round((m_start - end).total_seconds() / 60)
+                if gap <= after_minutes:
+                    out.append({
+                        "kind": "after_landing",
+                        "minutes": gap,
+                        "event": _travel_name(e),
+                        "other": _travel_name(m),
+                        "event_start": e.get("start") or "",
+                        "other_start": m.get("start") or "",
+                        "said": (f'You land at {_when_words(end)} and "{_travel_name(m)}" '
+                                 f'starts {_minutes_words(gap)} later at '
+                                 f"{_when_words(m_start)} - that is tight."),
+                    })
+    # Different physical addresses, close together, in time order.
+    ordered = sorted(timed, key=lambda t: (t[1], _travel_name(t[0])))
+    for (a, a_start, a_end), (b, b_start, b_end) in zip(ordered, ordered[1:]):
+        loc_a, loc_b = _physical(a), _physical(b)
+        if not loc_a or not loc_b or loc_a == loc_b or a_end is None:
+            continue
+        if b_start < a_end:
+            continue
+        gap = round((b_start - a_end).total_seconds() / 60)
+        if 0 <= gap < gap_minutes:
+            out.append({
+                "kind": "different_addresses",
+                "minutes": gap,
+                "event": _travel_name(a),
+                "other": _travel_name(b),
+                "event_start": a.get("start") or "",
+                "other_start": b.get("start") or "",
+                "said": (f'"{_travel_name(a)}" at {_when_words(a_start)} and '
+                         f'"{_travel_name(b)}" at {_when_words(b_start)} are only '
+                         f"{gap} minute(s) apart at two different addresses."),
+            })
+    out.sort(key=lambda r: (r["kind"], r["event_start"], r["event"], r["other"]))
+    seen, unique = set(), []
+    for r in out:
+        key = (r["kind"], r["event_start"], r["other_start"], r["event"], r["other"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(r)
+    return unique
+
+
+def _claimed_days(text: str) -> list:
+    """(kind, label, value) claims in one piece of text: a weekday name, or a
+    "November 6" / "6 November" date. Only shapes a PERSON wrote, read as they
+    wrote them; nothing is inferred when a claim is absent."""
+    got = []
+    for m in _WEEKDAY_RE.finditer(str(text or "")):
+        name = m.group(1)
+        got.append(("weekday", name, _DAY_NAMES.index(name.title())))
+    for m in _DATE_WORDS_RE.finditer(str(text or "")):
+        mon = (m.group(1) or m.group(4) or "").lower()
+        day = m.group(2) or m.group(3)
+        if mon in _MONTHS and day:
+            try:
+                got.append(("date", f"{day} {mon.title()}", (int(day), _MONTHS[mon])))
+            except (TypeError, ValueError):
+                continue
+    return got
+
+
+def detect_wrong_day_anomalies(events: list, source_texts=None) -> list:
+    """Where a calendar entry and a claim disagree about WHICH DAY it is on.
+
+    Two sources, both already in hand (no new read):
+    * an event whose own title says a weekday or a date that its start does not
+      match ("Showing - Tuesday" starting on a Wednesday);
+    * a caller-supplied claim about an event (`source_texts`: dicts with
+      `text` and `event_uid` or `event_summary`, or direct `claimed_weekday` /
+      `claimed_date` keys). A claim is compared with the event it names; when
+      the event cannot be found the claim is skipped, not guessed at.
+
+    Rows: `kind` ("weekday_mismatch" | "date_mismatch"), `event`,
+    `event_start`, `claimed`, `actual`, `said`. Both claims are reported; the
+    function never decides which is right."""
+    rows = [e for e in (events or []) if isinstance(e, dict)]
+    by_uid = {str(e.get("uid")): e for e in rows if e.get("uid")}
+    by_name = {}
+    for e in rows:
+        by_name.setdefault(_travel_name(e).casefold(), e)
+    out = []
+
+    def _add(e, start, kind, claimed, actual):
+        out.append({
+            "kind": kind,
+            "event": _travel_name(e),
+            "event_start": e.get("start") or "",
+            "claimed": claimed,
+            "actual": actual,
+            "said": (f'"{_travel_name(e)}" says it is {claimed}, but the calendar '
+                     f"has it on {actual} ({_when_words(start)}). Check which is right."),
+        })
+
+    for e in rows:
+        start, _end = _event_bounds(e)
+        if start is None:
+            continue
+        claimed = _claimed_days(_claim_text(_travel_name(e)))
+        description = e.get("description")
+        if description:
+            # The calendar reader deliberately never fetches DESCRIPTION; this
+            # only looks at one a caller already holds (a source-email panel
+            # or a test fixture), after the same marker strip.
+            claimed += _claimed_days(_claim_text(description))
+        if not claimed:
+            continue
+        actual_weekday = _DAY_NAMES[start.weekday()]
+        for kind, label, value in claimed:
+            if kind == "weekday" and value != start.weekday():
+                _add(e, start, "weekday_mismatch", label, actual_weekday)
+            elif kind == "date" and value != (start.day, start.month):
+                _add(e, start, "date_mismatch", label,
+                     f"{start.day} {start.strftime('%B')}")
+
+    for claim in source_texts or ():
+        if not isinstance(claim, dict):
+            continue
+        e = None
+        if claim.get("event_uid"):
+            e = by_uid.get(str(claim["event_uid"]))
+        if e is None and claim.get("event_summary"):
+            e = by_name.get(str(claim["event_summary"]).casefold())
+        if e is None:
+            continue
+        start, _end = _event_bounds(e)
+        if start is None:
+            continue
+        checks = []
+        if claim.get("claimed_weekday"):
+            name = str(claim["claimed_weekday"]).strip().title()
+            if name in _DAY_NAMES:
+                checks.append(("weekday", name, _DAY_NAMES.index(name)))
+        if claim.get("claimed_date") and "text" in claim:
+            checks.extend(_claimed_days(claim.get("text")))
+        elif claim.get("claimed_date"):
+            checks.extend(_claimed_days(str(claim.get("claimed_date"))))
+        else:
+            checks.extend(_claimed_days(claim.get("text") or ""))
+        actual_weekday = _DAY_NAMES[start.weekday()]
+        for kind, label, value in checks:
+            if kind == "weekday" and value != start.weekday():
+                _add(e, start, "weekday_mismatch", label, actual_weekday)
+            elif kind == "date" and value != (start.day, start.month):
+                _add(e, start, "date_mismatch", label,
+                     f"{start.day} {start.strftime('%B')}")
+
+    seen, unique = set(), []
+    for r in out:
+        key = (r["kind"], r["event"], r["event_start"], r["claimed"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(r)
+    unique.sort(key=lambda r: (r["event_start"], r["kind"], r["event"], r["claimed"]))
+    return unique
+
+
+#: The earlier name of the same rule (the PR that added it, #722, used this
+#: one); the gate names `detect_wrong_day_anomalies`, so that is canonical now
+#: and this stays as the compatibility name for any caller already written.
+detect_calendar_anomalies = detect_wrong_day_anomalies
+
+
+def external_meetings(events: list) -> list:
+    """Timed, non-travel events with a real place attached - the closest thing
+    to "meeting with someone outside this PC" a minimal calendar read can say
+    without inventing attendees it never read."""
+    out = []
+    for e in events or []:
+        if not isinstance(e, dict) or is_travel_event(e):
+            continue
+        start, _end = _event_bounds(e)
+        if start is None or not _physical(e):
+            continue
+        out.append(e)
+    out.sort(key=lambda e: (_event_bounds(e)[0], _travel_name(e)))
+    return out
+
+
+def meeting_prep(events: list, *, now: Optional[datetime] = None, people=None,
+                 notes=None, max_cards: int = 5) -> list:
+    """A compact 2-minute prep card per external meeting on the day.
+
+    `people` and `notes` are the caller's own read-only looks (a callable
+    taking the event and returning a list of short strings), because this
+    module must not open the CRM, the notes vault or memory itself. When a
+    provider is None the card says what is missing instead of showing a blank
+    card that reads like "nothing to know". Nothing is invented, and no event
+    text is logged."""
+    cards = []
+    for e in external_meetings(events)[:max_cards]:
+        start, _end = _event_bounds(e)
+        who, what, missing = [], [], []
+        for provider, label, sink in ((people, "people", who), (notes, "notes", what)):
+            if provider is None:
+                missing.append(label)
+                continue
+            try:
+                got = provider(e) or []
+            except Exception:
+                got = None
+            if got is None:
+                missing.append(label)
+                continue
+            short = [str(x).strip() for x in got if str(x).strip()][:4]
+            sink.extend(short)
+            if not short:
+                missing.append(label)
+        parts = []
+        if who:
+            parts.append("people: " + ", ".join(who))
+        if what:
+            parts.append("notes: " + ", ".join(what))
+        said = (f'2-minute prep for "{_travel_name(e)}" at {_when_words(start)}' +
+                (" - " + "; ".join(parts) if parts else "") +
+                (" - missing: " + ", ".join(sorted(set(missing))) if missing else ""))
+        cards.append({"summary": _travel_name(e), "start": e.get("start") or "",
+                      "when": _when_words(start), "people": who, "notes": what,
+                      "missing": sorted(set(missing)), "said": said})
+    return cards
+
+
 def run(p: Plan, *, fetch: Optional[Callable[[Query], str]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan. `approved` has no default of True.

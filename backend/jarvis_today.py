@@ -935,6 +935,16 @@ def cockpit_sections(sched, *, now: float, hidden: bool = False, turns=None,
                                           enabled=enabled, existing=covered)
     if proposals:
         out["proposals"] = proposals
+    # Wave D-1 (D7): the Daily Pulse travels on the latest briefing (which
+    # already read today's calendar/schedule) - no new read here. Absent when
+    # no briefing has been made in this process yet, and never while hidden.
+    try:
+        import jarvis_briefing as _B
+        pulse = (_B.latest() or {}).get("pulse")
+        if isinstance(pulse, dict) and (pulse.get("lines") or pulse.get("where_to_look")):
+            out["pulse"] = pulse
+    except Exception:
+        pass
     return out
 
 

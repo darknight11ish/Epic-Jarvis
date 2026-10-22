@@ -464,12 +464,21 @@ _ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "
                   # an old schedule.db reads exactly as it did.
                   ("context_bundle", "TEXT"), ("trigger", "TEXT"),
                   ("snooze_count", "INTEGER"), ("resolved_at", "REAL"),
-                  ("condition_kind", "TEXT"), ("condition_target", "TEXT"))
+                  ("condition_kind", "TEXT"), ("condition_target", "TEXT"),
+                  # Wave D-1 (2026-10-22): "Ready for your review" - a time
+                  # Jarvis finished its part and is waiting for the OWNER. It
+                  # is never a done state; only act("done") moves a to-do to
+                  # done, exactly as before.
+                  ("ready_for_review", "REAL"))
 
 #: States. `active` and `paused` are on the list; `waiting` is a repeating
 #: job whose card has not been answered; `fired` is a one-off that went off
 #: (kept FIRED_KEEP, readable by id); `done` is a to-do ticked off.
 LISTED = ("active", "paused", "waiting")
+
+#: Wave D-1 (Upgrade D6): Jarvis can finish its part, but only the OWNER marks
+#: a task done. This is the one sentence both apps show for that state.
+READY_SAID = "Ready for your review - only you can mark it done."
 
 # --------------------------------------------------------------------------
 #   Local time, and daylight saving
@@ -1311,6 +1320,45 @@ class Scheduler:
 
     # ---- changing one job ---------------------------------------------------------
 
+    #: Waves of work finish; the owner decides when a TASK finished.
+    #: "Ready for your review" is therefore its own marker, never `done`.
+    def propose_ready(self, jid: str, *, review_note: str = "") -> tuple:
+        """Jarvis has done its part: mark a to-do READY FOR THE OWNER.
+
+        Nothing is completed here (`done` stays False), and there is no route
+        that marks a task done except the owner's own `act("done")`.
+        Idempotent: proposing again only refreshes the time. Only a to-do item
+        can wait for review (a reminder or alarm is not the owner's task
+        list). The audit line carries the id, the kind and the outcome ONLY -
+        a `review_note` is accepted for callers to pass words along but is
+        deliberately NOT logged (Wave D-1, Upgrades D6; D-1.4 gate)."""
+        now = self.now()
+        with self._lock, self._db() as c:
+            row = self._row(c, jid)
+            if row is None:
+                return 404, {"ok": False, "reason": "no_such_job",
+                             "error": "That is not on the list any more."}
+            if row["state"] not in ("active", "paused"):
+                return 409, {"ok": False,
+                             "error": "That item is not waiting on you."}
+            if row["kind"] != "todo":
+                return 409, {"ok": False,
+                             "error": "Only a to-do item can be ready for your review."}
+            c.execute("UPDATE jobs SET ready_for_review = ?, changed = ? WHERE id = ?",
+                      (now, now, jid))
+        _audit("schedule.ready", {"id": jid, "kind": "todo",
+                                  "outcome": "ready_for_review"})
+        self._changed(jid, "todo")
+        return 200, {"ok": True, "ready_for_review": True,
+                     "said": READY_SAID}
+
+    def suggest_done(self, jid: str, *, review_note: str = "") -> tuple:
+        """The name the Wave D-1 gate uses for the same proposal: "this looks
+        finished - you decide". It NEVER sets done; it only marks the item
+        ready for the owner's review, and any `review_note` words are not
+        logged. `propose_ready` is the older spelling of the one method."""
+        return self.propose_ready(jid, review_note=review_note)
+
     def act(self, jid: str, do: str, seconds: Optional[float] = None) -> tuple:
         """ONE job: pause, resume, delete, done, add_time, snooze. (code, answer)."""
         do = str(do or "").strip().lower()
@@ -1343,8 +1391,8 @@ class Scheduler:
             if do == "done":
                 if kind != "todo":
                     return 409, {"ok": False, "error": "Only a to-do item can be marked done."}
-                c.execute("UPDATE jobs SET state = 'done', changed = ?, fired_at = ? "
-                          "WHERE id = ?", (now, now, jid))
+                c.execute("UPDATE jobs SET state = 'done', changed = ?, fired_at = ?, "
+                          "ready_for_review = NULL WHERE id = ?", (now, now, jid))
                 said = "Marked done."
             elif do == "pause":
                 k = KINDS.get(kind)
@@ -1870,6 +1918,17 @@ class Scheduler:
             v["list"] = row["list_name"] or ""
         if row["snooze_of"]:
             v["snoozed"] = True
+        try:
+            ready_at = row["ready_for_review"]
+        except (IndexError, KeyError):
+            ready_at = None
+        if ready_at:
+            v["ready_for_review"] = True
+            v["ready_at"] = float(ready_at)
+            v["ready_said"] = READY_SAID
+            # D-1.4 gate: the marker never means done. Said as a field too, so
+            # an app/test can assert the owner-only rule without reading state.
+            v["done"] = False
         v["lock_screen"] = k.lock_screen if k else "Jarvis: something is due."
         # GTD-1 (2026-10-18): additive, and only when there is something to
         # say - an old row (or a plain timer/alarm) grows no keys, so every
