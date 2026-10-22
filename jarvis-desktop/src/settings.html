@@ -1384,6 +1384,26 @@
           would stop working everywhere else on the computer.
         </p>
 
+        <div class="alt-space" id="alt-space">
+          <div class="alt-space-line">
+            <strong>Alt+Space at startup</strong>
+            <span id="alt-space-state" role="status">Checking Alt+Space…</span>
+          </div>
+          <p class="note" id="alt-space-hint">
+            Windows decides which program gets <code>Alt+Space</code> first at
+            logon, so another launcher can hold it for a few seconds — or for
+            good if it keeps it. Jarvis retries automatically for the first
+            minute after login; if the key is still held, claim it back here
+            once that program lets go. The tray&rsquo;s <em>Show or hide the
+            Jarvis bar</em> always works, and Win+Shift+J and the other
+            shortcuts are not affected.
+          </p>
+          <div class="row">
+            <button class="btn" id="reclaim-alt-space" type="button" hidden>Re-claim Alt+Space</button>
+            <span class="status" id="alt-space-status" role="status"></span>
+          </div>
+        </div>
+
         <div id="hotkey-rows"></div>
 
         <div class="row">

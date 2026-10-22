@@ -22720,6 +22720,26 @@ both-card lane, arriving later". Both apps call this route now: the desktop's
 focus-presets bridge sends it, and the Android preset screen reads and sends
 the same `apply_path` the GET advertises.
 
+**The HUD's left rail renders this contract too** (the owner's request of
+2026-10-21: "i would like this part of the jarvis HUD to have the presets we
+created instead, with one of the buttons being for the cloud"). The HUD window
+holds no pairing token, so it reaches both routes the way every other HUD read
+does: `GET /api/presets` is on the HUD window's fixed read list
+(`jarvis-desktop/src-tauri/src/hud_proxy.rs` `HUD_GET_PATHS`, returned through
+`hud_get`),
+and a preset click calls the BAR'S own Tauri command `apply_focus_preset`
+(`focus_presets.rs`, the same command the bar's "Use this preset" sends), so
+the PC raises the same ONE `switch_model` card and the page never posts
+`/api/work/apply` itself. The rail marks a preset chosen only when the next
+refetch says `chosen_preset`; after a successful apply the page clears its own
+lane override so the next chat turn is an ordinary routed turn at the PC's
+active lane (what the bar and the phone send). The single **Cloud** button is
+NOT this contract: it sets the next message's lane to the general cloud lane
+(`jarvis-escalate` when the PC lists it) through the HUD's existing lane
+mechanism, raises no card, and when `/api/status` says `proxy: false` it says
+plainly that the cloud lane is down and marks nothing. Tests:
+`jarvis-desktop/tests/hud-presets.mjs`.
+
 Tests: `backend/test_presets.py`, `test_presets_lanes.py`,
 `test_presets_apply.py` (route shape, origin/token, old shape not served,
 pending/heavy refusals, rollback), and `tools/gen_work_presets.py --check`.

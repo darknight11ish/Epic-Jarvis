@@ -30,11 +30,24 @@
 //! ## What must never be written here
 //!
 //! The pairing token, the contents of an approval prompt, a chat message, or
-//! a memory fact. This file is plain text on disk with no redaction pass, it
-//! outlives the process, and the owner will paste it into a bug report. Log
-//! that something happened and what failed, never what it was about. The
-//! backend's own log obeys the same rule on its side; see
-//! `docs/ARCHITECTURE.md` §4.
+//! a memory fact. This file is plain text on disk, it outlives the process,
+//! and the owner will paste it into a bug report. Log that something happened
+//! and what failed, never what it was about. The backend's own log obeys the
+//! same rule on its side; see `docs/ARCHITECTURE.md` §4.
+//!
+//! ## The scrubber, and why it is not a licence to log secrets
+//!
+//! R4 (2026-10-21; README section 8 bullet 15 used to say the desktop log was
+//! not scrubbed): every line the app writes now passes through
+//! [`crate::log_scrub::scrub_log_line`] at the ONE append function below -
+//! [`append_with`], whose production caller is [`append`] - so a caller cannot
+//! reach the file without it. It takes out the shapes the backend's scrubber
+//! knows too (pairing tokens, auth/header/query secrets, `sk-`/`ghp_`/`AIza`
+//! keys, long hex/base64 blobs), but it is a PATTERN LIST, not a guarantee:
+//! the discipline in the paragraph above is still the rule, and the README
+//! says so. `backend.log` is mostly the Python child's own handles
+//! ([`backend_sinks`]) and obeys its own scrubber on its side;
+//! [`mark_backend`] writes through this same appender.
 
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -119,12 +132,19 @@ pub fn mark_backend(line: &str) {
 }
 
 fn append(path: &Path, line: &str) {
+    append_with(path, line, &crate::log_scrub::scrub_log_line);
+}
+
+/// The one place a line reaches the disk, with the scrubber as a parameter so
+/// a test can prove the seam is real. Production calls [`append`], which
+/// passes [`crate::log_scrub::scrub_log_line`]; there is no other writer.
+fn append_with(path: &Path, line: &str, scrub: &dyn Fn(&str) -> String) {
     rotate_if_large(path);
     if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(path) {
         // Errors are dropped on purpose. A full disk must not turn every
         // logged event into a second failure, and there is nowhere to report
         // a logging failure to except the log.
-        let _ = writeln!(f, "{} {}", stamp(), line);
+        let _ = writeln!(f, "{} {}", stamp(), scrub(line));
     }
 }
 
@@ -263,5 +283,77 @@ mod tests {
         backend_sinks();
         mark_backend("and another");
         trim_backend_log();
+    }
+
+    fn scratch_log(tag: &str) -> (PathBuf, PathBuf) {
+        // Under this crate's own target folder, not %TEMP%: this PC's %TEMP%
+        // refuses writes on some desks (the documented pre-existing failures),
+        // and a test that cannot create its folder proves nothing.
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!(
+                "logfile-test-{tag}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ));
+        std::fs::create_dir_all(&dir).expect("test dir under target");
+        let path = dir.join("jarvis-desktop.log");
+        (dir, path)
+    }
+
+    /// THE ONE APPENDER SCRUBS. This is the behavioural half of R4's bite: a
+    /// secret written through the function every caller uses never reaches the
+    /// bytes on disk.
+    #[test]
+    fn the_appender_scrubs_a_secret_before_it_reaches_the_disk() {
+        let (dir, path) = scratch_log("scrub");
+        append(
+            &path,
+            "auth failed for X-Jarvis-Token: my-secret; sk-proj-1234567890abcdefghij; \
+             jdk1.d12345678.secret",
+        );
+        let body = std::fs::read_to_string(&path).expect("log written");
+        for raw in [
+            "my-secret",
+            "sk-proj-1234567890abcdefghij",
+            "jdk1.d12345678.secret",
+        ] {
+            assert!(!body.contains(raw), "raw secret on disk: {raw}\n{body}");
+        }
+        assert!(body.contains(crate::log_scrub::PAIR_TOKEN), "{body}");
+        assert!(body.contains(crate::log_scrub::API_KEY), "{body}");
+        assert!(body.contains("X-Jarvis-Token=[REDACTED]"), "{body}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Ordinary prose still lands exactly as written; the timestamp is the
+    /// only thing added.
+    #[test]
+    fn ordinary_prose_reaches_the_disk_unchanged() {
+        let (dir, path) = scratch_log("prose");
+        let line = "the build took 12.5 seconds and wrote 4 files";
+        append(&path, line);
+        let body = std::fs::read_to_string(&path).expect("log written");
+        // `writeln!` ends the line, so compare the text without that newline.
+        assert!(body.trim_end().ends_with(line), "{body}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The seam is real: whatever a test passes as the scrubber is what lands
+    /// on disk. It run-proves the appender consults the parameter rather than
+    /// writing the caller's text directly (no source-text pin).
+    #[test]
+    fn the_append_seam_really_uses_its_scrubber() {
+        let (dir, path) = scratch_log("seam");
+        append_with(&path, "whatever the caller passed", &|_| {
+            "SCRUBBED".to_string()
+        });
+        let body = std::fs::read_to_string(&path).expect("log written");
+        assert!(body.trim_end().ends_with("SCRUBBED"), "{body}");
+        assert!(!body.contains("whatever the caller passed"), "{body}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

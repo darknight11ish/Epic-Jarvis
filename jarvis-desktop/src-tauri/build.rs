@@ -519,6 +519,12 @@ fn main() {
             "get_hotkeys",
             "set_hotkeys",
             "reset_hotkeys",
+            // R6 (2026-10-21): the Alt+Space startup verdict and its
+            // one-click re-claim. Without these two lines the commands have no
+            // permission at all and the Settings call is refused at the ACL,
+            // silently - the audit's check_invoke_grants caught exactly that.
+            "alt_space_status",
+            "reclaim_alt_space",
             "hide_widget",
             "resize_desktop_widget",
             "set_widget_always_on_top",
