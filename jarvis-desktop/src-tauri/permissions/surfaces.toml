@@ -1923,3 +1923,20 @@ permissions = [
   "allow-get-focus-presets",
   "allow-apply-focus-preset",
 ]
+
+# The HUD Reminders tab's writes (2026-10-21, the owner's request for a
+# dedicated Reminders menu in the HUD). Reads do NOT need this set: the tab's
+# own `GET /api/schedule` goes through `hud-link`'s `hud-get`, where the words
+# are taken out while App lock or the private lists are hidden (the same
+# redaction the Brain window uses). This set is only the two write commands:
+# add ONE reminder/timer/alarm/to-do item, and change ONE job - or clear ONE
+# named list after the page's own are-you-sure, with the count it showed.
+# No card (both only add or quieten), never a delete-all, never the to-do
+# list itself, and every change is held on a stale link like the Brain's.
+[[set]]
+identifier = "hud-schedule"
+description = "Add ONE reminder, timer, alarm or to-do item, and change ONE job (pause, resume, delete, done, add time, snooze). No card, no list form, never a delete-all or a clear-list (Ruling 15: that stays the Brain's), held on a stale link."
+permissions = [
+  "allow-hud-schedule-add",
+  "allow-hud-schedule-act",
+]

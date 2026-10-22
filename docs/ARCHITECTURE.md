@@ -2394,6 +2394,28 @@ browser keeps the old three-way `jarvis.hud.layout` fallback until H2 draws
 the real region grid.
 
 **Not on the phone yet, and that is the scope of this slice rather than a
+**The HUD Reminders tab is the desktop HUD's, on purpose** (2026-10-21; the
+owner's dedicated Reminders menu). The HUD page (`jarvis_hud.html`, vendored
+byte-for-byte in three copies: `jarvis-desktop/src/`, `backend/` and
+`jarvis-backend/`) is a desktop window; the phone has its own Coming up
+screens on the same backend route. Its new `GET /api/schedule` read goes
+through `hud_proxy.rs`'s fixed list, and in Rust it gets the SAME word
+redaction the Brain window uses (`brain::schedule::redact_list`): while App
+lock or "Hide memory lists" is on, the words of reminders, to-do items and
+named lists are blanked while kinds, times and counts stay, so a page script
+cannot read round it. Its writes are two HUD-scoped commands,
+`hud_schedule_add` and `hud_schedule_act` (`hud-schedule` in
+`capabilities/hud.json`), held on a stale link like the Brain's, with no
+approval card because they only add or quieten, and with **no list form and no
+delete-all** (Ruling 15 keeps "clear named list" in the Brain window). Phase 1
+is view, add, and the EXISTING one-job actions - snooze, add time, pause,
+resume, done, delete. Editing an item's words/time/repeat, moving it between
+lists and reordering are Phase 2: they need backend actions and a rank column,
+so they need a later deploy, and they are not faked in the page. The phone is
+not missing a control: its own app already reads and acts on the same
+schedule. `tools/check_parity.py` has nothing new to classify, because no
+backend route is added and the phone's read of `/api/schedule` is unchanged.
+
 **Not on the phone yet, and that is the scope of this slice rather than a
 one-sided decision** (2026-10-19; extended by S3, 2026-10-20): **searchable
 recordings and videos** (`backend/jarvis_media_index.py`,

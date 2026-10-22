@@ -556,12 +556,17 @@ pub fn redact_graph(body: serde_json::Value) -> serde_json::Value {
 /// * `/api/graph` through [`redact_graph`];
 /// * `/api/retrieve?q=` (the HUD's "what the brain reached for" trace,
 ///   which lists recalled facts) becomes `{"available": false, "hidden":
-///   true}` - the page already shows no trace for `available: false`.
+///   true}` - the page already shows no trace for `available: false`;
+/// * `/api/schedule` (the HUD Reminders tab, 2026-10-21) through the SAME
+///   `brain::schedule::redact_list` the Brain window uses: the words of every
+///   reminder, to-do item and named list are taken out, while kinds, times
+///   and counts stay, so the tab can still group and count them.
 ///
 /// `/api/memory/pending` is NOT changed: the HUD shows only how many cards
 /// wait, never their words (jarvis_hud.html), and the Brain's own hidden
-/// list keeps that count too. Anything else, or a graph body that is not
-/// JSON, is passed on unchanged.
+/// list keeps that count too. Anything else, or a body that is not JSON, is
+/// passed on unchanged (the schedule body becomes the honest hidden reply,
+/// never the unreadable original).
 pub fn redact_hud_read(path: &str, body: &str) -> String {
     let route = path.split('?').next().unwrap_or(path);
     match route {
@@ -569,6 +574,10 @@ pub fn redact_hud_read(path: &str, body: &str) -> String {
         "/api/graph" => match serde_json::from_str::<serde_json::Value>(body) {
             Ok(v) => redact_graph(v).to_string(),
             Err(_) => body.to_string(),
+        },
+        "/api/schedule" => match serde_json::from_str::<serde_json::Value>(body) {
+            Ok(v) => crate::brain::schedule::redact_list(v).to_string(),
+            Err(_) => serde_json::json!({ "available": false, "hidden": true }).to_string(),
         },
         _ => body.to_string(),
     }
@@ -623,6 +632,60 @@ mod tests {
         let status = r#"{"model": "jazz"}"#;
         assert_eq!(redact_hud_read("/api/status", status), status);
         assert_eq!(redact_hud_read("/api/graph", "not json"), "not json");
+    }
+
+    /// The HUD Reminders tab is memory too: while App lock / the hidden
+    /// lists are on, the SAME redaction the Brain window uses takes the
+    /// words out of the schedule read - ids, kinds, times, states and
+    /// counts stay, so the tab can group and count without reading them.
+    #[test]
+    fn the_hud_schedule_read_loses_its_words_but_keeps_its_shape() {
+        let body = serde_json::json!({
+            "available": true,
+            "now": 1000.0,
+            "tz": "America/Los_Angeles",
+            "jobs": [
+                {"id": "s0123456789", "kind": "reminder", "text": "Call Priya about the ring",
+                 "state": "active", "when": "tomorrow at 18:00", "repeat": "every weekday at 18:00"},
+                {"id": "s012345678a", "kind": "timer", "text": "", "state": "active",
+                 "left": 60.0, "when": "in 1 minute"}
+            ],
+            "todo": [
+                {"id": "s012345678b", "kind": "todo", "text": "Buy milk", "state": "active",
+                 "list": "shopping"}
+            ],
+            "went_off": [],
+            "lists": [{"name": "shopping", "title": "Shopping list", "open": 1}]
+        });
+        let out = redact_hud_read("/api/schedule", &body.to_string());
+        for word in ["Priya", "ring", "Buy milk", "shopping", "Shopping"] {
+            assert!(!out.contains(word), "{word} survived the lock: {out}");
+        }
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["available"], true);
+        assert_eq!(v["hidden"], true);
+        assert_eq!(v["hidden_count"], 2, "two rows had words: {out}");
+        assert_eq!(v["jobs"][0]["kind"], "reminder", "kinds stay");
+        assert_eq!(v["jobs"][0]["when"], "tomorrow at 18:00", "times stay");
+        assert_eq!(
+            v["jobs"][0]["repeat"], "every weekday at 18:00",
+            "repeat words stay"
+        );
+        assert_eq!(v["jobs"][1]["kind"], "timer", "a timer still counts down");
+        assert_eq!(v["jobs"][1]["left"], 60.0);
+        assert_eq!(v["lists"][0]["open"], 1, "counts stay");
+        assert_eq!(
+            v["lists"][0]["name"], "hidden-1",
+            "a list name is the owner's words"
+        );
+        assert_eq!(
+            v["todo"][0]["list"], "hidden-1",
+            "the item points at the same stand-in"
+        );
+        assert_eq!(
+            redact_hud_read("/api/schedule", "not json"),
+            r#"{"available":false,"hidden":true}"#
+        );
     }
 
     #[test]
