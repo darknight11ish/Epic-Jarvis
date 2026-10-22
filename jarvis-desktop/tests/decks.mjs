@@ -106,6 +106,9 @@ await check("the shared words are word for word what the contract says", async (
   eq(D.REVIEW_HIDDEN, W.review_hidden);
   eq(D.SHOW_ANSWER, W.show_answer);
   eq(D.TYPED_PLACEHOLDER, W.typed_placeholder);
+  // Slice 22B, wired on the desktop 2026-10-21: the same two words the phone uses.
+  eq(D.MARK_ANSWER, W.mark_answer);
+  eq(D.RADAR_HEADING, W.radar_heading);
   eq(D.RATINGS.map((r) => r.id).join(","), FIX.ratings.join(","));
   eq(D.RATINGS[0].label, W.rating_again);
   eq(D.RATINGS[1].label, W.rating_hard);
@@ -689,7 +692,7 @@ if (K) {
     assert.match(body, /Cocina/);
   });
 
-  await check("review: the card first, Show answer, then the four ratings in order; the typed words are never sent", async () => {
+  await check("review: the card first, Show answer, then the four ratings in order; Show answer sends no typed words", async () => {
     const page = await workTab(decksData());
     await fkey(page, "review:d1a2b3c4d5e6").click();
     await settle(page, 500);
@@ -715,6 +718,37 @@ if (K) {
     assert.equal(JSON.stringify(calls).includes("MY PRIVATE GUESS"), false, "the typed words were sent");
     const reveal = calls.filter((c) => c.cmd === "brain_review_reveal");
     assert.deepEqual(reveal.map((c) => Object.keys(c).sort()), [["card", "cmd"]]);
+  });
+
+  await check("Mark my answer sends the typed words and shows the PC's own sentence; an empty box sends nothing", async () => {
+    const page = await workTab(decksData({ grade: FIX.samples.graded_reveal.grade }));
+    await fkey(page, "review:d1a2b3c4d5e6").click();
+    await settle(page, 500);
+    const emptyDisabled = await page.locator('[data-fkey="mark-answer"]').isDisabled();
+    await page.locator(".review-typed").fill("  sunlight  ");
+    const enabled = await page.locator('[data-fkey="mark-answer"]').isEnabled();
+    await page.locator('[data-fkey="mark-answer"]').click();
+    await settle(page, 500);
+    const calls = (await dcalls(page)).filter((c) => c.cmd === "brain_review_reveal");
+    const shown = await text(page, "#decks-body");
+    const markGone = await page.locator('[data-fkey="mark-answer"]').count();
+    await page.close();
+    assert.equal(emptyDisabled, true, "Mark my answer was offered with an empty box");
+    assert.equal(enabled, true);
+    assert.deepEqual(calls.map((c) => c.answer), ["sunlight"]);
+    assert.ok(shown.includes(FIX.samples.graded_reveal.grade.words), `the PC's sentence: ${shown}`);
+    assert.match(shown, /Chlorophyll/, "the back is shown too");
+    assert.equal(markGone, 0, "the mark button stayed on the revealed card");
+  });
+
+  await check("the PC's fading-card radar is drawn under the deck list, word for word", async () => {
+    const page = await workTab(decksData({ radar: FIX.samples.decks.radar }));
+    const heads = await page.locator("#decks-card h3").allInnerTexts();
+    const rows = await page.locator(".deck-radar .note").allInnerTexts();
+    await page.close();
+    // Headings are uppercased by CSS, so compare like the test above does.
+    assert.ok(heads.some((h) => h.toLowerCase() === W.radar_heading.toLowerCase()), `headings: ${heads}`);
+    assert.deepEqual(rows, FIX.samples.decks.radar.map((r) => r.words));
   });
 
   await check("rating sends the id for the button, shows the next card, and the last one ends on Nothing ready today", async () => {
@@ -862,7 +896,8 @@ if (K) {
   });
 
   await check("hidden lists: names, cards and the review are out; counts and the line stay; Show brings them back", async () => {
-    const page = await workTab({ ...decksData(), security: { hidden: true } });
+    const page = await workTab({ ...decksData({ radar: FIX.samples.decks.radar }), security: { hidden: true } });
+    const radarWords = FIX.samples.decks.radar[0].words;
     const hidden = await text(page, "#decks-card");
     const reviewButtons = await page.locator('#decks-card [data-fkey^="review:"]').count();
     const cardButtons = await page.locator('#decks-card [data-fkey^="cards:"]').count();
@@ -878,9 +913,11 @@ if (K) {
     assert.match(hidden, /3 cards/, "the counts stay");
     assert.ok(hidden.includes(W.review_hidden));
     assert.match(hidden, /Hidden until Windows Hello confirms it is you\./);
+    assert.ok(!hidden.includes(radarWords), "a radar row was drawn while hidden");
     assert.equal(reviewButtons + cardButtons + deleteButtons, 0);
     assert.equal(reads, 0, "review was asked of the PC while hidden");
     assert.match(shown, /Plants/);
+    assert.ok(shown.includes(radarWords), "the radar rows did not come back with Show");
   });
 
   await check("a review open when the lists are hidden closes, and no card word stays drawn", async () => {

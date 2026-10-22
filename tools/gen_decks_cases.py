@@ -23,11 +23,14 @@ ONE source for:
     additive fields: the "radar" rows under the deck list and the "grade" a
     reveal answers with when a typed answer is sent.
 
-Slice 22B adds fields only - no route, no changed key: the phone draws the
-radar and a "Mark my answer" button; the desktop's net layer reads both shapes
-(src/decks.js readRadar/readGrade) and its review screen does not draw them yet
-(docs/ARCHITECTURE.md section 8, "One-sided on purpose"). The backend suits
-these samples: backend/test_decks.py proves the radar sentences are
+Slice 22B adds fields only - no route, no changed key: the phone drew the radar
+and a "Mark my answer" button first (2026-10-17); the desktop's net layer read
+both shapes from the start (`src/decks.js` readRadar/readGrade) and **the
+desktop's review screen draws them too since 2026-10-21** (R2: the radar under
+the deck list, the typed answer sent by the "Mark my answer" tap, and the PC's
+own sentence shown word for word), so the words below are the same on both
+apps and this file is the one source for them. The backend suits these samples:
+backend/test_decks.py proves the radar sentences are
 _radar_words()'s and the graded reveal is grade_spoken_answer()'s own answer.
 
 This file replaced the hand-written tests/fixtures/decks-words.json (2026-09-30,
@@ -128,7 +131,10 @@ WORDS = {'section_title': 'My study decks',
  'empty_state': 'Keep questions from a quiz to make your first deck.',
  'review_hidden': 'Turn off Hide memory lists to review',
  'show_answer': 'Show answer',
- 'typed_placeholder': 'Type your answer (only for you - it is not sent or marked)',
+ 'mark_answer': 'Mark my answer',
+ 'radar_heading': 'Cards fading',
+ 'typed_placeholder': 'Type your answer (it stays on this device unless you ask the PC to '
+                      'mark it)',
  'rating_again': "Didn't remember",
  'rating_hard': 'Remembered, with effort',
  'rating_good': 'Remembered',

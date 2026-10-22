@@ -62,10 +62,12 @@ object Decks {
 
     const val SHOW_ANSWER = "Show answer"
     /**
-     * The box's word, changed for slice 22B: a typed answer can now be sent to
-     * the PC to be marked ("Mark my answer"). The desktop's review box still
-     * shows the old word and still drops what is typed; its screen is not part
-     * of this slice (docs/ARCHITECTURE.md section 8, "One-sided on purpose").
+     * The box's word, changed for slice 22B: a typed answer can be sent to the
+     * PC to be marked ("Mark my answer"). **Since 2026-10-21 (R2) this is the
+     * shared word on both apps**: the desktop's review screen draws the same
+     * button, sends the typed answer on that one tap and shows the PC's own
+     * sentence, so `tools/gen_decks_cases.py` is the one source for this word
+     * (the old desktop wording said the text was never sent).
      */
     const val TYPE_HINT = "Type your answer (it stays on this device unless you ask the PC to mark it)"
     const val MARK_ANSWER = "Mark my answer"
