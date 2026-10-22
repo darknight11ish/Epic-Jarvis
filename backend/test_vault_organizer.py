@@ -59,6 +59,12 @@ os.environ["JARVIS_NO_EMBED"] = "1"          # the clusterer never embeds; this 
 import jarvis_vault_organizer as V  # noqa: E402
 import jarvis_receipts as R  # noqa: E402
 
+# The existing writer checks below are about the IN-PLACE writer; the
+# R7 section passes apply_on_copy=True explicitly. Setting the module
+# default here keeps those 25 existing checks meaningful without
+# threading a new argument through each one.
+V.COPY_DEFAULT = False
+
 VAULT = TMP / "Vault"
 FAILED, PASSED, SKIPPED = [], [], []
 
@@ -78,6 +84,8 @@ def fresh():
     """An empty vault with Obsidian's marker folder, and the switch off."""
     V.reset_for_tests()
     shutil.rmtree(VAULT, ignore_errors=True)
+    for old_copy in VAULT.parent.glob(f"{VAULT.name}{V.COPY_SUFFIX}*"):
+        shutil.rmtree(old_copy, ignore_errors=True)
     (VAULT / ".obsidian").mkdir(parents=True)
     try:
         V.state_path().unlink()
@@ -1255,12 +1263,168 @@ def t_a_database_child_stays_beside_its_hub_under_both_schemes():
 
 
 # --------------------------------------------------------------------------
+#   R7 (Ruling 14, 2026-10-21): the first real run works on a COPY
+# --------------------------------------------------------------------------
+
+def _copy_vault() -> None:
+    """A small vault a first-run copy can organize, and its real-tree snapshot
+    is taken by the caller before applying."""
+    fresh()
+    write("Alpha.md", "# Alpha\n\nAlpha body words.\n")
+    write("Beta.md", "# Beta\n\nBeta body words.\n")
+
+
+def _plan(update=None):
+    out = V.plan_vault_organization(str(VAULT), scheme="mocs_only")
+    check("the copy-first vault plans", out.get("ok") is True, out)
+    return out
+
+
+def _apply(out, **kw):
+    # The suite sets COPY_DEFAULT = False for the in-place checks; the R7
+    # checks always ask for the ruling's copy-first behaviour explicitly.
+    kw.setdefault("apply_on_copy", True)
+    return V.apply_plan(out["plan_id"], out["digest"], gate=Gate(),
+                        tier_of=lambda a: "ask", **kw)
+
+
+def t_first_run_copies_and_the_real_vault_is_byte_for_byte_untouched():
+    _copy_vault()
+    before = tree(VAULT)
+    out = _plan()
+    gate = Gate()
+    res = V.apply_plan(out["plan_id"], out["digest"], gate=gate,
+                       tier_of=lambda a: "ask", apply_on_copy=True)
+    copy = Path(res.get("copy") or "")
+    check("the first run applies to a COPY", res.get("ok") is True
+          and res.get("mode") == "copy" and res.get("original_unchanged") is True, res)
+    check("the copy is a sibling whose name says so", copy.is_dir()
+          and copy.parent == VAULT.parent
+          and copy.name.startswith(f"{VAULT.name}{V.COPY_SUFFIX}"), str(copy))
+    check("the real vault is byte-for-byte unchanged (no marker added)",
+          tree(VAULT) == before, (before[:2], tree(VAULT)[:2]))
+    check("the copy got the planned tags, up: link, MOCs and Vault Home",
+          "tags:" in (copy / "Alpha.md").read_text(encoding="utf-8")
+          and "up:" in (copy / "Alpha.md").read_text(encoding="utf-8")
+          and (copy / "00 - Vault Home.md").is_file()
+          and any(p.name.startswith("_MOC - ") for p in copy.iterdir()),
+          listing(copy))
+    check("the copy says where it came from", (copy / V.COPY_NOTE).is_file())
+    check("the verified marker is NOT written by the writer",
+          not (VAULT / V.COPY_MARKER).exists())
+    call = gate.calls[0]
+    check("the card says the batch is on a copy and the real vault is not touched",
+          "COPY of your Obsidian vault" in call[2]
+          and "real vault is NOT touched" in call[2]
+          and call[1].get("copy_of") == VAULT.name
+          and call[1].get("original_untouched") is True, call[2][:400])
+
+
+def t_marking_verified_turns_the_next_run_into_an_in_place_run():
+    _copy_vault()
+    first = _apply(_plan())
+    copy = Path(first["copy"])
+    marked = V.mark_verified(VAULT, copy=str(copy))
+    check("the owner can mark the inspected copy as verified",
+          marked.get("ok") is True and (VAULT / V.COPY_MARKER).is_file(), marked)
+    out = _plan()
+    second = _apply(out)
+    check("a verified vault is written IN PLACE", second.get("ok") is True
+          and second.get("mode") == "in_place" and second.get("copy") == "", second)
+    check("... and the real vault really changed this time",
+          "tags:" in (VAULT / "Alpha.md").read_text(encoding="utf-8"))
+    check("... without making a second copy",
+          len(list(VAULT.parent.glob(f"{VAULT.name}{V.COPY_SUFFIX}*"))) == 1)
+
+
+def t_a_second_first_run_the_same_day_gets_its_own_copy_name():
+    _copy_vault()
+    first = _apply(_plan())
+    second = _apply(_plan())
+    first_copy, second_copy = Path(first["copy"]), Path(second["copy"])
+    check("two unverified runs make two copies, not one overwritten",
+          first_copy != second_copy and first_copy.is_dir() and second_copy.is_dir(),
+          (str(first_copy), str(second_copy)))
+    check("the second copy name carries a suffix rather than colliding",
+          second_copy.name.startswith(f"{VAULT.name}{V.COPY_SUFFIX}"), second_copy.name)
+
+
+def t_a_symlink_in_the_vault_refuses_the_copy_and_changes_nothing():
+    _copy_vault()
+    link = VAULT / "outside-link.md"
+    try:
+        link.symlink_to(VAULT / "Alpha.md")
+    except (OSError, NotImplementedError) as exc:       # noqa: BLE001
+        skip(f"this Windows account cannot make a symlink to test with ({type(exc).__name__})")
+        return
+    before = tree(VAULT)      # the snapshot includes the link, so it is stable
+    try:
+        res = _apply(_plan())
+        check("a vault holding a symlink refuses the first-run copy",
+              res.get("ok") is False and "symbolic link" in str(res.get("why")), res)
+        check("... and the real vault is unchanged", tree(VAULT) == before)
+        check("... and no copy folder is left behind",
+              not list(VAULT.parent.glob(f"{VAULT.name}{V.COPY_SUFFIX}*")))
+    finally:
+        try:
+            link.unlink()
+        except OSError:
+            pass
+
+
+def t_too_little_free_space_refuses_the_copy():
+    _copy_vault()
+    before = tree(VAULT)
+    saved = V._free_bytes
+    V._free_bytes = lambda path: 10
+    try:
+        res = _apply(_plan())
+        check("too little free space beside the vault refuses the first-run copy",
+              res.get("ok") is False and "free" in str(res.get("why")), res)
+        check("... and nothing was copied or changed", tree(VAULT) == before
+              and not list(VAULT.parent.glob(f"{VAULT.name}{V.COPY_SUFFIX}*")))
+    finally:
+        V._free_bytes = saved
+
+
+def t_an_oversized_vault_refuses_the_copy():
+    _copy_vault()
+    saved = V.MAX_COPY_BYTES
+    V.MAX_COPY_BYTES = 10
+    try:
+        res = _apply(_plan())
+        check("a vault over the bounded copy size refuses the first-run copy",
+              res.get("ok") is False and "bigger than" in str(res.get("why")), res)
+    finally:
+        V.MAX_COPY_BYTES = saved
+
+
+def t_mark_verified_refuses_what_it_cannot_mark():
+    plain = TMP / "not-a-vault"
+    plain.mkdir(exist_ok=True)
+    missing = V.mark_verified(TMP / "does-not-exist")
+    not_vault = V.mark_verified(plain)
+    check("mark_verified refuses a folder that is not there, in plain words",
+          missing.get("ok") is False and "not there" in str(missing.get("why")), missing)
+    check("... and a folder that is not an Obsidian vault",
+          not_vault.get("ok") is False and "not an Obsidian vault" in str(not_vault.get("why")),
+          not_vault)
+
+
+# --------------------------------------------------------------------------
 #   Runner
 # --------------------------------------------------------------------------
 
 def main() -> int:
     print(f"tree: {HERE}")
     for fn in (t_plan_is_completely_read_only,
+               t_first_run_copies_and_the_real_vault_is_byte_for_byte_untouched,
+               t_marking_verified_turns_the_next_run_into_an_in_place_run,
+               t_a_second_first_run_the_same_day_gets_its_own_copy_name,
+               t_a_symlink_in_the_vault_refuses_the_copy_and_changes_nothing,
+               t_too_little_free_space_refuses_the_copy,
+               t_an_oversized_vault_refuses_the_copy,
+               t_mark_verified_refuses_what_it_cannot_mark,
                t_the_read_only_instrument_bites,
                t_plan_payload_is_the_preview_the_next_slice_needs,
                t_mocs_link_every_note_and_the_notes_point_up,
