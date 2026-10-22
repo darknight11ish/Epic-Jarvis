@@ -974,7 +974,7 @@ here does **not** set it - it is recorded on the turn (`outside_flags` in
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
 | `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"`, and since 2026-09-24 `"train"` / `"strictness"` / `"privacy"` / `"memory"` / `"measure"` (§16), and since 2026-10-19 `"clear"` (delete the saved voice training, ONE card) | `voice_training.rs` `send_voice_training`, `set_voice_setting`, `measure_voice`, `cancel_voice_training` | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
-| `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
+| `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech), or **raw 16 kHz mono int16 PCM bytes** (no header; sniffed, added 2026-10-21) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms", "format"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
 | `/api/voice/voices` (+ `/create`, `/active`, `/delete`, `/better`) | GET / POST | see section 15 | `get_custom_voices`, `create_custom_voice`, `set_active_voice`, `delete_custom_voice`, `set_better_voice` (Settings -> Jarvis's voice) | `CustomVoices.kt` via `JarvisRuntime` (Checks -> Jarvis's voice, `VoicesScreen.kt`) | Custom voices (2026-09-24, `voices.patch`), section 15. |
 
 **Since 2026-09-24 `/api/voice/say` may answer in a custom voice** (section
@@ -1152,15 +1152,38 @@ same training, `jarvis_wakeword.py`).
 **`/api/voice/turn` - Smart Turn** (`voice-turn.patch`, module
 `jarvis_turn.py`, added 2026-09-24). "Has the speaker finished, or only
 paused?" The body is one WAV (any rate, mono or stereo, at most 30 s; only
-the last 8 s are used). The answer is always 200 unless the body is not a
-WAV (400): `{"available": true, "complete": bool, "probability": 0..1,
-"threshold": 0.5, "ms": 43.0}`, or `{"available": false, "why": "..."}` when
-the model is not installed. The desktop asks it after 200 ms of quiet while
-listening for "hey Jarvis" (the same audio already goes to this PC over
-loopback); the phone runs the same model on the phone. `/api/voice/status`
-carries `turn`: `{enabled, available, threshold, ask_after_ms: 200,
-max_pause_ms: 2000, engine, why}` - `enabled` (`[voice] turn_enabled`)
-governs both listeners.
+the last 8 s are used) **or, since 2026-10-21, raw 16 kHz mono int16 PCM
+bytes** (no WAV header, no base64 - the body is sniffed: a `RIFF` header is a
+WAV, anything else is that raw PCM, and a JSON-looking body is refused as
+audio). Old clients keep sending WAV unchanged. The answer is always 200
+unless the body is not audio (400): `{"available": true, "complete": bool,
+"probability": 0..1, "threshold": 0.5, "ms": 43.0, "format": "wav"|"pcm16"}`,
+or `{"available": false, "why": "..."}` when the model is not installed. The
+desktop asks it after 200 ms of quiet while listening for "hey Jarvis" (the
+same audio already goes to this PC over loopback); the phone runs the same
+model on the phone. `/api/voice/status` carries `turn`: `{enabled,
+available, threshold, ask_after_ms: 200, max_pause_ms: 2000, engine, why}` -
+`enabled` (`[voice] turn_enabled`) governs both listeners.
+
+**The fast path (2026-10-21, the audit's V3): raw PCM in process, and the
+picture built as the audio arrives.** `jarvis_turn.predict_pcm()` takes the
+same int16 PCM bytes **in process** - no WAV encode, no base64, no HTTP,
+no WAV parse - and `TurnStream` feeds it 32 ms VAD chunks, returning the same
+`Turn` at end of turn. The ONNX session was already cached (one
+`InferenceSession`, threads pinned, CPU only); what is new is the features:
+`MelStream` keeps the FFT of every frame an 8 s window can still ask for and
+serves the end-of-turn picture from that cache, correcting each cached raw
+frame for the window's own mean/variance analytically
+(`FFT((f-m)/s*h) = (FFT(f*h) - m*FFT(h))/s`). The old `features()` function is
+**kept unchanged as the reference** and every incremental case is compared to
+it in tests inside a stated tolerance (1e-2 absolute on the (x+4)/4 picture -
+the reference's own float32 normalisation rounding seen through the log of
+quiet mel bands); a caller whose chunk sizes change constantly simply gets the
+reference cost back, never a different answer. Nothing here is used by the
+wire yet: `voice.rs` still sends the WAV the route always took, so what this
+buys is the in-process call and the work moved off end-of-turn. **No hardware
+latency number is claimed** - the 90 ms/12-18 ms figures in the audit are the
+audit's, not measured here.
 
 **`/api/voice/enroll` - "Train my voice"** (`voice-enroll.patch`, module
 `jarvis_voice_enroll.py`). The phone sends the owner's recorded sentences:
@@ -1332,6 +1355,38 @@ carry the same rule where they assert the order. The ~140 ms is the work
 order's figure for the real models - **not measured here**: this repository
 has no CAM++ or Parakeet weights and no microphone, so what is proven is the
 mechanism, not the number.
+
+**The first window first: the owner check starts on ~1.2 s of voice
+(2026-10-21, the audit's V1-Path A).** The check above still runs on the
+whole clip when the whole clip is what decides, but `hear()` now asks it on
+the clip's **first ~1.2 s of voice** first (`_decide_owner`, `_early_window`):
+the same `jarvis_voice.verify` on less audio, which is where a speaker model
+gets nearly all of its information. A score at least `[voice]
+early_verify_margin` (0.06) **past** the bar one way decides on that window;
+anything **inside** the band is re-checked on the FULL clip exactly as before,
+so the window is a saving, never a different standard. If the window's worker
+raises, the full clip is checked too (a dead verifier is asked twice on that
+error path, never trusted once), and a check error still fails closed exactly
+as it did. `[voice] early_verify_window = 0` turns the whole thing off and
+restores the old single full-clip call; the default is 1.2. **The privacy
+rule has not moved:** the words are still made beside the check and, when the
+answer is no, the worker is joined and its answer discarded unread - and a
+**refusal still costs the transcription** (the discard waits for it), so a
+fast refusal cannot be told apart from a verified clip by how quickly the app
+answered. The check-only path of a Live voice pause gets the window too (it
+is the same check); session trust is unchanged.
+`StreamingVerify` is the same rule for a caller that feeds 16 kHz chunks
+while the owner is still speaking: the check starts as soon as a window of
+voice has arrived, so end of speech waits only for an answer that already
+exists. **An early verdict belongs to one recording and is never carried to the next one** (Gemini's sign-off ruling 10.4, 2026-10-21): the single-shot path builds and joins/discards its `_EarlyVerify` inside its own `hear()` call and stores no audio or verdict at module or class level, and a `StreamingVerify` instance binds each check to that recording's token, clears its worker, buffer and token in `verdict()`'s `finally:`, and offers `abort()` for a recording abandoned before its verdict - so a second utterance (or an aborted first one) gets a fresh check. Regression tests: `t_streaming_verify_never_carries_a_verdict_to_the_next_utterance`, `t_an_aborted_recording_cannot_answer_the_next_one` and `t_each_hear_gets_its_own_early_verdict` in `backend/test_voice_parallel.py`. The desktop does not feed it that way yet (it sends whole clips to
+`/api/voice/utterance`), so **that half is not measured end to end** and the
+turning-point savings for a real spoken sentence remain NOT-MEASURED until
+the owner retrains and a Live sentence is measured before/after. Tests:
+`backend/test_voice_parallel.py` (which check was asked, on how much audio,
+the borderline fallback, the switch-off, a worker that raises, the refusal's
+kept cost, the sinks for an unverified clip, and the streaming path's
+end-of-speech wait with slow stand-ins - test-mode numbers only),
+`backend/test_live.py` and `backend/test_turn.py`.
 
 **Jarvis's own voice is not the owner's (F3, landed 2026-10-20).** On open
 speakers - especially with a cloned custom voice - Jarvis's own answer can
