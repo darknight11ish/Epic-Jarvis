@@ -207,31 +207,31 @@ KNOWN_BREAKS = {
     # with them, exactly as the rule above asks. The handler is untouched.
     # 3532/3533/3540/3541/3542 - the handler itself is untouched; only its
     # position moved.
-    ("1 a read that can never arrive", "jarvis_hud.html", 4375, "message", "hello"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 4458, "message", "hello"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"hello\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 4376, "message", "approval"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 4459, "message", "approval"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"approval\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 4383, "message", "proposal"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 4466, "message", "proposal"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"proposal\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 4384, "message", "finding"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 4467, "message", "finding"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"finding\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 4385, "message", "activity"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 4468, "message", "activity"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
@@ -930,3 +930,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

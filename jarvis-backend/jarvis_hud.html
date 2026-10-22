@@ -2310,6 +2310,55 @@ const galaxy = (() => {
 
   let fitted = false;
 
+  // ---- G2 node budget (2026-10-21, Ruling 11.5) -------------------------
+  // The inline HUD's Galaxy is capped at MAX_HUD_GALAXY_NODES; the full-size
+  // Brain view keeps MAX_BRAIN_GALAXY_NODES. The cap is applied per lens,
+  // deterministically (rank, then id), and the counts line says
+  // "showing N of M nodes" when it bites - the picture never pretends the
+  // small screen is the whole graph.
+  //
+  // PAST THE CAP, DECORATION GOES FIRST. Labels are drawn up to a budget
+  // (smaller inline than in the full view) and, when capped, the glow halo
+  // pass is skipped for ordinary nodes; a dot is never dropped to make room
+  // for a label. Every drawn node is still a real HTML button in the overlay,
+  // so the keyboard path is never what gets traded away.
+  const MAX_HUD_GALAXY_NODES = 120;
+  const MAX_BRAIN_GALAXY_NODES = 240;
+  const HUD_LABEL_BUDGET = 18;
+  const BRAIN_LABEL_BUDGET = 36;
+  let budgetCapped = false;
+  let budgetTotal = 0;
+  let lastBudgetKey = "";
+
+  /** True when the Galaxy fills a large window (the full Brain view); false
+   *  for the inline stage/bento. SIZE is what the frame budget follows - the
+   *  same page serves both surfaces, so a view name cannot tell them apart. */
+  function isFullGalaxy(){ return W >= 900 && H >= 560; }
+
+  function nodeBudget(){ return isFullGalaxy() ? MAX_BRAIN_GALAXY_NODES : MAX_HUD_GALAXY_NODES; }
+
+  function labelBudget(){ return isFullGalaxy() ? BRAIN_LABEL_BUDGET : HUD_LABEL_BUDGET; }
+
+  /** Deterministic "worth drawing first": the core, then the models (a lens
+   *  with no model is not the capability half), then weight; the id breaks
+   *  ties, so the same graph and lens always draw the same 120. */
+  function rankOf(n){
+    let r = n.group === "core" ? 1e9 : (n.group === "model" ? 5e8 : 0);
+    r += (typeof n.weight === "number" ? n.weight : 0) * 1000;
+    return r;
+  }
+
+  /** The lens's nodes, cut to this surface's budget. */
+  function budgetNodes(nodesIn){
+    budgetTotal = nodesIn.length;
+    const cap = nodeBudget();
+    if(nodesIn.length <= cap){ budgetCapped = false; return nodesIn.slice(); }
+    budgetCapped = true;
+    return nodesIn.slice()
+      .sort((a, b) => (rankOf(b) - rankOf(a)) || String(a.id).localeCompare(String(b.id)))
+      .slice(0, cap);
+  }
+
   // ---- GALAXY v2 lenses (2026-10-21, G1) -------------------------------
   // ONE graph, three views of it. The capability half (models/clusters/tools)
   // and the memory half (facts/documents/knowledge/projects/skills/personas)
@@ -2389,12 +2438,19 @@ const galaxy = (() => {
       + `${nodesIn.length} nodes in all`;
   }
 
-  /** Tell assistive tech what is on screen now (the counts are computed). */
+  /** Tell assistive tech what is on screen now (the counts are computed).
+   *  When the node budget cut the lens, the same line says so in words. */
   function renderCounts(nodesIn){
     const el = document.getElementById("galaxy-counts");
     if(!el) return;
-    el.textContent = countLine(nodesIn);
+    const line = countLine(nodesIn) + (budgetCapped
+      ? ` · showing ${nodesIn.length} of ${budgetTotal} nodes` : "");
+    el.textContent = line;
     el.setAttribute("data-galaxy-counts", lens);
+    el.setAttribute("data-galaxy-budget", budgetCapped ? "capped" : "all");
+    el.setAttribute("data-galaxy-shown", String(nodesIn.length));
+    el.setAttribute("data-galaxy-total", String(budgetTotal));
+    el.setAttribute("data-galaxy-labels", String(labelBudget()));
   }
 
   /** The node buttons: one per visible node, sorted by id so tab order is
@@ -2450,8 +2506,9 @@ const galaxy = (() => {
   }
 
   function applyLens(){
-    const use = lensNodes();
+    const use = budgetNodes(lensNodes());
     const linksIn = lensLinks(use);
+    lastBudgetKey = `${nodeBudget()}:${budgetCapped}`;
     rebuild({ nodes: use, links: linksIn });
     renderCounts(use);
     syncOverlay();
@@ -2466,6 +2523,13 @@ const galaxy = (() => {
     // The brain view is hidden at boot, so the first real measurement is the
     // first chance to frame the graph against actual pixels.
     if(nodes.length && W > 0 && !fitted){ fitted = true; fitCamera(); }
+    // The node budget follows the surface's size, so a window that crosses the
+    // inline/full threshold re-applies the lens instead of keeping the other
+    // surface's cap (and its "showing N of M" line) on screen.
+    if(nodes.length && lastBudgetKey
+        && lastBudgetKey.split(":")[0] !== String(nodeBudget())){
+      applyLens();
+    }
   }
   new ResizeObserver(resize).observe(cv);
 
@@ -2598,6 +2662,11 @@ const galaxy = (() => {
     const near = focusId ? (adj.get(focusId) || new Set()) : null;
     const q = query.trim().toLowerCase();
     const tracing = !!traceHits;
+    // Decoration degrades before data does (G2): labels are capped per frame,
+    // and when the node budget bit, ordinary nodes lose their glow halo. The
+    // dots themselves all stay, and the overlay keeps one real button each.
+    const labelsMax = labelBudget();
+    let labelsDrawn = 0;
 
     const proj = new Map();
     for(const p of nodes){ const s = project(p); if(s) proj.set(p.id, s); }
@@ -2651,7 +2720,8 @@ const galaxy = (() => {
       let r = Math.max(1.2, n.r * s.k * 1.05);
       if(isHit) r *= 1.5;
 
-      if(isFocus || hit || n.group === "core" || isHit || isMiss){
+      const decorative = isFocus || hit || n.group === "core" || isHit || isMiss;
+      if(decorative && (!budgetCapped || isFocus || isHit || isMiss || n.group === "core")){
         ctx.globalAlpha = alpha * (isHit ? 0.5 : isMiss ? 0.3 : 0.35);
         ctx.fillStyle = isHit ? tk("--accent", "#6fe3ff") : isMiss ? tk("--warn", "#ffb648") : colour;
         ctx.beginPath(); ctx.arc(s.x, s.y, r*(isHit?3.6:3.1), 0, Math.PI*2); ctx.fill();
@@ -2678,26 +2748,30 @@ const galaxy = (() => {
       }
 
       // Labels stay rare on purpose — every node labelled is a fog. Anything
-      // that would collide with a label already drawn is simply dropped.
+      // that would collide with a label already drawn is simply dropped, and
+      // the G2 label budget stops extra labels BEFORE any dot is cut.
       const always = n.group === "core" || n.group === "model"
                   || n.group === "cluster" || n.group === "project";
       const wanted = isFocus || n.id === hoverId || hit || isHit || isMiss
                   || ((always || r > 6.5) && !focusId && !q && !tracing);
       if(wanted){
-        const size = Math.max(10, Math.min(14, 10 + r*0.28));
-        ctx.font = `${size}px "IBM Plex Mono", monospace`;
-        const text = n.label || n.id;
-        const w = ctx.measureText(text).width;
-        const box = { x:s.x - w/2, y:s.y - r - 7 - size, w, h:size + 3 };
         const priority = isFocus || n.id === hoverId || hit || isHit;
-        if(priority || !placed.some(b =>
-             box.x < b.x + b.w && box.x + box.w > b.x &&
-             box.y < b.y + b.h && box.y + box.h > b.y)){
-          placed.push(box);
-          ctx.globalAlpha = Math.min(1, alpha * 1.1);
-          ctx.fillStyle = priority ? tk("--prose-strong", "#ffffff") : tk("--text-muted", "#9fb8c7");
-          ctx.textAlign = "center";
-          ctx.fillText(text, s.x, s.y - r - 7);
+        if(priority || labelsDrawn < labelsMax){
+          const size = Math.max(10, Math.min(14, 10 + r*0.28));
+          ctx.font = `${size}px "IBM Plex Mono", monospace`;
+          const text = n.label || n.id;
+          const w = ctx.measureText(text).width;
+          const box = { x:s.x - w/2, y:s.y - r - 7 - size, w, h:size + 3 };
+          if(priority || !placed.some(b =>
+               box.x < b.x + b.w && box.x + box.w > b.x &&
+               box.y < b.y + b.h && box.y + box.h > b.y)){
+            placed.push(box);
+            labelsDrawn += 1;
+            ctx.globalAlpha = Math.min(1, alpha * 1.1);
+            ctx.fillStyle = priority ? tk("--prose-strong", "#ffffff") : tk("--text-muted", "#9fb8c7");
+            ctx.textAlign = "center";
+            ctx.fillText(text, s.x, s.y - r - 7);
+          }
         }
       }
     }
@@ -2846,7 +2920,16 @@ const galaxy = (() => {
     search(v){ query = v; },
     toggleSpin(){ spin = !spin; return spin; },
     lens(){ return lens; },
-    focused(){ return focusId ? nodes.find(n => n.id === focusId) : null; }
+    focused(){ return focusId ? nodes.find(n => n.id === focusId) : null; },
+    /** G2: what the node budget did, for the tests and for anyone reading this
+     *  code - the cap in force, how many nodes the lens really has, how many
+     *  are drawn, and how many labels this surface allows. */
+    budgetInfo(){ return {
+      cap: nodeBudget(), shown: nodes.length, total: budgetTotal,
+      capped: budgetCapped, labels: labelBudget(),
+      maxInline: MAX_HUD_GALAXY_NODES, maxBrain: MAX_BRAIN_GALAXY_NODES,
+      full: isFullGalaxy(),
+    }; }
   };
 })();
 
