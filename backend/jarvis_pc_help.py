@@ -145,6 +145,11 @@ TOP_N = 3
 CACHE_SECONDS = 5.0
 PS_TIMEOUT = 12   # under the phone's 20-second limit for a read
 GIB = 1024 ** 3
+#: The marker a program's amount carries when it came from Windows' own
+#: GPU-process counter instead of the driver (R5, 2026-10-21). Deliberately the
+#: same string as `jarvis_hardware.WDDM_SOURCE` rather than an import: this
+#: module answers with the words alone when the hardware module is absent.
+WDDM_SOURCE = "windows_wddm_counter"
 
 # --------------------------------------------------------------------------
 #   Pillar 28 (2026-10-17): the silent-failure doctor
@@ -202,7 +207,11 @@ class Readers:
     apps()     -> [{"pid", "name", "uuid", "used_mib"}]  nvidia-smi's own
         process list. `used_mib` is None when the driver does not report it
         (measured on this PC 2026-10-17: it is [N/A] for every process), and
-        must stay None - never a made-up 0.
+        must stay None - never a made-up 0. Since R5 (2026-10-21) the default
+        reader fills a missing amount from Windows' GPU-process counter when
+        that counter can be read, adding `used_source = "windows_wddm_counter"`;
+        such a number is the program's total across the cards, and the words say
+        so. `used_mib` stays None when neither source has a reading.
     mic()      -> jarvis_speech.voice_attempts_status(): {"attempts",
                    "zeros_in_a_row", "digital_zero", "device", "last_peak_rms",
                    "last_at"} (Pillar 28: the last 3 voice attempts' peak RMS)
@@ -430,15 +439,40 @@ def _read_cards() -> Optional[list]:
 
 def _read_apps() -> Optional[list]:
     """nvidia-smi's own list of the programs using a card, or None when it
-    cannot be read. On this PC the list is real and the per-program amounts
-    are not (the driver answers [N/A]); jarvis_compute keeps that distinction
-    as None, and so does this reader."""
+    cannot be read.
+
+    On this PC the list is real and the per-program amounts are not (the
+    driver answers [N/A]); `jarvis_compute` keeps that distinction as None, and
+    so does this reader - EXCEPT that Windows' own GPU-process counter is asked
+    for the programs the driver left without an amount (R5, Ruling 13,
+    2026-10-21; measured readable and nonzero as a normal user: 63 instances
+    over 43 PIDs). A number from that counter carries
+    `used_source = WDDM_SOURCE` and is the program's TOTAL ACROSS THE CARDS - it
+    is never presented as one card's share (Windows exposes no clean non-admin
+    way to map its LUID/phys index to nvidia-smi's card number)."""
     try:
         import jarvis_compute as CP
         reader = getattr(CP, "query_apps", None)
-        return reader() if callable(reader) else None
+        rows = reader() if callable(reader) else None
     except Exception:
         return None
+    if rows is None:
+        return None
+    try:
+        import jarvis_hardware as HW
+    except Exception:
+        return rows
+    reading = None
+    out = []
+    for app in rows:
+        if isinstance(app, dict) and app.get("used_mib") is None:
+            if reading is None:
+                reading = HW.wddm_process_memory()
+            mib = HW.wddm_mib_for(app.get("pid"), reading)
+            if mib is not None:
+                app = dict(app, used_mib=mib, used_source=WDDM_SOURCE)
+        out.append(app)
+    return out
 
 
 def _read_models() -> Optional[list]:
@@ -698,22 +732,31 @@ def _apps_by_card(cards: list, apps: Optional[list]) -> dict:
 
 
 def _held_words(held: list) -> tuple:
-    """(one card's "Programs holding it: ..." sentence or "", names_programs).
+    """(one card's "Programs holding it: ..." sentence or "", names_programs,
+    any_total_across_cards).
+
     At most `TOP_N` names are shown - the same limit the processor and memory
     answers use - because a desktop card can easily have twenty programs on it
     (measured: 23 on this PC's 2080 SUPER), and a wall of names helps nobody;
-    "and N more" says the rest. Amounts are printed only when the driver
-    reports one for EVERY program there; on this PC it reports none, and the
-    words say so instead of inventing a number."""
+    "and N more" says the rest.
+
+    Amounts are printed only when EVERY program there has one; on this PC the
+    driver reports none. Since R5 (2026-10-21) Windows' own counter can supply
+    the ones the driver omits, and such a number is labelled "in total across
+    the cards" - the counter sums a program's instances on every adapter, and
+    no non-admin mapping to one card's index exists. `any_total_across_cards`
+    tells the caller to say that once, after the cards."""
     merged: dict = {}
     for a in held:
         label = _program_label(a.get("name"))
         key = "model" if _is_model(label) else label.lower()
         row = merged.setdefault(key, {"name": MODEL_WORDS if key == "model" else label,
-                                      "used_mib": 0, "amounts": True})
+                                      "used_mib": 0, "amounts": True, "wddm": False})
         used = a.get("used_mib")
         if isinstance(used, int) and not isinstance(used, bool):
             row["used_mib"] += used
+            if a.get("used_source") == WDDM_SOURCE:
+                row["wddm"] = True
         else:
             row["amounts"] = False
     rows = sorted(merged.values(),
@@ -723,12 +766,16 @@ def _held_words(held: list) -> tuple:
     for row in shown:
         part = MODEL_WORDS if row["name"] == MODEL_WORDS else row["name"]
         if row["amounts"]:
-            part += f" ({_gb(row['used_mib'] * 1024 ** 2)})"
+            if row["wddm"]:
+                part += f" ({_gb(row['used_mib'] * 1024 ** 2)} in total across the cards)"
+            else:
+                part += f" ({_gb(row['used_mib'] * 1024 ** 2)})"
         parts.append(part)
     extra = len(rows) - len(shown)
     if extra > 0:
         parts.append(f"{extra} more")
-    return _join(parts), any(r["name"] != MODEL_WORDS for r in rows)
+    return (_join(parts), any(r["name"] != MODEL_WORDS for r in rows),
+            any(r["amounts"] and r["wddm"] for r in rows))
 
 
 def _card_used_fraction(c):
@@ -850,11 +897,15 @@ def gpu_words(r: Readers) -> tuple:
     program other than Jarvis's own (that answer then stays private).
 
     MEASURED ON THIS PC (2026-10-17): nvidia-smi names the programs holding a
-    card but reports no amount for any of them (`used_memory` is [N/A]), so
-    the amount is shown only when the driver reports it, and the words say
-    plainly when it does not. Windows' own counter gives a program's total
-    graphics memory across every card, so it is labelled as a total and never
-    presented as one card's number."""
+    card but reports no amount for any of them (`used_memory` is [N/A]). Since
+    R5 (2026-10-21) Windows' own `GPU Process Memory` counter fills those
+    numbers in where it can: 63 instances over 43 PIDs, readable as a normal
+    user in under a second (the probe is recorded in `test_hardware.py` and the
+    reader is `jarvis_hardware.wddm_process_memory`). That counter sums a
+    program's instances across every card, so its numbers are said as "in total
+    across the cards" and never as one card's share. When the counter is
+    unavailable, empty, or slow, the same honest "the driver does not report
+    how much graphics memory each program uses" sentence is kept."""
     cards = r.cards()
     models = r.models()
     reading = r.programs()
@@ -866,6 +917,7 @@ def gpu_words(r: Readers) -> tuple:
         apps = None
     bits = []
     names = False
+    any_wddm_amount = False
     if cards:
         labels = _labels(cards)
         by_card = _apps_by_card(cards, apps)
@@ -894,15 +946,19 @@ def gpu_words(r: Readers) -> tuple:
                          f"you are not using.")
             held = by_card.get(i) or []
             if held:
-                said, held_names = _held_words(held)
+                said, held_names, held_wddm = _held_words(held)
                 if said:
                     line += f" Programs holding it: {said}."
                     names = names or held_names
+                    any_wddm_amount = any_wddm_amount or held_wddm
                     measured = all(isinstance(a.get("used_mib"), int)
                                    and not isinstance(a.get("used_mib"), bool) for a in held)
                     if not measured:
                         no_amounts = True
             bits.append(line)
+        if any_wddm_amount and not no_amounts:
+            bits.append("The amounts Windows reports are each program's total across all "
+                        "the cards, not its share of one card.")
         if no_amounts:
             bits.append("This PC's driver does not report how much graphics memory each "
                         "program uses, so Jarvis can only list the programs holding a card.")
