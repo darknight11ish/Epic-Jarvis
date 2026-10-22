@@ -26,7 +26,13 @@ settings folder, ONE batch receipt is recorded BEFORE the first write, writes
 are atomic, no note is ever deleted, and ONE Undo puts the exact bytes AND paths
 back (including moves). Both halves are described in docs/JARVIS-API.md
 section 151, which also carries the owner's runbook: the FIRST REAL RUN is on a
-COPY of the vault.
+COPY of the vault - and since R7 (Ruling 14, 2026-10-21) that is ENFORCED: a
+vault with no `.jarvis-organizer-verified.json` marker is planned and written
+against a sibling copy (`<Vault> - Jarvis Copy (<date>)`), never the real one.
+The copy is refused when the vault holds a symbolic link, is bigger than the
+bounded copy size, or its parent has too little free space. The real vault is
+left byte-for-byte untouched; `mark_verified()` records the owner's inspection
+and is what turns later runs in place.
 
 PREMISE-VERIFIED APIs (read from the real modules, not from a review's
 guesswork), and every one of them is CALLED, never re-implemented:
@@ -84,6 +90,7 @@ import json
 import math
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -1188,6 +1195,23 @@ RECEIPT_TOOL = "organize_obsidian_vault"
 BACKUP_ROOT = "vault-organizer-backups"
 MAX_RECEIPT_FILES = 2000
 
+#: R7 (Ruling 14, 2026-10-21): the FIRST real run is applied to a COPY of
+#: the vault. The owner inspects that copy; once the marker below exists in
+#: the REAL vault (he writes it, or a later screen does), the writer plans
+#: in place like before. The marker is a tiny JSON file, not a route and not
+#: a card: it records a person's own decision.
+COPY_MARKER = ".jarvis-organizer-verified.json"
+COPY_SUFFIX = " - Jarvis Copy"
+COPY_NOTE = ".jarvis-organizer-copy.json"
+MAX_COPY_BYTES = 2 * 1024 ** 3
+MAX_COPY_FILES = 20000
+FREE_SPACE_FACTOR = 1.10
+
+#: The default for `apply_plan`; the tests that check the in-place writer set
+#: this to False instead of passing the argument 25 times. The route below
+#: always leaves it at the ruling's True unless a caller says otherwise.
+COPY_DEFAULT = True
+
 _APPLY_LOCK = threading.Lock()
 
 ORGANIZE_CARD = (
@@ -1199,6 +1223,20 @@ ORGANIZE_CARD = (
     "  Nothing is deleted - duplicates and empty stubs are only listed.\n"
     "  A copy of every file it changes is saved first, so ONE Undo puts the"
     " whole vault back.\n"
+    "  The plan you looked at still matches the vault (digest {digest})."
+)
+#: The first-run card. The real vault is NOT the thing this batch changes.
+ORGANIZE_CARD_COPY = (
+    "Jarvis will organize a COPY of your Obsidian vault \"{name}\" on this PC.\n"
+    "  The real vault is NOT touched: this batch runs on \"{copy}\", a copy "
+    "Jarvis makes beside it first.\n"
+    "  Plan: {scheme_words}.\n"
+    "  {files} file(s) will change on the copy: {notes} note(s) get tags and "
+    "an up: link, {moves} note(s) move, {creates} note(s) are created (Maps of "
+    "Content and Vault Home).\n"
+    "  Nothing is deleted - duplicates and empty stubs are only listed.\n"
+    "  After inspecting the copy, mark it verified to let a later run work on "
+    "the real vault; the same snapshots, receipt and ONE Undo cover this batch.\n"
     "  The plan you looked at still matches the vault (digest {digest})."
 )
 SCHEME_WORDS = {
@@ -1451,16 +1489,31 @@ def _write_backup(bdir: Path, files: list) -> list:
     return out
 
 
-def record_card_detail(plan: "Plan", actions: dict) -> dict:
-    return {"text": ORGANIZE_CARD.format(
-                name=Path(plan.vault).name, scheme_words=_scheme_words(plan.scheme),
-                files=len(actions["actions"]) + len(actions["creates"]),
-                notes=len(actions["actions"]), moves=actions["moves"],
-                creates=len(actions["creates"]), digest=plan.digest),
-            "vault_name": Path(plan.vault).name, "scheme": plan.scheme,
-            "files": len(actions["actions"]) + len(actions["creates"]),
-            "moves": actions["moves"], "creates": len(actions["creates"]),
-            "undo": True, "deletes": False, "leaves_this_pc": False}
+def record_card_detail(plan: "Plan", actions: dict, *, copy_of: str = "") -> dict:
+    """The approval card's words and fields. With `copy_of`, the card says the
+    batch runs on the copy, names it, and says the real vault is NOT touched."""
+    if copy_of:
+        text = ORGANIZE_CARD_COPY.format(
+            name=Path(copy_of).name, copy=Path(plan.vault).name,
+            scheme_words=_scheme_words(plan.scheme),
+            files=len(actions["actions"]) + len(actions["creates"]),
+            notes=len(actions["actions"]), moves=actions["moves"],
+            creates=len(actions["creates"]), digest=plan.digest)
+    else:
+        text = ORGANIZE_CARD.format(
+            name=Path(plan.vault).name, scheme_words=_scheme_words(plan.scheme),
+            files=len(actions["actions"]) + len(actions["creates"]),
+            notes=len(actions["actions"]), moves=actions["moves"],
+            creates=len(actions["creates"]), digest=plan.digest)
+    detail = {"text": text, "vault_name": Path(plan.vault).name, "scheme": plan.scheme,
+              "files": len(actions["actions"]) + len(actions["creates"]),
+              "moves": actions["moves"], "creates": len(actions["creates"]),
+              "undo": True, "deletes": False, "leaves_this_pc": False}
+    if copy_of:
+        detail["copy_of"] = Path(copy_of).name
+        detail["copy"] = Path(plan.vault).name
+        detail["original_untouched"] = True
+    return detail
 
 
 def _verdict_ok(verdict, tier_of: Callable[[str], str]) -> tuple:
@@ -1505,8 +1558,175 @@ def _card_refusal(words: str, **extra) -> dict:
     return out
 
 
+def _size_words(n: int) -> str:
+    """A byte count in plain words, for the refusals and the card."""
+    for unit, scale in (("GB", 1024 ** 3), ("MB", 1024 ** 2), ("KB", 1024)):
+        if n >= scale:
+            return f"{n / scale:.1f} {unit}"
+    return f"{int(n)} bytes"
+
+
+def _verified(vault) -> bool:
+    """Whether the owner marked this vault as inspected-and-verified."""
+    try:
+        return (Path(vault) / COPY_MARKER).is_file()
+    except OSError:
+        return False
+
+
+def mark_verified(vault, *, copy: str = "") -> dict:
+    """Record that the owner inspected the copy-first run and accepts it.
+
+    Writes `COPY_MARKER` into the REAL vault; later runs then work in place.
+    Deliberately a plain function (and a plain file) rather than a route: it
+    records the owner's own decision, and a later screen can call it. Never
+    raises; answers plain words.
+    """
+    try:
+        root = Path(vault).resolve(strict=True)
+    except OSError:
+        return {"ok": False, "why": "that vault folder is not there, so nothing was marked"}
+    if not (root / ".obsidian").is_dir():
+        return {"ok": False, "why": "that folder is not an Obsidian vault, so nothing was marked"}
+    try:
+        (root / COPY_MARKER).write_bytes(json.dumps(
+            {"verified": True, "at": time.time(), "copy": str(copy or "")},
+            indent=1).encode("utf-8"))
+    except OSError as exc:                                # noqa: BLE001
+        return {"ok": False, "why": f"the marker could not be written ({type(exc).__name__})"}
+    return {"ok": True, "marker": str(root / COPY_MARKER)}
+
+
+def _free_bytes(path) -> int:
+    """Free bytes on the volume `path` is on; -1 when it cannot be read (the
+    refusal then says the copy cannot be checked, rather than guessing)."""
+    try:
+        return int(shutil.disk_usage(str(path)).free)
+    except OSError:
+        return -1
+
+
+def _copy_target(vault: Path) -> Path:
+    """A sibling folder name nothing else uses: `<Vault> - Jarvis Copy
+    (<date>)`, then ` (2)`, ` (3)` ... on a second run the same day. BESIDE the
+    vault, never inside it, so a copy can never be planned or organized."""
+    day = time.strftime("%Y-%m-%d", time.localtime())
+    base = vault.parent / f"{vault.name}{COPY_SUFFIX} ({day})"
+    if not base.exists():
+        return base
+    for n in range(2, 1000):
+        candidate = vault.parent / f"{vault.name}{COPY_SUFFIX} ({day}) ({n})"
+        if not candidate.exists():
+            return candidate
+    raise OSError("no free name for the copy")
+
+
+def _copy_preflight(vault: Path) -> dict:
+    """Everything the first-run copy must check BEFORE a byte is copied.
+
+    Reads only. Answers {ok, why} plus the numbers the words want: file count,
+    bytes, the needed free space and what is actually free. Refused: a symlink
+    anywhere in the vault (a copy of a link is not a copy of the note, and
+    following it could leave the vault), a vault over the bounded copy size,
+    and a parent folder without `FREE_SPACE_FACTOR` x the vault free.
+    """
+    files = 0
+    total = 0
+    links = []
+    for dirpath, dirnames, filenames in os.walk(str(vault), followlinks=False):
+        for name in list(dirnames) + list(filenames):
+            p = os.path.join(dirpath, name)
+            if os.path.islink(p):
+                links.append(os.path.relpath(p, str(vault)))
+        for name in filenames:
+            p = os.path.join(dirpath, name)
+            if os.path.islink(p):
+                continue
+            try:
+                size = os.path.getsize(p)
+            except OSError:
+                continue
+            files += 1
+            total += size
+            if files > MAX_COPY_FILES:
+                return {"ok": False,
+                        "why": f"this vault has more than {MAX_COPY_FILES:,} files, and "
+                               f"the first-run copy stops there; organize a folder of it first"}
+            if total > MAX_COPY_BYTES:
+                return {"ok": False,
+                        "why": f"this vault is bigger than {_size_words(MAX_COPY_BYTES)}, "
+                               f"and the first-run copy stops there; organize a folder of "
+                               f"it first"}
+    if links:
+        return {"ok": False,
+                "why": f"this vault contains {len(links)} symbolic link(s) (first: "
+                       f"{links[0]}); the copy is refused rather than follow them"}
+    need = int(total * FREE_SPACE_FACTOR)
+    free = _free_bytes(vault.parent)
+    if free >= 0 and free < need:
+        return {"ok": False,
+                "why": f"the first-run copy needs about {_size_words(need)} and only "
+                       f"{_size_words(free)} is free beside the vault"}
+    return {"ok": True, "files": files, "bytes": total, "need_bytes": need,
+            "free_bytes": free}
+
+
+def _make_copy(vault: Path) -> dict:
+    """Copy the vault to its sibling folder. A partial copy is removed, so a
+    failed first run leaves neither a half copy nor a changed real vault."""
+    try:
+        copy_path = _copy_target(vault)
+    except OSError as exc:                                # noqa: BLE001
+        return {"ok": False, "why": f"the copy folder could not be named ({exc})"}
+    try:
+        shutil.copytree(str(vault), str(copy_path), symlinks=False)
+    except Exception as exc:                              # noqa: BLE001
+        shutil.rmtree(str(copy_path), ignore_errors=True)
+        return {"ok": False,
+                "why": f"the copy could not be made ({type(exc).__name__}); the real "
+                       f"vault was not changed"}
+    return {"ok": True, "copy": str(copy_path)}
+
+
+def _tree_digest(root) -> str:
+    """A hash of every file under `root`: (relative path, sha256) sorted. Used
+    to prove the first-run copy really is a copy, without depending on the
+    plan's digest - that one includes the vault's own path, so two folders can
+    never share it even when their notes are byte-identical."""
+    rows = []
+    for dirpath, dirnames, filenames in os.walk(str(root), followlinks=False):
+        dirnames.sort()
+        for name in sorted(filenames):
+            p = os.path.join(dirpath, name)
+            if os.path.islink(p):
+                continue
+            try:
+                with open(p, "rb") as fh:
+                    sha = hashlib.sha256(fh.read()).hexdigest()
+            except OSError:
+                sha = "unreadable"
+            rows.append(f"{os.path.relpath(p, str(root)).replace(os.sep, '/')}:{sha}")
+    return hashlib.sha256("\n".join(rows).encode("utf-8")).hexdigest()
+
+
+def _write_copy_note(copy_path: Path, original: str, plan: "Plan") -> None:
+    """A tiny note inside the COPY only: where it came from and which plan made
+    it. Best effort - never a reason to fail the organize."""
+    try:
+        (copy_path / COPY_NOTE).write_bytes(json.dumps({
+            "copy_of": os.path.realpath(str(original)),
+            "plan_id": plan.plan_id, "scheme": plan.scheme,
+            "created": time.time(),
+            "note": "This is a Jarvis-created copy for a first-run organize. "
+                    "The real vault was not changed.",
+        }, indent=1).encode("utf-8"))
+    except OSError:
+        pass
+
+
 def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
-               tier_of: Optional[Callable[[str], str]] = None) -> dict:
+               tier_of: Optional[Callable[[str], str]] = None,
+               apply_on_copy: Optional[bool] = None) -> dict:
     """Do exactly what the plan previewed: ONE card, snapshots, one receipt.
 
     The plan must still be in memory (`plan_id`) and its `digest` must still
@@ -1516,6 +1736,7 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
     """
     plan_id = str(plan_id or "").strip()
     digest = str(digest or "").strip().lower()
+    want_copy = COPY_DEFAULT if apply_on_copy is None else bool(apply_on_copy)
     if not plan_id or not digest:
         return _card_refusal("the writer needs the plan's plan_id and digest - "
                              "ask for a plan first")
@@ -1545,6 +1766,46 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
                 "the vault changed since that plan was made, so the plan is "
                 "stale - make a new plan and look at it before writing",
                 stale=True)
+        # ---- R7: the FIRST real run works on a COPY, never the real vault.
+        # The copy is a sibling folder made here; its plan must read back as
+        # the SAME digest, or the copy is removed and nothing is written.
+        original_vault = plan.vault
+        copy_path = ""
+        copy_checks = None
+        if want_copy and not _verified(original_vault):
+            pre = _copy_preflight(Path(original_vault))
+            if pre.get("ok") is not True:
+                return _card_refusal(str(pre.get("why") or
+                                        "the first-run copy cannot be made"),
+                                     copy_mode=True)
+            copy_checks = {k: pre.get(k) for k in
+                           ("files", "bytes", "need_bytes", "free_bytes")}
+            made = _make_copy(Path(original_vault))
+            if made.get("ok") is not True:
+                return _card_refusal(str(made.get("why") or
+                                        "the copy could not be made"),
+                                     copy_mode=True)
+            copy_path = str(made["copy"])
+            if _tree_digest(original_vault) != _tree_digest(copy_path):
+                shutil.rmtree(copy_path, ignore_errors=True)
+                return _card_refusal(
+                    "the copy is not byte-for-byte the same vault (the copy was "
+                    "removed; the real vault is unchanged)", copy_mode=True)
+            sub = plan_vault_organization(copy_path, scheme=plan.scheme,
+                                          max_clusters=plan.max_clusters,
+                                          archive_empty_stubs=plan.archive_stubs)
+            if sub.get("ok") is not True:
+                shutil.rmtree(copy_path, ignore_errors=True)
+                return _card_refusal(
+                    "the copy could not be planned (the copy was removed; the "
+                    "real vault is unchanged)", copy_mode=True)
+            copied = get_plan(sub["plan_id"])
+            if copied is None:
+                shutil.rmtree(copy_path, ignore_errors=True)
+                return _card_refusal(
+                    "the copy's plan was lost (the copy was removed; the real "
+                    "vault is unchanged)", copy_mode=True)
+            plan = copied
         actions = _plan_actions(plan)
         if actions.get("ok") is not True:
             return _card_refusal(str(actions.get("why") or "the plan's paths "
@@ -1556,7 +1817,8 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
                 f"this one batch would touch {existing:,} existing files, and "
                 f"the organizer stops at {MAX_RECEIPT_FILES:,} for one receipt - "
                 f"organize a smaller vault or folder first")
-        detail = record_card_detail(plan, actions)
+        detail = record_card_detail(plan, actions,
+                                    copy_of=original_vault if copy_path else "")
         tier_of = tier_of or _tier
         try:
             verdict = (gate or _gate)(GATE_ACTION, detail, detail["text"])
@@ -1670,6 +1932,8 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
                            f"A receipt was saved first, so Undo puts back what "
                            f"changed.",
                     "undo": {"receipt_id": rid, "route": "/api/receipts/undo"}}
+        if copy_path:
+            _write_copy_note(Path(copy_path), original_vault, plan)
         index = _refresh_documents_index(plan.vault)
         _audit("vault_organizer.apply", {
             "scheme": plan.scheme, "changed": changed, "moved": moved,
@@ -1681,14 +1945,27 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
                 f"note(s) created ({s['mocs_to_create']:,} Map of Content and "
                 f"the Vault Home). Nothing was deleted. One click of Undo "
                 f"puts the whole vault back.")
-        return {"ok": True, "applied": True, "plan_id": plan.plan_id,
-                "receipt_id": rid, "backup": str(bdir),
-                "changed": changed, "moved": moved,
-                "created": len(actions["creates"]),
-                "snapshots": len(snap_rows),
-                "links_rewritten": actions["rewrites"],
-                "index_refresh": index, "said": said,
-                "undo": {"receipt_id": rid, "route": "/api/receipts/undo"}}
+        mode = "copy" if copy_path else "in_place"
+        said = said if not copy_path else (
+            f"Organized a COPY of \"{Path(original_vault).name}\": the copy is "
+            f"\"{Path(copy_path).name}\" beside it. The real vault was NOT "
+            f"changed. {changed:,} file(s) written in the copy, {moved:,} note(s) "
+            f"moved, {len(actions['creates']):,} note(s) created. Nothing was "
+            f"deleted. One click of Undo puts the copy back; inspect it, then mark "
+            f"it verified to let a later run work on the real vault.")
+        out = {"ok": True, "applied": True, "plan_id": plan.plan_id,
+               "receipt_id": rid, "backup": str(bdir),
+               "changed": changed, "moved": moved,
+               "created": len(actions["creates"]),
+               "snapshots": len(snap_rows),
+               "links_rewritten": actions["rewrites"],
+               "index_refresh": index, "said": said,
+               "mode": mode, "copy": copy_path,
+               "original_unchanged": bool(copy_path),
+               "undo": {"receipt_id": rid, "route": "/api/receipts/undo"}}
+        if copy_path:
+            out["copy_checks"] = copy_checks
+        return out
     finally:
         _APPLY_LOCK.release()
 
@@ -1862,7 +2139,8 @@ def handle_post(route: str, body, *, peer=None, local=None,
             return 400, {"ok": False,
                          "error": 'need {"plan_id": ..., "digest": ...} from a '
                                   'plan you looked at'}
-        return 200, apply_plan(body.get("plan_id"), body.get("digest"))
+        return 200, apply_plan(body.get("plan_id"), body.get("digest"),
+                               apply_on_copy=body.get("apply_on_copy"))
     scheme = str(body.get("scheme") or DEFAULT_SCHEME)
     try:
         clusters = int(body.get("max_clusters") or MAX_CLUSTERS)
