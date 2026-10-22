@@ -746,7 +746,8 @@ if (K) {
     const heads = await page.locator("#decks-card h3").allInnerTexts();
     const rows = await page.locator(".deck-radar .note").allInnerTexts();
     await page.close();
-    assert.ok(heads.includes(W.radar_heading), `headings: ${heads}`);
+    // Headings are uppercased by CSS, so compare like the test above does.
+    assert.ok(heads.some((h) => h.toLowerCase() === W.radar_heading.toLowerCase()), `headings: ${heads}`);
     assert.deepEqual(rows, FIX.samples.decks.radar.map((r) => r.words));
   });
 
