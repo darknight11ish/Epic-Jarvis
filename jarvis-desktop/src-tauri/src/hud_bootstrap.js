@@ -1948,4 +1948,21 @@
   } catch (e) {
     /* Never let a layout read break the page's own script. */
   }
+
+  /* H2 (2026-10-22): Settings' "Edit HUD in the window" button asks Rust to
+   * show this window and emit `jarvis:hud-edit-request`. Rust's emit reaches
+   * the page as a Tauri event; the page's editor listens for a DOM event, so
+   * forward it once here. A page without an editor simply has no listener. */
+  try {
+    var listen = tauri && tauri.event && tauri.event.listen;
+    if (typeof listen === "function") {
+      listen("jarvis:hud-edit-request", function () {
+        try {
+          window.dispatchEvent(new CustomEvent("jarvis:hud-edit-request"));
+        } catch (e) { /* older engine: nothing to tell */ }
+      });
+    }
+  } catch (e) {
+    /* An older shell without event.listen: the header button still edits. */
+  }
 })();

@@ -127,6 +127,30 @@ async function pickLayout(presetId) {
   paintChosen();
 }
 
+/* ── 3. The editor: open the HUD window in edit mode (H2, 2026-10-22) ────── */
+
+/**
+ * H2's editor lives in the HUD page. This Settings control is only the door:
+ * one navigation command (`open_hud_edit`) shows that window and asks it to
+ * enter edit mode; it saves nothing and approves nothing. In a plain browser
+ * (or an older shell without the command) the status line says so honestly.
+ */
+async function openEditor() {
+  const line = $("hud-edit-open-status");
+  const tauri = globalThis.__TAURI__;
+  const invoke = tauri && tauri.core && tauri.core.invoke;
+  if (typeof invoke !== "function") {
+    if (line) line.textContent = "Open the Jarvis desktop app to edit the HUD.";
+    return;
+  }
+  try {
+    await invoke("open_hud_edit");
+    if (line) line.textContent = "The big HUD window is open in edit mode. Escape finishes.";
+  } catch (e) {
+    if (line) line.textContent = `The HUD window could not be opened: ${e && e.message ? e.message : e}`;
+  }
+}
+
 /* ── Start ───────────────────────────────────────────────────────────────── */
 
 export function initHudWindowSettings() {
@@ -140,6 +164,8 @@ export function initHudWindowSettings() {
   }
   // `painted` guards the one-time row build; the async load repaints the
   // chosen row when the store answers (and reports an honest failure).
+  const editButton = $("hud-edit-open");
+  if (editButton) editButton.addEventListener("click", openEditor);
   buildLayoutRows();
   loadLayout().then((loaded) => {
     answer = loaded;
