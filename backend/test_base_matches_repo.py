@@ -47,7 +47,11 @@ WHAT IT CHECKS
      deliberately drifted twin, where the functions above are the judge. Since
      2026-10-13 the list it is judged against is `twin_pairs()`, which is the
      modules **and** the beside-files, so the fast check can no longer report
-     green while the beside-file half of the rule is broken.
+     green while the beside-file half of the rule is broken. Since 2026-10-23
+     that list keeps a leaf named by two different sources as two pairs, so the
+     fast check also covers `jarvis-desktop/src/jarvis_hud.html` - the third
+     copy of the page, which the old one-pair-per-leaf dedupe dropped - and the
+     agreement test below drifts that copy on its own to prove it bites.
 
 WHAT IT DOES NOT CHECK, PLAINLY
 
@@ -194,21 +198,26 @@ def twin_pairs() -> list:
     On 2026-10-13 the module half was green and `requirements.lock` was stale;
     see `BESIDE_TWINS` for the two beside-files that are deliberately not here.
 
-    The modules come first and a leaf seen twice is dropped, so the two files
-    that are in both lists - `jarvis-framework.toml` and `jarvis_hud.html` -
-    keep the copy `shipped_pairs()` names and nothing that was covered before
-    stops being covered. `jarvis_hud.html` is worth knowing about: `_where.SHIPPED`
-    lists it (the page served at "/", added 2026-10-07 because the patcher never
-    copied it), which is why there is also a `backend/jarvis_hud.html` for
-    `test_shipped_modules.py` to find, while `tools/gen_base_from_backend.py`
-    re-takes that page from `jarvis-desktop/src/`. All three copies are the same
-    text today, and the suite checks the `jarvis-desktop/src/` one against the
-    base separately, in `t_the_files_beside_the_code_are_there`.
+    The modules come first, and a pair seen twice is dropped. THE SAME LEAF FROM
+    TWO DIFFERENT SOURCES IS NOT DROPPED (2026-10-23): a file named by both
+    lists can have two copies in this repository, and dropping one left it
+    unchecked. `jarvis-framework.toml` is the same path in both lists, so it
+    contributes one pair either way. `jarvis_hud.html` is the one that differs:
+    `_where.SHIPPED` lists it (the page served at "/", added 2026-10-07 because
+    the patcher never copied it), which is why there is also a
+    `backend/jarvis_hud.html` for `test_shipped_modules.py` to find, while
+    `tools/gen_base_from_backend.py` re-takes that page from
+    `jarvis-desktop/src/`. All three copies are the same text today; before
+    2026-10-23 the dedupe kept only the SHIPPED pair, so a drifted desktop page
+    went unnoticed by this rule and by `tools/check_stale_twins.py`, and only
+    `t_the_files_beside_the_code_are_there` caught it in CI. Now the desktop
+    page is a pair here too, and the fast check compares every pair against the
+    base.
     """
     seen, out = set(), []
     for leaf, ours in shipped_pairs() + beside_pairs():
-        if leaf not in seen:
-            seen.add(leaf)
+        if (leaf, ours) not in seen:
+            seen.add((leaf, ours))
             out.append((leaf, ours))
     return out
 
@@ -311,15 +320,22 @@ def rule_finds(backend: Path, base: Path, shipped: tuple) -> tuple:
 
 
 def twin_fixture(work: Path) -> tuple:
-    """A copy of the two folders holding just two real shipped modules.
+    """A copy of the two folders holding just two real shipped modules and the
+    one file that is both a module and a beside-file.
 
     Built from `_where.SHIPPED` itself, so the names are ones the rule really
     lists and the fixture cannot rot as that list changes - one top-level
     module and one `rebuilt/` module, plus `jarvis-framework.toml`, which
-    `shipped_pairs()` adds whether or not SHIPPED names it. The copy's own
-    `_where.py` carries a trimmed SHIPPED, which is how the fast check is told
-    which files this copy is about, and its own `test_base_matches_repo.py` is
-    the rule the fast check loads.
+    `shipped_pairs()` adds whether or not SHIPPED names it. On top of those it
+    adds the overlap file (2026-10-23): the one leaf `shipped_pairs()` and
+    `BESIDE_TWINS` both name, which today is `jarvis_hud.html`. That leaf gives
+    the fixture all three real copies - `backend/`, `jarvis-backend/` and the
+    BESIDE source under `jarvis-desktop/src/` - so the agreement test below can
+    drift the desktop copy on its own and prove the fast check now sees it.
+
+    The copy's own `_where.py` carries a trimmed SHIPPED, which is how the fast
+    check is told which files this copy is about, and its own
+    `test_base_matches_repo.py` is the rule the fast check loads.
 
     It carries `tools/gen_base_from_backend.py` too, because the rule now reads
     `BESIDE_TWINS` out of it, and every BESIDE-file that file names as this
@@ -330,7 +346,13 @@ def twin_fixture(work: Path) -> tuple:
     """
     top = next(n for n in _where.SHIPPED if "/" not in n)
     rebuilt = next(n for n in _where.SHIPPED if n.startswith("rebuilt/"))
-    shipped = (rebuilt, top)
+    beside_leaves = {leaf for leaf, _rel in BESIDE_TWINS}
+    overlap_leaf = next((leaf for leaf, _ours in shipped_pairs()
+                         if leaf in beside_leaves), None)
+    overlap_rel = dict(BESIDE_TWINS).get(overlap_leaf) if overlap_leaf else None
+    overlap_source = next((ours for leaf, ours in shipped_pairs()
+                           if leaf == overlap_leaf), None)
+    shipped = (rebuilt, top) + ((overlap_leaf,) if overlap_leaf else ())
     copy = work / "copy"
     (copy / "backend" / "rebuilt").mkdir(parents=True)
     (copy / "jarvis-backend").mkdir()
@@ -341,9 +363,12 @@ def twin_fixture(work: Path) -> tuple:
                     copy / "tools" / "gen_base_from_backend.py")
     with (copy / "backend" / "_where.py").open("a", encoding="utf-8",
                                                newline="\n") as handle:
-        handle.write("\n\n# the agreement test's own list\nSHIPPED = (%r, %r)\n"
-                     % shipped)
-    for name in ("rebuilt/jarvis-framework.toml", rebuilt, top):
+        handle.write("\n\n# the agreement test's own list\nSHIPPED = %r\n"
+                     % (shipped,))
+    sources = ["rebuilt/jarvis-framework.toml", rebuilt, top]
+    if overlap_source is not None:
+        sources.append(overlap_source.relative_to(BACKEND).as_posix())
+    for name in sources:
         leaf = name.rsplit("/", 1)[-1]
         shutil.copyfile(BACKEND / name, copy / "backend" / name)
         shutil.copyfile(BACKEND / name, copy / "jarvis-backend" / leaf)
@@ -352,7 +377,8 @@ def twin_fixture(work: Path) -> tuple:
         here.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(REPO / rel, here)
         shutil.copyfile(REPO / rel, copy / "jarvis-backend" / leaf)
-    return copy, shipped, top.rsplit("/", 1)[-1], rebuilt.rsplit("/", 1)[-1]
+    return (copy, shipped, top.rsplit("/", 1)[-1],
+            rebuilt.rsplit("/", 1)[-1], overlap_leaf, overlap_rel)
 
 
 def t_the_stale_twin_check_agrees_with_the_rule():
@@ -362,7 +388,7 @@ def t_the_stale_twin_check_agrees_with_the_rule():
         return
     work = Path(tempfile.mkdtemp(prefix="twin-guard-"))
     try:
-        copy, shipped, top_leaf, rebuilt_leaf = twin_fixture(work)
+        copy, shipped, top_leaf, rebuilt_leaf, overlap_leaf, overlap_rel = twin_fixture(work)
         backend, base = copy / "backend", copy / "jarvis-backend"
 
         code, out = run_checker(copy)
@@ -438,6 +464,38 @@ def t_the_stale_twin_check_agrees_with_the_rule():
             theirs.write_bytes(keep)
             code, out = run_checker(copy)
             check(f"... and green again once {beside_leaf} is put back",
+                  code == 0 and not named_by_checker(out),
+                  f"the tool exited {code}: {out}")
+
+        # The overlap of the two lists, which is a third copy of the same file.
+        # `jarvis_hud.html` is in `_where.SHIPPED` (so `backend/` holds a copy
+        # for the module tests) and in the BESIDE table (so the base is re-taken
+        # from `jarvis-desktop/src/`). Until 2026-10-23 `twin_pairs()` dropped a
+        # leaf seen twice and kept the SHIPPED pair, so a desktop page that
+        # drifted - while `backend/` and the base still agreed - was green in
+        # the fast check and only red in this suite. This is that bite.
+        check("the fixture holds the file that is both a SHIPPED module and a "
+              "BESIDE file, so the three-copy case is exercised",
+              overlap_leaf is not None and overlap_rel is not None
+              and (copy / overlap_rel).is_file()
+              and (backend / overlap_leaf).is_file(),
+              f"overlap leaf={overlap_leaf!r}, beside path={overlap_rel!r}")
+        if overlap_leaf is not None and overlap_rel is not None:
+            desktop = copy / overlap_rel
+            keep = desktop.read_bytes()
+            desktop.write_bytes(keep + b"# desktop copy drifted by the agreement test\n")
+            code, out = run_checker(copy)
+            differ, missing = rule_finds(backend, base, shipped)
+            check(f"a desktop-only drift is red, and the tool names the file "
+                  f"({overlap_leaf}) - the copy the old dedupe dropped",
+                  code == 1 and differ == {overlap_leaf}
+                  and named_by_checker(out) == differ | missing,
+                  f"the tool named {sorted(named_by_checker(out))} and exited "
+                  f"{code}; this suite says differ={sorted(differ)}, "
+                  f"missing={sorted(missing)}")
+            desktop.write_bytes(keep)
+            code, out = run_checker(copy)
+            check("... and green again once the desktop copy is put back",
                   code == 0 and not named_by_checker(out),
                   f"the tool exited {code}: {out}")
 

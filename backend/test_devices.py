@@ -159,11 +159,17 @@ class Clock:
 
 
 def fresh():
-    """A new, empty settings folder and a clean module."""
+    """A new, empty settings folder and a clean module.
+
+    The token-failure bucket is reset too: it is process-global in
+    jarvis_owner_check (as it is in the running HUD), and a test that refuses
+    a bad key must not leave the next test's peer blocked (RA-2 audit,
+    2026-10-23)."""
     d = Path(tempfile.mkdtemp(prefix="cfg-", dir=_TMP))
     fw.CONFIG_DIR = d
     fw.action_tier = lambda a: "ask"
     D._reset_for_tests()
+    OC.TOKEN_FAILURES = OC.TokenFailureLimiter()
     AUDIT.clear()
     EVENTS.clear()
     return d
@@ -171,9 +177,11 @@ def fresh():
 
 class FakeHandler:
     def __init__(self, path="/", token=None, peer="127.0.0.1", local="127.0.0.1", body=b"{}",
-                 cookie=None):
+                 cookie=None, headers=None):
         self.path = path
-        self.headers = {"X-Jarvis-Token": token} if token is not None else {}
+        self.headers = dict(headers or {})
+        if token is not None:
+            self.headers["X-Jarvis-Token"] = token
         if cookie is not None:
             self.headers["Cookie"] = f"jarvis_token={cookie}"
         self.client_address = (peer, 50000)
@@ -1682,8 +1690,14 @@ def t_the_routes():
 PUBLIC_PEER = "203.0.113.5"       # a public address: never this app
 
 
-def _installed():
-    """A fresh registry and a handler class with the device routes on it."""
+def _installed(origin_ok=None):
+    """A fresh registry and a handler class with the device routes on it.
+
+    `origin_ok` is what the HUD passes in: every module route runs it BEFORE
+    the token check (`install()`'s `_allowed`), which is RA-2 invariant 2. The
+    default trusts every caller because most of these tests are about the
+    key/token half.
+    """
     fresh()
     D._ARMED = False
 
@@ -1691,7 +1705,7 @@ def _installed():
         pass
 
     orig = Original()
-    D.install(H, origin_ok=lambda h: True, token_ok=orig,
+    D.install(H, origin_ok=origin_ok or (lambda h: True), token_ok=orig,
               read_body=lambda h: h.body)
     return H, orig
 
@@ -1844,6 +1858,170 @@ def t_bite4_a_remote_web_client_is_not_this_pc():
     check("Bite 4: a risky card from that device needs its own signature",
           got is not None and got[0] == 403
           and got[1].get("owner_check") == "no_approval_key", got)
+    D._ARMED = False
+
+
+# ==========================================================================
+#   RA-2 - the five security invariants of the merged PR #755
+#   (2026-10-23 residual audit; the origin half is proved pure in
+#   backend/test_origin.py, and the ?token= logging half in test_scrub.py)
+# ==========================================================================
+
+def t_ra2_failed_device_keys_fill_the_token_failure_bucket():
+    """RA-2 invariant 4 (audit of #755, 2026-10-23): a refused DEVICE key must
+    count against the same `TokenFailureLimiter` the header/cookie/query path
+    uses, and a peer over the limit must be refused even with a valid key.
+
+    Found by the audit, and it bit before this test: `wrap_token_ok` answers
+    a device key before the HUD's `_token_ok` - the function
+    `hud-request-gate.patch` gives the bucket - runs. So a key nothing paired
+    could be guessed for ever at 401 with no 429, `/api/devices/web-session`
+    included, and a peer already blocked by header failures could still open
+    a browser session with a key of its own. The fix asks and feeds that one
+    bucket in this module.
+    """
+    H, orig = _installed()
+    with Clock():
+        _dev, token, _ = pair(name="iPad Safari", kind="tablet")
+    keyed = D.wrap_token_ok(orig)
+    unknown = "jdk1.d00000000." + "A" * 43
+    real = OC.TOKEN_FAILURES
+    now = [1000.0]
+
+    def limiter():
+        return OC.TokenFailureLimiter(max_failures=10, window_s=60.0,
+                                      clock=lambda: now[0])
+
+    try:
+        OC.TOKEN_FAILURES = limiter()
+        refused = [keyed(H(token=unknown, peer=MESH)) for _ in range(10)]
+        check("RA-2: an unknown device key is refused every time",
+              all(r is False for r in refused), refused)
+        check("RA-2: 10 refused device keys are counted, and the peer is not "
+              "blocked yet", OC.TOKEN_FAILURES.blocked(MESH) is False)
+        keyed(H(token=unknown, peer=MESH))
+        check("RA-2: the 11th refused device key fills the bucket (the HUD's "
+              "`_send` turns that route's 401 into 429 + Retry-After)",
+              OC.TOKEN_FAILURES.blocked(MESH) is True)
+        check("RA-2: a VALID device key from that peer is refused while blocked",
+              keyed(H(token=token, peer=MESH)) is False)
+        check("RA-2: another peer is not punished for it",
+              keyed(H(token=token, peer="100.101.9.9")) is True)
+
+        # The route the audit names, through the module's own POST path.
+        OC.TOKEN_FAILURES = limiter()
+        post = H(D.WEB_SESSION_ROUTE, token=unknown, peer=MESH)
+        for _ in range(10):
+            post.do_POST()
+        check("RA-2: a failed POST /api/devices/web-session is counted too",
+              [code for code, _body in post.sent[-10:]] == [401] * 10
+              and OC.TOKEN_FAILURES.blocked(MESH) is False, post.sent[-1])
+        post.do_POST()
+        check("RA-2: ... and its 11th leaves a full bucket (429 at the HUD gate)",
+              post.sent[-1][0] == 401 and OC.TOKEN_FAILURES.blocked(MESH) is True,
+              post.sent[-1])
+
+        # A valid key resets the peer, exactly as the bucket's own rule says.
+        OC.TOKEN_FAILURES = limiter()
+        for _ in range(10):
+            keyed(H(token=unknown, peer=MESH))
+        check("RA-2: a valid key after 10 refusals resets that peer",
+              keyed(H(token=token, peer=MESH)) is True
+              and OC.TOKEN_FAILURES.blocked(MESH) is False)
+        for _ in range(10):
+            keyed(H(token=unknown, peer=MESH))
+        check("RA-2: ... so ten MORE refusals are still not blocked",
+              OC.TOKEN_FAILURES.blocked(MESH) is False)
+    finally:
+        OC.TOKEN_FAILURES = real
+        D._ARMED = False
+
+
+def t_ra2_a_cookie_authenticated_post_needs_a_valid_origin():
+    """RA-2 invariant 2: every module route runs origin_ok BEFORE token_ok
+    (`install()`'s `_allowed`), so a request carrying only the
+    `jarvis_token` cookie cannot cross-site a POST: no Origin (and no
+    X-Jarvis-Client) is 403, the owner's mesh Origin is accepted, and a
+    foreign Origin is refused. The cookie is SameSite=Strict as well, so a
+    cross-site request never carries it in the first place (Bite 2 above
+    pins the flag)."""
+    fresh()
+    D._ARMED = False
+    served = {"http://127.0.0.1:4719"}
+
+    class H(FakeHandler):
+        pass
+
+    orig = Original()
+    D.install(H, origin_ok=lambda h: OC.origin_ok(h, served),
+              token_ok=orig, read_body=lambda h: h.body)
+    with Clock():
+        _dev, token, _ = pair(name="iPad Safari", kind="tablet")
+    h = H(D.WEB_SESSION_ROUTE, cookie=token, peer=MESH)
+    h.do_POST()
+    check("RA-2: a cookie POST with no Origin and no X-Jarvis-Client is 403",
+          h.sent[-1][0] == 403
+          and h.sent[-1][1].get("error") == "cross-origin request refused",
+          h.sent[-1])
+    h = H(D.WEB_SESSION_ROUTE, cookie=token, peer=MESH,
+          headers={"Origin": "http://mariorelan11-alps.nord:4719"})
+    h.do_POST()
+    check("RA-2: ... the same cookie POST with the owner's mesh Origin is 200 "
+          "and plants the session cookie",
+          h.sent[-1][0] == 200 and _cookie_of(h).startswith(D.WEB_COOKIE + "="),
+          h.sent[-1])
+    h = H(D.WEB_SESSION_ROUTE, cookie=token, peer=MESH,
+          headers={"Origin": "https://evil.example"})
+    h.do_POST()
+    check("RA-2: ... and a foreign Origin is refused 403", h.sent[-1][0] == 403,
+          h.sent[-1])
+    # The documented no-Origin fallback: a CUSTOM header forces a CORS
+    # preflight, which this server answers only for served origins - a
+    # cross-site form or script cannot send it, and SameSite=Strict keeps the
+    # cookie off a cross-site request anyway.
+    h = H(D.WEB_SESSION_ROUTE, cookie=token, peer=MESH,
+          headers={OC._HUD_CLIENT_HEADER: "hud"})
+    h.do_POST()
+    check("RA-2: no Origin + the HUD's own header is the documented fallback "
+          "(custom header => preflight; SameSite=Strict on the cookie)",
+          h.sent[-1][0] == 200, h.sent[-1])
+    D._ARMED = False
+
+
+def t_ra2_the_session_cookie_is_secure_only_over_tls():
+    """RA-2 invariant 5: the emitted Set-Cookie always has HttpOnly,
+    SameSite=Strict and Path=/, and Secure exactly when the connection is
+    TLS. A TLS socket is not something this suite can make (`#756` ships the
+    certificate tool, not an HTTPS listener), so the TLS branch is proved by
+    standing the detector in and the plain branch with the real one; the
+    value never reaches an answer body or an audit line."""
+    H, orig = _installed()
+    with Clock():
+        _dev, token, _ = pair(name="iPad Safari", kind="tablet")
+    h = H(D.WEB_SESSION_ROUTE, token=token, peer=MESH)
+    h.do_POST()
+    code, body = h.sent[-1]
+    cookie = _cookie_of(h)
+    check("RA-2: the session cookie is emitted", code == 200 and bool(cookie),
+          h.sent[-1])
+    for attr in ("Path=/", "HttpOnly", "SameSite=Strict", "Max-Age="):
+        check(f"RA-2: the emitted Set-Cookie always has {attr}", attr in cookie,
+              cookie)
+    check("RA-2: a plain-http cookie is NOT Secure (the browser must send it)",
+          "Secure" not in cookie, cookie)
+    check("RA-2: _is_https is False for a plain socket", D._is_https(h) is False)
+    real_is_https = D._is_https
+    try:
+        D._is_https = lambda handler: True
+        tls = H(D.WEB_SESSION_ROUTE, token=token, peer=MESH)
+        tls.do_POST()
+        tls_cookie = _cookie_of(tls)
+        check("RA-2: a TLS session cookie IS Secure", "Secure" in tls_cookie,
+              tls_cookie)
+    finally:
+        D._is_https = real_is_https
+    check("RA-2: the key is never in the answer body or an audit line",
+          token not in json.dumps(body) and token not in json.dumps(AUDIT))
     D._ARMED = False
 
 

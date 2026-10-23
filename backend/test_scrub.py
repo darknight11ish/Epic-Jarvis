@@ -623,6 +623,41 @@ def t_the_patch_installs_it_right_after_the_token():
           ns.get("_SCRUBBING_LOG") is False)
 
 
+def t_ra2_a_hud_request_line_cannot_carry_a_token():
+    """RA-2 invariant 1 (audit of #755, 2026-10-23): the ?token= bootstrap,
+    the query key a browser's EventSource must use, and a Set-Cookie line are
+    the three shapes that could carry a credential into backend.log.
+
+    The HUD itself logs no request line and redirects the bootstrap to a bare
+    "/" (test_origin.py pins both). This is the other half: anything that DOES
+    print - backend.log, a traceback, another server - loses the value and
+    keeps the label that says what was there, including a percent-encoded
+    query name (the HUD decodes the query with parse_qs, so `tok%65n=` IS the
+    bootstrap to it).
+    """
+    dev = "jdk1.d0123abcd." + "B" * 43
+    cases = (
+        ('GET /?token=' + PAIRING + ' HTTP/1.1" 303 -', PAIRING,
+         "the one-time ?token= bootstrap"),
+        ('GET /api/events?token=' + dev + ' HTTP/1.1" 200 -', dev,
+         "an EventSource query key"),
+        ('Set-Cookie: jarvis_token=' + dev + '; Path=/; HttpOnly; SameSite=Strict',
+         dev, "a Set-Cookie line"),
+        ('GET /?tok%65n=' + dev + ' HTTP/1.1" 303 -', dev,
+         "a percent-encoded query name"),
+    )
+    for text, secret, why in cases:
+        out = S.scrub_text(text)
+        check(f"RA-2: {why} loses its value", secret not in out, out)
+    out = S.scrub_text('GET /?token=' + PAIRING + ' HTTP/1.1" 303 -')
+    check("RA-2: ... and the request line still says a token was there",
+          "?token=" in out, out)
+    out = S.scrub_text('Set-Cookie: jarvis_token=' + dev
+                       + '; Path=/; HttpOnly; SameSite=Strict')
+    check("RA-2: ... the cookie line keeps its label",
+          out.startswith("Set-Cookie:"), out)
+
+
 if __name__ == "__main__":
     for fn in (t_shapes, t_the_router_table_is_the_one_used, t_identifiers,
                t_leaves_ordinary_text_alone, t_known_values, t_the_joplin_error_is_scrubbed,
@@ -631,7 +666,8 @@ if __name__ == "__main__":
                t_install_registers_the_pairing_token, t_a_logger_made_early_is_covered,
                t_it_never_says_what_it_removed, t_no_switch_and_no_network,
                t_tier2_negation_is_not_consent,
-               t_the_patch_installs_it_right_after_the_token):
+               t_the_patch_installs_it_right_after_the_token,
+               t_ra2_a_hud_request_line_cannot_carry_a_token):
         print(f"\n--- {fn.__name__} ---", file=REAL_OUT)
         try:
             fn()

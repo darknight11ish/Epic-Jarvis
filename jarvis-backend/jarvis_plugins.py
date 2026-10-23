@@ -81,8 +81,32 @@ DIR_ENV = "JARVIS_PLUGINS_DIR"
 #: The three callbacks the core hands every install(), unchanged.
 CTX_KEYS = ("origin_ok", "token_ok", "read_body")
 
+#: The number a folder is sorted by when it states no usable one: it is placed
+#: after every folder that does, and ties are broken by name.
+ORDER_SENTINEL = 10_000
+
 _ARMED = False
 _STATE: dict = {"loaded": [], "skipped": [], "failed": [], "dir": None}
+
+
+def _order_of(entry: dict) -> int:
+    """The number to sort one discovered folder by.
+
+    READ THE VALUE, THEN DEFAULT - never `entry.get("stack_order", ORDER_SENTINEL)`.
+    `dict.get` uses its default only when the key is ABSENT, so a manifest that
+    says `"stack_order": null` returned None, the default never applied, and
+    `sorted()` raised `TypeError: '<' not supported between instances of
+    'NoneType' and 'int'` - out of `discover()`, out of `install()`, and the
+    whole backend failed to start over one bad manifest (found 2026-10-15 by
+    backend/test_plugin_stack_order.py; latent, because no folder shipped that
+    way). A value that is present but is not a whole number now takes the same
+    path as one that is missing. A bool is not a whole number here: `true` is
+    an `int` in Python and would otherwise sort as 1.
+    """
+    value = entry.get("stack_order")
+    if isinstance(value, bool) or not isinstance(value, int):
+        return ORDER_SENTINEL
+    return value
 
 
 def plugins_dir(here: Path | None = None) -> Path:
@@ -135,7 +159,7 @@ def discover(folder: Path | None = None) -> list:
         if (child / "disabled").exists() or entry.get("enabled") is False:
             entry["disabled"] = True
         found.append(entry)
-    found.sort(key=lambda e: (e.get("stack_order", 10_000), str(e.get("name", ""))))
+    found.sort(key=lambda e: (_order_of(e), str(e.get("name", ""))))
     return found
 
 

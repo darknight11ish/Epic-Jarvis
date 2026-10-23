@@ -36,6 +36,20 @@ modules match" and CI went red on two jobs at once - `backend` and `audit` - on
 over one file, was the whole of the failure. It now compares every file the
 re-take rule keeps equal, so that cannot happen again silently.
 
+THE SECOND GAP IT HAD (2026-10-23), IN THE OVERLAP OF THE TWO LISTS
+
+Two files are named in both the SHIPPED list and the BESIDE table, and they are
+not the same shape: `jarvis-framework.toml` is the same path in both lists, but
+`jarvis_hud.html` is `backend/jarvis_hud.html` in SHIPPED and
+`jarvis-desktop/src/jarvis_hud.html` in BESIDE - three copies in all once the
+base's own is counted. `twin_pairs()` used to keep only the first pair it saw
+for a leaf, which is the SHIPPED one, so this tool compared
+`backend/jarvis_hud.html` with the base and never looked at the desktop page the
+base is re-taken FROM. A desktop page that drifted stayed green here and only
+went red in CI's `backend` job. The rule now keeps a leaf from two different
+sources as two pairs, and this tool compares EVERY repository copy of every
+leaf against the base - so all three copies of the page are covered.
+
 WHAT IT REUSES, SO IT CANNOT DISAGREE BY ACCIDENT
 
 It does not re-state the rule. It loads the rule's own code from the checkout it
@@ -55,9 +69,10 @@ is checking:
 `backend/test_base_matches_repo.py`'s own
 `t_the_stale_twin_check_agrees_with_the_rule` holds the agreement: it builds a
 deliberately perturbed copy of the two folders - one shipped module drifted, one
-beside-file drifted at a time - and fails unless this tool names exactly the
-files the rule names. It fails too if this tool is absent, or reports nothing,
-or goes red on a difference that is only line endings.
+beside-file drifted at a time, and one desktop-only drift of the overlapped
+`jarvis_hud.html` - and fails unless this tool names exactly the files the rule
+names. It fails too if this tool is absent, or reports nothing, or goes red on a
+difference that is only line endings.
 
 WHAT IT DELIBERATELY DOES NOT DO
 
@@ -161,23 +176,50 @@ class RuleUnreadable(Exception):
     """The rule could not be read, so nothing was checked."""
 
 
-def drifted(rule) -> tuple[list[tuple[str, Path, Path, int, int]], list[str]]:
-    """(twins whose text differs, twins with no copy in the base).
+def copies_by_leaf(rule) -> dict:
+    """Every repository copy the rule names for each file in the base.
 
-    Every judgement here is the rule's: the pair list is `rule.twin_pairs()`
-    and sameness is `rule.same_text()`. The only thing this function adds is
-    the reporting - a leaf name and both byte sizes instead of one long string.
+    `rule.twin_pairs()` is the rule's list of (leaf in the base, this
+    repository's copy) pairs, in its own order. Since 2026-10-23 it keeps the
+    same leaf from two different sources when two lists name it - `jarvis_hud.html`
+    is both a SHIPPED module and a BESIDE file - which is exactly the overlap
+    this tool used to drop. Grouping by leaf is how the report can print WHICH
+    copy drifted; a dict keeps the rule's order, and a path named twice by the
+    rule is compared once.
+    """
+    groups: dict[str, list[Path]] = {}
+    for leaf, ours in rule.twin_pairs():
+        sources = groups.setdefault(leaf, [])
+        if ours not in sources:
+            sources.append(ours)
+    return groups
+
+
+def drifted(rule) -> tuple[list[tuple[str, Path, Path, int, int]], list[str]]:
+    """(copies whose text differs, twins with no copy on one side).
+
+    Every judgement here is the rule's: which files are twins and when two
+    files count as the same text. The only thing this function adds is the
+    reporting - a leaf name and both byte sizes instead of one long string.
+
+    EVERY repository copy of a leaf is compared against the base, not just the
+    one pair `twin_pairs()` happens to name first: `jarvis_hud.html` is named
+    by both the SHIPPED list and the BESIDE table, and a desktop page that
+    drifted while `backend/` and the base still agreed stayed green here until
+    2026-10-23. One drifted copy is enough for a red run.
     """
     differs: list[tuple[str, Path, Path, int, int]] = []
     missing: list[str] = []
-    for leaf, ours in rule.twin_pairs():
+    for leaf, sources in copies_by_leaf(rule).items():
         theirs = rule.BASE / leaf
-        if not theirs.is_file() or not ours.is_file():
-            missing.append(leaf)
-            continue
-        if not rule.same_text(theirs, ours):
-            differs.append((leaf, theirs, ours,
-                            theirs.stat().st_size, ours.stat().st_size))
+        for ours in sources:
+            if not theirs.is_file() or not ours.is_file():
+                if leaf not in missing:
+                    missing.append(leaf)
+                continue
+            if not rule.same_text(theirs, ours):
+                differs.append((leaf, theirs, ours,
+                                theirs.stat().st_size, ours.stat().st_size))
     return differs, missing
 
 
@@ -204,7 +246,7 @@ def main() -> int:
         print(f"::error::{err}")
         return 1
 
-    pairs = rule.twin_pairs()
+    groups = copies_by_leaf(rule)
     differs, missing = drifted(rule)
 
     for leaf, theirs, ours, their_size, our_size in differs:
@@ -215,9 +257,9 @@ def main() -> int:
               f"too)")
 
     if differs or missing:
-        names = ", ".join([leaf for leaf, *_ in differs] + missing)
-        print(f"{len(differs) + len(missing)} stale twin(s) under "
-              f"{_rel(rule.BASE, root)}/: {names} - {FIX}")
+        names = sorted({leaf for leaf, *_ in differs} | set(missing))
+        print(f"{len(differs) + len(missing)} stale twin copy(ies) under "
+              f"{_rel(rule.BASE, root)}/: {', '.join(names)} - {FIX}")
         print("Which side is newer is not knowable from here: read both files "
               "(above) and decide. `py -3 tools/check_stale_twins.py` exits 0 "
               "when they match again.")
@@ -225,12 +267,17 @@ def main() -> int:
 
     shipped_leaves = {leaf for leaf, _ours in rule.shipped_pairs()}
     extra = [leaf for leaf, _ours in rule.beside_pairs() if leaf not in shipped_leaves]
+    copies = sum(len(sources) for sources in groups.values())
     print(f"{_rel(rule.BASE, root)}/ is this repository's copy: all "
-          f"{len(pairs)} files the base is re-taken from match, line endings "
-          f"ignored.")
+          f"{len(groups)} files the base is re-taken from match ({copies} "
+          f"repository copies, every one compared), line endings ignored.")
     print(f"     {len(shipped_leaves)} modules this repository ships whole"
           + (f", plus {len(extra)} file(s) it owns beside them: "
              f"{', '.join(extra)}." if extra else "."))
+    multi = sorted(leaf for leaf, sources in groups.items() if len(sources) > 1)
+    if multi:
+        print(f"     Every copy of a file named by two lists is compared too: "
+              f"{', '.join(multi)}.")
     print("This is the verbatim-copy half of backend/test_base_matches_repo.py "
           "only; that suite also checks the base's imports and that nothing "
           "private was swept in.")
