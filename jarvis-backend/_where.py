@@ -759,6 +759,35 @@ SHIPPED = (
     # entry to be a file in `backend/` as well as in the base, which is why it is
     # copied there too.
     "jarvis_hud.html",
+    # The page's own files (2026-10-23, PWA Slice 3a): the stylesheet, the
+    # fonts and the modules a browser asks for after GET "/". Not modules
+    # either - jarvis_hud.py's STATIC_ASSETS whitelist reads each from its own
+    # folder at request time - so a deploy has to put them beside the server.
+    # `static/` is where this repository keeps them (the page's real copies
+    # live in jarvis-desktop/src/, and backend/test_hud_static.py fails if they
+    # drift); every entry lands as its leaf name beside jarvis_hud.py, which is
+    # the name the whitelist reads.
+    "static/theme.css",
+    "static/fonts.css",
+    "static/chakra-petch-400.woff2",
+    "static/chakra-petch-500.woff2",
+    "static/chakra-petch-600.woff2",
+    "static/chakra-petch-700.woff2",
+    "static/ibm-plex-mono-400.woff2",
+    "static/ibm-plex-mono-500.woff2",
+    "static/ibm-plex-sans-400.woff2",
+    "static/lane-warning.js",
+    "static/hud-actions.js",
+    "static/hud-safety.js",
+    "static/hud-edit.js",
+    "static/hud-presets.js",
+    "static/private-speech.js",
+    "static/face-voice.js",
+    "static/face-moments.js",
+    "static/face-tuning.js",
+    "static/animal-shared.js",
+    "static/hud-layout.js",
+    "static/hud-layout-store.js",
     # --- the five the base already carried but SHIPPED did not list (2026-10-07) ---
     # Found by comparing a working backend against this list: all five were
     # already IN jarvis-backend/, and a SHIPPED module imports each of them, but
@@ -1163,6 +1192,11 @@ SHIPPED = (
     # flight engine + price history. [price_radar] enabled = false; no route,
     # no app surface, no booking path - docs/DESIGN-PRICE-RADAR.md.
     "jarvis_price_radar.py",
+    # The Daily Pulse's money / study / PC-health / watched-price summaries
+    # (2026-10-23, P3 seam B5-c): READ-ONLY reads of the four modules above,
+    # wired into the briefing by jarvis_briefing.live_deps(). No route, no
+    # card, no network; a source it cannot read is reported "not checked".
+    "jarvis_pulse_sources.py",
 )
 
 

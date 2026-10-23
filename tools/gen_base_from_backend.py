@@ -21,13 +21,22 @@ re-taken", and nothing else:
         test_*.py             (the tests are this repository's)
         patch_openjarvis.py   (a tool for a different project)
         spike_sandbox.py      (an experiment)
-    plus these six files:
+    plus the files the page needs beside the server:
         jarvis_hud.html          from jarvis-desktop/src/
         jarvis-framework.toml    from backend/rebuilt/  - the TEMPLATE, never the live file
         requirements.lock        from backend/
         quiz_grader_cases.json   from backend/
         rust-crates.lock         from jarvis-desktop/src-tauri/Cargo.lock
         jarvis-visual-spec.json  the owner's own copy, which is what /api/visual-spec reads
+        theme.css, fonts.css, the twelve .js modules and the seven woff2 faces
+                                 from backend/static/ - jarvis_hud.py's
+                                 STATIC_ASSETS whitelist reads each beside
+                                 itself (PWA Slice 3a, 2026-10-23); the page's
+                                 real copies live in jarvis-desktop/src/. The
+                                 woff2 faces are BYTES and are copied byte for
+                                 byte (`BESIDE_BINARY`) - decoding one as text
+                                 raises, and a line-ending rewrite would
+                                 corrupt it.
 
 Everything is written with LF line endings, which is this repository's rule
 (`.gitattributes`), and read with UTF-8. `jarvis-backend/README.md` and
@@ -131,6 +140,65 @@ BESIDE = (
      "jarvis_tool_updates.py reads it"),
     ("jarvis-visual-spec.json", "{source}/jarvis-visual-spec.json",
      "the owner's own copy, which is what /api/visual-spec reads"),
+    # --- The browser's own files (2026-10-23, PWA Slice 3a) -----------------
+    # `jarvis_hud.py`'s STATIC_ASSETS whitelist serves each of these from
+    # beside itself at the URL the page asks for, so a fresh copy of the base
+    # has to carry them or the page loads half-dressed (no theme, no fonts,
+    # every module a 404). This repository keeps them under backend/static/,
+    # flattened to the single names the whitelist reads; the page's real
+    # copies are in jarvis-desktop/src/, and backend/test_hud_static.py fails
+    # if the two ever differ.
+    ("theme.css", "{repo}/backend/static/theme.css",
+     "the page's stylesheet: jarvis_hud.py serves it at /theme.css"),
+    ("fonts.css", "{repo}/backend/static/fonts.css",
+     "the @font-face declarations the page loads at /fonts/fonts.css"),
+    ("lane-warning.js", "{repo}/backend/static/lane-warning.js",
+     "a module the page imports; served at /lane-warning.js"),
+    ("hud-actions.js", "{repo}/backend/static/hud-actions.js",
+     "a module the page imports; served at /hud-actions.js"),
+    ("hud-safety.js", "{repo}/backend/static/hud-safety.js",
+     "a module the page imports; served at /hud-safety.js"),
+    ("hud-edit.js", "{repo}/backend/static/hud-edit.js",
+     "a module the page imports; served at /hud-edit.js"),
+    ("hud-presets.js", "{repo}/backend/static/hud-presets.js",
+     "a module the page imports; served at /hud-presets.js"),
+    ("private-speech.js", "{repo}/backend/static/private-speech.js",
+     "the page's speech rule; served at /private-speech.js"),
+    ("face-voice.js", "{repo}/backend/static/face-voice.js",
+     "a module the page imports; served at /face-voice.js"),
+    ("face-moments.js", "{repo}/backend/static/face-moments.js",
+     "a module the page imports; served at /face-moments.js"),
+    ("face-tuning.js", "{repo}/backend/static/face-tuning.js",
+     "a module the page imports; served at /face-tuning.js"),
+    ("animal-shared.js", "{repo}/backend/static/animal-shared.js",
+     "a module the page imports; served at /animal-shared.js"),
+    ("hud-layout.js", "{repo}/backend/static/hud-layout.js",
+     "a module hud-edit.js/hud-presets.js import; served at /hud-layout.js"),
+    ("hud-layout-store.js", "{repo}/backend/static/hud-layout-store.js",
+     "a module hud-edit.js imports; served at /hud-layout-store.js"),
+)
+
+#: The beside-files that are BYTES, not text: the seven woff2 faces
+#: `fonts.css` declares. Same shape as `BESIDE` - (name in the base, where it
+#: comes from, why) - but copied byte for byte: decoding a woff2 as UTF-8
+#: raises, and a newline-style rewrite would corrupt it. They are still part of
+#: the same re-take rule and the same two-file rule, and `backend/
+#: test_hud_static.py` pins them to the page's real copies in jarvis-desktop/.
+BESIDE_BINARY = (
+    ("chakra-petch-400.woff2", "{repo}/backend/static/chakra-petch-400.woff2",
+     "a self-hosted face; served at /fonts/chakra-petch-400.woff2"),
+    ("chakra-petch-500.woff2", "{repo}/backend/static/chakra-petch-500.woff2",
+     "a self-hosted face; served at /fonts/chakra-petch-500.woff2"),
+    ("chakra-petch-600.woff2", "{repo}/backend/static/chakra-petch-600.woff2",
+     "a self-hosted face; served at /fonts/chakra-petch-600.woff2"),
+    ("chakra-petch-700.woff2", "{repo}/backend/static/chakra-petch-700.woff2",
+     "a self-hosted face; served at /fonts/chakra-petch-700.woff2"),
+    ("ibm-plex-mono-400.woff2", "{repo}/backend/static/ibm-plex-mono-400.woff2",
+     "a self-hosted face; served at /fonts/ibm-plex-mono-400.woff2"),
+    ("ibm-plex-mono-500.woff2", "{repo}/backend/static/ibm-plex-mono-500.woff2",
+     "a self-hosted face; served at /fonts/ibm-plex-mono-500.woff2"),
+    ("ibm-plex-sans-400.woff2", "{repo}/backend/static/ibm-plex-sans-400.woff2",
+     "a self-hosted face; served at /fonts/ibm-plex-sans-400.woff2"),
 )
 
 #: Files the base folder carries that are NOT part of the copy: the folder's
@@ -276,6 +344,16 @@ def planned(source: Path, repo: Path) -> tuple:
             continue
         want[name] = read_text(src)
 
+    # The byte files (the woff2 faces): copied exactly, never decoded. A text
+    # read raises UnicodeDecodeError on them and a newline rewrite would corrupt
+    # a font, so `want` carries their bytes and compare()/main() write bytes.
+    for name, where, why in BESIDE_BINARY:
+        src = Path(where.format(repo=repo.as_posix(), source=source.as_posix()))
+        if not src.is_file():
+            problems.append(f"{name}: not found at {src} ({why})")
+            continue
+        want[name] = src.read_bytes()
+
     for name, where, why in DERIVED_FROM_REPO:
         src = Path(where.format(repo=repo.as_posix(), source=source.as_posix()))
         if not src.is_file():
@@ -289,13 +367,17 @@ def planned(source: Path, repo: Path) -> tuple:
 def compare(want: dict, base: Path) -> tuple:
     """(what differs, what the base has that this copy would not write)."""
     differ, extra = [], []
-    for name, text in sorted(want.items()):
+    for name, value in sorted(want.items()):
         theirs = base / name
         if not theirs.is_file():
             differ.append((name, "not in the base at all"))
-        elif read_text(theirs) != text:
+        elif isinstance(value, bytes):
+            if theirs.read_bytes() != value:
+                differ.append((name, f"the base holds {theirs.stat().st_size} B, "
+                                     f"this folder produces {len(value)} B"))
+        elif read_text(theirs) != value:
             differ.append((name, f"the base holds {theirs.stat().st_size} B, "
-                                 f"this folder produces {len(text.encode('utf-8'))} B"))
+                                 f"this folder produces {len(value.encode('utf-8'))} B"))
     for p in sorted(base.rglob("*")):
         if not p.is_file():
             continue
@@ -328,7 +410,8 @@ def main(argv=None) -> int:
     print(f"Source  : {source}")
     print(f"Base    : {base}")
     print(f"Rule    : every top-level *.py except the tests, patch_openjarvis.py and "
-          f"spike_sandbox.py, plus {len(BESIDE)} files this repository owns"
+          f"spike_sandbox.py, plus {len(BESIDE)} text and {len(BESIDE_BINARY)} byte "
+          f"files this repository owns"
           + (f" and {len(DERIVED_FROM_REPO)} it derives"
              f" ({', '.join(n for n, _w, _y in DERIVED_FROM_REPO)})"
              if DERIVED_FROM_REPO else ""))
@@ -364,13 +447,19 @@ def main(argv=None) -> int:
         print(f"FAIL  {base} is not a folder")
         return 1
     written, unchanged = 0, 0
-    for name, text in sorted(want.items()):
+    for name, value in sorted(want.items()):
         dest = base / name
-        if dest.is_file() and read_text(dest) == text:
-            unchanged += 1
-            continue
+        if dest.is_file():
+            same = (dest.read_bytes() == value if isinstance(value, bytes)
+                    else read_text(dest) == value)
+            if same:
+                unchanged += 1
+                continue
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(text.encode("utf-8"))
+        if isinstance(value, bytes):
+            dest.write_bytes(value)
+        else:
+            dest.write_bytes(value.encode("utf-8"))
         written += 1
         print(f"        wrote {name}")
     differ, extra = compare(want, base)

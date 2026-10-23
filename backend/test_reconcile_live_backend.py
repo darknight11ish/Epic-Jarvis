@@ -140,6 +140,20 @@ MINI_HUD += (
     + "\n".join(R._delta_lines(R.LOOPBACK_OLD_FILE)) + "\n"
 )
 
+# PWA Slice 3a (2026-10-23): the two anchors its literal deltas insert in
+# front of, present in every fixture exactly as the real live HUD has them,
+# so a full-table plan can carry the static whitelist too. The fixture has
+# none of that code itself - a plan has to insert both blocks.
+MINI_HUD += (
+    "\n\n"
+    "class Handler(BaseHTTPRequestHandler):\n"
+    "    def do_GET(self):\n"
+    "        path = \"\"\n"
+    "        if path in (\"/\", \"/index.html\"):\n"
+    "            return None\n"
+    "        return None\n"
+)
+
 
 def make_live(root: Path, *, with_deltas=False, app_control_section=False) -> Path:
     live = root / "live"
@@ -714,6 +728,8 @@ def t_end_to_end_and_idempotent():
         check("... and creates no backup folder",
               not any(p.name.startswith("_jarvis-deploy-backup-tool-") for p in live.iterdir()))
         check("... and does not probe", not any("ROUTE PROBES" in l for l in lines), lines[-5:])
+        check("... and prints no BLOCKED LIVE DELTAS (the traces record is retired)",
+              "BLOCKED LIVE DELTAS" not in "\n".join(lines), lines[-8:])
 
         lines2 = []
         code2 = run_fixture(repo, live, apply=True, out_lines=lines2)
@@ -760,29 +776,31 @@ def t_cli_is_dry_run_by_default_and_validates_paths():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def t_traces_retention_is_recorded_blocked_not_guessed():
-    """F10 / Q2 (2026-10-20): traces.db retention is recorded as BLOCKED.
+def t_traces_retention_is_retired_not_blocked():
+    """RA-5 (2026-10-23): the F10 traces.db retention is NOT a blocked live delta.
 
-    The live HUD was read read-only and has no traces.db writer, schema or anchor.
-    A retention cap must not be guessed into a database this program does not own,
-    so the decision lives in BLOCKED_DELTAS and is printed - never staged."""
-    entry = R.BLOCKED_DELTAS.get("traces-retention")
-    check("traces-retention is recorded in BLOCKED_DELTAS", isinstance(entry, dict), entry)
-    check("... and is NOT in DELTA_TABLE, so no deploy ever tries to insert it",
+    #669 recorded it BLOCKED on 2026-10-20 because the live HUD had no writer,
+    schema or anchor. Four hours later #673 shipped the cap the safe way, in the
+    SHIPPED modules (`jarvis_sqlite.trim_table` / `idle_maintenance`, called from
+    `jarvis_initiative.sqlite_maintenance`), which deploy step 1 carries - and the
+    HUD never owned traces.db, so no live-HUD anchor can exist and a HUD-side
+    prune would delete a database this program does not own. RA-5 retired the
+    blocked record (2026-10-23): the dry run must report 0 blocked deltas, while
+    the cap stays shipped, wired and tested where it belongs."""
+    check("no blocked live delta is recorded any more", R.BLOCKED_DELTAS == {},
+          sorted(R.BLOCKED_DELTAS))
+    check("... traces-retention is not in DELTA_TABLE either",
           "traces-retention" not in R.DELTA_TABLE, sorted(R.DELTA_TABLE))
-    evidence = " ".join([str(entry.get("why") or "")]
-                        + [str(x) for x in (entry.get("evidence") or ())])
-    for probe in ("traces.db", "jarvis_hud.py", "no traces.db writer",
-                  "6238-6265", "snapshot", "no delete trigger"):
-        check(f"... the evidence names {probe!r}", probe in evidence, evidence[:200])
-    lines = R.blocked_delta_lines()
-    check("... the dry-run summary will print it as blocked, not as an insert",
-          len(lines) == 1 and lines[0].startswith("traces-retention -> jarvis_hud.py:"),
-          lines)
+    check("... so the dry-run summary prints no BLOCKED LIVE DELTAS",
+          R.blocked_delta_lines() == [], R.blocked_delta_lines())
+    # The retention cap itself is proved behaviourally by backend/test_sqlite_perf.py
+    # (TRACES_KEEP / trim_table / the heartbeat wiring). Nothing here reads production
+    # source text: the source-pin and position-pin gates forbid it (a ceiling may only
+    # go down), and the checks above already prove the retirement end to end.
 
 
 def t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing():
-    """What the tool WOULD do if the live HUD ever grew a safe anchor.
+    """What the tool WOULD do if a live-HUD delta ever had a safe anchor.
 
     A test-local delta (not in DELTA_TABLE) is fed the same fake HUD text and a
     synthetic patch: the shared ALREADY_PRESENT probe, the anchored insert, a
@@ -1261,6 +1279,147 @@ def t_the_loopback_connect_delta_ships_the_020_timeout():
               staged3 == {} and any("hud-loopback-connect.patch" in r
                                     and "appears 2 time" in r for r in refusals3),
               (staged3, refusals3))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+#: A live HUD stand-in carrying exactly the two anchors PWA Slice 3a's literal
+#: deltas insert in front of: the server class and the page route. It has none
+#: of the new code, so a plan has to add both blocks.
+MINI_STATIC_HUD = '''"""a live HUD stand-in for PWA Slice 3a"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path in ("/", "/index.html"):
+            return None
+        return self._send(404, {"error": "not found"})
+'''
+
+
+def t_the_pwa_static_whitelist_is_carried_as_two_literal_deltas():
+    """PWA Slice 3a (2026-10-23): the browser's own files reach the live HUD as
+    TWO literal deltas, because they are two disjoint regions of `jarvis_hud.py`:
+    the closed-world `STATIC_ASSETS` table + its handler in front of the class,
+    and the dispatch branch in front of the page route. No `.patch` carries
+    them (the base HUD is the published copy, and the live HUD is the patched
+    base - the exact `#752`/A4 pattern), so the delta bytes ARE the published
+    base HUD's own bytes. Bite: without the table entries the plan stages
+    nothing; removing the two blocks and re-inserting them reconstructs the
+    base byte for byte; a live file without them gets both inserts, in order;
+    and an anchor that is not unique is refused, never guessed. It composes
+    with A4's chained latch delta: both live in the same table and a
+    full-table plan carries both, which is why the fixture below carries the
+    class/page anchors and the latch chain's own pieces."""
+    root = tmpdir()
+    try:
+        assets_lines = R._delta_lines(R.HUD_STATIC_ASSETS_FILE)
+        route_lines = R._delta_lines(R.HUD_STATIC_ROUTE_FILE)
+        assets = "\n".join(assets_lines)
+        route = "\n".join(route_lines)
+        base_source = (REPO / "jarvis-backend" / "jarvis_hud.py").read_text(encoding="utf-8")
+        table = {
+            "hud-static-assets.patch": R.DELTA_TABLE.get("hud-static-assets.patch") or {},
+            "hud-static-route.patch": R.DELTA_TABLE.get("hud-static-route.patch") or {},
+        }
+
+        # ---- the delta bytes are the published base HUD's own text --------
+        check("the whitelist block is the published base HUD's own text, exactly once",
+              assets != "" and base_source.count(assets) == 1,
+              f"{base_source.count(assets)} occurrence(s)")
+        check("... and the dispatch block is too, exactly once",
+              route != "" and base_source.count(route) == 1,
+              f"{base_source.count(route)} occurrence(s)")
+        check("... they are disjoint blocks (one cannot contain the other)",
+              assets not in route and route not in assets)
+        check("... each anchor the tool inserts in front of appears exactly once in "
+              "the base HUD",
+              base_source.count(R.HUD_STATIC_ASSETS_ANCHOR) == 1
+              and base_source.count(R.HUD_STATIC_ROUTE_ANCHOR) == 1,
+              (base_source.count(R.HUD_STATIC_ASSETS_ANCHOR),
+               base_source.count(R.HUD_STATIC_ROUTE_ANCHOR)))
+        check("... and both DELTA_TABLE entries carry post-image probes",
+              all((table[name] or {}).get("jarvis_hud.py", {}).get("probes")
+                  for name in table), str(table))
+
+        # ---- the whitelist is closed-world, and the branch is the only call
+        check("the whitelist is a closed-world URL -> (file, MIME) dict: exact "
+              "lookup, no directory walking",
+              "STATIC_ASSETS = {" in assets
+              and "STATIC_ASSETS.get(path)" in assets
+              and "listdir" not in assets and "iterdir" not in assets
+              and "os.path.join" not in assets and "glob(" not in assets,
+              assets[:200])
+        check("... it sends the exact-XML/JS posture (nosniff and no-referrer)",
+              '"X-Content-Type-Options", "nosniff"' in assets
+              and '"Referrer-Policy", "no-referrer"' in assets)
+        check("... the dispatch block is the three lines the GET route needs",
+              "if path in STATIC_ASSETS:" in route
+              and "_serve_static(self, path)" in route
+              and "return" in route)
+
+        # ---- removing the two blocks and re-inserting them: the base, byte for byte
+        # `insert_before_anchor` adds `"\n".join(lines) + "\n"`, so that is the
+        # exact text a remove-and-reinsert has to take out and put back.
+        assets_inserted = assets + "\n"
+        route_inserted = route + "\n"
+        stripped = (base_source.replace(assets_inserted, "", 1)
+                    .replace(route_inserted, "", 1))
+        rebuilt = R.insert_before_anchor(stripped, assets_lines,
+                                         R.HUD_STATIC_ASSETS_ANCHOR, where="rehearsal")
+        rebuilt = R.insert_before_anchor(rebuilt, route_lines,
+                                         R.HUD_STATIC_ROUTE_ANCHOR, where="rehearsal")
+        check("removing both blocks and re-inserting them at their anchors "
+              "reconstructs the published base HUD byte for byte",
+              rebuilt == base_source)
+
+        # ---- (a) a live HUD without either change gets both, in order ------
+        live = make_live(root / "fresh")
+        write(live / "jarvis_hud.py", MINI_STATIC_HUD)
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 table=table, literals=True)
+        check("(a) a live HUD without the static blocks plans BOTH inserts, in order",
+              refusals == [] and [(d.patch, d.status) for d in deltas]
+              == [("hud-static-assets.patch", "insert"),
+                  ("hud-static-route.patch", "insert")], (deltas, refusals))
+        text = staged.get("jarvis_hud.py", "")
+        check("(a) the staged HUD carries both blocks",
+              assets in text and route in text, text[:200])
+        check("(a) ... and still compiles", R.rehearse(staged) == [], R.rehearse(staged))
+        backup = R.Backup(live, stamp="pwa-static")
+        written = R.apply_deltas(staged, live, backup)
+        check("(a) ... and the apply wrote exactly the staged text",
+              written == ["jarvis_hud.py"]
+              and (live / "jarvis_hud.py").read_bytes() == text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                  table=table, literals=True)
+        check("(a) ... a second plan sees BOTH deltas ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already", "already"],
+              (again, staged2, refusals2))
+
+        # ---- (b) an anchor that is not unique is REFUSED, never guessed ----
+        write(live / "jarvis_hud.py",
+              MINI_STATIC_HUD.replace(R.HUD_STATIC_ROUTE_ANCHOR,
+                                      R.HUD_STATIC_ROUTE_ANCHOR + "\n"
+                                      + R.HUD_STATIC_ROUTE_ANCHOR))
+        _d, staged_b, refusals_b = R.plan_deltas(live, [], show=fake_show,
+                                                 table=table, literals=True)
+        check("(b) a live file where the page anchor appears twice is REFUSED",
+              staged_b == {} and any("hud-static-route.patch" in r
+                                     and "appears 2 time" in r for r in refusals_b),
+              (staged_b, refusals_b))
+        write(live / "jarvis_hud.py",
+              MINI_STATIC_HUD.replace(R.HUD_STATIC_ASSETS_ANCHOR,
+                                      R.HUD_STATIC_ASSETS_ANCHOR + "\n"
+                                      + R.HUD_STATIC_ASSETS_ANCHOR))
+        _d2, staged_c, refusals_c = R.plan_deltas(live, [], show=fake_show,
+                                                  table=table, literals=True)
+        check("(b) ... and a duplicated class anchor is refused the same way",
+              staged_c == {} and any("hud-static-assets.patch" in r
+                                     and "appears 2 time" in r for r in refusals_c),
+              (staged_c, refusals_c))
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1996,6 +2155,7 @@ def main():
                t_the_api_status_route_delta_replaces_the_inline_route,
                t_the_session_latch_delta_chains_after_the_status_route_delta,
                t_the_loopback_connect_delta_ships_the_020_timeout,
+               t_the_pwa_static_whitelist_is_carried_as_two_literal_deltas,
                t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block,
                t_deltas_are_planned_and_refused_hermetically,
                t_an_unknown_delta_is_refused_before_writing,
@@ -2010,7 +2170,7 @@ def main():
                t_probes_skip_what_cannot_be_expected,
                t_a_missing_token_fails_the_probes_without_printing_one,
                t_end_to_end_and_idempotent,
-               t_traces_retention_is_recorded_blocked_not_guessed,
+               t_traces_retention_is_retired_not_blocked,
                t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing,
                t_cli_is_dry_run_by_default_and_validates_paths,
                t_the_backup_journal_rolls_back_overwritten_and_new_paths,

@@ -2187,6 +2187,105 @@ def retrieve(query: str, top_k: int = 7, near_k: int = 6) -> dict:
 # --------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# The browser's own files (2026-10-23, PWA Slice 3a)
+# ---------------------------------------------------------------------------
+#
+# GET "/" answers with jarvis_hud.html, but a browser then asks for the
+# stylesheet, the fonts and the modules that page imports. Every one of those
+# used to be a 404 - the server could answer exactly one file, the page itself -
+# so a browser got a half-dressed HUD with no theme, no fonts, and every shell
+# module off. This is the CLOSED WORLD of files it may ask for.
+#
+# A whitelist, not a directory server: a URL is a KEY in this table or it is a
+# 404. Nothing is ever joined to a path from the request, so "..", an encoded
+# traversal, an absolute URL, a trailing slash or a prefix match are simply not
+# keys - there is no code path that could serve a file beside this server that
+# is not named below. The files are read from THIS folder by these plain names,
+# so a deploy only has to put them beside jarvis_hud.py (apply-patches.ps1's
+# $SHIPPED and tools/reconcile_live_backend.py's shipped sync do that; the
+# page's real copies live in jarvis-desktop/src/ and backend/static/).
+#
+# url_path -> (file beside this server, exact Content-Type). An asset the PWA
+# slices have not written yet is listed anyway: its request is an honest 404
+# until the file lands, never a crash and never a guessed file.
+STATIC_ASSETS = {
+    # the page's two stylesheets; fonts.css declares the woff2 faces below
+    "/theme.css": ("theme.css", "text/css; charset=utf-8"),
+    "/fonts/fonts.css": ("fonts.css", "text/css; charset=utf-8"),
+    # the self-hosted faces, at the URLs fonts.css's own relative url() values
+    # resolve to (they are flat names beside the server; see the note above)
+    "/fonts/chakra-petch-400.woff2": ("chakra-petch-400.woff2", "font/woff2"),
+    "/fonts/chakra-petch-500.woff2": ("chakra-petch-500.woff2", "font/woff2"),
+    "/fonts/chakra-petch-600.woff2": ("chakra-petch-600.woff2", "font/woff2"),
+    "/fonts/chakra-petch-700.woff2": ("chakra-petch-700.woff2", "font/woff2"),
+    "/fonts/ibm-plex-mono-400.woff2": ("ibm-plex-mono-400.woff2", "font/woff2"),
+    "/fonts/ibm-plex-mono-500.woff2": ("ibm-plex-mono-500.woff2", "font/woff2"),
+    "/fonts/ibm-plex-sans-400.woff2": ("ibm-plex-sans-400.woff2", "font/woff2"),
+    # the modules the page imports, and the two its editor/presets import
+    "/lane-warning.js": ("lane-warning.js", "text/javascript; charset=utf-8"),
+    "/hud-actions.js": ("hud-actions.js", "text/javascript; charset=utf-8"),
+    "/hud-safety.js": ("hud-safety.js", "text/javascript; charset=utf-8"),
+    "/hud-edit.js": ("hud-edit.js", "text/javascript; charset=utf-8"),
+    "/hud-presets.js": ("hud-presets.js", "text/javascript; charset=utf-8"),
+    "/private-speech.js": ("private-speech.js", "text/javascript; charset=utf-8"),
+    "/face-voice.js": ("face-voice.js", "text/javascript; charset=utf-8"),
+    "/face-moments.js": ("face-moments.js", "text/javascript; charset=utf-8"),
+    "/face-tuning.js": ("face-tuning.js", "text/javascript; charset=utf-8"),
+    "/animal-shared.js": ("animal-shared.js", "text/javascript; charset=utf-8"),
+    "/hud-layout.js": ("hud-layout.js", "text/javascript; charset=utf-8"),
+    "/hud-layout-store.js": ("hud-layout-store.js", "text/javascript; charset=utf-8"),
+    # planned by the PWA slices that are not written yet (the bridge, the
+    # manifest and service worker, the home-screen icons): a request is a 404
+    # today, and turns into the real file the day that slice puts it beside us
+    "/hud-web-bridge.js": ("hud-web-bridge.js", "text/javascript; charset=utf-8"),
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+    "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
+    "/icons/jarvis-180.png": ("jarvis-180.png", "image/png"),
+    "/icons/jarvis-192.png": ("jarvis-192.png", "image/png"),
+    "/icons/jarvis-512.png": ("jarvis-512.png", "image/png"),
+}
+
+
+def _serve_static(handler, path: str) -> bool:
+    """Answer one whitelisted file, or return False when `path` is not a key.
+
+    The same gate as the page it belongs to (GET "/"): the token is required -
+    a browser's <link> and <script> requests carry no Origin and cannot set
+    `X-Jarvis-Client: hud`, so the SameSite=Strict `jarvis_token` cookie is
+    what identifies them, and a device key works there too - and an Origin
+    that IS present must pass `_origin_ok`, so a cross-origin page is refused
+    rather than served. The file is read from THIS folder by the whitelist's
+    own name: the request never becomes part of a path. Every answer carries
+    the HUD's own `Cache-Control: no-store` and `nosniff` (a browser must not
+    re-type a .js as HTML), and the page's `Referrer-Policy: no-referrer`.
+    """
+    entry = STATIC_ASSETS.get(path)
+    if entry is None:
+        return False
+    if not _token_ok(handler):
+        handler._send(401, {"error": "bad or missing X-Jarvis-Token"})
+        return True
+    try:
+        origin = handler.headers.get("Origin") or ""
+    except Exception:
+        origin = ""
+    if origin and not _origin_ok(handler):
+        handler._send(403, {"error": "cross-origin request refused"})
+        return True
+    name, ctype = entry
+    try:
+        body = (HERE / name).read_bytes()
+    except OSError:
+        handler._send(404, {"error": "not found"})       # not written yet
+        return True
+    handler._send(200, body, ctype, extra_headers=[
+        ("X-Content-Type-Options", "nosniff"),
+        ("Referrer-Policy", "no-referrer"),
+    ])
+    return True
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "JarvisHUD/1.0"
 
@@ -2359,6 +2458,10 @@ class Handler(BaseHTTPRequestHandler):
             if not _token_ok(self):
                 return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
             return self._stream_events()
+
+        if path in STATIC_ASSETS:
+            _serve_static(self, path)
+            return
 
         if path in ("/", "/index.html"):
             # The page itself is behind the same check as the API. Otherwise a
