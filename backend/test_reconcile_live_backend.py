@@ -714,6 +714,8 @@ def t_end_to_end_and_idempotent():
         check("... and creates no backup folder",
               not any(p.name.startswith("_jarvis-deploy-backup-tool-") for p in live.iterdir()))
         check("... and does not probe", not any("ROUTE PROBES" in l for l in lines), lines[-5:])
+        check("... and prints no BLOCKED LIVE DELTAS (the traces record is retired)",
+              "BLOCKED LIVE DELTAS" not in "\n".join(lines), lines[-8:])
 
         lines2 = []
         code2 = run_fixture(repo, live, apply=True, out_lines=lines2)
@@ -760,29 +762,42 @@ def t_cli_is_dry_run_by_default_and_validates_paths():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def t_traces_retention_is_recorded_blocked_not_guessed():
-    """F10 / Q2 (2026-10-20): traces.db retention is recorded as BLOCKED.
+def t_traces_retention_is_retired_not_blocked():
+    """RA-5 (2026-10-23): the F10 traces.db retention is NOT a blocked live delta.
 
-    The live HUD was read read-only and has no traces.db writer, schema or anchor.
-    A retention cap must not be guessed into a database this program does not own,
-    so the decision lives in BLOCKED_DELTAS and is printed - never staged."""
-    entry = R.BLOCKED_DELTAS.get("traces-retention")
-    check("traces-retention is recorded in BLOCKED_DELTAS", isinstance(entry, dict), entry)
-    check("... and is NOT in DELTA_TABLE, so no deploy ever tries to insert it",
+    #669 recorded it BLOCKED on 2026-10-20 because the live HUD had no writer,
+    schema or anchor. Four hours later #673 shipped the cap the safe way, in the
+    SHIPPED modules (`jarvis_sqlite.trim_table` / `idle_maintenance`, called from
+    `jarvis_initiative.sqlite_maintenance`), which deploy step 1 carries - and the
+    HUD never owned traces.db, so no live-HUD anchor can exist and a HUD-side
+    prune would delete a database this program does not own. RA-5 retired the
+    blocked record (2026-10-23): the dry run must report 0 blocked deltas, while
+    the cap stays shipped, wired and tested where it belongs."""
+    check("no blocked live delta is recorded any more", R.BLOCKED_DELTAS == {},
+          sorted(R.BLOCKED_DELTAS))
+    check("... traces-retention is not in DELTA_TABLE either",
           "traces-retention" not in R.DELTA_TABLE, sorted(R.DELTA_TABLE))
-    evidence = " ".join([str(entry.get("why") or "")]
-                        + [str(x) for x in (entry.get("evidence") or ())])
-    for probe in ("traces.db", "jarvis_hud.py", "no traces.db writer",
-                  "6238-6265", "snapshot", "no delete trigger"):
-        check(f"... the evidence names {probe!r}", probe in evidence, evidence[:200])
-    lines = R.blocked_delta_lines()
-    check("... the dry-run summary will print it as blocked, not as an insert",
-          len(lines) == 1 and lines[0].startswith("traces-retention -> jarvis_hud.py:"),
-          lines)
+    check("... so the dry-run summary prints no BLOCKED LIVE DELTAS",
+          R.blocked_delta_lines() == [], R.blocked_delta_lines())
+    sqlite_src = (REPO / "backend" / "jarvis_sqlite.py").read_text(encoding="utf-8")
+    initiative_src = (REPO / "backend" / "rebuilt" / "jarvis_initiative.py").read_text(
+        encoding="utf-8")
+    check("... the retention cap is shipped in jarvis_sqlite.py (deploy step 1)",
+          "TRACES_KEEP = 10000" in sqlite_src and "def trim_table(" in sqlite_src
+          and "if path.name == TRACES_DB:" in sqlite_src
+          and "trim_table(c, TRACES_TABLE, keep)" in sqlite_src, sqlite_src[:120])
+    check("... and called from the initiative heartbeat",
+          "def sqlite_maintenance(" in initiative_src
+          and "jarvis_sqlite.idle_maintenance()" in initiative_src, initiative_src[:120])
+    tool_src = (REPO / "tools" / "reconcile_live_backend.py").read_text(encoding="utf-8")
+    check("... and the retirement, with its reason, is written down",
+          "RETIRED" in tool_src and "0 blocked deltas" in tool_src, tool_src[:120])
+    check("... the shipped modules no longer claim a BLOCKED delta",
+          "stays BLOCKED" not in sqlite_src and "F10 STAYS BLOCKED" not in initiative_src)
 
 
 def t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing():
-    """What the tool WOULD do if the live HUD ever grew a safe anchor.
+    """What the tool WOULD do if a live-HUD delta ever had a safe anchor.
 
     A test-local delta (not in DELTA_TABLE) is fed the same fake HUD text and a
     synthetic patch: the shared ALREADY_PRESENT probe, the anchored insert, a
@@ -2010,7 +2025,7 @@ def main():
                t_probes_skip_what_cannot_be_expected,
                t_a_missing_token_fails_the_probes_without_printing_one,
                t_end_to_end_and_idempotent,
-               t_traces_retention_is_recorded_blocked_not_guessed,
+               t_traces_retention_is_retired_not_blocked,
                t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing,
                t_cli_is_dry_run_by_default_and_validates_paths,
                t_the_backup_journal_rolls_back_overwritten_and_new_paths,

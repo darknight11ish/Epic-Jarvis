@@ -2261,9 +2261,17 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   trusted `note_state()` hook can clear it, and an absent hook means unlocked.
   **The live HUD must eventually pass its App lock / hidden-lists state** - that
   wiring is not in this slice, so until it lands each app's own hiding above is
-  what protects the view. **Q2's `traces.db` retention cap stays BLOCKED and
-  live-only:** `traces.db` is written only by the live HUD, this repository
-  ships no module for it, and this wave deliberately adds no writer.
+  what protects the view. **Q2's `traces.db` retention cap is not a live-HUD
+  delta and is no longer BLOCKED:** `traces.db` has no writer in this repository
+  or on the live HUD, and this wave deliberately adds none. The cap ships in the
+  shipped modules instead - `jarvis_sqlite.trim_table` / `idle_maintenance` caps
+  any `traces.db`'s `traces` table at the newest 10,000 rows, and
+  `jarvis_initiative.sqlite_maintenance` calls it from the 30-minute heartbeat -
+  so deploy step 1 carries it. The live PC already has both modules (measured
+  2026-10-23: byte-identical to `origin/main:backend/...`) and no `traces.db`;
+  the reconcile tool's old `traces-retention` BLOCKED entry was retired on
+  2026-10-23 (RA-5) and its dry run reports 0 blocked deltas. The cap acts only
+  if a store from an older build or a backup restore appears.
 - **Who asks on the PC:** since the approval gap's step 1, the backend
   asks Windows Hello itself for a risky approval from the PC, and the
   desktop does not ask as well (`lock::check_approval`,

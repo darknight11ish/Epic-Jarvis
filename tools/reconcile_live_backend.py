@@ -43,9 +43,16 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        block in their stack order. A patch that is absent, touches a patched file, and
        has no anchor rule is REFUSED loudly: the tool changes nothing and names the
        patch, the file and what it would need. A missing or ambiguous anchor is refused
-       the same way - it never guesses. A delta whose live anchor does not exist at all
-       (F10 `traces.db` retention, Q2) is recorded in `BLOCKED_DELTAS` with its evidence,
-       printed as BLOCKED LIVE DELTAS, and never staged: blocked is reported, not guessed.
+       the same way - it never guesses. A delta that has no safe anchor at all is
+       recorded in `BLOCKED_DELTAS` with its evidence, printed as BLOCKED LIVE
+       DELTAS, and never staged: blocked is reported, not guessed. That table is
+       EMPTY on purpose since 2026-10-23: its one entry (F10 `traces.db` retention,
+       Q2) was RETIRED after #673 gave the cap to the SHIPPED modules
+       (`jarvis_sqlite.trim_table` / `idle_maintenance`, called from
+       `jarvis_initiative.sqlite_maintenance`), which deploy step 1 carries; the
+       live HUD never owned `traces.db`, so there is no anchor to attach a
+       live-HUD delta to, and a HUD-side prune would delete a database this
+       program does not own (RA-5; the history is in the comment on the table).
        Fixes that live in the published base files but in NO `.patch` of their own
        are literal deltas too: the entry carries the exact block bytes in
        `tools/hud-deltas/` and either inserts them at an anchor or REPLACES an old
@@ -427,38 +434,34 @@ DELTA_TABLE = {
 #: them and never stages them. A blocked entry is NOT a small patch waiting for
 #: an anchor - it is the evidence that no safe anchor exists today.
 #:
-#: F10 / Gemini Q2 ruling (2026-10-20): traces.db retention was to be a live-HUD
-#: delta, not a fake backend module. The live HUD was read read-only and has no
-#: traces.db writer, no schema and no insert/startup anchor for it (evidence in
-#: the entry). Adding a startup prune anyway would delete a database this
-#: program does not own, so the honest result is BLOCKED, not a guess.
-BLOCKED_DELTAS = {
-    "traces-retention": {
-        "file": "jarvis_hud.py",
-        "why": ("the live jarvis_hud.py has no traces.db writer, no trace schema "
-                "and no insert/startup anchor to attach a retention cap to; a "
-                "standalone prune would delete a database this program does not "
-                "own, so nothing is staged or applied"),
-        "evidence": (
-            "live jarvis_hud.py (2026-10-20, 393,012 bytes): zero 'traces.db' "
-            "matches; sqlite3 is imported only for the read-only memory readers "
-            "(around lines 6238-6265); CONFIG_DIR is at :81. No live module in "
-            "the Desktop program folder writes traces.db.",
-            "the live config folder (~/.openjarvis) has no traces.db today, and "
-            "the live folder has no traces.db writer or reader to anchor to.",
-            "the last evidence of the store is a snapshot, not live code: "
-            "Jarvis Backups/jarvis-snap-20261014-000438/traces.db (36,864 B) has "
-            "tables traces(id, trace_id, query, result, agent, started_at, "
-            "ended_at, ...), trace_steps(trace_id, timestamp, ...) and an FTS5 "
-            "traces_fts with only an INSERT trigger (traces_fts_ai), no delete "
-            "trigger; the repository names traces.db only in "
-            "backend/jarvis_backup.py:470/487.",
-            "therefore a delta cannot reuse the HUD's anchored ALREADY_PRESENT/"
-            "insert mechanism for this store: there is no post-image line to "
-            "probe and no insert to anchor to.",
-        ),
-    },
-}
+#: EMPTY ON PURPOSE SINCE 2026-10-23, and the one entry it held is RETIRED, not
+#: lost. Its history is kept here so the decision cannot be re-litigated:
+#:
+#:   * 2026-10-20 16:17, #669 (`e3457cc4c`) recorded F10 `traces.db` retention as
+#:     `traces-retention` after the Q2 reading of the live HUD found no writer, no
+#:     schema and no insert/startup anchor for the store. A standalone prune in
+#:     the HUD would have deleted a database this program does not own, so it was
+#:     BLOCKED rather than guessed.
+#:   * 2026-10-20 20:00, #673 (`0d29e8c50`) implemented the cap the safe way, in
+#:     SHIPPED modules rather than in the HUD: `jarvis_sqlite.trim_table` /
+#:     `idle_maintenance` caps any `traces.db`'s `traces` table at the newest
+#:     10,000 rows, and `jarvis_initiative.sqlite_maintenance` calls it from the
+#:     30-minute heartbeat. Deploy step 1 (the SHIPPED sync) carries both files:
+#:     measured 2026-10-23, the live `jarvis_sqlite.py` and `jarvis_initiative.py`
+#:     are byte-identical to `origin/main:backend/...`, the live `jarvis_hud.py`
+#:     still has zero `traces.db` matches, and no `traces.db` exists in the live
+#:     folder or in `~/.openjarvis`.
+#:   * So the HUD delta was obsolete by design, not waiting for an anchor: the HUD
+#:     never owned `traces.db`, there is no post-image line to probe and no insert
+#:     to anchor to, and "re-anchoring" it would mean inventing a writer the
+#:     program does not have. RA-5 retired it on 2026-10-23: the dry run reports
+#:     0 blocked deltas, and the retention stays where it is shipped and tested
+#:     (`backend/test_sqlite_perf.py`).
+#:
+#: A future delta with no safe anchor is still recorded here - name -> file/why/
+#: evidence - printed as BLOCKED, and never staged. `blocked_delta_lines()` is
+#: kept for it.
+BLOCKED_DELTAS = {}
 
 
 def blocked_delta_lines() -> list:
