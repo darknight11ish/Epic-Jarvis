@@ -130,6 +130,16 @@ MINI_HUD += (
     + R.STATUS_START_ANCHOR + "\n"
 )
 
+# D12's fixture piece: the live file's own `_http_json`/`_reachable` pair, which
+# no earlier delta has touched, so the loopback literal delta is planned against
+# exactly what the owner's live HUD holds (the pre-#752 text: no helpers, no
+# CONNECT pre-check). Added to every fixture for the same reason as the pieces
+# above - the literal entries are only planned when literals=True.
+MINI_HUD += (
+    "\n\n"
+    + "\n".join(R._delta_lines(R.LOOPBACK_OLD_FILE)) + "\n"
+)
+
 
 def make_live(root: Path, *, with_deltas=False, app_control_section=False) -> Path:
     live = root / "live"
@@ -1115,6 +1125,146 @@ def t_the_session_latch_delta_chains_after_the_status_route_delta():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def t_the_loopback_connect_delta_ships_the_020_timeout():
+    """D12 (2026-10-23): #752 added a 0.20 s loopback CONNECT cap to the
+    published base HUD's `_http_json`/`_reachable`, but NO patch carries it and
+    no DELTA_TABLE entry shipped it. So the owner's live `jarvis_hud.py` still
+    holds the pre-#752 pair (no CONNECT pre-check: a dead local port burns the
+    full 1.5 s HTTP timeout) - the fix existed on paper only. This literal
+    REPLACE ships it, chained after A4.
+
+    Each check bites: the NEW block is the published base's own text byte for
+    byte; the OLD block is the live file's own pre-#752 pair (the base no longer
+    holds it); the STAGED live text is EXECUTED against a fake socket and must
+    pass 0.20 s as the CONNECT timeout and treat a dead port as down without the
+    HTTP wait; a duplicated old block is refused; a second plan is idempotent;
+    and the full chain (route -> latches -> loopback) stages in that order."""
+    root = tmpdir()
+    try:
+        old = "\n".join(R._delta_lines(R.LOOPBACK_OLD_FILE))
+        new = "\n".join(R._delta_lines(R.LOOPBACK_NEW_FILE))
+        route_old = "\n".join(R._delta_lines(R.STATUS_ROUTE_OLD_FILE))
+        route_new = "\n".join(R._delta_lines(R.STATUS_ROUTE_NEW_FILE))
+        latches_new = "\n".join(R._delta_lines(R.STATUS_LATCHES_NEW_FILE))
+        base_source = (REPO / "jarvis-backend" / "jarvis_hud.py").read_text(encoding="utf-8")
+        table = {"hud-loopback-connect.patch":
+                 R.DELTA_TABLE.get("hud-loopback-connect.patch") or {}}
+        full_table = {
+            "hud-status-route.patch": R.DELTA_TABLE.get("hud-status-route.patch") or {},
+            "hud-status-latches.patch": R.DELTA_TABLE.get("hud-status-latches.patch") or {},
+            "hud-loopback-connect.patch": table["hud-loopback-connect.patch"],
+        }
+
+        # ---- the delta's bytes, and where it sits in the chain --------------
+        check("the loopback delta is a literal REPLACE in DELTA_TABLE",
+              bool(table["hud-loopback-connect.patch"].get("jarvis_hud.py", {})
+                   .get("replace_file"))
+              and bool(table["hud-loopback-connect.patch"].get("jarvis_hud.py", {})
+                       .get("file")))
+        check("... its NEW block is the published base's own text, byte for byte",
+              new != "" and base_source.count(new) == 1)
+        check("... its OLD block is the pre-#752 pair the base no longer holds",
+              old != "" and old != new and old not in base_source)
+        check("... and it is ordered AFTER A4's status-latches entry (and the route)",
+              list(R.DELTA_TABLE).index("hud-status-route.patch")
+              < list(R.DELTA_TABLE).index("hud-status-latches.patch")
+              < list(R.DELTA_TABLE).index("hud-loopback-connect.patch"))
+        check("... the fixture carries the OLD block exactly once",
+              MINI_HUD.count(old) == 1, MINI_HUD.count(old))
+
+        # ---- (a) the staged live text really carries the 0.20 s timeout -----
+        live = make_live(root / "one")
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 table=table, literals=True)
+        check("(a) the loopback delta is planned as a literal REPLACE",
+              refusals == [] and [(d.patch, d.status) for d in deltas]
+              == [("hud-loopback-connect.patch", "insert")], (deltas, refusals))
+        text = staged.get("jarvis_hud.py", "")
+        check("(a) the staged HUD carries the helpers and none of the old pair",
+              new in text and old not in text, text[:200])
+        check("(a) ... and it still compiles", R.rehearse(staged) == [], R.rehearse(staged))
+
+        # Execute the STAGED helpers (not a paraphrase): the deployed live code
+        # must use a 0.20 s socket CONNECT, call a dead port down without the
+        # HTTP wait, and leave non-loopback URLs alone.
+        import urllib.parse
+        connects = []
+
+        class _Sock:
+            def close(self):
+                return None
+
+        def fake_connection(addr, timeout=None):
+            connects.append((addr, timeout))
+            if addr[1] == 9:
+                raise TimeoutError("dead loopback port in the test")
+            return _Sock()
+
+        ns = {"socket": SimpleNamespace(create_connection=fake_connection),
+              "urllib": urllib}
+        exec(compile(textwrap.dedent(new), "<staged loopback block>", "exec"), ns)  # noqa: S102
+        check("(a) the staged text's CONNECT timeout constant is 0.20 s",
+              ns.get("_LOOPBACK_CONNECT_S") == 0.20, ns.get("_LOOPBACK_CONNECT_S"))
+        check("(a) an alive loopback port is probed with a 0.20 s CONNECT timeout",
+              ns["_loopback_connect_ok"]("http://127.0.0.1:4719/health") is True
+              and connects and connects[-1][0] == ("127.0.0.1", 4719)
+              and connects[-1][1] == 0.20, connects)
+        check("(a) a dead loopback port is DOWN, without the old 1.5 s HTTP wait",
+              ns["_reachable"]("http://127.0.0.1:9/health") is False)
+        probes = len(connects)
+        check("(a) a non-loopback URL takes the unchanged path (no CONNECT probe)",
+              ns["_loopback_connect_ok"]("http://example.invalid/health") is True
+              and len(connects) == probes)
+
+        backup = R.Backup(live, stamp="loopback")
+        written = R.apply_deltas(staged, live, backup)
+        check("(a) ... and the apply wrote exactly the staged text",
+              written == ["jarvis_hud.py"]
+              and (live / "jarvis_hud.py").read_bytes() == text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                  table=table, literals=True)
+        check("(a) ... a second plan sees the loopback delta ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"], (again, staged2, refusals2))
+
+        # ---- (b) the whole chain: route -> latches -> loopback, in order ----
+        live2 = make_live(root / "two")
+        deltas2, staged2b, refusals2b = R.plan_deltas(live2, [], show=fake_show,
+                                                      table=full_table, literals=True)
+        check("(b) a fresh live folder gets the route, latch and loopback changes "
+              "in order",
+              refusals2b == []
+              and [(d.patch, d.status) for d in deltas2]
+              == [("hud-status-route.patch", "insert"),
+                  ("hud-status-latches.patch", "insert"),
+                  ("hud-loopback-connect.patch", "insert")], (deltas2, refusals2b))
+        text2 = staged2b.get("jarvis_hud.py", "")
+        check("(b) ... the staged HUD ends with all three, and none of the old blocks",
+              new in text2 and latches_new in text2
+              and route_old not in text2 and route_new not in text2 and old not in text2,
+              text2[:200])
+        check("(b) ... and it still compiles", R.rehearse(staged2b) == [],
+              R.rehearse(staged2b))
+        R.apply_deltas(staged2b, live2, R.Backup(live2, stamp="chain2"))
+        _d2, staged2c, refusals2c = R.plan_deltas(live2, [], show=fake_show,
+                                                  table=full_table, literals=True)
+        check("(b) ... and a second plan sees all three ALREADY_PRESENT",
+              refusals2c == [] and staged2c == {}
+              and [d.status for d in _d2] == ["already", "already", "already"],
+              (_d2, staged2c, refusals2c))
+
+        # ---- (c) a half-applied live file is refused, never guessed --------
+        write(live2 / "jarvis_hud.py", MINI_HUD + "\n\n" + old + "\n")
+        _d3, staged3, refusals3 = R.plan_deltas(live2, [], show=fake_show,
+                                                table=table, literals=True)
+        check("(c) a live file where the OLD loopback block appears twice is REFUSED",
+              staged3 == {} and any("hud-loopback-connect.patch" in r
+                                    and "appears 2 time" in r for r in refusals3),
+              (staged3, refusals3))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block():
     """The literal entries refuse to guess: a missing anchor, a missing old
     block, and a probe that is already there (ALREADY_PRESENT, no write)."""
@@ -1845,6 +1995,7 @@ def main():
                t_the_two_2026_10_14_hud_fixes_are_literal_deltas,
                t_the_api_status_route_delta_replaces_the_inline_route,
                t_the_session_latch_delta_chains_after_the_status_route_delta,
+               t_the_loopback_connect_delta_ships_the_020_timeout,
                t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block,
                t_deltas_are_planned_and_refused_hermetically,
                t_an_unknown_delta_is_refused_before_writing,
