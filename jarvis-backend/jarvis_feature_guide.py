@@ -1567,9 +1567,12 @@ ALWAYS_ON_EXCEPTION = {
 }
 
 #: The Settings place the owner is sent to for an ability with no switch. The
-#: directory itself is the guaranteed path (both apps build it, ruling Q2b);
-#: a feature with a real Settings card names that card instead.
-SETTINGS_DIRECTORY = "Settings, All features and abilities (planned)"
+#: directory itself is the guaranteed path (both apps build it, ruling Q2b -
+#: the desktop since #748 and the phone since #749); a feature with a real
+#: Settings card names that card instead. No " (planned)" marker: both halves
+#: exist now, and a live path that still said planned would name a screen the
+#: owner can open.
+SETTINGS_DIRECTORY = "Settings, All features and abilities"
 
 
 def _section_words(row: dict) -> str:

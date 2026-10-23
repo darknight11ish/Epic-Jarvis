@@ -19,14 +19,16 @@ import com.jarvis.client.net.FeatureDirectory
 import com.jarvis.client.net.FeatureSearch
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
-import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.theme.LocalChrome
 
 /**
  * "All features and abilities" - the phone's searchable directory of the 139
- * features the PC knows about (jarvis_feature_guide.abilities_directory()).
+ * features the PC knows about. [FeatureDirectory] is GENERATED from
+ * `contract/feature-controls.json` by
+ * `jarvis-client/tools/gen_feature_directory.py` (the same contract the PC's
+ * own directory is generated from); it is never hand-typed here.
  *
  * It is a DIRECTORY, not a control panel (owner ruling, 2026-10-22): every row
  * carries the PC's own label among exactly five, and only a row the PC says is

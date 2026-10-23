@@ -793,8 +793,11 @@ fun SettingsScreen(
 
             // "All features and abilities" (2026-10-22): the phone directory of
             // all 139 features in the PC's own five labels (FeatureDirectory.kt
-            // is generated; FeatureDirectoryPlate draws and searches it).
-            item(key = "all-features") { FeatureDirectorySection() }
+            // is generated from contract/feature-controls.json;
+            // FeatureDirectoryPlate draws and searches it). The `drawn` guard is
+            // what every searchable row carries: a search hides the other cards
+            // instead of leaving this one behind (SettingsSearchTest holds it).
+            if (drawn("all-features")) item(key = "all-features") { FeatureDirectorySection() }
             item(key = "tail") { Gap(24) }
         }
     }

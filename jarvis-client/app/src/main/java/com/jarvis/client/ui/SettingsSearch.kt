@@ -449,14 +449,10 @@ object SettingsSearch {
             source = JUMP + listOf("net/SetupQuestionnaire.kt"),
         ),
         Row(
-            key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
-            label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),
-            source = SCREEN,
-        ),
-        Row(
             // "All features and abilities" (2026-10-22): the phone directory of
             // the 139 features, in the PC's five labels (FeatureDirectory.kt is
-            // generated from jarvis_feature_guide.abilities_directory()).
+            // GENERATED from contract/feature-controls.json by
+            // jarvis-client/tools/gen_feature_directory.py).
             key = "all-features", title = "All features and abilities",
             label = "All features; abilities; what can Jarvis do; feature list; " +
                 "typed commands; switches; safety rules; where to change a setting; " +
@@ -477,7 +473,15 @@ object SettingsSearch {
                 "All features and abilities",
                 "Every feature Jarvis knows about, in the PC's own words.",
             ),
-            source = PLATES + listOf("FeatureDirectoryPlate.kt"),
+            // The quotes live in the plate; PLATES is the plates' folder and the
+            // source list is relative to it, so the folder prefix is not itself
+            // an entry.
+            source = listOf(PLATES + "FeatureDirectoryPlate.kt"),
+        ),
+        Row(
+            key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
+            label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),
+            source = SCREEN,
         ),
     )
 
