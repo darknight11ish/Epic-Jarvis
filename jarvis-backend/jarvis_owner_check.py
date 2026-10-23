@@ -70,6 +70,7 @@ import io
 import ipaddress
 import json
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -323,6 +324,134 @@ _HUD_TOKEN_COOKIE = "jarvis_token"
 #: Peers believed when NO token is configured: this PC only.
 _HUD_LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1", "::ffff:127.0.0.1"})
 
+#: The two private mesh ranges a browser or a phone reaches Jarvis on:
+#: Tailscale and NordVPN Meshnet both hand out 100.64.0.0/10, and the IPv6
+#: range is Tailscale's own. A public address is deliberately NOT here - the
+#: app never opens a public tunnel (CLAUDE.md rule 2).
+_MESH_NETWORKS = (ipaddress.ip_network("100.64.0.0/10"),
+                  ipaddress.ip_network("fd7a:115c:a1e0::/48"))
+
+#: The port a HUD answers on unless the owner configured another. The caller's
+#: `served_origins` are read for any other configured port.
+_HUD_DEFAULT_PORT = 4719
+
+#: A mesh hostname: at least one label, then NordVPN Meshnet's `.nord` or
+#: Tailscale MagicDNS's `.ts.net`. DNS labels (letters, digits, hyphens, no
+#: leading or trailing hyphen), lower case because `urlsplit` lowercases the
+#: hostname. `nord` alone does not match, and neither does a lookalike such as
+#: `nord.evil.example`.
+_MESH_HOST = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:nord|ts\.net)")
+
+
+def _peer(handler):
+    """The socket peer's IP address, or None when it cannot be read."""
+    try:
+        peer = (handler.client_address or ("",))[0]
+    except Exception:
+        return None
+    return _ip(peer)
+
+
+def _peer_on_mesh(handler, address=None) -> bool:
+    """Is this request from this PC (loopback) or from another of the owner's
+    devices on Tailscale/Meshnet?
+
+    Fails closed: a peer that is absent or cannot be parsed is NOT on the
+    mesh, whatever the request claims (the same rule as `from_this_pc`).
+    """
+    p = _peer(handler) if address is None else address
+    if p is None or p.is_unspecified:
+        return False
+    if p.is_loopback:
+        return True
+    return any(p.version == n.version and p in n for n in _MESH_NETWORKS)
+
+
+def _served_ports(served_origins) -> frozenset:
+    """Every port this server was configured to answer on, plus the HUD's own
+    default. A mesh Origin may name one of these; any other port is a
+    different page on that machine, so it is refused."""
+    ports = {_HUD_DEFAULT_PORT}
+    for origin in served_origins or ():
+        try:
+            port = urlsplit(str(origin)).port
+        except (TypeError, ValueError):
+            continue
+        if port is not None:
+            ports.add(port)
+    return frozenset(ports)
+
+
+def _mesh_origin_ok(origin: str, handler, served_origins) -> bool:
+    """A browser on this PC or on the owner's private mesh, talking to
+    Jarvis by the machine's mesh name, sends an Origin the server's own
+    configuration cannot list in advance: `_served_origins()` is built from
+    the bind address and the port, not from a `.nord` / `.ts.net` DNS name.
+    Without this the page loaded, then every POST that carried `Origin:
+    http://mariorelan11-alps.nord:4719` was refused 403.
+
+    Accepted host: loopback (`localhost`, `127.0.0.1`, `::1`), an IP literal
+    in 100.64.0.0/10 (the range both mesh products use), or a hostname ending
+    `.nord` / `.ts.net`. Accepted port: none (a browser omits the scheme's
+    default) or one this server serves - 4719 unless configured otherwise.
+    http or https only; `Origin: null`, a userinfo part and every other page
+    are refused. And only from a peer on this PC or the private mesh: a
+    public address gets nothing new from this, whatever Origin it sends.
+    """
+    if not _peer_on_mesh(handler):
+        return False
+    try:
+        parts = urlsplit(str(origin or ""))
+    except ValueError:
+        return False
+    if parts.scheme not in ("http", "https"):
+        return False
+    if parts.username or parts.password:
+        return False
+    try:
+        port = parts.port
+    except ValueError:
+        return False
+    if port is not None and port not in _served_ports(served_origins):
+        return False
+    host = (parts.hostname or "").lower()
+    if not host:
+        return False
+    ip = _ip(host)
+    if ip is not None:
+        return ip.is_loopback or any(
+            ip.version == n.version and ip in n for n in _MESH_NETWORKS)
+    if host == "localhost":
+        return True
+    return bool(_MESH_HOST.fullmatch(host))
+
+
+def _sse_same_origin_ok(handler) -> bool:
+    """A browser's EventSource cannot set a request header, and a same-origin
+    subscription is sent with no Origin at all. The HUD's own copy of this
+    narrow exemption (`_same_origin_stream`) only believes a loopback peer,
+    so a browser on the owner's iPad or second PC was refused 403 on
+    /api/events and the HUD stayed "stale" - Approve blocked for ever.
+
+    Accept the event stream itself, with no Origin, from a peer on this PC or
+    on the mesh, and only when the request asked for an event stream
+    (`Accept: text/event-stream`, which EventSource always sends and a
+    cross-origin page cannot set without a preflight that carries an Origin).
+    Every other route keeps the real Origin check, and the stream still needs
+    the token.
+    """
+    if not _peer_on_mesh(handler):
+        return False
+    path = str(getattr(handler, "path", "") or "").split("?", 1)[0].rstrip("/")
+    if path != "/api/events":
+        return False
+    try:
+        accept = (handler.headers.get("Accept") or "").lower()
+    except Exception:
+        return False
+    return "text/event-stream" in accept
+
 
 def origin_ok(handler, served_origins) -> bool:
     """Is this request from a page we serve, or from a non-browser client?
@@ -336,9 +465,19 @@ def origin_ok(handler, served_origins) -> bool:
     Trust is derived from what THIS server was configured to answer on, which
     is exactly the `served_origins` set the caller supplies.
 
-    No Origin at all: the request must carry `X-Jarvis-Client: hud`, which
-    forces a CORS preflight and so cannot be produced by a drive-by simple
-    request.
+    Two additions, both additive (2026-10-23, the PWA slice; the routes are
+    documented in docs/JARVIS-API.md section 90):
+      * a mesh Origin (`.nord`, `.ts.net`, a CGNAT IP literal or a loopback
+        host) is accepted from a peer on this PC or the private mesh, even
+        though the server's configuration never lists that DNS name - see
+        `_mesh_origin_ok`;
+      * a no-Origin `/api/events` request from such a peer is accepted when
+        it asked for an event stream, because a browser's EventSource cannot
+        set a header - see `_sse_same_origin_ok`.
+
+    No Origin at all elsewhere: the request must carry `X-Jarvis-Client:
+    hud`, which forces a CORS preflight and so cannot be produced by a
+    drive-by simple request.
     """
     try:
         origin = (handler.headers.get("Origin") or "").rstrip("/")
@@ -346,8 +485,12 @@ def origin_ok(handler, served_origins) -> bool:
     except Exception:                    # no headers object: refuse, never guess
         return False
     if origin:
-        return origin in served_origins
-    return client == "hud"
+        if origin in (served_origins or ()):
+            return True
+        return _mesh_origin_ok(origin, handler, served_origins)
+    if client == "hud":
+        return True
+    return _sse_same_origin_ok(handler)
 
 
 def token_ok(handler, token, cookie, query) -> bool:
