@@ -575,10 +575,10 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     The check was byte-exact, which made the hunk header's LINE NUMBER
     load-bearing. It is not: `git apply` finds a hunk by matching its context
     contiguously, so the number is advisory. The HUD has moved since the patch
-    was written (the D12 loopback helpers and A4's two session-latch fields add
-    138 lines before this anchor): the committed patch says
-    `@@ -6591,3 +6591,25 @@` and the generator derives
-    `@@ -6729,3 +6729,25 @@`. Both files are 29 lines and line 3 is the only
+    was written (the D12 loopback helpers, A4's two session-latch fields and
+    PWA Slice 3a's static-asset block add 241 lines before this anchor): the
+    committed patch says `@@ -6591,3 +6591,25 @@` and the generator derives
+    `@@ -6832,3 +6832,25 @@`. Both files are 29 lines and line 3 is the only
     difference. That made CI red on EVERY branch, including ones that never
     touch this patch - while the 143-patch rehearsal passed with the stale
     number, which is the proof it applies.
@@ -619,13 +619,13 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     check("the committed patch's header is the stale one this was measured on",
           committed[2] == b"@@ -6591,3 +6591,25 @@", committed[2])
     check("the generated header is the one this was measured on",
-          generated[2] == b"@@ -6729,3 +6729,25 @@", generated[2])
+          generated[2] == b"@@ -6832,3 +6832,25 @@", generated[2])
 
     ok, summary, why = gen.check(have, want)
     check("the committed patch PASSES the semantic check even though its hunk "
-          "header is 138 lines stale", ok, why)
+          "header is 241 lines stale", ok, why)
     check("... and the skew is reported, not swallowed",
-          ok and "138 line(s)" in (summary or ""), summary)
+          ok and "241 line(s)" in (summary or ""), summary)
 
     def must_fail(label, bad):
         ok, summary, why = gen.check(bad, want)

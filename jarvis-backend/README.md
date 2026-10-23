@@ -51,9 +51,27 @@ plus these six files:
     quiz_grader_cases.json   from backend/
     rust-crates.lock         from jarvis-desktop/src-tauri/Cargo.lock
     jarvis-visual-spec.json  the owner's own copy, which is what /api/visual-spec reads
+    plus, since 2026-10-23 (PWA Slice 3a), the browser page's own files, each
+    flattened to its leaf name because jarvis_hud.py reads it beside itself:
+        theme.css, fonts.css, and seven *.woff2 faces     from backend/static/
+        lane-warning.js, hud-actions.js, hud-safety.js,   from backend/static/
+        hud-edit.js, hud-presets.js, private-speech.js,
+        face-voice.js, face-moments.js, face-tuning.js,
+        animal-shared.js, hud-layout.js, hud-layout-store.js
 and one file this repository DERIVES rather than copies:
     _where.py                backend/_where.py, plus a trailer that says what it is
 ```
+
+The 21 static files above are the closed-world whitelist
+`jarvis_hud.py`'s `STATIC_ASSETS` serves at `GET /theme.css`, `/fonts/*` and
+`/<module>.js`: without them the page loads in a browser and every file it
+then asks for is a 404, so the HUD arrives half-dressed with no theme, no
+fonts and every shell module off. This repository keeps them in
+`backend/static/`; the page's real copies are in `jarvis-desktop/src/`, and
+`backend/test_hud_static.py` fails if the two ever differ. They are re-taken
+from `backend/static/` by this same rule (the `BESIDE` table in
+`tools/gen_base_from_backend.py`), never from the live folder - a browser's
+CSS and modules are this repository's, not something the owner edits.
 
 `jarvis_hud.html` is the one file that was missing **everywhere**.
 `jarvis_hud.py:2226` serves `HERE / "jarvis_hud.html"` at

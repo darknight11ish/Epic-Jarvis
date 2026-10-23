@@ -1506,6 +1506,16 @@ jobs:
       # condition, and on a harness whose condition has a default.
       - name: No suite check can pass while checking nothing
         run: python3 ../../tools/check_vacuous_checks.py
+      # Review #8 (10-Review Playbook): every user-facing string in the backend's
+      # messages, the HUD page, Rust command errors and the Android resources is
+      # scanned for developer words (taint/latch/FTS5/HTTP 500/None/...) and for
+      # bare refusals that tell the owner neither what happened nor what to do.
+      # The recorded baseline in docs/REVIEW-8-ZERO-JARGON-BASELINE-2026-10-23.json
+      # is a ratchet: this fails only when the tree gets WORSE than the record.
+      # The count is real and non-zero today - cleaning it is follow-up work -
+      # so this is deliberately not a "zero jargon" gate yet.
+      - name: User-facing strings carry no new developer jargon (Review #8)
+        run: python3 ../../tools/check_zero_jargon.py --check
       # What this project says about itself in prose was checked by nobody, and
       # on 2026-10-05 five false statements reached the owner that way - the
       # worst of them CLAUDE.md's "not yet built" queue, which still listed

@@ -276,12 +276,16 @@ def sqlite_maintenance() -> None:
     tick". The 30-minute idle tick IS this engine's heartbeat, so the work is
     attached here, beside the job queue ticker and for the same reason.
 
-    F10 STAYS BLOCKED, AND THAT IS SAID OUT LOUD. `traces.db` has no writer
-    in this repository or on the owner's live HUD (recorded as the
-    `traces-retention` BLOCKED delta in tools/reconcile_live_backend.py), so
-    on the owner's PC today this is a directory listing and nothing more. The
-    retention cap is wired and tested so that a traces.db from an older build
-    or a future writer cannot grow without bound; nothing here claims a writer
+    NO WRITER, SO NO HUD DELTA, AND NO BLOCKED RECORD EITHER: RETIRED
+    2026-10-23 (RA-5). `traces.db` has no writer in this repository or on the
+    owner's live HUD, so on the owner's PC today this is a directory listing and
+    nothing more. The retention cap ships HERE, in a SHIPPED module called from
+    the heartbeat, not as a live-HUD delta: `jarvis_hud.py` never owned the
+    store, so there was no anchor for a delta and nothing for
+    tools/reconcile_live_backend.py to stage - its old `traces-retention`
+    BLOCKED entry is retired, and the deploy dry run reports 0 blocked deltas.
+    The cap is wired and tested so that a traces.db from an older build or a
+    future writer cannot grow without bound; nothing here claims a writer
     exists. Like `jobs_tick`, it returns None: housekeeping is work, not a
     finding, and must never publish the owner's data to the apps.
     """

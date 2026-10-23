@@ -1947,6 +1947,38 @@ $SHIPPED = @(
     # its demo data. test_shipped_modules.py keeps this list and _where.py's
     # SHIPPED in step.
     'jarvis_hud.html'            # the HUD page itself: the server hands it to a browser at GET / - no patch, no route of its own
+    # --- The page's own files: the stylesheet, the fonts and the modules (2026-10-23, PWA Slice 3a) ---
+    # Not modules either: jarvis_hud.py's STATIC_ASSETS whitelist (a closed
+    # world, no directory serving) reads each from its own folder at request
+    # time, so each has to sit beside the server. Until they did, the page
+    # loaded in a browser and every stylesheet, font and module behind it was
+    # a 404 - the HUD was half-dressed and its shell modules never mounted.
+    # `static/` is where this repository keeps them; the patcher flattens each
+    # entry to its leaf name (static/theme.css -> theme.css beside
+    # jarvis_hud.py), which is exactly the name the whitelist reads. The page's
+    # real copies live in jarvis-desktop/src/, and backend/test_hud_static.py
+    # fails if these copies drift from them.
+    'static/theme.css'
+    'static/fonts.css'
+    'static/chakra-petch-400.woff2'
+    'static/chakra-petch-500.woff2'
+    'static/chakra-petch-600.woff2'
+    'static/chakra-petch-700.woff2'
+    'static/ibm-plex-mono-400.woff2'
+    'static/ibm-plex-mono-500.woff2'
+    'static/ibm-plex-sans-400.woff2'
+    'static/lane-warning.js'
+    'static/hud-actions.js'
+    'static/hud-safety.js'
+    'static/hud-edit.js'
+    'static/hud-presets.js'
+    'static/private-speech.js'
+    'static/face-voice.js'
+    'static/face-moments.js'
+    'static/face-tuning.js'
+    'static/animal-shared.js'
+    'static/hud-layout.js'
+    'static/hud-layout-store.js'
     # --- The five the base carried but this list did not (2026-10-07) ---
     # All five were already in jarvis-backend/ and a SHIPPED module imports each,
     # but none was listed here and no patch delivered any of them - so a backend
@@ -2124,6 +2156,11 @@ $SHIPPED = @(
 'jarvis_barge_in.py'       # Voice Slice F phase-1 prototype: no live import,
 # [voice] aec_barge_in = false, nothing wired (docs/DESIGN-VOICE-BARGE-IN.md)
 'jarvis_price_radar.py'       # F1 price/flight radar (read-only, off; docs/DESIGN-PRICE-RADAR.md)
+# The Daily Pulse's money / study / PC-health / watched-price summaries
+# (2026-10-23, P3 seam B5-c): READ-ONLY reads of the four modules above,
+# wired into the briefing by jarvis_briefing.live_deps(). No route, no card,
+# no network; a source it cannot read is reported "not checked".
+'jarvis_pulse_sources.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
