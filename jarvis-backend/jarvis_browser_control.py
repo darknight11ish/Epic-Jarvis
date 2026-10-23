@@ -258,8 +258,9 @@ HARD_REFUSED_CATEGORIES = (
     ), "moving money between accounts, wiring or sending crypto"),
     ("third_party_account_access", (
         re.compile(r"\blogs?\s+(?:in|into|on|onto)\b[^.\n]{0,50}"
-                   r"\b(?:my|her|his|their|someone else's|a friend's|another person's|"
-                   r"my partner's|my wife's|my husband's|my son's|my daughter's)\b",
+                   r"\b(?:her|his|their|someone else's|a friend's|another person's|"
+                   r"my partner's|my wife's|my husband's|my son's|my daughter's|"
+                   r"my mother's|my father's|my friend's)\b",
                    re.IGNORECASE),
         re.compile(r"\b(?:access|log\s+into|sign\s+into|use)\b[^.\n]{0,40}"
                    r"\b(?:someone else's|another person's|her|his|their)\s+account\b",
@@ -291,13 +292,38 @@ _EXTRA_REFUSALS = (
     ("securities_trading", re.compile(
         r"\b(?:purchase|buy|sell|trade)\b[^.\n]{0,50}\b(?:shares?|stocks?|etfs?|"
         r"options?|securities|bonds?)\b", re.IGNORECASE)),
+    # "buy 10 AAPL", "sell 100 BTC", "trade BTC for ETH": a trade verb, an
+    # optional amount (and optional shares/units), then an uppercase ticker.
+    # Case-sensitive ON PURPOSE: lowercase "buy milk"/"buy 2 tickets" are
+    # ordinary shopping, while an uppercase 1-5 letter symbol is a security.
+    # A short stop-list keeps "buy TV"/"buy PC" ordinary; no crypto name here
+    # (the next pattern handles those, case-insensitively).
+    ("securities_trading", re.compile(
+        r"\b(?i:buy|purchase|sell|trade)\b"
+        r"(?:\s+\$?[\d,]+(?:\.\d+)?(?:\s*(?i:shares?|units?|coins?|tokens?))?)?"
+        r"\s+(?i:of\s+)?(?!(?:TV|PC|CAR|PHONE|LAPTOP|HOUSE|BOOK|BOOKS|TICKET|TICKETS|"
+        r"SHIRT|SHIRTS|SHOES?|GIFTS?|PIZZA|COFFEE|BEER|WINE|BREAD|MILK|EGGS?|GAS|TOYS?|"
+        r"GAMES?|SEATS?|ROOM|FLIGHT|HOTEL|UBER|LYFT|AMAZON|IPHONE|USB|HDMI|CPU|GPU|"
+        r"RAM|SSD|I|A|IT|OK|US|UK|EU)\b)[A-Z]{1,5}\b")),
+    # "buy bitcoin", "purchase 10 ethereum", "trade bitcoin for ethereum": the
+    # same verbs with a common crypto name directly after the optional amount,
+    # "of" or an article. Case-insensitive because these are ordinary words.
+    ("securities_trading", re.compile(
+        r"\b(?i:buy|purchase|sell|trade)\b"
+        r"(?:\s+\$?[\d,]+(?:\.\d+)?(?:\s*(?i:shares?|units?|coins?|tokens?))?)?"
+        r"\s+(?i:of\s+)?(?:\w+\s+)?(?i:(?:bitcoin|btc|ethereum|ether|eth|solana|sol|"
+        r"dogecoin|doge|cardano|ada|ripple|xrp|litecoin|ltc|polkadot|dot|avalanche|avax|"
+        r"chainlink|link|tether|usdt|binance coin|bnb|shiba inu|shib|usd coin|usdc|"
+        r"monero|xmr|tron|trx|cosmos|atom|near|algorand|algo|stellar|xlm|filecoin|fil|"
+        r"uniswap|uni|polygon|matic|crypto(?:currency)?|altcoin)s?)\b")),
     ("inter_account_money_transfer", re.compile(
         r"\b(?:transfer|move|send|wire|ach)\b[^.\n]{0,40}(?:\$\s?\d[\d,.]*|"
         r"\b\d[\d,.]*\s*(?:dollars|usd)\b|\b(?:funds|money|balance|cash|savings|"
         r"checking|account)\b)", re.IGNORECASE)),
     ("third_party_account_access", re.compile(
-        r"\b(?:log|sign)\b[^.\n]{0,40}\b[A-Za-z][A-Za-z'-]*'s\s+(?:online\s+)?"
-        r"(?:account|bank|banking|brokerage|email|mail|savings|checking)\b", re.IGNORECASE)),
+        r"\b(?:log|sign)\b[^.\n]{0,40}\b[A-Za-z][A-Za-z'-]*'s\s+"
+        r"(?:\w+\s+){0,3}(?:account|bank|banking|brokerage|email|mail|savings|checking)\b",
+        re.IGNORECASE)),
 )
 
 

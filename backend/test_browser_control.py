@@ -1654,6 +1654,71 @@ def t_the_cdp_reader_hands_back_the_box_it_already_worked_out():
                "box": (0, 0, 5, 5)}))[0].values()))
 
 
+def t_outright_refusal_refuses_ticker_trades_and_allows_own_account():
+    """The D-2 outright refusal must see a bare ticker/crypto trade, while an
+    owner's own account is not third-party account access."""
+    for text in ("buy 10 AAPL", "purchase 10 AAPL", "sell 100 BTC", "buy AAPL",
+                 "buy 10 shares of AAPL", "buy bitcoin", "buy a bitcoin",
+                 "purchase 10 ethereum", "trade BTC for ETH",
+                 "trade bitcoin for ethereum"):
+        got = B.check_outright_refusal(action_text=text)
+        check(f"outright refusal catches the trade: {text}",
+              got is not None and got.get("category") == "securities_trading",
+              repr(got))
+    for text in ("buy milk", "buy 2 tickets", "buy TV",
+                 "buy a book about bitcoin", "email Sam about AAPL",
+                 "log into my Fidelity account",
+                 "log into my own Fidelity account",
+                 "log into my account"):
+        got = B.check_outright_refusal(action_text=text)
+        check(f"ordinary text / own account is not refused: {text}",
+              got is None, repr(got))
+    for text in ("log into Sam's account", "log into Sam's Fidelity account",
+                 "log into my wife's account", "sign into his account"):
+        got = B.check_outright_refusal(action_text=text)
+        check(f"another person's account is refused: {text}",
+              got is not None and got.get("category") == "third_party_account_access",
+              repr(got))
+
+
+def t_a_ticker_trade_goal_is_refused_by_plan_run_and_run_steps():
+    """The goal text reaches all three entry points; each must stop before a
+    step, a card, or any reader/actor is reached."""
+    live = page(elements=[("button", "Buy", True)])
+    with NoRealAction():
+        p = B.plan("buy 10 AAPL", "s",
+                   [{"role": "button", "name": "Buy", "action": "click", "why": "buy"}],
+                   read=lambda _s: live)
+    check("plan() refuses a ticker-only goal with no steps",
+          p.steps == [] and p.refusal is not None
+          and p.refusal.get("category") == "securities_trading", repr(p.refusal))
+    check("plan() does not offer a yes that could be approved",
+          p.refusal is not None and p.refusal.get("allowed_with_approval") is False,
+          repr(p.refusal))
+
+    # A plan made before the goal changed: run() must still see the goal.
+    with NoRealAction():
+        p2 = B.plan("send", "s",
+                    [{"role": "button", "name": "Buy", "action": "click", "why": "buy"}],
+                    read=lambda _s: live)
+    p2.goal = "buy 10 AAPL"
+    out = B.run(p2, approved=True,
+                read=lambda _s: (_ for _ in ()).throw(AssertionError("read ran")),
+                act=lambda _s: (_ for _ in ()).throw(AssertionError("act ran")))
+    check("run() refuses a ticker-only goal before reading or acting",
+          out.get("code") == "outright_refused_category"
+          and out.get("steps_done") == 0, repr(out))
+
+    boom = lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("action ran"))
+    steps = B.run_steps(
+        [{"tab_id": "t1", "action": "click", "role": "button", "name": "Buy",
+          "why": "buy"}],
+        goal="buy 10 AAPL", approved=True, read=boom, act=boom)
+    check("run_steps() refuses a ticker-only goal with nothing done",
+          steps.get("code") == "outright_refused_category"
+          and steps.get("done") == [], repr(steps))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_element_is_treated_as_unmatched,
@@ -1717,6 +1782,8 @@ if __name__ == "__main__":
                t_the_task_lease_is_the_one_integration_point,
                t_the_scrubber_runs_over_a_snapshots_words_and_fails_closed_without_it,
                t_scroll_is_a_step_plan_makes_too,
+               t_outright_refusal_refuses_ticker_trades_and_allows_own_account,
+               t_a_ticker_trade_goal_is_refused_by_plan_run_and_run_steps,
                t_the_cdp_reader_hands_back_the_box_it_already_worked_out):
         print(f"\n--- {fn.__name__} ---")
         try:
