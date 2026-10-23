@@ -373,14 +373,18 @@ def idle_maintenance(config_dir=None, *, keep: int = TRACES_KEEP) -> dict:
     """The 30-minute heartbeat's housekeeping, for the databases that exist.
 
     ADDITIVE AND HONEST ABOUT F10. `traces.db` has NO WRITER in this
-    repository or on the owner's live HUD (Gemini's Q2 finding, recorded in
-    tools/reconcile_live_backend.py's BLOCKED_DELTAS as `traces-retention`,
-    BLOCKED): nothing here invents one, and on a PC without the file this is a
-    directory listing and nothing else. The retention cap and the WAL/optimize
-    pass are wired so that IF a traces.db appears - from an older build or a
-    future writer - its `traces` table stays at the newest 10,000 rows and its
-    write-ahead log is folded down on the same beat. F10's own "no writer, no
-    anchor" remains a BLOCKED live delta and is NOT claimed fixed here.
+    repository or on the owner's live HUD (Gemini's Q2 finding): nothing here
+    invents one, and on a PC without the file this is a directory listing and
+    nothing else. The retention cap is the F10 fix's safe half and ships HERE, in
+    a SHIPPED module that deploy step 1 carries - not as a live-HUD delta: the
+    HUD never owned the store, so there was no anchor for a delta, and a HUD-side
+    prune would delete a database this program does not own. The old
+    `traces-retention` BLOCKED record in tools/reconcile_live_backend.py was
+    retired on 2026-10-23 (RA-5) for exactly that reason, and the deploy dry run
+    reports 0 blocked deltas. The cap and the WAL/optimize pass are wired so that
+    IF a traces.db appears - from an older build or a future writer - its
+    `traces` table stays at the newest 10,000 rows and its write-ahead log is
+    folded down on the same beat. Nothing here claims a writer exists.
 
     Only files that are already on disk are opened (a missing database is
     never created by housekeeping), each one is best-effort, and the return

@@ -105,6 +105,26 @@ sentence from "the list is empty", and the Android parser checks for it before
 anything else (`JarvisApi.kt:136`). An empty approval queue is reassuring;
 a missing approval queue is not, and they must not look the same.
 
+### The page's own files (browser mode, 2026-10-23)
+
+`GET /` answers with `jarvis_hud.html`; a browser then loads that page's
+stylesheet, fonts and modules from the same origin. Those are the only other
+files the server hands out: `jarvis_hud.py`'s `STATIC_ASSETS` is an explicit
+closed-world whitelist — `url_path -> (file beside the server, exact
+Content-Type)` — with `X-Content-Type-Options: nosniff`, the HUD's
+`Cache-Control: no-store` on every answer, exact MIME types, and the same gate
+as the page: the token is required (a browser's `<link>`/`<script>` requests
+carry the SameSite=Strict `jarvis_token` cookie), and an `Origin`, when one is
+present, must pass the origin check. There is no directory serving: an
+unlisted path, `..`, an encoded traversal, a trailing slash, a case variant or
+an absolute URL is a 404, never a file lookup. The served set today is
+`/theme.css`, `/fonts/fonts.css`, the seven self-hosted `.woff2` faces and the
+page's twelve `.js` modules. `/hud-web-bridge.js`, `/manifest.webmanifest`,
+`/sw.js` and `/icons/jarvis-180|192|512.png` are listed ahead of the slices
+that write them, so each answers 404 until its file exists beside the server.
+`backend/test_hud_static.py` keeps the page and the whitelist in step in both
+directions.
+
 ---
 
 ## 2. The event stream
@@ -6267,9 +6287,29 @@ most 3, a calendar collision first, EMPTY on a normal day - built by
 `build_where_to_look_strip` - and `not_checked`), and its text carries
 "Where to look today: ...". `where_to_look` is empty on a normal day.
 **Honest limits:** the quiet-thread list is only rendered when a caller supplies
-it (no live mailbox thread read is wired in v1); the prep people/notes and the
-money/study/PC-health pulse sources are likewise caller-supplied, and a source
-nobody read is listed in `not_checked` - never shown as 0.
+it (no live mailbox thread read is wired in v1); the prep people/notes are
+likewise caller-supplied, and a source nobody read is listed in `not_checked` -
+never shown as 0.
+
+**B5-c (2026-10-23): the Pulse's money / study / PC-health halves are live.**
+The briefing's own build supplies `Deps.pulse_sources` with
+`jarvis_pulse_sources.pulse_sources()` (through `jarvis_briefing.live_deps()`):
+it reads `jarvis_spending.view()` (a COUNT of bank statements waiting for a
+layout - no file name or path), `jarvis_decks.get().line()` ("3 cards ready",
+numbers only) and the fading-topic COUNT (the deck names are read and thrown
+away), `jarvis_pc_help.diagnose_silent_failures()` TITLES (never its
+paragraphs), and - only when the owner has turned the radar on and its store
+already exists - one "a watched price changed" line with no route, airline or
+amount. No new socket, model, route, card, permission or grant: every call
+reads a store this PC already keeps. App lock / "Hide memory lists and chat
+history" withholds the whole extras block, and a lock state that cannot be read
+counts as locked. Each source has a short deadline on a daemon thread and its
+own `try`/`except`, so one slow or broken source is absent, not fatal - and the
+briefing then says it was not checked (`extras` also carries the internal
+`checked` list, so a source that WAS read with nothing to say is not called
+"not checked"; it is a caller-supplied dict, not a route schema). Tests:
+`backend/test_pulse_sources.py` (fake sources, the no-leak rule, fail-closed
+lock, bounded slow source, `pulse_from` integration).
 
 ## 23. Web search (added 2026-09-25)
 
@@ -10123,23 +10163,29 @@ and the four shipped modules that used a 5-second raw `sqlite3.connect` timeout
 (`jarvis_chat_log.py`, `jarvis_decks.py`, `jarvis_owned_tables.py`,
 `jarvis_data_health.py`) now use 10 seconds. That is the lock half of F10.
 
-The `traces.db` half is **BLOCKED, and recorded as blocked rather than
-guessed.** The Gemini Q2 ruling said it is written only by the live HUD and
-should be a small live-HUD/reconcile delta, not a fake backend module. Reading
-the live HUD on 2026-10-20 found **no `traces.db` writer, no trace schema and no
-insert/startup anchor there**: the live `jarvis_hud.py` (393,012 bytes) has zero
-`traces.db` matches, its `sqlite3` use is the read-only memory readers (around
-lines 6238-6265), the live folder has no writer, and `~/.openjarvis` has no
-`traces.db` today. The only evidence of the store is a snapshot
-(`Jarvis Backups/jarvis-snap-20261014-000438/traces.db`): tables `traces`
-(`trace_id`, `started_at`, `ended_at`, ...), `trace_steps` and an external-content
-FTS5 `traces_fts` with only an INSERT trigger. A retention cap cannot reuse the
-HUD's anchored ALREADY_PRESENT/insert mechanism against a store with no writer;
-adding a standalone prune would delete a database this program does not own.
-`tools/reconcile_live_backend.py` therefore records this under
-**`BLOCKED_DELTAS["traces-retention"]`** (with the evidence) and every dry run
-prints it as **BLOCKED LIVE DELTAS**, never as a planned insert. It becomes a
-delta only when a live HUD writer and a real anchor exist.
+The `traces.db` half **ships in the base modules, and no live-HUD delta is
+recorded for it any more** (retired 2026-10-23, RA-5). The Gemini Q2 ruling
+asked for a small live-HUD/reconcile delta rather than a fake backend module;
+reading the live HUD on 2026-10-20 found **no `traces.db` writer, no trace schema
+and no insert/startup anchor there**: the live `jarvis_hud.py` has zero
+`traces.db` matches, its `sqlite3` use is the read-only memory readers, the live
+folder has no writer, and `~/.openjarvis` had no `traces.db`. A standalone prune
+in the HUD would delete a database this program does not own, so the tool
+recorded it as `BLOCKED_DELTAS["traces-retention"]` (PR #669) and every dry run
+printed it as **BLOCKED LIVE DELTAS**, never as a planned insert.
+
+Four hours later **#673** shipped the cap the safe way, in SHIPPED modules:
+`jarvis_sqlite.trim_table` / `idle_maintenance` caps any `traces.db`'s `traces`
+table at the newest 10,000 rows and runs `PRAGMA wal_checkpoint(PASSIVE)` +
+`PRAGMA optimize`, and `jarvis_initiative.sqlite_maintenance` calls it from the
+30-minute heartbeat. Deploy step 1 carries those files, so on the owner's PC
+(measured 2026-10-23) the live `jarvis_sqlite.py` and `jarvis_initiative.py` are
+byte-identical to `origin/main:backend/...`, the live `jarvis_hud.py` still has
+zero `traces.db` matches, and there is nothing for a live-HUD delta to apply.
+`tools/reconcile_live_backend.py` therefore **retired** that record (its history
+is kept in the comment on `BLOCKED_DELTAS`), and every dry run now prints **0
+blocked deltas**. Nothing claims a `traces.db` writer exists: the cap acts only
+if a store from an older build or a backup restore appears.
 
 ### 49.2 The route
 

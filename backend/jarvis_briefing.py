@@ -421,9 +421,15 @@ class Deps:
     #: find_quiet_threads). None: no thread read was wired, and the briefing
     #: says nothing rather than inventing a quiet inbox.
     quiet_threads: Optional[Callable[[], list]] = None
-    #: Wave D-1 (D7): the money / study / PC-health halves of the Pulse. None:
-    #: those sources are reported "not checked today", never filled with a
-    #: made-up number.
+    #: Wave D-1 (D7): the money / study / PC-health halves of the Pulse, and
+    #: since B5-c (2026-10-23) the watched-price anomalies too. None: those
+    #: sources are reported "not checked today", never filled with a made-up
+    #: number. The dict it answers may hold "money"/"study"/"pc" one-line
+    #: summaries, an "anomalies" list of short plain sentences, and a "checked"
+    #: list of the label sources it really read - so a source that WAS read and
+    #: had nothing to say is not reported as "not checked".
+    #: `jarvis_pulse_sources.pulse_sources()` is the live supplier; tests inject
+    #: their own.
     pulse_sources: Optional[Callable[[], dict]] = None
     #: D-1.3 gate: when the caller already knows the private view is locked or
     #: hidden, the prep cards carry NO dossier/email/reminder details at all.
@@ -433,6 +439,26 @@ class Deps:
     senders_on: Callable[[], bool] = lambda: senders_setting()["on"]
     publish: Callable[[str, dict], None] = _publish
     deadline: float = READ_DEADLINE
+
+
+def _live_pulse_sources() -> Optional[Callable[[], dict]]:
+    """The live Pulse supplier, or None on a PC without the module.
+
+    The module is SHIPPED, so it should be there; the try/except is the same
+    rule every guarded import here follows - a backend that has not received it
+    yet reports the Pulse's sources "not checked" instead of failing."""
+    try:
+        import jarvis_pulse_sources
+        return jarvis_pulse_sources.pulse_sources
+    except Exception:
+        return None
+
+
+def live_deps() -> Deps:
+    """The production suppliers. Tests keep building with `Deps()` and injecting
+    their own; only the two live entry points (`_on_fire` and `handle_now`) use
+    this, so importing or driving the briefing in a test stays hermetic."""
+    return Deps(pulse_sources=_live_pulse_sources())
 
 
 # --------------------------------------------------------------------------
@@ -1028,6 +1054,8 @@ def pulse_from(*, sections: list, warnings: list, quiet_rows: list, approvals: i
 
     Honesty rules, and they are the whole point:
     * a source nobody read is listed in `not_checked`, never shown as "0";
+    * a source that WAS read and had nothing to say is not "not checked" - the
+      provider names it in `extras["checked"]`;
     * the strip is capped at PULSE_MAX_ANOMALIES and sorted by how much a
       decision matters (a flight collision before a waiting card);
     * a normal day produces no strip at all - `where_to_look` is empty."""
@@ -1042,6 +1070,7 @@ def pulse_from(*, sections: list, warnings: list, quiet_rows: list, approvals: i
                      (" is" if approvals == 1 else " are") +
                      " waiting for your yes or no.")
     extras = extras or {}
+    checked = {str(k) for k in (extras.get("checked") or ()) if isinstance(k, str)}
     for key, label in (("money", "Money"), ("study", "Study"), ("pc", "PC health")):
         if extras.get(key):
             lines.append(f"{label}: {str(extras[key]).strip()}")
@@ -1050,7 +1079,7 @@ def pulse_from(*, sections: list, warnings: list, quiet_rows: list, approvals: i
     for key, label in (("money", "money and subscriptions"),
                        ("study", "study decks"),
                        ("pc", "PC and GPU health")):
-        if not extras.get(key):
+        if not extras.get(key) and key not in checked:
             not_checked.append(label)
     anomalies = []
     for w in warnings or ():
@@ -1734,7 +1763,7 @@ def _on_fire(job_id: str, *, sched=None, deps: Optional[Deps] = None) -> None:
     """A briefing job went off (the scheduler calls this on its own thread,
     after its "fired" event). Build it, keep it, then ring "ready" - always,
     even when a part could not be read, so the apps are never left waiting."""
-    deps = deps or Deps()
+    deps = deps or live_deps()
     try:
         sched = sched or S.get()
         view = sched.job(job_id) or {}
@@ -2065,6 +2094,10 @@ def handle_now(body=None, sched=None, deps: Optional[Deps] = None) -> tuple:
     (source "now"), and both apps then say it has no "What did I miss?"."""
     if body is not None and not isinstance(body, dict):
         return 400, {"ok": False, "error": "need a JSON object"}
+    # B5-c: the route is a live entry point, so a caller that passes no deps
+    # (every real caller) gets the PC's own read-only Pulse suppliers. Tests
+    # pass their own Deps and never reach a real source.
+    deps = deps or live_deps()
     if isinstance(body, dict) and body.get("missed") is True:
         try:
             m = build_missed(sched=sched, deps=deps, since=touch())

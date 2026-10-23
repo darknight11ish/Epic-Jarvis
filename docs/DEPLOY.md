@@ -116,22 +116,32 @@ restart, a plain `GET /api/status` answers from the cache (no upstream probe) an
 `?force=1` deliberately re-probes on the caller's thread (about 3.1 s on this PC
 while the dead :8000/:4000 endpoints time out), with the same ten keys.
 
-**A recorded BLOCKED delta: `traces.db` retention (F10 / Q2, 2026-10-20).**
-Gemini's Q2 ruling asked for the trace store's retention to be a small
-live-HUD/reconcile delta, not a fake backend module. The live HUD was read
+**A RETIRED blocked record: `traces.db` retention (F10 / Q2, retired
+2026-10-23).** Gemini's Q2 ruling asked for the trace store's retention to be a
+small live-HUD/reconcile delta, not a fake backend module. The live HUD was read
 read-only and has **no `traces.db` writer, schema or insert/startup anchor**:
 `jarvis_hud.py` has zero `traces.db` matches, its `sqlite3` use is the read-only
 memory readers, the live folder has no writer, and `~/.openjarvis` has no
-`traces.db` today. The only shape evidence is a snapshot
-(`Jarvis Backups/jarvis-snap-20261014-000438/traces.db`: `traces`,
-`trace_steps`, external-content `traces_fts` with only an INSERT trigger). A
-prune cannot use the tool's anchored ALREADY_PRESENT/insert path against a
-store with no writer, and a standalone prune would delete a database this
-program does not own. The tool therefore keeps the decision in
-**`BLOCKED_DELTAS["traces-retention"]`** (with that evidence) and every run
-prints **BLOCKED LIVE DELTAS** - it is never staged, and the exit code is not
-turned into a false success by it. This is BLOCKED, not a PASS; it becomes a
-delta when a live writer and a real anchor exist.
+`traces.db` today. A standalone prune in the HUD would delete a database this
+program does not own, so the tool recorded the decision as
+**`BLOCKED_DELTAS["traces-retention"]`** (PR #669, with that evidence) and every
+run printed **BLOCKED LIVE DELTAS** - it was never staged.
+
+**That record is retired, not applied (RA-5, 2026-10-23).** Four hours after
+#669, **#673** shipped the cap the safe way, in SHIPPED modules rather than in
+the HUD: `jarvis_sqlite.trim_table` / `idle_maintenance` caps any `traces.db`'s
+`traces` table at the newest 10,000 rows, and
+`jarvis_initiative.sqlite_maintenance` calls it from the 30-minute heartbeat.
+Deploy step 1 (the SHIPPED sync) carries both files, and on this PC (measured
+2026-10-23) the live `jarvis_sqlite.py` and `jarvis_initiative.py` are
+byte-identical to `origin/main:backend/...`, while the live `jarvis_hud.py`
+still has zero `traces.db` matches and no `traces.db` exists in the live folder
+or `~/.openjarvis`. The HUD never owned the store, so there is no anchor a
+live-HUD delta could attach to - "re-anchoring" it would mean inventing a writer
+the program does not have. `BLOCKED_DELTAS` is now empty, the dry run reports
+**0 blocked deltas**, and the retention remains tested where it ships
+(`backend/test_sqlite_perf.py`). This is not a claim that a writer exists: the
+cap acts only if a store from an older build or a backup restore appears.
 
 ## 3. The old one-off scripts are superseded
 
