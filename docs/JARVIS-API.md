@@ -5822,6 +5822,23 @@ marker, so a newer UI talking to an older backend hides the edit/move/reorder
 controls instead of drawing ones it cannot honour. The marker is a boolean
 only and old clients ignore it; the `?id=` one-job read keeps its old shape.
 
+**Desktop UI (2026-10-22):** the HUD's Reminders panel and the Brain's
+Coming up draw ONE `Edit` control per editable row (and `Move up`/`Move down`
+on a to-do in its own list) **only when that marker is true**; an older
+backend draws exactly the Phase 1 panel. Edit opens an inline row editor:
+a timer's words + minutes (`seconds`), a one-off alarm/reminder's words +
+date/time (cardless), a repeating alarm/reminder's words + repeat rule (the
+ONE `schedule_repeat` 202 card, with the asking sentence shown before the
+answer and the old rule still shown), and a to-do's words + list (a
+list-only save is the `move` verb; a list riding with words is one `edit`).
+The desktop command is the existing `hud_schedule_act`/`brain_schedule_act`
+with an optional typed `change` - no new command, permission or capability -
+and a repeat edit's wait gets 1,200 s while every other schedule call keeps
+20 s. The phone's Coming up stays read-only for now; the verbs are ready for
+it. Honest limits: no edit history/undo in v1, no drag (buttons only), no
+new-list creation from the UI, and module-managed kinds are still changed
+where they were set up.
+
 Storage: a `rank INTEGER` column added through the same idempotent ALTER path
 as every later column, plus a one-time per-list backfill of the OPEN to-dos
 (active/paused) to 0..n-1 in `(created,rowid)` order. The ALTERs and the

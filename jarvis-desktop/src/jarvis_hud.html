@@ -1034,6 +1034,33 @@ html[data-hud-shell="split-stage"] .bento-waiting{display:flex; flex-direction:c
   font-family:var(--f-mono); font-size:10.5px; color:var(--text);}
 .rem-form-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
 .rem-form-note{font-family:var(--f-mono); font-size:10px; color:var(--text-faint);}
+/* Phase 2 (2026-10-22): the inline row editor, the one Edit control and the
+   keyboard Up/Down reorder. The same words/field model come from
+   src/hud-actions.js; this is styling only. */
+.rem-controls{display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-top:6px;}
+.rem-controls .rem-btn{padding:3px 8px;}
+.rem-editor{margin-top:7px; padding:8px; border:1px solid var(--line);
+  border-radius:4px; background:var(--plate-2);}
+.rem-edit-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:6px;}
+.rem-edit-field{display:flex; align-items:center; gap:6px; min-width:0;}
+.rem-edit-field > label{min-width:52px; font-family:var(--f-mono); font-size:10.5px;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--dim);}
+.rem-editor input, .rem-editor select{flex:1 1 110px; min-width:0; padding:6px 8px;
+  border:1px solid var(--line); border-radius:3px; background:var(--plate-2);
+  color:var(--text); font-family:var(--f-mono); font-size:11.5px;}
+.rem-editor input:focus, .rem-editor select:focus{outline:none;
+  border-color:var(--line-hot);}
+.rem-editor .rem-days label{display:inline-flex; align-items:center; gap:3px;
+  font-family:var(--f-mono); font-size:10.5px; color:var(--text);}
+.rem-editor .rem-form-note{margin:0;}
+@media (min-width:520px){.rem-edit-grid{grid-template-columns:repeat(2, minmax(0,1fr));}}
+/* Full stage (FT-3): the docked Reminders panel is wide, so the editor uses two
+   columns there even at the narrow end; the rail keeps one. */
+html[data-hud-shell="split-stage"][data-hud-tab="reminders"] #stage > #rail-reminders
+  .rem-edit-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
+/* H2 edit mode is about HUD layout, not reminder content: a layout drag must
+   not start a schedule change by accident. */
+body[data-hud-edit="on"] .rem-controls, body[data-hud-edit="on"] .rem-editor{display:none;}
 /* L3/FT-3 (2026-10-22): the Reminders stage tab is a FULL-STAGE screen, not a
    rail-only selection. The page's own script docks #rail-reminders into
    #stage while this tab is chosen and puts it back when the owner leaves, so
@@ -1871,9 +1898,11 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
          from the SAME GET /api/schedule read the Brain's Coming up uses; the
          Studio stage tab / dock icon, the Cockpit Bento card and the Ambient
          rail all show this one panel. Its words are blanked in Rust while App
-         lock or the private lists are hidden. Phase 1: view, add, and the
-         existing one-job actions - edit/move/reorder need backend changes and
-         a later deploy, and are not faked here. -->
+         lock or the private lists are hidden. Phase 1: view, add and the six
+         existing one-job actions. Phase 2 (2026-10-22, after backend #730):
+         Edit/Up/Down on an editable row, drawn ONLY when the PC's own
+         GET /api/schedule says phase2:true - an older backend shows exactly
+         the Phase 1 panel, never a fake control. -->
     <div class="rail-section bento-reminders" id="rail-reminders">
       <div class="hud-label">Reminders</div>
       <p class="rem-note" id="rem-note" hidden></p>
@@ -5376,6 +5405,10 @@ var laneSelect = $("lane-compact");
   var errorLine = $("rem-error");
   var view = null;
   var busy = false;
+  // When a repeat edit's ONE card is waiting, the asking sentence must stay on
+  // screen even while the list refreshes under it (paint would otherwise clear
+  // the note): about a card's lifetime, then the ordinary note comes back.
+  var askedAt = 0;
 
   function txt(v) { return typeof v === "string" ? v : ""; }
   function el(tag, cls, words) {
@@ -5411,7 +5444,13 @@ var laneSelect = $("lane-compact");
                when: txt(j.when), repeats: j.repeats === true, repeat: txt(j.repeat),
                missed: txt(j.missed), note: txt(j.note), hidden: j.hidden === true,
                list: txt(j.list), snoozed: j.snoozed === true,
-               wentOffAt: txt(j.went_off_at) };
+               wentOffAt: txt(j.went_off_at),
+               // Phase 2 (2026-10-22): the PC's own rank in its list (a number,
+               // never a word), a timer's own duration, and a repeating job's
+               // machine rule for the editor's prefill.
+               rank: Number.isInteger(j.rank) ? j.rank : null,
+               duration: typeof j.duration === "number" ? j.duration : null,
+               rule: j && typeof j.rule === "object" && j.rule ? j.rule : null };
     };
     var lists = Array.isArray(src.lists) ? src.lists.filter(function (l) {
       return l && typeof l === "object" && typeof l.name === "string" && l.name
@@ -5424,6 +5463,9 @@ var laneSelect = $("lane-compact");
       why: available ? "" : txt(src.why) ||
         "Your PC's Jarvis does not have timers and reminders yet - run apply-patches.ps1 on the PC.",
       hidden: available && src.hidden === true,
+      // Phase 2 is present only when the PC's own read says so: an older
+      // backend never gets an Edit/Up/Down control (no fake controls).
+      phase2: available && src.phase2 === true,
       hiddenCount: typeof src.hidden_count === "number" ? src.hidden_count : 0,
       jobs: available ? src.jobs.filter(ok).map(row) : [],
       todo: available ? src.todo.filter(ok).map(row) : [],
@@ -5529,13 +5571,342 @@ var laneSelect = $("lane-compact");
     return fallbackActionsFor(job, wentOff);
   }
   window.__hudActionsFallback = fallbackActionsFor;
-  function rowOf(job, wentOff) {
+  /* ---- Phase 2 (2026-10-22): Edit, move by list, reorder --------------- */
+  /*  The PC's own jarvis_schedule._act_phase2 is the authority for every
+   *  refusal; this page only offers what the read says is editable, sends ONE
+   *  change at a time, and never repaints a value before the PC's next read.
+   *  The words and the field model live in src/hud-actions.js (the module at
+   *  the end of the file). What follows is the browser-served fallback so the
+   *  backend-served page keeps working; tests/hud.mjs holds the two together. */
+  var PHASE2 = {
+    EDIT_LABEL: "Edit",
+    SAVE_LABEL: "Save changes",
+    CANCEL_LABEL: "Cancel",
+    MOVE_TO_TODO_LABEL: "To-do list",
+    UP_LABEL: "Move up",
+    DOWN_LABEL: "Move down",
+    ASKED_REPEAT_WORDS: "Asked the PC. Nothing changes until you answer the card.",
+    REPEAT_CARD_WORDS: "A repeat change asks with one card; the old schedule " +
+      "stays active until you answer it.",
+    NOTHING_CHANGED_WORDS: "Nothing changed.",
+    TIMER_MINUTES_HINT: "1 to 1440 minutes (24 hours)."
+  };
+  function phase2Words() { return window.__hudPhase2Words || PHASE2; }
+  function editableKind(kind) {
+    return ["timer", "alarm", "reminder", "todo"].indexOf(kind) >= 0;
+  }
+  function canEdit(job) {
+    if (!view || view.phase2 !== true || view.hidden) return false;
+    if (!job || job.hidden) return false;
+    if (!editableKind(job.kind)) return false;
+    return job.state === "active" || job.state === "paused";
+  }
+  function rankOf(job, index) {
+    return Number.isInteger(job.rank) ? job.rank : (index >= 0 ? index : 0);
+  }
+
+  /* ONE change. `asked` is shown BEFORE the request (a repeat edit waits on
+   * the owner's card, so the sentence must not wait for the answer); `done`
+   * tells the caller whether the editor can close. */
+  function change(job, action, fields, options) {
+    if (busy) return;
+    options = options || {};
+    busy = true;
+    Array.prototype.forEach.call(body.querySelectorAll("button"), function (b) {
+      b.disabled = true;
+    });
+    if (options.asked) {
+      errorLine.hidden = true;
+      note.textContent = options.asked;
+      note.hidden = false;
+    }
+    var args = { id: job.id, action: action };
+    if (fields && Object.keys(fields).length) args.change = fields;
+    var refused = false;
+    invoke("hud_schedule_act", args).then(function (v) {
+      if (v && v.waiting === true) {
+        askedAt = Date.now();
+        note.textContent = phase2Words().ASKED_REPEAT_WORDS;
+        note.hidden = false;
+        if (options.done) options.done(true);
+      } else {
+        askedAt = 0;
+        showSaid(v);
+        if (options.done) options.done(true);
+      }
+    }).catch(function (e) {
+      refused = true;
+      showError(e);
+      if (options.done) options.done(false);
+    }).then(function () {
+      busy = false;
+      Array.prototype.forEach.call(body.querySelectorAll("button"), function (b) {
+        b.disabled = false;
+      });
+      // A waiting card is the PC's answer already; do not repaint over the asking
+      // sentence. A REFUSED save keeps the editor and the owner's typed words on
+      // screen (review 737 #3): only a successful (or asking) change re-reads.
+      if (askedAt || refused) return;
+      return afterChange();
+    });
+  }
+
+  /* The one new row control: Edit, plus Up/Down on a to-do inside its list. */
+  function controlsOf(job, groupJobs) {
+    if (!canEdit(job)) return null;
+    var bar = el("div", "rem-controls");
+    var edit = el("button", "rem-btn", phase2Words().EDIT_LABEL);
+    edit.type = "button";
+    edit.setAttribute("data-rem-control", "edit");
+    edit.addEventListener("click", function () { openEditor(job, bar); });
+    bar.append(edit);
+    if (job.kind === "todo" && Array.isArray(groupJobs)) {
+      var index = groupJobs.indexOf(job);
+      var rank = rankOf(job, index);
+      var up = el("button", "rem-btn", "\u2191");
+      up.type = "button";
+      up.setAttribute("data-rem-control", "up");
+      up.setAttribute("aria-label", phase2Words().UP_LABEL);
+      up.title = phase2Words().UP_LABEL;
+      up.disabled = rank <= 0;
+      up.addEventListener("click", function () {
+        change(job, "reorder", { rank: rank - 1 });
+      });
+      var down = el("button", "rem-btn", "\u2193");
+      down.type = "button";
+      down.setAttribute("data-rem-control", "down");
+      down.setAttribute("aria-label", phase2Words().DOWN_LABEL);
+      down.title = phase2Words().DOWN_LABEL;
+      down.disabled = rank >= (groupJobs.length - 1);
+      down.addEventListener("click", function () {
+        change(job, "reorder", { rank: rank + 1 });
+      });
+      bar.append(up, down);
+    }
+    return bar;
+  }
+
+  /* ---- the inline row editor ------------------------------------------ */
+  function fieldRow(labelText, input) {
+    var row = el("div", "rem-edit-field");
+    var label = el("label", "", labelText);
+    if (input.id) label.setAttribute("for", input.id);
+    row.append(label, input);
+    return row;
+  }
+  function inputOf(type, value, field, min, max) {
+    var i = el("input");
+    i.type = type;
+    i.value = value === null || value === undefined ? "" : String(value);
+    i.setAttribute("data-rem-field", field);
+    if (min !== undefined) i.min = String(min);
+    if (max !== undefined) i.max = String(max);
+    return i;
+  }
+  function selectOf(options, value, field) {
+    var s = el("select");
+    s.setAttribute("data-rem-field", field);
+    options.forEach(function (o) {
+      var opt = el("option", "", o.label);
+      opt.value = o.value;
+      if (o.value === value) opt.selected = true;
+      s.append(opt);
+    });
+    return s;
+  }
+  function timeField(value) {
+    var i = inputOf("time", value, "time");
+    return i;
+  }
+  function dueDate(job) {
+    if (typeof job.due !== "number") return { date: "", time: "" };
+    var d = new Date(job.due * 1000);
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    return {
+      date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
+      time: pad(d.getHours()) + ":" + pad(d.getMinutes())
+    };
+  }
+  function ruleFor(job) {
+    var rule = job && job.rule && typeof job.rule === "object" ? job.rule : {};
+    return {
+      every: txt(rule.every),
+      at: txt(rule.at),
+      days: Array.isArray(rule.days) ? rule.days.slice() : []
+    };
+  }
+  function sameRule(a, b) {
+    if (a.every !== b.every || a.at !== b.at) return false;
+    var x = a.days.slice().sort(function (p, q) { return p - q; }).join(",");
+    var y = b.days.slice().sort(function (p, q) { return p - q; }).join(",");
+    return x === y;
+  }
+  function openEditor(job, controlsBar) {
+    var row = controlsBar.closest ? controlsBar.closest(".rem-row")
+      : controlsBar.parentNode;
+    if (!row || row.querySelector(".rem-editor")) return;
+    var actions = row.querySelector(".rem-actions");
+    if (actions) actions.style.display = "none";
+    var form = el("form", "rem-editor");
+    form.setAttribute("data-rem-editing", job.id);
+    form.autocomplete = "off";
+    var grid = el("div", "rem-edit-grid");
+    var words = inputOf("text", job.text, "text");
+    var due = dueDate(job);
+    var rule = ruleFor(job);
+    var fields = [];
+    if (!(job.kind === "timer" && !job.text)) {
+      fields.push(fieldRow("What", words));
+    }
+    if (job.kind === "timer") {
+      var minutes = Math.max(1, Math.round((job.duration || job.left || 600) / 60));
+      fields.push(fieldRow("Minutes", inputOf("number", minutes, "minutes", 1, 1440)));
+    } else if ((job.kind === "alarm" || job.kind === "reminder") && !job.repeats) {
+      fields.push(fieldRow("Date", inputOf("date", due.date, "date")));
+      fields.push(fieldRow("Time", timeField(due.time)));
+    } else if ((job.kind === "alarm" || job.kind === "reminder") && job.repeats) {
+      var rep = selectOf([
+        { value: "day", label: "Every day" },
+        { value: "weekday", label: "Every weekday" },
+        { value: "custom", label: "Custom days" }
+      ], rule.every === "week" ? "custom" : rule.every, "repeat");
+      fields.push(fieldRow("Repeat", rep));
+      fields.push(fieldRow("Time", timeField(rule.at)));
+      var daysBox = el("div", "rem-edit-field");
+      daysBox.setAttribute("data-rem-field", "days");
+      daysBox.append(el("label", "", "Days"));
+      var days = el("span", "rem-days");
+      ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach(function (name, d) {
+        var lab = el("label", "", "");
+        var cb = el("input");
+        cb.type = "checkbox";
+        cb.value = String(d);
+        cb.checked = rule.days.indexOf(d) >= 0;
+        lab.append(cb, document.createTextNode(" " + name));
+        days.append(lab);
+      });
+      daysBox.append(days);
+      fields.push(daysBox);
+    } else if (job.kind === "todo") {
+      var opts = [{ value: "todo", label: phase2Words().MOVE_TO_TODO_LABEL }];
+      (view.lists || []).forEach(function (l) {
+        opts.push({ value: l.name, label: l.title || l.name });
+      });
+      fields.push(fieldRow("List", selectOf(opts, job.list || "todo", "list")));
+    }
+    fields.forEach(function (f) { grid.append(f); });
+    form.append(grid);
+    var words2 = phase2Words();
+    if ((job.kind === "alarm" || job.kind === "reminder") && job.repeats) {
+      form.append(el("p", "rem-form-note", words2.REPEAT_CARD_WORDS));
+    } else {
+      form.append(el("p", "rem-form-note", "No card: editing this item changes it at once."));
+    }
+    var actRow = el("div", "rem-form-actions");
+    var save = el("button", "act primary", words2.SAVE_LABEL);
+    save.type = "submit";
+    var cancel = el("button", "rem-btn", words2.CANCEL_LABEL);
+    cancel.type = "button";
+    cancel.addEventListener("click", function () {
+      form.remove();
+      if (actions) actions.style.display = "";
+      if (controlsBar.querySelector('[data-rem-control="edit"]')) {
+        controlsBar.querySelector('[data-rem-control="edit"]').focus();
+      }
+    });
+    actRow.append(save, cancel);
+    form.append(actRow);
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      submitEdit(job, form, rule, due, controlsBar);
+    });
+    form.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        cancel.click();
+      }
+    });
+    var anchor = actions || row.lastChild;
+    row.insertBefore(form, anchor);
+    words.focus();
+  }
+  function submitEdit(job, form, oldRule, oldDue, controlsBar) {
+    var field = function (name) { return form.querySelector('[data-rem-field="' + name + '"]'); };
+    var out = {};
+    var text = field("text") ? field("text").value.trim() : job.text;
+    if (text !== job.text) {
+      if (!text) { showError(new Error("Type what to change it to first.")); return; }
+      out.text = text;
+    }
+    if (job.kind === "timer") {
+      var mins = parseInt(field("minutes").value, 10);
+      if (!(mins >= 1 && mins <= 1440)) {
+        showError(new Error("A timer is " + phase2Words().TIMER_MINUTES_HINT + "."));
+        return;
+      }
+      var oldMins = Math.max(1, Math.round((job.duration || job.left || 600) / 60));
+      if (mins !== oldMins) out.seconds = mins * 60;
+    } else if (job.kind === "todo") {
+      var list = field("list").value;
+      if (list !== (job.list || "todo")) out.list = list;
+    } else if (!job.repeats) {
+      var date = field("date").value;
+      var time = field("time").value;
+      if (!date) { showError(new Error("Pick a date, like 2030-09-15.")); return; }
+      if (!time) { showError(new Error("Write the time as HH:MM, like 18:00.")); return; }
+      if (date !== oldDue.date || time !== oldDue.time) {
+        out.date = date;
+        out.time = time;
+      }
+    } else {
+      var every = field("repeat").value;
+      var at = field("time").value;
+      if (!at) { showError(new Error("Write the time as HH:MM, like 07:30.")); return; }
+      var days = [];
+      Array.prototype.forEach.call(form.querySelectorAll('[data-rem-field="days"] input:checked'),
+        function (c) { days.push(parseInt(c.value, 10)); });
+      var rule = { every: every === "custom" ? "week" : every, at: at };
+      if (rule.every === "week") {
+        if (!days.length) {
+          showError(new Error("Pick at least one day."));
+          return;
+        }
+        // The owner's own days, never a Mon-Fri guess (review 737 #1).
+        rule.days = days;
+      }
+      if (!sameRule(rule, oldRule)) out.repeat = rule;
+    }
+    var api = phase2Words();
+    if (!Object.keys(out).length) {
+      showError(new Error(api.NOTHING_CHANGED_WORDS));
+      return;
+    }
+    var isRepeat = Object.prototype.hasOwnProperty.call(out, "repeat");
+    change(job, "edit", out, {
+      asked: isRepeat ? api.ASKED_REPEAT_WORDS : "",
+      done: function (ok) {
+        if (!ok) return;                 // refused: keep the editor and its words
+        form.remove();
+        var actions = form.parentNode ? form.parentNode.querySelector(".rem-actions") : null;
+        if (actions) actions.style.display = "";
+        var edit = controlsBar.querySelector('[data-rem-control="edit"]');
+        if (edit) {
+          edit.disabled = true;
+          edit.textContent = "Asked the PC\u2026";
+        }
+      }
+    });
+  }
+  function rowOf(job, wentOff, groupJobs) {
     var row = el("div", "rem-row");
     row.setAttribute("data-rem-id", job.id);
     row.setAttribute("data-rem-kind", job.kind);
+    if (Number.isInteger(job.rank)) row.setAttribute("data-rem-rank", String(job.rank));
     row.append(el("p", "rem-title", rowTitle(job)));
     var meta = rowMeta(job);
     if (meta) row.append(el("p", "rem-meta", meta));
+    var controls = controlsOf(job, groupJobs);
+    if (controls) row.append(controls);
     var acts = actionsFor(job, wentOff);
     if (acts.length) {
       var bar = el("div", "rem-actions");
@@ -5554,7 +5925,7 @@ var laneSelect = $("lane-compact");
     if (!jobs.length) return null;
     var box = el("div", "rem-group");
     box.append(el("h3", "", title));
-    jobs.forEach(function (j) { box.append(rowOf(j, wentOff)); });
+    jobs.forEach(function (j) { box.append(rowOf(j, wentOff, jobs)); });
     return box;
   }
   function paint() {
@@ -5570,7 +5941,10 @@ var laneSelect = $("lane-compact");
             "Times, kinds and counts still show.")
       : "";
     if (hiddenNote) { note.textContent = hiddenNote; note.hidden = false; }
-    else { note.hidden = true; note.textContent = ""; }
+    else if (!(askedAt && Date.now() - askedAt < 60000)) {
+      note.hidden = true;
+      note.textContent = "";
+    }
     if (!view.available) {
       body.append(el("p", "rem-empty", view.why));
       return;
@@ -5803,6 +6177,18 @@ window.paintLaneWarning = paintLaneWarning;
  * HUD's action buttons and the Brain's Coming up both read this same table. */
 import { actionsFor as hudActionsFor } from "./hud-actions.js";
 window.__hudActionsFor = hudActionsFor;
+import {
+  EDIT_LABEL, SAVE_LABEL, CANCEL_LABEL, MOVE_TO_TODO_LABEL, UP_LABEL, DOWN_LABEL,
+  ASKED_REPEAT_WORDS, REPEAT_CARD_WORDS, NOTHING_CHANGED_WORDS, TIMER_MINUTES_HINT,
+} from "./hud-actions.js";
+/* Phase 2 (2026-10-22): the Reminders row editor's words, one spelling with the
+ * Brain's Coming up and the contract. The page's own fallback is below the
+ * inline IIFE, for a page with no module graph. */
+window.__hudPhase2Words = {
+  EDIT_LABEL, SAVE_LABEL, CANCEL_LABEL, MOVE_TO_TODO_LABEL, UP_LABEL, DOWN_LABEL,
+  ASKED_REPEAT_WORDS, REPEAT_CARD_WORDS, NOTHING_CHANGED_WORDS, TIMER_MINUTES_HINT,
+};
+if (typeof window.__hudRemindersRefresh === "function") window.__hudRemindersRefresh();
 
 /* H4 (2026-10-22): the safety rail is an EXTERNAL module, so the page keeps
  * its inline-script count (tests/csp-inline.mjs pins it) and the CSP is

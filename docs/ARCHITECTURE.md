@@ -3053,6 +3053,17 @@ script or CSP change; the phone's own stale-approval and App-lock rules are
 unchanged (this rail is the HUD window's face of facts the phone already shows
 in its own surfaces).
 
+**Reminders Phase 2 editing is on the desktop first, and that is one-sided on
+purpose for now** (2026-10-22, backend #730). The PC's backend already offers
+`edit`/`move`/`reorder` to every client, and the HUD's Reminders panel and the
+Brain's Coming up draw them; the phone's Coming up stays a read surface, because
+a phone-side row editor is its own slice (a small screen, a keyboard-free
+picker, and the phone's own stale-link/App-lock handling), and building it
+half-tested in this one would be worse than saying so. Nothing is faked on the
+phone: it calls none of the three verbs, so `tools/check_parity.py` sees no
+drift. The verbs are ready for it, and JARVIS-API section 21 documents the
+shapes it will use.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

@@ -204,6 +204,16 @@ async function openHud(browser, status, pageOptions = {}) {
             if (cmd === "hud_schedule_act") {
               body = { id: args.id, do: args.action };
               if (typeof args.seconds === "number") body.seconds = args.seconds;
+              // Phase 2 (2026-10-22): the same verb choice `change_body` makes in
+              // Rust - a list-only edit is the backend's move - and the same fields.
+              if (args.change && typeof args.change === "object") {
+                const keys = Object.keys(args.change);
+                body = { id: args.id, do: args.action };
+                if (args.action === "edit" && keys.length === 1 && keys[0] === "list") {
+                  body.do = "move";
+                }
+                for (const key of keys) body[key] = args.change[key];
+              }
             }
             const r = await origFetch(backend + path, { method: "POST",
               headers: { ...shellHeaders, "Content-Type": "application/json" },
@@ -325,6 +335,12 @@ async function openHud(browser, status, pageOptions = {}) {
         // body the page asked for is the body the backend takes.
         scheduleWrites.push({ wrote: url.pathname,
                               body: JSON.parse(req.postData() || "{}") });
+        // Review 737 #3: a scenario can make the PC REFUSE the change, to
+        // prove the editor and the typed words survive it.
+        if (status.scheduleActRefuse) {
+          return route.fulfill({ status: 409, headers: cors,
+            json: { ok: false, error: status.scheduleActRefuse } });
+        }
         return route.fulfill({ status: 200, headers: cors, json:
           url.pathname === "/api/schedule/add"
             ? (status.scheduleAddReply || { ok: true, said: "Reminder set for tomorrow at 18:00." })
@@ -2879,9 +2895,9 @@ const remindersPanel = (page) => page.evaluate(() => {
   };
 });
 
-const openReminders = async (schedule) => {
+const openReminders = async (schedule, extra = {}) => {
   const opened = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
-    schedule });
+    schedule, ...extra });
   await setHudLook(opened.page, "studio");
   await opened.page.waitForTimeout(150);
   await opened.page.evaluate((n) => document.querySelector(
@@ -4255,6 +4271,184 @@ await check("H4: geometry at 900x600, DPR 1.5 and reduced motion; Deny stays cli
   assert.equal(motion[2], "none");
   assert.equal(motion[3], "0s");
   assert.equal(await page.locator("#hud-safety").isVisible(), true);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+/* =========================================================================
+ * REMINDERS PHASE 2 (2026-10-22, backend #730): Edit, move by list and the
+ * keyboard reorder. Drawn only when the PC's own read says `phase2: true`;
+ * ONE change at a time; a repeat edit is the ONE 202 card and says so.
+ * ========================================================================= */
+
+const PHASE2_SCHEDULE = {
+  available: true, phase2: true, now: 1000, tz: "UTC",
+  jobs: [
+    { id: "s0123456789", kind: "reminder", text: "Call Mum", state: "active",
+      due: 4102444800, when: "tomorrow at 18:00", repeats: false },
+    { id: "s012345678a", kind: "timer", text: "Tea", state: "active",
+      left: 300, duration: 300, when: "in 5 minutes" },
+    { id: "s012345678b", kind: "alarm", text: "Wake", state: "active", repeats: true,
+      rule: { every: "weekday", at: "07:00" }, repeat: "every weekday at 07:00",
+      when: "tomorrow at 07:00" },
+    { id: "s012345678e", kind: "reminder", text: "Water plants", state: "active",
+      repeats: true, rule: { every: "week", at: "09:00", days: [0, 2, 4, 5, 6] },
+      repeat: "every week on Mon, Wed, Fri, Sat, Sun at 09:00",
+      when: "tomorrow at 09:00" },
+  ],
+  todo: [
+    { id: "s012345678c", kind: "todo", text: "Buy milk", state: "active", list: "", rank: 0 },
+    { id: "s012345678d", kind: "todo", text: "Eggs", state: "active", list: "", rank: 1 },
+  ],
+  went_off: [], lists: [{ name: "shopping", title: "Shopping list", open: 1 }],
+};
+
+const phase2Page = async (schedule = PHASE2_SCHEDULE, extra = {}) =>
+  openReminders(schedule, extra);
+
+const rowOf = (page, id) => page.locator(`#reminders-body [data-rem-id="${id}"]`);
+
+await check("Phase 2: the PC's marker gates every control; older backend and hidden words draw none", async () => {
+  const old = await openReminders(REMINDERS_SCHEDULE);
+  assert.equal(await old.page.locator("#reminders-body [data-rem-control]").count(), 0,
+    "a backend without the phase2 marker got an edit control");
+  await old.page.close();
+  const hidden = await phase2Page({ ...PHASE2_SCHEDULE, hidden: true, hidden_count: 2 });
+  assert.equal(await hidden.page.locator("#reminders-body [data-rem-control]").count(), 0,
+    "App lock / hidden lists still offered Edit");
+  await hidden.page.close();
+  const p2 = await phase2Page();
+  assert.equal(await p2.page.locator('#reminders-body [data-rem-control="edit"]').count(), 6,
+    "each editable row draws one Edit");
+  assert.equal(await rowOf(p2.page, "s012345678c").locator('[data-rem-control="up"]').isDisabled(), true);
+  assert.equal(await rowOf(p2.page, "s012345678d").locator('[data-rem-control="down"]').isDisabled(), true);
+  assert.deepEqual(p2.problems, []);
+  await p2.page.close();
+});
+
+await check("Phase 2: edit the words, the timer's minutes and a one-off's date/time, cardless", async () => {
+  const { page, problems, scheduleWrites } = await phase2Page();
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="text"]', "Call Mum tonight");
+  await page.click('[data-rem-editing="s0123456789"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  let acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts, [{ id: "s0123456789", do: "edit", text: "Call Mum tonight" }]);
+
+  await rowOf(page, "s012345678a").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s012345678a"] [data-rem-field="minutes"]', "10");
+  await page.click('[data-rem-editing="s012345678a"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts[1], { id: "s012345678a", do: "edit", seconds: 600 });
+
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="date"]', "2030-09-15");
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="time"]', "18:00");
+  await page.click('[data-rem-editing="s0123456789"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts[2], { id: "s0123456789", do: "edit", date: "2030-09-15", time: "18:00" });
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+await check("Phase 2: a repeat edit is ONE 202 card - the asking sentence, the old rule shown", async () => {
+  const { page, scheduleWrites } = await phase2Page(PHASE2_SCHEDULE,
+    { scheduleActReply: { ok: true, waiting: true, job: PHASE2_SCHEDULE.jobs[2] } });
+  await rowOf(page, "s012345678b").locator('[data-rem-control="edit"]').click();
+  assert.equal(await page.locator('[data-rem-editing="s012345678b"] [data-rem-field="date"]').count(), 0,
+    "a repeating job's editor offered a Date (the PC refuses that)");
+  await page.fill('[data-rem-editing="s012345678b"] [data-rem-field="time"]', "08:00");
+  await page.click('[data-rem-editing="s012345678b"] button[type="submit"]');
+  await page.waitForTimeout(400);
+  const body = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body)[0];
+  assert.deepEqual(body, { id: "s012345678b", do: "edit",
+    repeat: { every: "weekday", at: "08:00" } });
+  assert.match(await page.locator("#rem-note").innerText(),
+    /Asked the PC\. Nothing changes until you answer the card\./);
+  // Nothing was claimed: the row still shows the OLD repeating rule.
+  assert.match(await rowOf(page, "s012345678b").innerText(), /every weekday at 07:00/);
+  await page.close();
+});
+
+await check("Phase 2: a list-only save is the backend's move; a reorder sends the PC's rank", async () => {
+  const { page, scheduleWrites } = await phase2Page();
+  await rowOf(page, "s012345678c").locator('[data-rem-control="edit"]').click();
+  await page.selectOption('[data-rem-editing="s012345678c"] [data-rem-field="list"]', "shopping");
+  await page.click('[data-rem-editing="s012345678c"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  let acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts[0], { id: "s012345678c", do: "move", list: "shopping" });
+
+  await rowOf(page, "s012345678d").locator('[data-rem-control="up"]').click();
+  await page.waitForTimeout(300);
+  acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts[1], { id: "s012345678d", do: "reorder", rank: 0 });
+  await page.close();
+});
+
+await check("Phase 2: Escape cancels an edit with no request; nothing changed sends none", async () => {
+  const { page, scheduleWrites } = await phase2Page();
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="text"]', "Something else");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('[data-rem-editing="s0123456789"]').count(), 0,
+    "Escape did not close the editor");
+  assert.deepEqual(scheduleWrites, [], "a cancelled edit sent a write");
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.click('[data-rem-editing="s0123456789"] button[type="submit"]');
+  await page.waitForTimeout(200);
+  assert.deepEqual(scheduleWrites, [], "an unchanged save sent a write");
+  await page.close();
+});
+
+
+/* =========================================================================
+ * #737 review fixes: the owner's own custom days, a refused save keeping the
+ * editor, and no unnecessary field churn.
+ * ========================================================================= */
+
+await check("#737: a week rule's own days are shown and saved unchanged (never Mon-Fri)", async () => {
+  const { page, problems, scheduleWrites } = await phase2Page();
+  await rowOf(page, "s012345678e").locator('[data-rem-control="edit"]').click();
+  const state = await page.evaluate(() => {
+    const form = document.querySelector('[data-rem-editing="s012345678e"]');
+    return {
+      repeat: form.querySelector('[data-rem-field="repeat"]').value,
+      days: [...form.querySelectorAll('[data-rem-field="days"] input:checked')].map((c) => c.value),
+    };
+  });
+  assert.equal(state.repeat, "custom", "a week rule was shown as something other than Custom days");
+  assert.deepEqual(state.days, ["0", "2", "4", "5", "6"],
+    "the owner's own days were not pre-selected");
+  await page.fill('[data-rem-editing="s012345678e"] [data-rem-field="time"]', "09:30");
+  await page.click('[data-rem-editing="s012345678e"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  const body = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body)[0];
+  assert.deepEqual(body, { id: "s012345678e", do: "edit",
+    repeat: { every: "week", at: "09:30", days: [0, 2, 4, 5, 6] } },
+  "the save rewrote the owner's days");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("#737: a refused save keeps the editor and the owner's typed words", async () => {
+  const { page, problems, scheduleWrites } = await phase2Page(PHASE2_SCHEDULE,
+    { scheduleActRefuse: "That is changed where it was set up." });
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="text"]', "The words I typed");
+  await page.click('[data-rem-editing="s0123456789"] button[type="submit"]');
+  await page.waitForTimeout(400);
+  assert.match(await page.locator("#rem-error").innerText(),
+    /That is changed where it was set up\./);
+  assert.equal(await page.locator('[data-rem-editing="s0123456789"]').count(), 1,
+    "a refused save destroyed the editor");
+  assert.equal(await page.inputValue('[data-rem-editing="s0123456789"] [data-rem-field="text"]'),
+    "The words I typed", "a refused save threw the typed words away");
+  assert.equal(scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").length, 1,
+    "a refused save sent more than the one request");
   await page.close();
   assert.deepEqual(problems, []);
 });
