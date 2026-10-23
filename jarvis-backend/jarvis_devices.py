@@ -19,7 +19,10 @@ listed in both apps with its own Remove.
 WHAT THIS MODULE DOES
   1. Checks every request's key (`wrap_token_ok`, design 5.2). A device key
      (`jdk1.<id>.<secret>`) is checked against the registry here and NEVER
-     falls through to the old check. Anything else goes to the owner's own
+     falls through to the old check. It is accepted in the same three ways
+     the HUD's own token is - X-Jarvis-Token, the `jarvis_token` cookie and
+     the one-time ?token= bootstrap (2026-10-23, the PWA slice: a browser's
+     EventSource cannot set a header). Anything else goes to the owner's own
      `_token_ok`, unchanged - today's rule - and is then refused from any
      device but this PC once the old shared key has been retired OR once a
      device holds a key of its own (`_first_pairing`). This PC always keeps
@@ -37,6 +40,16 @@ WHAT THIS MODULE DOES
      refuses to write once that device is removed.
   5. The old shared key's Retire (immediate) and Bring back (a card,
      `unretire_shared_key`, PC only, Windows Hello; refused under Lockdown).
+  6. The browser session (2026-10-23): `POST /api/devices/web-session`
+     exchanges a device key for the HttpOnly `jarvis_token` cookie, so a web
+     app's `/api/events` EventSource can authenticate without a header;
+     `POST /api/devices/web-logout` clears it. The cookie carries the key,
+     every request re-checks its hash, and Remove cuts it off at once.
+  7. A browser cannot run the phone's QR pairing exchange, so the PC mints
+     its key: `python jarvis_devices.py --add-device "iPad Safari" --kind
+     tablet` prints it ONCE and stores only its SHA-256 (no route - a
+     terminal on this PC is the only way, so no second remote way to make a
+     credential exists; the pairing card still gates remote devices).
 
 THE OLD SHARED KEY IS A BOOTSTRAP, NOT A FALLBACK (2026-10-05)
 
@@ -154,6 +167,19 @@ TRIES = 3
 #: last_seen (and the shared key's last use from another device) is written
 #: at most this often per device - not on every request.
 SEEN_EVERY = 60
+
+#: The browser session's cookie: the SAME name the HUD itself plants when
+#: `GET /?token=` exchanges the shared key for a cookie, so
+#: `jarvis_owner_check.token_ok` already reads it and neither that module nor
+#: the HUD needs a new cookie name. It is HttpOnly and SameSite=Strict, and a
+#: browser sends it with the EventSource request, which cannot carry a header
+#: (2026-10-23, the PWA slice - docs/JARVIS-API.md section 90).
+WEB_COOKIE = "jarvis_token"
+#: A browser session lasts this long, then the web app pairs again with the
+#: key it already holds. Removing the device cuts the cookie off at once:
+#: every request re-checks the key's hash against the live registry, so the
+#: cookie is a way to PRESENT the key, never a second credential.
+WEB_SESSION_MAX_AGE = 30 * 24 * 60 * 60
 
 QR_SCHEME = "jarvis-pair:"
 QR_VERSION = "1"
@@ -1263,6 +1289,40 @@ def _header_key(handler) -> str:
         return ""
 
 
+def _presented_key(handler) -> str:
+    """The key this request presents, in the three ways the HUD's own token
+    is accepted: `X-Jarvis-Token`, the `jarvis_token` cookie, and the
+    one-time `?token=` bootstrap.
+
+    The cookie and the query are what make a BROWSER work (2026-10-23, the
+    PWA slice): an EventSource cannot set a request header, and a web app's
+    pairing key is a device key. Before this, only the header was checked for
+    a device key, so a browser holding one could not open /api/events at all
+    and the stream stayed stale. The header always wins, so a request that
+    sets several is decided by the header's key and a cookie can never
+    upgrade a bad header.
+    """
+    header = _header_key(handler)
+    if header:
+        return header
+    try:
+        raw = str(handler.headers.get("Cookie") or "")
+    except Exception:
+        raw = ""
+    for part in raw.split(";"):
+        name, _, value = part.strip().partition("=")
+        if name.strip() == WEB_COOKIE:
+            value = value.strip().strip('"')
+            if value:
+                return value
+    try:
+        from urllib.parse import parse_qs
+        query = parse_qs(urlsplit(str(getattr(handler, "path", "") or "")).query)
+        return str((query.get("token") or [""])[0]).strip()
+    except Exception:
+        return ""
+
+
 def wrap_token_ok(original: Callable) -> Callable:
     """The owner's `_token_ok(handler)`, with device keys and Retire added
     (design 5.2). Idempotent. Never raises: a device key that cannot be
@@ -1272,7 +1332,7 @@ def wrap_token_ok(original: Callable) -> Callable:
         return original
 
     def token_ok(handler):
-        key = _header_key(handler)
+        key = _presented_key(handler)
         if key.startswith(KEY_PREFIX):
             try:
                 device_id, why = check_device_key(key)
@@ -2510,12 +2570,17 @@ def check_signed_approval(body, row: dict, device_id: str) -> Optional[tuple]:
 # The routes - wrapped round the handler, like jarvis_owner_check.install()
 # ---------------------------------------------------------------------------
 
+WEB_SESSION_ROUTE = "/api/devices/web-session"
+WEB_LOGOUT_ROUTE = "/api/devices/web-logout"
+
 GET_ROUTES = ("/api/pair/session", "/api/devices")
 POST_ROUTES = ("/api/pair/start", "/api/pair/cancel", "/api/pair/claim", "/api/pair/collect",
                "/api/devices/remove", "/api/devices/label", "/api/devices/shared",
-               "/api/devices/approval-key", "/api/approve/challenge")
-#: The only routes in Jarvis that take no key: the phone has none yet.
-KEYLESS = ("/api/pair/claim", "/api/pair/collect")
+               "/api/devices/approval-key", "/api/approve/challenge",
+               WEB_SESSION_ROUTE, WEB_LOGOUT_ROUTE)
+#: The only routes in Jarvis that take no key: the phone has none yet, and
+#: clearing your own browser cookie must work even after the key was revoked.
+KEYLESS = ("/api/pair/claim", "/api/pair/collect", WEB_LOGOUT_ROUTE)
 
 _ARMED = False
 
@@ -2543,6 +2608,100 @@ def _own_port(handler) -> Optional[int]:
         return int(getattr(main, "HUD_PORT"))
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# The browser session (2026-10-23, the PWA slice)
+# ---------------------------------------------------------------------------
+#
+# A browser is the one client that cannot always send X-Jarvis-Token: its
+# EventSource API has no way to set a header. The HUD's own token has three
+# ways in (header, `jarvis_token` cookie, one-time ?token=), and the HUD page
+# already puts its token in the event stream's query string; a web app's
+# pairing key is a DEVICE key, and until now `wrap_token_ok` looked only at
+# the header for those. These two routes finish the same shape for a device:
+# exchange the key (sent as a header by a normal fetch) for the HttpOnly
+# cookie the browser sends by itself from then on, and clear it again.
+
+
+def _is_https(handler) -> bool:
+    """True only when the request arrived over TLS (the optional local
+    certificate). A plain-http request must NOT get a `Secure` cookie: the
+    browser would refuse to send it and the session would look broken."""
+    try:
+        import ssl
+        return isinstance(getattr(handler, "connection", None), ssl.SSLSocket)
+    except Exception:
+        return False
+
+
+def session_cookie(key: str, *, max_age: int = WEB_SESSION_MAX_AGE,
+                   secure: bool = False) -> str:
+    """The `Set-Cookie` value for a browser session. `max_age=0` clears it.
+
+    HttpOnly: a page's script cannot read it. SameSite=Strict: a cross-site
+    request never carries it, so the CSRF property the Origin check gives us
+    is kept. Secure only over TLS. The value is the device key itself - the
+    registry keeps only its SHA-256, and every request re-checks it, so a
+    cookie is another way to PRESENT the key, never a second credential.
+    """
+    parts = [f"{WEB_COOKIE}={key}", "Path=/", "HttpOnly", "SameSite=Strict",
+             f"Max-Age={int(max_age)}"]
+    if secure:
+        parts.append("Secure")
+    return "; ".join(parts)
+
+
+def web_session(*, you: str, peer, local=None, key: str = "",
+                secure: bool = False) -> tuple:
+    """POST /api/devices/web-session - exchange the key a fetch can send for
+    the cookie a browser's EventSource can send by itself.
+
+    `you` is who the already-checked key said it was ("pc", "shared" or a
+    device id). Returns (status, body, extra_headers), like every other
+    route here except that this one also writes a header.
+
+    Only from this PC or from a device on Tailscale/Meshnet: a browser
+    session is for the owner's own devices, and the private network is how
+    they reach this PC (no public tunnel, CLAUDE.md rule 2). The key was
+    already checked by `_allowed`; this refuses a peer that could not use a
+    session anyway, and names the device so the web app can show it.
+    """
+    here = from_this_pc(peer, local)
+    if not here and mesh_peer(peer, local) != "mesh":
+        return 403, {"ok": False, "reason": "off_network",
+                     "error": ("A browser session can only be opened from this PC "
+                               "or from another device on Tailscale or Meshnet.")}, []
+    doc, why = load()
+    if why:
+        return 503, {"ok": False, "error": DEVICES_WORDS["registry_unreadable"]}, []
+    if you in ("pc", "shared"):
+        device_id = you
+        name = "This PC" if you == "pc" else "Shared key"
+        kind = "pc" if you == "pc" else "phone"
+    else:
+        row = _live_row(doc, you)
+        if row is None:
+            return 401, {"ok": False, "reason": "device_removed",
+                         "error": "This device is no longer paired."}, []
+        device_id, name = row["id"], row_shown(row)
+        kind = row.get("kind") or "phone"
+    if not key:
+        return 401, {"ok": False, "error": "bad or missing X-Jarvis-Token"}, []
+    return 200, {"ok": True, "device_id": device_id, "device_name": name,
+                 "kind": kind, "from_this_pc": here}, [
+        ("Set-Cookie", session_cookie(key, secure=secure))]
+
+
+def web_logout(*, secure: bool = False) -> tuple:
+    """POST /api/devices/web-logout - clear the browser session cookie.
+
+    Keyless on purpose: clearing your own cookie must work after the device
+    was revoked, when the key is refused. It revokes nothing - Remove is the
+    route that cuts a device off (immediately, and it stays cut off).
+    """
+    return 200, {"ok": True}, [
+        ("Set-Cookie", session_cookie("", max_age=0, secure=secure))]
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
@@ -2602,6 +2761,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             return None
         peer, local = _peer_local(self)
         body = _body(self)
+        extra = None
         try:
             if route == "/api/pair/claim":
                 code, out = claim(body, peer=peer, local=local)
@@ -2625,10 +2785,18 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                         self._jarvis_guard_device = None
                 elif route == "/api/devices/label":
                     code, out = label(body, you=you)
+                elif route == WEB_SESSION_ROUTE:
+                    code, out, extra = web_session(
+                        you=you, peer=peer, local=local,
+                        key=_presented_key(self), secure=_is_https(self))
+                elif route == WEB_LOGOUT_ROUTE:
+                    code, out, extra = web_logout(secure=_is_https(self))
                 else:
                     code, out = shared(body, you=you, here=here)
         except Exception as exc:
             code, out = 503, {"ok": False, "error": type(exc).__name__}
+        if extra:
+            return self._send(code, out, extra_headers=extra)
         return self._send(code, out)
 
     do_GET._jarvis_devices = True
@@ -2649,14 +2817,102 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     return f"  devices    {n} paired device(s), pairing by QR code on{retired}"
 
 
-if __name__ == "__main__":
-    if "--start-fresh" in sys.argv:
+# ---------------------------------------------------------------------------
+# Minting a key at the PC (2026-10-23, the PWA slice)
+# ---------------------------------------------------------------------------
+#
+# The phone pairs by scanning the PC's QR code and proving it holds the
+# session secret, an HMAC exchange between two programs. A BROWSER cannot run
+# that exchange, and a browser holding only the old shared token stops
+# working once any device has a key of its own (the first-pairing rule
+# above). So the owner mints the browser's key HERE, at the PC, and carries
+# it to the browser once - the web app pastes it into its pairing sheet and
+# exchanges it for the `jarvis_token` cookie (web_session above).
+#
+# This command opens NO network surface: a route for it would be a second,
+# remote way to create credentials, which is exactly what the pair_device
+# card exists to gate. A terminal on this PC is already full control of
+# Jarvis (the owner can run --start-fresh, which rewrites the registry
+# wholesale), so no card is raised; the key is printed ONCE to the terminal
+# that asked for it, never written to a file, and only its SHA-256 reaches
+# the registry. Say it back to the owner in those terms in the CLI.
+
+MINT_WORDS = {
+    "bad_name": ("A device name is 1-40 characters: letters and digits of any "
+                 "script, space, and - _ . ' ( ) only. Nothing was added."),
+    "bad_kind": ('A browser device can say it is a "phone", a "laptop" or a '
+                 '"tablet". Nothing was added.'),
+}
+
+
+def mint_browser_key(name: str, kind: str = "tablet") -> tuple:
+    """Create a named device row for a browser/PWA; returns (device id, key).
+
+    `kind` is display only, one of DEVICE_KINDS - a browser on a tablet is a
+    tablet; "pc" is this PC and is not mintable. Raises ValueError with the
+    owner's sentence when the name or kind is refused, and nothing is written
+    in that case. Call this only from the PC (the CLI below): it makes a
+    credential without the pairing card, which is right for the owner at
+    this PC's own terminal and would not be right over the network.
+    """
+    if not name_ok(name):
+        raise ValueError(MINT_WORDS["bad_name"])
+    if not kind_ok(kind):
+        raise ValueError(MINT_WORDS["bad_kind"])
+    device_id, token = _mint(name, kind)
+    _audit("devices.minted", {"id": device_id})
+    _publish("devices", {})
+    return device_id, token
+
+
+def _cli_mint(argv) -> int:
+    """`--add-device NAME [--kind KIND]`: the one-time reveal, on this PC."""
+    import argparse
+    parser = argparse.ArgumentParser(
+        prog="jarvis_devices.py", add_help=False,
+        description="Create a device key for a browser/PWA on this PC.")
+    parser.add_argument("--add-device", metavar="NAME", required=True)
+    parser.add_argument("--kind", default="tablet", choices=DEVICE_KINDS)
+    try:
+        args = parser.parse_args(list(argv))
+    except SystemExit:
+        # argparse already said what was wrong, in its own words.
+        return 2
+    try:
+        device_id, token = mint_browser_key(args.add_device, args.kind)
+    except ValueError as exc:
+        print("  devices    " + str(exc))
+        return 2
+    except Exception as exc:
+        print(f"  devices    the device list could not be written "
+              f"({type(exc).__name__}). Nothing was added.")
+        return 1
+    print(f"  device     {args.add_device} ({args.kind}) is now device {device_id}")
+    print(f"  key        {token}")
+    print("             Shown ONCE. Paste it into the browser's pairing sheet on")
+    print("             that device. Only its SHA-256 is saved on this PC, so it")
+    print("             cannot be shown again - mint another device and Remove")
+    print("             this one to replace it.")
+    print("  next       Open this PC's mesh address in that browser (or its mesh")
+    print("             name); the web app exchanges the key for its own cookie.")
+    print("  remove     Settings, Devices removes it, and that cuts it off at")
+    print("             once.")
+    return 0
+
+
+def main(argv=None) -> int:
+    """The module's command line: what is paired, --start-fresh, or
+    --add-device. `argv` lets the suite run the real entry point in-process."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--start-fresh" in argv:
         print("  " + start_fresh())
-        sys.exit(0)
+        return 0
+    if "--add-device" in argv:
+        return _cli_mint(argv)
     doc, why = load()
     if why:
         print(f"  devices    {DEVICES_WORDS['registry_unreadable']}")
-        sys.exit(1)
+        return 1
     live = [r for r in doc["devices"] if not r.get("removed") and r.get("token_sha256")]
     print(f"  devices    {len(live)} paired")
     for r in live:
@@ -2666,3 +2922,8 @@ if __name__ == "__main__":
         print(f"             {r['id']}  {row_shown(r)}")
     print(f"  shared key {'retired (this PC only)' if doc['shared']['retired'] else 'works'}"
           f"{'' if _first_pairing(doc) else ' - from this PC only now: the first device has its own key'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
