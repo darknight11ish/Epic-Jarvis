@@ -1484,6 +1484,30 @@
           </span>
         </label>
 
+        <!-- ── Chat history on this PC (2026-10-22, task-79 + #734's typed
+             chat_history/chat_keep_days). Owner requirement: findable AND
+             adjustable in Settings. chat-history-settings.js draws the switch and
+             the retention choice from the PC's own status, through the SAME route
+             the typed setting and the Brain's History switch use
+             (/api/history/settings, one field per request): ON raises ONE
+             `history_enable` card and answers "waiting"; OFF is immediate; the
+             retention choice deletes older conversations at once, so it asks here
+             first and is held on a stale link. The page never sees a conversation -
+             the Rust command drops the list and returns only the status fields. -->
+        <h3 class="subhead" id="ch-title">Chat history on this PC</h3>
+        <p class="state" id="ch-state" role="status">Asking Jarvis…</p>
+        <div id="ch-body" hidden>
+          <button class="btn" id="ch-switch" type="button">Turn chat history on</button>
+          <div class="field">
+            <label class="label" for="ch-keep">How long my chats are kept</label>
+            <select id="ch-keep"></select>
+          </div>
+          <p class="note" id="ch-line"></p>
+          <p class="note" id="ch-note"></p>
+          <p class="note" id="ch-link-note" hidden></p>
+          <span class="status" id="ch-status" role="status"></span>
+        </div>
+
         <span class="status" id="sec-status" role="status"></span>
       </section>
 
@@ -2183,6 +2207,32 @@
             <span class="status" id="bm-status" role="status"></span>
           </div>
 
+          <!-- The big coding model (30B coder) - 2026-10-22, task-79: the
+               owner's requirement that every feature be findable AND adjustable
+               in Settings, not only by typing. big-coder-settings.js draws the
+               switch from the PC's own route (/api/big-coder through the
+               big_coder command); ON is ONE approval card, OFF is immediate,
+               and starting the model is deliberately NOT offered here - it
+               pauses Jarvis's own lanes and is the model's separate call. -->
+          <h3 class="subhead">The big coding model (30B coder)</h3>
+          <p class="note">
+            A big coding model that needs both graphics cards at once, so
+            Jarvis pauses its own models while it works. Off until you turn it
+            on here; turning it on shows you one approval card first, and
+            turning it off happens at once. It never starts on its own, and
+            nothing here sends anything off this computer.
+          </p>
+          <p class="state" id="bc-state" role="status">Asking Jarvis…</p>
+          <div id="bc-body" hidden>
+            <button class="btn" id="bc-switch" type="button">Turn the big coding model on</button>
+            <p class="note" id="bc-link-note" hidden></p>
+            <p class="sc-line" id="bc-line" role="status"></p>
+            <p class="sc-line" id="bc-running" role="status" hidden></p>
+            <div class="row">
+              <span class="status" id="bc-status" role="status"></span>
+            </div>
+          </div>
+
           <h3 class="subhead">The engine (colibri)</h3>
           <p class="note">
             colibri only runs while a job needs it. It listens on this
@@ -2381,8 +2431,13 @@
            field here, and none can be added. The PC gives every word. -->
       <section class="card" id="browser-engine">
         <h2 id="be-title">Browser without a window (Obscura)</h2>
+        <!-- The PC replaces the title above with its own words at read time, so
+             the feature's ordinary name for Settings search lives HERE, in
+             static words a search can always read. -->
+        <p class="note">A headless browser: pages read by Jarvis with no window
+          open, so nothing pops up in front of you.</p>
         <div id="be-body" hidden>
-          <p class="note" id="be-subtitle">a browser Jarvis uses without opening a window</p>
+          <p class="note" id="be-subtitle">a headless browser - a browser Jarvis uses without opening a window</p>
           <p class="note" id="be-detail"></p>
           <label class="toggle">
             <input id="be-switch" type="checkbox" />
@@ -2930,6 +2985,7 @@
       <section class="card" id="asks-first">
         <h2>What asks first</h2>
         <p class="note">Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. "Ask me first" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.</p>
+        <p class="note" id="af-search-words">On this page: lights without asking, enabling tools, and the short lists above.</p>
         <p class="state" id="af-state" role="status">Asking Jarvis…</p>
         <div id="af-body" hidden>
           <div class="af-lockdown" id="af-lockdown" role="group" aria-label="Lockdown" hidden></div>
@@ -3046,8 +3102,9 @@
       <section class="card" id="media-index">
         <h2 id="mi-title">Searchable recordings and videos</h2>
         <p class="note" id="mi-disclosure">
-          Jarvis can keep the words it reads from recordings and videos in your
-          listed folders, so it can search them. The words are stored as
+          Also called the media index: Jarvis can keep the words it reads
+          from recordings and videos in your listed folders, so it can search
+          them. The words are stored as
           readable text on this PC — including other people's voices and
           anything read aloud — until you delete them. It never copies the
           audio or video, never learns the words as a fact, and only looks
@@ -3231,6 +3288,8 @@
 <script type="module" src="pictures-settings.js"></script>
     <script type="module" src="sandbox-settings.js"></script>
     <script type="module" src="media-index-settings.js"></script>
+<script type="module" src="big-coder-settings.js"></script>
+<script type="module" src="chat-history-settings.js"></script>
     <script type="module" src="setup-settings.js"></script>
   </body>
 </html>

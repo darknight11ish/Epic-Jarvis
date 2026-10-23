@@ -607,7 +607,7 @@ export const UPDATE_BOTH = {
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
-  altSpace, reclaimAltSpace,
+  altSpace, reclaimAltSpace, bigCoder, chatHistory,
   tutorials, faq, hudLayout }) {
   const listeners = {};
   window.__calls = [];
@@ -922,6 +922,72 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__memoryWrites.push({ cmd, ...args });
             return { ok: true };
           case "get_hotkeys": return window.__hotkeys;
+    // Task-79: chat history's switch and retention. `read` answers the current
+    // status (or the next item of a scenario's `reads` list, so the ON card's
+    // "waiting" state can be tested); a change records the call and updates the
+    // status like the PC's own route.
+    case "history_settings": {
+      const action = String((args && args.action) || "read");
+      window.__historyCalls.push({ action, keepDays: args && args.keepDays });
+      if (action === "read") {
+        window.__historyReads.push(1);
+        const reads = window.__historySettings.reads;
+        let out;
+        if (Array.isArray(reads) && reads.length) {
+          out = reads.length > 1 ? reads.shift() : reads[0];
+        } else {
+          out = window.__historySettings;
+        }
+        return JSON.parse(JSON.stringify(out));
+      }
+      if (action === "on") {
+        window.__historySettings = { ...window.__historySettings, enabled: true,
+          waiting: true, message: "Waiting for your approval card in the Jarvis bar." };
+        return JSON.parse(JSON.stringify(window.__historySettings));
+      }
+      if (action === "off") {
+        window.__historySettings = { ...window.__historySettings, enabled: false,
+          waiting: false, message: "Chat history is off. Nothing new is kept." };
+        return JSON.parse(JSON.stringify(window.__historySettings));
+      }
+      {
+        // A scenario can make the PC's synchronous deletion slow
+        // (`history.keepDelayMs`), so the page's patience can be tested: the
+        // real change runs the PC's housekeeping inside the same request.
+        const delay = Number(window.__historySettings.keepDelayMs || 0);
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+      window.__historySettings = { ...window.__historySettings,
+        keep_days: Number(args && args.keepDays),
+        message: `Conversations are now kept for ${args && args.keepDays} days.` };
+      return JSON.parse(JSON.stringify(window.__historySettings));
+    }
+    // Task-79: the big coding model's switch. `read` answers the scenario's
+    // status; `on`/`off` behave like the PC's route (ON is one card, OFF is
+    // immediate) and record every call so a test can prove the page used the
+    // one existing command.
+    case "big_coder": {
+      const action = String((args && args.action) || "read");
+      window.__bigCoderCalls.push(action);
+      if (action === "read") {
+        return JSON.parse(JSON.stringify(window.__bigCoder ||
+          { on: false, running: false, message: "" }));
+      }
+      const before = window.__bigCoder ||
+        { on: false, running: false, message: "" };
+      if (action === "on") {
+        window.__bigCoder = { ...before, on: true, changed: true,
+          message: before.onMessage ||
+            "The big coding model is on. It starts only when you ask Jarvis for a code job." };
+      } else {
+        window.__bigCoder = { ...before, on: false, running: false,
+          changed: true, message: before.offMessage ||
+            "The big coding model is off. It will not be started." };
+      }
+      return JSON.parse(JSON.stringify(window.__bigCoder));
+    }
     // R6: the honest Alt+Space state and the one-click re-claim; mirrors
     // hotkeys.rs's `alt_space_status` / `reclaim_alt_space`.
     case "alt_space_status":
@@ -3461,6 +3527,16 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // R6 (2026-10-21): the Alt+Space startup verdict the Settings page
   // reads, and what a scenario wants the Re-claim call to answer.
   window.__altSpace = altSpace ? JSON.parse(JSON.stringify(altSpace)) : null;
+  // Task-79 (2026-10-22): the big coding model's switch, for Settings.
+  window.__bigCoder = bigCoder ? JSON.parse(JSON.stringify(bigCoder)) : null;
+  window.__bigCoderCalls = [];
+  // Task-79: chat history's switch and retention. `history.reads` may list
+  // successive read answers (the ON card's "waiting" state is re-read).
+  window.__historySettings = chatHistory
+    ? JSON.parse(JSON.stringify(chatHistory))
+    : { enabled: true, keep_days: 0, recording: true, why_not: "" };
+  window.__historyReads = [];
+  window.__historyCalls = [];
   window.__reclaimAltSpace = reclaimAltSpace
     ? JSON.parse(JSON.stringify(reclaimAltSpace)) : null;
   window.__update = JSON.parse(JSON.stringify(update));
@@ -3798,6 +3874,8 @@ export async function open(browser, base, file, data, viewport) {
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     altSpace: { registered: true, attempts: 0, accelerator: "Alt+Space",
                 reason: "" },
+    bigCoder: { on: false, running: false, message: "" },
+    chatHistory: { enabled: true, keep_days: 0, recording: true, why_not: "" },
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
     taskActionFails: null, taskNoteFails: null, noteJobs: null,
     noteTargets: NOTE_TARGETS.all,

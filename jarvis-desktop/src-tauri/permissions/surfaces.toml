@@ -1627,6 +1627,36 @@ identifier = "media-index"
 description = "Read the searchable-recordings switch, the stored counts and the PC's disclosure; turn it off at once, ask to turn it back on (one approval card on this PC), and Delete the stored words. Settings only; never a word from a recording."
 permissions = ["allow-media-index"]
 
+# ---------------------------------------------------------------------------
+# Chat history's switch and retention for Settings (2026-10-22, task-79 +
+# voiceprint-wiring's #734 typed `chat_history`/`chat_keep_days`; backend
+# `jarvis_chat_log.py`, route added by `backend/chat-history.patch`). Read the
+# status fields only (no conversation ever crosses into the page), turn it on
+# (ONE `history_enable` card) or off at once, and choose the retention (which
+# deletes older conversations at once, so it is held on a stale link). Settings
+# only: no other window draws it, and it cannot delete a conversation.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "history-settings"
+description = "Read whether chat history is kept and for how long, turn it on (one approval card on this PC) or off at once, and choose 0/30/90/365 days of retention. Settings only; never returns a conversation, never deletes one."
+permissions = [
+  "allow-history-settings",
+]
+
+# ---------------------------------------------------------------------------
+# The big coding model's switch (2026-10-22; `big_coder.rs`; backend
+# `jarvis_big_coder.py`, route added by `big-coder.patch`, JARVIS-API §126).
+# Read the switch and ask for it ON (the PC raises ONE approval card) or OFF at
+# once. It never starts or stops the model - that pauses Jarvis's own lanes and
+# is the model's separate call. Settings only: no other window draws it.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "big-coder"
+description = "Read the big coding model's ON/OFF switch, ask to turn it on (one approval card on this PC) or turn it off at once. Settings only. Approves nothing; never starts the model."
+permissions = [
+  "allow-big-coder",
+]
+
 # The setup questionnaire (S2, 2026-10-20; setup_questionnaire.rs; the PC's
 # module is backend/jarvis_setup.py, JARVIS-API section 147): Settings reads the
 # fourteen questions, the current values and the last answers/outcomes, asks

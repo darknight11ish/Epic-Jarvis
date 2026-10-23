@@ -868,6 +868,8 @@ fn main() {
             // read the switch and counts, turn it off at once, ask to turn it
             // back on (ONE card on the PC), and the one Delete. Settings only.
             "media_index",
+            "big_coder",
+            "history_settings",
             // The setup questionnaire (setup_questionnaire.rs; S2, 2026-10-20;
             // JARVIS-API section 147): read the fourteen questions and the
             // PC's current values, ask for the READ-ONLY plan, and apply the
