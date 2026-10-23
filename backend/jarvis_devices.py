@@ -1323,24 +1323,89 @@ def _presented_key(handler) -> str:
         return ""
 
 
+def _bucket():
+    """`jarvis_owner_check`, the one owner of the token-failure rate bucket.
+
+    None when the module is not installed: a checkout without it keeps the
+    old behaviour rather than refusing a request over a missing module.
+    """
+    try:
+        import jarvis_owner_check as oc
+        return oc
+    except Exception:
+        return None
+
+
+def _bucket_blocked(handler) -> bool:
+    """Is this peer already over the token-failure limit?
+
+    The HUD's own `_token_ok` asks this before comparing a shared token
+    (`hud-request-gate.patch` owns the bucket), but a DEVICE key never
+    reached that function - this wrapper answers first - so the bucket was
+    skipped for the one key type a browser carries. RA-2 audit (2026-10-23):
+    the web-session route made that reachable from a page. Ask here too.
+    """
+    oc = _bucket()
+    if oc is None:
+        return False
+    try:
+        return bool(oc.TOKEN_FAILURES.blocked((handler.client_address or ("",))[0]))
+    except Exception:
+        return False
+
+
+def _bucket_note(handler, ok: bool) -> None:
+    """Feed one device-key decision to the SAME bucket the header path uses.
+
+    A valid key resets the peer (the bucket's own rule: one good token clears
+    it). A refused one counts only when the request PRESENTED a key - which
+    the device-key path always does, in the header, the cookie or the query.
+    Never raises; the bucket is a defence, not a dependency.
+    """
+    oc = _bucket()
+    if oc is None:
+        return
+    try:
+        peer = (handler.client_address or ("",))[0]
+        if ok:
+            oc.TOKEN_FAILURES.succeeded(peer)
+        elif oc.request_carries_token(handler):
+            oc.TOKEN_FAILURES.failed(peer)
+    except Exception:
+        pass
+
+
 def wrap_token_ok(original: Callable) -> Callable:
     """The owner's `_token_ok(handler)`, with device keys and Retire added
     (design 5.2). Idempotent. Never raises: a device key that cannot be
     checked is refused; anything else that goes wrong falls back to the
-    original's own answer - today's behaviour."""
+    original's own answer - today's behaviour.
+
+    A DEVICE key also answers to the token-failure bucket (RA-2 audit,
+    2026-10-23): this wrapper answers before the HUD's own `_token_ok` - the
+    function that owns the bucket - runs, so without the two calls below a
+    refused browser key was never counted, never produced a 429, and a peer
+    already over the limit could still present a valid one. See
+    `_bucket_blocked` / `_bucket_note`.
+    """
     if getattr(original, "_jarvis_devices", False):
         return original
 
     def token_ok(handler):
         key = _presented_key(handler)
         if key.startswith(KEY_PREFIX):
+            if _bucket_blocked(handler):
+                _say_why(handler, None)
+                return False
             try:
                 device_id, why = check_device_key(key)
             except Exception:
                 device_id, why = None, None
             if device_id is None:
+                _bucket_note(handler, False)
                 _say_why(handler, why)
                 return False
+            _bucket_note(handler, True)
             try:
                 handler._jarvis_device = device_id
                 _say_why(handler, None)
