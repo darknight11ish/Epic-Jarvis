@@ -2235,9 +2235,12 @@ STATIC_ASSETS = {
     "/animal-shared.js": ("animal-shared.js", "text/javascript; charset=utf-8"),
     "/hud-layout.js": ("hud-layout.js", "text/javascript; charset=utf-8"),
     "/hud-layout-store.js": ("hud-layout-store.js", "text/javascript; charset=utf-8"),
-    # planned by the PWA slices that are not written yet (the bridge, the
-    # manifest and service worker, the home-screen icons): a request is a 404
-    # today, and turns into the real file the day that slice puts it beside us
+    # PWA Slice 2's browser bridge became a real file on 2026-10-23: the page
+    # loads it, so a deploy must put it beside the server (backend/static/,
+    # shipped by both lists and the BESIDE rule). The entries after it are
+    # still planned by the slices not written yet (the manifest and service
+    # worker, the home-screen icons): their request is an honest 404 until the
+    # file lands - never a crash and never a guessed file.
     "/hud-web-bridge.js": ("hud-web-bridge.js", "text/javascript; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
     "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),

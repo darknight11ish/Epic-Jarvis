@@ -20,9 +20,12 @@ WHAT THIS SUITE PROVES, against the real published base HUD and the real page:
      page file that is not whitelisted fails here - the point of "closed
      world" - and a whitelist entry nothing loads fails too.
   2. **The PWA files that are not written yet are listed ahead of time**
-     (`hud-web-bridge.js`, `manifest.webmanifest`, `sw.js`, the home-screen
-     icons). Their request is an honest 404 until the file lands beside the
-     server: no crash, no guessed file, and no stub file is created here.
+     (`manifest.webmanifest`, `sw.js`, the home-screen icons). Their request is
+     an honest 404 until the file lands beside the server: no crash, no guessed
+     file, and no stub file is created here. (The browser bridge was planned
+     this way in Slice 3a and is a served file now - PWA Slice 2 put it beside
+     the server - so the same deployment-honesty rule below checks it like any
+     other file the page loads.)
   3. **Exact MIME types, and no way around the dict.** The real
      `_serve_static` is lifted out of the base HUD with `ast` and run
      in-process against a temporary folder: a whitelisted file answers 200
@@ -79,7 +82,6 @@ CONTENT_TYPES = {
 #: Files the PWA slices after this one will write. Whitelisted now so the day
 #: they appear beside the server they are served; a request today is a 404.
 PLANNED = {
-    "/hud-web-bridge.js": ".js",
     "/manifest.webmanifest": ".webmanifest",
     "/sw.js": ".js",
     "/icons/jarvis-180.png": ".png",
@@ -267,11 +269,17 @@ def t_the_whitelist_covers_everything_the_page_loads():
           len(wanted) >= 20, f"{len(wanted)} reference(s): {sorted(wanted)[:6]}")
     check("every planned PWA entry is whitelisted ahead of its slice",
           set(PLANNED) <= set(assets), str(sorted(set(PLANNED) - set(assets))))
-    check("... and two planned entries worth naming are there: the bridge and "
-          "the service worker",
-          "/hud-web-bridge.js" in assets and "/sw.js" in assets
-          and "/manifest.webmanifest" in assets
-          and all(u in assets for u in PLANNED if u.startswith("/icons/")))
+    check("... and the entries still planned are the manifest, the service "
+          "worker and the home-screen icons",
+          set(PLANNED) == {"/manifest.webmanifest", "/sw.js",
+                           "/icons/jarvis-180.png", "/icons/jarvis-192.png",
+                           "/icons/jarvis-512.png"},
+          str(sorted(PLANNED)))
+    check("... and the browser bridge is no longer planned: the page loads it "
+          "and this server serves it (PWA Slice 2's delivery fix)",
+          "/hud-web-bridge.js" not in PLANNED
+          and "/hud-web-bridge.js" in assets
+          and (STATIC / "hud-web-bridge.js").is_file())
 
 
 def t_every_content_type_is_exact_and_every_file_is_flat():

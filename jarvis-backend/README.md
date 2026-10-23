@@ -57,12 +57,13 @@ plus these six files:
         lane-warning.js, hud-actions.js, hud-safety.js,   from backend/static/
         hud-edit.js, hud-presets.js, private-speech.js,
         face-voice.js, face-moments.js, face-tuning.js,
-        animal-shared.js, hud-layout.js, hud-layout-store.js
+        animal-shared.js, hud-layout.js, hud-layout-store.js,
+        hud-web-bridge.js (PWA Slice 2's browser bridge)
 and one file this repository DERIVES rather than copies:
     _where.py                backend/_where.py, plus a trailer that says what it is
 ```
 
-The 21 static files above are the closed-world whitelist
+The 22 static files above are the closed-world whitelist
 `jarvis_hud.py`'s `STATIC_ASSETS` serves at `GET /theme.css`, `/fonts/*` and
 `/<module>.js`: without them the page loads in a browser and every file it
 then asks for is a 404, so the HUD arrives half-dressed with no theme, no

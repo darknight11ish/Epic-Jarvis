@@ -104,6 +104,9 @@ BESIDE = (
     "hud-presets.js", "private-speech.js", "face-voice.js", "face-moments.js",
     "face-tuning.js", "animal-shared.js", "hud-layout.js",
     "hud-layout-store.js",                                      # /<module>.js
+    # PWA Slice 2's browser bridge: the page loads it with a <script src>, so
+    # the whitelist serves it like the modules above (delivery fix F1).
+    "hud-web-bridge.js",                                        # /hud-web-bridge.js
 )
 
 #: What must never be in the base: (pattern on the name, why).

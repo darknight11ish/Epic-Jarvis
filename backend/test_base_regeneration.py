@@ -96,6 +96,10 @@ def t_the_rule_is_the_readme_s_rule():
                      "hud-edit.js", "hud-presets.js", "private-speech.js",
                      "face-voice.js", "face-moments.js", "face-tuning.js",
                      "animal-shared.js", "hud-layout.js", "hud-layout-store.js",
+                     # ... and PWA Slice 2's browser bridge, which the page
+                     # loads with a <script src> (delivered with the static
+                     # files, 2026-10-23)
+                     "hud-web-bridge.js",
                      # ... and the seven woff2 faces, which are BYTES
                      "chakra-petch-400.woff2", "chakra-petch-500.woff2",
                      "chakra-petch-600.woff2", "chakra-petch-700.woff2",

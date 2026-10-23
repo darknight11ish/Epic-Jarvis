@@ -28,7 +28,7 @@ re-taken", and nothing else:
         quiz_grader_cases.json   from backend/
         rust-crates.lock         from jarvis-desktop/src-tauri/Cargo.lock
         jarvis-visual-spec.json  the owner's own copy, which is what /api/visual-spec reads
-        theme.css, fonts.css, the twelve .js modules and the seven woff2 faces
+        theme.css, fonts.css, the thirteen .js modules and the seven woff2 faces
                                  from backend/static/ - jarvis_hud.py's
                                  STATIC_ASSETS whitelist reads each beside
                                  itself (PWA Slice 3a, 2026-10-23); the page's
@@ -176,6 +176,13 @@ BESIDE = (
      "a module hud-edit.js/hud-presets.js import; served at /hud-layout.js"),
     ("hud-layout-store.js", "{repo}/backend/static/hud-layout-store.js",
      "a module hud-edit.js imports; served at /hud-layout-store.js"),
+    # PWA Slice 2 (2026-10-23): the page's external browser bridge. It is not a
+    # front-end module the page imports, but the page loads it with a <script
+    # src>, so the closed-world whitelist has to serve it from beside the server
+    # too - and a deploy that leaves it out hands a browser a page whose bridge
+    # 404s (the F1 cross-slice blocker the independent review found).
+    ("hud-web-bridge.js", "{repo}/backend/static/hud-web-bridge.js",
+     "the browser bridge the page loads at /hud-web-bridge.js (PWA Slice 2)"),
 )
 
 #: The beside-files that are BYTES, not text: the seven woff2 faces
