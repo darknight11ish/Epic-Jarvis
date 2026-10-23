@@ -2900,9 +2900,13 @@ are gone, and the window keeps the owner's own layouts:
    (`split-stage`'s right rail via Telemetry/Memory/Today). Entering Edit HUD
    auto-reveals every hidden rail, so the protected controls the HUD draws stay
    visible/reachable while editing and all four `PROTECTED_IDS` stay forced
-   visible in the document. **Tracked gap:** the HUD has no clickable stop-all;
-   its real Stop everything paths are the Alt+Shift+X hotkey, the tray and the
-   widget (a HUD stop control is a separate UI/command decision, not claimed).
+   visible in the document. The fixed **Stop everything** control (owner-approved
+   2026-10-22) sits in the stage bar outside every card and the layout document:
+   `#hud-stop` calls the same `screen_work::stop_everything` command as the
+   Alt+Shift+X hotkey, the tray and the widget (stop only, never held on a stale
+   link or App lock), and the HUD gains only the least-privilege `hud-stop`
+   capability (`allow-stop-everything`). No preset, import or Edit HUD can hide
+   it; H4 may later move it into `#hud-safety` without a second control.
    The 4-into-3 `LOOKS` alias map, `LOOK_BY_PRESET`,
    `lookForPreset`, `data-hud-layout` and the stale "until H2" comments are
    **deleted**, pinned by a source test. Only a three-field

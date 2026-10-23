@@ -243,6 +243,12 @@ async function openHud(browser, status, pageOptions = {}) {
             if (!r.ok) throw new Error(body.error || `the server answered HTTP ${r.status}`);
             return body;
           }
+          case "stop_everything":
+            // The fixed HUD control (owner-approved 2026-10-22): the same
+            // command the hotkey, tray and widget use. It stops only, approves
+            // and starts nothing, and the real command never consults the link
+            // or App lock. The invocation is already in window.__invokes.
+            return null;
           default:
             throw new Error(`Command ${cmd} not allowed by ACL`);
         }
@@ -3494,6 +3500,18 @@ await check("H3: the Import dialog adds to My layouts and keeps the owner's exis
   await K.until(page, "the imported layout to be saved", async () =>
     (await page.evaluate(() => (window.__hudLayoutWrites || []).length)) > 0, { ms: 10000 });
   const saved = await page.evaluate(() => window.__hudLayoutWrites.at(-1));
+  const importedStop = await page.evaluate(() => {
+    const node = document.getElementById("hud-stop");
+    if (!node) return null;
+    const box = node.getBoundingClientRect();
+    return { visible: box.width > 1 && box.height > 1,
+      inLayout: ((window.__jarvisHudLayout && window.__jarvisHudLayout.cards) || [])
+        .some((card) => card.id === "hud-stop") };
+  });
+  assert.ok(importedStop && importedStop.visible,
+    "the Import dialog removed/hid the fixed Stop control");
+  assert.equal(importedStop.inLayout, false,
+    "the Import dialog put the Stop control into the layout document");
   const dialogOpen = await page.evaluate(() => Boolean(document.querySelector("dialog[open]")));
   const activeName = await page.evaluate(() => {
     const badge = document.getElementById("hud-layout-badge");
@@ -3562,6 +3580,23 @@ await check("H3: every preset renders its own shell, density and opening view/ta
     assert.equal(facts.htmlDensity, want.density, `${id}: html density`);
     assert.equal(facts.tab, want.tab, `${id}: opening stage tab`);
     assert.equal(facts.view, want.view, `${id}: opening view`);
+    const stop = await page.evaluate(() => {
+      const node = document.getElementById("hud-stop");
+      if (!node) return null;
+      const box = node.getBoundingClientRect();
+      return {
+        count: document.querySelectorAll("#hud-stop").length,
+        visible: getComputedStyle(node).display !== "none"
+          && getComputedStyle(node).visibility !== "hidden"
+          && box.width > 1 && box.height > 1,
+        disabled: node.disabled,
+        inCard: Boolean(node.closest("[data-hud-card],[data-hud-region]")),
+      };
+    });
+    assert.ok(stop && stop.count === 1, `${id}: the fixed Stop control is not in the page`);
+    assert.equal(stop.visible, true, `${id}: the fixed Stop control is not visible`);
+    assert.equal(stop.disabled, false, `${id}: the fixed Stop control starts disabled`);
+    assert.equal(stop.inCard, false, `${id}: the fixed Stop control is inside a card/region`);
     await page.close();
     assert.deepEqual(problems, [], `${id}: page errors`);
   }
@@ -3579,6 +3614,18 @@ await check("H3: the imported two-column-right shell renders, and its left drawe
   await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   await K.until(page, "the imported shell to render", async () =>
     (await page.evaluate(() => document.body.dataset.hudShell)) === "two-column-right", { ms: 8000 });
+  const importedStop = await page.evaluate(() => {
+    const node = document.getElementById("hud-stop");
+    if (!node) return null;
+    const box = node.getBoundingClientRect();
+    return { count: document.querySelectorAll("#hud-stop").length,
+      visible: box.width > 1 && box.height > 1,
+      inCard: Boolean(node.closest("[data-hud-card],[data-hud-region]")) };
+  });
+  assert.ok(importedStop && importedStop.count === 1 && importedStop.visible,
+    "two-column-right: the fixed Stop control is not visible");
+  assert.equal(importedStop.inCard, false,
+    "two-column-right: the fixed Stop control is inside a card/region");
   const before = await railBox(page, "rail-left");
   assert.ok(before && before.x < -100, `two-column-right: left rail starts off-canvas (${JSON.stringify(before)})`);
   await page.click("#left-toggle");
@@ -3641,8 +3688,7 @@ await check("H3: Edit HUD auto-reveals rails, so every protected control the pag
         approvals: visible("approvals"),
         bar: visible("hud-open-bar"),
         mic: visible("mic"),
-        // emergency_stop has no page DOM yet (a pre-existing H2 gap, reported
-        // in the PR); its protected truth is the layout document below.
+        stop: visible("hud-stop"),
         dataProtected: ((window.__jarvisHudLayout && window.__jarvisHudLayout.cards) || [])
           .filter((card) => ids.includes(card.id))
           .map((card) => [card.id, card.visible]),
@@ -3654,6 +3700,7 @@ await check("H3: Edit HUD auto-reveals rails, so every protected control the pag
     assert.equal(state.approvals, true, `${shell}: approvals hidden in edit mode`);
     assert.equal(state.bar, true, `${shell}: the Jarvis-bar button hidden in edit mode`);
     assert.equal(state.mic, true, `${shell}: the voice control hidden in edit mode`);
+    assert.equal(state.stop, true, `${shell}: the fixed Stop control hidden in edit mode`);
     for (const id of PROTECTED) {
       const found = state.dataProtected.find(([card]) => card === id);
       assert.ok(found && found[1] === true, `${shell}: protected ${id} is not visible in the document`);
@@ -3704,6 +3751,50 @@ await check("H3: Edit HUD auto-reveals rails, so every protected control the pag
     await page.close();
     assert.deepEqual(problems, [], `${shell}: page errors`);
   }
+});
+
+await check("HUD stop: one fixed control invokes the existing stop command once, no card, stale link does not disable it", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false });
+  await page.waitForSelector("#hud-stop");
+  const before = await page.evaluate(() => {
+    const button = document.getElementById("hud-stop");
+    const inLayout = ((window.__jarvisHudLayout && window.__jarvisHudLayout.cards) || [])
+      .some((card) => card.id === "hud-stop");
+    return {
+      count: document.querySelectorAll("#hud-stop").length,
+      label: button && button.getAttribute("aria-label"),
+      disabled: Boolean(button && button.disabled),
+      inCard: Boolean(button && button.closest("[data-hud-card],[data-hud-region]")),
+      inLayout,
+    };
+  });
+  assert.equal(before.count, 1, "the HUD does not draw exactly one fixed Stop control");
+  assert.equal(before.label, "Stop everything", "the Stop control has no accessible name");
+  assert.equal(before.disabled, false, "the Stop control starts disabled");
+  assert.equal(before.inCard, false, "the Stop control is inside an editable card/region");
+  assert.equal(before.inLayout, false, "the Stop control was added to the layout document");
+  // A stale link must not disable or hide it: stop is the one action that must
+  // still work when the event stream is stale.
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: true }));
+  await page.waitForTimeout(80);
+  assert.equal(await page.locator("#hud-stop").isDisabled(), false,
+    "a stale link disabled the fixed Stop control");
+  const cardsBefore = await page.evaluate(() => document.querySelectorAll("#approvals .appr").length);
+  await page.click("#hud-stop");
+  await page.waitForTimeout(120);
+  const seen = await page.evaluate(() => ({
+    stops: window.__invokes.filter((call) => call[0] === "stop_everything").length,
+    decides: window.__invokes.filter((call) => call[0] === "decide_approval").length,
+    status: (document.getElementById("hud-stop-status") || {}).textContent || "",
+    cards: document.querySelectorAll("#approvals .appr").length,
+  }));
+  assert.equal(seen.stops, 1, "one Stop click did not send exactly one stop_everything");
+  assert.equal(seen.decides, 0, "the Stop control answered/raised an approval card");
+  assert.match(seen.status, /Stop sent\./, "the Stop control did not report the PC's answer");
+  assert.equal(seen.cards, cardsBefore, "the Stop control changed the approval cards");
+  await page.close();
+  assert.deepEqual(problems, []);
 });
 
 await check("H3: Ambient keeps the protected Jarvis-bar card reachable in edit mode", async () => {

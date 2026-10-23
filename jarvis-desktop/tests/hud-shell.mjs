@@ -440,29 +440,41 @@ await check("H3-PM-2: Ambient's left rail is a drawer, not an unreachable hidden
     "edit mode does not force the tab-revealed rail back on");
   assert.match(editSrc, /revealRailsForEditing/, "the editor does not reveal hidden rails");
   assert.match(editSrc, /edit-reveal/, "the editor does not mark the revealed rails");
-  // The HUD has no clickable stop-all (post-merge review, 2026-10-22): the
-  // claims must name the real paths and keep the gap visible, so this pin
-  // fails if the sentence drifts back into "all four protected cards stay
-  // visible and reachable" or a stop control appears without the claim/docs
-  // being updated with it.
+  // The HUD's fixed Stop everything control is real now (owner-approved
+  // 2026-10-22): pinned in the page, the editor reason and both docs. The old
+  // tracked-gap wording must be gone, and the page must actually carry the
+  // button - a document-level `emergency_stop` alone is not a control.
   const ARCH = readFileSync(join(ROOT, "docs", "ARCHITECTURE.md"), "utf8");
   const DECISIONS = readFileSync(join(ROOT, "docs", "DECISIONS.md"), "utf8");
-  assert.match(editSrc, /this page has no stop control yet/,
-    "the editor's emergency-stop reason does not admit the missing page control");
+  assert.match(editSrc, /Stop everything is a fixed control in the header/,
+    "the editor's emergency-stop reason does not describe the fixed header control");
   assert.match(editSrc, /Alt\+Shift\+X/,
     "the editor's emergency-stop reason does not name the real stop hotkey");
-  assert.match(ARCH, /\*\*Tracked gap:\*\* the HUD page/,
-    "ARCHITECTURE lost the tracked emergency-stop gap");
-  assert.match(ARCH, /no DOM and no clickable stop-all/,
-    "ARCHITECTURE does not say the HUD has no clickable stop-all");
+  assert.match(ARCH, /The fixed Stop everything control \(owner-approved 2026-10-22\)/,
+    "ARCHITECTURE does not describe the fixed Stop everything control");
+  assert.match(ARCH, /#hud-stop/, "ARCHITECTURE does not name the HUD stop control");
   assert.match(ARCH, /Alt\+Shift\+X/, "ARCHITECTURE does not name the real stop hotkey");
-  assert.match(DECISIONS, /\*\*Tracked gap:\*\* the HUD has no clickable stop-all/,
-    "DECISIONS lost the tracked emergency-stop gap");
+  assert.match(DECISIONS, /The fixed \*\*Stop everything\*\* control \(owner-approved/,
+    "DECISIONS does not describe the fixed Stop everything control");
+  assert.match(DECISIONS, /#hud-stop/, "DECISIONS does not name the HUD stop control");
   assert.match(DECISIONS, /Alt\+Shift\+X/, "DECISIONS does not name the real stop hotkey");
-  assert.equal(/all four protected cards stay visible and\s+reachable/.test(ARCH + DECISIONS),
-    false, "the old 'all four protected cards stay visible and reachable' overclaim survived");
-  assert.equal(/id="hud-stop"|id="emergency-stop"|id="emergency_stop"/.test(page),
-    false, "the HUD page grew a stop control without updating the tracked-gap claim");
+  assert.equal(/\*\*Tracked gap:\*\* the HUD page|no DOM and no clickable stop-all/.test(ARCH),
+    false, "ARCHITECTURE still carries the old tracked-gap wording");
+  assert.equal(/\*\*Tracked gap:\*\* the HUD has no clickable stop-all/.test(DECISIONS),
+    false, "DECISIONS still carries the old tracked-gap wording");
+  assert.match(page, /<button class="hud-stop" id="hud-stop"/,
+    "the HUD page has no real #hud-stop button");
+  assert.match(page, /invoke\("stop_everything"\)/,
+    "the HUD page does not invoke the existing stop_everything command");
+  const capability = JSON.parse(read("src-tauri/capabilities/hud.json"));
+  assert.equal(capability.permissions.filter((name) => name === "hud-stop").length, 1,
+    "the HUD capability does not grant exactly one hud-stop");
+  assert.equal(capability.permissions.includes("task-control"), false,
+    "the broad task-control set was granted to the HUD instead of hud-stop");
+  const surfaces = read("src-tauri/permissions/surfaces.toml");
+  assert.match(surfaces, /identifier = "hud-stop"/, "surfaces.toml has no hud-stop set");
+  assert.match(surfaces, /permissions = \["allow-stop-everything"\]/,
+    "hud-stop does not grant exactly allow-stop-everything");
 });
 
 await check("H3: the bootstrap renders shell/density/tab and writes the first-paint mirror", () => {
@@ -495,7 +507,7 @@ await check("copy/paste JSON is the only move path (no file, blob, object URL)",
   assert.equal(/fetch\s*\(/.test(presetsSrc), false, "the Layouts menu calls fetch");
 });
 
-await check("H3 adds no capability and no command: still exactly one HUD write", () => {
+await check("H3 added no WRITE capability and no command: still exactly one HUD write", () => {
   const capability = JSON.parse(read("src-tauri/capabilities/hud.json"));
   assert.ok(capability.permissions.includes("hud-layout-write"));
   assert.ok(capability.permissions.includes("hud-layout-read"));
