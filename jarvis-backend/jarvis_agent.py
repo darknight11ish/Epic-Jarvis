@@ -752,7 +752,7 @@ def _run_send_email(args: dict, plan_obj, **_) -> dict:
     return SEND.run(plan_obj, approved=True)
 
 
-def _prepare_draft_email(args: dict):
+def _prepare_draft_email(args: dict, watch: Optional["_TurnWatch"] = None):
     try:
         import jarvis_email_draft as DRAFT
     except Exception as exc:
@@ -764,8 +764,20 @@ def _prepare_draft_email(args: dict):
     # Only these four fields are ever read out of the model's arguments - an
     # "attachments" key it adds anyway is never looked at (jarvis_email_draft
     # has no attachments parameter at all; see that module's docstring).
+    #
+    # Wave D-2 review: the classifier needs the owner's own prompt words and
+    # THIS turn's outside-text state. `tool.prepare()` has no turn context, so
+    # the direct-call path passes its `_TurnWatch` here. Without it the old
+    # behaviour is kept (empty prompt, gate latch fallback), never an assumed
+    # clean turn.
+    prompt = ""
+    tainted = None
+    if watch is not None:
+        prompt = str(getattr(watch, "newest_own_words", "") or "")
+        tainted = bool(getattr(watch, "read", None) or getattr(watch, "tainted", False))
     p = DRAFT.plan(args.get("to"), args.get("cc"), args.get("subject", ""),
-                   args.get("body", ""), reply_to_message_id=args.get("reply_to_message_id"))
+                   args.get("body", ""), reply_to_message_id=args.get("reply_to_message_id"),
+                   user_prompt=prompt, tainted=tainted)
     return p, DRAFT.describe(p)
 
 
@@ -10180,7 +10192,15 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     # tool validating its own arguments, e.g. {"days_ahead": "seven"} - comes
     # back as a tool RESULT the model can read and retry from.
     try:
-        state, plan_text = tool.prepare(args)
+        if name == "draft_email" and tool.prepare is _prepare_draft_email:
+            # The D-2 classifier needs this turn's own prompt words and taint;
+            # the generic tool.prepare() contract carries only arguments, so
+            # the one tool that needs context is handed the watch here. A test
+            # or a caller that replaced prepare() keeps its own stand-in (the
+            # generic tier tests do exactly that and must not open a mailbox).
+            state, plan_text = _prepare_draft_email(args, watch)
+        else:
+            state, plan_text = tool.prepare(args)
     except Exception as exc:
         convo.append({"role": "tool",
                       "tool_call_id": call.get("id", ""),

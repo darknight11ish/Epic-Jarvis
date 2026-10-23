@@ -560,6 +560,29 @@ def t_no_switch_and_no_network():
         check(f"it does not use {bad}", bad not in code)
 
 
+def t_tier2_negation_is_not_consent():
+    """PA-4: "do not send my tax balance" is a refusal, not permission.
+    A bare "send/share" word is not enough; a negation in the owner's own
+    prompt refuses the Tier-2 category."""
+    finance = "My tax balance is $4,200."
+    health = "My cholesterol result is 240."
+    for label, text, prompt in (
+            ("do not + finance", finance, "do not send my tax balance"),
+            ("never + finance", finance, "never share my tax balance"),
+            ("without + finance", finance, "email my accountant without my salary"),
+            ("not + health", health, "not sharing my health info"),
+            ("do not + health", health, "do not email my doctor my health info")):
+        got = S.classify_outbound_sensitivity(text, user_prompt=prompt, tainted=False)
+        check(f"Tier 2 is refused for a negated prompt ({label})",
+              got.get("allowed") is False and got.get("tier") == 2
+              and "tier2_negated" in (got.get("reasons") or []), got)
+    asked = S.classify_outbound_sensitivity(
+        finance, user_prompt="email my accountant my tax balance", tainted=False)
+    check("CONTROL: the same finance draft is allowed with an affirmative ask",
+          asked.get("allowed") is True and asked.get("tier") == 2
+          and "tier2_negated" not in (asked.get("reasons") or []), asked)
+
+
 # -- log-scrub.patch ------------------------------------------------------------
 
 def t_the_patch_installs_it_right_after_the_token():
@@ -607,6 +630,7 @@ if __name__ == "__main__":
                t_find_secret, t_stream, t_install_wraps_both_streams_once,
                t_install_registers_the_pairing_token, t_a_logger_made_early_is_covered,
                t_it_never_says_what_it_removed, t_no_switch_and_no_network,
+               t_tier2_negation_is_not_consent,
                t_the_patch_installs_it_right_after_the_token):
         print(f"\n--- {fn.__name__} ---", file=REAL_OUT)
         try:

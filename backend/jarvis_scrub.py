@@ -160,6 +160,15 @@ _EXPLICIT_FINANCE_SHARE_RE = re.compile(
     r"\b(?:tax(?:es)?|salary|income|financ(?:e|es|ial)|balance|account|budget|"
     r"net worth|mortgage|loan|pension|investment)\b",
     re.IGNORECASE | re.DOTALL)
+#: A refusal/negation in the owner's own prompt makes the two patterns above
+#: NOT consent. "do not send my tax balance", "never share my health info" and
+#: "email it without the salary" all contain a send/share word followed by a
+#: category word; without this guard Tier 2 would read them as "please share".
+#: Conservative on purpose: any negation in the prompt refuses the Tier-2
+#: category rather than guessing which clause it belongs to.
+_NEGATION_RE = re.compile(
+    r"\b(?:do\s+not|don't|dont|never|without|not|no)\b",
+    re.IGNORECASE)
 
 
 def _luhn_ok(digits: str) -> bool:
@@ -248,11 +257,16 @@ def classify_outbound_sensitivity(outbound_text, *, user_prompt: str = "",
                 "tainted": bool(tainted)}
     tier2 = _tier2_categories(text)
     if tier2:
-        explicit = {"health": bool(_EXPLICIT_HEALTH_SHARE_RE.search(prompt)),
-                    "personal_finance": bool(_EXPLICIT_FINANCE_SHARE_RE.search(prompt))}
+        negated = bool(_NEGATION_RE.search(prompt))
+        explicit = {"health": bool(_EXPLICIT_HEALTH_SHARE_RE.search(prompt))
+                              and not negated,
+                    "personal_finance": bool(_EXPLICIT_FINANCE_SHARE_RE.search(prompt))
+                                        and not negated}
         blocked = [c for c in tier2 if tainted or not explicit.get(c)]
         if blocked:
             reasons = ["tier2_unrequested_or_tainted"]
+            if negated:
+                reasons.append("tier2_negated")
             if tainted:
                 reasons.append("turn_read_outside_text")
             return {"allowed": False, "tier": 2, "reasons": reasons,
