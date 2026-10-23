@@ -823,18 +823,18 @@ await check("F5: the HUD page consumes the shared table (checked fallback, not a
 });
 
 /* The cross-surface hook: the phone is another owner's file, so this records
- * the honest gap instead of editing it. When the phone's Coming up gains the
- * same add_time action, flip PHONE_HAS_ADD_TIME to true and this test fails
- * until the shared table and the phone are checked against each other again -
- * which is the point of a hook, not a drift. */
-const PHONE_HAS_ADD_TIME = false;
+ * its real state instead of drifting. The phone's Coming up now HAS add_time
+ * (the Q2/F5 Android PR consumed the shared schedule contract, 2026-10-23),
+ * so the flag is true; if a later change takes it away, this test fails until
+ * the surfaces are checked against each other again - the point of a hook. */
+const PHONE_HAS_ADD_TIME = true;
 await check("F5 hook: the phone's known action gap is recorded, not assumed away", () => {
   const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt");
   for (const action of ["pause", "resume", "delete", "done", "snooze"]) {
     assert.ok(kt.includes(`"${action}"`), `the phone has no ${action} action`);
   }
   assert.equal(kt.includes('"add_time"'), PHONE_HAS_ADD_TIME,
-    "the phone's add_time state changed: flip PHONE_HAS_ADD_TIME and re-check the surfaces");
+    "the phone's add_time state changed: re-check the shared table and the phone surfaces");
 });
 
 await browser.close();
