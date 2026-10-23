@@ -92,6 +92,18 @@ BESIDE = (
     "quiz_grader_cases.json",   # eval_quiz_grader.py
     "jarvis-visual-spec.json",  # /api/visual-spec
     "rust-crates.lock",         # jarvis_tool_updates.py
+    # The browser's own files (2026-10-23, PWA Slice 3a): jarvis_hud.py's
+    # STATIC_ASSETS whitelist reads each from beside itself, so the page loads
+    # in a browser with its theme, fonts and modules instead of 404s.
+    "theme.css", "fonts.css",                                   # /theme.css, /fonts/fonts.css
+    "chakra-petch-400.woff2", "chakra-petch-500.woff2",          # /fonts/*
+    "chakra-petch-600.woff2", "chakra-petch-700.woff2",
+    "ibm-plex-mono-400.woff2", "ibm-plex-mono-500.woff2",
+    "ibm-plex-sans-400.woff2",
+    "lane-warning.js", "hud-actions.js", "hud-safety.js", "hud-edit.js",
+    "hud-presets.js", "private-speech.js", "face-voice.js", "face-moments.js",
+    "face-tuning.js", "animal-shared.js", "hud-layout.js",
+    "hud-layout-store.js",                                      # /<module>.js
 )
 
 #: What must never be in the base: (pattern on the name, why).
@@ -141,12 +153,17 @@ def _beside_twins_from_the_rule() -> tuple:
     """(leaf in the base, where this repository keeps its copy) for the
     BESIDE-files this repository owns.
 
-    Read out of `tools/gen_base_from_backend.py`'s own `BESIDE` table - the
-    table the re-take rule is - rather than restated, so a file added there is
-    checked here with no edit to this file. Filtered to the entries whose
-    source is this repository: `jarvis-visual-spec.json` comes from the
-    owner's live backend folder (`{source}/`), which is not in this repository
-    and is not in CI, so there is no copy here to compare it with.
+    Read out of `tools/gen_base_from_backend.py`'s own `BESIDE` and
+    `BESIDE_BINARY` tables - the tables the re-take rule is - rather than
+    restated, so a file added there is checked here with no edit to this file.
+    `BESIDE_BINARY` is the seven woff2 faces PWA Slice 3a serves: their base
+    copies are byte-identical, and `same_text()` below still compares them
+    correctly because both sides hold the same bytes (the line-ending
+    normalisation cannot make two different binary files equal). Filtered to
+    the entries whose source is this repository: `jarvis-visual-spec.json`
+    comes from the owner's live backend folder (`{source}/`), which is not in
+    this repository and is not in CI, so there is no copy here to compare it
+    with.
 
     `_where.py` is deliberately NOT here. It lands under `DERIVED_FROM_REPO`,
     not `BESIDE`, and the base's copy is this repository's copy PLUS
@@ -165,7 +182,7 @@ def _beside_twins_from_the_rule() -> tuple:
     finally:
         sys.path.remove(str(REPO / "tools"))
     out = []
-    for name, where, _why in gen.BESIDE:
+    for name, where, _why in gen.BESIDE + gen.BESIDE_BINARY:
         if "{source}" in where:
             continue
         at = Path(where.format(repo=REPO.as_posix(), source=""))

@@ -1,0 +1,4 @@
+        if path in STATIC_ASSETS:
+            _serve_static(self, path)
+            return
+

@@ -74,8 +74,8 @@ def t_the_tool_is_ascii_only():
 
 
 def t_the_rule_is_the_readme_s_rule():
-    """The three exclusions, the six beside-files and the one derived file, as
-    the README writes them.
+    """The three exclusions, the files beside the code and the one derived file,
+    as the README writes them.
 
     Read out of the tool rather than restated: a rule that only exists in this
     test would drift from the tool the moment either changed.
@@ -84,10 +84,23 @@ def t_the_rule_is_the_readme_s_rule():
     check("the three refusals are the README's own (test_*.py, patch_openjarvis.py, spike_sandbox.py)",
           names == [r"^test_.*\.py$", r"^patch_openjarvis\.py$", r"^spike_sandbox\.py$"],
           str(names))
-    beside = [n for n, _w, _y in G.BESIDE]
-    check("the six files beside the code are the README's own six",
+    beside = [n for n, _w, _y in G.BESIDE] + [n for n, _w, _y in G.BESIDE_BINARY]
+    check("the files beside the code are the README's own list",
           beside == ["jarvis_hud.html", "jarvis-framework.toml", "requirements.lock",
-                     "quiz_grader_cases.json", "rust-crates.lock", "jarvis-visual-spec.json"],
+                     "quiz_grader_cases.json", "rust-crates.lock", "jarvis-visual-spec.json",
+                     # the browser's own files (2026-10-23, PWA Slice 3a):
+                     # jarvis_hud.py's STATIC_ASSETS whitelist reads each beside
+                     # itself; the page's real copies live in jarvis-desktop/src/
+                     "theme.css", "fonts.css",
+                     "lane-warning.js", "hud-actions.js", "hud-safety.js",
+                     "hud-edit.js", "hud-presets.js", "private-speech.js",
+                     "face-voice.js", "face-moments.js", "face-tuning.js",
+                     "animal-shared.js", "hud-layout.js", "hud-layout-store.js",
+                     # ... and the seven woff2 faces, which are BYTES
+                     "chakra-petch-400.woff2", "chakra-petch-500.woff2",
+                     "chakra-petch-600.woff2", "chakra-petch-700.woff2",
+                     "ibm-plex-mono-400.woff2", "ibm-plex-mono-500.woff2",
+                     "ibm-plex-sans-400.woff2"],
           str(beside))
     srcs = {n: w for n, w, _y in G.BESIDE}
     check("... and the settings file comes from backend/rebuilt/, never from the source folder",
@@ -97,6 +110,16 @@ def t_the_rule_is_the_readme_s_rule():
     check("... and jarvis-visual-spec.json is the one that DOES come from the source folder",
           srcs["jarvis-visual-spec.json"].startswith("{source}"),
           srcs["jarvis-visual-spec.json"])
+    binary = [n for n, _w, _y in G.BESIDE_BINARY]
+    check("... and the seven woff2 faces are the BYTE half of the rule (copied, never decoded)",
+          binary == ["chakra-petch-400.woff2", "chakra-petch-500.woff2",
+                     "chakra-petch-600.woff2", "chakra-petch-700.woff2",
+                     "ibm-plex-mono-400.woff2", "ibm-plex-mono-500.woff2",
+                     "ibm-plex-sans-400.woff2"]
+          and all(w.startswith("{repo}/backend/static/")
+                  for _n, w, _y in G.BESIDE_BINARY)
+          and not ({n for n, _w, _y in G.BESIDE} & set(binary)),
+          str(binary))
     derived = [n for n, _w, _y in G.DERIVED_FROM_REPO]
     check("_where.py is the one file DERIVED rather than copied, and from this repository",
           derived == ["_where.py"] and G.DERIVED_FROM_REPO[0][1] == "{repo}/backend/_where.py",
@@ -169,9 +192,14 @@ def t_a_plan_copies_what_the_rule_says_and_refuses_what_it_says():
         check("the owner's live settings file is NOT what the base's toml comes from",
               want.get("jarvis-framework.toml") == G.read_text(REPO / "backend" / "rebuilt" / "jarvis-framework.toml"),
               str(want.get("jarvis-framework.toml"))[:120])
-        check("... and the six beside-files are all planned",
-              all(n in want for n, _w, _y in G.BESIDE),
-              str([n for n, _w, _y in G.BESIDE if n not in want]))
+        check("... and every beside-file (text and bytes) is planned",
+              all(n in want for n, _w, _y in G.BESIDE + G.BESIDE_BINARY),
+              str([n for n, _w, _y in G.BESIDE + G.BESIDE_BINARY if n not in want]))
+        check("... and the woff2 faces are planned as BYTES, never decoded as text",
+              isinstance(want.get("chakra-petch-400.woff2"), bytes)
+              and want.get("chakra-petch-400.woff2")
+              == (REPO / "backend" / "static" / "chakra-petch-400.woff2").read_bytes(),
+              type(want.get("chakra-petch-400.woff2")))
         check("... and the owner's own visual spec IS copied in",
               want.get("jarvis-visual-spec.json") == '{"v": 1}\n',
               str(want.get("jarvis-visual-spec.json")))
@@ -220,11 +248,16 @@ def t_check_fails_on_a_base_that_disagrees():
         write(base / "jarvis_hud.py", "print('a base someone edited by hand')\n")
         write(base / "jarvis_gone.py", "print('no longer in the program')\n")
         # Every beside-file that has a source, so the only differences `--check`
-        # finds are the two put there on purpose.
+        # finds are the two put there on purpose. The woff2 faces are bytes and
+        # are written byte for byte, the same way the tool reads them.
         for name, where, _why in G.BESIDE:
             src_path = Path(where.format(repo=REPO.as_posix(), source=src.as_posix()))
             if src_path.is_file():
                 write(base / name, G.read_text(src_path))
+        for name, where, _why in G.BESIDE_BINARY:
+            src_path = Path(where.format(repo=REPO.as_posix(), source=src.as_posix()))
+            if src_path.is_file():
+                (base / name).write_bytes(src_path.read_bytes())
         run = subprocess.run([sys.executable, str(REPO / "tools" / "gen_base_from_backend.py"),
                               "--source", str(src), "--base", str(base), "--check"],
                              capture_output=True, text=True)
@@ -257,11 +290,15 @@ def t_the_fast_twin_check_covers_every_beside_file_this_repository_owns():
     import test_base_matches_repo as M          # noqa: PLC0415
 
     covered = {leaf for leaf, _ours in M.twin_pairs()}
-    repo_owned = {n for n, where, _why in G.BESIDE if "{source}" not in where}
+    repo_owned = {n for n, where, _why in G.BESIDE + G.BESIDE_BINARY
+                  if "{source}" not in where}
     check("every beside-file the re-take rule takes from THIS repository is in "
           "the fast twin check's list",
           repo_owned <= covered,
           "the fast check does not compare: " + ", ".join(sorted(repo_owned - covered)))
+    check("... and so are the seven woff2 faces, the rule's BYTE half",
+          all(n in covered for n, _w, _y in G.BESIDE_BINARY),
+          str([n for n, _w, _y in G.BESIDE_BINARY if n not in covered]))
     check("... and requirements.lock, the file that went stale in PR #390 while "
           "the module half was green, is one of them",
           "requirements.lock" in covered, str(sorted(covered))[:300])
@@ -287,17 +324,16 @@ def t_the_repository_s_own_inputs_are_the_ones_in_the_base():
     base derives rather than copies.
     """
     base = REPO / "jarvis-backend"
-    pairs = [
-        ("requirements.lock", REPO / "backend" / "requirements.lock"),
-        ("quiz_grader_cases.json", REPO / "backend" / "quiz_grader_cases.json"),
-        ("rust-crates.lock", REPO / "jarvis-desktop" / "src-tauri" / "Cargo.lock"),
-        ("jarvis-framework.toml", REPO / "backend" / "rebuilt" / "jarvis-framework.toml"),
-        ("jarvis_hud.html", REPO / "jarvis-desktop" / "src" / "jarvis_hud.html"),
-    ]
+    pairs = [(n, Path(w.format(repo=REPO.as_posix(), source=REPO.as_posix())))
+             for n, w, _y in G.BESIDE if "{repo}" in w]
     differ = [n for n, ours in pairs
               if not (base / n).is_file() or G.read_text(base / n) != G.read_text(ours)]
+    binary = [(n, Path(w.format(repo=REPO.as_posix(), source=REPO.as_posix())))
+              for n, w, _y in G.BESIDE_BINARY]
+    differ += [n for n, ours in binary
+               if not (base / n).is_file() or (base / n).read_bytes() != ours.read_bytes()]
     check("the base's copy of each file the rule takes from this repository is this repository's copy",
-          not differ, "these differ (or are absent): " + ", ".join(differ))
+          not differ, "these differ (or are absent): " + ", ".join(sorted(differ)))
 
     #: `_where.py` is the exception, and it is a DERIVED file rather than a
     #: copied or an untouched one: `backend/_where.py` plus the base's own

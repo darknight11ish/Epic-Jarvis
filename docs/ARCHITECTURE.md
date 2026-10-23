@@ -3129,6 +3129,32 @@ newer ones, like `jarvis_second_card.py` and `jarvis_big_model.py` — ships
 as a file, not a patch, because there is nothing on the owner's machine to
 patch. `apply-patches.ps1` copies them in.
 
+**The page's own files are a closed world, and they are carried like modules
+(2026-10-23, PWA Slice 3a).** `GET /` has always answered with
+`jarvis_hud.html`; a browser then asks for the stylesheet, the fonts and the
+modules that page imports, and every one of them used to be a 404 — the page
+loaded half-dressed and its shell modules never mounted. `jarvis_hud.py` now
+serves them through `STATIC_ASSETS`, an explicit `url_path -> (file beside the
+server, exact Content-Type)` dictionary: a URL is a key or it is a 404, and
+the request never becomes part of a path (so there is no traversal, no
+directory listing and no prefix match). The same page gate applies — the token
+is required (a browser's `<link>`/`<script>` requests carry the SameSite=Strict
+cookie; an Origin, when present, must pass `_origin_ok`) — and every answer
+carries `X-Content-Type-Options: nosniff`. Files the later PWA slices will
+write (`/hud-web-bridge.js`, `/manifest.webmanifest`, `/sw.js`, `/icons/*`) are
+listed ahead of time: a request is an honest 404 until the file lands beside
+the server. The files reach the owner's PC the way the page itself does:
+`apply-patches.ps1`'s `$SHIPPED` list copies each one beside `jarvis_hud.py`,
+`tools/reconcile_live_backend.py`'s shipped sync carries the same list to the
+live folder, and `tools/gen_base_from_backend.py`'s `BESIDE`/`BESIDE_BINARY`
+tables put them in the published base (the woff2 faces are copied as bytes).
+`backend/test_hud_static.py` proves the whitelist is exactly what the page
+loads, that the handler refuses traversal and everything else, and that every
+served file is in those lists; the HUD-side code itself is a base-HUD change
+carried live by two literal deltas in `tools/reconcile_live_backend.py`'s
+`DELTA_TABLE` (`tools/hud-deltas/hud-static-*.txt`), because the live
+`jarvis_hud.py` is never replaced.
+
 **A local test run writes nothing into the owner's home folder - the audit log
 included (2026-10-20).** `backend/run_suites.py` gives every run a throwaway
 config folder, HOME and audit log, and `apply-patches.ps1` gets the same
