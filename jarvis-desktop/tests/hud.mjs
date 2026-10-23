@@ -3300,11 +3300,7 @@ await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escap
       .filter((node) => !node.hidden && node.getBoundingClientRect().height > 0);
     const boxes = cards.map((node) => {
       const r = node.getBoundingClientRect();
-      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return {
-        id: node.getAttribute("data-hud-card"), top: r.top, bottom: r.bottom,
-        hit: Boolean(at && (at === node || node.contains(at))),
-      };
+      return { id: node.getAttribute("data-hud-card"), top: r.top, bottom: r.bottom };
     }).sort((a, b) => a.top - b.top);
     const overlaps = [];
     for (let i = 1; i < boxes.length; i += 1) {
@@ -3312,11 +3308,24 @@ await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escap
         overlaps.push([boxes[i - 1].id, boxes[i].id]);
       }
     }
+    // The rail scrolls: budget/voice may start below the fold, so bring each
+    // card on screen before asking what a real click would hit. The geometry
+    // above is taken before scrolling, so an overlap is still caught.
+    const hits = cards.map((node) => {
+      node.scrollIntoView({ block: "nearest" });
+      const r = node.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        id: node.getAttribute("data-hud-card"),
+        hit: Boolean(at && (at === node || node.contains(at))),
+      };
+    });
     return {
       bannerCount: document.querySelectorAll(".hud-edit-banner").length,
       bannerText: (document.querySelector(".hud-edit-banner .hud-edit-words") || {}).textContent || "",
       statusText: (document.getElementById("hud-edit-status") || {}).textContent || "",
       cards: boxes,
+      hits,
       overlaps,
     };
   });
@@ -3328,7 +3337,7 @@ await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escap
   assert.deepEqual(rail.overlaps, [],
     `right-rail cards overlap in Edit HUD: ${JSON.stringify(rail.overlaps)}`);
   assert.ok(rail.cards.length >= 2, "the right rail has fewer than two cards to test");
-  for (const card of rail.cards) {
+  for (const card of rail.hits) {
     assert.equal(card.hit, true, `right-rail card ${card.id} is covered in Edit HUD`);
   }
   await page.keyboard.press("Escape");

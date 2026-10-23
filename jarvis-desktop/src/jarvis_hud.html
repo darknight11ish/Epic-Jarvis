@@ -5002,7 +5002,7 @@ subscribe();
     function paint() {
       var open = isOpen();
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      toggle.textContent = open ? "Hide navigation" : "Navigation";
+      toggle.textContent = open ? "Hide Controls" : "\u2630 Controls";
       if (close) {
         close.setAttribute("aria-hidden", open ? "false" : "true");
         close.tabIndex = open ? 0 : -1;
