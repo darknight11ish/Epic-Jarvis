@@ -200,6 +200,64 @@ def main():
               no_label.returncode == 1 and "label" in no_label.stdout.lower(), no_label.stdout + no_label.stderr)
 
         reset_surfaces(tmp)
+        doc = read_json(tmp)
+        lights = next(f for f in doc["features"] if f["id"] == "lights")
+        lights["control"]["turn_on"] = "speak faster"
+        write_json(tmp, doc)
+        wrong_words = run(tmp)
+        check("a feature phrase that changes a DIFFERENT setting fails",
+              wrong_words.returncode == 1 and "lights" in wrong_words.stdout
+              and "not this feature's own control" in wrong_words.stdout,
+              wrong_words.stdout + wrong_words.stderr)
+
+        reset_surfaces(tmp)
+        doc = read_json(tmp)
+        command = next(f for f in doc["features"] if f["id"] == "typing")
+        command["name"] = "Picture mode"
+        command["control"]["turn_on"] = "turn on Picture mode"
+        write_json(tmp, doc)
+        command_change = run(tmp)
+        check("a Command-Only title that changes a setting fails",
+              command_change.returncode == 1 and "typing" in command_change.stdout
+              and "changes a setting" in command_change.stdout,
+              command_change.stdout + command_change.stderr)
+
+        reset_surfaces(tmp)
+        doc = read_json(tmp)
+        multi = doc["multi_field"][0]
+        phrase = next(p for p in multi["phrases"] if p.get("resolved"))
+        phrase["resolved"] = False
+        write_json(tmp, doc)
+        stale_multi = run(tmp)
+        check("a stale multi-field resolved flag fails",
+              stale_multi.returncode == 1 and multi["id"] in stale_multi.stdout
+              and "resolved=" in stale_multi.stdout,
+              stale_multi.stdout + stale_multi.stderr)
+
+        reset_surfaces(tmp)
+        doc = read_json(tmp)
+        switchable = next(f for f in doc["features"]
+                          if f["label"].startswith("Switchable") and f["id"] == "email-read")
+        switchable["control"]["turn_on"] = "this sentence is not in the grammar"
+        write_json(tmp, doc)
+        unresolved = run(tmp)
+        check("a Switchable/Adjustable phrase that does not resolve fails",
+              unresolved.returncode == 1 and "email-read" in unresolved.stdout
+              and "does not resolve" in unresolved.stdout,
+              unresolved.stdout + unresolved.stderr)
+
+        reset_surfaces(tmp)
+        doc = read_json(tmp)
+        planned = next(f for f in doc["features"] if f["id"] == "wake-word")
+        planned.pop("label_note", None)
+        write_json(tmp, doc)
+        no_note = run(tmp)
+        check("a planned Switchable row without a label_note fails",
+              no_note.returncode == 1 and "wake-word" in no_note.stdout
+              and "label_note" in no_note.stdout,
+              no_note.stdout + no_note.stderr)
+
+        reset_surfaces(tmp)
         html = tmp / "jarvis-desktop/src/settings.html"
         text = html.read_text(encoding="utf-8")
         html.write_text(text.replace('id="follow-system"', 'id="not-the-row"', 1), encoding="utf-8")

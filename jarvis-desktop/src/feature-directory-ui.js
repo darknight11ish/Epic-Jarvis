@@ -65,6 +65,13 @@ function rowNode(row) {
   title.textContent = row.title;
   li.append(title);
 
+  if (row.status === "planned" || row.status === "pc-only") {
+    const badge = document.createElement("span");
+    badge.className = "fd-badge";
+    badge.textContent = row.status === "planned" ? "Planned" : "PC only";
+    li.append(badge);
+  }
+
   const label = document.createElement("p");
   label.className = "fd-label";
   label.textContent = row.label;
@@ -72,7 +79,17 @@ function rowNode(row) {
 
   const example = document.createElement("p");
   example.className = "note fd-example";
-  example.textContent = `Try: "${row.example}"`;
+  if (row.status === "planned") {
+    // A planned row has no proved typed phrase yet. Showing "Try: ..." would
+    // invite the owner to try words that do not change that feature.
+    example.textContent = "Typed phrase: planned - not wired yet.";
+  } else if (row.status === "pc-only") {
+    example.textContent = row.example_ok
+      ? `Try on this PC: "${row.example}"`
+      : "PC only: no fixed typed phrase yet.";
+  } else {
+    example.textContent = `Try: "${row.example}"`;
+  }
   li.append(example);
 
   const where = document.createElement("p");
