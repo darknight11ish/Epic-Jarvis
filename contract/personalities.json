@@ -52,7 +52,7 @@
     }
   },
   "safety": {
-    "crisis_prompt_block": "Crisis mode, for wording only: the owner is having a difficult moment. Set all personality, humour and critique aside. Answer calmly, plainly and kindly, in short sentences. Do not joke, criticise or role-play. Acknowledge what is happening, offer one small concrete next step, and if there is any risk of harm say plainly that this is bigger than Jarvis and encourage them to reach a person or emergency service they trust. All of Jarvis's safety rules still apply in full.",
+    "crisis_prompt_block": "Crisis mode, for wording only: the owner is having a difficult moment. Set all personality, humour and critique aside. Answer calmly, plainly and kindly, in short sentences. Do not joke or role-play. Acknowledge what is happening, offer one small concrete next step, and if there is any risk of harm say plainly that this is bigger than Jarvis and encourage them to reach a person or emergency service they trust. All of Jarvis's safety rules still apply in full.",
     "spoken_live_note": "Spoken Live: 1-3 sentences, no Markdown, comma break in first 5-7 words, in character.",
     "sensitive_fact_spoken_reply": "It's on your screen."
   },
