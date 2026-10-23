@@ -1478,13 +1478,59 @@ def _auth_headers(extra: dict | None = None) -> dict:
     return headers
 
 
+#: Loopback liveness probes are a check on THIS PC, not a network request to a
+#: remote service. A dead local port used to burn the caller's full HTTP
+#: timeout (measured 1.5 + 1.5 + 0.06 ≈ 3.1 s on `?force=1` and the poller);
+#: 0.20 s is the socket CONNECT timeout only, so a slow-but-alive local service
+#: still keeps its normal read timeout and is not falsely marked down. Non-
+#: loopback URLs take the unchanged path and their own timeout.
+_LOOPBACK_CONNECT_S = 0.20
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _loopback_target(url: str):
+    """(host, port) for a loopback HTTP(S) URL, else None."""
+    try:
+        parts = urllib.parse.urlsplit(str(url or ""))
+        host = (parts.hostname or "").lower().rstrip(".")
+        if host not in _LOOPBACK_HOSTS:
+            return None
+        port = parts.port
+    except Exception:
+        return None
+    if port is None:
+        port = 443 if parts.scheme == "https" else 80
+    return host, int(port)
+
+
+def _loopback_connect_ok(url: str) -> bool:
+    """True for a non-loopback URL, or when the loopback port accepts a
+    connection within _LOOPBACK_CONNECT_S. Never raises."""
+    target = _loopback_target(url)
+    if target is None:
+        return True
+    try:
+        sock = socket.create_connection(target, timeout=_LOOPBACK_CONNECT_S)
+    except Exception:
+        return False
+    try:
+        sock.close()
+    except Exception:
+        pass
+    return True
+
+
 def _http_json(url: str, timeout: float = 2.0):
+    if not _loopback_connect_ok(url):
+        raise OSError("the loopback service did not accept a connection")
     req = urllib.request.Request(url, headers=_auth_headers({"Accept": "application/json"}))
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8", "replace"))
 
 
 def _reachable(url: str, timeout: float = 1.5) -> bool:
+    if not _loopback_connect_ok(url):
+        return False
     try:
         urllib.request.urlopen(
             urllib.request.Request(url, headers=_auth_headers()), timeout=timeout
@@ -1494,6 +1540,33 @@ def _reachable(url: str, timeout: float = 1.5) -> bool:
         return True  # answered, just not with a 200 - the service is alive
     except Exception:
         return False
+
+
+def _reachable_all(items: dict) -> dict:
+    """Probe several URLs CONCURRENTLY and return {key: bool}.
+
+    With a 0.20 s connect timeout, three sequential dead loopback probes would
+    still cost ~0.6 s. They are independent, so one thread each keeps the
+    `?force=1` route and the poller under 0.25 s without changing any single
+    probe's timeout. A raising probe is False, never a lost answer.
+    """
+    out: dict = {}
+    threads = []
+
+    def run(key: str, url: str) -> None:
+        try:
+            out[key] = _reachable(url)
+        except Exception:
+            out[key] = False
+
+    for key, url in items.items():
+        thread = threading.Thread(target=run, args=(key, url),
+                                  name=f"jarvis-status-{key}", daemon=True)
+        thread.start()
+        threads.append(thread)
+    for thread in threads:
+        thread.join()
+    return out
 
 
 # /api/status answers from HERE, not by probing the network on the request
@@ -1514,7 +1587,12 @@ _STATUS_LOCK = threading.Lock()
 
 def _status_probe() -> dict:
     """The upstream half of /api/status, and the only part that goes over a socket."""
-    jarvis_up = _reachable(f"{JARVIS_URL}/health")
+    reach = _reachable_all({
+        "jarvis": f"{JARVIS_URL}/health",
+        "ollama": f"{OLLAMA_URL}/api/tags",
+        "proxy": f"{PROXY_URL}/health",
+    })
+    jarvis_up = bool(reach.get("jarvis"))
     models = []
     if jarvis_up:
         try:
@@ -1524,8 +1602,8 @@ def _status_probe() -> dict:
             models = []
     return {
         "jarvis": jarvis_up,
-        "ollama": _reachable(f"{OLLAMA_URL}/api/tags"),
-        "proxy": _reachable(f"{PROXY_URL}/health"),
+        "ollama": bool(reach.get("ollama")),
+        "proxy": bool(reach.get("proxy")),
         "models": models,
     }
 
