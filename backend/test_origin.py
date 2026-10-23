@@ -37,6 +37,12 @@ import jarvis_owner_check as OC  # noqa: E402
 FAILED, PASSED = [], []
 PATCH = HERE / "hud-origin-module.patch"
 PS1 = HERE.parent / "scripts" / "apply-patches.ps1"
+#: The server half of the HUD, as the published base ships it. The real live
+#: file is on the owner's PC; this copy is what an installer starts from and
+#: the only copy the repository can read on a clean checkout. #755 changed
+#: neither the `?token=` bootstrap block nor `log_message`, so what RA-2 reads
+#: here is the merged state of both.
+HUD = HERE.parent / "jarvis-backend" / "jarvis_hud.py"
 
 
 def check(name, cond, detail=""):
@@ -243,12 +249,60 @@ def t_the_hud_patch_wires_it_to_this_module():
           < names.index("plugin-loader.patch"))
 
 
+def t_ra2_the_bootstrap_redeems_the_query_token_without_leaving_it():
+    """RA-2 invariant 1 (audit of #755, 2026-10-23): a browser that opens
+    `/?token=<key>` must not leave that key in a later URL or in a log.
+
+    The HUD redeems it with a 303 to a bare "/" after planting the cookie, so
+    the address bar, the Referer of everything the page loads, and the history
+    entry are the bare path - no-referrer and no-store keep it that way. The
+    HUD writes no request line at all (its `log_message` overrides the base
+    class's writer and never calls it), and `jarvis_scrub.install(HUD_TOKEN)`
+    runs right after the token is resolved, so anything that DOES print a
+    line still cannot carry it (test_scrub.py proves the request-line shapes
+    lose the value).
+    """
+    check("RA-2: the HUD server the base ships is here", HUD.is_file(), HUD)
+    text = HUD.read_text(encoding="utf-8") if HUD.is_file() else ""
+    at = text.find("if HUD_TOKEN and hmac.compare_digest(_query_token(self), HUD_TOKEN):")
+    check("RA-2: the ?token= bootstrap block is the one the audit names",
+          at >= 0, "not found")
+    block = text[at:at + 900] if at >= 0 else ""
+    for needle, why in (
+            ("send_response(303)",
+             "it is redeemed with a 303, not served on the token URL"),
+            ('send_header("Location", "/")',
+             "the later request is the bare path"),
+            ('send_header("Referrer-Policy", "no-referrer")',
+             "nothing the page loads learns the old URL from Referer"),
+            ('send_header("Cache-Control", "no-store")',
+             "the token URL is not put in a cache"),
+            ("jarvis_token={HUD_TOKEN}", "the cookie is planted before the redirect")):
+        check(f"RA-2: bootstrap {why}", needle in block, block[:400])
+    check("RA-2: there is one redemption path, not one per route",
+          text.count("send_response(303)") == 1,
+          text.count("send_response(303)"))
+    # No request line is logged: the override returns without calling the base
+    # class's writer and never writes to a stream itself.
+    start = text.find("def log_message(self, fmt, *args):")
+    end = text.find("\n    # -- responses", start) if start >= 0 else -1
+    body = text[start:end] if start >= 0 and end > start else ""
+    check("RA-2: the HUD's log_message writes no request line at all "
+          "(so ?token= cannot become an access-log line)",
+          bool(body) and "super()" not in body and "stderr" not in body
+          and "wfile" not in body, body[:300])
+    check("RA-2: the scrubber is installed with the token, after it is resolved",
+          text.find("_SCRUBBING_LOG = bool(jarvis_scrub.install(HUD_TOKEN))") > 0,
+          "install line missing")
+
+
 if __name__ == "__main__":
     for fn in (t_origin_ok_is_the_decision_the_hud_makes,
                t_token_ok_is_the_decision_the_hud_makes,
                t_bite1_mesh_origins_are_accepted_from_the_owners_network,
                t_bite2_the_event_stream_from_a_browser_on_the_mesh,
-               t_the_hud_patch_wires_it_to_this_module):
+               t_the_hud_patch_wires_it_to_this_module,
+               t_ra2_the_bootstrap_redeems_the_query_token_without_leaving_it):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
