@@ -32,7 +32,7 @@ WHAT IT CHECKS
   4. each row's `indent` is the page's real indentation - the number the
      generator needs to put the row back where it found it;
   5. the count is stated out loud, so a number that moves is noticed rather
-     than absorbed. It is **28** (27 until "Making pictures" was added on
+     than absorbed. It is **29** (28 until "Making pictures" was added on
      2026-10-11, 26 before "Click through to what is behind" on 2026-10-10),
      and it has been mis-reported as 19: a bare `<label class="toggle">`
      string match misses the rows that also carry a label id;
@@ -221,12 +221,19 @@ def t_setting_links_are_real():
     # transcript text kept ON by default; its desktop Settings card is a
     # hand-written panel (disclosure, switch, one Delete) drawn from its own
     # route rather than a generated toggle row, and the phone has no card yet
-    # (ARCHITECTURE section 8 records that follow-up), so this list is seven.
+    # (ARCHITECTURE section 8 records that follow-up). The universal-control pass
+    # (2026-10-22) gave `background_learning` and `learn_sensitive_topics` real rows
+    # (the `memory-learning` card) and added eight switches with no toggle row of
+    # their own (chat history, Write like me, three big-model switches, the second
+    # card's combined mode and two suggestion switches), so the list is thirteen.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known seven",
-          orphans == ["background_learning", "big_coder", "learn_sensitive_topics",
-                      "lights_without_card", "media_index", "phone_notifications",
-                      "smartwatch_notifications"], str(orphans))
+    check("...and the BoolSettings with no desktop row are the known fifteen",
+          orphans == ["background_learning", "big_coder", "big_model",
+                      "big_model_deep_questions", "big_model_wiki", "chat_history",
+                      "learn_sensitive_topics", "lights_without_card", "media_index",
+                      "phone_notifications", "second_card_combined",
+                      "second_card_suggest_correction", "second_card_suggest_struggle",
+                      "smartwatch_notifications", "write_like_me"], str(orphans))
     phone_linked = sorted(r.setting for r in R.SETTINGS_ROWS
                           if r.owner == "phone" and r.setting)
     check("the three phone rows name the three phone-side spoken settings",
@@ -306,8 +313,8 @@ def t_bool_settings_is_the_measured_thirteen():
     phrase and dispatches on the same key, so both phrases really work. Any
     further growth has to be argued the same way.
     """
-    check("BOOL_SETTINGS holds its twenty-three spoken settings",
-          len(R.BOOL_SETTINGS) == 23, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-one spoken settings",
+          len(R.BOOL_SETTINGS) == 31, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:
@@ -329,3 +336,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

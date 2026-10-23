@@ -499,13 +499,22 @@ def t_a_phrase_that_names_no_setting_is_refused():
                         ("the pc sounds", "pc_alarm_sounds"),
                         ("my pc sounds", "pc_alarm_sounds"),
                         ("screen mode", "screen_picture"),
-                        ("the screen mode", "screen_picture"),
-                        ("the big model", "big_coder")):
+                        ("the screen mode", "screen_picture")):
         got = R.find_bool_setting_words(phrase)
         check(f"{phrase!r} names no single switch (it used to reach {was})",
               got is None, repr(got and got.key))
         check(f"{phrase!r} is refused by the spoken matcher too",
               R.find_bool_setting(phrase) is None)
+    # "the big model" is no longer an ambiguous phrase: the universal-control
+    # pass (2026-10-22) gave the big model its own switch, so both matchers
+    # must reach THAT switch - never the 30B coder's one.
+    for phrase in ("the big model", "the big model on this pc"):
+        got = R.find_bool_setting_words(phrase)
+        check(f"{phrase!r} reaches the big-model switch",
+              got is not None and got.key == "big_model", repr(got and got.key))
+        got = R.find_bool_setting(phrase)
+        check(f"{phrase!r} is the big-model switch to the spoken matcher too",
+              got is not None and got.key == "big_model", repr(got and got.key))
     # The restatements this matcher exists for must still work.
     for phrase, want in (("stop showing me notifications on my watch",
                           "smartwatch_notifications"),
@@ -706,8 +715,9 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     # setter calls the module's own request_enabled(), the same function the
     # Settings card route calls, so the tool can reach it exactly as the phrase
     # can - which is what this test is about.
-    check("the count is still the 23 measured on 2026-10-19 (22 before it)",
-          len(R.BOOL_SETTINGS) == 23, str(len(R.BOOL_SETTINGS)))
+    check("the count is now 31: the 23 measured on 2026-10-19 plus the eight"
+              " added by the universal-control pass on 2026-10-22",
+          len(R.BOOL_SETTINGS) == 31, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:

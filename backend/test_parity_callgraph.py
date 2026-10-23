@@ -40,6 +40,15 @@ three times:
 
 The fake checkout fails other checks of its own (it has no desktop routes at
 all), so the runs are told apart by the message, never by the exit code alone.
+
+A fourth tree is the shape #727 / F11 produces: the phone's work-offer surface is
+removed whole, so the old builder is gone and the route has NO call site in
+either app while still classified `planned` (the PC route remains). It must be a
+`RETIRED` warning naming the reason, never the "classified 'planned' but nothing
+checks it" error. A fifth tree wires the route up again in BOTH apps (a real
+literal in the desktop's JS and the phone's Kotlin): the same `RETIRED` entry
+must then be a FAILURE in both directions - a retired route is not allowed to be
+called again - with the "remove RETIRED, reclassify" message, never a warning.
 """
 import os
 import shutil
@@ -167,6 +176,14 @@ NOT_WIRED = "/api/work/recommend is 'planned' and the phone calls it"
 #: checker must name it, and `docs/WORK-SETUPS.md` and `docs/JARVIS-API.md`
 #: section 124.4 quote this sentence.
 NOTHING_CALLS_IT = "/api/work/recommend is 'planned' and NEITHER app calls it"
+#: The planned-loop failure the pre-#731 tree raised on the removed-surface
+#: tree; a retired route must never produce it.
+PLANNED_NOTHING = "/api/work/recommend is classified 'planned' but nothing checks it"
+#: What the checker says instead: retired, with the F11 reason, as a warning.
+RETIRED_SAID = "/api/work/recommend is 'planned' and RETIRED"
+#: A retired route called again by an app is a FAILURE, not a warning.
+RETIRED_DESK_ERROR = "/api/work/recommend is RETIRED but the desktop calls it again"
+RETIRED_PHONE_ERROR = "/api/work/recommend is RETIRED but the phone calls it again"
 
 
 def main():
@@ -251,6 +268,30 @@ def main():
         check("... and the route is not put back into the phone's set",
               "/api/work/recommend is 'planned' and the phone calls it" not in fourth,
               fourth[-600:])
+        # #727 / F11 removes the phone surface whole. The route is still classified
+        # `planned` (the PC route remains) and no app calls it; the RETIRED
+        # declaration must make that a warning that says so, never an error.
+        check("... and the planned loop does NOT fail the removed-surface tree",
+              PLANNED_NOTHING not in fourth, fourth[-600:])
+        check("... and it says the route is RETIRED, with the F11 reason, as a warning",
+              RETIRED_SAID in fourth and "F11" in fourth, fourth[-600:])
+        check("... naming it once", fourth.count(RETIRED_SAID) == 1, fourth[-600:])
+
+        # A retired route being wired up AGAIN must fail, not warn. Put a real
+        # `/api/...` literal in BOTH apps (the desktop's JS window and the phone's
+        # Kotlin) - the shape a re-wire takes in the checker's scanner.
+        _put(root, "jarvis-desktop/src/rewired.js",
+             "fetch('/api/work/recommend');\n")
+        _put(root, "jarvis-client/app/src/main/java/com/jarvis/client/ui/Rewired.kt",
+             "package com.jarvis.client.ui\n\n"
+             "suspend fun rewired() {\n"
+             "    api.post(\"/api/work/recommend\")\n"
+             "}\n")
+        fifth = _run(root)
+        check("a retired route the DESKTOP calls again is an ERROR, not a warning",
+              RETIRED_DESK_ERROR in fifth, fifth[-700:])
+        check("... and the same for the PHONE calls it again",
+              RETIRED_PHONE_ERROR in fifth, fifth[-700:])
     finally:
         shutil.rmtree(str(root), ignore_errors=True)
 
