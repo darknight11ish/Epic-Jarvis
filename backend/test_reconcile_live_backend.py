@@ -779,21 +779,10 @@ def t_traces_retention_is_retired_not_blocked():
           "traces-retention" not in R.DELTA_TABLE, sorted(R.DELTA_TABLE))
     check("... so the dry-run summary prints no BLOCKED LIVE DELTAS",
           R.blocked_delta_lines() == [], R.blocked_delta_lines())
-    sqlite_src = (REPO / "backend" / "jarvis_sqlite.py").read_text(encoding="utf-8")
-    initiative_src = (REPO / "backend" / "rebuilt" / "jarvis_initiative.py").read_text(
-        encoding="utf-8")
-    check("... the retention cap is shipped in jarvis_sqlite.py (deploy step 1)",
-          "TRACES_KEEP = 10000" in sqlite_src and "def trim_table(" in sqlite_src
-          and "if path.name == TRACES_DB:" in sqlite_src
-          and "trim_table(c, TRACES_TABLE, keep)" in sqlite_src, sqlite_src[:120])
-    check("... and called from the initiative heartbeat",
-          "def sqlite_maintenance(" in initiative_src
-          and "jarvis_sqlite.idle_maintenance()" in initiative_src, initiative_src[:120])
-    tool_src = (REPO / "tools" / "reconcile_live_backend.py").read_text(encoding="utf-8")
-    check("... and the retirement, with its reason, is written down",
-          "RETIRED" in tool_src and "0 blocked deltas" in tool_src, tool_src[:120])
-    check("... the shipped modules no longer claim a BLOCKED delta",
-          "stays BLOCKED" not in sqlite_src and "F10 STAYS BLOCKED" not in initiative_src)
+    # The retention cap itself is proved behaviourally by backend/test_sqlite_perf.py
+    # (TRACES_KEEP / trim_table / the heartbeat wiring). Nothing here reads production
+    # source text: the source-pin and position-pin gates forbid it (a ceiling may only
+    # go down), and the checks above already prove the retirement end to end.
 
 
 def t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing():
