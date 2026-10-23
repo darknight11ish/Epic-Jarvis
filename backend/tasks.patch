@@ -27,7 +27,7 @@
          if path == "/api/notes/capture":
              # note-capture.patch - how a note the owner filed ended (waiting,
              # filed, not filed and why, failed), never its text; with no id,
-@@ -3635,7 +3635,46 @@
+@@ -3657,7 +3657,46 @@
                  except Exception:
                      pass
              return self._send(code, out)
