@@ -688,8 +688,8 @@ def handle_get() -> tuple:
 
 _SET_KEYS = frozenset({
     "manner", "humor", "personality", "dial", "dials",
-    "sync_voice_with_personality", "custom_personality",
-    "delete_personality", "confirm",
+    "sync_voice_with_personality", "voice_sync", "custom_personality",
+    "custom", "delete_personality", "confirm",
 })
 
 
@@ -733,6 +733,7 @@ def handle_set(body) -> tuple:
     if changed_manner:
         legacy_pid = _LEGACY[m]
         if not _merge_setting({"manner": m, "personality": legacy_pid,
+                               "personality_explicit": False,
                                "dials": dict(_BY_ID[legacy_pid]["dials"])}):
             return 500, {"ok": False, "error": "could not save the setting (OSError)"}
         said.append(SAID[m])
@@ -765,15 +766,42 @@ def handle_set(body) -> tuple:
             if not ok:
                 return 400, {"ok": False, "error": message}
             said.append(message)
-    # ---- the voice-lock switch ----
-    if "sync_voice_with_personality" in body:
-        ok, message = set_sync_voice(body.get("sync_voice_with_personality"))
+    # ---- the voice-lock switch (both spellings: the older long name and
+    # #769's wire name voice_sync) ----
+    if "sync_voice_with_personality" in body or "voice_sync" in body:
+        value = body.get("voice_sync", body.get("sync_voice_with_personality"))
+        ok, message = set_sync_voice(value)
         if not ok:
             return 400, {"ok": False, "error": message}
         said.append(message)
     # ---- "My Personalities" ----
+    # Both shapes are accepted: the original custom_personality object and
+    # the desktop's {"custom": {"op": "save"|"delete", ...}} one.
+    custom = body.get("custom")
+    custom_spec = body.get("custom_personality")
+    if isinstance(custom, dict):
+        op = str(custom.get("op") or "").strip().lower()
+        if op == "save":
+            custom_spec = {
+                "name": custom.get("name"),
+                "base_preset": custom.get("based_on") or custom.get("base_preset"),
+                "custom_trait": custom.get("line") or custom.get("custom_trait"),
+                "example_user": "",
+                "example_jarvis": custom.get("example") or custom.get("example_jarvis"),
+                "dials": custom.get("dials"),
+                "voice_spec": custom.get("voice_spec"),
+                "voice_speed": custom.get("voice_speed"),
+            }
+            body = dict(body, custom_personality=custom_spec)
+            body.setdefault("_suggested_id", custom.get("id"))
+        elif op == "delete":
+            body = dict(body, delete_personality=custom.get("id"))
+            body["confirm"] = custom.get("confirm", body.get("confirm", False))
+        else:
+            return 400, {"ok": False, "error": 'custom op must be "save" or "delete"'}
     if "custom_personality" in body:
-        ok, result = save_user_personality(body.get("custom_personality"))
+        ok, result = save_user_personality(
+            body.get("custom_personality"), suggested_id=body.get("_suggested_id"))
         if not ok:
             return 400, {"ok": False, "error": str(result)}
         said.append(f"Saved {result['name']} in My Personalities.")
@@ -832,6 +860,9 @@ _DEFAULT_PERSONALITY = PERSONALITIES_DATA["default"]
 _LEGACY = dict(PERSONALITIES_DATA["legacy_aliases"])
 MAX_CUSTOM = int(PERSONALITIES_DATA.get("max_custom_personalities") or 20)
 CUSTOM_FIELD_MAX = int(PERSONALITIES_DATA.get("max_custom_field_chars") or 240)
+#: The desktop/PWA custom builder allows a 60-character name (its own LIMITS
+#: table); the backend used to cap at 40, which made 41-60 a 400 there.
+MAX_CUSTOM_NAME = 60
 
 #: Words for the dials when they are written into a prompt.
 _HUMOR_WORD = {0: "none", 1: "subtle", 2: "dry", 3: "playful"}
@@ -879,12 +910,13 @@ def normalize_personality_id(value) -> "str | None":
     key = _plain(value)
     if not key:
         return None
+    # "a butler" / "an iron man" / "the butler" name the same preset as
+    # "butler": drop a leading article before matching.
+    key = re.sub(r"^(?:the|a|an)\s+", "", key)
     if key in _LEGACY:
         return _LEGACY[key]
     if key in _BY_ID:
         return key
-    if key.startswith("the "):
-        key = key[4:]
     if key in _ALIAS:
         return _ALIAS[key]
     for item in user_personalities():
@@ -943,7 +975,7 @@ def _custom_spec(item: dict) -> dict:
     blend = str(item.get("voice_spec") or "").strip() or base["voice_blend"]
     return {
         "id": item["id"],
-        "title": str(item.get("name") or item["id"]),
+        "title": _scrub(_strip_markers(str(item.get("name") or item["id"]))).strip()[:MAX_CUSTOM_NAME],
         "description": trait or base["description"],
         "aliases": [],
         "prompt_block": (base["prompt_block"] + " " + trait).strip(),
@@ -1164,17 +1196,19 @@ def sync_voice_enabled() -> bool:
 
 
 def personality_chosen(conversation_id: "str | None" = None) -> bool:
-    """True when the owner has actually chosen a personality (saved, or a
-    temporary-chat override) - False on a PC still using the plain warm/plain
-    manner. The difference matters for the spoken voice: an untouched PC keeps
-    the owner's configured Kokoro voice exactly as before, and only a real
-    choice hands the voice to the preset."""
+    """True when the owner actually chose a PRESET (the new way), in a
+    temporary chat or saved.
+
+    NOT true for a PC that only ever used the old warm/plain switch: those
+    words keep the old words, the old spoken voice and the old timer sentences
+    exactly (the blueprint's zero-breaking-change rule), because the legacy
+    handle_set(manner) path stores its mapped preset with an explicit False.
+    Only a real personality choice sets the marker True."""
     if isinstance(conversation_id, str) and conversation_id:
         with _TEMP_LOCK:
             if _TEMPORARY_PERSONALITY.get(conversation_id):
                 return True
-    doc = _read_settings()
-    return normalize_personality_id(doc.get("personality")) is not None
+    return _read_settings().get("personality_explicit") is True
 
 
 def voice_for_speech() -> "dict | None":
@@ -1195,7 +1229,7 @@ def set_personality(pid, *, keep_dials: bool = False) -> tuple:
     active = preset(pid)
     if active is None:
         return False, "I do not know that personality. Say \"what personalities do you have?\" to hear the list."
-    patch = {"personality": active["id"],
+    patch = {"personality": active["id"], "personality_explicit": True,
              "manner": "warm" if active["id"] == "warm_peer" else "plain"}
     if not keep_dials:
         patch["dials"] = dict(active["dials"])
@@ -1284,7 +1318,7 @@ def _custom_slug(name: str, taken: set) -> str:
     return candidate
 
 
-def save_user_personality(spec) -> tuple:
+def save_user_personality(spec, *, suggested_id=None) -> tuple:
     """Save a "My Personalities" preset. (ok, message-or-preset).
 
     The user's own words are stripped of SecAlign markers, a phrase that tries
@@ -1292,11 +1326,15 @@ def save_user_personality(spec) -> tuple:
     anything is stored. Never more than MAX_CUSTOM presets."""
     if not isinstance(spec, dict):
         return False, "The custom personality must be an object."
-    name = _strip_markers(str(spec.get("name") or "")).strip()
+    # The name is not decoration: it becomes the preset title, goes into the
+    # <jarvis_persona> attribute in the prompt, is spoken in the switch line
+    # and is written to manner.json in plain JSON. It gets the SAME
+    # injection scan and secret scrub as the trait and examples.
+    name, name_problem = _clean_field(spec.get("name"), cap=MAX_CUSTOM_NAME)
+    if name_problem:
+        return False, f"That name contains {name_problem}; nothing was saved."
     if not name:
         return False, "Give the personality a name."
-    if len(name) > 40:
-        return False, "That name is longer than 40 characters."
     base_id = normalize_personality_id(spec.get("base_preset") or _DEFAULT_PERSONALITY)
     if base_id is None or base_id not in _BY_ID:
         return False, "Say which built-in personality it starts from."
@@ -1325,7 +1363,12 @@ def save_user_personality(spec) -> tuple:
             and 0.5 <= float(speed) <= 1.5):
         speed = None
     taken = {p["id"] for p in all_personalities()}
-    item = {"id": _custom_slug(name, taken), "name": name, "base_preset": base_id,
+    wanted = _strip_markers(str(suggested_id or "")).strip().lower()
+    if re.fullmatch(r"[a-z0-9][a-z0-9-]{2,63}", wanted) and wanted not in taken:
+        pid = wanted
+    else:
+        pid = _custom_slug(name, taken)
+    item = {"id": pid, "name": name, "base_preset": base_id,
             "dials": dials_spec, "custom_trait": fields["custom_trait"],
             "example_user": fields["example_user"],
             "example_jarvis": fields["example_jarvis"],
@@ -1351,6 +1394,7 @@ def delete_user_personality(pid, *, confirm: bool = False) -> tuple:
     patch = {"user_personalities": items}
     if current_personality() == key:
         patch["personality"] = _DEFAULT_PERSONALITY
+        patch["personality_explicit"] = False
         patch["dials"] = dict(_BY_ID[_DEFAULT_PERSONALITY]["dials"])
         patch["manner"] = "warm"
     if not _merge_setting(patch):
@@ -1365,7 +1409,10 @@ def view_personalities() -> dict:
         "personalities": [
             {"id": p["id"], "title": p["title"], "description": p["description"],
              "switch_ack": p["switch_ack"], "greeting_subtitle": p["greeting_subtitle"],
+             "quote": (p.get("examples") or [{}])[0].get("jarvis", ""),
              "voice_blend": p["voice_blend"], "voice_speed": p["voice_speed"],
+             "voice": {"blend": p["voice_blend"], "fallback": p["voice_fallback"],
+                       "speed": p["voice_speed"]},
              "dials": p["dials"], "builtin": bool(p.get("builtin", True))}
             for p in all_personalities()
         ],
@@ -1378,7 +1425,14 @@ def view_personalities() -> dict:
             "address": ["first_name", "sir", "ma'am", "boss", "captain", "none"],
         },
         "sync_voice_with_personality": sync_voice_enabled(),
+        # The desktop/phone Settings UI (PR #769 and its phone twin) reads these
+        # two snake_case names; the long names above stay for existing callers.
+        "voice_sync": sync_voice_enabled(),
         "user_personalities": [
+            {"id": item["id"], "name": item["name"], "base_preset": item["base_preset"]}
+            for item in user_personalities()
+        ],
+        "custom_personalities": [
             {"id": item["id"], "name": item["name"], "base_preset": item["base_preset"]}
             for item in user_personalities()
         ],
