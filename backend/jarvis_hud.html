@@ -3423,18 +3423,18 @@ const voice = (() => {
   const webMode = Boolean(window.__JARVIS_WEB_MODE);
   let listening = false;
 
-  $("r-stt").textContent = webMode ? "needs HTTPS" : "unsupported";
+  $("r-stt").textContent = webMode ? "not yet" : "unsupported";
   if(webMode && $("mic")){
-    $("mic").title = "Voice in a browser needs HTTPS. Until then, use Jarvis on your PC.";
+    $("mic").title = "Web voice is not here yet: it needs HTTPS and the web-voice update. Until then, use Jarvis on your PC.";
     $("mic").setAttribute("aria-label", $("mic").title);
   }
 
   function browserVoiceNote(){
-    const words = "Voice in a browser needs HTTPS. Until then, use Jarvis on your PC.";
+    const words = "Web voice is not here yet: it needs HTTPS and the web-voice update. Until then, use Jarvis on your PC.";
     if(window.__jarvisWebBridge && typeof window.__jarvisWebBridge.note === "function"){
       window.__jarvisWebBridge.note(words);
     }
-    if($("r-stt")) $("r-stt").textContent = "needs HTTPS";
+    if($("r-stt")) $("r-stt").textContent = "not yet";
   }
 
   function start(announce){

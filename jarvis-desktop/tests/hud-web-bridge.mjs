@@ -21,7 +21,7 @@
  *      real normalizer, restored on reload, and never written by the desktop;
  *   7. the one launcher focuses the page's own chat box in a browser;
  *   8. no client-side speech recogniser exists in any of the three twins, and
- *      the web mic says voice needs HTTPS instead of listening;
+ *      the web mic says web voice is not here yet instead of listening;
  *   9. the host-change guard refuses to send the remembered key elsewhere.
  *
  * The real iPad/PWA device rows are NOT-TESTABLE in this container: this is
@@ -152,7 +152,8 @@ function startServer() {
         const writeNext = () => {
           if (config.sse === "drop") {
             if (at === 0) {
-              res.write('event: hello\ndata: {"stale":false}\n\n');
+              // An id'd frame, then a drop: the reconnect must say `since=`.
+              res.write('id: 4242\nevent: hello\ndata: {"stale":false}\n\n');
               at += 1;
               setTimeout(() => { try { res.end(); } catch (e) { /* gone */ } }, 30);
             }
@@ -357,7 +358,7 @@ await check("browser: a wrong key is refused, the right key pairs, and the key i
   assert.equal(afterRight.overlayShown, false, "the right key did not close the pairing sheet");
   assert.equal(afterRight.pairs, 1, "the right key was not counted as one pairing");
   assert.equal(afterRight.pairedHost, afterRight.host, "the paired host was not remembered");
-  assert.equal(afterRight.keyInMemory, GOOD_KEY, "the paired key was not held in tab memory for the first requests");
+  assert.equal(afterRight.keyInMemory, GOOD_KEY, "the paired key was not held in this tab's memory");
   assert.ok(!afterRight.storage.includes(GOOD_KEY),
     "the pairing key was written to localStorage (CLAUDE.md rule 3)");
   const keyInUrls = server.config.requests.filter((r) => String(r.url).includes(GOOD_KEY));
@@ -399,6 +400,16 @@ await check("browser: fetch-SSE carries the token header and reconnects after a 
     "the SSE fetch did not send the session cookie");
   assert.ok(facts.connections >= 2, `the stream did not reconnect after a drop (connections=${facts.connections})`);
   assert.ok(facts.link && facts.link.tone === "bad", "a dropped stream did not say the link was bad");
+  // The drop is an id'd frame (id: 4242), so every reconnect must ask the
+  // server not to replay what was already delivered. The bridge does NOT
+  // de-duplicate a frame the server sends twice (the page treats events as a
+  // doorbell and re-reads state), so this asserts the `since=` request, not
+  // duplicate suppression.
+  const sinceCalls = eventsCalls
+    .map((r) => new URL("http://mock" + String(r.url)).searchParams.get("since"))
+    .filter(Boolean);
+  assert.ok(sinceCalls.includes("4242"),
+    `the reconnect did not carry since=4242 (saw ${JSON.stringify(sinceCalls)})`);
 });
 
 await check("browser: the SSE parser keeps frames and multi-byte characters split across chunks", async () => {
@@ -580,7 +591,7 @@ await check("browser: the one launcher focuses the chat box (and the dock duplic
 });
 
 /* ── 8. Client-side speech-to-text is gone; the web mic says so ─────── */
-await check("all three twins: no client-side speech recogniser, and the web mic says voice needs HTTPS", async () => {
+await check("all three twins: no client-side speech recogniser, and the web mic says web voice is not here yet", async () => {
   for (const file of TWINS) {
     const html = fs.readFileSync(file, "utf8");
     assert.ok(!/webkitSpeechRecognition/i.test(html), `${path.basename(path.dirname(file))}/jarvis_hud.html still names webkitSpeechRecognition`);
@@ -601,11 +612,13 @@ await check("all three twins: no client-side speech recogniser, and the web mic 
     stt: (document.getElementById("r-stt") || {}).textContent,
   }));
   await closeApp(app);
-  assert.equal(facts.stt, "needs HTTPS", "the web voice readout does not say voice needs HTTPS");
-  assert.match(String(facts.micTitle), /HTTPS/, "the web mic's tooltip does not say voice needs HTTPS");
+  assert.equal(facts.stt, "not yet", "the web voice readout does not say web voice is not here yet");
+  assert.match(String(facts.micTitle), /HTTPS/, "the web mic's tooltip does not say what web voice still needs");
+  assert.match(String(facts.micTitle), /web-voice/, "the web mic's tooltip does not name the web-voice update (HTTPS alone is not enough)");
   assert.equal(afterClick.mediaCalls, 0, "the mic opened the microphone in a browser (client STT/mic is forbidden here)");
-  assert.ok(/HTTPS/.test(afterClick.note + " " + afterClick.stt),
-    "clicking the web mic said nothing about HTTPS: " + afterClick.note + " / " + afterClick.stt);
+  const spoken = afterClick.note + " " + afterClick.stt + " " + String(facts.micTitle);
+  assert.ok(/HTTPS/.test(spoken) && /web-voice/.test(spoken),
+    "clicking the web mic did not say it needs both HTTPS and the web-voice update: " + spoken);
 });
 
 /* ── 9. Host-change guard: the remembered key is not sent elsewhere ─── */

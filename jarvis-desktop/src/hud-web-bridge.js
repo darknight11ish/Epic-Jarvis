@@ -18,19 +18,23 @@
  * WHAT IT DOES IN A PLAIN BROWSER (no `__TAURI__`):
  *   * pairing: paste the `jdk1...` kind of key the PC printed for this browser
  *     (docs/JARVIS-API.md §90) → `POST /api/devices/web-session` → the PC
- *     answers with the HttpOnly `jarvis_token` cookie. The key is kept only in
- *     this tab's memory for the first moments (so the first requests can carry
- *     it); it is never written to localStorage, never logged, and never put in
- *     a URL. The cookie is what persists. `jarvis.web.paired_host` remembers
- *     which host this browser was paired to; if the page is later served from
- *     a different host the bridge refuses to send the in-memory key and asks
- *     to pair again.
+ *     answers with the HttpOnly `jarvis_token` cookie. The key is held in this
+ *     tab's memory for the tab's whole session (so the requests that follow can
+ *     carry it); it is never written to localStorage, never logged, and never
+ *     put in a URL. The cookie is what persists. `jarvis.web.paired_host`
+ *     remembers which host this browser was paired to; if the page is later
+ *     served from a different host the bridge refuses to send the in-memory key
+ *     and asks to pair again.
  *   * the live stream: EventSource cannot set a header; a fetch() +
  *     ReadableStream SSE reader can, and carries the cookie too. The bridge
  *     replaces `window.EventSource` with a spec-shaped shim fed by that one
  *     reader, so the page's existing subscribe() code (hello/approval/
  *     proposal/finding/activity/power/wellbeing/schedule) works unchanged. It
- *     reconnects with backoff and re-syncs on visibilitychange/pageshow.
+ *     reconnects with backoff, asking for `?since=<last id>` each time so the
+ *     backend does not replay what was already seen; a frame the server DOES
+ *     send twice is not de-duplicated here — the page treats events as a
+ *     doorbell (it re-reads state), so a duplicate costs a re-read, never a
+ *     wrong action. It also re-syncs on visibilitychange/pageshow.
  *   * the honest link verdict: it pushes `jarvis-link-status` (the same shape
  *     hud_bootstrap.js pushes) — "catching up" until `/api/status` and
  *     `/api/pending` resolve, then linked; offline when the stream drops. The
