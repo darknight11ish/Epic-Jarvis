@@ -21,8 +21,10 @@ WHERE EACH SURFACE'S TABLE NOW LIVES (2026-10-22, coherence slice #729):
     functions (`actionsOf` delegates to `actionNames`, `labelOf` reads
     `ACTION_LABELS`). Both are checked against the contract, and the HUD fallback
     is checked through the same cases as the shared module.
-  * `jarvis-client/.../Schedule.kt` is still hand-written and does not offer
-    `add_time` yet - it is the one `pending` surface, owned by Session B.
+  * `jarvis-client/.../Schedule.kt` now offers `add_time` with the contract's
+    label, so it is ENFORCED like the other two (consumed by the Android Q2/F5
+    PR, 2026-10-23). No surface is pending any more; the pending/xfail machinery
+    stays so a future surface can be reported honestly while it is consumed.
 
 XFAIL-WITH-REASON (the repository's honest equivalent: `skip`). A surface whose
 contract entry is `pending` must say `"xfail": true` with `owner` + `reason`; its
@@ -265,16 +267,18 @@ def _kt_list(text: str, name: str) -> list:
 def parse_phone(repo: Path, contract: dict, shared: dict) -> dict:
     text = _read(surface_paths(contract, repo)["phone"])
     consts = {name: _kt_const(text, name)
-              for name in ("PAUSE", "RESUME", "DELETE", "DONE", "SNOOZE")}
+              for name in ("PAUSE", "RESUME", "DELETE", "DONE", "SNOOZE", "ADD_TIME")}
     labels = {"pause": consts["PAUSE"], "resume": consts["RESUME"],
               "delete": consts["DELETE"], "done": consts["DONE"],
-              "snooze": consts["SNOOZE"]}
+              "snooze": consts["SNOOZE"], "add_time": consts["ADD_TIME"]}
     next_time = _kt_const(text, "NEXT_TIME")
     went_off = _kt_list(text, "WENT_OFF_ACTIONS")
     act_actions = _kt_list(text, "ACTIONS")
     actions_block = _js_function_block(text, "fun actionsOf(job: Job)")
     label_block = _js_function_block(text, "fun labelOf(action: String)")
-    for match in re.finditer(r'"([a-z_]+)"\s*->\s*(PAUSE|RESUME|DELETE|DONE|SNOOZE)', label_block):
+    for match in re.finditer(
+            r'"([a-z_]+)"\s*->\s*(PAUSE|RESUME|DELETE|DONE|SNOOZE|ADD_TIME)',
+            label_block):
         labels[match.group(1)] = consts[match.group(2)]
     return {"labels": labels, "went_off": went_off, "act_actions": act_actions,
             "actions_block": actions_block, "next_time": next_time,
@@ -305,6 +309,19 @@ def phone_actions(parsed: dict, kind: str, state: str, went_off: bool) -> list:
     if re.search(r'job\.state\s*==\s*"waiting"\s*->\s*listOf\(([^)]*)\)', block):
         if state == "waiting":
             return [entry("delete")]
+    state_when = re.search(
+        r'job\.kind\s*==\s*"([a-z_]+)"\s*->\s*when\s*\(job\.state\)\s*\{(.*?)\n\s*\}',
+        block, re.S)
+    if state_when is not None and state_when.group(1) == kind:
+        body = state_when.group(2)
+        for state_match in re.finditer(
+                r'"([a-z_]+)"\s*->\s*listOf\(([^)]*)\)', body):
+            if state_match.group(1) == state:
+                return [entry(a) for a in re.findall(r'"([a-z_]+)"', state_match.group(2))]
+        fallback = re.search(r'else\s*->\s*listOf\(([^)]*)\)', body)
+        if fallback is not None:
+            return [entry(a) for a in re.findall(r'"([a-z_]+)"', fallback.group(1))]
+        return []
     if re.search(r'job\.state\s*==\s*"paused"\s*->\s*listOf\(([^)]*)\)', block):
         if state == "paused":
             return [entry("resume"), entry("delete")]

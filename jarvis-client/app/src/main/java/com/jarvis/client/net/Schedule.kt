@@ -668,11 +668,10 @@ object Schedule {
         job.kind == NEXT_TIME -> listOf("delete")
         // add_time is a timer's alone (jarvis_schedule.act), in both
         // its active and paused states - the HUD draws it on the same row.
-        job.kind == "timer" -> listOf(
-            "add_time",
-            if (job.state == "paused") "resume" else "pause",
-            "delete",
-        )
+        job.kind == "timer" -> when (job.state) {
+            "paused" -> listOf("add_time", "resume", "delete")
+            else -> listOf("add_time", "pause", "delete")
+        }
         job.state == "paused" -> listOf("resume", "delete")
         else -> listOf("pause", "delete")
     }
