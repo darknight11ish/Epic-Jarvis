@@ -6267,9 +6267,29 @@ most 3, a calendar collision first, EMPTY on a normal day - built by
 `build_where_to_look_strip` - and `not_checked`), and its text carries
 "Where to look today: ...". `where_to_look` is empty on a normal day.
 **Honest limits:** the quiet-thread list is only rendered when a caller supplies
-it (no live mailbox thread read is wired in v1); the prep people/notes and the
-money/study/PC-health pulse sources are likewise caller-supplied, and a source
-nobody read is listed in `not_checked` - never shown as 0.
+it (no live mailbox thread read is wired in v1); the prep people/notes are
+likewise caller-supplied, and a source nobody read is listed in `not_checked` -
+never shown as 0.
+
+**B5-c (2026-10-23): the Pulse's money / study / PC-health halves are live.**
+The briefing's own build supplies `Deps.pulse_sources` with
+`jarvis_pulse_sources.pulse_sources()` (through `jarvis_briefing.live_deps()`):
+it reads `jarvis_spending.view()` (a COUNT of bank statements waiting for a
+layout - no file name or path), `jarvis_decks.get().line()` ("3 cards ready",
+numbers only) and the fading-topic COUNT (the deck names are read and thrown
+away), `jarvis_pc_help.diagnose_silent_failures()` TITLES (never its
+paragraphs), and - only when the owner has turned the radar on and its store
+already exists - one "a watched price changed" line with no route, airline or
+amount. No new socket, model, route, card, permission or grant: every call
+reads a store this PC already keeps. App lock / "Hide memory lists and chat
+history" withholds the whole extras block, and a lock state that cannot be read
+counts as locked. Each source has a short deadline on a daemon thread and its
+own `try`/`except`, so one slow or broken source is absent, not fatal - and the
+briefing then says it was not checked (`extras` also carries the internal
+`checked` list, so a source that WAS read with nothing to say is not called
+"not checked"; it is a caller-supplied dict, not a route schema). Tests:
+`backend/test_pulse_sources.py` (fake sources, the no-leak rule, fail-closed
+lock, bounded slow source, `pulse_from` integration).
 
 ## 23. Web search (added 2026-09-25)
 
