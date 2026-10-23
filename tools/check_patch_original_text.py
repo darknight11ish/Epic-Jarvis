@@ -187,6 +187,18 @@ PIN = {
     # of the live jarvis_hud.py.
     "hud-origin-module.patch":                 (2, 73),    # position 144
     "hud-exclusive-bind.patch":                (1, 7),     # position 145
+    # 2026-10-23, rescue #4 narrowed by the owner's ruling Q1: only pairing a
+    # device, an approval key and a restore may have no deadline. ALL EIGHT of
+    # its hunks read text only the owner's PC holds - the module docstring, the
+    # APPROVAL_TIMEOUT block, `_init()`'s stale-row sweep (touched by no patch
+    # at all), `check()`'s deadline and wait loop, `pending()`'s expires_in
+    # block, and `withdraw()`'s insertion point before `history()`. Honest
+    # rather than drift, and checked the other way by
+    # backend/test_gate_no_expiry.py, which applies the patch to the published
+    # base with `git apply` (no fuzz), compiles the result and drives it. Its
+    # three jarvis_owner_check.py/devices.py halves are shipped modules, not
+    # patches, so they do not cost this walk anything.
+    "no-expiry-cards.patch":                   (8, 62),     # position 36
 }
 
 #: The audit's position, kept because the rule it states is the shape of this
