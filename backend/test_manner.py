@@ -1161,6 +1161,57 @@ def t_personality_views_carry_the_owner_surface():
               v["personality_default"] == "warm_peer" and v["personality"] == "warm_peer")
 
 
+def t_personality_voice_blending_and_voice_lock():
+    # Bite 5: the 256-dim style-vector blend is a real weighted sum with
+    # weights normalised to 1.0, and "Keep my current voice" really keeps it.
+    import jarvis_kokoro as K
+    try:
+        import numpy as np
+    except Exception:
+        skip("numpy is not installed here, so the style-vector blend cannot be built")
+        return
+    import jarvis_speech as SP
+    rng = np.random.default_rng(20261022)
+    archive = {"bm_george": rng.random((510, 256)).astype("float32"),
+               "bm_lewis": rng.random((510, 256)).astype("float32"),
+               "af_heart": rng.random((510, 256)).astype("float32")}
+    got = K.resolve_voice_style_vector(archive, "bm_george:0.65+bm_lewis:0.35")
+    want = archive["bm_george"] * 0.65 + archive["bm_lewis"] * 0.35
+    check("the blend is the weighted sum of the two voices' 256-dim tables",
+          got.shape == (510, 256) and got.dtype == np.float32 and np.allclose(got, want),
+          f"shape={getattr(got, 'shape', None)} dtype={getattr(got, 'dtype', None)}")
+    ones = {"a": np.ones((510, 256), dtype="float32"),
+            "b": np.ones((510, 256), dtype="float32")}
+    normal = K.resolve_voice_style_vector(ones, "a:3+b:1")
+    check("weights are normalised: any positive weights leave a constant table constant",
+          np.allclose(normal, 1.0) and np.isclose(normal.sum(), 510 * 256),
+          f"sum={normal.sum()}")
+    check("a bare name returns that voice's table unchanged",
+          K.resolve_voice_style_vector(archive, "af_heart") is archive["af_heart"])
+    check("an unknown spec falls back to the named fallback voice",
+          K.resolve_voice_style_vector(archive, "nobody:none", "af_heart") is archive["af_heart"])
+    check("the spec parser keeps the weights and drops unreadable parts",
+          K.parse_voice_spec("a:0.65+b:0.35") == [("a", 0.65), ("b", 0.35)]
+          and K.parse_voice_spec("a:0+b:1") == [("b", 1.0)]
+          and K.parse_voice_spec("a+ b") == [("a", 1.0), ("b", 1.0)])
+    with Folder():
+        check("a PC that never chose a personality keeps its own voice: no recipe",
+              M.voice_for_speech() is None and not M.personality_chosen())
+        M.handle_set({"personality": "classic_butler"})
+        spec = M.voice_for_speech()
+        check("a chosen personality hands the voice its blend, fallback and speed",
+              spec is not None and spec["voice"] == "bm_george:0.65+bm_lewis:0.35"
+              and spec["fallback"] == "bm_george" and spec["speed"] == 1.02, spec)
+        check("jarvis_speech's own voice resolver sees the same recipe",
+              SP._personality_voice() == spec)
+        check("the chosen personality's fixed acks join the #690 reflex whitelist",
+              "Done, sir." in SP.reflex_texts()
+              and not any("{" in t for t in SP.reflex_texts()))
+        M.handle_set({"sync_voice_with_personality": False})
+        check("with the voice-lock switch on, jarvis_speech is handed no recipe at all",
+              M.voice_for_speech() is None and SP._personality_voice() is None)
+
+
 def main():
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

@@ -1163,10 +1163,25 @@ def sync_voice_enabled() -> bool:
     return value if isinstance(value, bool) else True
 
 
+def personality_chosen(conversation_id: "str | None" = None) -> bool:
+    """True when the owner has actually chosen a personality (saved, or a
+    temporary-chat override) - False on a PC still using the plain warm/plain
+    manner. The difference matters for the spoken voice: an untouched PC keeps
+    the owner's configured Kokoro voice exactly as before, and only a real
+    choice hands the voice to the preset."""
+    if isinstance(conversation_id, str) and conversation_id:
+        with _TEMP_LOCK:
+            if _TEMPORARY_PERSONALITY.get(conversation_id):
+                return True
+    doc = _read_settings()
+    return normalize_personality_id(doc.get("personality")) is not None
+
+
 def voice_for_speech() -> "dict | None":
     """The active preset's blended voice, speed and fallback for
-    jarvis_kokoro/jarvis_speech, or None when the owner locked their voice."""
-    if not sync_voice_enabled():
+    jarvis_kokoro/jarvis_speech, or None when the owner locked their voice or
+    never chose a personality (then the PC's own voice is untouched)."""
+    if not sync_voice_enabled() or not personality_chosen():
         return None
     active = current_preset()
     return {"personality": active["id"], "voice": active["voice_blend"],
