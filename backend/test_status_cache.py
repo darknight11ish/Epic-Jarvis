@@ -89,10 +89,13 @@ def main() -> int:
     check("... and ?force=1 is still a way to ask for a probe right now",
           "force" in block,
           "?force=1 was dropped")
-    check("... and the response keys are unchanged",
+    check("... and the response keys are unchanged (the ten, plus A4's two "
+          "read-only session-latch fields)",
           all(f'"{k}"' in block for k in
               ("routing", "jarvis_injects_memory", "budget", "jarvis", "ollama",
-               "proxy", "models", "lanes", "default_model", "tools")),
+               "proxy", "models", "lanes", "default_model", "tools",
+               # A4 (2026-10-23): read-only, cleared by nothing here.
+               "taint_latched", "rush_latched")),
           "the payload lost a key another client reads")
 
     # ---- the shipped base IS what the owner runs ---------------------------
