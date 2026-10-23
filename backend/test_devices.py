@@ -170,14 +170,18 @@ def fresh():
 
 
 class FakeHandler:
-    def __init__(self, path="/", token=None, peer="127.0.0.1", local="127.0.0.1", body=b"{}"):
+    def __init__(self, path="/", token=None, peer="127.0.0.1", local="127.0.0.1", body=b"{}",
+                 cookie=None):
         self.path = path
         self.headers = {"X-Jarvis-Token": token} if token is not None else {}
+        if cookie is not None:
+            self.headers["Cookie"] = f"jarvis_token={cookie}"
         self.client_address = (peer, 50000)
         self.connection = types.SimpleNamespace(getsockname=lambda: (local, 4719))
         self.body = body if isinstance(body, bytes) else json.dumps(body).encode()
         self.wfile = io.BytesIO()
         self.sent = []
+        self.sent_headers = []
 
     def do_GET(self):
         self.sent.append(("original GET", self.path))
@@ -185,20 +189,33 @@ class FakeHandler:
     def do_POST(self):
         self.sent.append(("original POST", self.path))
 
-    def _send(self, code, obj):
+    def _send(self, code, obj, *args, **kwargs):
         self.sent.append((code, obj))
+        self.sent_headers.append(list(kwargs.get("extra_headers") or []))
         return code
 
 
 class Original:
-    """The owner's _token_ok, as far as these tests need it: the shared key."""
+    """The owner's _token_ok, as far as these tests need it: the shared key -
+    in the same three ways the real HUD accepts it (header, jarvis_token
+    cookie, one-time ?token=), because the device wrapper must fall back to
+    that decision unchanged."""
 
     def __init__(self):
         self.calls = 0
 
     def __call__(self, handler):
         self.calls += 1
-        return handler.headers.get("X-Jarvis-Token") == SHARED
+        if handler.headers.get("X-Jarvis-Token") == SHARED:
+            return True
+        raw = handler.headers.get("Cookie") or ""
+        for part in raw.split(";"):
+            name, _, value = part.strip().partition("=")
+            if name == "jarvis_token" and value == SHARED:
+                return True
+        from urllib.parse import parse_qs, urlsplit
+        query = parse_qs(urlsplit(str(getattr(handler, "path", "") or "")).query)
+        return (query.get("token") or [""])[0] == SHARED
 
 
 def pair(name="Pixel 9", method="qr", gate=None, peer=MESH, kind=None):
@@ -1650,6 +1667,247 @@ def t_the_routes():
               E._capability_probe()["pairing"] == {"version": 1, "signed_approvals": True})
     finally:
         D._ARMED = False
+
+
+# ==========================================================================
+#   6b. The web app over Meshnet / Tailscale (the PWA slice, 2026-10-23)
+# ==========================================================================
+# Bites 2, 3 and 4 of the PWA blueprint, adapted to what is really here. The
+# blueprint's premise (one paired phone in devices/owner-phone.json) is wrong:
+# the registry has held many independent devices since docs/PAIRING-DESIGN.md,
+# so Bite 3 is a test of what exists, not new code. What WAS missing is the
+# browser's way in: EventSource cannot send a header, and a device key was
+# accepted only from one. Bite 2 is that gap.
+
+PUBLIC_PEER = "203.0.113.5"       # a public address: never this app
+
+
+def _installed():
+    """A fresh registry and a handler class with the device routes on it."""
+    fresh()
+    D._ARMED = False
+
+    class H(FakeHandler):
+        pass
+
+    orig = Original()
+    D.install(H, origin_ok=lambda h: True, token_ok=orig,
+              read_body=lambda h: h.body)
+    return H, orig
+
+
+def _cookie_of(handler) -> str:
+    for name, value in handler.sent_headers[-1]:
+        if name == "Set-Cookie":
+            return value
+    return ""
+
+
+def t_bite2_a_browser_can_open_the_event_stream_with_the_device_key():
+    """Bite 2 (adapted): a browser's EventSource cannot send
+    X-Jarvis-Token. The HUD's own token has always been accepted three ways
+    (header, `jarvis_token` cookie, one-time ?token=); a device key now works
+    through the same three, and POST /api/devices/web-session is what plants
+    the HttpOnly cookie. Nothing here prints the key."""
+    H, orig = _installed()
+    with Clock():
+        dev, token, _ = pair(name="iPad Safari", kind="tablet")
+    keyed = D.wrap_token_ok(orig)
+    check("Bite 2: the session cookie is the one the HUD's own gate reads",
+          D.WEB_COOKIE == OC._HUD_TOKEN_COOKIE, D.WEB_COOKIE)
+    check("Bite 2: the header way still works", keyed(H(token=token)) is True)
+    check("Bite 2: a cookie-only request (the EventSource shape) works",
+          keyed(H(cookie=token)) is True)
+    check("Bite 2: the ?token= bootstrap works too",
+          keyed(H(path="/api/events?token=" + token)) is True)
+    check("Bite 2: a key nothing paired in the cookie is refused",
+          keyed(H(cookie="jdk1.d00000000." + "A" * 43)) is False)
+    check("Bite 2: the old shared key in the cookie is still the old rule",
+          keyed(H(cookie=SHARED)) is True)
+    check("Bite 2: the header wins, so a bad header is not rescued by a good cookie",
+          keyed(H(token="bad", cookie=token)) is False)
+
+    # ---- web-session plants the cookie a browser sends by itself --------
+    h = H(D.WEB_SESSION_ROUTE, token=token, peer=MESH)
+    h.do_POST()
+    code, out = h.sent[-1]
+    cookie = _cookie_of(h)
+    check("Bite 2: POST web-session answers 200 and names the device",
+          code == 200 and out["device_id"] == dev
+          and out["device_name"] == "iPad Safari"
+          and out["from_this_pc"] is False, (code, out))
+    for attr in ("Path=/", "HttpOnly", "SameSite=Strict", "Max-Age="):
+        check(f"Bite 2: the session cookie has {attr}", attr in cookie, cookie)
+    check("Bite 2: over plain http the cookie is not Secure (the browser must send it)",
+          "Secure" not in cookie, cookie)
+    check("Bite 2: over TLS the cookie is Secure",
+          "Secure" in D.session_cookie(token, secure=True))
+    check("Bite 2: the answer body never carries the key", token not in json.dumps(out))
+    check("Bite 2: no audit line carries it either", token not in json.dumps(AUDIT))
+
+    # ---- the browser that follows carries only the cookie ---------------
+    before = orig.calls
+    h = H("/api/devices", cookie=token, peer=MESH)
+    h.do_GET()
+    check("Bite 2: a real route reached with the cookie and no header says 200",
+          h.sent[-1][0] == 200, h.sent)
+    check("Bite 2: the owner's own _token_ok was never asked about a device key",
+          orig.calls == before, (before, orig.calls))
+
+    # ---- only this PC or a mesh device may open a session ---------------
+    h = H(D.WEB_SESSION_ROUTE, token=token, peer=PUBLIC_PEER, local=PC_MESH)
+    h.do_POST()
+    check("Bite 2: a public peer cannot open a browser session (403 off_network)",
+          h.sent[-1][0] == 403 and h.sent[-1][1].get("reason") == "off_network", h.sent)
+    h = H(D.WEB_LOGOUT_ROUTE, peer=MESH)
+    h.do_POST()
+    code, out = h.sent[-1]
+    cookie = _cookie_of(h)
+    check("Bite 2: web-logout clears the cookie, no key needed (Max-Age=0)",
+          code == 200 and "Max-Age=0" in cookie and "HttpOnly" in cookie,
+          (code, cookie))
+    D._ARMED = False
+
+
+def t_bite3_revoking_one_device_leaves_the_other_working():
+    """Bite 3 (adapted): two named devices, revoke one, prove it is refused
+    at once and the other keeps working - independent revocation, which the
+    registry already has (/api/devices/remove). No parallel registry here."""
+    H, orig = _installed()
+    with Clock():
+        phone, phone_key, _ = pair(name="OnePlus 10T", kind="phone")
+        tablet, tablet_key, _ = pair(name="iPad Safari", kind="tablet")
+    keyed = D.wrap_token_ok(orig)
+    check("Bite 3: both device keys work before the revocation",
+          keyed(H(token=phone_key)) is True and keyed(H(token=tablet_key)) is True)
+    code, out = D.remove({"id": tablet}, you="pc")
+    check("Bite 3: revoking the iPad answers 200 and names it",
+          code == 200 and out["id"] == tablet, (code, out))
+    check("Bite 3: the revoked device's key is refused at once",
+          keyed(H(token=tablet_key)) is False)
+    check("Bite 3: the other device's key still works",
+          keyed(H(token=phone_key)) is True)
+    h = H("/api/devices", cookie=tablet_key, peer=MESH)
+    h.do_GET()
+    check("Bite 3: a revoked device's session cookie gets 401 device_removed",
+          h.sent[-1] == (401, {"error": "bad or missing X-Jarvis-Token",
+                               "key": "device_removed"}), h.sent)
+    h = H("/api/devices", cookie=phone_key, peer=MESH)
+    h.do_GET()
+    check("Bite 3: the other device's session still answers 200",
+          h.sent[-1][0] == 200, h.sent)
+    rows = {r["id"]: r for r in
+            json.loads(D.registry_path().read_text(encoding="utf-8"))["devices"]}
+    check("Bite 3: only the revoked row is removed; the other keeps its hash",
+          bool(rows[tablet].get("removed")) and rows[tablet].get("token_sha256") == ""
+          and not rows[phone].get("removed")
+          and len(rows[phone].get("token_sha256") or "") == 64, rows)
+    D._ARMED = False
+
+
+def t_bite4_a_remote_web_client_is_not_this_pc():
+    """Bite 4 (adapted): a browser session from another device on the mesh is
+    `not from_this_pc`, and the PC-only boundary holds - a PC-only card is
+    refused 403 from there, an ordinary card is still approved, and a risky
+    card needs that device's own signed approval. The boundary is production
+    code in jarvis_owner_check.approve_check; this is the web-client proof."""
+    check("Bite 4: loopback is this PC",
+          D.from_this_pc("127.0.0.1", "127.0.0.1") is True)
+    check("Bite 4: a mesh peer is not this PC",
+          D.from_this_pc(MESH, PC_MESH) is False)
+    check("Bite 4: ... and it is placed on the mesh",
+          D.mesh_peer(MESH, PC_MESH) == "mesh", D.mesh_peer(MESH, PC_MESH))
+    check("Bite 4: a public peer is not on the mesh",
+          D.mesh_peer(PUBLIC_PEER, PC_MESH) == "no", D.mesh_peer(PUBLIC_PEER, PC_MESH))
+    H, orig = _installed()
+    with Clock():
+        dev, token, _ = pair(name="iPad Safari", kind="tablet")
+    pc_only = {"id": "bite4-pc", "action": "loosen_what_asks_first",
+               "risk": {"classified": True, "reach": "local", "reversible": "yes"}}
+    got = OC.approve_check({"id": "bite4-pc"}, peer=MESH, local=PC_MESH,
+                           pending=lambda: [pc_only], own=())
+    check("Bite 4: a PC-only card from the mesh web client is refused 403 pc_only",
+          got is not None and got[0] == 403
+          and got[1].get("owner_check") == "pc_only", got)
+    safe = {"id": "bite4-safe", "action": "capture_note",
+            "risk": {"classified": True, "reach": "local", "reversible": "yes"}}
+    got = OC.approve_check({"id": "bite4-safe"}, peer=MESH, local=PC_MESH,
+                           pending=lambda: [safe], own=())
+    check("Bite 4: an ordinary card from the same client is still approved",
+          got is None, got)
+    check("Bite 4: ... and it was stamped for the gate",
+          OC.take_stamp("bite4-safe", "capture_note") is True)
+    risky = {"id": "bite4-risky", "action": "capture_note",
+             "risk": {"classified": False}}
+    got = OC.approve_check({"id": "bite4-risky"}, peer=MESH, local=PC_MESH,
+                           pending=lambda: [risky], own=(), device=dev)
+    check("Bite 4: a risky card from that device needs its own signature",
+          got is not None and got[0] == 403
+          and got[1].get("owner_check") == "no_approval_key", got)
+    D._ARMED = False
+
+
+def t_bite1a_the_pc_can_mint_a_browser_key():
+    """Premise 1a, found after the blueprint was written: a browser cannot run
+    the phone's QR/HMAC pairing exchange, and there was no other way to create
+    a key for one - so a web app could never get its own credential. The PC
+    command mints it, prints it ONCE and stores only the hash; it raises no
+    card and opens no route, because a terminal on this PC is already the
+    owner, while the pairing card still gates remote devices."""
+    H, orig = _installed()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf), Clock():
+        code = D.main(["--add-device", "iPad Safari", "--kind", "tablet"])
+    said = buf.getvalue()
+    found = re.search(D.KEY_PATTERN, said)
+    check("Bite 1a: the PC command mints a key, prints it once and exits 0",
+          code == 0 and found is not None, said[:400])
+    token = found.group(0) if found else ""
+    dev = token.split(".")[1] if token else ""
+    doc = json.loads(D.registry_path().read_text(encoding="utf-8"))
+    row = next((r for r in doc["devices"] if r["id"] == dev), {})
+    check("Bite 1a: it is a named tablet, listed with the paired devices",
+          row.get("name") == "iPad Safari" and row.get("kind") == "tablet", row)
+    text = D.registry_path().read_text(encoding="utf-8")
+    check("Bite 1a: only the key's SHA-256 is written",
+          hashlib.sha256(token.encode()).hexdigest() in text and token not in text)
+    check("Bite 1a: the audit line names the id, never the key",
+          ("devices.minted", {"id": dev}) in AUDIT and token not in json.dumps(AUDIT))
+    keyed = D.wrap_token_ok(orig)
+    check("Bite 1a: the minted key works at once (header and cookie)",
+          keyed(FakeHandler(token=token)) is True
+          and keyed(FakeHandler(cookie=token)) is True)
+    h = H(D.WEB_SESSION_ROUTE, token=token, peer=MESH)
+    h.do_POST()
+    check("Bite 1a: ... and it opens a browser session (the flow the web app uses)",
+          h.sent[-1][0] == 200 and h.sent[-1][1]["device_id"] == dev, h.sent)
+    # A refused command says so in the owner's words and writes nothing.
+    before = json.loads(D.registry_path().read_text(encoding="utf-8"))["devices"]
+    bad = io.StringIO()
+    with contextlib.redirect_stdout(bad), contextlib.redirect_stderr(bad):
+        code = D.main(["--add-device", "", "--kind", "tablet"])
+    check("Bite 1a: a refused name exits 2, says why, and adds nothing",
+          code == 2 and "Nothing was added" in bad.getvalue()
+          and json.loads(D.registry_path().read_text(encoding="utf-8"))["devices"] == before,
+          bad.getvalue())
+    bad2 = io.StringIO()
+    with contextlib.redirect_stdout(bad2), contextlib.redirect_stderr(bad2):
+        code = D.main(["--add-device", "Odd", "--kind", "pc"])
+    check("Bite 1a: this PC is not a kind a browser may claim", code == 2,
+          bad2.getvalue())
+    # The shared-key cliff (premise 1e): this is the step that gives a browser
+    # its own key, and after it the old shared key stops working elsewhere.
+    cliff = D.wrap_token_ok(Original())
+    check("Bite 1a: the shared-key cliff - a device key now exists, so the old "
+          "shared key is refused from another device",
+          cliff(FakeHandler(token=SHARED, peer=MESH)) is False)
+    check("Bite 1a: ... and this PC keeps working",
+          cliff(FakeHandler(token=SHARED, peer="127.0.0.1")) is True)
+    code, out = D.remove({"id": dev}, you="pc")
+    check("Bite 1a: the minted device is removed like any other, and its key dies",
+          code == 200 and D.wrap_token_ok(Original())(FakeHandler(token=token)) is False,
+          (code, out))
+    D._ARMED = False
 
 
 # ==========================================================================

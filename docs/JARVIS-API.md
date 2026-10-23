@@ -16324,6 +16324,8 @@ all, which reads as "no label" - never as a broken registry.
 | `POST /api/devices/label` | `{"id": "d3f9a1c2e", "label": "Garden phone"}` and nothing else | The owner's own name for a device he already paired (docs/MULTI-DEVICE-DESIGN.md, 2026-10-09): **200** `{"ok": true, "id", "label", "name", "shown", "was_this_device"}`, immediate, **no card** from either app - a label grants nothing and revokes nothing, so it is never held on a stale link either. An empty `label` clears it, and `shown` goes back to the name the phone sent at pairing. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_labelable"}` for `"pc"`, `{"reason": "bad_label"}` when the label is over 40 characters or holds anything but letters and digits of any script, space and `- _ . ' ( )`, `{"reason": "bad_request"}` for anything else. Audit line `devices.labelled` with the id and whether it was cleared - **never the label**; a `devices` event. It can raise, answer and approve no card at all: `pair_device` stays PC only with Windows Hello. |
 | `POST /api/devices/shared` | `{"retired": true}` | **200** `{"ok": true, "retired": true, "retired_at"}`, immediate, no card, from either app. **409** `{"reason": "uses_it_yourself"}` when this very request used the shared key from another device - it would cut itself off. |
 | `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, **409** `{"first_pair_only": true}` while a device holds a key of its own (removing every device first is the way back), else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
+| `POST /api/devices/web-session` | No body. The key is presented as usual - `X-Jarvis-Token`, the `jarvis_token` cookie or `?token=` - and may be a device key or the old shared key | The browser session (2026-10-23, the PWA slice): **200** `{"ok": true, "device_id", "device_name", "kind", "from_this_pc"}` (`device_id` is a device id, `"pc"` or `"shared"`) and `Set-Cookie: jarvis_token=<key>; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000` (`; Secure` when the request arrived over https). This is the SAME cookie the HUD itself plants from `GET /?token=`, so the gate already reads it: a browser's `EventSource('/api/events')` - which cannot set a header - authenticates with it, and so does every other call. **403** `{"reason": "off_network"}` from a peer that is neither this PC nor on Tailscale/Meshnet; **503** while the device list cannot be read. The cookie PRESENTS the key - the registry keeps only its SHA-256 and every request re-checks it - so Remove cuts the session off at once. The key itself is in no body, audit line or error. |
+| `POST /api/devices/web-logout` | No body | **200** `{"ok": true}` and `Set-Cookie: jarvis_token=; Path=/; Max-Age=0; ...`, clearing the browser session cookie. Takes no key on purpose (clearing your own cookie must work after a device was removed); it revokes nothing - `POST /api/devices/remove` is the route that cuts a device off. |
 
 A 401 for a device key the PC removed (or never had) carries `"key":
 "device_removed"`; for the old shared key from another device after Retire,
@@ -16331,6 +16333,40 @@ A 401 for a device key the PC removed (or never had) carries `"key":
 device holds a key of its own (2026-10-05), `"key":
 "shared_first_pair_only"`. Both apps say the design's sentences (in the
 shared cases file); without `key`, today's words.
+
+**A browser needs a cookie, not a header** (2026-10-23, the PWA slice). A
+browser's `EventSource('/api/events')` cannot set `X-Jarvis-Token`, and
+putting the key in the query string leaves it in history and Referer, so
+`POST /api/devices/web-session` exchanges the key (sent as a normal header)
+for the HttpOnly `jarvis_token` cookie and the browser sends that by itself
+from then on. The same cookie is what the HUD's own `GET /?token=` bootstrap
+plants, and a device key is presented in the same three ways the HUD's
+shared token always has been: the header, that cookie, and the one-time
+`?token=` query (the last works even before a cookie exists, for the cold
+start the HUD page already uses). None of them is a second credential: each
+request re-checks the key's SHA-256 against the live registry, so Remove is
+immediate, and the key never appears in a response body, an audit line or an
+error.
+
+**Minting a browser's key on the PC** (2026-10-23). A phone pairs by scanning
+the PC's QR code and proving it holds the session secret; a browser cannot
+run that exchange. So the owner creates the browser's key at the PC:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_devices.py --add-device "iPad Safari" --kind tablet
+```
+
+It prints a new `jdk1...` key **once** and stores only its SHA-256; paste it
+into the web app's pairing sheet, which calls `POST /api/devices/web-session`
+and keeps the cookie. There is deliberately no route for this: a remote way
+to create credentials is exactly what the `pair_device` card gates, while
+this command runs only at a terminal on the PC, where the owner already
+controls Jarvis. `--kind` is display only (`phone`, `laptop` or `tablet`).
+**The shared-key cliff:** the moment any device holds its own key, the old
+shared HUD_TOKEN is refused from every other device (`shared_first_pair_only`
+above). Mint the browser's key instead of relying on the shared token for a
+tablet - a browser that only had `?token=` stops working after the first
+phone pairing, and this is the step that gives it its own key first.
 
 ### 90.6 Failing safe
 
