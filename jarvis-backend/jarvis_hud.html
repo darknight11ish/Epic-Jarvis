@@ -246,6 +246,24 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   letter-spacing:.2em; text-transform:uppercase; color:var(--dim);
 }
 .stage-bar .spacer{flex:1;}
+/* The fixed Stop everything control (2026-10-22, owner-approved). It lives in
+   the stage bar, outside every card, data-hud-region and the saved layout
+   document, so no preset, imported layout or Edit HUD can hide or move it.
+   It calls the same Rust command as Alt+Shift+X / the tray / the widget. */
+.hud-stop{
+  display:inline-flex; align-items:center; justify-content:center; gap:5px;
+  flex-shrink:0; padding:5px 11px; border:1px solid rgb(var(--bad-rgb) / .55);
+  border-radius:4px; background:rgb(var(--bad-rgb) / .10);
+  color:var(--bad-text); font-family:var(--f-mono); font-size:10.5px;
+  letter-spacing:.08em; text-transform:uppercase; cursor:pointer;
+}
+.hud-stop:hover{border-color:var(--bad); color:var(--diff-remove);}
+.hud-stop:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.hud-stop[aria-busy="true"]{opacity:.65;}
+.hud-stop-status.sr-only{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
 .chip{
   font-family:var(--f-mono); font-size:10px; letter-spacing:.08em;
   padding:3px 8px; border-radius:2px; border:1px solid var(--line);
@@ -1371,6 +1389,12 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
   body[data-hud-edit="on"] .rail.edit-reveal{transform:none !important;}
   body[data-hud-edit="on"] .rail.edit-reveal.right{display:flex !important;
     flex-direction:column;}
+  /* Review of #742 (2026-10-22): in two-column-left (Quiet) Edit HUD reveals
+     its right rail as a fixed overlay above the static stage bar, so the fixed
+     Stop control's centre hit-tested as the rail's form. Raise the button
+     itself (not the stage bar's position, which is fixed in Ambient) above
+     every rail (20/26/30/40/41) and below the Layouts menu (70). */
+  body[data-hud-edit="on"] #hud-stop{position:relative; z-index:60;}
 
   /* ---- Layouts menu + copy/paste JSON dialogs (H3) --------------------- */
   .hud-presets-menu{
@@ -1629,6 +1653,14 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
               aria-controls="rail-left" aria-expanded="false">Navigation</button>
       <button class="ghost rail-toggle" id="rail-toggle" type="button"
               aria-controls="rail-right" aria-expanded="false">Telemetry</button>
+      <!-- Fixed, outside every card/region/layout document. Same command as
+           Alt+Shift+X / the tray / the widget; never held on a stale link or
+           App lock, and it raises no approval card. -->
+      <button class="hud-stop" id="hud-stop" type="button"
+              aria-label="Stop everything"
+              title="Stop everything (Alt+Shift+X)">Stop</button>
+      <span class="hud-stop-status sr-only" id="hud-stop-status"
+            role="status" aria-live="polite"></span>
     </div>
 
     <!-- Studio layout only: the Inspector Stage's tabs. They choose what the
@@ -5646,6 +5678,38 @@ var laneSelect = $("lane-compact");
     start();
   }
 })();
+
+  /* ---- the fixed Stop everything control (2026-10-22, owner-approved) ----
+   * Same command as Alt+Shift+X / the tray / the widget:
+   * `screen_work::stop_everything` -> `commands::stop_everything_now`, which
+   * stops speech and the running turn, asks /api/stop_all with the Rust-held
+   * token, and is NEVER held on a stale link, App lock or a waiting card.
+   * It approves and starts nothing, so there is no approval card and no
+   * confirmation step. It is deliberately outside the layout document and
+   * every edit region: no preset, import or Edit HUD can hide it. */
+  (function hudStopEverything() {
+    var button = document.getElementById("hud-stop");
+    var status = document.getElementById("hud-stop-status");
+    if (!button) return;
+    function say(words) {
+      if (status) status.textContent = words;
+      button.removeAttribute("aria-busy");
+    }
+    button.addEventListener("click", function () {
+      if (button.getAttribute("aria-busy") === "true") return;
+      var core = window.__TAURI__ && window.__TAURI__.core;
+      if (!core || typeof core.invoke !== "function") {
+        say("The PC cannot be asked to stop from this page.");
+        return;
+      }
+      button.setAttribute("aria-busy", "true");
+      core.invoke("stop_everything").then(function () {
+        say("Stop sent.");
+      }, function () {
+        say("The PC could not be asked to stop.");
+      });
+    });
+  }());
 </script>
 <!-- The one shared rule: what a not-running model is called, and the DOM
      half that draws it (`lane-warning.js`, held to these words by

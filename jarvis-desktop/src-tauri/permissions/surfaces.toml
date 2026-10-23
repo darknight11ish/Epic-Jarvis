@@ -130,6 +130,16 @@ identifier = "hud-approvals"
 description = "Answer ONE waiting approval card from the HUD, through the same decide_approval the Jarvis bar and the widget use. Deny works on any card; Approve is held by Windows Hello where the settings ask for it, refused while the link is stale, and refused while App lock covers this window."
 permissions = ["allow-decide-approval"]
 
+# The fixed Stop everything control on the HUD (owner-approved 2026-10-22):
+# the SAME command the Alt+Shift+X hotkey, the tray and the widget use. It stops
+# the running turn and Jarvis's speech, approves nothing and starts nothing, and
+# is never held on a stale link or App lock. Separate from `task-control` on
+# purpose: this window gets no pause/resume/stop-task/inject/screen-work rights.
+[[set]]
+identifier = "hud-stop"
+description = "The HUD's fixed Stop everything control: stops the running turn and speech, approves and starts nothing, and is never held on a stale link or App lock."
+permissions = ["allow-stop-everything"]
+
 # Pause, resume or stop the turn Jarvis is running right now, and annotate it.
 # Granted to the two windows that actually draw those controls - the quickbar
 # and the widget - and to nothing else, the same reasoning `approvals` above

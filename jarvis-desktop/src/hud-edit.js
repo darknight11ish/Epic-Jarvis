@@ -105,7 +105,7 @@ export const CARD_DOM = Object.freeze({
 
 /** Cards that H2 shows but deliberately does not reparent, with their reason. */
 export const FIXED_IDS = Object.freeze({
-  emergency_stop: "Stop everything is the PC's own path (Alt+Shift+X, tray or widget); this page has no stop control yet.",
+  emergency_stop: "Stop everything is a fixed control in the header (Alt+Shift+X also works).",
   voice_controls: "The voice controls stay beside the composer.",
   conversation: "The conversation is the main stage.",
   composer: "The ask box is the main stage.",

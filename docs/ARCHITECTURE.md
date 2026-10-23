@@ -2508,15 +2508,19 @@ Grid/Flexbox variants with a way back from every rail a shell hides - a
 slide-over drawer (Ambient `center-core`, `two-column-right`, `single-stage-bento`)
 or the stage tabs (`split-stage`'s right rail, via Telemetry/Memory/Today) - so
 no card becomes unreachable. Entering **Edit HUD** auto-reveals every hidden
-rail, so the protected controls the HUD draws (`approvals`, the Jarvis-bar
-button and the mic) stay visible and reachable while editing, and the layout
-document keeps all four `PROTECTED_IDS` (`approvals`, `emergency_stop`,
-`voice_controls`, `bar_launcher`) forced visible. **Tracked gap:** the HUD page
-has no DOM and no clickable stop-all of its own (`emergency_stop` is a
-document-level protected card, not a page control; `voice_controls`' drawn
-control is the mic). The real **Stop everything** paths are the PC hotkey
-(`Alt+Shift+X`, `hotkeys.rs`), the tray and the widget - never a HUD button. A
-HUD stop control needs its own UI/command decision and is **not** claimed here.
+rail, so the protected controls the HUD draws (`approvals`, the fixed Stop
+everything button, the Jarvis-bar button and the mic) stay visible and reachable
+while editing, and the layout document keeps all four `PROTECTED_IDS`
+(`approvals`, `emergency_stop`, `voice_controls`, `bar_launcher`) forced
+visible. **The fixed Stop everything control (owner-approved 2026-10-22):** the
+stage bar carries a native `#hud-stop` button outside every card, region and the
+layout document, so no preset, imported layout or Edit HUD can hide it. It
+calls the same `screen_work::stop_everything` command as the PC hotkey
+(`Alt+Shift+X`), the tray and the widget - stops speech and the running turn,
+posts `/api/stop_all` with Rust's token, approves nothing, starts nothing, and is
+never held on a stale link or App lock - and the HUD gains only the
+least-privilege `hud-stop` capability (`allow-stop-everything`). H4 may later
+move it into `#hud-safety`; there is exactly one stop control, never a duplicate.
 The four-into-three `LOOKS` alias map, the
 `data-hud-layout` look attribute and `lookForPreset` are **retired**; the only
 survivor of the old road is a `jarvis.hud.preview` localStorage mirror holding
