@@ -27,11 +27,8 @@ import org.junit.Test
  * `tools/gen_work_cases.py` - the same shape `backend/test_work.py` holds the
  * Python half to. Nothing here is a shape typed to suit this client.
  *
- * The two checks that matter most, and are named so they cannot be skimmed:
+ * The check that matters most, and is named so it cannot be skimmed:
  *
- *  - `a recommendation never switches a model on its own` - the offer the PC
- *    sends is a suggestion with a step the OWNER has to ask for, and the answer
- *    says outright that nothing was switched;
  *  - `the explanation is on screen before the choice is applied` - the words a
  *    person reads before pressing anything (what it is for, what it costs, what
  *    it is worse at) are all present in the PC's answer for every setup, and
@@ -51,9 +48,6 @@ class WorkSetupsContractTest {
 
     private fun status(case: String = "today"): WorkSetups.Status =
         requireNotNull(WorkSetups.parse(cases[case]!!.jsonObject)) { "$case did not parse" }
-
-    private fun offer(case: String): WorkSetups.Offer =
-        WorkSetups.parseOffer(cases[case]!!.jsonObject["answer"]!!.jsonObject)
 
     private fun post(case: String): ApiResult<JsonObject> {
         val c = cases[case]!!.jsonObject
@@ -117,65 +111,6 @@ class WorkSetupsContractTest {
         val coding = requireNotNull(s.setup("coding"))
         assertTrue(coding.thinking, coding.thinking.contains("EMPTY"))
         assertTrue(coding.worse.plus(coding.why).contains("196,608"))
-    }
-
-    @Test
-    fun `a recommendation never switches a model on its own`() {
-        // The offer the PC sends is a suggestion. It says so, it carries a step
-        // the OWNER has to ask for, and the answer says outright that no model
-        // was switched. Nothing in this client may act on it: the only way a
-        // model changes is [WorkSetups.stepRequest] on a CHOSEN setup, posted
-        // through the existing switch card.
-        val o = offer("words_android_app")
-        assertTrue(o.offered)
-        assertEquals("coding", o.id)
-        assertFalse("an offer must never claim a model was switched", o.switched)
-        assertTrue(o.words, o.words.contains("Nothing has changed"))
-        val step = requireNotNull(o.step)
-        assertEquals("switch", step.kind)
-        assertEquals(WorkSetups.SWITCH_PATH, step.route)
-        assertEquals("qwen3.5:9b", step.body!!["ref"]!!.jsonPrimitive.content)
-
-        // ... and the sentence a person reads never claims it happened.
-        val words = o.words.lowercase()
-        for (claim in listOf("switched to", "i have switched", "now using", "i loaded")) {
-            assertFalse("the offer says: $words", words.contains(claim))
-        }
-
-        // Every offer case the golden file holds obeys the same rule.
-        for (name in cases.keys.filter { it.startsWith("words_") }) {
-            val each = offer(name)
-            assertTrue(name, each.offered)
-            assertFalse(name, each.switched)
-            assertTrue(name, each.words.contains("Nothing has changed"))
-        }
-    }
-
-    @Test
-    fun `an offer is made for work, and never for a mention or a crisis`() {
-        val wants = mapOf(
-            "words_android_app" to "coding",
-            "words_coding_bug" to "coding",
-            "words_coding_gradle" to "coding",
-            "words_admin_taxes" to "admin",
-            "words_admin_letter" to "admin",
-            "words_admin_inbox" to "admin",
-            "words_long_document" to "long",
-            "words_long_book" to "long",
-            "words_specialist" to "specialist",
-            "words_everyday" to "everyday",
-        )
-        for ((name, want) in wants) {
-            val o = offer(name)
-            assertTrue(name, o.offered)
-            assertEquals(name, want, o.id)
-            assertTrue(name, o.words.isNotBlank() && o.name!!.isNotBlank())
-        }
-        // The half that matters more: the turns that must offer NOTHING.
-        for (name in cases.keys.filter { it.startsWith("none_") }) {
-            assertFalse(name, offer(name).offered)
-            assertNull(name, offer(name).id)
-        }
     }
 
     @Test
@@ -273,21 +208,9 @@ class WorkSetupsContractTest {
     }
 
     @Test
-    fun `a recommend with no words is refused, and the refusal is shown`() {
-        val bad = post("post_recommend_no_words")
-        assertTrue(bad is ApiResult.Ok)
-        assertTrue(WorkSetups.replyLine(bad).contains("words"))
-    }
-
-    @Test
     fun `the bodies this app builds are the shape the PC wants`() {
         assertEquals("""{"setup":"coding"}""", WorkSetups.chooseBody("coding"))
         assertEquals("""{"setup":null}""", WorkSetups.chooseBody(null))
-        assertEquals("""{"words":"build an app"}""", WorkSetups.recommendBody("build an app"))
-        // A quote inside the owner's own words must not break the JSON.
-        val tricky = WorkSetups.recommendBody("""he said "hello" to me""")
-        val parsed = JarvisJson.parseToJsonElement(tricky) as JsonObject
-        assertEquals("""he said "hello" to me""", parsed["words"]!!.jsonPrimitive.content)
     }
 
     @Test

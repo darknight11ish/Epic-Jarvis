@@ -326,9 +326,9 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
  * from here. There is no download button, because a setup whose model is not on
  * the PC says so and points at the ordinary download card.
  *
- * Jarvis's own offer ([WorkSetups.Offer]) is drawn at the top, labelled as a
- * suggestion, and it switches nothing either - the words come from the PC, and
- * the PC's answer says `switched: false`.
+ * Nothing is drawn for the removed phone-side work offer (F11, 2026-10-22):
+ * the PC's `POST /api/work/choose` is the only work-setup write this screen
+ * sends, and choosing still changes no model.
  */
 @Composable
 private fun WorkSetupsSection(
@@ -338,7 +338,6 @@ private fun WorkSetupsSection(
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
-    val offer by JarvisRuntime.workOffer.collectAsState()
     var busy by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var asked by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
@@ -365,32 +364,6 @@ private fun WorkSetupsSection(
     Gap(4)
     Text(WorkSetups.KICKER, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
     Text(status.howTo, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-
-    // Jarvis's own suggestion, when the owner's words named a kind of work. It is
-    // a suggestion: it says outright that nothing has changed, and dismissing it
-    // changes nothing either.
-    offer?.takeIf { it.offered }?.let { o ->
-        Gap(8)
-        Plate {
-            Text(
-                WorkSetups.OFFER_TITLE,
-                style = MaterialTheme.typography.titleSmall,
-                color = chrome.textHi,
-            )
-            Gap(2)
-            Text(o.words, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-            Gap(2)
-            Text(WorkSetups.OFFER_TAIL, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-            Gap(6)
-            Text(
-                if (o.switched) "A model was switched." else "No model was switched by this.",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (o.switched) chrome.warnInk else chrome.okInk,
-            )
-            Gap(4)
-            Quiet("Not now", enabled = busy == null, onClick = { JarvisRuntime.clearWorkOffer() })
-        }
-    }
 
     for (s in status.setups) {
         Gap(8)

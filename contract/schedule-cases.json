@@ -359,10 +359,10 @@
     "phone": {
       "file": "jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt",
       "table": "actionsOf(job) + labelOf(action) + ACTIONS + WENT_OFF_ACTIONS",
-      "status": "pending",
-      "xfail": true,
-      "owner": "Session B / Android (coherence Q2)",
-      "reason": "add_time is missing from ACTIONS, actionsOf and labelOf (actBody therefore refuses it); no ready_for_review marker; goal_checkin and nexttime already match"
+      "status": "enforced",
+      "owner": "Session B / Android (Q2/F5) - consumed 2026-10-23",
+      "reason": "Schedule.kt offers add_time in ACTIONS, actionsOf and labelOf with the contract's own label, and all 29 shared cases match; the Q2/F5 phone PR consumed the contract.",
+      "cases": 29
     }
   }
 }

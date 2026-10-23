@@ -2967,17 +2967,17 @@ class JarvisApi(
         }
 
     /**
-     * One of the two work-setup POSTs: choosing a setup
-     * ([WorkSetups.CHOOSE_PATH]) or asking which setup to offer for the owner's
-     * own words ([WorkSetups.RECOMMEND_PATH]). Anything else is refused here,
-     * before anything is sent - neither of these routes switches a model, and
-     * the switch a chosen setup may need is the existing
+     * The one work-setup POST: choosing a setup ([WorkSetups.CHOOSE_PATH]).
+     * Anything else is refused here, before anything is sent - choosing
+     * switches no model, and the switch a chosen setup may need is the existing
      * `/api/models/switch` card, posted through [hardwarePost] like every other
      * step. A success never means a model changed; re-read [workSetups].
+     * The dead recommend route was removed from this client on 2026-10-22
+     * (F11); the PC keeps `POST /api/work/choose` unified.
      */
     suspend fun workPost(path: String, json: String): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {
-            if (path != WorkSetups.CHOOSE_PATH && path != WorkSetups.RECOMMEND_PATH) {
+            if (path != WorkSetups.CHOOSE_PATH) {
                 return@withContext ApiResult.Failed(ApiError.Malformed("not a work-setup route"))
             }
             val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())

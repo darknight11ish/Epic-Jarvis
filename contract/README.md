@@ -37,7 +37,7 @@ HUD's fallback table and compares both to the contract.
   note, not as a surface difference.
 - `surfaces` - the places that draw buttons, with the file that holds each one's
   table, an `owner`, and a `status`. `enforced` means a difference is a failure;
-  `pending` means the surface has not consumed the table yet and must say
+  `pending` (none today) means a surface has not consumed the table yet and must say
   `"xfail": true` with a reason (its differences are printed as `EXPECTED-GAP`).
 
 **Consumers and current status**
@@ -46,7 +46,7 @@ HUD's fallback table and compares both to the contract.
 |---|---|---|
 | HUD Reminders | `jarvis-desktop/src/hud-actions.js` (import) + browser-served `fallbackActionsFor` in `jarvis_hud.html` (3 byte-identical copies) | **enforced** (consumed in #729; both copies match every case) |
 | Brain "Coming up" | `jarvis-desktop/src/coming-up.js` imports `ACTION_LABELS` / `WENT_OFF_ACTIONS` / `actionNames` from `hud-actions.js` | **enforced** (a pure consumer since #729) |
-| Phone Coming up | `jarvis-client/.../net/Schedule.kt` hand-written `actionsOf`/`labelOf`/`ACTIONS` | **pending xfail** - Session B / Android (Q2): `add_time` is missing from its list, `actionsOf` and `labelOf` |
+| Phone Coming up | `jarvis-client/.../net/Schedule.kt` hand-written `actionsOf`/`labelOf`/`ACTIONS` | **enforced** - consumed 2026-10-23; `add_time` is in `ACTIONS`, `actionsOf` and `labelOf` |
 
 Two contract entries are deliberately **outside the cross-surface comparison
 yet**, each with its reason and owner beside it in the JSON: the D-1
@@ -72,7 +72,7 @@ listed and fired row. The checker reads each surface's own table from the source
 shape it has today (an unrecognised shape is reported, never guessed at), so a
 surface PR that renames its table updates the checker in the same change.
 
-When the phone's PR lands, remove its `"xfail": true` and flip its `status` to
+When a surface consumes the table, remove its `"xfail": true` (none today) and flip its `status` to
 `"enforced"`; the same checker then becomes the complete cross-surface test, and
 `--strict` can be wired in that PR. The suite proves that one-switch flip on a
 copy of the contract today.

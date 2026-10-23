@@ -21,13 +21,13 @@ the phone's hand-written `Schedule.kt` table, and compares each to the contract.
 **This suite changes no surface, no backend module and no patch-carried file.**
 
 THE XFAIL-WITH-REASON, stated exactly: a surface whose `status` is `"pending"` and
-`"xfail": true` in the contract (only the phone now) is still compared and every
-difference is printed as `EXPECTED-GAP`; this suite reports that surface with
-`skip(...)` - a skip is counted on its own line and is never a pass. `--strict`
-turns a pending gap WITHOUT `xfail` (or any enforced-surface difference) into a
-failure; the suite proves that one-switch flip by removing the phone's xfail on a
-copy of the contract. When Session B's phone PR lands it removes the xfail and
-flips the status, and the same checker becomes the complete cross-surface test.
+`"xfail": true` in the contract is still compared and every difference is printed
+as `EXPECTED-GAP`; this suite reports such a surface with `skip(...)` - a skip is
+counted on its own line and is never a pass. `--strict` turns a pending gap
+WITHOUT `xfail` (or any enforced-surface difference) into a failure. All three
+surfaces are now ENFORCED (the phone consumed the contract on 2026-10-23, Q2/F5),
+so the suite still proves the strict rule by putting a pending gap without xfail
+on a copy of the contract.
 
 WHAT IS PROVED AGAINST THE REAL AUTHORITY, not copied prose:
   * the contract's kind list and flags against the REAL `jarvis_schedule.KINDS`
@@ -248,11 +248,11 @@ def t_contract_is_one_complete_table():
     check("the shared table's went-off list and no-pause list are the contract's ordering",
           shared["went_off"] == ["snooze", "delete"] and shared["no_pause"] == {"nexttime"},
           (shared["went_off"], sorted(shared["no_pause"])))
-    check("HUD and the Brain are ENFORCED on the shared table; only the phone stays pending xfail",
+    check("all three surfaces are ENFORCED on the shared table (phone consumed 2026-10-23)",
           contract["surfaces"]["hud"]["status"] == "enforced"
           and contract["surfaces"]["coming_up"]["status"] == "enforced"
-          and contract["surfaces"]["phone"]["status"] == "pending"
-          and contract["surfaces"]["phone"].get("xfail") is True, contract["surfaces"])
+          and contract["surfaces"]["phone"]["status"] == "enforced"
+          and not contract["surfaces"]["phone"].get("xfail"), contract["surfaces"])
     check("the two deliberately-uncompared entries state their reason and owner",
           contract["kinds"]["goal_checkin"].get("surface_compare") is False
           and "surface_note" in contract["kinds"]["goal_checkin"]
@@ -424,22 +424,24 @@ def t_cross_surface_checker():
     phone = reports["phone"]
     check("phone: its source was parsed in the known shape", phone["parse_error"] == "",
           phone["parse_error"])
-    check("phone: the pending gap is named (never a silent pass)",
-          phone["status"] == "pending" and phone["xfail"] is True
-          and bool(phone["mismatches"]), phone)
-    skip(f"phone: XFAIL-WITH-REASON until {phone['owner']} consumes the contract - "
-         f"{phone['reason']}")
+    check("phone: status is enforced and every case matches the contract",
+          phone["status"] == "enforced" and not phone["mismatches"], phone)
+    check("phone: it was compared on the same 29 shared cases as the desktop",
+          phone["cases"] == 29, phone["cases"])
     check("the D-1 marker and the Goals-only kind are reported as notes, not failures",
           any("ready_for_review" in note for note in result["notes"])
           and any("goal_checkin" in note for note in result["notes"]), result["notes"])
 
     strict = CHECKER.run(contract, REPO, strict=True)
-    check("--strict is GREEN while the only pending surface is an explicit xfail",
-          strict["ok"] is True, strict)
-    without_xfail = copy.deepcopy(contract)
-    without_xfail["surfaces"]["phone"].pop("xfail", None)
-    flipped = CHECKER.run(without_xfail, REPO, strict=True)
-    check("--strict bites the moment the phone's xfail is removed (the one-switch flip)",
+    check("--strict is GREEN with every surface enforced", strict["ok"] is True, strict)
+    # The rule the repo keeps for a future, not-yet-consumed surface: a pending
+    # gap WITH a real mismatch and no xfail must fail strict, never pass as green.
+    synthetic = copy.deepcopy(contract)
+    synthetic["surfaces"]["phone"]["status"] = "pending"
+    synthetic["surfaces"]["phone"].pop("xfail", None)
+    synthetic["kinds"]["timer"]["states"]["active"] = ["pause", "delete"]
+    flipped = CHECKER.run(synthetic, REPO, strict=True)
+    check("--strict bites on a pending surface with a real gap and no xfail",
           flipped["ok"] is False, flipped)
 
     readme = README_PATH.read_text(encoding="utf-8") if README_PATH.is_file() else ""

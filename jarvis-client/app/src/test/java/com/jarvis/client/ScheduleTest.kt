@@ -53,7 +53,7 @@ class ScheduleTest {
             Schedule.metaOf(v.jobs[2]),
         )
         assertEquals(listOf("every 2 hours", Schedule.WAITING), Schedule.metaOf(v.jobs[3]))
-        assertEquals(listOf("pause", "delete"), Schedule.actionsOf(v.jobs[0]))
+        assertEquals(listOf("add_time", "pause", "delete"), Schedule.actionsOf(v.jobs[0]))
         assertEquals(listOf("delete"), Schedule.actionsOf(v.jobs[3]))
         assertEquals(listOf("done", "delete"), Schedule.actionsOf(v.todo[0]))
         assertEquals("9:58", Schedule.countdown(598.0))
@@ -64,8 +64,33 @@ class ScheduleTest {
     }
 
     @Test
+    fun onlyATimerOffersTheHudsFiveMoreMinutes() {
+        // Q2/F5 (2026-10-22): the PC's own matrix is the authority -
+        // jarvis_schedule.act() accepts add_time for a timer only. This is the
+        // phone half of the cross-surface rule; when Session A lands
+        // contract/schedule-cases.json this check can read its timer row instead
+        // of these fixtures (contract/ is not this branch's to edit).
+        val v = Schedule.parse(list)!!
+        assertEquals(listOf("add_time", "pause", "delete"), Schedule.actionsOf(v.jobs[0]))
+        for (row in v.jobs.drop(1) + v.todo) {
+            assertFalse("${row.kind}/${row.state} must not offer add_time",
+                "add_time" in Schedule.actionsOf(row))
+        }
+        val paused = Schedule.parse(obj(
+            """{"available":true,"jobs":[{"id":"s0000000006","kind":"timer",
+            "text":"tea","state":"paused","left":120,"duration":600}],"todo":[]}""",
+        ))!!
+        assertEquals(listOf("add_time", "resume", "delete"), Schedule.actionsOf(paused.jobs[0]))
+        assertEquals("+5 minutes", Schedule.labelOf("add_time"))
+        assertEquals("""{"id":"s0000000006","do":"add_time","seconds":300}""",
+            Schedule.actBody("s0000000006", "add_time"))
+    }
+
+    @Test
     fun oneJobPerChangeAndNeverAll() {
         assertEquals("""{"id":"s0000000001","do":"delete"}""", Schedule.actBody("s0000000001", "delete"))
+        assertEquals("""{"id":"s0000000001","do":"add_time","seconds":300}""",
+            Schedule.actBody("s0000000001", "add_time"))
         for (bad in listOf("all", "*", "", "s000000000", "S0000000001", "s0000000001,s0000000002")) {
             assertNull(bad, Schedule.actBody(bad, "delete"))
         }

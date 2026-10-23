@@ -505,13 +505,6 @@ object JarvisRuntime {
     val workSetups: StateFlow<WorkSetups.Read> = _workSetups.asStateFlow()
 
     /**
-     * What Jarvis offers for the owner's own words ([WorkSetups.Offer]), or
-     * null. Shown once, as a suggestion; it never changes a model by itself.
-     */
-    private val _workOffer = MutableStateFlow<WorkSetups.Offer?>(null)
-    val workOffer: StateFlow<WorkSetups.Offer?> = _workOffer.asStateFlow()
-
-    /**
      * The focus presets (`GET /api/work`'s `presets[]`, net/FocusPresets.kt):
      * the one contract both apps render. Nothing here switches a model by
      * itself; [useFocusPreset] posts the contract's one apply action, which
@@ -2527,25 +2520,6 @@ object JarvisRuntime {
                 Hardware.replyLine(result)
             }
         }
-    }
-
-    /**
-     * Asks the PC which setup to offer for the owner's own words, and keeps the
-     * answer for one look. It SWITCHES NOTHING: the PC's answer carries
-     * `switched: false`, and acting on the offer is the owner's tap. A PC whose
-     * backend predates work.patch answers nothing and nothing is shown.
-     */
-    suspend fun offerWorkSetup(words: String): WorkSetups.Offer? {
-        if (words.isBlank()) return null
-        val result = api.workPost(WorkSetups.RECOMMEND_PATH, WorkSetups.recommendBody(words))
-        val offer = (result as? ApiResult.Ok)?.value?.let { WorkSetups.parseOffer(it) }
-        _workOffer.value = offer?.takeIf { it.offered }
-        return _workOffer.value
-    }
-
-    /** The offer has been read (or dismissed). Nothing on the PC changes. */
-    fun clearWorkOffer() {
-        _workOffer.value = null
     }
 
     // ------------------------------------------------------- focus presets ----
