@@ -1038,6 +1038,59 @@
               <span class="toggle-detail" id="mn-humor-detail"></span>
             </span>
           </label>
+          <!-- Personality presets (2026-10-23, Personality Presets SLICE 2a):
+               the eight built-in presets, their paired voice, the four tuning
+               dials and the owner's own saved mixes. The words and the eight
+               presets' data are personalities.js's; the PC's own answer wins
+               whenever it carries the fields. Wording and voice only - never
+               what Jarvis does, asks or remembers - so no control here asks
+               for a yes. On a PC whose backend does not have the fields yet
+               the controls stay visible but disabled, with the plain "run
+               apply-patches.ps1" sentence, and the two choices above keep
+               working exactly as before. -->
+          <div class="mn-block" id="mn-presets-block" hidden>
+            <h3 class="subhead" id="mn-presets-title">Personality presets</h3>
+            <p class="note" id="mn-presets-note" hidden></p>
+            <div class="mn-presets" id="mn-presets" role="list"></div>
+          </div>
+          <div class="mn-block" id="mn-tune-block" hidden>
+            <h3 class="subhead">Fine tuning</h3>
+            <p class="note">The four dials apply on top of the chosen personality.</p>
+            <div id="mn-dials"></div>
+            <label class="mn-sync-row">
+              <input type="checkbox" id="mn-sync" data-live="true" />
+              <span>Switch Jarvis's spoken voice to match the chosen personality
+                <span class="toggle-detail" id="mn-sync-detail"></span></span>
+            </label>
+          </div>
+          <div class="mn-block" id="mn-mine-block" hidden>
+            <h3 class="subhead" id="mn-mine-title">My personalities</h3>
+            <p class="note">Save your own mix of the four dials. It is kept on this PC, like the built-in presets.</p>
+            <p class="note" id="mn-mine-empty">No personalities of your own yet.</p>
+            <div id="mn-mine"></div>
+            <form id="mn-custom-form" hidden>
+              <div class="row">
+                <label class="label" for="mn-custom-name">Name</label>
+                <input id="mn-custom-name" type="text" maxlength="60" autocomplete="off" />
+              </div>
+              <div class="row">
+                <label class="label" for="mn-custom-line">One line about how it should sound (up to 240 characters)</label>
+                <input id="mn-custom-line" type="text" maxlength="240" autocomplete="off" />
+              </div>
+              <div class="row">
+                <label class="label" for="mn-custom-example">One example exchange (up to 240 characters)</label>
+                <input id="mn-custom-example" type="text" maxlength="240" autocomplete="off" />
+              </div>
+              <div class="row">
+                <label class="label" for="mn-custom-base">Start from</label>
+                <select id="mn-custom-base"></select>
+              </div>
+              <div class="row">
+                <button type="submit" class="mn-btn" data-live="true">+ Create Custom Personality</button>
+                <span class="status" id="mn-custom-status" role="status"></span>
+              </div>
+            </form>
+          </div>
           <div class="row">
             <span class="status" id="mn-status" role="status"></span>
           </div>
