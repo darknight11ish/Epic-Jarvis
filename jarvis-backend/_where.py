@@ -1192,6 +1192,11 @@ SHIPPED = (
     # flight engine + price history. [price_radar] enabled = false; no route,
     # no app surface, no booking path - docs/DESIGN-PRICE-RADAR.md.
     "jarvis_price_radar.py",
+    # The Daily Pulse's money / study / PC-health / watched-price summaries
+    # (2026-10-23, P3 seam B5-c): READ-ONLY reads of the four modules above,
+    # wired into the briefing by jarvis_briefing.live_deps(). No route, no
+    # card, no network; a source it cannot read is reported "not checked".
+    "jarvis_pulse_sources.py",
 )
 
 

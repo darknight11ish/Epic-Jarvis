@@ -2579,7 +2579,12 @@ backend route is added and the phone's read of `/api/schedule` is unchanged.
 written down rather than implied** (2026-10-22; PR #722; JARVIS-API sections 22
 and 82). The briefing's new sections - Travel and next steps, 2-minute prep and
 Quiet threads - travel on the existing briefing answer, which both apps already
-show, and no backend route was added. The Daily Pulse's `where_to_look` strip
+show, and no backend route was added. Since B5-c (2026-10-23) the Pulse's
+money / study / PC-health halves are read on this PC by
+`jarvis_pulse_sources.pulse_sources()` (read-only, bounded, counts and titles
+only, withheld under App lock / hidden memory lists) instead of waiting for a
+caller; the quiet-thread list and the prep people/notes are still
+caller-supplied. The Daily Pulse's `where_to_look` strip
 reaches the desktop's Today board (`jarvis_today` carries `pulse`); the phone's
 Today board does not exist yet - the phone's Today is unchanged in this slice,
 and a phone Today board is the named follow-up in JARVIS-API section 82 - so
