@@ -17,8 +17,10 @@
  * checkbox or select in the list, and nothing here calls the PC. A switchable
  * row says which existing Settings card changes it; a Command-Only row says
  * what to ask for and where; an Always-On row says it is a rule rather than a
- * setting. The one interactive thing is the filter box, which only hides rows
- * locally (no setting is changed, and clearing it restores every row).
+ * setting. The interactive things are the filter box - which only hides rows
+ * locally (no setting is changed, and clearing it restores every row) - and the
+ * five native `<details>` disclosures the five labels are grouped under. There
+ * is no button, toggle, checkbox or select inside the directory.
  *
  * The rows are in the page's text, not drawn later on demand, so the Settings
  * search box (settings-search.js) indexes all 139 features as words on screen.
@@ -56,6 +58,7 @@ function rowNode(row) {
   const li = document.createElement("li");
   li.className = "fd-row";
   li.dataset.fdRow = "true";
+  li.dataset.fdId = row.id;
 
   const title = document.createElement("h3");
   title.className = "fd-name";

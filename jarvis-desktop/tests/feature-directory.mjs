@@ -15,6 +15,7 @@
  * select inside the list, and the only interactive thing is the filter.
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -70,6 +71,7 @@ const directory = (page) => page.evaluate(() => {
     controls: document.querySelectorAll(
       "#fd-list button, #fd-list input, #fd-list select, #fd-list textarea, " +
       "#fd-list [role=switch], #fd-list [role=checkbox]").length,
+    disclosures: document.querySelectorAll("#fd-list details").length,
   };
 });
 
@@ -93,6 +95,35 @@ await check("the generated copy matches the canonical contract", async () => {
   assert.deepEqual(FIXTURE.label_order, LABELS,
     "the generated order is not the contract's label order");
   assert.deepEqual(Object.keys(FIXTURE.labels), LABELS);
+  // The page imports the GENERATED module, not the fixture: prove its embedded
+  // source_sha256 is the same one, so a fixture regenerated without the module
+  // (or the other way round) fails instead of showing labels the contract no
+  // longer has.
+  const moduleText = read("src/feature-directory.js").toString("utf8");
+  const moduleSha = (moduleText.match(/"source_sha256": "([0-9a-f]{64})"/) || [])[1];
+  assert.equal(moduleSha, sha,
+    "src/feature-directory.js is stale - run python -B tools/gen_feature_directory.py");
+  assert.equal(moduleSha, FIXTURE.source_sha256);
+  // Wire the generator's own --check into a required battery: this suite runs
+  // in the frontend job, so a hand-edited generated file or a stale copy fails
+  // CI even if nobody runs the generator by hand. Both interpreter names are
+  // tried (Windows uses `python`, CI's ubuntu uses `python3`).
+  const root = join(HERE, "..", "..");
+  let out = null;
+  let last = null;
+  for (const engine of ["python3", "python"]) {
+    try {
+      out = execFileSync(engine,
+        ["-B", "tools/gen_feature_directory.py", "--check"],
+        { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      break;
+    } catch (e) {
+      last = e;
+    }
+  }
+  assert.ok(out !== null,
+    `tools/gen_feature_directory.py --check did not run: ${last && (last.stderr || last.message)}`);
+  assert.match(out, /match the feature contract/);
 });
 
 await check("the page renders all 139 features, grouped under exactly five labels", async () => {
@@ -117,12 +148,16 @@ await check("it is a directory, not a second settings surface", async () => {
   const d = await directory(page);
   assert.equal(d.controls, 0,
     `${d.controls} control(s) were drawn inside the directory - it must be words only`);
-  // The one interactive thing is the filter, and it changes no setting.
+  // Two kinds of interactive element, and neither changes a setting: the
+  // filter box (hides rows locally) and the five native <details> disclosures
+  // the labels are grouped under. No button/toggle/checkbox/select anywhere.
   const filter = await page.evaluate(() => {
     const el = document.getElementById("fd-filter");
     return el ? { type: el.type, tag: el.tagName } : null;
   });
   assert.deepEqual(filter, { type: "search", tag: "INPUT" });
+  assert.equal(d.disclosures, 5,
+    `${d.disclosures} disclosure groups - expected the five labels`);
   await page.close();
 });
 
@@ -141,20 +176,32 @@ await check("the filter narrows the list and clearing it restores every row", as
   await page.close();
 });
 
-await check("the page names the screen the generated rows point at", async () => {
+await check("the live desktop screen name is real; only the phone stays planned", async () => {
+  // R1: this PR ships the desktop screen, so the contract's desktop "(planned)"
+  // marker must NOT reach the page. The phone directory is Session B's work, so
+  // the phone half may keep the contract's planned wording.
+  const planned = FIXTURE.rows.filter((r) => /\(planned\)/.test(r.where_desktop));
+  assert.deepEqual(planned.map((r) => r.id), [],
+    "a live desktop screen path still says (planned)");
+  assert.ok(FIXTURE.rows.some((r) => /\(planned\)/.test(r.where_phone)),
+    "the phone half should still say (planned) until Session B ships it");
   const page = await open();
+  const title = await page.evaluate(
+    () => (document.getElementById("fd-title") || {}).textContent || "");
+  assert.equal(title.trim(), "All features and abilities",
+    "the visible card title is not the live contract screen name");
   const text = await page.evaluate(() =>
     (document.getElementById("fd-title")?.closest(".card") || {}).innerText || "");
-  // The contract names the directory "Settings, All features and abilities"
-  // (with a "(planned)" suffix until it is real); the visible card must carry
-  // that name, so a row never points at a screen whose own text is missing.
-  assert.match(text, /all features and abilities/i);
   // Users also know it as "Abilities & commands"; the card says both.
   assert.match(text, /Abilities & commands/);
   await page.close();
 });
 
-await check("Settings search finds the features inside the directory", async () => {
+await check("the main search brings the directory card up; the card's box narrows rows", async () => {
+  // R2: Settings search filters CARDS. A feature name brings this whole card up;
+  // it does NOT reveal the one matching row inside it. The per-feature search is
+  // the card's own box, which narrows the rows locally. Both sentences are in
+  // the card's words so the page does not over-claim either behaviour.
   const page = await open();
   const type = async (text) => {
     await page.locator("#settings-search-input").fill(text);
@@ -164,13 +211,38 @@ await check("Settings search finds the features inside the directory", async () 
     const card = document.getElementById("fd-title")?.closest(".card");
     return Boolean(card) && !card.hidden;
   });
+  const intro = await page.evaluate(() =>
+    (document.getElementById("fd-title")?.closest(".card") || {}).innerText || "");
+  assert.match(intro, /main Settings search brings this whole card up/i,
+    "the card does not say the main search shows the card, not a row");
   for (const words of ["clipboard history", "retirement what-if",
     "morning briefing"]) {
     await type(words);
     assert.equal(await cardShown(), true,
-      `"${words}" did not find the abilities directory`);
+      `"${words}" did not find the abilities directory card`);
     await type("");
   }
+  // The card's own filter is what finds a row.
+  await page.locator("#fd-filter").fill("retirement");
+  await page.waitForTimeout(250);
+  const shown = await page.evaluate(() =>
+    document.querySelectorAll("#fd-list .fd-row").length);
+  assert.ok(shown > 0 && shown < 139, `the row filter showed ${shown} rows`);
+  await page.close();
+});
+
+await check("a known multi-field row keeps its planned note", async () => {
+  // R5: the honest note is words, not just a flag. Pin one row the contract
+  // marks multi-field and prove the page renders the exact sentence.
+  const note = "Settings control today; typed path still being wired.";
+  const row = FIXTURE.rows.find((r) => r.id === "read-aloud");
+  assert.ok(row, "the pinned multi-field row read-aloud is missing");
+  assert.equal(row.note, note);
+  const page = await open();
+  const shown = await page.evaluate(() =>
+    (document.querySelector('#fd-list [data-fd-id="read-aloud"] .fd-note') || {})
+      .textContent || "");
+  assert.equal(shown, note, "the page lost the multi-field planned note");
   await page.close();
 });
 

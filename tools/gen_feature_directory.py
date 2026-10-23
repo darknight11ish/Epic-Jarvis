@@ -161,6 +161,14 @@ def rows(data: dict) -> list:
         # either so the page can say "On this PC" and "On the phone"; a path
         # with no separator is the same on both.
         where_desktop, where_phone = split_screen_path(where)
+        # The DESKTOP screen ships in this same PR, so the contract's
+        # " (planned)" marker for the desktop half is stale on the live page:
+        # remove it from the desktop display only, and only as a trailing
+        # marker. The phone half keeps the contract's planned wording until
+        # Session B ships the phone directory. The raw contract text stays in
+        # `where` and the canonical file is never modified here.
+        if where_desktop.endswith(" (planned)"):
+            where_desktop = where_desktop[:-len(" (planned)")].strip()
         out.append({
             "id": fid,
             "title": str(row.get("name") or fid),

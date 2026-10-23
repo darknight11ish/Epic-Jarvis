@@ -31,7 +31,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "what is the weather today",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -57,7 +57,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "start listening",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -83,7 +83,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "speak faster",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -96,7 +96,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "speak faster",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -109,7 +109,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Teach Jarvis your voice",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -122,7 +122,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on How strict the voice check is",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -161,7 +161,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "— (no fixed phrase; ask for it in your own words)",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -174,7 +174,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Interrupt Jarvis while it talks",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -187,7 +187,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Jarvis Live",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -200,7 +200,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on The extras around Live",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -213,7 +213,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Talk-to-type",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -239,7 +239,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "start a temporary chat",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -252,7 +252,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Search what was said",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -278,7 +278,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "what is coming up",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -291,7 +291,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Today",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -304,7 +304,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Widgets you describe",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -317,7 +317,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Background jobs",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -330,7 +330,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on What Jarvis is doing right now",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -343,7 +343,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "speak up 3 times a day",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Still being wired (owner: Session B): typed control works; no phone Settings location",
       "not_a_control": true
@@ -356,7 +356,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "focus for 25 minutes",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -369,7 +369,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on The Memory tab",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -382,7 +382,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "what have you learned about me",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Still being wired (owner: Session B): typed control works; no phone Settings location",
       "not_a_control": true
@@ -395,7 +395,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on Facts waiting for your yes",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -408,7 +408,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on What Jarvis knows about you",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -421,7 +421,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on People and things",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -434,7 +434,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Person dossier",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -447,7 +447,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Always keep in mind",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -460,7 +460,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Between us",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -473,7 +473,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "stop using my work topic",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -486,7 +486,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "— (no fixed phrase; ask for it in your own words)",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Still being wired (owner: setup-ui): Both learning switches live only in Brain -> Memory -> Learning; no Settings row exists on either app. A desktop-only card would also need a phone OpenPlace decision, so it is recorded rather than faked.",
       "not_a_control": true
@@ -499,7 +499,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on The wiki Jarvis builds",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -512,7 +512,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Deep questions",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -525,7 +525,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on What did I believe on this date?",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -538,7 +538,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Bring in old chats",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -551,7 +551,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "— (no fixed phrase; ask for it in your own words)",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -564,7 +564,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Chat tags",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -577,7 +577,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "forget what you learned last week",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -590,7 +590,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Galaxy",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -629,7 +629,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Watch with me",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -642,7 +642,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Picture mode",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -655,7 +655,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Photo to reminder",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -668,7 +668,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Show Jarvis the camera in Live",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -681,7 +681,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Quiz me on a text",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -707,7 +707,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on My study decks",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -720,7 +720,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Write a note for you",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -746,7 +746,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Ask about a PDF, a Word file or a Notion page",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -759,7 +759,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Tutorials and the FAQ",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -772,7 +772,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "why is my pc slow",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -811,7 +811,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on What's new on GitHub",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -824,7 +824,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "Jarvis, what is Talk to a chatbot for me",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -837,7 +837,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "Jarvis, what is Deal with customer support for me",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -850,7 +850,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Projects",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -863,7 +863,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Goals",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -876,7 +876,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Progress",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -902,7 +902,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "run a retirement what-if",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -928,7 +928,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on Health and money facts wait for your yes",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -941,7 +941,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on Crisis help",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -954,7 +954,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "stop asking before my calendar",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Still being wired (owner: Session B): typed control works; no phone Settings location",
       "not_a_control": true
@@ -967,7 +967,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "stop asking before my calendar",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -980,7 +980,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Locks, doors, alarms and covers",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -993,7 +993,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "stop asking before my calendar",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1006,7 +1006,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "keep the animal still",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -1019,7 +1019,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "stop asking before my calendar",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Still being wired (owner: Session B): typed control works; no phone Settings location",
       "not_a_control": true
@@ -1045,7 +1045,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Save a draft to your Drafts folder",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1058,7 +1058,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Tidy the inbox by voice",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1071,7 +1071,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on News headlines, and pages that change",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1175,7 +1175,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Also on my phone",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1188,7 +1188,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "ring my phone",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1201,7 +1201,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on What the phone deliberately does not do",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1240,7 +1240,7 @@ export const FEATURE_DIRECTORY = {
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "example": "— (no fixed phrase; ask for it in your own words)",
       "where": "desktop Settings: All features and abilities (planned); phone: that app's own Settings",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "that app's own Settings",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -1318,7 +1318,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "— (no fixed phrase; ask for it in your own words)",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -1331,7 +1331,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "example": "— (no fixed phrase; ask for it in your own words)",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
@@ -1344,7 +1344,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Skills",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1357,7 +1357,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Memory on the Model page",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1396,7 +1396,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on The Work tab",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1409,7 +1409,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Jobs that keep going after the chat ends",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1591,7 +1591,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "undo that",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1604,7 +1604,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Activity: cards you already decided",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1630,7 +1630,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Change a setting by asking, in any words",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1643,7 +1643,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Start the local model when it is not running",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1656,7 +1656,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Jarvis starts the local model again by itself when it dies",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1669,7 +1669,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on Clipboard history, and three one-press cleanups for what you copy",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1682,7 +1682,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "example": "turn on File history",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1747,7 +1747,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on When the connection is catching up",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1760,7 +1760,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on Stop everything",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1773,7 +1773,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on Trust: content risk and the audit chain",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1786,7 +1786,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on A warning when text tried to rush you",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1799,7 +1799,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on Jarvis marks what it read from outside",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
@@ -1812,7 +1812,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "example": "turn on Settings itself",
       "where": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
-      "where_desktop": "All features and abilities (planned)",
+      "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities (planned)",
       "note": "",
       "not_a_control": true
