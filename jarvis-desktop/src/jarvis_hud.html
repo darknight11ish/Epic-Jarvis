@@ -1571,6 +1571,106 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
 @media (prefers-reduced-motion: reduce){
   #hud-safety, #hud-safety > span{transition:none !important; animation:none !important;}
 }
+
+  /* P0.6 (owner field test, 2026-10-23): Edit HUD is a dedicated three-column
+     editor. Before this, the live shell's drawers and fixed Studio rail stayed
+     in force while cards grew edit handles, so cards painted over the stage and
+     over each other. In edit mode every rail is a normal in-flow column:
+     300px left, the stage, 370px right; no drawer transforms, no fixed
+     overlays. The live stage stays visible in the middle as the drop target.
+     A narrow window (the same page at 900px, the H2/H4 geometry tests) cannot
+     give the stage 230px between those two columns, so below 1180px the
+     editor's own columns shrink first. */
+  html body[data-hud-edit="on"] #shell{
+    grid-template-columns:300px minmax(0, 1fr) 370px;
+    grid-template-rows:minmax(0, 1fr);
+  }
+  @media (max-width:1180px){
+    html body[data-hud-edit="on"] #shell{
+      grid-template-columns:minmax(0, 220px) minmax(0, 1fr) minmax(0, 280px);
+    }
+  }
+  @media (max-width:760px){
+    html body[data-hud-edit="on"] #shell{
+      grid-template-columns:minmax(0, 160px) minmax(0, 1fr) minmax(0, 200px);
+    }
+  }
+  html body[data-hud-edit="on"] .rail.left,
+  html body[data-hud-edit="on"] .rail.right{
+    position:static !important;
+    inset:auto !important;
+    transform:none !important;
+    width:auto !important;
+    min-width:0;
+    max-width:none;
+    display:flex !important;
+    z-index:auto !important;
+    box-shadow:none !important;
+    overflow-y:auto;
+    max-height:100dvh;
+  }
+  html body[data-hud-edit="on"] .rail.left{grid-column:1;}
+  html body[data-hud-edit="on"] .rail.right{grid-column:3;}
+  html body[data-hud-edit="on"] #stage{grid-column:2; min-width:0;}
+  /* The rail is a flex column that scrolls; the editor's card region must keep
+     its full height rather than being squeezed, or a long card list paints
+     over whatever follows it in the rail (the Studio dock, the rail foot).
+     #stage is a flex column in Cockpit and Ambient too, with the same shape of
+     bug: a squeezed region puts the editor banner over the approval cards. */
+  html body[data-hud-edit="on"] .rail .hud-region,
+  html body[data-hud-edit="on"] #stage .hud-region{flex:0 0 auto;}
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage{
+    grid-template-columns:minmax(0, 1fr);
+  }
+  /* Studio's stage is a grid with seven explicit child rows, and the editor
+     inserts the Stage-top card region as a child of it. Auto-placed, that
+     region landed in row 1 and painted over the stage bar - the field-test
+     "cards paint over the stage". While editing, the rows are re-numbered so
+     the bar, the editor's own band and the Stage-top cards each get a row,
+     and the stage scrolls if the list is longer than the window. */
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage{
+    grid-template-rows:auto auto auto auto auto auto auto auto minmax(0, 1fr);
+    overflow-y:auto;
+  }
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > .stage-bar{grid-row:1;}
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > .hud-edit-banner{
+    grid-column:1 / -1; grid-row:2;
+  }
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > [data-hud-region="stage_top"]{
+    grid-column:1 / -1; grid-row:3;
+  }
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #stage-tabs{grid-row:4;}
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #approvals{grid-row:5;}
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #initiative{grid-row:6;}
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #banner{grid-row:7;}
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #model-warn{grid-row:8;}
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #talk,
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #brain{
+    grid-row:9; grid-column:1 / -1;
+  }
+  /* Studio hides its navigation, presets and systems sections because the
+     dock takes their place - but those sections ARE the cards being edited,
+     so the hiding rules must not leave the editor's left cards with empty
+     bodies. Only a card's own content comes back here. */
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] [data-hud-card] .rail-nav{
+    display:flex !important;
+  }
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] [data-hud-card] .rail-lanes,
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] [data-hud-card] .rail-systems{
+    display:block !important;
+  }
+
+  /* One open-the-bar control, not three. The shell injects the real
+     "Open the Jarvis bar" button beside the composer; the HUD's own footer
+     pill and Studio dock lightning duplicated it and read as two extra
+     launching controls. They stay in the DOM for old tests/ids but are never
+     drawn. */
+  #rail-quickbar, #dock-quickbar{display:none !important;}
+
+  /* Windows draws emoji in colour; this HUD's other dock glyphs are
+     monochrome text. VS15 asks the platform for text presentation so the
+     alarm and lightning do not stand out as coloured emoji. */
+  .dock-btn, .quickbar-pill .qp-glyph{font-variant-emoji:text;}
 </style>
 
 <!-- ==================================================================== *
@@ -1653,10 +1753,10 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         <span aria-hidden="true">&#10003;</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="reminders" title="Reminders, timers, alarms and to-do" aria-pressed="false">
-        <span aria-hidden="true">&#9200;</span>
+        <span aria-hidden="true">&#9200;&#xFE0E;</span>
       </button>
       <button type="button" class="dock-btn" id="dock-quickbar" title="Jarvis bar" hidden>
-        <span aria-hidden="true">&#9889;</span>
+        <span aria-hidden="true">&#9889;&#xFE0E;</span>
       </button>
     </nav>
 
@@ -1699,7 +1799,7 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
          hidden when there is no shell to open a bar (a plain browser). -->
     <div class="rail-foot">
       <button class="quickbar-pill" id="rail-quickbar" type="button" hidden>
-        <span class="qp-glyph" aria-hidden="true">&#9889;</span>
+        <span class="qp-glyph" aria-hidden="true">&#9889;&#xFE0E;</span>
         <span class="qp-label">Jarvis bar</span>
       </button>
     </div>

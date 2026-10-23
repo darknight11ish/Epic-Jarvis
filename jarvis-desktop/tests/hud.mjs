@@ -2468,15 +2468,23 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
   assert.deepEqual(problems, []);
 });
 
-await check("the footer Jarvis-bar pill is there with the shell, and gone in a plain browser", async () => {
+await check("one open-the-bar control is drawn; the duplicate pill and dock icon stay dormant", async () => {
   const shelled = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   const withShell = await shelled.page.evaluate(() => {
     const pill = document.getElementById("rail-quickbar");
+    const dock = document.getElementById("dock-quickbar");
+    const visible = ["hud-open-bar", "rail-quickbar", "dock-quickbar"].filter((id) => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && cs.display !== "none" && cs.visibility !== "hidden";
+    });
     return {
-      present: Boolean(pill),
-      hidden: pill ? pill.hidden : true,
-      ready: pill ? pill.hasAttribute("data-ready") : false,
-      shown: pill ? pill.getBoundingClientRect().width > 0 : false,
+      present: Boolean(pill) && Boolean(dock),
+      pillShown: pill ? pill.getBoundingClientRect().width > 0 : false,
+      dockShown: dock ? dock.getBoundingClientRect().width > 0 : false,
+      visibleControls: visible,
     };
   });
   await shelled.page.close();
@@ -2489,12 +2497,47 @@ await check("the footer Jarvis-bar pill is there with the shell, and gone in a p
     };
   });
   await plain.page.close();
-  assert.equal(withShell.present, true, "the footer pill is not in the page at all");
-  assert.equal(withShell.hidden, false, "the footer pill is hidden though the shell is there");
-  assert.equal(withShell.ready, true);
-  assert.equal(withShell.shown, true, "the footer pill is not drawn in the Cockpit rail");
-  assert.equal(withoutShell.ready, false, "a plain browser drew a Jarvis-bar pill with no bar to open");
+  assert.equal(withShell.present, true, "a duplicate launcher id was removed instead of being kept for old tests");
+  assert.equal(withShell.pillShown, false, "the footer Jarvis-bar pill is still drawn");
+  assert.equal(withShell.dockShown, false, "the Studio dock lightning is still drawn");
+  assert.deepEqual(withShell.visibleControls, ["hud-open-bar"],
+    "exactly one bar launcher should be visible (the shell's own button)");
+  assert.equal(withoutShell.ready, false, "a plain browser marked a bar pill ready with no bar to open");
   assert.equal(withoutShell.shown, false);
+});
+
+await check("P0.6: Windows is asked for the monochrome presentation of the two dock emoji", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  // The owner's field test (2026-10-23): the alarm and lightning drew as colour
+  // Windows emoji among monochrome dock glyphs. Two things make them text:
+  // the U+FE0E variation selector on the character, and the CSS asking for the
+  // text presentation. Both are readable from the DOM, so this holds on every
+  // runner; the PIXEL result can only be checked on Windows and is evidence in
+  // the PR, not a CI check.
+  const glyphs = await page.evaluate(() => {
+    const read = (selector) => {
+      const span = document.querySelector(selector);
+      if (!span) return null;
+      const button = span.closest(".dock-btn");
+      return {
+        text: span.textContent,
+        vs15: span.textContent.includes("\uFE0E"),
+        emoji: button ? getComputedStyle(button).getPropertyValue("font-variant-emoji").trim() : "",
+      };
+    };
+    return {
+      reminders: read('#studio-dock .dock-btn[data-hud-tab-choice="reminders"] span'),
+      quickbar: read("#dock-quickbar span"),
+    };
+  });
+  await page.close();
+  assert.equal(glyphs.reminders && glyphs.reminders.vs15, true,
+    "the alarm glyph carries no U+FE0E text-presentation selector");
+  assert.equal(glyphs.quickbar && glyphs.quickbar.vs15, true,
+    "the lightning glyph carries no U+FE0E text-presentation selector");
+  assert.equal(glyphs.reminders.emoji, "text",
+    "the dock does not ask the platform for the text presentation (font-variant-emoji)");
+  assert.deepEqual(problems, []);
 });
 
 
@@ -3387,15 +3430,18 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
     const toggleBox = box(toggle);
     const barBox = box(bar);
     const railBox = box(rail);
+    const stageBox = box(document.getElementById("stage"));
     return {
       toggle: atCentre(toggle),
       top: top ? top.getAttribute("data-hud-card") : null,
       tool: atCentre(tool),
-      toggleBox, barBox, railBox,
+      toggleBox, barBox, railBox, stageBox,
+      railPosition: rail ? getComputedStyle(rail).position : null,
       railShown: Boolean(rail && getComputedStyle(rail).display !== "none"
         && rail.getBoundingClientRect().width > 0),
       railTop: railBox ? railBox.y : null,
       barBottom: barBox ? barBox.y + barBox.h : null,
+      vw: innerWidth,
     };
   });
   await page.keyboard.press("Escape");
@@ -3406,12 +3452,21 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
   assert.ok(hit.top, "no visible card shell to test the top toolbar");
   assert.ok(hit.tool,
     `the Studio rail covers the top ${hit.top} card's toolbar (${JSON.stringify({ bar: hit.barBox, rail: hit.railBox })})`);
-  // The structural half: the rail starts BELOW the header band, not merely
-  // under it in paint order.
-  assert.ok(hit.railTop >= hit.barBottom - 2,
-    `the Studio rail starts at y=${hit.railTop}, inside the header band ending at ${hit.barBottom}`);
-  assert.ok(hit.toggleBox.y + hit.toggleBox.h <= hit.railTop + 1,
-    `[Edit HUD] sits at y=${hit.toggleBox.y} and the rail starts at ${hit.railTop}`);
+  // The structural half, P0.6 (owner field test, 2026-10-23): in Edit HUD the
+  // Studio rail is no longer a fixed overlay that must start BELOW the header
+  // band - that overlay was the jumble the owner photographed. It is now a
+  // normal in-flow column beside the stage: it starts at the window's top and
+  // sits to the RIGHT of the stage, so it cannot cover anything in it.
+  assert.equal(hit.railPosition, "static",
+    `the Studio rail is still an out-of-flow overlay in Edit HUD (${hit.railPosition})`);
+  assert.ok(hit.railTop <= 1,
+    `the Studio rail starts at y=${hit.railTop} instead of the window's top`);
+  assert.ok(hit.stageBox && hit.railBox.x >= hit.stageBox.x + hit.stageBox.w - 1,
+    `the Studio rail starts at x=${hit.railBox.x}, at or left of the stage's right edge ${hit.stageBox && hit.stageBox.x + hit.stageBox.w}`);
+  assert.ok(hit.railBox.x + hit.railBox.w <= hit.vw + 1,
+    `the Studio rail leaves the window (${hit.railBox.x + hit.railBox.w} > ${hit.vw})`);
+  assert.ok(hit.toggleBox.x >= 0 && hit.toggleBox.x + hit.toggleBox.w <= hit.vw + 1,
+    `[Edit HUD] is outside the window at x=${hit.toggleBox.x}`);
   assert.deepEqual(problems, []);
 });
 
