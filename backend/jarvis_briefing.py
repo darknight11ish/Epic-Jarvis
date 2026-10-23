@@ -913,7 +913,10 @@ def build_meeting_prep_cards(events, *, people=None, notes=None,
             locked = bool(got.get("locked") or got.get("app_locked")
                           or got.get("hide_memory_lists"))
         except Exception:
-            locked = bool(app_locked or hide_memory_lists)
+            # FAIL CLOSED: a lock state that cannot be read is treated as
+            # locked. The caller's flags are not trusted as a fallback because
+            # they may both be false on a surface that did not pass them.
+            locked = True
     if locked:
         return []
     try:

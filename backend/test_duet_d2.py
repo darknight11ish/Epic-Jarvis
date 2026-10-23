@@ -269,6 +269,18 @@ def t_d22a_tier2_needs_an_untainted_turn_and_the_owners_own_words():
     check("an ordinary draft is tier 0 and allowed",
           S.classify_outbound_sensitivity(
               "See you at 3 on Tuesday - I'll bring the slides.").get("tier") == 0)
+    # PA-4: the owner's words can SAY NOT TO SHARE. Those are not consent.
+    for label, text, prompt in (
+            ("finance 'do not'", finance, "do not send my tax balance"),
+            ("finance 'never'", finance, "never share my tax balance"),
+            ("finance 'without'", finance,
+             "email my accountant without my salary"),
+            ("health 'not'", health, "not sharing my health info"),
+            ("health 'do not'", health, "do not email my doctor my health info")):
+        got = S.classify_outbound_sensitivity(text, user_prompt=prompt, tainted=False)
+        check(f"a negated Tier-2 prompt is refused ({label})",
+              got.get("allowed") is False and got.get("tier") == 2
+              and "tier2_negated" in (got.get("reasons") or []), got)
 
 
 def t_d22a_email_draft_refuses_a_tier1_draft_before_the_card():
@@ -381,6 +393,33 @@ def t_d23_document_hits_carry_and_withhold_provenance():
               hidden.get("ok") is True and "source_provenance" not in hidden, hidden)
     finally:
         D._private_withheld = saved
+
+
+def t_d23_fail_closed_when_the_private_view_raises():
+    """PA-3: an unreadable lock state withholds provenance; it does not show
+    file names because the read failed."""
+    import types
+    saved = sys.modules.get("jarvis_private_view")
+    broken = types.ModuleType("jarvis_private_view")
+
+    def unreadable():
+        raise RuntimeError("private view unreadable (test)")
+    broken.state = unreadable
+    sys.modules["jarvis_private_view"] = broken
+    try:
+        check("spending's private check is True when the view cannot be read",
+              SP._private_withheld() is True)
+        check("spending provenance is withheld when the view cannot be read",
+              SP._provenance("spreadsheet", ["bank-march.csv"]) is None)
+        check("documents' private check is True when the view cannot be read",
+              D._private_withheld() is True)
+        check("document provenance is withheld when the view cannot be read",
+              D._hit_provenance("/tmp/atlas-notes.md") == {})
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_private_view", None)
+        else:
+            sys.modules["jarvis_private_view"] = saved
 
 
 # --------------------------------------------------------------------------
@@ -498,6 +537,7 @@ def main() -> int:
                t_d22b_refusals_happen_before_any_card_or_browser,
                t_d23_spending_summary_carries_and_withholds_provenance,
                t_d23_document_hits_carry_and_withhold_provenance,
+               t_d23_fail_closed_when_the_private_view_raises,
                t_d24_the_walk_splits_and_classifies_and_the_report_keeps_the_details,
                t_d21_a_plan_cannot_call_a_mutating_handler_readonly,
                t_d22_the_classifier_is_defined_once_and_email_passes_prompt_and_taint,

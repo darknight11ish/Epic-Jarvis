@@ -626,7 +626,8 @@ DRAFT_ARGS = {"to": [ALEX], "cc": [SAM], "subject": "Dinner on Friday",
 
 
 def _turn(calls, *, gate=APPROVE, provenance="typed", tainted=False, app_system=False,
-         enabled=("draft_email", "email_check"), model="m", tier="ask", capture=None):
+         enabled=("draft_email", "email_check"), model="m", tier="ask", capture=None,
+         prompt="draft a reply to Sam"):
     """One turn in which the model asks for `calls` [(tool, args)]. Returns
     (gate calls, what the model was told, turn summary, steps)."""
     gate_calls, steps = [], []
@@ -643,7 +644,7 @@ def _turn(calls, *, gate=APPROVE, provenance="typed", tainted=False, app_system=
     def post(url, payload):
         sent.append(payload)
         return next(it)
-    req = [{"role": "user", "content": "draft a reply to Sam", "provenance": provenance}]
+    req = [{"role": "user", "content": prompt, "provenance": provenance}]
     if app_system:
         req.insert(0, {"role": "system", "content": "clipboard: something"})
     saved = (AG._conversation_tainted, AG._tier_of)
@@ -651,7 +652,7 @@ def _turn(calls, *, gate=APPROVE, provenance="typed", tainted=False, app_system=
     AG._tier_of = lambda a: tier if a == DRAFT.ACTION else saved[1](a)
     try:
         summary = AG.run_local_turn(
-            [{"role": "user", "content": "draft a reply to Sam"}], model,
+            [{"role": "user", "content": prompt}], model,
             ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
             gate_check=watching, enabled_tools=set(enabled), record_chain=lambda s: None,
             on_step=steps.append, context_length=16384,
@@ -795,6 +796,45 @@ def t_the_card_says_when_outside_text_shaped_it():
     check("said to the talk button (the owner's own words): no such line",
           gates and AG.DRAFT_EMAIL_READ not in gates[0][1]["text"]
           and "check that saving" not in gates[0][1]["text"])
+
+
+def t_the_production_tool_passes_the_turns_prompt_and_taint():
+    """PA-5: `_one_call` must hand this turn's own words and read/taint state
+    to DRAFT.plan. The direct plan() tests pass them by hand and miss the
+    production wiring."""
+    set_env(**{MAIL.HOST_ENV: "imap.gmail.com"})
+    health_args = dict(DRAFT_ARGS, subject="Health",
+                       body="My cholesterol result is 240.")
+    ask = "email my doctor my cholesterol result"
+    real_tainted = DRAFT._tainted
+
+    def no_global_latch(value):
+        if value is None:
+            raise AssertionError("the global taint latch was consulted")
+        return bool(value)
+    DRAFT._tainted = no_global_latch
+    try:
+        with Saved() as s:
+            gates, told, summary, steps = _turn(
+                [("draft_email", health_args)], prompt=ask, tainted=False)
+        check("an explicit untainted Tier-2 request stages ONE draft through "
+              "the production tool",
+              len(gates) == 1 and len(s.appends) == 1, (gates, s.appends, told))
+        with Saved() as s:
+            gates, told, summary, steps = _turn(
+                [("draft_email", health_args)], prompt=ask, tainted=True)
+        check("... but the same request on a tainted turn saves nothing and "
+              "raises no card",
+              gates == [] and s.appends == [] and "mentions" in told[-1]["content"],
+              (gates, s.appends, told))
+        with Saved() as s:
+            gates, told, summary, steps = _turn(
+                [("draft_email", health_args)], tainted=False)
+        check("... and without the owner's explicit words it saves nothing",
+              gates == [] and s.appends == [] and "mentions" in told[-1]["content"],
+              (gates, s.appends, told))
+    finally:
+        DRAFT._tainted = real_tainted
 
 
 def t_rule_1_only_the_model_on_this_pc_writes_a_draft():
@@ -1022,6 +1062,7 @@ if __name__ == "__main__":
                    t_one_card_showing_all_of_it_and_only_a_yes_saves,
                    t_refused_with_no_card_when_there_is_nothing_to_ask,
                    t_the_card_says_when_outside_text_shaped_it,
+                   t_the_production_tool_passes_the_turns_prompt_and_taint,
                    t_rule_1_only_the_model_on_this_pc_writes_a_draft,
                    t_the_password_goes_only_to_the_mail_server,
                    t_the_settings_line, t_the_patch_and_the_wiring):

@@ -378,6 +378,59 @@ def t_d4_rows_never_carry_email_words():
           MAIL.quiet_threads_line([]) == "")
 
 
+def t_d4_bare_addresses_and_secret_names_are_scrubbed_everywhere():
+    """PA-2: a no-display-name From is the bare address, and the sentence is a
+    displayed path too - scrub the name BEFORE it is formatted into `said`, and
+    scrub the finished row. A test that checks only `who` misses this."""
+    now = 1_790_000_000.0
+    bare = {"thread": "bare", "direction": "in", "at": now - 72 * 3600,
+            "who": "alex@example.com", "text": "Could you send the file?"}
+    rows = MAIL.find_quiet_threads([bare], now=now, latch=False)
+    blob = json.dumps(rows)
+    check("a bare-address sender is scrubbed in both who and said",
+          rows and "@" not in blob and "[redacted" in rows[0]["said"], rows)
+    check("... and the address itself is not in the row",
+          rows and "alex@example.com" not in blob, rows)
+    secret_name = "sk-" + "a" * 24
+    outgoing = {"thread": "out", "direction": "out", "at": now - 5 * 86400,
+                "who": secret_name, "text": "Can you confirm the date?"}
+    rows = MAIL.find_quiet_threads([outgoing], now=now, latch=False)
+    blob = json.dumps(rows)
+    check("a secret-shaped display name is scrubbed in said too",
+          rows and secret_name not in blob and "[redacted" in rows[0]["said"], rows)
+
+
+def t_d4_privacy_gates_fail_closed_when_the_private_view_raises():
+    """PA-3: a privacy gate that cannot read the private view withholds."""
+    import types
+    saved = sys.modules.get("jarvis_private_view")
+    broken = types.ModuleType("jarvis_private_view")
+
+    def unreadable(**_kw):
+        raise RuntimeError("private view unreadable (test)")
+    broken.effective = unreadable
+    broken.state = unreadable
+    sys.modules["jarvis_private_view"] = broken
+    try:
+        events = [day_event("Client call", BASE.replace(hour=10), BASE.replace(hour=11),
+                            loc="12 Oak Street")]
+        check("prep cards fail CLOSED when the private view cannot be read",
+              B.build_meeting_prep_cards(events, people=lambda e: ["Alex"],
+                                         app_locked=False,
+                                         hide_memory_lists=False) == [])
+        now = 1_790_000_000.0
+        msgs = [{"thread": "t1", "direction": "in", "at": now - 72 * 3600,
+                 "who": "Sam", "text": "Could you send the file?"}]
+        check("quiet threads fail CLOSED when the private view cannot be read",
+              MAIL.find_quiet_threads(msgs, now=now, app_locked=False,
+                                      hide_memory_lists=False) == [])
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_private_view", None)
+        else:
+            sys.modules["jarvis_private_view"] = saved
+
+
 # --------------------------------------------------------------------------
 #   D6 - owner-only completion
 # --------------------------------------------------------------------------
@@ -544,6 +597,8 @@ if __name__ == "__main__":
                t_d4_waiting_on_them_boundaries,
                t_d4_waiting_on_you_and_automated_skips,
                t_d4_rows_never_carry_email_words,
+               t_d4_bare_addresses_and_secret_names_are_scrubbed_everywhere,
+               t_d4_privacy_gates_fail_closed_when_the_private_view_raises,
                t_d4_privacy_gates_and_taint,
                t_d6_ready_for_review_is_never_done,
                t_d1_3_where_to_look_strip_and_gated_prep_cards,

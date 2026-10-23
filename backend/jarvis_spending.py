@@ -1973,7 +1973,9 @@ def _private_withheld() -> bool:
         state = pv.state()
         return bool(state.get("app_locked") or state.get("hide_memory_lists"))
     except Exception:                                        # noqa: BLE001
-        return False
+        # FAIL CLOSED: an unreadable lock state withholds provenance rather
+        # than returning file names because the read itself failed.
+        return True
 
 
 def build_table(numbers: dict, *, by: str, period_label: str, sources: list,

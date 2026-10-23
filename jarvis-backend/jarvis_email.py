@@ -700,7 +700,9 @@ def _scrub_name(name: str) -> str:
         import jarvis_scrub
         return str(jarvis_scrub.scrub_text(name))[:60]
     except Exception:
-        return name
+        # FAIL CLOSED: without the scrubber the name cannot be proven safe
+        # (a no-display-name From is the whole address). Never echo it raw.
+        return "[redacted: name]"
 
 
 def _quiet_locked(*, app_locked: bool, hide_memory_lists: bool) -> bool:
@@ -714,7 +716,10 @@ def _quiet_locked(*, app_locked: bool, hide_memory_lists: bool) -> bool:
         return bool(got.get("locked") or got.get("app_locked")
                     or got.get("hide_memory_lists"))
     except Exception:
-        return bool(app_locked or hide_memory_lists)
+        # FAIL CLOSED: if the trusted lock state cannot be read, this read
+        # withholds rather than trusting caller flags that may be false. A
+        # privacy gate that cannot answer must never show the private rows.
+        return True
 
 
 def find_quiet_threads(messages, *, now=None, days_quiet_min: float = QUIET_MIN_DAYS,
@@ -761,7 +766,7 @@ def find_quiet_threads(messages, *, now=None, days_quiet_min: float = QUIET_MIN_
             days = age_s / 86400.0
             if days_quiet_min <= days <= days_quiet_max and _has_ask(
                     last.get("text") or last.get("preview")):
-                who = _who(last)
+                who = _scrub_name(_who(last))
                 n = round(days)
                 rows.append({
                     "kind": "waiting_on_them",
@@ -776,7 +781,7 @@ def find_quiet_threads(messages, *, now=None, days_quiet_min: float = QUIET_MIN_
             hours = age_s / 3600.0
             if hours > waiting_on_you_hours and not _is_automated(last) and _has_ask(
                     last.get("text") or last.get("preview")):
-                who = _who(last)
+                who = _scrub_name(_who(last))
                 n = round(hours)
                 rows.append({
                     "kind": "waiting_on_you",
@@ -789,11 +794,14 @@ def find_quiet_threads(messages, *, now=None, days_quiet_min: float = QUIET_MIN_
                 })
     rows.sort(key=lambda r: (r["kind"], -(r.get("days") or r.get("hours") or 0), r["thread"]))
     for row in rows:
-        # A display name can itself carry a secret shape; scrub it. The row
-        # never carries a subject or a snippet, which is stronger than
-        # scrubbing those (D-1.2 gate says scrub them if they are returned -
-        # they are not returned at all).
+        # A display name can itself carry a secret shape OR be the sender's
+        # bare e-mail address when the From header has no name; the sentence
+        # already uses the scrubbed name, and scrubbing the whole row catches
+        # any future display field as well. The row never carries a subject or
+        # a snippet, which is stronger than scrubbing those (D-1.2 gate says
+        # scrub them if they are returned - they are not returned at all).
         row["who"] = _scrub_name(row.get("who") or "")
+        row["said"] = _scrub_name(row.get("said") or "")
     if rows and latch:
         # These rows name the owner's private correspondence, so the read is
         # outside text: latch the SAME taint jarvis_calendar's own read does,
