@@ -3712,6 +3712,26 @@ await check("H3: Edit HUD auto-reveals rails, so every protected control the pag
     assert.equal(state.bar, true, `${shell}: the Jarvis-bar button hidden in edit mode`);
     assert.equal(state.mic, true, `${shell}: the voice control hidden in edit mode`);
     assert.equal(state.stop, true, `${shell}: the fixed Stop control hidden in edit mode`);
+    const hit = await page.evaluate(() => {
+      const button = document.getElementById("hud-stop");
+      const r = button.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { hitId: at ? at.id : "", hitStop: at === button || Boolean(at && button.contains(at)) };
+    });
+    assert.equal(hit.hitStop, true,
+      `${shell}: the fixed Stop control is covered by #${hit.hitId} in edit mode`);
+    if (shell === "two-column-left") {
+      // The reported case: Quiet's auto-revealed right rail used to cover the
+      // button even though it was "visible"; a real click must work.
+      const beforeStops = await page.evaluate(() =>
+        window.__invokes.filter((call) => call[0] === "stop_everything").length);
+      await page.click("#hud-stop");
+      await page.waitForTimeout(120);
+      const afterStops = await page.evaluate(() =>
+        window.__invokes.filter((call) => call[0] === "stop_everything").length);
+      assert.equal(afterStops, beforeStops + 1,
+        "Quiet/Edit: a real click on the fixed Stop control did not send the command");
+    }
     for (const id of PROTECTED) {
       const found = state.dataProtected.find(([card]) => card === id);
       assert.ok(found && found[1] === true, `${shell}: protected ${id} is not visible in the document`);

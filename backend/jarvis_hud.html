@@ -1389,6 +1389,12 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
   body[data-hud-edit="on"] .rail.edit-reveal{transform:none !important;}
   body[data-hud-edit="on"] .rail.edit-reveal.right{display:flex !important;
     flex-direction:column;}
+  /* Review of #742 (2026-10-22): in two-column-left (Quiet) Edit HUD reveals
+     its right rail as a fixed overlay above the static stage bar, so the fixed
+     Stop control's centre hit-tested as the rail's form. Raise the button
+     itself (not the stage bar's position, which is fixed in Ambient) above
+     every rail (20/26/30/40/41) and below the Layouts menu (70). */
+  body[data-hud-edit="on"] #hud-stop{position:relative; z-index:60;}
 
   /* ---- Layouts menu + copy/paste JSON dialogs (H3) --------------------- */
   .hud-presets-menu{

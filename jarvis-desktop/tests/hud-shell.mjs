@@ -438,6 +438,8 @@ await check("H3-PM-2: Ambient's left rail is a drawer, not an unreachable hidden
     "edit mode does not bring slide-over rails home");
   assert.match(page, /body\[data-hud-edit="on"\] \.rail\.edit-reveal\.right\{display:flex !important;/,
     "edit mode does not force the tab-revealed rail back on");
+  assert.match(page, /body\[data-hud-edit="on"\] #hud-stop\{[^}]*z-index:60;?/,
+    "edit mode does not keep the fixed Stop control above the auto-revealed rails");
   assert.match(editSrc, /revealRailsForEditing/, "the editor does not reveal hidden rails");
   assert.match(editSrc, /edit-reveal/, "the editor does not mark the revealed rails");
   // The HUD's fixed Stop everything control is real now (owner-approved
