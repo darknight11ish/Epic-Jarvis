@@ -39,6 +39,14 @@ HUD's fallback table and compares both to the contract.
   table, an `owner`, and a `status`. `enforced` means a difference is a failure;
   `pending` (none today) means a surface has not consumed the table yet and must say
   `"xfail": true` with a reason (its differences are printed as `EXPECTED-GAP`).
+- `management` - **HUD Reminders Phase 2** (2026-10-22): `edit`, `move` and
+  `reorder` are kept out of the per-kind `states` action lists because they open
+  an editor / list picker / keyboard reorder instead of drawing one button per
+  action. `authority.verbs` is the closed nine-verb set, `management.cases` is
+  the real accept/refuse matrix driven through the PC's `Scheduler.act`, and
+  `management.surfaces` names the open Phase-2 UI branch that must consume it.
+  The Phase-2 words (`Edit`, `Save changes`, `Cancel`, `To-do list`, `Move up`,
+  `Move down`) are the open branch's own words.
 
 **Consumers and current status**
 
@@ -47,6 +55,7 @@ HUD's fallback table and compares both to the contract.
 | HUD Reminders | `jarvis-desktop/src/hud-actions.js` (import) + browser-served `fallbackActionsFor` in `jarvis_hud.html` (3 byte-identical copies) | **enforced** (consumed in #729; both copies match every case) |
 | Brain "Coming up" | `jarvis-desktop/src/coming-up.js` imports `ACTION_LABELS` / `WENT_OFF_ACTIONS` / `actionNames` from `hud-actions.js` | **enforced** (a pure consumer since #729) |
 | Phone Coming up | `jarvis-client/.../net/Schedule.kt` hand-written `actionsOf`/`labelOf`/`ACTIONS` | **enforced** - consumed 2026-10-23; `add_time` is in `ACTIONS`, `actionsOf` and `labelOf` |
+| HUD/Brain Phase-2 `edit`/`move`/`reorder` | the Phase-2 block of `jarvis-desktop/src/hud-actions.js` (`EDIT_LABEL`, `EDITABLE_KINDS`, `canEdit`) on `feat/hud-reminders-phase2-edit-move-reorder-ui` | **pending** on the open UI branch; phone is `not-planned` (its Coming up has no editor yet). This is a contract entry, not a second table. |
 
 Two contract entries are deliberately **outside the cross-surface comparison
 yet**, each with its reason and owner beside it in the JSON: the D-1
@@ -68,9 +77,14 @@ py -3 backend/run_suites.py test_schedule_contract.py   # the suite (authority +
 registry and `Scheduler.act()` on this PC: `add_time` only on a timer, `done`
 only on a to-do, `pause` never on a to-do or a `Kind.ends` kind, `resume` only
 from paused, `snooze` only on a fired timer/alarm/reminder, `delete` on every
-listed and fired row. The checker reads each surface's own table from the source
-shape it has today (an unrecognised shape is reported, never guessed at), so a
-surface PR that renames its table updates the checker in the same change.
+listed and fired row. It also reads the **verb set** out of `Scheduler.act`'s
+own source (AST, no backend import) and fails if `authority.verbs` differs, and
+it drives every `management.cases` entry through the real `act()` with its
+expected 200/202/400/409. `tools/check_schedule_actions.py` asserts the same
+verb set independently, so a future verb cannot drift out of the contract. The
+checker reads each surface's own table from the source shape it has today (an
+unrecognised shape is reported, never guessed at), so a surface PR that renames
+its table updates the checker in the same change.
 
 When a surface consumes the table, remove its `"xfail": true` (none today) and flip its `status` to
 `"enforced"`; the same checker then becomes the complete cross-surface test, and

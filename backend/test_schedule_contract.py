@@ -49,7 +49,15 @@ WHAT IS PROVED AGAINST THE REAL AUTHORITY, not copied prose:
   * D-1's `ready_for_review` marker when the backend has it (`propose_ready` /
     `suggest_done`), and an honest `skip` when it does not - D-1 (#722) was OPEN
     and NOT in main a97ac5f2 on 2026-10-22, so on today's main that half is
-    NOT-TESTABLE, not a pass.
+    NOT-TESTABLE, not a pass;
+  * HUD Reminders Phase 2 (`edit`, `move`, `reorder`): `authority.verbs` is proved
+    equal to the verb set read out of `Scheduler.act`'s own source (AST, not a
+    backend import - the same read the checker does), and every case in the
+    contract's `management.cases` is driven through the REAL `Scheduler.act()`
+    with the expected 200/202/400/409 and the refusal sentence where one exists.
+    The contract's contract-level verb/label/management shape is checked by
+    `tools/check_schedule_actions.py` too, and this suite proves the checker
+    fails on a deliberately drifted copy.
 
 HONEST LIMITS: the three surface parsers read the known shape each surface has
 today - a surface PR that renames its table must update
@@ -61,13 +69,16 @@ live write, no card, no deploy.
 """
 from __future__ import annotations
 
+import ast
 import copy
 import importlib
 import importlib.util
+import inspect
 import json
 import os
 import sys
 import tempfile
+import textwrap
 import traceback
 from pathlib import Path
 
@@ -161,6 +172,10 @@ def fresh_job(kind: str, state: str = "active", *, rule=None, fired: bool = Fals
 def act(jid: str, do: str, seconds: float = 300) -> int:
     code, _out = SCHEDULER.act(jid, do, seconds=seconds)
     return code
+
+
+def act_fields(jid: str, do: str, fields: dict) -> tuple:
+    return SCHEDULER.act(jid, do, fields=fields)
 
 
 def _listed(contract: dict) -> dict:
@@ -259,6 +274,34 @@ def t_contract_is_one_complete_table():
           and (contract["states"]["ready_for_review"].get("surface_status")
                == "pending-d1-surfacing")
           and "surface_note" in contract["states"]["ready_for_review"])
+    management = contract.get("management") or {}
+    check("the contract carries HUD Reminders Phase 2 with a real case matrix",
+          set((management.get("verbs") or {})) == {"edit", "move", "reorder"}
+          and len(management.get("cases") or []) >= 20
+          and management.get("owner") and management.get("reason"), management)
+    check("authority.verbs names all nine real verbs, including the Phase-2 three",
+          contract["authority"].get("verbs") == [
+              "pause", "resume", "delete", "done", "add_time", "snooze",
+              "edit", "move", "reorder"], contract["authority"].get("verbs"))
+    check("the Phase-2 words are the open UI's exact words",
+          (management.get("labels") or {}).get("edit") == "Edit"
+          and (management.get("labels") or {}).get("save") == "Save changes"
+          and (management.get("labels") or {}).get("cancel") == "Cancel"
+          and (management.get("labels") or {}).get("move_up") == "Move up"
+          and (management.get("labels") or {}).get("move_down") == "Move down",
+          management.get("labels"))
+    check("the Phase-2 kinds are the open UI's EDITABLE_KINDS plus the to-do-only verbs",
+          management["verbs"]["edit"]["kinds"] == ["timer", "alarm", "reminder", "todo"]
+          and management["verbs"]["move"]["kinds"] == ["todo"]
+          and management["verbs"]["reorder"]["kinds"] == ["todo"]
+          and all(k in contract["kinds"] for verb in management["verbs"].values()
+                  for k in verb["kinds"]), management["verbs"])
+    check("the Phase-2 surfaces say who must consume the block, and why it is pending",
+          (management.get("surfaces") or {}).get("hud") == "pending"
+          and (management.get("surfaces") or {}).get("coming_up") == "pending"
+          and (management.get("surfaces") or {}).get("phone") == "not-planned"
+          and "feat/hud-reminders-phase2-edit-move-reorder-ui" in management["owner"],
+          management.get("surfaces"))
 
 
 # ==========================================================================
@@ -400,6 +443,72 @@ def t_ready_for_review_half():
 
 
 # ==========================================================================
+#  2b/2c. the verb set and the Phase-2 management cases against the REAL act()
+# ==========================================================================
+
+def _act_verbs_from_act_source() -> set:
+    """The accepted verb set as the PC's own code spells it, no backend import."""
+    src = textwrap.dedent(inspect.getsource(S.Scheduler.act))
+    tree = ast.parse(src)
+    verbs = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Compare) and isinstance(node.left, ast.Name)
+                and node.left.id == "do"):
+            continue
+        for op, comp in zip(node.ops, node.comparators):
+            if isinstance(op, ast.Eq) and isinstance(comp, ast.Constant) \
+                    and isinstance(comp.value, str):
+                verbs.add(comp.value)
+            elif isinstance(op, ast.In) and isinstance(comp, ast.Tuple):
+                verbs.update(elt.value for elt in comp.elts
+                             if isinstance(elt, ast.Constant) and isinstance(elt.value, str))
+    return verbs
+
+
+def t_act_verb_set_matches_the_contract():
+    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    real = _act_verbs_from_act_source()
+    declared = sorted(contract["authority"]["verbs"])
+    check("the AST read of Scheduler.act finds exactly the nine real verbs",
+          real == {"pause", "resume", "delete", "done", "add_time", "snooze",
+                   "edit", "move", "reorder"}, sorted(real))
+    check("the contract's authority.verbs is EXACTLY Scheduler.act's accepted set",
+          sorted(real) == declared, (sorted(real), declared))
+    check("the checker's own AST read agrees (contract and tool use one truth)",
+          CHECKER.scheduler_act_verbs(REPO) == declared,
+          (CHECKER.scheduler_act_verbs(REPO), declared))
+    check("every declared verb has a label or a management entry",
+          set(contract["labels"]) | set(contract["management"]["verbs"]) == set(declared),
+          (sorted(contract["labels"]), sorted(contract["management"]["verbs"])))
+    drifted = copy.deepcopy(contract)
+    drifted["authority"]["verbs"] = ["pause", "resume", "delete"]
+    found = CHECKER.run(drifted, REPO)
+    check("the checker FAILS when a contract verb is dropped (the drift is caught)",
+          found["ok"] is False and any("Scheduler.act" in p
+                                       for p in found["contract_problems"]),
+          found["contract_problems"])
+
+
+def t_phase2_management_cases():
+    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    cases = contract["management"]["cases"]
+    for case in cases:
+        label = (f"{case['verb']} {case['kind']}.{case['state']} "
+                 f"{case['fields']} -> {case['code']}")
+        jid = fresh_job(case["kind"], case["state"])
+        code, out = act_fields(jid, case["verb"], dict(case.get("fields") or {}))
+        check(f"real act() gives the contract's {case['code']} for {label}",
+              code == case["code"], out)
+        if case.get("error"):
+            said = str((out or {}).get("error") or "")
+            check(f"... with the refusal sentence {case['error']!r}",
+                  case["error"].lower() in said.lower(), said)
+        if case.get("waiting"):
+            check("... as ONE pending card (202 waiting), never a silent write",
+                  (out or {}).get("waiting") is True, out)
+
+
+# ==========================================================================
 #  4. the cross-surface checker: real files, pending gaps named, strict flips
 # ==========================================================================
 
@@ -428,9 +537,11 @@ def t_cross_surface_checker():
           phone["status"] == "enforced" and not phone["mismatches"], phone)
     check("phone: it was compared on the same 29 shared cases as the desktop",
           phone["cases"] == 29, phone["cases"])
-    check("the D-1 marker and the Goals-only kind are reported as notes, not failures",
+    check("the D-1 marker, the Goals-only kind and Phase-2 are notes, not failures",
           any("ready_for_review" in note for note in result["notes"])
-          and any("goal_checkin" in note for note in result["notes"]), result["notes"])
+          and any("goal_checkin" in note for note in result["notes"])
+          and any("Phase-2 management actions" in note for note in result["notes"]),
+          result["notes"])
 
     strict = CHECKER.run(contract, REPO, strict=True)
     check("--strict is GREEN with every surface enforced", strict["ok"] is True, strict)
@@ -472,6 +583,8 @@ def main():
         ("0. the contract is one complete table", t_contract_is_one_complete_table),
         ("1. the contract matches the real kind registry", t_contract_matches_the_real_kind_registry),
         ("2. the real act() authority matches the contract rules", t_act_authority_matches_the_contract_rules),
+        ("2b. the contract verb set equals Scheduler.act's accepted set", t_act_verb_set_matches_the_contract),
+        ("2c. the Phase-2 management cases match the real act()", t_phase2_management_cases),
         ("3. Wave D-1 ready_for_review", t_ready_for_review_half),
         ("4. the cross-surface checker", t_cross_surface_checker),
     )

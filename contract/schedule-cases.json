@@ -1,14 +1,25 @@
 {
-  "$comment": "F5/Q2 - the ONE canonical schedule action table. Derived from the real backend authority (backend/jarvis_schedule.py: Scheduler.act's decision table, the Kind registry, and Wave D-1's propose_ready/suggest_done for ready_for_review) and the words both apps already share. Surfaces (HUD jarvis_hud.html, coming-up.js, Schedule.kt) MUST match this table; tools/check_schedule_actions.py reports each surface, and contract/README.md says who still has to consume it. Data only: no code, no words that are not user-facing below. The shared desktop table is jarvis-desktop/src/hud-actions.js (coherence #729): the HUD's fallback and the Brain consume it; the shared table section below is the only desktop source of truth the checker reads.",
+  "$comment": "F5/Q2 - the ONE canonical schedule action table. Derived from the real backend authority (backend/jarvis_schedule.py: Scheduler.act's decision table, the Kind registry, and Wave D-1's propose_ready/suggest_done for ready_for_review) and the words both apps already share. Surfaces (HUD jarvis_hud.html, coming-up.js, Schedule.kt) MUST match this table; tools/check_schedule_actions.py reports each surface, and contract/README.md says who still has to consume it. Data only: no code, no words that are not user-facing below. The shared desktop table is jarvis-desktop/src/hud-actions.js (coherence #729): the HUD's fallback and the Brain consume it; the shared table section below is the only desktop source of truth the checker reads. Phase 2 (HUD Reminders edit/move/reorder, 2026-10-22) is in the separate `management` block: those verbs open an editor/list picker/keyboard reorder, so they are not one-tap entries in a kind's `states` actions. The checker asserts `authority.verbs` equals the verb set it reads out of `backend/jarvis_schedule.py`'s `Scheduler.act` source.",
   "schema": 1,
   "updated": "2026-10-22",
   "owner": "prompt-wiring (contract + checker only; surfaces are owned by their PRs)",
   "authority": {
     "module": "backend/jarvis_schedule.py",
-    "act": "Scheduler.act (one of pause, resume, delete, done, add_time, snooze; refusals in plain words)",
+    "act": "Scheduler.act (one of pause, resume, delete, done, add_time, snooze, edit, move, reorder; refusals in plain words)",
     "kinds": "Kind registry (register_kind) - S.KINDS after KIND_MODULES load, plus jarvis_goals.KIND = goal_checkin when Goals registers it",
     "states": "LISTED = active, paused, waiting; fired rows are shown under 'Just went off'; D-1 adds the ready_for_review marker to a to-do",
-    "snooze": "S.SNOOZABLE = timer, alarm, reminder; S.SNOOZE_DEFAULT seconds"
+    "snooze": "S.SNOOZABLE = timer, alarm, reminder; S.SNOOZE_DEFAULT seconds",
+    "verbs": [
+      "pause",
+      "resume",
+      "delete",
+      "done",
+      "add_time",
+      "snooze",
+      "edit",
+      "move",
+      "reorder"
+    ]
   },
   "shared": {
     "file": "jarvis-desktop/src/hud-actions.js",
@@ -25,6 +36,328 @@
       "coming_up": "jarvis-desktop/src/coming-up.js imports ACTION_LABELS, WENT_OFF_ACTIONS and actionNames"
     },
     "why": "one module, no DOM, no dependency; the phone cannot import it yet (Session B / Q2), so its hand-written table stays the pending surface"
+  },
+  "management": {
+    "$comment": "HUD Reminders Phase 2 (2026-10-22). These verbs are NOT part of a kind.states action list: they open an editor, a list picker or a keyboard reorder instead of drawing one button per action. The PC's Scheduler.act/_act_phase2 is the authority on every accept/refusal; the words are the Phase-2 block of jarvis-desktop/src/hud-actions.js on the open feat/hud-reminders-phase2-edit-move-reorder-ui branch, which is not on main yet.",
+    "verbs": {
+      "edit": {
+        "label": "Edit",
+        "kinds": [
+          "timer",
+          "alarm",
+          "reminder",
+          "todo"
+        ],
+        "states": [
+          "active",
+          "paused"
+        ],
+        "changes": "text, a one-off's own time (when/at/date+time/seconds), repeat (ONE card, old rule runs until answered), a to-do's list"
+      },
+      "move": {
+        "label": "To-do list",
+        "kinds": [
+          "todo"
+        ],
+        "states": [
+          "active",
+          "paused"
+        ],
+        "changes": "the to-do's named list, or null for the to-do list"
+      },
+      "reorder": {
+        "label": "Move up",
+        "down_label": "Move down",
+        "kinds": [
+          "todo"
+        ],
+        "states": [
+          "active",
+          "paused"
+        ],
+        "changes": "rank, or before/after another item on the same list"
+      }
+    },
+    "labels": {
+      "edit": "Edit",
+      "save": "Save changes",
+      "cancel": "Cancel",
+      "move_to_todo": "To-do list",
+      "move_up": "Move up",
+      "move_down": "Move down"
+    },
+    "backend_note": "Scheduler._edit technically also accepts a plain text edit on briefing/standby/review/nexttime rows (their Kind has no add hook), but no surface offers those controls - the open Phase-2 UI's canEdit() limits Edit to `editable_kinds`. tellme/today refuse edit with 'That is changed where it was set up.'",
+    "surfaces": {
+      "hud": "pending",
+      "coming_up": "pending",
+      "phone": "not-planned"
+    },
+    "owner": "Coherence Fix Slice (Session A) - HUD Reminders Phase 2 UI (open branch feat/hud-reminders-phase2-edit-move-reorder-ui)",
+    "reason": "The Phase-2 UI is not on main yet, so the shared hud-actions.js has no EDIT_LABEL/canEdit there and the cross-surface checker cannot compare this block. When that PR lands, flip the two desktop entries to enforced and add the controls to the checker.",
+    "cases": [
+      {
+        "verb": "edit",
+        "kind": "timer",
+        "state": "active",
+        "fields": {
+          "seconds": 300
+        },
+        "code": 200
+      },
+      {
+        "verb": "edit",
+        "kind": "timer",
+        "state": "paused",
+        "fields": {
+          "seconds": 300
+        },
+        "code": 200
+      },
+      {
+        "verb": "edit",
+        "kind": "alarm",
+        "state": "active",
+        "fields": {
+          "text": "new words"
+        },
+        "code": 200
+      },
+      {
+        "verb": "edit",
+        "kind": "reminder",
+        "state": "active",
+        "fields": {
+          "text": "new words"
+        },
+        "code": 200
+      },
+      {
+        "verb": "edit",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "text": "new words"
+        },
+        "code": 200
+      },
+      {
+        "verb": "edit",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "list": "shopping"
+        },
+        "code": 200
+      },
+      {
+        "verb": "edit",
+        "kind": "alarm",
+        "state": "active",
+        "fields": {
+          "date": "2027-06-02",
+          "time": "09:00"
+        },
+        "code": 200
+      },
+      {
+        "verb": "edit",
+        "kind": "alarm",
+        "state": "active",
+        "fields": {
+          "repeat": {
+            "every": "day",
+            "at": "07:00"
+          }
+        },
+        "code": 202,
+        "waiting": true
+      },
+      {
+        "verb": "edit",
+        "kind": "tellme",
+        "state": "active",
+        "fields": {
+          "text": "new"
+        },
+        "code": 409,
+        "error": "changed where it was set up"
+      },
+      {
+        "verb": "edit",
+        "kind": "today",
+        "state": "active",
+        "fields": {
+          "text": "new"
+        },
+        "code": 409,
+        "error": "changed where it was set up"
+      },
+      {
+        "verb": "edit",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "time": "18:00"
+        },
+        "code": 409,
+        "error": "A to-do item has no time"
+      },
+      {
+        "verb": "edit",
+        "kind": "timer",
+        "state": "active",
+        "fields": {
+          "time": "18:00"
+        },
+        "code": 409,
+        "error": "timer's length is changed in seconds"
+      },
+      {
+        "verb": "edit",
+        "kind": "timer",
+        "state": "active",
+        "fields": {
+          "repeat": "every day"
+        },
+        "code": 409,
+        "error": "Only alarms, reminders and briefings can repeat"
+      },
+      {
+        "verb": "edit",
+        "kind": "timer",
+        "state": "active",
+        "fields": {
+          "nope": 1
+        },
+        "code": 400,
+        "error": "edit changes only"
+      },
+      {
+        "verb": "edit",
+        "kind": "timer",
+        "state": "active",
+        "fields": {},
+        "code": 400,
+        "error": "needs at least one field"
+      },
+      {
+        "verb": "edit",
+        "kind": "reminder",
+        "state": "fired",
+        "fields": {
+          "text": "new"
+        },
+        "code": 409,
+        "error": "already gone off"
+      },
+      {
+        "verb": "edit",
+        "kind": "reminder",
+        "state": "waiting",
+        "fields": {
+          "text": "new"
+        },
+        "code": 409,
+        "error": "waiting for its card"
+      },
+      {
+        "verb": "move",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "list": "shopping"
+        },
+        "code": 200
+      },
+      {
+        "verb": "move",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "list": null
+        },
+        "code": 200
+      },
+      {
+        "verb": "move",
+        "kind": "reminder",
+        "state": "active",
+        "fields": {
+          "list": "shopping"
+        },
+        "code": 409,
+        "error": "Only a to-do item can move"
+      },
+      {
+        "verb": "move",
+        "kind": "todo",
+        "state": "waiting",
+        "fields": {
+          "list": "shopping"
+        },
+        "code": 409,
+        "error": "waiting for its card"
+      },
+      {
+        "verb": "move",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "list": "shopping",
+          "x": 1
+        },
+        "code": 400,
+        "error": "move changes only the list"
+      },
+      {
+        "verb": "reorder",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "rank": 0
+        },
+        "code": 200
+      },
+      {
+        "verb": "reorder",
+        "kind": "todo",
+        "state": "paused",
+        "fields": {
+          "rank": 0
+        },
+        "code": 200
+      },
+      {
+        "verb": "reorder",
+        "kind": "reminder",
+        "state": "active",
+        "fields": {
+          "rank": 0
+        },
+        "code": 409,
+        "error": "Only a to-do item can be reordered"
+      },
+      {
+        "verb": "reorder",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "rank": 99
+        },
+        "code": 400,
+        "error": "rank is a whole position"
+      },
+      {
+        "verb": "reorder",
+        "kind": "todo",
+        "state": "active",
+        "fields": {
+          "nope": 1
+        },
+        "code": 400,
+        "error": "reorder changes only rank"
+      }
+    ]
   },
   "labels": {
     "add_time": {

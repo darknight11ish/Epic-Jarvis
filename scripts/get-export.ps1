@@ -34,6 +34,13 @@
   second export means a second wait, and the missing modules could as easily be
   in a Project as in a chat.
 
+  Every manifest entry's `filename` is checked as a LOCAL file name before a
+  download: separators, rooted paths, `..`, drive/ADS colons and control
+  characters are refused (the manifest is data from outside this script). The
+  `export_url` must be https; nothing else is fetched. `-SelfTest` runs those
+  checks without reading a manifest or touching the network, so the guard is
+  proved under Windows PowerShell 5.1 in CI.
+
 .PARAMETER Manifest
   The manifest JSON. Defaults to the newest `manifest-*` in your Downloads.
 
@@ -47,7 +54,8 @@
 [CmdletBinding()]
 param(
     [string] $Manifest,
-    [string] $OutDir
+    [string] $OutDir,
+    [switch] $SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +63,82 @@ $ErrorActionPreference = 'Stop'
 function Say($msg, $colour = 'Gray') { Write-Host $msg -ForegroundColor $colour }
 function Ok($msg)   { Write-Host "  ok    $msg" -ForegroundColor Green }
 function Bad($msg)  { Write-Host "  FAIL  $msg" -ForegroundColor Red }
+
+# The manifest is data from outside this script: its filename is a download
+# DESTINATION, so it must be a plain local name. Refuse separators, rooted
+# paths, dot segments, drive/ADS colons and control characters. A missing
+# filename keeps the old batch-index fallback; an unsafe one is not guessed.
+function Get-SafeExportName([string] $Filename, $BatchIndex) {
+    if ([string]::IsNullOrWhiteSpace($Filename)) {
+        return "part-$BatchIndex.zip"
+    }
+    $name = $Filename.Trim()
+    if ($name -match '[\\/:*?"<>|]' -or $name -match '[\x00-\x1F]') { return $null }
+    if ($name -eq '.' -or $name -eq '..') { return $null }
+    if ($name -match '(^|[\\/])\.\.([\\/]|$)') { return $null }
+    if ([IO.Path]::IsPathRooted($name)) { return $null }
+    return $name
+}
+
+function Test-ExportUrl([string] $Url) {
+    return ($Url -match '^https://[^/\s]+(/|$)')
+}
+
+if ($SelfTest) {
+    $failedNames = @(
+        @{ In = '..\evil.zip'; Why = 'parent traversal' },
+        @{ In = '..\..\evil.zip'; Why = 'parent traversal' },
+        @{ In = 'a/b.zip'; Why = 'separator' },
+        @{ In = 'a\b.zip'; Why = 'separator' },
+        @{ In = '/etc/passwd'; Why = 'rooted path' },
+        @{ In = 'C:\evil.zip'; Why = 'drive path' },
+        @{ In = 'C:evil.zip'; Why = 'drive-relative' },
+        @{ In = '.'; Why = 'dot' },
+        @{ In = '..'; Why = 'dot-dot' },
+        @{ In = "bad`tname.zip"; Why = 'control character' }
+    )
+    $goodNames = @(
+        @{ In = 'conversations.json'; Want = 'conversations.json' },
+        @{ In = 'part-0.zip'; Want = 'part-0.zip' },
+        @{ In = '  spaced.zip  '; Want = 'spaced.zip' }
+    )
+    $bad = 0
+    foreach ($case in $failedNames) {
+        $got = Get-SafeExportName $case.In 0
+        if ($null -ne $got) {
+            $bad++
+            "::error::get-export self-test: accepted $($case.In) ($($case.Why))"
+        } else { "ok    refused $($case.In) ($($case.Why))" }
+    }
+    foreach ($case in $goodNames) {
+        $got = Get-SafeExportName $case.In 0
+        if ($got -ne $case.Want) {
+            $bad++
+            "::error::get-export self-test: $($case.In) became '$got', wanted '$($case.Want)'"
+        } else { "ok    accepted $($case.In)" }
+    }
+    $missing = Get-SafeExportName '' 4
+    if ($missing -ne 'part-4.zip') {
+        $bad++
+        "::error::get-export self-test: a missing filename became '$missing'"
+    } else { "ok    a missing filename falls back to part-4.zip" }
+    if (-not (Test-ExportUrl 'https://claude.ai/export/a')) {
+        $bad++
+        "::error::get-export self-test: rejected an https URL"
+    } else { "ok    accepted an https export URL" }
+    foreach ($u in @('http://claude.ai/export/a', 'file:///C:/x', 'C:\x', '')) {
+        if (Test-ExportUrl $u) {
+            $bad++
+            "::error::get-export self-test: accepted non-https URL '$u'"
+        } else { "ok    refused non-https URL '$u'" }
+    }
+    if ($bad -gt 0) {
+        "get-export self-test: $bad problem(s)"
+        exit 1
+    }
+    Say "get-export self-test: all manifest-name and URL checks passed." Cyan
+    exit 0
+}
 
 # --- find the manifest -------------------------------------------------------
 
@@ -131,8 +215,17 @@ function Test-Zip([string] $path) {
 $good = @(); $bad = @(); $forbidden = 0
 
 foreach ($f in $m.data_files) {
-    $name = $f.filename
-    if (-not $name) { $name = "part-$($f.batch_index).zip" }
+    $name = Get-SafeExportName $f.filename $f.batch_index
+    if (-not $name) {
+        Bad "manifest filename is not a safe local file name: '$($f.filename)'"
+        $bad += [string]$f.filename
+        continue
+    }
+    if (-not (Test-ExportUrl ([string]$f.export_url))) {
+        Bad "$name - the manifest's export_url is not an https URL"
+        $bad += $name
+        continue
+    }
     $dest = Join-Path $OutDir $name
 
     if ((Test-Path -LiteralPath $dest) -and (Test-Zip $dest)) {
