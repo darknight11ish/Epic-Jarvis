@@ -32,6 +32,7 @@ import {
   normalizeLayout,
   presetInfo,
   presetLayout,
+  userLayouts,
 } from "./hud-layout.js";
 
 /** The old localStorage key (src/hud-window.js HUD_LAYOUT_KEY keeps it too). */
@@ -164,9 +165,19 @@ export async function saveLayout(layout, storage = globalThis.localStorage) {
  * three-way localStorage key is not written any more (the HUD page no longer
  * reads it either). A page that is already open follows through the shell's
  * layout event, not through this function.
+ *
+ * H3-PM-1 (post-merge audit, 2026-10-22): a preset choice replaces the ACTIVE
+ * arrangement, never the owner's library. The current document is passed in so
+ * "My layouts" survives exactly as it does through Reset (hud-window-settings)
+ * and the Layouts menu; without it this save used to write `user_presets: []`
+ * and silently delete up to 20 saved layouts. `currentDoc` is optional for the
+ * old two-argument test calls, but every product caller passes it.
  */
-export async function choosePreset(presetId) {
-  return saveLayout(presetLayout(presetId));
+export async function choosePreset(presetId, currentDoc = null) {
+  const base = presetLayout(presetId);
+  const library = currentDoc && typeof currentDoc === "object"
+    ? userLayouts(currentDoc) : [];
+  return saveLayout(normalizeLayout({ ...base, user_presets: library }));
 }
 
 /** One line for the picker's status: what is chosen and whether it was kept. */

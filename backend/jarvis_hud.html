@@ -1034,14 +1034,27 @@ html[data-hud-shell="center-core"] #rail-reminders{display:flex; flex-direction:
  *  No sidebars. Two floating glass pills carry what a rail would have
  *  said: top-left the status, model and latency; top-right the view
  *  switches, the live approval badge, the layout picker, the settings
- *  gear and the telemetry drawer. The core takes the centre at 320px with
+ *  gear, the [Navigation] drawer and the telemetry drawer. The core takes
+ *  the centre at 320px with
  *  layered orbital rings, the latest exchange sits beneath it as a glass
  *  card, and the composer floats centred underneath. The approval cards
  *  themselves STAY, full size, at the top of the stage: a card never
  *  hides because of a layout.
  * --------------------------------------------------------------------- */
 html[data-hud-shell="center-core"] #shell{grid-template-columns:minmax(0,1fr);}
-html[data-hud-shell="center-core"] .rail.left{display:none;}
+/* H3-PM-2 (post-merge audit, 2026-10-22): the old Ambient look hid the left
+   rail outright. That made its cards - and, in edit mode, the protected
+   Jarvis-bar card that H2 renders in the left region - unreachable. The same
+   drawer the new shells use is the honest fallback: off-canvas until
+   [Navigation], with its own Close button, Escape and focus return. */
+html[data-hud-shell="center-core"] .rail.left{
+  position:fixed; top:0; left:0; bottom:0; width:min(260px, 84vw);
+  z-index:41; background:var(--surface-sunken);
+  border-right:1px solid var(--line); padding:12px 10px 18px;
+  overflow-y:auto; transform:translateX(-100%); transition:transform .18s ease;
+}
+html[data-hud-shell="center-core"] .rail.left.open{transform:none;}
+html[data-hud-shell="center-core"] .left-toggle{display:flex;}
 html[data-hud-shell="center-core"] .rail.right{
   position:fixed; right:0; top:0; bottom:0; width:300px; z-index:40;
   transform:translateX(100%); transition:transform .22s ease;
@@ -1350,6 +1363,14 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
   html[data-hud-shell="single-stage-bento"] .hud-region{
     grid-template-columns:repeat(12, minmax(0,1fr));
   }
+
+  /* H3-PM-2 (post-merge audit, 2026-10-22): while Edit HUD is on, no rail
+     that a shell hides may keep a protected control away. The editor marks
+     the rails it must reveal with `.edit-reveal`; slide-over drawers come
+     home, and split-stage's tab-revealed right rail is forced back on. */
+  body[data-hud-edit="on"] .rail.edit-reveal{transform:none !important;}
+  body[data-hud-edit="on"] .rail.edit-reveal.right{display:flex !important;
+    flex-direction:column;}
 
   /* ---- Layouts menu + copy/paste JSON dialogs (H3) --------------------- */
   .hud-presets-menu{
@@ -4798,7 +4819,8 @@ subscribe();
   }
 
   /* ── the left-rail drawer (H3) ──────────────────────────────────────── *
-   * two-column-right and single-stage-bento hide the left rail, so the same
+   * two-column-right, single-stage-bento and center-core hide the left rail,
+   * so the same
    * reachability rule the right rail already has (field fix 2026-10-21)
    * applies here: a visible toggle, a close button, Escape, and focus
    * returned to the toggle. No shell may hide a card with no way back. */

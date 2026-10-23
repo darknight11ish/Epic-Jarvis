@@ -561,7 +561,7 @@ await check("choosing a preset saves its document in the store, and writes NO le
     return { layout: null, source: "none" };
   });
   const storage = mem();
-  const answer = await store.choosePreset("quiet", storage);
+  const answer = await store.choosePreset("quiet");
   assert.equal(answer.saved, true);
   assert.equal(written.length, 1);
   assert.equal(written[0].base_preset, "quiet");
@@ -574,12 +574,43 @@ await check("choosing a preset saves its document in the store, and writes NO le
   noShell();
 });
 
+await check("H3-PM-1: choosing a built-in preset keeps every saved layout", async () => {
+  // The post-merge audit found the Settings radio called choosePreset with no
+  // current document, so the save wrote user_presets: [] and silently deleted
+  // "My layouts". The store now takes the live document and keeps its library.
+  const written = [];
+  fakeShell((cmd, args) => {
+    if (cmd === "set_hud_layout") {
+      written.push(args.layout);
+      return { layout: args.layout, source: "saved" };
+    }
+    return { layout: null, source: "none" };
+  });
+  const base = L.presetLayout("cockpit");
+  const entry = {
+    id: "custom-cockpit-1", name: "Mine", base_preset: "cockpit",
+    shell_template: "three-column", density: "comfortable",
+    default_stage_tab: "talk", cards: base.cards,
+  };
+  const current = L.normalizeLayout({ ...base, id: entry.id, name: entry.name,
+    user_presets: [entry] });
+  assert.equal(L.userLayouts(current).length, 1, "the fixture has no saved layout");
+  const answer = await store.choosePreset("quiet", current);
+  assert.equal(answer.saved, true);
+  assert.equal(written.length, 1, "the preset choice wrote more than once");
+  assert.equal(written[0].base_preset, "quiet", "the chosen preset is not active");
+  assert.deepEqual(written[0].user_presets.map((saved) => saved.id), ["custom-cockpit-1"],
+    "the preset choice deleted My layouts");
+  assert.equal(written[0].user_presets[0].name, "Mine", "the saved layout lost its name");
+  noShell();
+});
+
 await check("a refused save is reported as not saved, with the shell's reason", async () => {
   fakeShell((cmd) => {
     if (cmd === "get_hud_layout") return { layout: null, source: "none" };
     return Promise.reject(new Error("the layout is not readable"));
   });
-  const answer = await store.choosePreset("minimal", mem());
+  const answer = await store.choosePreset("minimal");
   assert.equal(answer.saved, false);
   assert.match(store.layoutStatus(answer), /Not saved/);
   assert.match(store.layoutStatus(answer), /not readable/);
