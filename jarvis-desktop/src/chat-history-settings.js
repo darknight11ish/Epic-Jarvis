@@ -22,10 +22,11 @@
  * answers "waiting" at once, so the page says so and re-reads the status while
  * it is waiting; OFF is immediate. Choosing a retention has NO card in the
  * backend: it is a direct setting change that deletes conversations older than
- * the chosen age AT ONCE, so the page asks here first (in plain words, with the
- * count it will act on) and the change is held on a stale link (rule 4) -
- * turning history OFF is never held. This page does not pretend the retention
- * choice raises a card the route does not have.
+ * the chosen age AT ONCE, so the page asks here first (in plain words: which
+ * conversations will go, and that the PC reports how many were deleted once it
+ * is done - there is no count to show before the deletion) and the change is
+ * held on a stale link (rule 4) - turning history OFF is never held. This page
+ * does not pretend the retention choice raises a card the route does not have.
  *
  * @module chat-history-settings
  */
@@ -119,6 +120,10 @@ function paint() {
   if (el.sw) {
     el.sw.disabled = busy || held;
     el.sw.textContent = view.enabled === true ? OFF_BUTTON : ON_BUTTON;
+    // The button IS the switch: expose its state to assistive technology,
+    // and update it whenever the PC's status repaints the label.
+    el.sw.setAttribute("aria-checked",
+      view.enabled === true ? "true" : "false");
   }
   if (el.keep) {
     el.keep.disabled = busy || keepHeld;
@@ -209,7 +214,9 @@ async function setKeep(days) {
     ? null
     : `Conversations older than ${KEEP_CHOICES.find((c) => c.days === days).label} ` +
       "deleted NOW. This cannot be undone.";
-  if (older && !window.confirm(`${older}\n\nKeep chats for ${days === 365 ? "1 year" : days + " days"}?`)) {
+  const reported = "\nThe PC reports how many conversations were deleted once it is done.";
+  if (older && !window.confirm(
+    `${older}${reported}\n\nKeep chats for ${days === 365 ? "1 year" : days + " days"}?`)) {
     el.keep.value = String(view.keep_days ?? 0);
     return;
   }

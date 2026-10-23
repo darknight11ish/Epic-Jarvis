@@ -58,6 +58,7 @@ const state = (page) => page.evaluate(() => ({
   button: (document.getElementById("ch-switch") || {}).textContent || "",
   disabled: Boolean(document.getElementById("ch-switch")?.disabled),
   keepValue: (document.getElementById("ch-keep") || {}).value || "",
+  ariaChecked: document.getElementById("ch-switch")?.getAttribute("aria-checked") || "",
   keepOptions: [...document.querySelectorAll("#ch-keep option")]
     .map((o) => o.textContent),
   line: (document.getElementById("ch-line") || {}).textContent || "",
@@ -76,6 +77,7 @@ await check("the switch and retention read the PC's real status", async () => {
   const s = await state(page);
   assert.equal(s.bodyHidden, false);
   assert.equal(s.button.trim(), "Turn chat history off");
+  assert.equal(s.ariaChecked, "true", "the switch does not expose its state");
   assert.equal(s.keepValue, "30");
   assert.deepEqual(s.keepOptions,
     ["Keep until I delete them", "30 days", "90 days", "1 year"]);
@@ -98,6 +100,7 @@ await check("OFF is the one command, one boolean, immediate", async () => {
   assert.deepEqual(s.calls.filter((c) => c.action === "off"),
     [{ action: "off", keepDays: undefined }]);
   assert.equal(s.button.trim(), "Turn chat history on");
+  assert.equal(s.ariaChecked, "false", "the switch did not update its state");
   assert.match(s.line, /chat history is off/i);
   await page.close();
 });
@@ -230,6 +233,19 @@ await check("search finds it by its ordinary words", async () => {
 });
 
 /* ── The command: Settings-only, one field, and no conversation at all ────── */
+
+await check("CONTROL: the confirm never promises a count it cannot show", async () => {
+  const js = read("src/chat-history-settings.js");
+  assert.doesNotMatch(js, /with the count it will act on/,
+    "the module still claims the confirm shows a count");
+  assert.match(js,
+    /The PC reports how many conversations were deleted once it is done\./,
+    "the confirm does not say the count is reported after the deletion");
+  const html = read("src/settings.html");
+  assert.match(html,
+    /id="ch-switch" type="button" role="switch" aria-checked="false"/,
+    "the chat-history switch is not exposed as a switch");
+});
 
 await check("CONTROL: the command's verbs are read/on/off/keep, one field each", async () => {
   const rust = read("src-tauri/src/history_settings.rs");

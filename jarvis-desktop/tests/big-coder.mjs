@@ -55,6 +55,7 @@ const ready = async (page) => {
 
 const state = (page) => page.evaluate(() => ({
   button: (document.getElementById("bc-switch") || {}).textContent || "",
+  ariaChecked: document.getElementById("bc-switch")?.getAttribute("aria-checked") || "",
   disabled: Boolean(document.getElementById("bc-switch")?.disabled),
   line: (document.getElementById("bc-line") || {}).textContent || "",
   running: (document.getElementById("bc-running") || {}).textContent || "",
@@ -75,6 +76,7 @@ await check("the switch reads the PC's own status and offers the real control", 
   const s = await state(page);
   assert.equal(s.bodyHidden, false, "the control never appeared");
   assert.equal(s.button.trim(), "Turn the big coding model on");
+  assert.equal(s.ariaChecked, "false", "the switch does not expose its off state");
   assert.match(s.line, /Off unless you turn it on here/, s.line);
   assert.equal(s.running, "", "nothing is running, so nothing is claimed");
   assert.deepEqual(s.calls, ["read"], "the read must be one command");
@@ -95,6 +97,7 @@ await check("ON is the ONE existing command, waits for the card, and says so", a
   assert.deepEqual(s.invokes.filter((a) => a.action === "on"),
     [{ action: "on" }], JSON.stringify(s.invokes));
   assert.equal(s.button.trim(), "Turn the big coding model off");
+  assert.equal(s.ariaChecked, "true", "the switch did not expose its on state");
   assert.match(s.line, /big coding model is on/, s.line);
   // The page never starts or stops the model - only the switch position.
   assert.ok(!s.invokes.some((a) => a.action === "start" || a.action === "stop"),
