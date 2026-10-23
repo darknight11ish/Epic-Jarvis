@@ -24429,7 +24429,15 @@ tainted=False)` is a pure function (no clock, no network, no model) answering
   sharing that category (a documented regex: "send/email/share/forward/...
   <category> words"). Otherwise refused with a reason. A bare "send it" is
   not an authorisation; a tainted turn (it read outside text) is refused even
-  when asked.
+  when asked. **The owner's own records are not outside text** (RA-6,
+  2026-10-23): reading the spending table (`my_spending`) or a saved memory
+  (`memory_search`) in the turn does not taint it for this gate, so "read my
+  Q3 tax total from my spending CSV and email it to my accountant" stages the
+  draft card as usual; every other reading tool (email, web pages, files,
+  notes read back, the screen, the phone) still does. Only the tool path can
+  tell those apart - the classifier itself stays the pure function above -
+  and a later turn of the same conversation is still treated as tainted
+  (the chat log records only that a tool ran).
 
 `jarvis_email_draft.plan()` runs the classifier on the subject+body BEFORE the
 card is built: a refused draft is a `Plan` with a `problem` and no card, and
