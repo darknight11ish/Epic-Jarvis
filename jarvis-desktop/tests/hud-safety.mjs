@@ -14,12 +14,15 @@ import {
   OFFLINE_LEAD,
   TAINT_LEAD,
   TAINT_TAIL,
+  LATCH_LOCAL_WORDS,
+  LATCH_RUSH_WORDS,
   FIXED_LABEL,
   LOCK_BEAT_MS,
   raisedOf,
   lockWords,
   linkWords,
   taintWords,
+  latchWords,
   safetyChips,
   approveHeld,
   applyApprovalControls,
@@ -224,8 +227,39 @@ check("the rail is click-through, top-centre, and its tracked docs say the same"
     "the test reads the untracked design spec");
 });
 
+check("A4: the persistent latches are plain words, drawn only when true", () => {
+  // null ("the PC has not said") is NOT "not latched": no chip either way.
+  assert.equal(latchWords(null), null);
+  assert.equal(latchWords({}), null);
+  assert.equal(latchWords({ taint: false, rush: false }), null);
+  assert.equal(latchWords({ taint: null, rush: null }), null);
+  assert.equal(latchWords({ taint: "true", rush: 1 }), null, "only a real true arms a chip");
+  const local = latchWords({ taint: true, rush: false });
+  assert.equal(local.words, LATCH_LOCAL_WORDS);
+  assert.equal(local.tone, "warn");
+  const rushed = latchWords({ taint: false, rush: true });
+  assert.equal(rushed.words, LATCH_RUSH_WORDS);
+  const both = latchWords({ taint: true, rush: true });
+  assert.ok(both.words.includes(LATCH_LOCAL_WORDS) && both.words.includes(LATCH_RUSH_WORDS));
+  // A beginner reads these: none of the internal words may reach a screen.
+  for (const words of [local.words, rushed.words, both.words]) {
+    assert.ok(!/taint|latch|tier|armed|session-local/i.test(words),
+      `internal jargon on a screen: ${words}`);
+  }
+  // The chip sits after the lock chip and before the queue evidence, and only
+  // when a latch is armed; linked-only stays silent (the one row says it).
+  assert.deepEqual(safetyChips({ latch: { taint: true } }).map((c) => c.chip), ["latch"]);
+  assert.deepEqual(safetyChips({
+    lock: { appLock: true },
+    latch: { taint: true, rush: true },
+    rows: [{ raised: { quote: "q", source: "s" } }],
+    link: { up: true, short: "reconnecting", tone: "warn" },
+  }).map((c) => c.chip), ["lock", "latch", "taint", "link"]);
+  assert.deepEqual(safetyChips({}), []);
+});
+
 if (fails) {
   console.error(`\n${fails} failed`);
   process.exit(1);
 }
-console.log("ok: H4 safety rail — words, queue-scoped evidence, un-hideable pins");
+console.log("ok: H4/A4 safety rail — words, queue-scoped evidence, persistent latches, un-hideable pins");

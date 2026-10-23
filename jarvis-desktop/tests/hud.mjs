@@ -4248,6 +4248,52 @@ await check("H4: the rush banner is the waiting card's evidence, escaped, never 
   assert.deepEqual(problems, []);
 });
 
+await check("H4/A4: the persistent latches show read-only, and unknown stays silent", async () => {
+  // Both armed: one chip, both plain sentences, no control, still one strip.
+  const both = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, taint_latched: true, rush_latched: true });
+  await both.page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-latch");
+    return node && !node.hidden && node.textContent.length > 0;
+  }, null, { timeout: 8000 });
+  const words = await both.page.locator("#hud-safety-latch").innerText();
+  assert.match(words, /staying on your PC/, words);
+  assert.match(words, /tried to rush you recently/, words);
+  assert.ok(!/taint|latch|tier|armed/i.test(words), `internal jargon on screen: ${words}`);
+  assert.equal(await both.page.locator("#hud-safety-latch").getAttribute("role"), "status");
+  assert.equal(await both.page.locator("#hud-safety button, #hud-safety input, #hud-safety select").count(), 0,
+    "the persistent-latch chip grew a control");
+  assert.equal(await both.page.locator("#hud-safety").getAttribute("role"), "region",
+    "the rail stopped being the one fixed strip");
+  await both.page.close();
+  assert.deepEqual(both.problems, []);
+
+  // The PC has not said (null): silent - never drawn as "not latched".
+  const unknown = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, taint_latched: null, rush_latched: null });
+  await unknown.page.waitForTimeout(700);
+  assert.equal(await unknown.page.locator("#hud-safety-latch").isHidden(), true,
+    "an unread latch was drawn as a verdict");
+  assert.equal(await unknown.page.locator("#hud-safety").isHidden(), true,
+    "the rail drew a chip with no fact");
+  await unknown.page.close();
+  assert.deepEqual(unknown.problems, []);
+
+  // false: silent too, and a stale link still holds ONLY Approve (Rule 4).
+  const calm = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, taint_latched: false, rush_latched: false,
+      pending: PLAIN_CARD });
+  await LINK(calm.page, { connected: true, stale: true });
+  await calm.page.waitForTimeout(300);
+  assert.equal(await calm.page.locator("#hud-safety-latch").isHidden(), true,
+    "a false latch drew a chip");
+  assert.equal(await calm.page.locator("#approvals .appr .no").first().isEnabled(), true);
+  assert.equal(await calm.page.locator("#approvals .appr .yes").first().isDisabled(), true,
+    "the latch chip changed Rust's stale-link rule");
+  await calm.page.close();
+  assert.deepEqual(calm.problems, []);
+});
+
 await check("H4: a preset or a hostile saved document cannot hide the strip", async () => {
   const HOSTILE = { version: 1, id: "custom-hostile-1", name: "Hostile",
     base_preset: "quiet", theme: "dark", density: "comfortable",
@@ -4345,7 +4391,7 @@ await check("H4: no layout, import or edit mode can hide the rail, and it has no
   const editing = await page.evaluate(() => ({
     strip: document.getElementById("hud-safety").hidden,
     label: getComputedStyle(document.getElementById("hud-safety-fixed")).display,
-    chips: document.querySelectorAll("#hud-safety-lock:not([hidden]), #hud-safety-taint:not([hidden]), #hud-safety-link:not([hidden])").length,
+    chips: document.querySelectorAll("#hud-safety-lock:not([hidden]), #hud-safety-latch:not([hidden]), #hud-safety-taint:not([hidden]), #hud-safety-link:not([hidden])").length,
   }));
   assert.equal(editing.strip, false, "healthy edit mode hid the safety rail");
   assert.equal(editing.label, "block", "edit mode did not show the 'always visible' line");
