@@ -57,18 +57,24 @@ class FeatureDirectoryTest {
 
     @Test
     fun `a non-toggle row carries an honest example and screen path, and no switch is faked`() {
+        // The directory draws NO toggles, so "no fake control" is a data rule:
+        // a setting key may only appear on a Switchable row, and a row the
+        // contract marks as a toggle must name it. A Switchable row can carry
+        // keys without being a one-tap toggle (it may be a choice or a title),
+        // which is exactly why the UI receives data and never draws a switch.
         for (row in rows) {
+            if (row.switchKeys.isNotEmpty()) {
+                assertTrue("only a Switchable row may name a setting: ${row.id}",
+                    row.label.startsWith("Switchable / Adjustable"))
+            }
             if (row.isToggle) {
                 assertTrue("a toggle row must be Switchable: ${row.id}",
                     row.label.startsWith("Switchable / Adjustable"))
-                assertFalse("a toggle row names a switch: ${row.id}", row.switchKeys.isEmpty())
-            } else {
-                assertFalse("a non-toggle row must not carry a switch: ${row.id}",
-                    row.switchKeys.isNotEmpty())
-                if (row.label.startsWith("Command-Only")) {
-                    assertTrue("a command row has an example: ${row.id}",
-                        row.examplePhrase.isNotBlank())
-                }
+                assertTrue("a toggle row names a switch: ${row.id}", row.switchKeys.isNotEmpty())
+            }
+            if (row.label.startsWith("Command-Only")) {
+                assertTrue("a command row has an example: ${row.id}",
+                    row.examplePhrase.isNotBlank())
             }
             assertTrue("every row has a screen path: ${row.id}", row.settingsPath.isNotBlank())
         }
