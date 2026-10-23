@@ -1468,6 +1468,49 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
     position:absolute; width:1px; height:1px; padding:0; margin:-1px;
     overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
   }
+
+/* ---- H4 (2026-10-22): the safety rail -------------------------------- *
+ * One fixed strip, owned by the shell, in NO editable region. It never
+ * animates (reduced motion is its resting state), it is never colour-only
+ * (every tone has its own words), and it sits above H2's edit overlay so a
+ * drag ghost cannot cover it. Placement is geometry-tested at 1280x820,
+ * 1024x768 and 900x600, at DPR 1 and 1.5: bottom-left, above the composer
+ * line and clear of the edit toggle, the edit bar and the card buttons. */
+#hud-safety{
+  /* H4-1: top-centre, clear of the protected bar launcher, the quickbar
+     pills and the composer at every tested width. The strip holds no
+     controls in v1, so it ALSO clicks through: nothing under it is ever
+     pointer-blocked even if a very narrow window wraps it onto content. */
+  position:fixed; top:2px; left:50%; transform:translateX(-50%); z-index:9001;
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  max-width:min(560px, calc(100vw - 28px)); pointer-events:none;
+}
+#hud-safety[hidden]{display:none;}
+#hud-safety > span{
+  pointer-events:none; display:block; max-width:100%; padding:6px 10px;
+  border:1px solid var(--line-hot); border-radius:4px;
+  background:var(--plate-2); color:var(--text);
+  font-family:var(--f-mono); font-size:14px; line-height:1.35; text-align:left;
+  white-space:normal; overflow-wrap:anywhere;
+  transition:none !important; animation:none !important;
+}
+#hud-safety > span[hidden]{display:none;}
+#hud-safety > span[data-tone="warn"]{border-color:var(--warn);
+  background:linear-gradient(90deg, rgb(var(--warn-rgb) / .16), var(--plate-2));}
+#hud-safety > span[data-tone="bad"]{border-color:var(--line-hot);
+  background:linear-gradient(90deg, rgb(var(--warn-rgb) / .26), var(--plate-2));}
+/* Higher specificity than `#hud-safety > span{display:block}`, so this
+   label is hidden in normal mode and shown ONLY while editing (H4-3). */
+#hud-safety > span#hud-safety-fixed{display:none; font-size:11px;
+  letter-spacing:.04em; text-transform:uppercase; color:var(--dim);
+  border-style:dashed;}
+body[data-hud-edit="on"] #hud-safety > span#hud-safety-fixed{display:block;}
+/* H4-3: healthy edit mode keeps the strip on screen even with no chip
+   (the design promises it is always visible while editing). */
+body[data-hud-edit="on"] #hud-safety{display:flex;}
+@media (prefers-reduced-motion: reduce){
+  #hud-safety, #hud-safety > span{transition:none !important; animation:none !important;}
+}
 </style>
 
 <!-- ==================================================================== *
@@ -1489,6 +1532,18 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
  *  keep their ids and words in every shell too.
  * ==================================================================== -->
 <body data-hud-shell="three-column" data-hud-density="comfortable">
+
+<!-- H4 (2026-10-22): the safety rail. A shell-owned strip, NOT a card:
+     it is outside #shell, has no data-hud-card / data-hud-region, is not in
+     CARD_REGISTRY or the layout document, and no preset, import or edit-mode
+     action can hide or move it. Its words are painted from the live link
+     push, the lock flags and the pending queue by hud-safety.js. -->
+<div id="hud-safety" role="region" aria-label="Safety and connection" hidden>
+  <span id="hud-safety-fixed" aria-hidden="true">Always visible — no layout can hide this</span>
+  <span id="hud-safety-lock" role="status" aria-live="polite" hidden></span>
+  <span id="hud-safety-taint" role="alert" hidden></span>
+  <span id="hud-safety-link" role="status" aria-live="polite" hidden></span>
+</div>
 
 <div id="shell">
 
@@ -4250,6 +4305,12 @@ window.addEventListener("jarvis-link-status", (event) => {
     short: String(detail.short || ""),
     tone: String(detail.tone || ""),
   };
+  // H4: the safety rail's link chip reads the same push (never the row's
+  // own words twice - the row is silent when linked, and so is the rail).
+  // The push can arrive before the external module mounts, so the page keeps
+  // the last verdict for it (`mountSafetyRail` seeds from this).
+  window.__hudLinkStatus = linkStatus;
+  if (window.__hudSafety) window.__hudSafety.setLink(linkStatus);
   hostWarn();
 });
 // Tell hud_bootstrap.js this page composes the one row itself, and drop a
@@ -4378,7 +4439,7 @@ async function apprPoll(){
     const yes = el.querySelector(".yes");
     // A request cut off before it reached this card cannot be approved from
     // it: what is shown is not all of what would run.
-    if(apprCutOff(p)) yes.disabled = true;
+    if(apprCutOff(p)){ yes.disabled = true; yes.dataset.cutoff = "1"; }
     if(apprReplace(p) && !apprCutOff(p)){
       // Review ruling 8.2: TWO presses. The first arms the card and sends
       // nothing at all - the button then says "Confirm replace", so a person
@@ -4398,6 +4459,19 @@ async function apprPoll(){
     }
     el.querySelector(".no").onclick  = () => apprDecide(p.id, false, el);
     box.appendChild(el);
+  }
+  // H4 (2026-10-22): the rail's taint chip is queue-scoped - exactly the
+  // `raised` evidence of the rows that are waiting now - and while the link
+  // is catching up, Approve waits but Deny stays enabled (Rust's own rule:
+  // `stale_answer_refusal` holds only an APPROVE on a stale link).
+  if (window.__hudSafety){
+    window.__hudSafety.setPending(list);
+    window.__hudSafety.syncApprovals(box);
+  } else {
+    // H4-4: the first paint can beat the external module's mount. Stash the
+    // rows so an already-waiting raised card's evidence is shown at once
+    // (the module seeds from this and the page repaints it after mounting).
+    window.__hudSafetyPending = list;
   }
   apprTick();
 }
@@ -5729,6 +5803,21 @@ window.paintLaneWarning = paintLaneWarning;
  * HUD's action buttons and the Brain's Coming up both read this same table. */
 import { actionsFor as hudActionsFor } from "./hud-actions.js";
 window.__hudActionsFor = hudActionsFor;
+
+/* H4 (2026-10-22): the safety rail is an EXTERNAL module, so the page keeps
+ * its inline-script count (tests/csp-inline.mjs pins it) and the CSP is
+ * untouched. It shows App lock / hidden lists, the queue-scoped rush
+ * evidence and the catching-up state, and it keeps Deny enabled while the
+ * link is stale (the command already holds only Approve). */
+import { mountSafetyRail } from "./hud-safety.js";
+mountSafetyRail().then((rail) => {
+  window.__hudSafety = rail;
+  // H4-4: paint the queue once now, so a card that was already waiting at
+  // load reaches the rail's queue-scoped evidence without the 30 s poll.
+  if (typeof apprPoll === "function") apprPoll();
+}).catch(() => {
+  /* An older shell/page pairing: the rest of the HUD keeps working. */
+});
 
 /* H2 of the editable HUD (2026-10-22). An EXTERNAL module: the page keeps the
  * inline-script count it had (tests/csp-inline.mjs pins it) and the CSP is

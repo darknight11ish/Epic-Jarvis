@@ -125,7 +125,7 @@ async function openHud(browser, status, pageOptions = {}) {
   // does, with no __TAURI__ at all; `tauriInvoke: "fail"` makes the mic's
   // command refused.
   if (!status.noShell) {
-    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout, preview }) => {
+    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout, preview, lockFlags }) => {
       // Captured before the bootstrap replaces window.fetch.
       const origFetch = window.fetch.bind(window);
       const shellHeaders = { "X-Jarvis-Client": "hud", "X-Jarvis-Token": "test-token" };
@@ -217,6 +217,9 @@ async function openHud(browser, status, pageOptions = {}) {
           // (the owner's ask of 2026-10-09). Granted in surfaces.toml's
           // `hud-voice` set; this stand-in refuses anything not granted.
           case "hide_quickbar": return null;
+          // The two yes/no lock answers (commands.rs `get_lock_flags`, granted
+          // through `hud-link`): no token, no words, nothing written.
+          case "get_lock_flags": return lockFlags;
           case "mark_answer": {
             const r = await origFetch(backend + "/api/feedback/mark", { method: "POST",
               headers: { ...shellHeaders, "Content-Type": "application/json" },
@@ -256,7 +259,8 @@ async function openHud(browser, status, pageOptions = {}) {
     }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs),
       hudLayout: status.hudLayout || null,
       preview: status.preview || null,
-         decideFails: status.decideFails || "" });
+         decideFails: status.decideFails || "",
+         lockFlags: status.lockFlags || { appLock: false, privateAnswers: false } });
   }
   // A browser's voice list, with one online voice and one local one, and
   // an utterance class that accepts them (the real one only takes real
@@ -1526,6 +1530,11 @@ await check("a HUD card that REPLACES data takes TWO presses in the injected win
                                     replaces_note: c.note,
                                     risk: { reversible: "no", reach: "local",
                                             swipe_ok: false } })) });
+  // H4 review (unknown-link Approve): the rail holds Approve until the shell
+  // has said the link is live; push that same verdict the bootstrap sends, so
+  // this test drives the two-press guard, not the boot hold.
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+  await page.waitForTimeout(150);
   const place = (card) => page.evaluate((c) => {
     const box = document.getElementById("approvals");
     box.hidden = false;
@@ -1625,7 +1634,7 @@ await check("the HUD page holds no token, and every request it makes goes throug
   assert.deepEqual(direct, [], `the page reached the backend by itself: ${JSON.stringify(direct)}`);
   assert.equal(chats.length, 1, "the chat did not reach the backend through the shell");
   assert.ok(log.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."), JSON.stringify(log));
-  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout"].includes(c)), [],
+  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout", "get_lock_flags"].includes(c)), [],
     `the HUD called ${JSON.stringify(held.invoked)}`);
   // Every read is one hud_proxy.rs allows (HUD_GET_PATHS and /api/retrieve).
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
@@ -1756,7 +1765,8 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
     pressed: document.getElementById("mic").getAttribute("aria-pressed"),
   }));
   await page.close();
-  assert.deepEqual(after.invokes.map((c) => c[0]).filter((c) => c !== "hud_get" && c !== "get_hud_layout"),
+  assert.deepEqual(after.invokes.map((c) => c[0])
+    .filter((c) => c !== "hud_get" && c !== "get_hud_layout" && c !== "get_lock_flags"),
     ["summon_push_to_talk"],
     "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
   assert.equal(after.listening, false, "the page's own (browser) recogniser started");
@@ -3923,6 +3933,331 @@ await check("H3: DPR 1.5 / 900-1280 widths keep the saved shell and a working dr
   }
 });
 
+
+/* =========================================================================
+ * H4 (2026-10-22): the safety rail — App lock, queue-scoped rush evidence,
+ * catching up with Deny still enabled. The strip is outside every editable
+ * region, so no preset, import or edit-mode action can hide it.
+ * ========================================================================= */
+
+const LINK = (page, detail) => page.evaluate((d) => window.__jarvisFeed("link", d), detail);
+const APPROVALS_RAISED = [{ id: "91", action: "send_email", tier: "ask", replaces: false,
+  raised: { quote: "<script>alert(1)</script> act now", source: "an email" },
+  expires_in: 120 }];
+const PLAIN_CARD = [{ id: "91", action: "send_email", tier: "ask", replaces: false, expires_in: 120 }];
+
+/** Does a box overlap `#hud-safety`? Boxes only; no screenshots. */
+async function safetyOverlaps(page) {
+  return page.evaluate(() => {
+    const rail = document.getElementById("hud-safety");
+    const rb = rail.getBoundingClientRect();
+    const hits = [];
+    const nodes = [];
+    const ids = ["hud-edit-toggle", "hud-edit-bar", "hud-open-bar", "rail-quickbar",
+      "dock-quickbar", "input", "send", "mic", "drawer-close", "hud-stop"];
+    for (const id of ids) {
+      const node = document.getElementById(id);
+      if (node) nodes.push({ name: id, node });
+    }
+    const drawerButtons = document.querySelectorAll("#rail-right button");
+    for (let i = 0; i < drawerButtons.length; i += 1) {
+      nodes.push({ name: "drawer-control", node: drawerButtons[i] });
+    }
+    const buttons = document.querySelectorAll("#approvals .appr .yes, #approvals .appr .no, #approvals .appr .why");
+    for (let i = 0; i < buttons.length; i += 1) {
+      nodes.push({ name: "card-button", node: buttons[i] });
+    }
+    // H4-1: the strip has no controls in v1, so every protected control under
+    // it must still answer elementFromPoint (click-through, not just no box).
+    const blocked = [];
+    for (let i = 0; i < nodes.length; i += 1) {
+      const entry = nodes[i];
+      const node = entry.node;
+      if (!node || node.hidden) continue;
+      const b = node.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      if (hit && hit.closest && hit.closest("#hud-safety")) blocked.push(entry.name);
+    }
+    for (let i = 0; i < nodes.length; i += 1) {
+      const entry = nodes[i];
+      const node = entry.node;
+      if (!node || node.hidden) continue;
+      const b = node.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      const overlap = rb.left < b.right && b.left < rb.right && rb.top < b.bottom && b.top < rb.bottom;
+      if (overlap) hits.push(entry.name);
+    }
+    return { hits, blocked, railVisible: !rail.hidden };
+  });
+}
+
+await check("H4: catching up shows the rail, Approve waits and Deny keeps working", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD });
+  await LINK(page, { connected: true, stale: true });
+  await page.waitForTimeout(300);
+  const rail = await page.evaluate(() => ({
+    visible: !document.getElementById("hud-safety").hidden,
+    link: document.getElementById("hud-safety-link").textContent,
+    lock: document.getElementById("hud-safety-lock").hidden,
+    taint: document.getElementById("hud-safety-taint").hidden,
+  }));
+  assert.equal(rail.visible, true, "the safety rail stayed hidden while catching up");
+  assert.equal(rail.lock, true, "an App-lock chip appeared with the lock off");
+  assert.equal(rail.taint, true, "a rush chip appeared with no raised evidence");
+  assert.match(rail.link, /Deny still works/);
+  const card = page.locator("#approvals .appr").first();
+  assert.equal(await card.locator(".no").isEnabled(), true, "Deny was held on a stale link");
+  assert.equal(await card.locator(".yes").isDisabled(), true, "Approve was offered on a stale link");
+  assert.equal(await card.locator(".yes").getAttribute("aria-describedby"), "hud-safety-link");
+  assert.ok((await card.locator(".yes").getAttribute("title") || "").includes("Deny still works"));
+  const before = await page.evaluate(() => window.__invokes.filter((c) => c[0] === "decide_approval").length);
+  await card.locator(".no").click();
+  await page.waitForTimeout(300);
+  const decisions = await page.evaluate(() => window.__invokes
+    .filter((c) => c[0] === "decide_approval").map((c) => c[1]));
+  assert.equal(decisions.length, before + 1, "Deny did not reach decide_approval");
+  assert.deepEqual(decisions[decisions.length - 1], { id: "91", approved: false });
+  // The one status row still says "reconnecting" once; the rail adds no dupe.
+  const row = await page.locator("#brand-sub").innerText();
+  assert.equal((row.match(/reconnecting/gi) || []).length, 1, row);
+  const overlaps = await safetyOverlaps(page);
+  assert.deepEqual(overlaps.hits, [], `the safety rail covers a control: ${overlaps.hits}`);
+  assert.deepEqual(overlaps.blocked, [], `the safety rail pointer-blocks: ${overlaps.blocked}`);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: linked is silent here (the one status row already says it)", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: true, ollama: true, proxy: false });
+  await LINK(page, { connected: true, stale: false });
+  await page.waitForTimeout(250);
+  const state = await page.evaluate(() => ({
+    hidden: document.getElementById("hud-safety").hidden,
+    rail: document.getElementById("hud-safety").textContent,
+  }));
+  assert.equal(state.hidden, true, "the rail duplicated the linked status row");
+  assert.equal(state.rail.includes("linked"), false, state.rail);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: offline uses Rust's own first sentence, and Deny stays enabled", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: [{ id: "92", action: "read_files" }] });
+  await LINK(page, { connected: false, stale: true, error: "Jarvis is not answering. Start it on the PC." });
+  await page.waitForTimeout(300);
+  const words = await page.locator("#hud-safety-link").innerText();
+  assert.ok(words.startsWith("No link to Jarvis on your PC: "), words);
+  assert.ok(words.includes("Jarvis is not answering."), "Rust's own sentence was not carried");
+  assert.equal(await page.locator("#approvals .appr .no").first().isEnabled(), true);
+  assert.equal(await page.locator("#approvals .appr .yes").first().isDisabled(), true);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: App lock and hidden memory lists show, from the already-granted flags", async () => {
+  const locked = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, lockFlags: { appLock: true, privateAnswers: false } });
+  await locked.page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-lock");
+    return node && !node.hidden && node.textContent.length > 0;
+  }, null, { timeout: 8000 });
+  const words = await locked.page.locator("#hud-safety-lock").innerText();
+  assert.match(words, /App lock is on\. This window hides when you step away/);
+  assert.equal(await locked.page.locator("#approvals .appr").count(), 0,
+    "reading the lock flags raised an approval card");
+  await locked.page.close();
+  assert.deepEqual(locked.problems, []);
+  const hidden = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, lockFlags: { appLock: false, privateAnswers: true } });
+  await hidden.page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-lock");
+    return node && !node.hidden && node.textContent.length > 0;
+  }, null, { timeout: 8000 });
+  assert.match(await hidden.page.locator("#hud-safety-lock").innerText(),
+    /Memory lists are hidden until you unlock\./);
+  await hidden.page.close();
+  assert.deepEqual(hidden.problems, []);
+});
+
+await check("H4: the rush banner is the waiting card's evidence, escaped, never run", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: APPROVALS_RAISED });
+  await page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-taint");
+    return node && !node.hidden && node.textContent.length > 0;
+  }, null, { timeout: 8000 });
+  const taint = await page.locator("#hud-safety-taint").innerText();
+  assert.match(taint, /on the card that is waiting/);
+  assert.ok(taint.includes('"') || taint.includes("\u201c"), taint);
+  assert.ok(taint.includes("<script>alert(1)</script> act now"), "the quote is not shown as words");
+  assert.match(taint, /can never be hidden/);
+  assert.equal(await page.locator("#approvals script").count(), 0, "a card quote was injected as HTML");
+  assert.equal(await page.locator("#hud-safety-taint").getAttribute("role"), "alert");
+  // A queue with no raised evidence: no banner, never a guess at the latch.
+  const quiet = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: [{ id: "93", action: "read_files" }] });
+  await quiet.page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-taint");
+    return node && node.hidden;
+  }, null, { timeout: 8000 });
+  assert.equal(await quiet.page.locator("#hud-safety-taint").isHidden(), true,
+    "a rush banner was drawn with no raised evidence");
+  await quiet.page.close();
+  assert.deepEqual(quiet.problems, []);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: a preset or a hostile saved document cannot hide the strip", async () => {
+  const HOSTILE = { version: 1, id: "custom-hostile-1", name: "Hostile",
+    base_preset: "quiet", theme: "dark", density: "comfortable",
+    default_stage_tab: "talk",
+    cards: [{ id: "safety", region: "header", order: 0, col_span: 12, row_span: 1, visible: false },
+      { id: "app_lock", region: "header", order: 1, col_span: 12, row_span: 1, visible: false },
+      { id: "taint", region: "header", order: 2, col_span: 12, row_span: 1, visible: false }],
+    user_presets: [], updated_at: 1 };
+  for (const hudLayout of [{ version: 1, base_preset: "quiet", cards: [] }, HOSTILE]) {
+    const opened = await openHud(browser,
+      { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD, hudLayout });
+    await LINK(opened.page, { connected: true, stale: true });
+    await opened.page.waitForTimeout(300);
+    const state = await opened.page.evaluate(() => ({
+      present: Boolean(document.getElementById("hud-safety")),
+      visible: !document.getElementById("hud-safety").hidden,
+      ghosts: document.querySelectorAll("#safety, #app-lock, #taint, [data-hud-card=\"safety\"]").length,
+    }));
+    assert.equal(state.present, true, "a preset/hostile document removed the strip element");
+    assert.equal(state.visible, true, "a preset/hostile document hid the strip");
+    assert.equal(state.ghosts, 0, "a ghost safety card was drawn");
+    await opened.page.close();
+    assert.deepEqual(opened.problems, []);
+  }
+});
+
+await check("H4: the strip is clear of every protected control at 1280 and 1024 (DPR 1)", async () => {
+  for (const [width, height] of [[1280, 820], [1024, 768]]) {
+    const opened = await openHud(browser,
+      { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD },
+      { viewport: { width, height } });
+    await LINK(opened.page, { connected: true, stale: true });
+    await opened.page.waitForTimeout(300);
+    const overlaps = await safetyOverlaps(opened.page);
+    assert.deepEqual(overlaps.hits, [], `${width}x${height}: the rail covers ${overlaps.hits}`);
+    assert.deepEqual(overlaps.blocked, [], `${width}x${height}: pointer-blocks ${overlaps.blocked}`);
+    assert.equal(overlaps.railVisible, true);
+    await opened.page.close();
+    assert.deepEqual(opened.problems, []);
+  }
+});
+
+await check("H4: no layout, import or edit mode can hide the rail, and it has no controls", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD });
+  await LINK(page, { connected: true, stale: true });
+  await page.waitForTimeout(250);
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(300);
+  const state = await page.evaluate(() => {
+    const rail = document.getElementById("hud-safety");
+    let node = rail.parentElement;
+    let fixedAncestor = false;
+    while (node) {
+      if (node.hasAttribute("data-hud-card") || node.hasAttribute("data-hud-region")) fixedAncestor = true;
+      node = node.parentElement;
+    }
+    return {
+      visible: !rail.hidden,
+      label: document.getElementById("hud-safety-fixed").textContent,
+      labelShown: !document.getElementById("hud-safety-fixed").hidden,
+      controls: rail.querySelectorAll("button, input, select, [data-hud-card-handle]").length,
+      fixedAncestor,
+      cards: document.querySelectorAll("#hud-safety .appr, #hud-safety .hud-card").length,
+    };
+  });
+  assert.equal(state.visible, true, "entering edit mode hid the safety rail");
+  assert.equal(state.labelShown, true, "the 'always visible' line is not shown in edit mode");
+  assert.match(state.label, /Always visible/);
+  assert.equal(state.controls, 0, "the rail grew a control");
+  assert.equal(state.fixedAncestor, false, "the rail sits inside an editable region or card");
+  assert.equal(state.cards, 0, "the rail borrowed a card/appr shell");
+  const overlaps = await safetyOverlaps(page);
+  // #741 reveals the right rail OVER the stage in Edit HUD, so its buttons can
+  // sit under the top-centre strip while editing. The strip is click-through
+  // (asserted below), and the reviewer accepted that transient edit-mode
+  // overlap as cosmetic; every PROTECTED control outside that revealed rail
+  // must still be clear of it, and nothing may be pointer-blocked.
+  assert.deepEqual(overlaps.hits.filter((hit) => hit !== "drawer-control"), [],
+    `edit mode covers/overlaps the rail: ${overlaps.hits}`);
+  assert.deepEqual(overlaps.blocked, [], `edit mode pointer-blocks: ${overlaps.blocked}`);
+  // H4-3: a HEALTHY edit mode (no chip true) still shows the strip and its
+  // "Always visible" line; the line must be hidden outside edit mode.
+  await page.keyboard.press("Escape");
+  await LINK(page, { connected: true, stale: false });
+  await page.waitForTimeout(250);
+  const normal = await page.evaluate(() => ({
+    strip: document.getElementById("hud-safety").hidden,
+    label: getComputedStyle(document.getElementById("hud-safety-fixed")).display,
+  }));
+  assert.equal(normal.strip, true, "a linked, healthy HUD showed the strip");
+  assert.equal(normal.label, "none", "the 'always visible' line showed outside edit mode");
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(250);
+  const editing = await page.evaluate(() => ({
+    strip: document.getElementById("hud-safety").hidden,
+    label: getComputedStyle(document.getElementById("hud-safety-fixed")).display,
+    chips: document.querySelectorAll("#hud-safety-lock:not([hidden]), #hud-safety-taint:not([hidden]), #hud-safety-link:not([hidden])").length,
+  }));
+  assert.equal(editing.strip, false, "healthy edit mode hid the safety rail");
+  assert.equal(editing.label, "block", "edit mode did not show the 'always visible' line");
+  assert.equal(editing.chips, 0, "a silent edit-mode rail drew a chip");
+  await page.keyboard.press("Escape");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: geometry at 900x600, DPR 1.5 and reduced motion; Deny stays clickable", async () => {
+  const opened = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD },
+    { viewport: { width: 900, height: 600 }, deviceScaleFactor: 1.5 });
+  const { page, problems } = opened;
+  await LINK(page, { connected: true, stale: true });
+  await page.waitForTimeout(350);
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(300);
+  const overlaps = await safetyOverlaps(page);
+  // #741 reveals the right rail OVER the stage in Edit HUD; that transient
+  // overlay's buttons are the reviewer-accepted cosmetic overlap, and the
+  // strip is click-through (asserted next). Every other control must be clear.
+  assert.deepEqual(overlaps.hits.filter((hit) => hit !== "drawer-control"), [],
+    `DPR 1.5 / 900x600: the rail covers ${overlaps.hits}`);
+  assert.deepEqual(overlaps.blocked, [], `DPR 1.5 pointer-blocks: ${overlaps.blocked}`);
+  const deny = page.locator("#approvals .appr .no").first();
+  assert.equal(await deny.isEnabled(), true);
+  await deny.click();
+  await page.waitForTimeout(250);
+  const decided = await page.evaluate(() => window.__invokes
+    .filter((c) => c[0] === "decide_approval").map((c) => c[1].approved));
+  assert.deepEqual(decided, [false], "Deny at DPR 1.5 did not reach the shell");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.waitForTimeout(150);
+  const motion = await page.evaluate(() => {
+    const rail = document.getElementById("hud-safety");
+    const chip = document.getElementById("hud-safety-link");
+    const s1 = getComputedStyle(rail);
+    const s2 = getComputedStyle(chip);
+    return [s1.animationName, s1.transitionDuration, s2.animationName, s2.transitionDuration];
+  });
+  assert.equal(motion[0], "none", "reduced motion: the rail animates");
+  assert.equal(motion[1], "0s", "reduced motion: the rail transitions");
+  assert.equal(motion[2], "none");
+  assert.equal(motion[3], "0s");
+  assert.equal(await page.locator("#hud-safety").isVisible(), true);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
 
 await browser.close();
 if (fails.length) {
