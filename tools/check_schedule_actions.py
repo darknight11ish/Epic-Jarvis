@@ -12,6 +12,15 @@ THE CONTRACT is `contract/schedule-cases.json` (see `contract/README.md`): the o
 `ready_for_review` marker. This tool does NOT decide what the table is - it reads
 it, extracts each surface's own table from its source, and compares them.
 
+THE `management` BLOCK (HUD Reminders Phase 2, 2026-10-22) is separate on purpose:
+`edit`/`move`/`reorder` open an editor / list picker / keyboard reorder, so they
+are not one-tap entries in a kind's `states` action list. The tool asserts that
+`authority.verbs` is EXACTLY the verb set it reads out of `Scheduler.act`'s own
+source (no backend import: a plain AST read of `backend/jarvis_schedule.py`), so
+a future verb cannot drift out of the contract unnoticed. The Phase-2 UI is not
+on main yet, so its two desktop surfaces stay `pending` and are reported as a
+note, never silently dropped.
+
 WHERE EACH SURFACE'S TABLE NOW LIVES (2026-10-22, coherence slice #729):
   * `jarvis-desktop/src/hud-actions.js` is the SHARED module every desktop
     surface reads: `ACTION_LABELS`, `WENT_OFF_ACTIONS`, `NO_PAUSE_KINDS`,
@@ -45,6 +54,7 @@ surface/shared files and prints.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import sys
@@ -83,6 +93,40 @@ def shared_path(contract: dict, repo: Path = None) -> Path:
     if not spec.get("file"):
         raise SurfaceError("the contract does not name its shared table (`shared.file`)")
     return Path(repo or REPO) / spec["file"]
+
+
+#: The PC's own accepted verb set, read from `Scheduler.act`'s source. The tool
+#: never imports the backend (it runs on Linux, where the scheduler's dependencies
+#: are only partly present); the AST read is the same authority the suite tests.
+def scheduler_act_verbs(repo: Path = None) -> list:
+    path = Path(repo or REPO) / "backend" / "jarvis_schedule.py"
+    try:
+        tree = ast.parse(_read(path))
+    except SyntaxError as exc:
+        raise SurfaceError(f"cannot parse {path}: {exc}") from exc
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == "Scheduler":
+            for fn in node.body:
+                if isinstance(fn, ast.FunctionDef) and fn.name == "act":
+                    verbs = set()
+                    for inner in ast.walk(fn):
+                        if not (isinstance(inner, ast.Compare)
+                                and isinstance(inner.left, ast.Name)
+                                and inner.left.id == "do"):
+                            continue
+                        for op, comp in zip(inner.ops, inner.comparators):
+                            if (isinstance(op, ast.Eq)
+                                    and isinstance(comp, ast.Constant)
+                                    and isinstance(comp.value, str)):
+                                verbs.add(comp.value)
+                            elif isinstance(op, ast.In) and isinstance(comp, ast.Tuple):
+                                verbs.update(
+                                    elt.value for elt in comp.elts
+                                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str))
+                    if verbs:
+                        return sorted(verbs)
+    raise SurfaceError("cannot find Scheduler.act's verb comparisons in "
+                       "backend/jarvis_schedule.py")
 
 
 def _read(path: Path) -> str:
@@ -406,7 +450,54 @@ def _notes(contract: dict, reports: list) -> list:
         if spec.get("listed") and spec.get("surface_compare") is False:
             notes.append(f"{kind} kind: not in the cross-surface comparison yet - "
                          + str(spec.get("surface_note") or "owned by its own module"))
+    management = contract.get("management") or {}
+    if management:
+        pending = {name: status for name, status in
+                   (management.get("surfaces") or {}).items()
+                   if status == "pending"}
+        if pending:
+            notes.append("Phase-2 management actions: pending on "
+                         + ", ".join(sorted(pending))
+                         + " - " + str(management.get("owner") or "no owner")
+                         + "; " + str(management.get("reason") or "not on main yet"))
     return notes
+
+
+def _contract_problems(contract: dict, repo: Path) -> tuple:
+    """(problems, real act verbs). Problems are contract-level, not surface ones."""
+    problems = []
+    authority = contract.get("authority") or {}
+    declared = sorted(authority.get("verbs") or [])
+    try:
+        real = scheduler_act_verbs(repo)
+    except SurfaceError as exc:
+        problems.append(str(exc))
+        real = []
+    if real and declared != real:
+        problems.append(
+            "authority.verbs is not Scheduler.act's accepted set: contract="
+            f"{declared!r}, Scheduler.act={real!r}. Add/remove the contract entry "
+            "and its label or management verb in the same change.")
+    labels = sorted((contract.get("labels") or {}).keys())
+    management = contract.get("management") or {}
+    mgmt = management.get("verbs") or {}
+    if declared and sorted(set(labels) | set(mgmt.keys())) != declared:
+        problems.append(
+            "every verb in authority.verbs needs a label or a management entry: "
+            f"verbs={declared!r}, labels={labels!r}, management={sorted(mgmt)!r}")
+    for verb, spec in sorted(mgmt.items()):
+        if not spec.get("label"):
+            problems.append(f"management verb {verb} has no label")
+        for kind in spec.get("kinds") or []:
+            if kind not in (contract.get("kinds") or {}):
+                problems.append(f"management verb {verb} names unknown kind {kind!r}")
+        for state in spec.get("states") or []:
+            if state not in ("active", "paused", "waiting", "fired"):
+                problems.append(f"management verb {verb} names unknown state {state!r}")
+    for name, status in (management.get("surfaces") or {}).items():
+        if status not in ("pending", "enforced", "not-planned"):
+            problems.append(f"management surface {name!r} has unknown status {status!r}")
+    return problems, real
 
 
 def run(contract: dict = None, repo: Path = None, *, strict: bool = False) -> dict:
@@ -414,7 +505,8 @@ def run(contract: dict = None, repo: Path = None, *, strict: bool = False) -> di
     repo = Path(repo or REPO)
     reports = [compare_surface(name, contract, repo) for name in SURFACE_SPECS]
     notes = _notes(contract, reports)
-    ok = True
+    contract_problems, real_verbs = _contract_problems(contract, repo)
+    ok = not contract_problems
     for report in reports:
         if report["parse_error"]:
             ok = False
@@ -424,12 +516,16 @@ def run(contract: dict = None, repo: Path = None, *, strict: bool = False) -> di
                 and not report["xfail"]:
             ok = False
     return {"contract": str(DEFAULT_CONTRACT), "strict": strict, "ok": ok,
-            "surfaces": reports, "notes": notes}
+            "surfaces": reports, "notes": notes,
+            "contract_problems": contract_problems,
+            "scheduler_act_verbs": real_verbs}
 
 
 def _print_report(result: dict, *, quiet: bool = False) -> None:
     print(f"schedule action contract: {'STRICT' if result['strict'] else 'default'}"
           f" - {'OK' if result['ok'] else 'FAIL'}")
+    for problem in result.get("contract_problems") or []:
+        print(f"  CONTRACT {problem}")
     for report in result["surfaces"]:
         status = report["status"]
         if report["parse_error"]:

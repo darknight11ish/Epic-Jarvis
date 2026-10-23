@@ -26,7 +26,12 @@ real PC:
      conditional probes skip honestly, and the token never appears in the output;
   8. a full dry run and a full apply on a temporary "PC" (fake git blobs, fake probes,
      fake add-plugin runner) are idempotent: the second apply changes nothing and all
-     probes pass.
+     probes pass;
+  9. the backup journal: it is printed BEFORE any live write, a mid-apply or plug-in
+     failure is rolled back from it (old bytes restored, new files removed), a probe
+     failure after a COMPLETE write keeps the files and names the backup/journal
+     instead, and `rollback_backup`/`--rollback` restores a partial state from the
+     journal - all on temporary folders.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the two patches the
@@ -662,7 +667,8 @@ $PATCHES = @(
     return repo, live, fake_show
 
 
-def run_fixture(repo: Path, live: Path, *, apply: bool, out_lines=None, **kw):
+def run_fixture(repo: Path, live: Path, *, apply: bool, out_lines=None,
+                probe_client=None, **kw):
     out = (out_lines.append if out_lines is not None else (lambda _m: None))
 
     def client(url, method="GET", body=None, token=""):
@@ -673,6 +679,8 @@ def run_fixture(repo: Path, live: Path, *, apply: bool, out_lines=None, **kw):
         if url.endswith("/api/voice/status"):
             return 200, {"gate": {"training": {}}}
         return 404, {}
+
+    client = probe_client or client
 
     return R.run_deploy(repo, live, apply=apply, ref="origin/main",
                         show=kw.pop("show", fake_show),
@@ -1535,6 +1543,166 @@ def t_the_real_live_gate_gets_the_digest_read_only():
           after == before)
 
 
+# --------------------------------------------------------------------------
+#   9. the backup journal, rollback, and no silent partial deploy
+# --------------------------------------------------------------------------
+
+def _live_bytes(live: Path) -> dict:
+    return {p.relative_to(live).as_posix(): p.read_bytes()
+            for p in live.rglob("*") if p.is_file() and "_jarvis-deploy-backup-tool-" not in p.parts[-2:]}
+
+
+def t_the_backup_journal_rolls_back_overwritten_and_new_paths():
+    root = tmpdir()
+    try:
+        live = root / "live"
+        live.mkdir()
+        old = write(live / "old.py", "old bytes")
+        backup = R.Backup(live, stamp="rb")
+        backup.start()
+        backup.save(old)
+        backup.record_new(live / "new.py")
+        check("start() creates the backup folder and a journal BEFORE any write",
+              backup.root.is_dir() and (backup.root / R.JOURNAL_NAME).is_file(),
+              backup.root)
+        write(old, "new bytes")
+        write(live / "new.py", "created by the deploy")
+        lines = []
+        code = backup.rollback(out=lines.append)
+        check("a rollback puts the overwritten bytes back", old.read_bytes() == b"old bytes")
+        check("... and removes the file the deploy created", not (live / "new.py").exists())
+        check("... and reports what it did", code == 0 and "ROLLBACK" in "\n".join(lines),
+              lines)
+        doc = json.loads((backup.root / R.JOURNAL_NAME).read_text(encoding="utf-8"))
+        check("the journal records both the overwrite and the new path",
+              doc["version"] == 1 and len(doc["entries"]) == 2
+              and {e["path"] for e in doc["entries"]} == {"old.py", "new.py"}, doc)
+        # restore again from the journal (the `--rollback` path), after another
+        # hand-made mess: it must not need this process's Backup object.
+        write(old, "mess again")
+        write(live / "new.py", "mess again")
+        code2 = R.rollback_backup(live, backup.root, out=lines.append)
+        check("rollback_backup reads the journal and restores the same way",
+              code2 == 0 and old.read_bytes() == b"old bytes"
+              and not (live / "new.py").exists(), lines[-3:])
+        wrong = root / "other-live"
+        wrong.mkdir()
+        check("a journal for another live folder is refused",
+              R.rollback_backup(wrong, backup.root) == 2)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_mid_apply_failure_rolls_back_and_prints_the_backup():
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        before = _live_bytes(live)
+        real = R.apply_deltas
+
+        def fails_after_one(staged, live, backup, *, write=True):
+            for name in sorted(staged)[:1]:
+                target = Path(live) / name
+                backup.save(target)
+                target.write_text("BROKEN HALF-WRITE", encoding="utf-8", newline="")
+            raise OSError("simulated disk full")
+
+        R.apply_deltas = fails_after_one
+        try:
+            lines = []
+            code = run_fixture(repo, live, apply=True, out_lines=lines)
+        finally:
+            R.apply_deltas = real
+        text = "\n".join(lines)
+        check("a mid-apply write failure exits 2", code == 2, (code, lines[-8:]))
+        check("... the backup folder and journal were named BEFORE the write",
+              "BACKUP:" in text and R.JOURNAL_NAME in text, text[-1200:])
+        check("... every overwritten file is back to its pre-run bytes",
+              all((live / rel).read_bytes() == data
+                  for rel, data in before.items() if (live / rel).is_file()),
+              [rel for rel, data in before.items()
+               if (live / rel).is_file() and (live / rel).read_bytes() != data])
+        check("... the file the deploy added is gone",
+              not (live / "jarvis_compute.py").exists())
+        check("... a ROLLBACK was reported", "ROLLBACK: restored" in text, text[-1200:])
+        backups = [p for p in live.iterdir() if p.name.startswith(
+            "_jarvis-deploy-backup-tool-fixture")]
+        check("... and the backup folder is still there for a human",
+              len(backups) == 1 and (backups[0] / R.JOURNAL_NAME).is_file(), backups)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_plugin_failure_rolls_back_the_already_written_files():
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        before = _live_bytes(live)
+        real_plan, real_add = R.plan_plugins, R.add_plugin
+        R.plan_plugins = lambda _live, _repo: (["demo-plugin"], [], [], [])
+        R.add_plugin = lambda *_a, **_k: (False, "simulated add-plugin failure")
+        try:
+            lines = []
+            code = run_fixture(repo, live, apply=True, out_lines=lines)
+        finally:
+            R.plan_plugins, R.add_plugin = real_plan, real_add
+        text = "\n".join(lines)
+        check("a plug-in failure after the writes exits 1", code == 1, (code, lines[-8:]))
+        check("... the written files are rolled back to their pre-run bytes",
+              all((live / rel).read_bytes() == data
+                  for rel, data in before.items() if (live / rel).is_file()),
+              [rel for rel, data in before.items()
+               if (live / rel).is_file() and (live / rel).read_bytes() != data])
+        check("... the new shipped module is gone", not (live / "jarvis_compute.py").exists())
+        check("... it says the plug-in failure and names the recovery point",
+              "plugin demo-plugin: simulated add-plugin failure" in text
+              and "ROLLBACK: restored" in text and "BACKUP:" in text, text[-1200:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_probe_failure_keeps_the_complete_write_and_names_the_backup():
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines,
+                           probe_client=lambda *a, **k: (500, {"error": "simulated"}))
+        text = "\n".join(lines)
+        check("a probe failure after a complete write exits 1", code == 1, (code, lines[-10:]))
+        check("... the new files are KEPT (a complete write is not undone by a probe)",
+              (live / "jarvis_agent.py").read_bytes() == b'"""agent"""\nVALUE = 2\n'
+              and (live / "jarvis_compute.py").is_file())
+        check("... the output says it did not roll back and names the backup + journal",
+              "did NOT roll them back" in text and "BACKUP:" in text
+              and R.JOURNAL_NAME in text, text[-1400:])
+        check("... and it tells the operator how to restore", "--rollback" in text,
+              text[-500:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_cli_rollback_restores_from_a_backup_folder():
+    root = tmpdir()
+    try:
+        live = root / "live"
+        live.mkdir()
+        write(live / "a.py", "before")
+        backup = R.Backup(live, stamp="cli")
+        backup.start()
+        backup.save(live / "a.py")
+        write(live / "a.py", "after")
+        backup.record_new(live / "b.py")
+        write(live / "b.py", "new")
+        code = R.main(["--backend-path", str(live), "--rollback", str(backup.root)])
+        check("main --rollback restores the journal without a deploy", code == 0, code)
+        check("... restoring overwritten bytes and removing the new file",
+              (live / "a.py").read_text(encoding="utf-8") == "before"
+              and not (live / "b.py").exists())
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -1570,7 +1738,12 @@ def main():
                t_end_to_end_and_idempotent,
                t_traces_retention_is_recorded_blocked_not_guessed,
                t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing,
-               t_cli_is_dry_run_by_default_and_validates_paths):
+               t_cli_is_dry_run_by_default_and_validates_paths,
+               t_the_backup_journal_rolls_back_overwritten_and_new_paths,
+               t_a_mid_apply_failure_rolls_back_and_prints_the_backup,
+               t_a_plugin_failure_rolls_back_the_already_written_files,
+               t_a_probe_failure_keeps_the_complete_write_and_names_the_backup,
+               t_cli_rollback_restores_from_a_backup_folder):
         fn()
     print()
     if FAILED:

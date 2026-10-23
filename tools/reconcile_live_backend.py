@@ -23,6 +23,15 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        `jarvis-backend/*` is NEVER copied over live: that folder is a stale 2026-10-14
        snapshot (`.dsh-scratch/LINEAGE-CORRECTION-2026-10-20.md`), not a runtime tree.
 
+    A failed APPLY is fail-closed and journaled. The backup folder and its
+    `_journal.json` are created and PRINTED before the first live write; a write
+    failure or a failed ready plug-in restores every overwritten file and removes
+    every path this run created, then exits non-zero. A route-probe failure is
+    different by design: it happens only after a COMPLETE write, so the new files
+    are kept and the report prints the backup/journal plus the exact
+    `--rollback <backup folder>` command (a running server is not un-deployed
+    underneath the operator). `--rollback` restores a backup folder's journal
+    without deploying anything.
     2. HUD DELTAS for the five patched base files (`jarvis_hud.py`, `jarvis_gate.py`,
        `jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py`). Those files are
        never replaced, because the live copies are newer than the published base. For
@@ -418,6 +427,7 @@ _GENERIC_PROBES = frozenset({
 _NEVER_FROM_BASE = ("jarvis-backend/",)
 
 BACKUP_PREFIX = "_jarvis-deploy-backup-tool-"
+JOURNAL_NAME = "_journal.json"
 
 CLIENT_HEADER = "X-Jarvis-Client"
 TOKEN_HEADER = "X-Jarvis-Token"
@@ -833,23 +843,169 @@ def rehearse(staged: dict) -> list:
     return errors
 
 
+def _restore_entries(live: Path, root: Path, entries: list) -> tuple:
+    """Restore one journal's entries, newest first. Returns (restored, removed, failures).
+
+    The journal is the failure half of the deploy: every overwritten file has a
+    copy under `backup_root`, every newly created file/dir has `existed: false`,
+    and the live path is re-checked to stay under the live folder. A failed
+    restore is reported per path; it never raises into the caller's report.
+    """
+    live = Path(live).resolve()
+    root = Path(root)
+    restored = removed = 0
+    failures = []
+    for entry in reversed(list(entries or [])):
+        rel = str(entry.get("path") or "")
+        try:
+            target = (live / rel).resolve()
+            if target != live and live not in target.parents:
+                raise ValueError("journal path leaves the live folder")
+            if entry.get("existed"):
+                backup_rel = str(entry.get("backup") or "")
+                if not backup_rel:
+                    raise ValueError("journal entry has no backup copy")
+                src = (root / backup_rel).resolve()
+                if root.resolve() not in src.parents and src != root.resolve():
+                    raise ValueError("journal backup path leaves the backup folder")
+                if not src.exists():
+                    raise FileNotFoundError(f"backup copy is missing: {backup_rel}")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if entry.get("kind") == "dir":
+                    shutil.copytree(src, target, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src, target)
+                restored += 1
+            else:
+                if target.exists():
+                    if entry.get("kind") == "dir":
+                        shutil.rmtree(target)
+                    else:
+                        target.unlink()
+                    removed += 1
+        except (OSError, ValueError) as exc:
+            failures.append(f"{rel}: {exc}")
+    return restored, removed, failures
+
+
+def load_journal(backup_root: Path) -> dict:
+    """Read one deploy journal. Raises Refused on anything unsafe or unreadable."""
+    path = Path(backup_root) / JOURNAL_NAME
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise Refused(f"cannot read the deploy journal {path}: {exc}") from exc
+    except ValueError as exc:
+        raise Refused(f"the deploy journal {path} is not valid JSON: {exc}") from exc
+    if not isinstance(doc, dict) or doc.get("version") != 1 \
+            or not isinstance(doc.get("entries"), list):
+        raise Refused(f"{path} is not a version-1 deploy journal")
+    return doc
+
+
+def rollback_backup(live: Path, backup_root: Path, out: Optional[Callable] = None) -> int:
+    """Restore a finished/partial deploy from its journal. No live write planning."""
+    out = out or print
+    doc = load_journal(backup_root)
+    expected = str(Path(doc.get("live") or ""))
+    if expected and Path(expected).resolve() != Path(live).resolve():
+        out(f"REFUSED: the journal was written for {expected}, not {Path(live).resolve()}")
+        return 2
+    restored, removed, failures = _restore_entries(live, Path(backup_root), doc["entries"])
+    out(f"ROLLBACK: restored {restored} overwritten path(s), removed {removed} new path(s)")
+    for failure in failures:
+        out(f"FAIL  {failure}")
+    if failures:
+        out(f"ROLLBACK INCOMPLETE - {len(failures)} path(s) need attention; the backup "
+            f"folder is still at {Path(backup_root)}")
+        return 1
+    out(f"ROLLBACK OK - the live folder is back to its pre-deploy state; journal at "
+        f"{Path(backup_root) / JOURNAL_NAME}")
+    return 0
+
+
 class Backup:
-    """One timestamped folder under the live backend; every overwritten byte kept."""
+    """One timestamped folder under the live backend: every overwritten byte kept,
+    and a journal that can put the live folder back after a failed write.
+
+    `start()` is called before the first live write (the deploy prints it); a
+    direct `save()` still works for the unit tests and creates the folder lazily.
+    """
 
     def __init__(self, live: Path, stamp: Optional[str] = None):
         self.live = Path(live)
         stamp = stamp or time.strftime("%Y%m%d-%H%M%S")
         self.root = self.live / f"{BACKUP_PREFIX}{stamp}"
         self.saved = []
+        self.entries = []
+        self.journal = self.root / JOURNAL_NAME
+        self.started = False
+
+    def start(self) -> Path:
+        """Create the backup folder and an empty journal BEFORE any live write."""
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.started = True
+        self._flush()
+        return self.root
+
+    def _rel(self, path: Path) -> str:
+        return Path(path).relative_to(self.live).as_posix()
+
+    def _flush(self) -> None:
+        if not self.started:
+            self.root.mkdir(parents=True, exist_ok=True)
+            self.started = True
+        doc = {"version": 1, "live": str(self.live.resolve()), "entries": self.entries}
+        tmp = self.journal.with_name(self.journal.name + ".tmp")
+        tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, self.journal)
+
+    def _remember(self, entry: dict) -> None:
+        self.entries.append(entry)
+        self._flush()
 
     def save(self, path: Path) -> Path:
         path = Path(path)
-        rel = path.relative_to(self.live)
+        rel = self._rel(path)
         dest = self.root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, dest)
-        self.saved.append(str(rel).replace("\\", "/"))
+        if rel not in self.saved:
+            self.saved.append(rel)
+        if not any(e.get("path") == rel and e.get("backup") for e in self.entries):
+            self._remember({"path": rel, "existed": True, "backup": rel, "kind": "file"})
         return dest
+
+    def save_dir(self, path: Path) -> Path:
+        """Back up an existing directory before a plugin step overwrites/adds inside it."""
+        path = Path(path)
+        rel = self._rel(path)
+        dest = self.root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(path, dest, dirs_exist_ok=True)
+        if rel not in self.saved:
+            self.saved.append(rel)
+        self._remember({"path": rel, "existed": True, "backup": rel, "kind": "dir"})
+        return dest
+
+    def record_new(self, target: Path, *, directory: bool = False) -> None:
+        """Record a path this run will CREATE (rollback removes it)."""
+        rel = self._rel(target)
+        if any(e.get("path") == rel for e in self.entries):
+            return
+        self._remember({"path": rel, "existed": False, "backup": None,
+                        "kind": "dir" if directory else "file"})
+
+    def rollback(self, out: Optional[Callable] = None) -> int:
+        out = out or print
+        restored, removed, failures = _restore_entries(self.live, self.root, self.entries)
+        out(f"ROLLBACK: restored {restored} overwritten path(s), removed {removed} new path(s)")
+        for failure in failures:
+            out(f"FAIL  {failure}")
+        if failures:
+            out(f"ROLLBACK INCOMPLETE - the backup folder is {self.root}")
+            return 1
+        return 0
 
 
 def apply_shipped(actions: Iterable[ShippedAction], live: Path,
@@ -863,8 +1019,10 @@ def apply_shipped(actions: Iterable[ShippedAction], live: Path,
         if not write:
             written.append(action.live_name)
             continue
-        if target.exists() and action.status == "update":
-            backup.save(target)          # back up only what is being overwritten
+        if target.exists():
+            backup.save(target)          # back up what is being overwritten
+        else:
+            backup.record_new(target)    # a failed later step removes this file
         target.write_bytes(action.blob or b"")
         written.append(action.live_name)
     return written
@@ -894,10 +1052,12 @@ def plan_pycache(live: Path) -> list:
     return sorted(folder.glob("*.pyc"))
 
 
-def purge_pycache(live: Path) -> list:
+def purge_pycache(live: Path, backup: Optional["Backup"] = None) -> list:
     deleted = []
     for path in plan_pycache(live):
         try:
+            if backup is not None:
+                backup.save(path)        # a rollback restores the bytecode too
             path.unlink()
             deleted.append(path.name)
         except OSError:
@@ -1240,42 +1400,85 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
         out("Probes are not run in a dry run; use --apply after reviewing this plan.")
         return 0
 
-    # 5. Write: shipped bytes, then the staged HUD files.
+    # 5. Write: shipped bytes, then the staged HUD files. The backup folder and
+    # its journal are created and PRINTED before the first live write, so a
+    # failure half-way through always has a named recovery point.
+    has_writes = bool(adds or updates or inserts or plan.pycache
+                      or (not skip_plugins and plan.plugins_missing))
     backup = Backup(live, stamp=stamp)
     written = []
     try:
+        if has_writes:
+            backup.start()
+            out(f"BACKUP: {backup.root} (journal: {backup.journal.name})")
+        else:
+            out("BACKUP: nothing to overwrite or add; no backup folder needed")
         written += apply_shipped(plan.shipped, live, backup, write=True)
         written += apply_deltas(staged, live, backup, write=True)
     except OSError as exc:
         out(f"FAIL  writing the backend: {exc}")
+        if has_writes:
+            out(f"RESTORING from the backup printed above: {backup.root}")
+            backup.rollback(out=out)
+            out(f"RESULT: FAIL - the live folder was rolled back; the backup and "
+                f"journal are at {backup.root}")
+        else:
+            out("RESULT: FAIL - nothing had been written yet")
         return 2
-    if backup.saved:
-        out(f"BACKUP: {backup.root} ({len(backup.saved)} file(s))")
-    else:
-        out("BACKUP: nothing overwritten, nothing to back up")
 
-    # 6. Purge stale bytecode.
-    purged = purge_pycache(live)
+    # 6. Purge stale bytecode (backed up first when this is a real apply).
+    purged = purge_pycache(live, backup if has_writes else None)
     out(f"PYCACHE: purged {len(purged)} stale .pyc file(s)")
 
-    # 7. Ready plug-ins.
+    # 7. Ready plug-ins. A new folder is journaled before the step runs.
     plugin_failures = 0
     if not skip_plugins:
         for name in plan.plugins_missing:
+            target = Path(live) / "jarvis_plugins" / name
+            try:
+                if target.exists():
+                    backup.save_dir(target)
+                else:
+                    backup.record_new(target, directory=True)
+            except OSError as exc:
+                out(f"FAIL  plugin {name}: could not journal {target}: {exc}")
+                plugin_failures += 1
+                break
             ok, why = add_plugin(repo, live, name, runner=plugin_runner)
             out(f"{'PASS' if ok else 'FAIL'}  plugin {name}: {why}")
             if not ok:
                 plugin_failures += 1
+                break
 
-    # 8. Route probes against the live server.
+    if plugin_failures:
+        out("")
+        out(f"RESTORING from the backup printed above: {backup.root}")
+        backup.rollback(out=out)
+        out(f"RESULT: FAIL - a ready plug-in could not be added; the live folder was "
+            f"rolled back. Backup/journal: {backup.root}")
+        return 1
+
+    # 8. Route probes against the live server. The probe runs only after a
+    # COMPLETE write; a probe failure keeps the new files and names the recovery
+    # point instead of pretending the deploy is atomic with a running server.
     out("")
     out("ROUTE PROBES:")
     probe_failures = run_probes(live, base_url, client=probe_client,
                                 token_reader=token_reader, out=out)
     out("")
-    if plugin_failures or probe_failures:
-        out(f"RESULT: FAIL ({plugin_failures} plug-in failure(s), "
-            f"{probe_failures} expected probe failure(s)). Restart Jarvis and re-check.")
+    if probe_failures:
+        if has_writes:
+            out(f"RESULT: FAIL ({probe_failures} expected probe failure(s)). The files "
+                f"were all written; this run did NOT roll them back.")
+            out(f"BACKUP: {backup.root} (journal: {backup.journal.name})")
+            if written:
+                out(f"        wrote {len(written)} file(s); full write, partial deploy "
+                    f"verification")
+            out("        Restart Jarvis, re-check, or run --rollback <the backup folder> "
+                "to put the files back.")
+        else:
+            out(f"RESULT: FAIL ({probe_failures} expected probe failure(s)). Nothing "
+                "was written in this run, so there is nothing to restore.")
         return 1
     out("RESULT: PASS - backend reconciled; restart Jarvis and read the start-up banner.")
     if written:
@@ -1301,7 +1504,12 @@ def main(argv: Optional[list] = None) -> int:
                         help="do not add ready plug-ins")
     parser.add_argument("--base-url", default="",
                         help="live server base URL for the probes (default: from HUD_PORT)")
+    parser.add_argument("--rollback", default="",
+                        help="restore a previous backup folder's journal and exit "
+                             "(does not deploy)")
     ns = parser.parse_args(argv)
+    if ns.rollback:
+        return rollback_backup(Path(ns.backend_path).expanduser(), Path(ns.rollback))
     if ns.apply and ns.dry_run:
         print("Choose one: --apply or --dry-run (dry run is the default).")
         return 2

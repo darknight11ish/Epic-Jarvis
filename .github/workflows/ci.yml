@@ -889,6 +889,10 @@ jobs:
           }
           "$($files.Count) script(s), $bad problem(s)"
           if ($bad -gt 0) { exit 1 }
+      - name: Run get-export.ps1's manifest-name self-test in 5.1
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\get-export.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "get-export self-test exited $LASTEXITCODE" }
       - name: Run apply-patches.ps1 in 5.1 against a stand-in backend
         run: |
           $ErrorActionPreference = 'Stop'
