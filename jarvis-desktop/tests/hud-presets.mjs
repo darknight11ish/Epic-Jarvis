@@ -250,6 +250,15 @@ await check("a click posts /api/work/apply once with the right preset id, then m
 
 await check("the PC's card really flows: it paints in #approvals, Approve decides, and the rail follows", async () => {
   const { page, state, problems } = await openHud(browser, { applyMode: "hold" });
+  // H4 (2026-10-22): the safety rail holds Approve until the shell has said the
+  // link is live (an unknown link is not offered an Approve). This harness serves
+  // the page without the bootstrap, so push the same verdict the bootstrap sends
+  // before touching the card - the behaviour under test is the preset flow, not
+  // the boot hold.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis-link-status", {
+    detail: { up: true, words: "linked", short: "linked", tone: "ok" },
+  })));
+  await page.waitForTimeout(150);
   await page.click('#presets .preset[data-preset="general"]');
   // The apply POST is waiting on the PC's ONE change_own_config card. The page
   // paints cards from #approvals on the shell's `approval` event (and on its
