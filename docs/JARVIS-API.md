@@ -10163,23 +10163,29 @@ and the four shipped modules that used a 5-second raw `sqlite3.connect` timeout
 (`jarvis_chat_log.py`, `jarvis_decks.py`, `jarvis_owned_tables.py`,
 `jarvis_data_health.py`) now use 10 seconds. That is the lock half of F10.
 
-The `traces.db` half is **BLOCKED, and recorded as blocked rather than
-guessed.** The Gemini Q2 ruling said it is written only by the live HUD and
-should be a small live-HUD/reconcile delta, not a fake backend module. Reading
-the live HUD on 2026-10-20 found **no `traces.db` writer, no trace schema and no
-insert/startup anchor there**: the live `jarvis_hud.py` (393,012 bytes) has zero
-`traces.db` matches, its `sqlite3` use is the read-only memory readers (around
-lines 6238-6265), the live folder has no writer, and `~/.openjarvis` has no
-`traces.db` today. The only evidence of the store is a snapshot
-(`Jarvis Backups/jarvis-snap-20261014-000438/traces.db`): tables `traces`
-(`trace_id`, `started_at`, `ended_at`, ...), `trace_steps` and an external-content
-FTS5 `traces_fts` with only an INSERT trigger. A retention cap cannot reuse the
-HUD's anchored ALREADY_PRESENT/insert mechanism against a store with no writer;
-adding a standalone prune would delete a database this program does not own.
-`tools/reconcile_live_backend.py` therefore records this under
-**`BLOCKED_DELTAS["traces-retention"]`** (with the evidence) and every dry run
-prints it as **BLOCKED LIVE DELTAS**, never as a planned insert. It becomes a
-delta only when a live HUD writer and a real anchor exist.
+The `traces.db` half **ships in the base modules, and no live-HUD delta is
+recorded for it any more** (retired 2026-10-23, RA-5). The Gemini Q2 ruling
+asked for a small live-HUD/reconcile delta rather than a fake backend module;
+reading the live HUD on 2026-10-20 found **no `traces.db` writer, no trace schema
+and no insert/startup anchor there**: the live `jarvis_hud.py` has zero
+`traces.db` matches, its `sqlite3` use is the read-only memory readers, the live
+folder has no writer, and `~/.openjarvis` had no `traces.db`. A standalone prune
+in the HUD would delete a database this program does not own, so the tool
+recorded it as `BLOCKED_DELTAS["traces-retention"]` (PR #669) and every dry run
+printed it as **BLOCKED LIVE DELTAS**, never as a planned insert.
+
+Four hours later **#673** shipped the cap the safe way, in SHIPPED modules:
+`jarvis_sqlite.trim_table` / `idle_maintenance` caps any `traces.db`'s `traces`
+table at the newest 10,000 rows and runs `PRAGMA wal_checkpoint(PASSIVE)` +
+`PRAGMA optimize`, and `jarvis_initiative.sqlite_maintenance` calls it from the
+30-minute heartbeat. Deploy step 1 carries those files, so on the owner's PC
+(measured 2026-10-23) the live `jarvis_sqlite.py` and `jarvis_initiative.py` are
+byte-identical to `origin/main:backend/...`, the live `jarvis_hud.py` still has
+zero `traces.db` matches, and there is nothing for a live-HUD delta to apply.
+`tools/reconcile_live_backend.py` therefore **retired** that record (its history
+is kept in the comment on `BLOCKED_DELTAS`), and every dry run now prints **0
+blocked deltas**. Nothing claims a `traces.db` writer exists: the cap acts only
+if a store from an older build or a backup restore appears.
 
 ### 49.2 The route
 

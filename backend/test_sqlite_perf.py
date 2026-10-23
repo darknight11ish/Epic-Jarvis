@@ -35,7 +35,7 @@ WHAT IS PROVED HERE, one check per property:
      the oldest gone, the newest kept, idempotent on the second call.
   7. `idle_maintenance` caps a real traces.db, folds the WAL down, optimises,
      says "absent" honestly when there is no traces.db (the owner's PC today -
-     F10 is BLOCKED, not fixed), and does not raise on a file that is not a
+     no writer is claimed), and does not raise on a file that is not a
      database.
   8. The heartbeat really carries the maintenance tick: `Engine` registers it
      once, and `jarvis_initiative.sqlite_maintenance()` caps the traces table
@@ -495,7 +495,7 @@ def t_idle_maintenance_is_honest_without_a_traces_db():
               out["traces"] == "absent" and out["trimmed"] == 0
               and out["databases"] == [], out)
         note("idle_maintenance without traces.db: traces='absent', nothing staged "
-             "(F10 stays BLOCKED; this slice does not claim a writer exists)")
+             "(no writer is claimed; this cap ships here, not as a HUD delta)")
 
 
 # --------------------------------------------------------------------------
