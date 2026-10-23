@@ -1,0 +1,44 @@
+# Review #8 allowlist - technical words the owner has deliberately chosen to
+# see and already understands. One entry per line.
+#
+# A line with a SPACE is a whole phrase: it is removed from the analysed text
+# before matching, case-insensitively, so the phrase passes while a bare
+# "API" elsewhere in the same sentence still fails. A single word allows that
+# whole word everywhere.
+#
+# Anything not here is reported. Adding a word here is a decision about what the
+# owner is expected to read, so add a short reason beside it.
+#
+# --- the private networks and the app's own name/obvious UI words -----------
+Tailscale          # the owner's own private network name
+Meshnet            # NordVPN Meshnet, the other private network the owner uses
+NordVPN
+VPN
+Windows Hello      # the owner's own sign-in name for the biometric prompt
+PIN                # the lock-screen word the owner chose
+HTTPS              # the address bar word the owner asked about
+HTTPS certificate
+Android
+iPhone
+iPad
+Windows
+# --- model names and the hardware the owner was shown and measured ----------
+Ollama
+llama
+qwen
+gpt-oss
+deepseek
+embedding
+RTX
+NVIDIA
+GPU
+CPU
+RAM
+SSD
+USB
+Wi-Fi
+GB
+MB
+# --- deliberate product vocabulary -------------------------------------------
+API key            # "API key" is a settings row the owner asked for
+Pairing token      # the owner's own name for the phone key
