@@ -15,9 +15,16 @@
  *   (`hud-link`'s set; two booleans, no token, no words);
  * - the rush/outside-text evidence is the pending queue the page already
  *   polls: rows whose `raised` object carries the quote/source. It is
- *   QUEUE-SCOPED on purpose — the persistent ten-minute rush latch lives on
- *   the PC only and has no read on the HUD's fixed allowlist, so the banner
- *   says "on the card that is waiting", never "the latch is armed".
+ *   QUEUE-SCOPED on purpose — this banner says "on the card that is waiting",
+ *   never "the latch is armed" from a card alone.
+ * - the two PERSISTENT session latches are the PC's own `/api/status` fields
+ *   `taint_latched` and `rush_latched` (A4, 2026-10-23; read-only, no new
+ *   route — `/api/status` was already on the HUD's fixed allowlist). The page
+ *   hands them in from reads it already made (boot and the page's own 30 s
+ *   beat), so this module opens no socket of its own. `true` says the latch is
+ *   armed, `false` says it is not, and `null` means "the PC has not said" —
+ *   never "not latched" — so no chip is drawn then. Reading them clears
+ *   nothing, and the strip has no control that could clear either latch.
  *
  * HONEST LIMITS (also in the PR and docs):
  * - the actual App-lock "locked" state hides the HUD window (Rust), so there
@@ -52,6 +59,15 @@ export const OFFLINE_LEAD = "No link to Jarvis on your PC: ";
 /** The queue-scoped rush evidence's lead and tail (never overclaims the latch). */
 export const TAINT_LEAD = "Something Jarvis read tried to rush you on the card that is waiting";
 export const TAINT_TAIL = "Take your time — this can never be hidden.";
+
+/** A4 (2026-10-23): the persistent local-only session latch is armed. Plain
+ *  words only - the owner never reads the word "taint" on a screen. */
+export const LATCH_LOCAL_WORDS = "This session is staying on your PC.";
+
+/** A4: the persistent rush latch is armed - every approval asks for one more
+ *  look until it clears. Says what changes, not what the mechanism is called. */
+export const LATCH_RUSH_WORDS =
+  "Something Jarvis read tried to rush you recently. Approvals ask for one more look until it clears.";
 
 /** The visual "you cannot hide this" line, shown only in H2's edit mode. */
 export const FIXED_LABEL = "Always visible — no layout can hide this";
@@ -119,14 +135,34 @@ export function taintWords(rows) {
 }
 
 /**
+ * A4 (2026-10-23): the persistent-session chip's words, or null.
+ *
+ * `latch` is the page's `{taint, rush}` object from `/api/status` - each one
+ * `true`, `false`, or `null` ("the PC has not said"). ONLY `true` draws a
+ * chip: `null` must never read as "not latched", and false has nothing to say.
+ * Both true are shown together, because they are two different facts (this
+ * session stays local AND approvals are asking more carefully).
+ */
+export function latchWords(latch) {
+  if (!latch || typeof latch !== "object") return null;
+  const parts = [];
+  if (latch.taint === true) parts.push(LATCH_LOCAL_WORDS);
+  if (latch.rush === true) parts.push(LATCH_RUSH_WORDS);
+  if (!parts.length) return null;
+  return { tone: "warn", words: parts.join(" ") };
+}
+
+/**
  * The rail's whole state, as chips in markup order. Pure: the mount paints it,
  * tests read it. `link` is the shell push's detail, `lock` the two booleans,
- * `rows` the pending queue rows.
+ * `rows` the pending queue rows, `latch` A4's two persistent booleans.
  */
-export function safetyChips({ link = null, lock = null, rows = [] } = {}) {
+export function safetyChips({ link = null, lock = null, rows = [], latch = null } = {}) {
   const chips = [];
   const lockText = lockWords(lock);
   if (lockText) chips.push({ chip: "lock", role: "status", tone: "warn", words: lockText });
+  const session = latchWords(latch);
+  if (session) chips.push({ chip: "latch", role: "status", tone: session.tone, words: session.words });
   const taint = taintWords(rows);
   if (taint) chips.push({ chip: "taint", role: "alert", tone: taint.tone, words: taint.words });
   const linkState = linkWords(link);
@@ -201,6 +237,7 @@ export function mountSafetyRail() {
   if (!strip) return Promise.resolve(null);
   const chips = {
     lock: el("hud-safety-lock"),
+    latch: el("hud-safety-latch"),
     taint: el("hud-safety-taint"),
     link: el("hud-safety-link"),
   };
@@ -211,6 +248,12 @@ export function mountSafetyRail() {
     link: window.__hudLinkStatus && typeof window.__hudLinkStatus === "object"
       ? window.__hudLinkStatus : { up: null },
     lock: null,
+    // A4-4: the page publishes the two persistent latches from the /api/status
+    // read it already makes, BEFORE this module mounts (the fetch is not
+    // awaited by the inline script), so the last one is seeded here and every
+    // later read arrives as the `jarvis-latch-status` event.
+    latch: window.__hudLatchFacts && typeof window.__hudLatchFacts === "object"
+      ? window.__hudLatchFacts : null,
     // H4-4: rows the page painted before this module mounted (seeded once,
     // then kept in step by setPending on every paint).
     rows: Array.isArray(window.__hudSafetyPending) ? window.__hudSafetyPending.slice() : [],
@@ -258,6 +301,11 @@ export function mountSafetyRail() {
     render();
   }
 
+  function setLatch(facts) {
+    state.latch = facts && typeof facts === "object" ? facts : null;
+    render();
+  }
+
   function syncApprovals(root) {
     const held = approveHeld(state.link);
     const words = held ? STALE_WORDS : "";
@@ -291,6 +339,11 @@ export function mountSafetyRail() {
   window.addEventListener("jarvis-link-status", (event) => {
     setLink((event && event.detail) || { up: null });
   });
+  // A4: the page publishes the two persistent latches after each /api/status
+  // read it already makes. Read-only: this only paints words.
+  window.addEventListener("jarvis-latch-status", (event) => {
+    setLatch((event && event.detail) || null);
+  });
   window.addEventListener("focus", readLock);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) readLock();
@@ -313,6 +366,7 @@ export function mountSafetyRail() {
     setLink,
     setLock,
     setPending,
+    setLatch,
     syncApprovals,
     readLock,
     stop,

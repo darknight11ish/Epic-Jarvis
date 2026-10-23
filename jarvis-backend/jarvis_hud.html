@@ -1701,6 +1701,7 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
 <div id="hud-safety" role="region" aria-label="Safety and connection" hidden>
   <span id="hud-safety-fixed" aria-hidden="true">Always visible — no layout can hide this</span>
   <span id="hud-safety-lock" role="status" aria-live="polite" hidden></span>
+  <span id="hud-safety-latch" role="status" aria-live="polite" hidden></span>
   <span id="hud-safety-taint" role="alert" hidden></span>
   <span id="hud-safety-link" role="status" aria-live="polite" hidden></span>
 </div>
@@ -4215,6 +4216,21 @@ function led(id, up, label){
   el.querySelector(".val").textContent = label || (up ? "up" : "down");
 }
 
+/** A4 (2026-10-23): hand the two persistent safety latches to the fixed rail.
+ *
+ *  `/api/status` carries them read-only as `taint_latched` / `rush_latched`
+ *  (true, false, or null for "the PC has not said" - never "not latched"). This
+ *  opens no socket of its own: both status reads below already happen, and the
+ *  rail seeds from `window.__hudLatchFacts` (a read can land before the module
+ *  mounts) and listens for `jarvis-latch-status`. Nothing here clears,
+ *  approves or decides anything. */
+function publishSafetyFacts(st){
+  const tri = (v) => (v === true ? true : (v === false ? false : null));
+  const facts = { taint: tri(st && st.taint_latched), rush: tri(st && st.rush_latched) };
+  window.__hudLatchFacts = facts;
+  try{ window.dispatchEvent(new CustomEvent("jarvis-latch-status", { detail: facts })); }catch(e){}
+}
+
 async function boot(){
   setView("talk");
 
@@ -4258,6 +4274,8 @@ async function boot(){
         Math.round(100*status.budget.day_used/status.budget.day_limit) + "%";
     }
     S.jarvisMemory = !!status.jarvis_injects_memory;
+    // A4: the two persistent safety latches this read also carries (read-only).
+    publishSafetyFacts(status);
     $("brand-sub").textContent = S.online ? "online · local first" : "online · model not running";
   } else {
     led("led-ollama", false, "—");
@@ -4366,6 +4384,9 @@ async function paintHost(){
       // Only a read that landed changes anything. A failed read says nothing
       // about the model, so what was last known stands.
       if(st) S.ollama = st.ollama;
+      // A4: the same read carries the two persistent latches; a restart while
+      // this window is open is noticed on this beat (the latch can expire).
+      if(st) publishSafetyFacts(st);
     }
   }catch(e){ /* keep what was last known; never guess "down" from a failure */ }
   hostWarn();

@@ -3355,6 +3355,26 @@ class Handler(BaseHTTPRequestHandler):
                     pass
             cfg = _read_toml(CONFIG_FILE)
             budget = jarvis_router.Budget.load().status() if ROUTING else {}
+            # A4 (2026-10-23): the session safety latches, READ-ONLY. They are
+            # stored on this PC - a SQLite row for the taint latch, a JSON state
+            # file for the rush latch - so the HUD's fixed safety strip can stay
+            # honest across a backend restart instead of going quiet the moment
+            # the process stops. This is a read: it clears nothing, approves
+            # nothing, and adds no route, permission or card. `None` means "the
+            # PC has not said" (never "not latched"), and taint_active() itself
+            # fails CLOSED - True when its store cannot be read - so the only
+            # word a page may draw from `true` is "staying local".
+            latch = {"taint_latched": None, "rush_latched": None}
+            try:
+                if jarvis_gate is not None:
+                    latch["taint_latched"] = bool(jarvis_gate.taint_active())
+            except Exception:
+                latch["taint_latched"] = True
+            try:
+                import jarvis_content_risk as _content_risk
+                latch["rush_latched"] = bool(_content_risk.rush_active())
+            except Exception:
+                latch["rush_latched"] = None
             return self._send(200, {
                 "routing": ROUTING,
                 "jarvis_injects_memory": jarvis_injects_memory(),
@@ -3366,6 +3386,8 @@ class Handler(BaseHTTPRequestHandler):
                 "lanes": lanes,
                 "default_model": (cfg.get("intelligence") or {}).get("default_model", ""),
                 "tools": len((cfg.get("tools") or {}).get("enabled") or []),
+                "taint_latched": latch["taint_latched"],
+                "rush_latched": latch["rush_latched"],
             })
 
         return self._send(404, {"error": "not found"})
