@@ -279,6 +279,10 @@ export function readSchedule(answer) {
     alert: text(j.alert),
     hidden: j.hidden === true,
     list: text(j.list),
+    // Phase 2 (2026-10-22): the PC's rank in its own list (a number), and the
+    // machine rule a repeating row's editor prefills from.
+    rank: Number.isInteger(j.rank) ? j.rank : null,
+    rule: j.rule && typeof j.rule === "object" ? j.rule : null,
     // A reminder for next time's subject - the owner's words, blanked with
     // `text` while the private lists are hidden (brain/schedule.rs).
     about: text(j.about),
@@ -296,6 +300,9 @@ export function readSchedule(answer) {
     available,
     why: available ? "" : text(a.why) || SCHEDULE_MISSING,
     hidden: available && a.hidden === true,
+    // The PC's own Phase 2 marker: an older backend never draws an edit
+    // control (Lead decision, 2026-10-22).
+    phase2: available && a.phase2 === true,
     jobs: available ? a.jobs.filter(ok).map(row) : [],
     todo: available ? a.todo.filter(ok).map(row) : [],
     // An older PC sends neither: nothing went off, and no named lists.

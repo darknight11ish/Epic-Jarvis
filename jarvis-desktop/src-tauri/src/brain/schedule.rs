@@ -70,7 +70,7 @@ use std::sync::Mutex;
 
 use tauri::AppHandle;
 
-use super::{require_link_live, READ_TIMEOUT, WRITE_TIMEOUT};
+use super::{require_link_live, READ_TIMEOUT, REPEAT_EDIT_TIMEOUT, WRITE_TIMEOUT};
 use crate::commands;
 use crate::notifications::{self, Kind};
 
@@ -90,7 +90,12 @@ const UNREADABLE: &str = "Jarvis answered, but not in a way this app can read. \
      Update the backend by running apply-patches.ps1.";
 
 /// The only things one job can be asked to do. Never "all", never a list.
-pub(crate) const ACTIONS: &[&str] = &["pause", "resume", "delete", "done", "add_time", "snooze"];
+/// The last three are Phase 2 (2026-10-22): ONE edit, ONE move between the
+/// to-do lists, ONE reorder - the PC's own `jarvis_schedule._act_phase2` is the
+/// authority; these names only say what one job may be asked.
+pub(crate) const ACTIONS: &[&str] = &[
+    "pause", "resume", "delete", "done", "add_time", "snooze", "edit", "move", "reorder",
+];
 
 /// Snooze: how long the buttons set (jarvis_schedule.SNOOZE_DEFAULT), and
 /// the shortest and longest the PC takes.
@@ -115,6 +120,174 @@ pub(crate) const MAX_TEXT: usize = 300;
 /// The longest a timer may run (jarvis_schedule.MAX_TIMER): a timer is for
 /// today; later than 24 hours is a reminder.
 pub(crate) const MAX_TIMER_SECONDS: f64 = 24.0 * 3600.0;
+
+/// The highest rank a reorder may name. The PC renumbers a list 0..n-1, and a
+/// list holds at most `jarvis_schedule.MAX_TODO` open items; a number past that
+/// is not a position on any list.
+const MAX_REORDER_RANK: i64 = 300;
+
+/// The Phase 2 fields ONE edit, move or reorder may carry (2026-10-22, the
+/// owner's Reminders request). Every field is optional; [`change_body`] refuses
+/// an empty or nonsensical combination and never invents a value. Deserialised
+/// from the page's own argument object with `deny_unknown_fields`, so a page
+/// cannot smuggle a field the PC never takes through this command. `when` is
+/// deliberately not here: this window reschedules with date+time, and a field
+/// it never sends has no reason to exist (the PC still accepts `when` from
+/// other callers).
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub struct ScheduleChange {
+    pub text: Option<String>,
+    pub date: Option<String>,
+    pub time: Option<String>,
+    /// `at` is an EPOCH (seconds), the PC's own shape - not "HH:MM" (the
+    /// HH:MM choice is `time`, beside `date`).
+    pub at: Option<f64>,
+    pub repeat: Option<serde_json::Value>,
+    pub list: Option<String>,
+    pub rank: Option<i64>,
+    pub seconds: Option<f64>,
+}
+
+/// How long ONE change may take: a repeat edit waits for the owner's approval
+/// card (the 202), everything else keeps the ordinary write budget.
+pub(crate) fn change_timeout(action: &str, change: &ScheduleChange) -> std::time::Duration {
+    if action == "edit" && change.repeat.is_some() {
+        REPEAT_EDIT_TIMEOUT
+    } else {
+        WRITE_TIMEOUT
+    }
+}
+
+/// A move target as the PC takes it: the literal `"todo"` for the to-do list
+/// itself, else a named list's tidied name. `None` is never sent - the page
+/// always names its target, so a missing one is refused before any request.
+fn move_target(raw: &str) -> Result<String, String> {
+    let t = raw.trim().to_ascii_lowercase();
+    if t.is_empty() || t == "todo" || t == "to-do" {
+        return Ok("todo".to_string());
+    }
+    list_name(raw).ok_or_else(|| "That is not one of your lists.".to_string())
+}
+
+/// The body of ONE Phase 2 change: `edit`, `move` or `reorder`, built only from
+/// the fields the page gave and checked against the PC's own limits before any
+/// request is made (the PC checks them again and is the authority).
+///
+/// THE VERB IS CHOSEN HERE (Lead, 2026-10-22): an `edit` whose ONLY field is a
+/// list becomes the backend's `move` verb, exactly as a list-only change must;
+/// a list riding with text/when/repeat stays inside the one `edit`.
+pub(crate) fn change_body(
+    id: &str,
+    action: &str,
+    change: &ScheduleChange,
+) -> Result<serde_json::Value, String> {
+    if !valid_id(id) {
+        return Err("That is not one job.".to_string());
+    }
+    match action {
+        "move" => {
+            let raw = change
+                .list
+                .as_deref()
+                .ok_or_else(|| "Choose which list.".to_string())?;
+            Ok(serde_json::json!({ "id": id, "do": "move", "list": move_target(raw)? }))
+        }
+        "reorder" => {
+            let rank = change.rank.ok_or_else(|| "Which position?".to_string())?;
+            if !(0..=MAX_REORDER_RANK).contains(&rank) {
+                return Err("That position is not on the list.".to_string());
+            }
+            Ok(serde_json::json!({ "id": id, "do": "reorder", "rank": rank }))
+        }
+        "edit" => {
+            let mut body = serde_json::Map::new();
+            body.insert("id".into(), serde_json::json!(id));
+            body.insert("do".into(), serde_json::json!("edit"));
+            let mut fields = 0usize;
+            let mut has_list = false;
+            let mut timed = Vec::new();
+            if let Some(raw) = change.text.as_deref() {
+                let t = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+                if t.is_empty() {
+                    return Err("Type what to change it to first.".to_string());
+                }
+                if t.chars().count() > MAX_TEXT {
+                    return Err(format!(
+                        "That is longer than {MAX_TEXT} characters - say it more briefly."
+                    ));
+                }
+                body.insert("text".into(), serde_json::json!(t));
+                fields += 1;
+            }
+            let date = change
+                .date
+                .as_deref()
+                .map(str::trim)
+                .filter(|d| !d.is_empty());
+            let time = change
+                .time
+                .as_deref()
+                .map(str::trim)
+                .filter(|t| !t.is_empty());
+            if date.is_some() != time.is_some() {
+                return Err("Give the date and time together.".to_string());
+            }
+            if let (Some(date), Some(time)) = (date, time) {
+                if !date_shape(date) {
+                    return Err("A date looks like 2030-09-15.".to_string());
+                }
+                let at =
+                    hhmm(time).ok_or_else(|| "Write the time as HH:MM, like 18:00.".to_string())?;
+                body.insert("date".into(), serde_json::json!(date));
+                body.insert("time".into(), serde_json::json!(at));
+                timed.push("date/time");
+                fields += 1;
+            }
+            if let Some(at) = change.at {
+                if !at.is_finite() || at <= 0.0 {
+                    return Err("Give the time as the PC's own clock.".to_string());
+                }
+                body.insert("at".into(), serde_json::json!(at));
+                timed.push("at");
+                fields += 1;
+            }
+            if let Some(seconds) = change.seconds {
+                if !seconds.is_finite() || seconds <= 0.0 {
+                    return Err("A timer needs a positive number of seconds.".to_string());
+                }
+                if seconds > MAX_TIMER_SECONDS {
+                    return Err("A timer is for today - at most 24 hours.".to_string());
+                }
+                body.insert("seconds".into(), serde_json::json!(seconds));
+                timed.push("seconds");
+                fields += 1;
+            }
+            if timed.len() > 1 {
+                return Err("give one time: when, at, date+time or seconds".to_string());
+            }
+            if let Some(rule) = change.repeat.as_ref() {
+                body.insert("repeat".into(), repeat_rule(rule)?);
+                fields += 1;
+            }
+            if let Some(raw) = change.list.as_deref() {
+                body.insert("list".into(), serde_json::json!(move_target(raw)?));
+                has_list = true;
+                fields += 1;
+            }
+            if fields == 0 {
+                return Err("an edit needs at least one field to change".to_string());
+            }
+            if has_list && fields == 1 {
+                // The ONLY change is the list: the backend's own `move` verb.
+                let list = body.remove("list").unwrap_or(serde_json::json!("todo"));
+                return Ok(serde_json::json!({ "id": id, "do": "move", "list": list }));
+            }
+            Ok(serde_json::Value::Object(body))
+        }
+        _ => Err(format!("\"{action}\" is not something a job can change.")),
+    }
+}
 
 /// The HUD Reminders tab's own sentence for a value it cannot send.
 pub(crate) const REMINDERS_FORM_HINT: &str =
@@ -1151,15 +1324,23 @@ pub async fn brain_schedule(app: AppHandle) -> Result<serde_json::Value, String>
     )
 }
 
-/// ONE job: pause, resume, delete, done, or add time. Held on a stale link.
+/// ONE job: pause, resume, delete, done, add time (and, since Phase 2, edit,
+/// move or reorder). Held on a stale link. `change` is only for the three
+/// Phase 2 verbs; the six older ones keep their flat `seconds` body.
 #[tauri::command]
 pub async fn brain_schedule_act(
     app: AppHandle,
     id: String,
     action: String,
     seconds: Option<f64>,
+    change: Option<ScheduleChange>,
 ) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
+    if let Some(change) = change {
+        let body = change_body(&id, &action, &change)?;
+        let timeout = change_timeout(&action, &change);
+        return post_with_timeout(&app, "/api/schedule/act", body, timeout).await;
+    }
     let body = act_body(&id, &action, seconds)?;
     post(&app, "/api/schedule/act", body).await
 }
@@ -1239,8 +1420,19 @@ pub(crate) async fn post(
     path: &str,
     body: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    post_with_timeout(app, path, body, WRITE_TIMEOUT).await
+}
+
+/// ONE write with its own budget (the repeat edit's card wait; `change_timeout`
+/// picks it). Everything here is otherwise exactly `post`.
+pub(crate) async fn post_with_timeout(
+    app: &AppHandle,
+    path: &str,
+    body: serde_json::Value,
+    timeout: std::time::Duration,
+) -> Result<serde_json::Value, String> {
     let base = commands::jarvis_base(app);
-    let response = commands::jarvis_client(Some(WRITE_TIMEOUT))?
+    let response = commands::jarvis_client(Some(timeout))?
         .post(format!("{base}{path}"))
         .headers(commands::jarvis_headers(app)?)
         .json(&body)
@@ -1255,6 +1447,168 @@ pub(crate) async fn post(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Phase 2 (2026-10-22): the three verbs' bodies, the owner's caps, and the
+    /// verb choice the Lead settled - a list-only edit becomes `move`.
+    #[test]
+    fn one_change_keeps_the_phase2_bodies_and_the_owners_caps() {
+        let none = ScheduleChange::default();
+        let body =
+            |id: &str, action: &str, change: &ScheduleChange| change_body(id, action, change);
+        assert!(body("s0123456789", "edit", &none).is_err());
+        assert!(body("not-an-id", "edit", &none).is_err());
+        assert!(body("s0123456789", "explode", &none).is_err());
+
+        let text = ScheduleChange {
+            text: Some("  call mum  ".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "edit", &text).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "edit", "text": "call mum"})
+        );
+        let long = ScheduleChange {
+            text: Some("x".repeat(MAX_TEXT + 1)),
+            ..Default::default()
+        };
+        assert!(body("s0123456789", "edit", &long).is_err());
+
+        let when = ScheduleChange {
+            date: Some("2030-09-15".into()),
+            time: Some("7:5".into()),
+            ..Default::default()
+        };
+        assert!(body("s0123456789", "edit", &when).is_err());
+        let when = ScheduleChange {
+            date: Some("2030-09-15".into()),
+            time: Some("18:00".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "edit", &when).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "edit",
+                                     "date": "2030-09-15", "time": "18:00"})
+        );
+
+        let timer = ScheduleChange {
+            seconds: Some(600.0),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "edit", &timer).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "edit", "seconds": 600.0})
+        );
+        for bad in [0.0, -5.0, MAX_TIMER_SECONDS + 1.0, f64::NAN] {
+            let s = ScheduleChange {
+                seconds: Some(bad),
+                ..Default::default()
+            };
+            assert!(
+                body("s0123456789", "edit", &s).is_err(),
+                "seconds {bad} was accepted"
+            );
+        }
+
+        let rule = ScheduleChange {
+            repeat: Some(serde_json::json!({"every": "weekday", "at": "07:00"})),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "edit", &rule).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "edit",
+                                     "repeat": {"every": "weekday", "at": "07:00"}})
+        );
+        let bad_rule = ScheduleChange {
+            repeat: Some(serde_json::json!({"every": "decade"})),
+            ..Default::default()
+        };
+        assert!(body("s0123456789", "edit", &bad_rule).is_err());
+
+        // A list alone is the backend's `move` verb (Lead, 2026-10-22).
+        let move_only = ScheduleChange {
+            list: Some("shopping".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "edit", &move_only).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "move", "list": "shopping"})
+        );
+        let todo = ScheduleChange {
+            list: Some("to-do".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "move", &todo).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "move", "list": "todo"})
+        );
+        // A list riding with words stays inside the one edit.
+        let both = ScheduleChange {
+            text: Some("milk".into()),
+            list: Some("shopping".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "edit", &both).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "edit", "text": "milk",
+                                     "list": "shopping"})
+        );
+        assert!(body(
+            "s0123456789",
+            "edit",
+            &ScheduleChange {
+                list: Some("Not A List".into()),
+                ..Default::default()
+            }
+        )
+        .is_err());
+
+        let rank = ScheduleChange {
+            rank: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "reorder", &rank).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "reorder", "rank": 2})
+        );
+        for bad in [-1, MAX_REORDER_RANK + 1] {
+            assert!(body(
+                "s0123456789",
+                "reorder",
+                &ScheduleChange {
+                    rank: Some(bad),
+                    ..Default::default()
+                }
+            )
+            .is_err());
+        }
+        assert!(body("s0123456789", "reorder", &none).is_err());
+        // `at` is the PC's own epoch shape, never "HH:MM" (review 737 #6): a
+        // string is refused when the command's arguments are deserialised.
+        let at = ScheduleChange {
+            at: Some(1_893_456_000.0),
+            ..Default::default()
+        };
+        assert_eq!(
+            body("s0123456789", "edit", &at).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "edit",
+                                     "at": 1_893_456_000.0})
+        );
+        assert!(
+            serde_json::from_value::<ScheduleChange>(serde_json::json!({"at": "18:00"})).is_err(),
+            "an epoch field accepted an HH:MM string"
+        );
+        let bad_at = ScheduleChange {
+            at: Some(0.0),
+            ..Default::default()
+        };
+        assert!(body("s0123456789", "edit", &bad_at).is_err());
+        // The repeat edit is the ONE card-gated path, so it alone gets the long budget.
+        assert_eq!(change_timeout("edit", &rule), REPEAT_EDIT_TIMEOUT);
+        assert_eq!(change_timeout("edit", &text), WRITE_TIMEOUT);
+        assert_eq!(change_timeout("move", &move_only), WRITE_TIMEOUT);
+        assert_eq!(change_timeout("reorder", &rank), WRITE_TIMEOUT);
+        assert_eq!(change_timeout("pause", &none), WRITE_TIMEOUT);
+    }
 
     /// GTD-2: the Today board is ADDED under `cockpit`; every field of the
     /// list's own answer is untouched, a quiet board adds nothing, and a

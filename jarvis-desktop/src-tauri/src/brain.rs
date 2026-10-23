@@ -76,6 +76,13 @@ use routes::{first_line, route_for};
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// ONE repeat edit (2026-10-22, the owner's Reminders Phase 2) waits for the
+/// PC's `schedule_repeat` approval card - the answer is the 202, and the gate may
+/// wait up to 900 s for the owner. Long enough to outlast it, the same shape
+/// `focus_presets.rs` uses for its card-gated apply; every other schedule write
+/// keeps `WRITE_TIMEOUT`.
+const REPEAT_EDIT_TIMEOUT: Duration = Duration::from_secs(1_200);
+
 // ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------

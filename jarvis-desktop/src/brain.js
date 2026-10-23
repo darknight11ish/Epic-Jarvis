@@ -146,6 +146,22 @@ import {
   WENT_OFF_ACTIONS,
   wentOffMeta,
 } from "./coming-up.js";
+/* Phase 2 (2026-10-22): the row editor's words and gate, the ONE shared table
+ * with the HUD's Reminders panel (src/hud-actions.js). */
+import {
+  ASKED_REPEAT_WORDS,
+  CANCEL_LABEL as SCHEDULE_CANCEL_LABEL,
+  DOWN_LABEL,
+  EDIT_LABEL,
+  MOVE_TO_TODO_LABEL,
+  NOTHING_CHANGED_WORDS,
+  REPEAT_CARD_WORDS,
+  SAVE_LABEL,
+  TIMER_MINUTES_HINT,
+  UP_LABEL,
+  canEdit,
+  rankOf,
+} from "./hud-actions.js";
 import {
   ACCEPT_LABEL,
   ADD_STEP_LABEL,
@@ -8363,19 +8379,192 @@ async function loadComingUp() {
   }
 }
 
-async function scheduleAct(job, action) {
+async function scheduleAct(job, action, change) {
+  let failed = false;
+  let waiting = false;
+  const asked = Boolean(change && change.repeat);
+  if (asked) toast(ASKED_REPEAT_WORDS, "ok");
   try {
     // Snooze says how long (10 minutes), so the PC and this button agree.
     const args = action === "snooze" ? { id: job.id, action, seconds: SNOOZE_SECONDS }
       : { id: job.id, action };
+    if (change) args.change = change;
     const out = await invoke("brain_schedule_act", args);
-    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
-    else toast(String((out && out.said) || "Done."), "ok");
+    if (out && out.waiting === true) {
+      waiting = true;
+      toast(ASKED_REPEAT_WORDS, "ok");
+    } else if (out && out.ok === false) {
+      failed = true;
+      toast(String(out.error || "Refused."), "bad");
+    } else {
+      toast(String((out && out.said) || "Done."), "ok");
+    }
   } catch (error) {
+    failed = true;
     toast(errorText(error), "bad");
   }
   await loadComingUp();
+  return { ok: !failed, waiting };
 }
+
+/**
+ * Phase 2 (2026-10-22, the owner's Reminders request): the ONE row editor in
+ * Coming up. Fields by kind, prefilled from the PC's own read; Save sends ONE
+ * `brain_schedule_act` with a typed `change` and the PC's answer decides the
+ * outcome (a repeat change waits on its ONE card and says so first). The words
+ * and the gate are the shared table (hud-actions.js via coming-up.js).
+ */
+function scheduleEditorField(job, name, value) {
+  const wrap = el("div", "schedule-editor-field");
+  const label = el("label", "", name);
+  let input;
+  if (name === "Repeat" || name === "List") {
+    input = el("select");
+    const options = name === "Repeat"
+      ? [["day", "Every day"], ["weekday", "Every weekday"], ["custom", "Custom days"]]
+      : [["todo", MOVE_TO_TODO_LABEL]].concat(
+        (upL.view && upL.view.lists ? upL.view.lists : [])
+          .map((l) => [l.name, l.title || l.name]));
+    for (const [valueOf, words] of options) {
+      const option = el("option", "", words);
+      option.value = valueOf;
+      input.append(option);
+    }
+    input.value = value === null || value === undefined ? "" : String(value);
+  } else {
+    input = el("input");
+    input.type = name === "Date" ? "date" : name === "Time" ? "time" : "text";
+    input.value = value === null || value === undefined ? "" : String(value);
+  }
+  input.dataset.field = name;
+  wrap.append(label, input);
+  return wrap;
+}
+
+function sameScheduleRule(a, b) {
+  if (!a || typeof a !== "object" || !b || typeof b !== "object") return false;
+  if (String(a.every || "") !== String(b.every || "")) return false;
+  if (String(a.at || "") !== String(b.at || "")) return false;
+  const days = (rule) => (Array.isArray(rule.days) ? rule.days.slice().sort((x, y) => x - y).join(",") : "");
+  return days(a) === days(b);
+}
+
+function changeFromEditor(job, form) {
+  const value = (name) => {
+    const node = form.querySelector(`[data-field="${name}"]`);
+    return node ? String(node.value).trim() : "";
+  };
+  const out = {};
+  const text = value("What");
+  if (text && text !== job.text) out.text = text;
+  if (job.kind === "timer") {
+    const mins = parseInt(value("Minutes"), 10);
+    if (!(mins >= 1 && mins <= 1440)) { toast(TIMER_MINUTES_HINT, "bad"); return null; }
+    const old = Math.max(1, Math.round((job.duration || job.left || 600) / 60));
+    if (mins !== old) out.seconds = mins * 60;
+  } else if (job.kind === "todo") {
+    const list = value("List");
+    const current = job.list || "todo";
+    if (list && list !== current) out.list = list === "todo" ? "todo" : list;
+  } else if (!job.repeats) {
+    // Only a field the owner actually changed goes to the PC (review 737 #5).
+    const date = value("Date");
+    const at = value("Time");
+    if (!date || !at) { toast("Give the date and the time.", "bad"); return null; }
+    const due = job.due && Number.isFinite(job.due) ? new Date(job.due * 1000) : null;
+    const pad = (n) => (n < 10 ? `0${n}` : String(n));
+    const oldDate = due ? `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}` : "";
+    const oldTime = due ? `${pad(due.getHours())}:${pad(due.getMinutes())}` : "";
+    if (date !== oldDate) out.date = date;
+    if (at !== oldTime) out.time = at;
+  } else {
+    const every = value("Repeat");
+    const at = value("Time");
+    if (!at) { toast("Write the time as HH:MM, like 07:30.", "bad"); return null; }
+    let rule;
+    if (every === "custom") {
+      // The owner's own days, never a Mon-Fri guess (review 737 #1).
+      const days = [...form.querySelectorAll("[data-day]:checked")].map((n) => parseInt(n.value, 10));
+      if (!days.length) { toast("Pick at least one day.", "bad"); return null; }
+      rule = { every: "week", at, days };
+    } else if (every === "weekday") {
+      rule = { every: "weekday", at };
+    } else {
+      rule = { every: "day", at };
+    }
+    // ONLY a rule that changed is sent: an unchanged repeat would raise the ONE
+    // card for nothing (review 737 #2).
+    if (!sameScheduleRule(rule, job.rule)) out.repeat = rule;
+  }
+  return out;
+}
+
+function openScheduleEditor(job, item, groupJobs) {
+  if (item.querySelector(".schedule-editor")) return;
+  const actions = item.querySelector(".row-actions");
+  if (actions) actions.hidden = true;
+  const form = el("form", "schedule-editor");
+  form.autocomplete = "off";
+  const grid = el("div", "schedule-editor-grid");
+  const due = job.due && Number.isFinite(job.due) ? new Date(job.due * 1000) : null;
+  const pad = (n) => (n < 10 ? `0${n}` : String(n));
+  if (job.kind !== "timer" || job.text) grid.append(scheduleEditorField(job, "What", job.text));
+  if (job.kind === "timer") {
+    grid.append(scheduleEditorField(job, "Minutes",
+      Math.max(1, Math.round((job.duration || job.left || 600) / 60))));
+  } else if (!job.repeats && (job.kind === "alarm" || job.kind === "reminder")) {
+    grid.append(scheduleEditorField(job, "Date", due ? `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}` : ""));
+    grid.append(scheduleEditorField(job, "Time", due ? `${pad(due.getHours())}:${pad(due.getMinutes())}` : ""));
+  } else if (job.repeats) {
+    const rule = job.rule && typeof job.rule === "object" ? job.rule : {};
+    const custom = rule.every === "week" || (Array.isArray(rule.days) && rule.days.length
+      && rule.every !== "day" && rule.every !== "weekday");
+    grid.append(scheduleEditorField(job, "Repeat", custom ? "custom" : (rule.every || "day")));
+    grid.append(scheduleEditorField(job, "Time", rule.at || ""));
+    const daysBox = el("div", "schedule-editor-days");
+    daysBox.hidden = !custom;
+    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((name, d) => {
+      const label = el("label", "", name);
+      const box = el("input");
+      box.type = "checkbox";
+      box.value = String(d);
+      box.dataset.day = "1";
+      box.checked = Array.isArray(rule.days) && rule.days.includes(d);
+      label.prepend(box);
+      daysBox.append(label);
+    });
+    grid.append(daysBox);
+    const repeatSelect = grid.querySelector('[data-field="Repeat"]');
+    if (repeatSelect) repeatSelect.addEventListener("change", () => { daysBox.hidden = repeatSelect.value !== "custom"; });
+    form.append(el("p", "schedule-editor-note", REPEAT_CARD_WORDS));
+  } else if (job.kind === "todo") {
+    grid.append(scheduleEditorField(job, "List", job.list || "todo"));
+  }
+  form.append(grid);
+  const buttons = el("div", "schedule-editor-buttons");
+  const save = el("button", "btn small", SAVE_LABEL);
+  save.type = "submit";
+  const cancel = el("button", "btn small", SCHEDULE_CANCEL_LABEL);
+  cancel.type = "button";
+  cancel.addEventListener("click", () => {
+    form.remove();
+    if (actions) actions.hidden = false;
+  });
+  buttons.append(save, cancel);
+  form.append(buttons);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const change = changeFromEditor(job, form);
+    if (change === null) return;
+    if (!Object.keys(change).length) { toast(NOTHING_CHANGED_WORDS, "ok"); return; }
+    const result = await scheduleAct(job, "edit", change);
+    if (result.ok) form.remove();
+  });
+  item.append(form);
+  const first = form.querySelector("input");
+  if (first) first.focus();
+}
+
 
 /**
  * One new item, on the to-do list or (with `list`) a named list - the
@@ -8455,7 +8644,7 @@ function paintNamedLists(v) {
     part.dataset.list = l.name;
     part.append(el("h3", "subhead", l.title));
     const list = el("div", "rows");
-    for (const j of l.items) list.append(scheduleRow(j));
+    for (const j of l.items) list.append(scheduleRow(j, l.items));
     part.append(list);
     if (!v.hidden) {
       const form = el("form", "todo-form");
@@ -8511,7 +8700,7 @@ async function addStandby() {
   await loadComingUp();
 }
 
-function scheduleRow(job) {
+function scheduleRow(job, groupJobs) {
   const since = Date.now() - upL.readAt;
   const item = row({
     tag: tagOf(job),
@@ -8522,6 +8711,30 @@ function scheduleRow(job) {
       button(labelOf(a), () => scheduleAct(job, a), { live: true, danger: a === "delete" })),
   });
   item.dataset.id = job.id;
+  // Phase 2: ONE Edit control (and, on a to-do inside its list, Up/Down),
+  // drawn only when the PC's read says the backend can do it.
+  if (canEdit(job, { phase2: Boolean(upL.view && upL.view.phase2),
+                     hidden: Boolean(upL.view && upL.view.hidden) })) {
+    const controls = el("div", "row-controls");
+    controls.append(button(EDIT_LABEL, () => openScheduleEditor(job, item, groupJobs)));
+    if (job.kind === "todo" && Array.isArray(groupJobs)) {
+      const rank = rankOf(job, groupJobs.indexOf(job));
+      const up = button("\u2191", () => scheduleAct(job, "reorder", { rank: rank - 1 }),
+        { live: true, title: UP_LABEL });
+      liveButtons.add(up);
+      syncLiveButton(up);
+      up.setAttribute("aria-label", UP_LABEL);
+      up.disabled = rank <= 0;
+      const down = button("\u2193", () => scheduleAct(job, "reorder", { rank: rank + 1 }),
+        { live: true, title: DOWN_LABEL });
+      liveButtons.add(down);
+      syncLiveButton(down);
+      down.setAttribute("aria-label", DOWN_LABEL);
+      down.disabled = rank >= groupJobs.length - 1;
+      controls.append(up, down);
+    }
+    item.append(controls);
+  }
   if (job.kind === "timer" && job.state === "active") {
     const span = item.querySelector(".row-meta");
     if (span) {
@@ -8587,7 +8800,10 @@ function paintComingUp() {
   // ONE job per tap.
   if (dom.wentOffPart) dom.wentOffPart.hidden = !v.wentOff.length;
   if (dom.wentOff) rows(dom.wentOff, v.wentOff, wentOffRow, "");
-  if (dom.todoList) rows(dom.todoList, todoItems(v), scheduleRow, EMPTY_TODO);
+  if (dom.todoList) {
+    const todo = todoItems(v);
+    rows(dom.todoList, todo, (j) => scheduleRow(j, todo), EMPTY_TODO);
+  }
   paintNamedLists(v);
   // Its example says "milk": nothing of that shape shows while hidden.
   if (dom.listsNote) dom.listsNote.hidden = v.hidden;
