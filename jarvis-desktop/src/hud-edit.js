@@ -105,7 +105,7 @@ export const CARD_DOM = Object.freeze({
 
 /** Cards that H2 shows but deliberately does not reparent, with their reason. */
 export const FIXED_IDS = Object.freeze({
-  emergency_stop: "Stop everything is a fixed control in the header.",
+  emergency_stop: "Stop everything is the PC's own path (Alt+Shift+X, tray or widget); this page has no stop control yet.",
   voice_controls: "The voice controls stay beside the composer.",
   conversation: "The conversation is the main stage.",
   composer: "The ask box is the main stage.",
@@ -598,6 +598,33 @@ export function mountHudEditor(options = {}) {
     announce("Undone.");
   }
 
+  // H3-PM-2 (post-merge audit, 2026-10-22): entering edit mode must never
+  // leave a protected card behind a closed rail. Every rail the current shell
+  // slides away (or hides outright, like split-stage's right rail) is marked
+  // `.edit-reveal`, which the page CSS brings on screen; leaving edit mode
+  // removes the mark so the shell's own look returns untouched.
+  const editRevealedRails = new Set();
+  function revealRailsForEditing() {
+    const view = doc.defaultView;
+    const rails = [doc.querySelector(".rail.left"), doc.getElementById("rail-right")]
+      .filter(Boolean);
+    for (const rail of rails) {
+      if (editing) {
+        const style = view ? view.getComputedStyle(rail) : null;
+        const box = rail.getBoundingClientRect();
+        const hidden = !style || style.display === "none" || box.right <= 1
+          || box.left >= (view ? view.innerWidth : 0) - 1;
+        if (hidden) {
+          rail.classList.add("edit-reveal");
+          editRevealedRails.add(rail);
+        }
+      } else if (editRevealedRails.has(rail)) {
+        rail.classList.remove("edit-reveal");
+        editRevealedRails.delete(rail);
+      }
+    }
+  }
+
   function setEditing(on) {
     editing = Boolean(on);
     if (editing) {
@@ -607,6 +634,7 @@ export function mountHudEditor(options = {}) {
     } else if (saveTimer) {
       flushSave();
     }
+    revealRailsForEditing();
     render();
     updateEditButton();
   }

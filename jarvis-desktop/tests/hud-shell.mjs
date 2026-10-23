@@ -400,10 +400,69 @@ await check("Q5: LOOKS, lookForPreset, data-hud-layout and jarvis:hud-look are g
   assert.equal(storeSrc.includes("lookForPreset"), false, "store still exports lookForPreset");
   assert.equal(modelSrc.includes("THEMES"), false, "model still exports THEMES");
   assert.equal(editSrc.includes("presetsPeek"), false, "editor still peeks at Focus presets");
-  // The stale H1/H2 comments are rewritten, not left saying "until H2".
-  for (const source of [modelSrc, storeSrc, page]) {
+  // The stale H1/H2 comments are rewritten, not left saying "until H2" - and
+  // the broader pre-H3 descriptions are gone too (post-merge audit H3-PM-5).
+  for (const source of [modelSrc, storeSrc, page, settingsModule, editSrc, presetsSrc]) {
     assert.equal(/until H2/.test(source), false, "a stale 'until H2' comment survived");
+    assert.equal(source.includes("H2 draws the region grid"), false,
+      "a stale 'H2 draws the region grid' comment survived");
+    assert.equal(source.includes("three in-header pills"), false,
+      "a stale 'three in-header pills' comment survived");
+    assert.equal(source.includes("current three-way `data-hud-layout` look"), false,
+      "a stale three-way data-hud-layout comment survived");
   }
+});
+
+await check("H3-PM-2: Ambient's left rail is a drawer, not an unreachable hidden rail", () => {
+  // The old center-core block hid the left rail outright, so its cards (and
+  // the protected Jarvis-bar card H2 renders there in edit mode) were
+  // unreachable. It now uses the same drawer + [Navigation] toggle as
+  // two-column-right and single-stage-bento.
+  assert.equal(page.includes('html[data-hud-shell="center-core"] .rail.left{display:none;}'),
+    false, "Ambient still hides the left rail outright");
+  assert.match(page,
+    /html\[data-hud-shell="center-core"\] \.rail\.left\{[^}]*transform:translateX\(-100%\)/,
+    "Ambient has no off-canvas left drawer");
+  assert.match(page,
+    /html\[data-hud-shell="center-core"\] \.rail\.left\.open\{transform:none;\}/,
+    "Ambient has no open left drawer");
+  assert.match(page,
+    /html\[data-hud-shell="center-core"\] \.left-toggle\{display:flex;\}/,
+    "Ambient offers no [Navigation] toggle");
+  assert.match(page, /two-column-right, single-stage-bento and center-core hide the left rail/,
+    "the left-drawer comment does not list Ambient");
+  // Gemini's PM-2 ruling: while Edit HUD is active, every hidden rail is
+  // revealed (slide-over drawers home; split-stage's tab rail forced back), so
+  // no protected control can sit behind a closed rail.
+  assert.match(page, /body\[data-hud-edit="on"\] \.rail\.edit-reveal\{transform:none !important;\}/,
+    "edit mode does not bring slide-over rails home");
+  assert.match(page, /body\[data-hud-edit="on"\] \.rail\.edit-reveal\.right\{display:flex !important;/,
+    "edit mode does not force the tab-revealed rail back on");
+  assert.match(editSrc, /revealRailsForEditing/, "the editor does not reveal hidden rails");
+  assert.match(editSrc, /edit-reveal/, "the editor does not mark the revealed rails");
+  // The HUD has no clickable stop-all (post-merge review, 2026-10-22): the
+  // claims must name the real paths and keep the gap visible, so this pin
+  // fails if the sentence drifts back into "all four protected cards stay
+  // visible and reachable" or a stop control appears without the claim/docs
+  // being updated with it.
+  const ARCH = readFileSync(join(ROOT, "docs", "ARCHITECTURE.md"), "utf8");
+  const DECISIONS = readFileSync(join(ROOT, "docs", "DECISIONS.md"), "utf8");
+  assert.match(editSrc, /this page has no stop control yet/,
+    "the editor's emergency-stop reason does not admit the missing page control");
+  assert.match(editSrc, /Alt\+Shift\+X/,
+    "the editor's emergency-stop reason does not name the real stop hotkey");
+  assert.match(ARCH, /\*\*Tracked gap:\*\* the HUD page/,
+    "ARCHITECTURE lost the tracked emergency-stop gap");
+  assert.match(ARCH, /no DOM and no clickable stop-all/,
+    "ARCHITECTURE does not say the HUD has no clickable stop-all");
+  assert.match(ARCH, /Alt\+Shift\+X/, "ARCHITECTURE does not name the real stop hotkey");
+  assert.match(DECISIONS, /\*\*Tracked gap:\*\* the HUD has no clickable stop-all/,
+    "DECISIONS lost the tracked emergency-stop gap");
+  assert.match(DECISIONS, /Alt\+Shift\+X/, "DECISIONS does not name the real stop hotkey");
+  assert.equal(/all four protected cards stay visible and\s+reachable/.test(ARCH + DECISIONS),
+    false, "the old 'all four protected cards stay visible and reachable' overclaim survived");
+  assert.equal(/id="hud-stop"|id="emergency-stop"|id="emergency_stop"/.test(page),
+    false, "the HUD page grew a stop control without updating the tracked-gap claim");
 });
 
 await check("H3: the bootstrap renders shell/density/tab and writes the first-paint mirror", () => {

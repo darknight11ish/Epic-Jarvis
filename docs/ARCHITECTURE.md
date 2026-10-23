@@ -2504,8 +2504,20 @@ A preset's own `shell_template` (six shells), `density` (comfortable / compact /
 spacious) and `default_stage_tab` are now drawn: the bootstrap puts
 `data-hud-shell`/`data-hud-density` on the page and announces `jarvis:hud-shell`,
 the page opens the mapped view or inspector tab, and the six shells are CSS
-Grid/Flexbox variants with a working drawer for every rail a shell hides (no
-card becomes unreachable). The four-into-three `LOOKS` alias map, the
+Grid/Flexbox variants with a way back from every rail a shell hides - a
+slide-over drawer (Ambient `center-core`, `two-column-right`, `single-stage-bento`)
+or the stage tabs (`split-stage`'s right rail, via Telemetry/Memory/Today) - so
+no card becomes unreachable. Entering **Edit HUD** auto-reveals every hidden
+rail, so the protected controls the HUD draws (`approvals`, the Jarvis-bar
+button and the mic) stay visible and reachable while editing, and the layout
+document keeps all four `PROTECTED_IDS` (`approvals`, `emergency_stop`,
+`voice_controls`, `bar_launcher`) forced visible. **Tracked gap:** the HUD page
+has no DOM and no clickable stop-all of its own (`emergency_stop` is a
+document-level protected card, not a page control; `voice_controls`' drawn
+control is the mic). The real **Stop everything** paths are the PC hotkey
+(`Alt+Shift+X`, `hotkeys.rs`), the tray and the widget - never a HUD button. A
+HUD stop control needs its own UI/command decision and is **not** claimed here.
+The four-into-three `LOOKS` alias map, the
 `data-hud-layout` look attribute and `lookForPreset` are **retired**; the only
 survivor of the old road is a `jarvis.hud.preview` localStorage mirror holding
 three facts purely so the FIRST frame is not the wrong shell (the store's answer
