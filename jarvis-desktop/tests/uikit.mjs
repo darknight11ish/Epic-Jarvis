@@ -608,9 +608,14 @@ export const UPDATE_BOTH = {
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
   altSpace, reclaimAltSpace,
-  tutorials, faq }) {
+  tutorials, faq, hudLayout }) {
   const listeners = {};
   window.__calls = [];
+  // H3 (post-merge audit): the Settings picker reads/writes the one HUD layout
+  // document through these two commands. A scenario seeds `hudLayout`; the
+  // test reads back what the page actually saved (never a click's promise).
+  window.__hudLayout = hudLayout ? JSON.parse(JSON.stringify(hudLayout)) : null;
+  window.__hudLayoutWrites = [];
   // Commands a scenario wants to see FAIL, by name -> the words the bridge
   // gives back. Every command that does not appear here behaves as before.
   // This is how the "the PC refused, so the switch must SAY so" paths in
@@ -689,6 +694,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           throw new Error(window.__invokeFails[cmd]);
         }
         switch (cmd) {
+          case "get_hud_layout":
+            return { layout: window.__hudLayout,
+              source: window.__hudLayout ? "saved" : "none" };
+          case "set_hud_layout":
+            window.__hudLayout = args.layout;
+            window.__hudLayoutWrites.push(args.layout);
+            return { layout: args.layout, source: "saved" };
           case "get_link_state": return state;
           case "get_pending_approvals": {
             // A scenario whose queue changes mid-test (a card raised by a

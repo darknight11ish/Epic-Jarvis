@@ -125,11 +125,17 @@ async function openHud(browser, status, pageOptions = {}) {
   // does, with no __TAURI__ at all; `tauriInvoke: "fail"` makes the mic's
   // command refused.
   if (!status.noShell) {
-    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout }) => {
+    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout, preview }) => {
       // Captured before the bootstrap replaces window.fetch.
       const origFetch = window.fetch.bind(window);
       const shellHeaders = { "X-Jarvis-Client": "hud", "X-Jarvis-Token": "test-token" };
       window.__invokes = [];
+      // H3 post-merge audit (task-100): a scenario may seed a conflicting
+      // first-paint preview BEFORE the page's head script reads it, so the
+      // test can prove the store's answer wins and the mirror is corrected.
+      if (preview) {
+        try { localStorage.setItem("jarvis.hud.preview", JSON.stringify(preview)); } catch (e) {}
+      }
       class Channel { constructor() { this.onmessage = null; } }
       window.__TAURI__ = { core: { Channel, invoke: async (cmd, args) => {
         window.__invokes.push([cmd, cmd === "hud_chat" ? { body: args.body } : args]);
@@ -243,6 +249,7 @@ async function openHud(browser, status, pageOptions = {}) {
       } } };
     }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs),
       hudLayout: status.hudLayout || null,
+      preview: status.preview || null,
          decideFails: status.decideFails || "" });
   }
   // A browser's voice list, with one online voice and one local one, and
@@ -2353,10 +2360,12 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
     const visibleRows = rows.filter((el) => getComputedStyle(el).display !== "none");
     const composer = document.querySelector(".composer").getBoundingClientRect();
     return {
-      leftRail: getComputedStyle(document.querySelector(".rail.left")).display,
-      // The drawer is off the right-hand edge until its toggle opens it:
-      // measured as "not on screen", not as display:none, because a slid
-      // panel must keep its box to slide.
+      // Both Ambient rails are drawers now (H3 post-merge audit H3-PM-2):
+      // measured as "off screen", not "display:none" - a slid panel keeps its
+      // box so it can slide, and the [Navigation]/[Telemetry] toggles stay the
+      // way back.
+      leftRailOffScreen: document.querySelector(".rail.left").getBoundingClientRect().right <= 1,
+      leftToggleShown: getComputedStyle(document.getElementById("left-toggle")).display !== "none",
       rightRailOffScreen: document.getElementById("rail-right").getBoundingClientRect().left >= window.innerWidth - 1,
       coreWidth: Math.round(box.width),
       barPosition: stageBar.position,
@@ -2378,7 +2387,8 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
     pressed: document.getElementById("history-toggle").getAttribute("aria-pressed"),
   }));
   await page.close();
-  assert.equal(shape.leftRail, "none", "Ambient still draws the navigation rail");
+  assert.equal(shape.leftRailOffScreen, true, "Ambient draws the navigation rail over the core");
+  assert.equal(shape.leftToggleShown, true, "Ambient has no [Navigation] toggle for its left rail");
   assert.equal(shape.rightRailOffScreen, true, "Ambient draws the telemetry rail over the core");
   assert.equal(shape.coreWidth, 320, "the Ambient core is not 320px");
   assert.equal(shape.barPosition, "fixed", "the top-right pill is not floating");
@@ -3501,6 +3511,296 @@ await check("H3: the Import dialog adds to My layouts and keeps the owner's exis
   assert.match(activeName, /Layout: Quiet/, `the badge does not name the imported layout: ${activeName}`);
   assert.deepEqual(problems, []);
 });
+
+/* =========================================================================
+ * H3 post-merge audit (task-100): the page checks the merged H3 PR claimed.
+ * Every preset is loaded through the bootstrap's saved layout (not a synthetic
+ * event), including the imported two-column-right shell; the checks cover
+ * density, the opening view/tab, first-paint preview fallback, drawers at DPR
+ * 1.5 / 900-1280 widths, reduced motion, the Ambient Navigation drawer and the
+ * protected Jarvis-bar card while editing.
+ * ========================================================================= */
+
+const H3_PRESETS = {
+  cockpit: { shell: "three-column", density: "comfortable", tab: "", view: "talk" },
+  studio: { shell: "split-stage", density: "comfortable", tab: "galaxy", view: "talk" },
+  ambient: { shell: "center-core", density: "spacious", tab: "", view: "talk" },
+  quiet: { shell: "two-column-left", density: "comfortable", tab: "", view: "talk" },
+  telemetry: { shell: "three-column", density: "compact", tab: "telemetry", view: "talk" },
+  second_brain: { shell: "three-column", density: "comfortable", tab: "galaxy", view: "brain" },
+  minimal: { shell: "single-stage-bento", density: "compact", tab: "", view: "talk" },
+};
+const H3_PENDING = [{ id: "91", action: "send_email", tier: "ask", replaces: false,
+  expires_in: 120 }];
+const hudFacts = (page) => page.evaluate(() => ({
+  shell: document.body.dataset.hudShell,
+  density: document.body.dataset.hudDensity,
+  htmlShell: document.documentElement.getAttribute("data-hud-shell"),
+  htmlDensity: document.documentElement.getAttribute("data-hud-density"),
+  tab: document.body.dataset.hudTab || "",
+  view: document.getElementById("brain").classList.contains("on") ? "brain" : "talk",
+}));
+const railBox = (page, id) => page.evaluate((which) => {
+  const node = document.getElementById(which);
+  if (!node) return null;
+  const r = node.getBoundingClientRect();
+  return { x: Math.round(r.x), w: Math.round(r.width),
+    on: getComputedStyle(node).display !== "none" && r.width > 1 };
+}, id);
+
+await check("H3: every preset renders its own shell, density and opening view/tab", async () => {
+  for (const [id, want] of Object.entries(H3_PRESETS)) {
+    const { page, problems } = await openHud(browser,
+      { jarvis: false, ollama: true, proxy: false, hudLayout: presetLayout(id) });
+    await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+    await K.until(page, `${id}'s shell to render`, async () =>
+      (await page.evaluate(() => document.body.dataset.hudShell)) === want.shell, { ms: 8000 });
+    const facts = await hudFacts(page);
+    assert.equal(facts.shell, want.shell, `${id}: body shell`);
+    assert.equal(facts.htmlShell, want.shell, `${id}: html shell`);
+    assert.equal(facts.density, want.density, `${id}: density`);
+    assert.equal(facts.htmlDensity, want.density, `${id}: html density`);
+    assert.equal(facts.tab, want.tab, `${id}: opening stage tab`);
+    assert.equal(facts.view, want.view, `${id}: opening view`);
+    await page.close();
+    assert.deepEqual(problems, [], `${id}: page errors`);
+  }
+});
+
+await check("H3: the imported two-column-right shell renders, and its left drawer reaches the rail", async () => {
+  const base = presetLayout("cockpit");
+  const entry = { id: "custom-audit-1", name: "Audit layout", base_preset: "cockpit",
+    shell_template: "two-column-right", density: "comfortable", default_stage_tab: "talk",
+    cards: base.cards };
+  const doc = normalizeLayout({ ...base, id: entry.id, name: entry.name,
+    shell_template: "two-column-right", user_presets: [entry] });
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, hudLayout: doc });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+  await K.until(page, "the imported shell to render", async () =>
+    (await page.evaluate(() => document.body.dataset.hudShell)) === "two-column-right", { ms: 8000 });
+  const before = await railBox(page, "rail-left");
+  assert.ok(before && before.x < -100, `two-column-right: left rail starts off-canvas (${JSON.stringify(before)})`);
+  await page.click("#left-toggle");
+  await K.until(page, "the left drawer to open", async () => {
+    const box = await railBox(page, "rail-left");
+    return box && box.x >= -1 && box.w > 200;
+  }, { ms: 5000 });
+  assert.equal(await page.locator("#left-close").isVisible(), true,
+    "two-column-right: the left drawer has no visible close");
+  await page.keyboard.press("Escape");
+  await K.until(page, "Escape to close the left drawer", async () => {
+    const box = await railBox(page, "rail-left");
+    return box && box.x < -100;
+  }, { ms: 3000 });
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H3: Edit HUD auto-reveals rails, so every protected control the page draws is visible in all six shells", async () => {
+  const base = presetLayout("cockpit");
+  const entry = { id: "custom-audit-1", name: "Audit layout", base_preset: "cockpit",
+    shell_template: "two-column-right", density: "comfortable", default_stage_tab: "talk",
+    cards: base.cards };
+  const twoColumnRight = normalizeLayout({ ...base, id: entry.id, name: entry.name,
+    shell_template: "two-column-right", user_presets: [entry] });
+  const shells = [
+    ["three-column", presetLayout("cockpit")],
+    ["split-stage", presetLayout("studio")],
+    ["center-core", presetLayout("ambient")],
+    ["two-column-left", presetLayout("quiet")],
+    ["single-stage-bento", presetLayout("minimal")],
+    ["two-column-right", twoColumnRight],
+  ];
+  const PROTECTED = ["approvals", "emergency_stop", "voice_controls", "bar_launcher"];
+  for (const [shell, doc] of shells) {
+    const { page, problems } = await openHud(browser,
+      { jarvis: true, ollama: true, proxy: false, pending: H3_PENDING, hudLayout: doc });
+    await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+    await K.until(page, `${shell}: shell to render`, async () =>
+      (await page.evaluate(() => document.body.dataset.hudShell)) === shell, { ms: 8000 });
+    await page.click("#hud-edit-toggle");
+    await page.waitForTimeout(350);
+    const state = await page.evaluate((ids) => {
+      const visible = (id) => {
+        const node = document.getElementById(id);
+        if (!node) return false;
+        const r = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return style.display !== "none" && style.visibility !== "hidden"
+          && r.width > 1 && r.height > 1 && !node.closest("[hidden]");
+      };
+      const left = document.querySelector(".rail.left");
+      const right = document.getElementById("rail-right");
+      const box = (node) => ({ editReveal: node.classList.contains("edit-reveal"),
+        display: getComputedStyle(node).display,
+        x: Math.round(node.getBoundingClientRect().x),
+        w: Math.round(node.getBoundingClientRect().width) });
+      return {
+        editing: document.body.getAttribute("data-hud-edit"),
+        approvals: visible("approvals"),
+        bar: visible("hud-open-bar"),
+        mic: visible("mic"),
+        // emergency_stop has no page DOM yet (a pre-existing H2 gap, reported
+        // in the PR); its protected truth is the layout document below.
+        dataProtected: ((window.__jarvisHudLayout && window.__jarvisHudLayout.cards) || [])
+          .filter((card) => ids.includes(card.id))
+          .map((card) => [card.id, card.visible]),
+        left: box(left),
+        right: box(right),
+      };
+    }, PROTECTED);
+    assert.equal(state.editing, "on", `${shell}: edit mode did not start`);
+    assert.equal(state.approvals, true, `${shell}: approvals hidden in edit mode`);
+    assert.equal(state.bar, true, `${shell}: the Jarvis-bar button hidden in edit mode`);
+    assert.equal(state.mic, true, `${shell}: the voice control hidden in edit mode`);
+    for (const id of PROTECTED) {
+      const found = state.dataProtected.find(([card]) => card === id);
+      assert.ok(found && found[1] === true, `${shell}: protected ${id} is not visible in the document`);
+    }
+    // The rails a shell hides are brought on screen by Edit HUD itself (no
+    // second click), so the protected card inside them is reachable.
+    if (shell === "split-stage") {
+      assert.notEqual(state.right.display, "none", "split-stage: right rail not revealed for editing");
+    }
+    if (["center-core", "two-column-right", "single-stage-bento"].includes(shell)) {
+      assert.equal(state.left.editReveal, true, `${shell}: left drawer not revealed for editing`);
+      assert.ok(state.left.w > 100 && state.left.x >= -1, `${shell}: left drawer is still off-canvas`);
+    }
+    if (["two-column-left", "center-core", "single-stage-bento"].includes(shell)) {
+      assert.equal(state.right.editReveal, true, `${shell}: right drawer not revealed for editing`);
+    }
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(250);
+    const restored = await page.evaluate(() => {
+      const box = (selector) => {
+        const node = document.querySelector(selector);
+        if (!node) return null;
+        const r = node.getBoundingClientRect();
+        return { editReveal: node.classList.contains("edit-reveal"),
+          display: getComputedStyle(node).display,
+          x: Math.round(r.x), w: Math.round(r.width) };
+      };
+      return { editing: document.body.getAttribute("data-hud-edit"),
+        shell: document.body.dataset.hudShell,
+        left: box(".rail.left"), right: box("#rail-right") };
+    });
+    assert.equal(restored.editing, "off", `${shell}: Escape did not leave edit mode`);
+    assert.equal(restored.shell, shell, `${shell}: leaving edit changed the shell`);
+    if (["center-core", "two-column-right", "single-stage-bento"].includes(shell)) {
+      assert.equal(restored.left.editReveal, false,
+        `${shell}: the left drawer stayed marked after leaving edit mode`);
+      assert.ok(restored.left.x < -100,
+        `${shell}: the left drawer stayed on screen after leaving edit mode (${JSON.stringify(restored.left)})`);
+    }
+    if (["two-column-left", "center-core", "single-stage-bento"].includes(shell)) {
+      assert.equal(restored.right.editReveal, false,
+        `${shell}: the right drawer stayed marked after leaving edit mode`);
+    }
+    if (shell === "split-stage") {
+      assert.equal(restored.right.display, "none",
+        "split-stage: the tab-revealed rail stayed forced on after leaving edit mode");
+    }
+    await page.close();
+    assert.deepEqual(problems, [], `${shell}: page errors`);
+  }
+});
+
+await check("H3: Ambient keeps the protected Jarvis-bar card reachable in edit mode", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, hudLayout: presetLayout("ambient") });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+  await K.until(page, "Ambient to render", async () =>
+    (await page.evaluate(() => document.body.dataset.hudShell)) === "center-core", { ms: 8000 });
+  const normal = await railBox(page, "rail-left");
+  assert.ok(normal && normal.x < -100, "Ambient: the left rail starts hidden");
+  assert.equal(await page.locator("#left-toggle").isVisible(), true,
+    "Ambient: no [Navigation] toggle is offered");
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => document.body.getAttribute("data-hud-edit")), "on",
+    "Ambient: edit mode did not start");
+  // H3-PM-2 (Gemini ruling): entering Edit HUD auto-reveals the slide-over
+  // rail, so the protected Jarvis-bar card is visible without another click.
+  await K.until(page, "the Ambient left rail to reveal itself for editing", async () => {
+    const box = await railBox(page, "rail-left");
+    return box && box.x >= -1 && box.w > 200;
+  }, { ms: 5000 });
+  assert.equal(await page.evaluate(() =>
+    document.querySelector(".rail.left").classList.contains("edit-reveal")), true,
+    "Ambient: edit mode did not auto-reveal the left rail");
+  const bar = await page.locator('[data-hud-card="bar_launcher"]');
+  assert.equal(await bar.isVisible(), true,
+    "Ambient edit mode: the protected Jarvis-bar card is not visible in the revealed Navigation rail");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H3: first paint takes the store's answer and corrects a conflicting preview mirror", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, hudLayout: presetLayout("quiet"),
+      preview: { shell_template: "single-stage-bento", density: "spacious", default_stage_tab: "telemetry" } });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+  await K.until(page, "the saved shell to win", async () =>
+    (await page.evaluate(() => document.body.dataset.hudShell)) === "two-column-left", { ms: 8000 });
+  const facts = await hudFacts(page);
+  assert.equal(facts.shell, "two-column-left", "a conflicting preview painted the wrong shell");
+  assert.equal(facts.density, "comfortable", "a conflicting preview painted the wrong density");
+  const mirror = await page.evaluate(() => JSON.parse(localStorage.getItem("jarvis.hud.preview")));
+  assert.deepEqual(mirror,
+    { shell_template: "two-column-left", density: "comfortable", default_stage_tab: "talk" },
+    "the first-paint mirror was not corrected to the store's answer");
+  await page.close();
+  assert.deepEqual(problems, []);
+
+  const garbage = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, hudLayout: presetLayout("cockpit"),
+      preview: { shell_template: "hexagon", density: "tiny", default_stage_tab: "rain" } });
+  await garbage.page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+  await K.until(garbage.page, "garbage preview to fall back", async () =>
+    (await garbage.page.evaluate(() => document.body.dataset.hudShell)) === "three-column", { ms: 8000 });
+  const fallback = await hudFacts(garbage.page);
+  assert.equal(fallback.density, "comfortable", "a garbage preview kept a garbage density");
+  assert.equal(fallback.tab, "", "a garbage preview kept a garbage opening tab");
+  await garbage.page.close();
+  assert.deepEqual(garbage.problems, []);
+});
+
+await check("H3: DPR 1.5 / 900-1280 widths keep the saved shell and a working drawer; reduced motion is respected", async () => {
+  for (const [width, height, dpr] of [[900, 600, 1.5], [1024, 768, 1], [1280, 820, 1]]) {
+    const { page, problems } = await openHud(browser,
+      { jarvis: false, ollama: true, proxy: false, hudLayout: presetLayout("quiet") },
+      { viewport: { width, height }, deviceScaleFactor: dpr });
+    await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+    await K.until(page, `${width}px: quiet shell`, async () =>
+      (await page.evaluate(() => document.body.dataset.hudShell)) === "two-column-left", { ms: 8000 });
+    const before = await railBox(page, "rail-right");
+    assert.ok(before && (before.x >= width - 5 || before.on === false),
+      `${width}px: the right rail started on screen (${JSON.stringify(before)})`);
+    await page.click("#rail-toggle");
+    await K.until(page, `${width}px: right drawer`, async () => {
+      const box = await railBox(page, "rail-right");
+      return box && box.x < width && box.w > 200;
+    }, { ms: 5000 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.waitForTimeout(100);
+    const underMotion = await page.evaluate(() => ({
+      shell: document.body.dataset.hudShell,
+      density: document.body.dataset.hudDensity,
+      transition: getComputedStyle(document.getElementById("rail-right")).transitionDuration,
+      reduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    }));
+    assert.equal(underMotion.shell, "two-column-left", `${width}px: reduced motion changed the shell`);
+    assert.equal(underMotion.density, "comfortable", `${width}px: reduced motion changed the density`);
+    assert.equal(underMotion.reduced, true, `${width}px: reduced-motion media did not apply`);
+    assert.ok(parseFloat(underMotion.transition) <= 0.12,
+      `${width}px: drawer transitions ignore reduced motion (${underMotion.transition})`);
+    await page.keyboard.press("Escape");
+    await page.close();
+    assert.deepEqual(problems, []);
+  }
+});
+
 
 await browser.close();
 if (fails.length) {

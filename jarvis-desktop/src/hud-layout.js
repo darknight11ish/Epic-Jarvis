@@ -50,9 +50,10 @@ export const REGIONS = Object.freeze([
 ]);
 
 /**
- * The shells a preset may choose between. H1 stores the value and keeps the
- * current three-way `data-hud-layout` look working; H2 draws the region grid
- * itself. The first three names are the existing layouts' own shells.
+ * The shells a preset may choose between. H3 renders the value directly:
+ * `data-hud-shell` on <html>/<body> and the six CSS/Flexbox variants on the
+ * page (the old `data-hud-layout` look and the three-pill picker are gone).
+ * The first three names are the layouts that predate H3.
  */
 export const SHELL_TEMPLATES = Object.freeze([
   "three-column",
