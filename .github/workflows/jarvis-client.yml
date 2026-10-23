@@ -392,7 +392,10 @@ jobs:
           name: jarvis-client-release-apk
           path: jarvis-client/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
-          retention-days: 30
+          # The published APK on client-latest is permanent; this run copy is
+          # debug fallback only, so keep a week (package-efficiency ruling,
+          # 2026-10-22).
+          retention-days: 7
 
   # The gap that let a crash in onCreate ship with a green tick on every
   # check: the job above compiles the APK and runs unit tests, and never once

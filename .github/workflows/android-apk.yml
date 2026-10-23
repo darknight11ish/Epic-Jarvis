@@ -177,7 +177,9 @@ jobs:
           name: jarvis-android-debug-apk
           path: artifacts/*.apk
           if-no-files-found: error
-          retention-days: 30
+          # The published APK is the permanent artifact; this run copy is debug
+          # fallback only, so keep a week (package-efficiency ruling, 2026-10-22).
+          retention-days: 7
 
       # This workflow no longer publishes a release, and the reason is not
       # tidiness. `android-latest` sat next to `client-latest` with a nearly

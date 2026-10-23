@@ -1882,52 +1882,87 @@
 })();
 
 /* ---------------------------------------------------------------------------
- * 7. The saved HUD layout (H1/H2; F1 of the 2026-10-22 coherence slice)
+ * 7. The saved HUD layout (H1/H2; H3 renders the preset, 2026-10-22)
  * ---------------------------------------------------------------------------
  * ONE truth: the HUD-layout document in the shell's appearance-class settings
  * store (`hud_layout.rs`, the same store the theme uses). Settings and the
- * in-window H2 editor write it; this bootstrap only READS it. The page's own
- * localStorage layout key is retired - the page no longer reads or writes it.
+ * in-window H2/H3 editor write it; this bootstrap only READS it. The page's own
+ * localStorage layout key is retired.
  *
- * What arrives here is a HUD layout (an arrangement of cards); the page still
- * paints one of its three view shapes (cockpit/studio/ambient) as the outer
- * shell, so the bootstrap hands the matching shape to the page as
- * `jarvis:hud-look`. The full document is left on `window.__jarvisHudLayout`
- * and announced as `jarvis:hud-layout` for the H2 editor. A page served on its
- * own in a plain browser (no `window.__TAURI__`) keeps Cockpit, unchanged.
+ * H3 (Q5): the preset's own `shell_template`, `density` and `default_stage_tab`
+ * are now rendered. This bootstrap puts them on <html>/<body> and announces
+ * them as `jarvis:hud-shell`; the page's own script opens the mapped view or
+ * tab. The four-into-three LOOKS alias map is gone. The full document is left
+ * on `window.__jarvisHudLayout` and announced as `jarvis:hud-layout` for the
+ * editor and the Layouts menu.
+ *
+ * FIRST PAINT: the async store read may finish after the first frame. The same
+ * facts are mirrored into localStorage under `jarvis.hud.preview` after every
+ * successful read (and by `hud-layout-store.js` after every save); the page's
+ * head reads that mirror once, only to paint the right shell before the store
+ * answers. It is a view mirror, never the truth.
  * ------------------------------------------------------------------------- */
 (function () {
   var tauri = window.__TAURI__;
   var invoke = tauri && tauri.core && tauri.core.invoke;
   if (typeof invoke !== "function") return;
 
-  /* The page still paints three view shapes; a HUD layout wears the nearest
-   * one. `focus` is the old H1 name kept as a silent alias for a saved document
-   * written before the 2026-10-22 rename to `quiet`. Keep this table in step
-   * with hud-layout-store.js LOOK_BY_PRESET. */
-  var LOOKS = {
-    cockpit: "cockpit",
-    studio: "studio",
-    ambient: "ambient",
-    quiet: "ambient",
-    focus: "ambient",
-    telemetry: "cockpit",
-    second_brain: "studio",
-    minimal: "ambient"
-  };
+  var PREVIEW_KEY = "jarvis.hud.preview";
+  var SHELLS = ["three-column", "split-stage", "center-core",
+    "two-column-left", "two-column-right", "single-stage-bento"];
+  var DENSITIES = ["comfortable", "compact", "spacious"];
+  var TABS = ["talk", "galaxy", "today", "reminders", "memory", "telemetry"];
+
+  function factsOf(layout) {
+    if (!layout || typeof layout !== "object") return null;
+    return {
+      shell_template: SHELLS.indexOf(layout.shell_template) >= 0
+        ? layout.shell_template : "three-column",
+      density: DENSITIES.indexOf(layout.density) >= 0
+        ? layout.density : "comfortable",
+      default_stage_tab: TABS.indexOf(layout.default_stage_tab) >= 0
+        ? layout.default_stage_tab : "talk",
+      base_preset: String(layout.base_preset || "cockpit"),
+      name: String(layout.name || "")
+    };
+  }
+
+  function applyFacts(facts) {
+    var root = document.documentElement;
+    if (root) {
+      root.setAttribute("data-hud-shell", facts.shell_template);
+      root.setAttribute("data-hud-density", facts.density);
+    }
+    if (document.body && document.body.dataset) {
+      document.body.dataset.hudShell = facts.shell_template;
+      document.body.dataset.hudDensity = facts.density;
+    }
+  }
+
+  function rememberPreview(facts) {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(PREVIEW_KEY, JSON.stringify({
+          shell_template: facts.shell_template,
+          density: facts.density,
+          default_stage_tab: facts.default_stage_tab
+        }));
+      }
+    } catch (e) {
+      /* Private mode / storage full: the store still answers in a moment. */
+    }
+  }
 
   function applyLayout(layout) {
-    if (!layout || typeof layout !== "object" || !layout.base_preset) return;
-    var look = LOOKS[layout.base_preset];
-    if (!look) return;
+    var facts = factsOf(layout);
+    if (!facts) return;
     window.__jarvisHudLayout = layout;
-    var root = document.documentElement;
-    if (root) root.setAttribute("data-hud-layout", look);
-    if (document.body) document.body.setAttribute("data-hud-layout", look);
+    applyFacts(facts);
+    rememberPreview(facts);
     try {
-      // F1: the page obeys this shape in its own applyLayout (state, history,
-      // reminders docking); the H2 editor obeys the full document.
-      window.dispatchEvent(new CustomEvent("jarvis:hud-look", { detail: look }));
+      // H3: the page opens the preset's own view/tab from this.
+      window.dispatchEvent(new CustomEvent("jarvis:hud-shell", { detail: facts }));
+      // H2/H3: the editor and the Layouts menu read the whole document.
       window.dispatchEvent(new CustomEvent("jarvis:hud-layout", { detail: layout }));
     } catch (e) {
       /* An old engine without CustomEvent: the attributes are still set. */
@@ -1948,7 +1983,7 @@
     invoke("get_hud_layout").then(function (answer) {
       if (answer && answer.layout) applyWhenReady(answer.layout);
     }).catch(function () {
-      /* No saved layout yet (or no shell store): the page keeps its own look. */
+      /* No saved layout yet (or no shell store): the page keeps its preview. */
     });
   } catch (e) {
     /* Never let a layout read break the page's own script. */

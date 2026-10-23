@@ -95,18 +95,43 @@ already calls - see "Animal options" at the end of this file:
     jarvis_quick.py names the change in X-Jarvis-Route (`face_tuning`) and
     the app that asked changes itself (jarvis_animal.step_device).
 
+UNIVERSAL CONTROLS (2026-10-22, the owner's requirement: "make sure i can
+turn off or adjust any function or feature or turn it on by typing it into
+jarvis on either the desktop or android phone"). The tables above grew with
+every switch and named choice whose control ALREADY existed but had no
+spoken name - each setter calls the same function its control/route calls, so
+its card, tier, stale-link and PC-only rules are unchanged:
+  * the switches: chat history, "Write like me", the big model and its wiki /
+    deep-question jobs, the second card's combined mode and its two
+    bigger-model suggestion switches (BOOL_SETTINGS at the end);
+  * the named choices (CHOICE_SETTINGS, "set <name> to <value>"): how long
+    chats are kept (0/30/90/365 days), the captcha hand-off (stop early or
+    keep offering), whether that window is brought to the front, voice speed,
+    the built-in voice the pack really offers, and the focus presets (its
+    apply still raises the one switch_model card it always did);
+  * the sandbox and media-index switches now name their real Settings cards,
+    so "is the sandbox on?" maps to the switch the page draws.
+
+Multi-field boards that need a FILE PICKER, several values at once, or a
+SECRET are still open-only, and each is named with its reason in
+`jarvis_feature_guide.NO_COMMAND_REASON` (never a silent omission). An
+ambiguous value is refused with the real options, never guessed.
+
 Left OUT of "adjust", on purpose, said plainly rather than guessed at:
-  * Voice (speed, built-in speaker, the better voice, voice follows the
-    face - that last one IS a single on/off, but it lives on the voice
-    screen with the rest and has not been offered as a spoken "adjust";
-    "open Jarvis's voice" reaches it; each animal's own voice, pitch and
-    pace, 2026-09-28, is a multi-field row, so open-only too),
-    hardware/models, the
-    second graphics card, the big model, backups, custom voices, and
-    Accounts (credentials) - each is either a multi-field control with no
-    single "on/off" a spoken sentence maps to safely, or (Accounts) a
-    secret the owner should never be asked to say aloud. All of these are
-    "open"-only: SECTIONS still jumps the app there.
+  * Accounts/API keys and the pairing token - a secret the owner should
+    never be asked to say aloud (rule 3), Settings-only by owner decision
+    (2026-10-22);
+  * Restore backup - replaces memory, chat history, settings and notes with
+    an older save; Settings-only by owner decision (2026-10-22) because a
+    beginner owner saying the wrong thing by voice should not be one
+    sentence away from it;
+  * multi-field panels whose control needs a file/folder picked on the PC or
+    several values at once (folders, spending layouts, backup folder, custom
+    voice enrolment, per-face voice choices, hardware/model lane assignment,
+    the appearance theme the desktop's own store owns): "open" reaches them,
+    and their NO_COMMAND_REASON row says why a typed value cannot reach the
+    same setter safely yet.
+All of these are still "open"-only: SECTIONS jumps the app there.
   * `restore_backup` - also PC_ONLY_ACTIONS and already wired
     (jarvis_backup.py), but deliberately not offered as a spoken "adjust":
     it replaces memory, chat history, settings and notes with an older
@@ -134,6 +159,17 @@ _LEAD_ARTICLE = re.compile(r"^(?:the|my|a|an)\s+")
 
 def _bare(words: str) -> str:
     return _LEAD_ARTICLE.sub("", " ".join(str(words or "").split()))
+
+
+def _choice_key(words: str) -> str:
+    """A spoken value's identity: letters and digits only, lower case.
+
+    Both a row's own labels/ids and the tail of a typed sentence go through
+    this, so "American (female) - Heart", "american female heart" and
+    "the American female Heart" are one choice. Punctuation is never part of
+    a value - a person says the words, not the hyphens."""
+    cleaned = " ".join(re.sub(r"[^a-z0-9]+", " ", str(words or "").lower()).split())
+    return _LEAD_ARTICLE.sub("", cleaned)
 
 # --------------------------------------------------------------------------
 #   "Open": every settings screen/section this file knows how to name -
@@ -906,6 +942,87 @@ def set_better_voice(on: bool, *, peer=None, local=None) -> Outcome:
         return _missing("the better voice")
     code, out = JV.set_better({"enabled": bool(on)})
     return _say(code, out)
+
+
+# --- the universal-control pass (2026-10-22) ------------------------------
+# The owner's requirement: every function or feature can be turned on or off
+# by typing at Jarvis on either app. These switches already had a real route
+# and a real control somewhere; what they lacked was a spoken name. Each
+# setter below calls the EXACT function the control/route already calls (or
+# its own route handler, when that is where the gating lives) - never a new
+# mutation path, and never a weaker tier than the control's own.
+
+def set_chat_history(on: bool, *, peer=None, local=None) -> Outcome:
+    """`jarvis_chat_log.request_settings`: OFF at once, ON is its own card."""
+    try:
+        import jarvis_chat_log as CL
+    except Exception:
+        return _missing("chat history")
+    code, out = CL.request_settings({"enabled": bool(on)})
+    return _say(code, out)
+
+
+def set_write_like_me(on: bool, *, peer=None, local=None) -> Outcome:
+    """`jarvis_voiceprint.handle_post` at its ENABLED_PATH: the one switch the
+    "Write like me" control writes. No card either way (it changes whether a
+    profile is used, not what may leave the PC)."""
+    try:
+        import jarvis_voiceprint as VP
+    except Exception:
+        return _missing("\"Write like me\"")
+    code, out = VP.handle_post(VP.ENABLED_PATH, {"enabled": bool(on)})
+    return _say(code, out)
+
+
+def _set_big_model_switch(switch: str, on: bool) -> Outcome:
+    try:
+        import jarvis_big_model as BM
+    except Exception:
+        return _missing("the big model")
+    code, out = BM.request_change(switch, bool(on))
+    return _say(code, out)
+
+
+def set_big_model(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_big_model_switch("master", on)
+
+
+def set_big_model_wiki(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_big_model_switch("wiki", on)
+
+
+def set_big_model_deep_questions(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_big_model_switch("deep_questions", on)
+
+
+def _set_second_card_feature(feature: str, on: bool) -> Outcome:
+    try:
+        import jarvis_second_card as SC
+    except Exception:
+        return _missing("the second graphics card")
+    code, out = SC.request_change(feature, bool(on))
+    return _say(code, out)
+
+
+def set_second_card_combined(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_second_card_feature("combined", on)
+
+
+def _set_second_card_suggestion(signal: str, on: bool) -> Outcome:
+    try:
+        import jarvis_second_card as SC
+    except Exception:
+        return _missing("the second graphics card")
+    code, out = SC.handle_suggest_post({"signal": signal, "enabled": bool(on)})
+    return _say(code, out)
+
+
+def set_second_card_suggest_struggle(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_second_card_suggestion("struggle", on)
+
+
+def set_second_card_suggest_correction(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_second_card_suggestion("correction", on)
 
 
 # --- "what asks first": loosening a named action, the PC only -------------
@@ -1733,28 +1850,26 @@ BOOL_SETTINGS: tuple = (
                "browser-engine", set_browser_engine),
     # "The data and maths sandbox" (LM-1, 2026-10-18). The ONE tool whose
     # switch is its own rather than a line in [tools].enabled: default OFF, and
-    # ON is one normal change_own_config card. It has NO desktop or phone row
-    # yet on purpose - a toggle that cannot be clicked is worse than none - so
-    # its `section` is None and it is one of the spoken-only settings the rows
-    # test lists by name. LM-1C adds the real rows and their two routes.
+    # ON is one normal change_own_config card. Its `section` is the Settings
+    # card that draws the switch (the owner approved a real control on
+    # 2026-10-22; the feature guide maps "is the sandbox on?" to it).
     BoolSetting("sandbox_exec",
                ("the data sandbox", "data sandbox", "the data and maths sandbox",
                 "the python sandbox", "the small python sandbox", "the sandbox",
                 "small python scripts", "the data and maths tool"),
-               None, set_sandbox_exec),
+               "sandbox", set_sandbox_exec),
     # "Searchable recordings and videos" (F5 S2, the owner's decision of
     # 2026-10-19: readable transcript text, ON by default). Its switch is the
     # shipped `[media_index] enabled = true`; the owner's own file wins, so OFF
     # is instant, and turning it back ON is one normal card (set_media_index,
-    # above). It has no generated settings-toggle row: the desktop's own
-    # Settings card (a hand-written panel, not a toggle row) draws the
-    # disclosure, the switch and the one Delete from its route; the phone has
-    # no card yet (ARCHITECTURE section 8 records that follow-up honestly).
+    # above). The desktop's Settings card is the hand-written panel in
+    # `media-index` (disclosure, switch and one Delete); the phone has no card
+    # yet (ARCHITECTURE section 8 records that follow-up honestly).
     BoolSetting("media_index",
                ("searchable recordings", "the recording index", "the media index",
                 "searchable media", "the recordings index", "searchable videos",
                 "recording and video search", "search my recordings"),
-               None, set_media_index),
+               "media-index", set_media_index),
     # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
     # JARVIS-API section 129). Its own switch, OFF by default: the second card
     # is shared with the everyday model, and CLAUDE.md's rule is that a feature
@@ -1822,6 +1937,42 @@ BOOL_SETTINGS: tuple = (
                 "custom voices on the second card",
                 "make custom voices on the second graphics card"),
                "voices", set_better_voice),
+    # --- the universal-control pass (2026-10-22): switches that had a real
+    # route/control but no spoken name. See the setters above; every section
+    # is the Settings card that already draws the control.
+    BoolSetting("chat_history",
+               ("chat history", "keeping chat history", "saving my chats",
+                "my conversation history", "keeping conversations"),
+               None, set_chat_history),
+    BoolSetting("write_like_me",
+               ("write like me", "the write like me switch", "my writing voice",
+                "the writing style profile", "voiceprint", "my voiceprint"),
+               None, set_write_like_me),
+    BoolSetting("big_model",
+               ("the big model", "the big slow model", "the big model on this pc"),
+               "big-model", set_big_model),
+    BoolSetting("big_model_wiki",
+               ("the big model for the wiki builder", "the wiki builder on the big model",
+                "the big model wiki builder"),
+               "big-model", set_big_model_wiki),
+    BoolSetting("big_model_deep_questions",
+               ("the big model for deep questions", "deep questions on the big model",
+                "the big model's deep questions"),
+               "big-model", set_big_model_deep_questions),
+    BoolSetting("second_card_combined",
+               ("one bigger model on both cards", "the bigger model on both cards",
+                "combining the two cards", "the combined model setting"),
+               "second-card", set_second_card_combined),
+    BoolSetting("second_card_suggest_struggle",
+               ("bigger model suggestions when i am struggling",
+                "suggesting a bigger model when i struggle",
+                "the struggle suggestion for a bigger model"),
+               "second-card", set_second_card_suggest_struggle),
+    BoolSetting("second_card_suggest_correction",
+               ("bigger model suggestions after a correction",
+                "suggesting a bigger model after i correct you",
+                "the correction suggestion for a bigger model"),
+               "second-card", set_second_card_suggest_correction),
 )
 
 _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
@@ -2056,6 +2207,491 @@ def set_card_mode(mode: str, *, peer=None, local=None) -> Outcome:
 
 
 # --------------------------------------------------------------------------
+#   Settings with MORE THAN TWO choices (2026-10-22, the owner's "every
+#   function or feature ... can be turned on, off or adjusted by typing").
+# --------------------------------------------------------------------------
+#
+# The same second-door rule as BOOL_SETTINGS: a phrase resolves to a table
+# row, and the row's setter calls the EXACT function the Settings control (or
+# its own route handler, when the gating lives there) already calls. A change
+# that loosens a rule still raises the card that control raises; a change the
+# PC-only rule refuses is still refused; nothing here invents a tier.
+#
+# VALUES ARE NAMED, NOT GUESSED. Each row maps the words a person says to the
+# value the existing function takes. An unrecognised value does NOT fall
+# through to the model: jarvis_quick answers settings_choice_bad and says the
+# options, so the owner is never told a change happened that did not. A row
+# whose choices are read from a module (the voices pack, the presets) asks
+# that module at match time, so a new voice or preset appears without editing
+# this file.
+
+def _choices_now(choices) -> dict:
+    """The spoken->value map for a row: its dict, or a callable's answer.
+
+    A module missing on an older PC gives {} - the name still resolves (so the
+    answer can say the setting is not there) but no value can be accepted."""
+    if callable(choices):
+        try:
+            got = choices()
+        except Exception:
+            return {}
+        return dict(got or {})
+    return dict(choices or {})
+
+
+@dataclass(frozen=True)
+class ChoiceSetting:
+    """One setting whose value is a name from a real list (2+ choices)."""
+
+    key: str
+    #: What a person may call the setting. Exact aliases only, like a switch.
+    names: tuple
+    #: The SECTIONS id whose card draws the control, or None (Brain/History).
+    where: Optional[str]
+    #: Spoken value -> the value the existing function takes. A dict, or a
+    #: callable returning one (read fresh, so new voices/presets appear).
+    choices: object
+    #: Calls the exact existing function; (value, *, peer, local) -> Outcome.
+    set: Callable[..., Outcome] = field(repr=False)
+    #: One line for "what can I change?" - never used to dispatch.
+    describe: str = ""
+
+    def options(self) -> dict:
+        """The spoken->value map, keys normalized the way speech arrives.
+
+        jarvis_quick lower-cases a sentence before this file sees it, and a
+        label or id may carry capital letters or a leading "the"; normalizing
+        both sides HERE is what keeps "set the built-in voice to Heart" and
+        the row's own "American (female) - Heart" the same choice."""
+        return {_choice_key(key): value
+                for key, value in _choices_now(self.choices).items()}
+
+    def option_words(self) -> str:
+        return ", ".join(sorted(set(self.options().keys())))
+
+
+def _voice_speed_choices() -> dict:
+    return {"slower": "slower", "slow": "slower",
+            "normal": "normal", "normal speed": "normal",
+            "faster": "faster", "fast": "faster"}
+
+
+def _voice_speaker_choices() -> dict:
+    """The voices pack's own list, by name and by label - never typed twice."""
+    try:
+        import jarvis_voices as JV
+        view = JV.speaker_view()
+    except Exception:
+        return {}
+    out = {}
+    for row in view.get("choices") or ():
+        if not isinstance(row, dict):
+            continue
+        pid = str(row.get("id") or "").strip()
+        if not pid:
+            continue
+        out[pid] = pid
+        label = str(row.get("label") or "").strip()
+        if label:
+            out[_bare(label)] = pid
+        accent = str(row.get("accent") or "").strip()
+        if accent:
+            out[_bare(f"{label} {accent}")] = pid
+    return out
+
+
+def _preset_choices() -> dict:
+    """The focus presets' own ids and titles, read from jarvis_presets."""
+    try:
+        import jarvis_presets as JP
+        rows = JP.PRESETS
+    except Exception:
+        return {}
+    out = {}
+    for preset in rows:
+        pid = str(getattr(preset, "id", "") or "").strip()
+        if not pid:
+            continue
+        out[pid] = pid
+        title = str(getattr(preset, "title", "") or "").strip()
+        if title:
+            out[_bare(title)] = pid
+            out[_bare(f"{title} preset")] = pid
+    return out
+
+
+def _set_handoff_mode(mode: str) -> Outcome:
+    try:
+        import jarvis_handoff_mode as HM
+    except Exception:
+        return _missing("the captcha hand-off setting")
+    code, out = HM.request(mode)
+    return _say(code, out)
+
+
+def set_handoff_mode(value: str, *, peer=None, local=None) -> Outcome:
+    return _set_handoff_mode(str(value))
+
+
+def _set_handoff_front(mode: str) -> Outcome:
+    try:
+        import jarvis_handoff_front as HF
+    except Exception:
+        return _missing("the captcha window setting")
+    code, out = HF.request(mode)
+    return _say(code, out)
+
+
+def set_handoff_front(value: str, *, peer=None, local=None) -> Outcome:
+    return _set_handoff_front(str(value))
+
+
+def set_voice_speed(value: str, *, peer=None, local=None) -> Outcome:
+    """The same `jarvis_voices.set_speed` POST /api/voice/voices/speed calls."""
+    try:
+        import jarvis_voices as JV
+    except Exception:
+        return _missing("the voice speed")
+    code, out = JV.set_speed({"speed": str(value)})
+    return _say(code, out)
+
+
+def set_voice_speaker(value: str, *, peer=None, local=None) -> Outcome:
+    """The same `jarvis_voices.set_speaker` the voices page's picker calls."""
+    try:
+        import jarvis_voices as JV
+    except Exception:
+        return _missing("the built-in voice")
+    code, out = JV.set_speaker({"speaker": str(value)})
+    return _say(code, out)
+
+
+def set_focus_preset(value: str, *, peer=None, local=None) -> Outcome:
+    """The same `jarvis_presets.apply_from_body` POST /api/work/apply calls -
+    including its ONE switch_model card and its rollback."""
+    try:
+        import jarvis_presets as JP
+    except Exception:
+        return _missing("the focus presets")
+    code, out = JP.apply_from_body({"preset": str(value)})
+    return _say(code, out)
+
+
+CHOICE_SETTINGS: tuple = (
+    ChoiceSetting(
+        "handoff_mode",
+        ("the captcha hand-off", "the handoff", "the hand-off",
+         "the hand-off when my phone does not answer", "handoff mode"),
+        "handoff", {"stop early": "stop_early", "stop_early": "stop_early",
+                    "quick": "stop_early",
+                    "keep offering": "keep_offering",
+                    "keep offering it": "keep_offering",
+                    "keep_offering": "keep_offering",
+                    "patient": "keep_offering",
+                    "15 minutes": "keep_offering",
+                    "fifteen minutes": "keep_offering"},
+        set_handoff_mode,
+        "how long the captcha hand-off stays on offer (stop early or 15 minutes)"),
+    ChoiceSetting(
+        "handoff_front",
+        ("the captcha window", "the hand-off window", "the handoff window",
+         "the captcha window in front"),
+        "handoff-front", {"leave it where it is": "leave_in_place",
+                          "leave it in place": "leave_in_place",
+                          "leave_in_place": "leave_in_place",
+                          "where it is": "leave_in_place",
+                          "bring it to the front": "bring_to_front",
+                          "bring to the front": "bring_to_front",
+                          "bring_to_front": "bring_to_front",
+                          "in front": "bring_to_front"},
+        set_handoff_front,
+        "whether a captcha brings its window to the front"),
+    ChoiceSetting(
+        "voice_speed",
+        ("the voice speed", "how fast jarvis speaks", "jarvis's speed",
+         "the speed of the voice"),
+        "voice", _voice_speed_choices, set_voice_speed,
+        "how fast Jarvis speaks (slower, normal, faster)"),
+    ChoiceSetting(
+        "voice_speaker",
+        ("the built-in voice", "which voice jarvis uses", "jarvis's built-in voice",
+         "the voice jarvis speaks with", "the voice"),
+        "voices", _voice_speaker_choices, set_voice_speaker,
+        "which built-in voice Jarvis speaks with"),
+    ChoiceSetting(
+        "focus_preset",
+        ("the focus preset", "jarvis's preset", "the model preset",
+         "which preset jarvis uses"),
+        "focus-presets", _preset_choices, set_focus_preset,
+        "which focus preset Jarvis runs (each apply raises its one card)"),
+)
+
+
+def find_choice_setting(words: str):
+    """The ChoiceSetting `words` names exactly, or None (never a guess)."""
+    bare = _bare(words)
+    for setting in CHOICE_SETTINGS:
+        if any(bare == _bare(name) for name in setting.names):
+            return setting
+    return None
+
+
+def choice_from_words(setting: ChoiceSetting, words: str):
+    """The value `words` names in this setting's own list, or None."""
+    return setting.options().get(_choice_key(words))
+
+
+# --------------------------------------------------------------------------
+#   The closed (control, field) vocabulary for the ONE generic grammar
+#   (Gemini ruling Q3, 2026-10-22): "set <control> <field> to <value>" /
+#   "change ...". A pair here maps to the SAME ChoiceSetting (and therefore the
+#   same existing setter, card, tier and PC-only gate) the Settings control
+#   calls. There is no second mutation path: the handler stores nothing but
+#   calls ChoiceSetting.set.
+#
+#   The grammar is CLOSED-WORLD: a control or field not in this table falls
+#   through exactly as before; a control that is named with a missing or
+#   ambiguous field, or a value not in its list, is answered deterministically
+#   (list the fields / the valid values / the current values) and is NEVER
+#   handed to the model.
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ControlField:
+    """One field of one multi-field control (a name for an existing choice)."""
+
+    field: str          # the word the owner says for the field
+    setting: ChoiceSetting
+    aliases: tuple = ()
+
+
+def _choice(key: str) -> ChoiceSetting:
+    for choice in CHOICE_SETTINGS:
+        if choice.key == key:
+            return choice
+    raise KeyError(key)
+
+
+#: control -> its field rows, in the order the clarifying question lists them.
+CONTROL_FIELDS: dict = {
+    "voice": (
+        ControlField("speed", _choice("voice_speed"),
+                     ("speed", "speaking speed", "how fast", "pace")),
+        ControlField("voice", _choice("voice_speaker"),
+                     ("voice", "speaker", "built in voice", "built-in voice",
+                      "which voice")),
+    ),
+    "captcha hand off": (
+        ControlField("mode", _choice("handoff_mode"),
+                     ("mode", "how long", "offer", "when")),
+        ControlField("window", _choice("handoff_front"),
+                     ("window", "front", "position")),
+    ),
+    "focus preset": (
+        ControlField("preset", _choice("focus_preset"), ("preset",)),
+    ),
+}
+
+#: The words a person may say for each control, longest first at match time.
+CONTROL_NAMES = {
+    "voice": ("the voice", "jarvis's voice", "jarvis voice", "voice"),
+    "captcha hand off": ("the captcha hand-off", "the captcha handoff",
+                         "the hand-off", "the handoff", "the captcha",
+                         "captcha hand-off", "captcha handoff", "hand-off", "handoff"),
+    "focus preset": ("the focus preset", "focus preset", "the model preset"),
+}
+
+
+def _norm_control(words: str) -> str:
+    cleaned = " ".join(re.sub(r"[^a-z0-9]+", " ", str(words or "").lower()).split())
+    return _LEAD_ARTICLE.sub("", cleaned)
+
+
+#: Built once, longest alias first, so "captcha hand-off" wins over "captcha".
+_CONTROL_ALIASES = sorted(
+    ((_norm_control(alias), control)
+     for control, aliases in CONTROL_NAMES.items() for alias in aliases),
+    key=lambda pair: len(pair[0]), reverse=True)
+
+
+def find_control(words: str):
+    """`(control, remainder)` when `words` starts with a real control name.
+
+    The alias must be a whole word prefix ("voice" in "voice speed ..." yes,
+    "voicemail ..." no), and the longest alias wins. None when no control is
+    named - the caller then falls through exactly as before."""
+    text = _norm_control(words)
+    for alias, control in _CONTROL_ALIASES:
+        if text == alias:
+            return control, ""
+        if text.startswith(alias + " "):
+            return control, text[len(alias):].strip()
+    return None
+
+
+def fields_for_control(control: str) -> tuple:
+    return CONTROL_FIELDS.get(control, ())
+
+
+def find_field(control: str, words: str):
+    """`(ControlField, remainder)` when `words` starts with one of its fields."""
+    text = _norm_control(words)
+    for row in fields_for_control(control):
+        names = sorted({_norm_control(row.field),
+                        *(_norm_control(a) for a in row.aliases)},
+                       key=len, reverse=True)
+        for name in names:
+            if not name:
+                continue
+            if text == name:
+                return row, ""
+            if text.startswith(name + " "):
+                return row, text[len(name):].strip()
+    return None
+
+
+def resolve_control_sentence(control_words: str, value_words: str = None) -> dict:
+    """Everything the generic handler needs to answer one sentence.
+
+    `control_words` is the part before "to" ("voice speed", "the captcha
+    hand-off", "voice"); `value_words` is the part after it, or None when the
+    owner only said "adjust the voice".
+
+    Returns one of:
+      {"kind": "set",  "control", "field", "key", "value", "setting"}
+      {"kind": "ask",  "control"}            - field/value missing or ambiguous
+      {"kind": "bad",  "control", "field"}    - a named field's value is invalid
+      {"kind": "invalid", "control", "value"} - value matches no field
+      {"kind": "none"}                       - no control in the closed table
+    Never guesses: two matching fields is "ask", zero is "invalid"."""
+    found = find_control(control_words)
+    if found is None:
+        return {"kind": "none"}
+    control, rest = found
+    row = None
+    if rest:
+        by_field = find_field(control, rest)
+        if by_field is not None:
+            row, leftover = by_field
+            if leftover and value_words is None:
+                # "voice speed faster" with no "to": treat the leftover as the
+                # value, exactly as the generic handler does with a "to" tail.
+                value_words = leftover
+    if value_words is None:
+        return {"kind": "ask", "control": control}
+    if row is not None:
+        value = choice_from_words(row.setting, value_words)
+        if value is None:
+            return {"kind": "bad", "control": control, "field": row.field}
+        return {"kind": "set", "control": control, "field": row.field,
+                "key": row.setting.key, "value": value, "setting": row.setting}
+    hits = []
+    for candidate in fields_for_control(control):
+        value = choice_from_words(candidate.setting, value_words)
+        if value is not None:
+            hits.append((candidate, value))
+    if len(hits) == 1:
+        candidate, value = hits[0]
+        return {"kind": "set", "control": control, "field": candidate.field,
+                "key": candidate.setting.key, "value": value,
+                "setting": candidate.setting}
+    if not hits:
+        return {"kind": "invalid", "control": control, "value": value_words}
+    return {"kind": "ask", "control": control}
+
+
+def control_current_words(setting: ChoiceSetting) -> str:
+    """The current value in plain words, or "I could not read it" - never a
+    guess. Used by the clarifying question the ruling asks for."""
+    key = setting.key
+    try:
+        if key == "handoff_mode":
+            import jarvis_handoff_mode as HM
+            mode = str((HM.view() or {}).get("mode") or "")
+            return {"stop_early": "stop early",
+                    "keep_offering": "keep offering it"}.get(mode, mode) or "unknown"
+        if key == "handoff_front":
+            import jarvis_handoff_front as HF
+            mode = str((HF.view() or {}).get("mode") or "")
+            return {"leave_in_place": "leave it where it is",
+                    "bring_to_front": "bring it to the front"}.get(mode, mode) or "unknown"
+        if key == "voice_speed":
+            import jarvis_voices as JV
+            return str((JV.speed_view() or {}).get("choice") or "normal")
+        if key == "voice_speaker":
+            import jarvis_voices as JV
+            view = JV.speaker_view() or {}
+            return str(view.get("label") or view.get("choice") or "unknown")
+        if key == "focus_preset":
+            import jarvis_presets as JP
+            chosen = JP.choice()
+            if not chosen:
+                return "no preset chosen"
+            row = JP.by_id(chosen)
+            return str(getattr(row, "title", "") or chosen)
+    except Exception:                       # noqa: BLE001 - said as unknown
+        return "unknown"
+    return "unknown"
+
+
+def control_ask_words(control: str) -> str:
+    """The deterministic clarifying question: valid fields + current values."""
+    parts = []
+    for row in fields_for_control(control):
+        parts.append(f"{row.field} (currently {control_current_words(row.setting)})")
+    listed = "; ".join(parts) if parts else "no fields"
+    name = control
+    return (f"Which part of {name} would you like to change? You can set: "
+            f"{listed}.")
+
+
+def control_bad_words(control: str, field: str) -> str:
+    row = next((r for r in fields_for_control(control) if r.field == field), None)
+    if row is None:
+        return f"I do not have a field called {field} for {control}."
+    options = sorted(row.setting.options().keys())
+    return (f"That is not one of the values for {control}'s {field}. "
+            f"Say one of: {', '.join(options)}.")
+
+
+def control_invalid_words(control: str, words: str) -> str:
+    rows = fields_for_control(control)
+    if not rows:
+        return f"I do not have fields for {control}."
+    fields = "; ".join(r.field for r in rows)
+    return (f"I did not recognise \"{words}\" as a value for {control}. "
+            f"Its fields are: {fields}.")
+
+
+#: The owner's two Settings-only exceptions (ruling Q3.3, 2026-10-22): typing
+#: a change to them is refused in plain words with the Settings pointer - never
+#: handed to the model, never a card.
+SETTINGS_ONLY = {
+    "accounts": ("That is Settings-only, by your decision: Accounts and API "
+                 "keys are never typed or spoken. Open Settings, Accounts on "
+                 "the PC."),
+    "restore": ("Restore backup is Settings-only, by your decision: it "
+                "replaces memory, chat history, settings and notes. Open "
+                "Settings, Backups on the PC."),
+}
+
+
+def settings_only_words(which: str) -> str:
+    return SETTINGS_ONLY.get(str(which or ""), SETTINGS_ONLY["accounts"])
+
+
+def choice_bad_words(setting: ChoiceSetting) -> str:
+    """The honest answer when the value is not one this setting has."""
+    options = setting.option_words()
+    if not options:
+        return (f"{setting.names[0] if setting.names else setting.key} has no "
+                "choices on this PC yet, so there is nothing to set it to.")
+    return (f"That is not one of the choices for "
+            f"{setting.names[0] if setting.names else setting.key}. "
+            f"Say one of: {options}.")
+
+
+# --------------------------------------------------------------------------
 #   "What can I change?" (the owner's decision, 2026-10-10)
 # --------------------------------------------------------------------------
 #
@@ -2216,6 +2852,7 @@ def capability_keys() -> list:
     other's version - but each can say what it can DO, and that is comparable.
     """
     keys = [f"switch:{b.key}" for b in BOOL_SETTINGS]
+    keys += [f"choice:{c.key}" for c in CHOICE_SETTINGS]
     keys += [f"asks_first:{k}" for k in _ASKS_FIRST_TARGETS]
     keys += [f"tool:{k}" for k in _TOOL_TARGETS]
     for what, _where, _count, module in _OTHER_REACHABLE:
@@ -2300,6 +2937,13 @@ def changeable_settings() -> dict:
     for what, where, count, module_name in _OTHER_REACHABLE:
         rows.append((what, where))
         total += _family_count(module_name, count) if count < 0 else count
+
+    # The named-choice settings (2026-10-22): each row is ONE setting with a
+    # list of values, so the count is one per row - never the number of choices.
+    for choice in CHOICE_SETTINGS:
+        rows.append((choice.describe or choice.key,
+                     SECTION_PLAIN.get(choice.where or "", "")))
+        total += 1
 
     return {"switches": rows, "count": total,
             "words": changeable_words(rows, total)}
@@ -2394,3 +3038,5 @@ def set_weather_source(source: str, *, peer=None, local=None) -> Outcome:
         return _missing("the sun, moon and weather")
     code, out = SK.handle_post({"weather": source}, here=_sky_here(peer, local))
     return _say(code, out)
+
+

@@ -58,7 +58,10 @@ a failure: it means "reclassify as ported", which is good news.
 A route marked `planned` is built on the backend and neither app calls it
 yet (the backend is written first, then each app builds against it). It is
 exempt from rule 4. The moment the desktop calls it, a warning says to
-reclassify it (`ported` once the phone calls it too, else `todo`).
+reclassify it (`ported` once the phone calls it too, else `todo`). A route in
+`RETIRED` was given up on purpose (an app surface was removed whole, F11): it
+stays `planned`, and having NO call site in either app is a warning that says
+so, never an error - unless an app starts calling it again.
 """
 import os
 import re
@@ -844,6 +847,27 @@ UNREACHABLE = {
 }
 
 
+#: Routes deliberately RETIRED from the product: an app surface was removed
+#: whole (or a feature was given up), while the backend route remains. They stay
+#: classified `planned` - the PC route is real, the apps simply do not have the
+#: feature any more - and they are allowed to have NO call site in either app.
+#: In the planned loop below a retired route with no call sites is a warning
+#: naming the retirement, NEVER an error: there is nothing left to classify or
+#: wire. If either app ever calls a retired route again, that is an ERROR -
+#: "remove it from RETIRED and reclassify it" - never a warning: the route is
+#: being wired up again, and the retirement is a lie at that point.
+#:
+#: Keep the UNREACHABLE entry above while the old builder still exists on the
+#: pre-removal tree; once that builder is gone (#727 / F11) this table is what
+#: keeps the post-removal tree green.
+RETIRED = {
+    "/api/work/recommend": (
+        "F11 (2026-10-22) removed the phone work-offer surface (the dead "
+        "JarvisRuntime.offerWorkSetup / WorkSetups.RECOMMEND_PATH path, which "
+        "nothing called); the PC route remains, and neither app calls it."),
+}
+
+
 def _nothing_calls_it(route: str) -> str:
     """The one sentence for a route whose declaration still holds: no app calls
     it. Shared by the two warning sites below that used to say either too much
@@ -1044,6 +1068,19 @@ def main():
             f"but the phone calls it ({', '.join(sorted(phone_at[r]))}).")
     for r in sorted(by("todo") & phone):
         warnings.append(f"{r} is 'todo' but the phone now calls it - reclassify it as 'ported'.")
+    for r in sorted(set(RETIRED) & desk):
+        problems.append(
+            f"{r} is RETIRED but the desktop calls it again. A retired route must "
+            f"be called by NEITHER app: remove {r} from RETIRED in "
+            "tools/check_parity.py and reclassify it (it is being wired up).")
+    # `phone` also holds routes whose ONLY phone appearance is the dead builder
+    # declared in UNREACHABLE (`nothing_calls_it`) - on the pre-removal tree that
+    # is the normal planned warning, not a re-wire. Only a real phone call counts.
+    for r in sorted((set(RETIRED) & phone) - nothing_calls_it):
+        problems.append(
+            f"{r} is RETIRED but the phone calls it again. A retired route must be "
+            f"called by NEITHER app: remove {r} from RETIRED in "
+            "tools/check_parity.py and reclassify it (it is being wired up).")
     for r in sorted(by("planned") & desk):
         warnings.append(f"{r} is 'planned' but the desktop now calls it - reclassify it as "
                         f"'ported' (if the phone calls it too) or 'todo'.")
@@ -1060,11 +1097,18 @@ def main():
             # The route is in no app at all: the phone's only reference to it is
             # a helper nothing calls.
             warnings.append(_nothing_calls_it(r))
+        elif r in RETIRED:
+            # The whole surface was retired (F11): the PC route remains and no
+            # app is meant to call it. A warning naming the retirement, never a
+            # failure - there is no app surface left to classify or wire.
+            warnings.append(f"{r} is 'planned' and RETIRED (no app calls it): "
+                            f"{RETIRED[r]}")
         else:
             problems.append(
                 f"{r} is classified 'planned' but nothing checks it: the desktop does "
                 "not call it, the phone does not call it, and it is not declared in "
-                "UNREACHABLE. Classify it for real, or record why it is unreachable.")
+                "UNREACHABLE or RETIRED. Classify it for real, or record why it is "
+                "unreachable.")
     for r in sorted(set(CLASSIFICATION) - desk - by("planned")):
         problems.append(
             f"{r} is classified here but the desktop no longer calls it. "

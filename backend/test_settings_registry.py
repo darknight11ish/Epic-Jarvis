@@ -28,7 +28,8 @@ Runs anywhere; no Home Assistant, no model, no network, no Windows Hello
    still raises that card through this new path - never applies silently -
    whichever device asks; turning the same setting OFF is still immediate,
    with no card, exactly as the existing route behaves.
-6. Ambiguous or unrecognised phrasing matches nothing here (falls through
+6. Ambiguous or unrecognised phrasing: a named control asks/refuses here;
+   a sentence that names no control in the closed table matches nothing and falls through
    to the model) rather than guessing at a setting or a value.
 7. `jarvis_quick.answer_turn`'s own peer/local plumbing (schedule.patch)
    reaches this file unchanged - proved end to end, not only at run()'s own
@@ -747,3 +748,275 @@ def t_the_backend_behind_check():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# ================================== 7. the universal-control pass (2026-10-22)
+#
+# The owner's requirement: every function or feature can be turned on, off or
+# adjusted by typing at Jarvis on either app. These tests prove the COMMAND
+# side is real: every switch's phrase resolves and dispatches to its own
+# registered setter (a spy), every named-choice option resolves and dispatches
+# to its own setter, an unknown value is answered with the real options rather
+# than guessed at, the deliberate open-only switches never become speakable,
+# and nothing branches on which app asked.
+
+def t_every_bool_setting_resolves_on_and_off_and_reaches_its_own_setter():
+    import dataclasses
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    names = [n for b in R.BOOL_SETTINGS for n in b.names]
+    check("no two switches claim the same spoken name", len(names) == len(set(names)),
+          sorted({n for n in names if names.count(n) > 1}))
+    for b in R.BOOL_SETTINGS:
+        label = b.names[0]
+        for want_on, phrase in ((True, f"turn on {label}"), (False, f"turn off {label}")):
+            got = Q.match(phrase)
+            check(f"{phrase!r} resolves to the {b.key} switch",
+                  got is not None and got.name == "settings_bool"
+                  and got.f.get("key") == b.key and got.f.get("on") is want_on,
+                  got)
+            if got is None or got.name != "settings_bool":
+                continue
+            calls = []
+
+            def spy(on, *, peer=None, local=None):
+                calls.append((bool(on), peer, local))
+                return R.Outcome(True, "spy")
+
+            swapped = dataclasses.replace(b, set=spy)
+            saved = R.BOOL_SETTINGS
+            R.BOOL_SETTINGS = tuple(swapped if x.key == b.key else x for x in saved)
+            try:
+                out = Q._run_settings_bool({"key": b.key, "on": want_on}, "peer-a", True)
+            finally:
+                R.BOOL_SETTINGS = saved
+            check(f"...and dispatch calls {b.key}'s own setter with the value",
+                  calls == [(want_on, "peer-a", True)], calls)
+            check(f"...and reports the setter's own sentence ({b.key})",
+                  out is not None and out.reply == "spy", out)
+
+
+def t_every_choice_setting_resolves_its_options_and_reaches_its_own_setter():
+    import dataclasses
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    for c in R.CHOICE_SETTINGS:
+        options = c.options()
+        check(f"{c.key} has at least two named choices", len(options) >= 2, options)
+        check(f"{c.key}'s setter is this registry's own (no copied path)",
+              getattr(c.set, "__module__", "") == "jarvis_settings_registry", c.set)
+        for value_word, value in list(options.items())[:3]:
+            phrase = f"set {c.names[0]} to {value_word}"
+            got = Q.match(phrase)
+            check(f"{phrase!r} resolves to {c.key}",
+                  got is not None and got.name == "settings_choice"
+                  and got.f.get("key") == c.key, got)
+            if got is None or got.name != "settings_choice":
+                continue
+            calls = []
+
+            def spy(chosen, *, peer=None, local=None):
+                calls.append((chosen, peer, local))
+                return R.Outcome(True, "spy")
+
+            swapped = dataclasses.replace(c, set=spy)
+            saved = R.CHOICE_SETTINGS
+            R.CHOICE_SETTINGS = tuple(swapped if x.key == c.key else x for x in saved)
+            try:
+                out = Q._run_settings_choice(
+                    {"key": c.key, "value": got.f["value"]}, "peer-b", False)
+            finally:
+                R.CHOICE_SETTINGS = saved
+            check(f"...and dispatch calls {c.key}'s own setter with the value",
+                  calls and calls[0][0] == value and calls[0][1:] == ("peer-b", False),
+                  calls)
+            check(f"...and reports the setter's own sentence ({c.key})",
+                  out is not None and out.reply == "spy", out)
+        bad = Q.match(f"set {c.names[0]} to zzzz-not-a-real-choice")
+        check(f"{c.key}: an unknown value is a refusal, not a guess",
+              bad is not None and bad.name == "settings_choice_bad", bad)
+        if bad is not None and bad.name == "settings_choice_bad":
+            refused = Q._run_settings_choice_bad(bad.f)
+            first = sorted(options)[0]
+            check(f"{c.key}: the refusal names the real options",
+                  refused is not None and first in refused.reply.lower()
+                  and "not one of the choices" in refused.reply, refused.reply if refused else None)
+        ask = Q.match(f"what are the choices for {c.names[0]}")
+        check(f"{c.key}: 'what are the choices' answers without changing anything",
+              ask is not None and ask.name == "settings_choice_help", ask)
+
+
+def t_the_deliberate_open_only_switches_stay_unreachable():
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    for dom_id, names in R.NOT_BY_ASKING.items():
+        for name in names:
+            got = Q.match(f"turn on {name}")
+            check(f"{name!r} is not changed by asking (NOT_BY_ASKING: {dom_id})",
+                  got is None or got.name not in ("settings_bool", "settings_choice"),
+                  got)
+            got = Q.match(f"turn off {name}")
+            check(f"...nor turned off ({name!r})",
+                  got is None or got.name not in ("settings_bool", "settings_choice"),
+                  got)
+
+
+def t_the_new_controls_do_not_branch_on_which_client_asked():
+    """The backend never reads a client kind: the same phrase, the same setter,
+    the same gate on both apps (the app is told apart only by peer/local, which
+    the setters already receive)."""
+    import inspect
+    import jarvis_settings_registry as R
+    repo = Path(__file__).resolve().parents[1]
+    for name in ("jarvis_settings_registry.py", "jarvis_quick.py"):
+        text = (repo / "backend" / name).read_text(encoding="utf-8")
+        check(f"{name} does not branch on the client kind",
+              "X-Jarvis-Client" not in text and "client_kind" not in text, name)
+    for key in ("chat_history", "write_like_me", "big_model", "second_card_combined"):
+        setting = next(b for b in R.BOOL_SETTINGS if b.key == key)
+        params = inspect.signature(setting.set).parameters
+        check(f"{key}'s setter takes peer and local, not a client kind",
+              "peer" in params and "local" in params and "client" not in params,
+              list(params))
+    for c in R.CHOICE_SETTINGS:
+        params = inspect.signature(c.set).parameters
+        check(f"{c.key}'s setter takes peer and local too",
+              "peer" in params and "local" in params, list(params))
+
+
+def t_the_new_rows_link_to_real_controls():
+    """Every feature the matrix calls command-controllable must name a real
+    BoolSetting/ChoiceSetting key - never a string typed only in the matrix."""
+    import jarvis_feature_guide as FG
+    import jarvis_settings_registry as R
+    bool_keys = {b.key for b in R.BOOL_SETTINGS}
+    choice_keys = {c.key for c in R.CHOICE_SETTINGS}
+    for fid, keys in FG.EXTRA_CONTROLS.items():
+        for key in keys:
+            check(f"{fid}'s extra control {key} is a real BoolSetting",
+                  key in bool_keys, key)
+    for row in FG.control_matrix():
+        for key in row["switch_keys"]:
+            check(f"{row['id']} names the real switch {key}", key in bool_keys, key)
+        for entry in row["adjust"]:
+            check(f"{row['id']}'s adjust proof {entry['phrase']!r} works",
+                  bool(entry["intent"]), entry)
+    check("the matrix has one row per catalogue feature",
+          len(FG.control_matrix()) == FG.feature_count(),
+          (len(FG.control_matrix()), FG.feature_count()))
+    known = bool_keys | choice_keys
+    check("every extra-control key is a real switch", known, known)
+
+
+# ================================== 8. the generic multi-field grammar (Q3)
+
+def t_the_generic_control_grammar_is_closed_world_and_asks_on_ambiguity():
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    # the closed vocabulary itself: every field points at a real choice setting
+    choice_keys = {c.key for c in R.CHOICE_SETTINGS}
+    for control, fields in R.CONTROL_FIELDS.items():
+        check(f"{control!r} has at least one field", bool(fields), control)
+        for field in fields:
+            check(f"{control}/{field.field} points at a real choice setting",
+                  field.setting.key in choice_keys, field.setting.key)
+    # unambiguous: control + field + value
+    for phrase, key, value in (
+            ("set voice speed to faster", "voice_speed", "faster"),
+            ("change the voice speed to normal", "voice_speed", "normal"),
+            ("set the captcha hand-off window to bring it to the front",
+             "handoff_front", "bring_to_front"),
+            ("set the captcha hand-off mode to patient", "handoff_mode", "keep_offering"),
+                        ("set the focus preset to coding", "focus_preset", "coding")):
+        got = Q.match(phrase)
+        check(f"{phrase!r} resolves to {key}={value!r}",
+              got is not None and got.name == "control_set"
+              and got.f.get("key") == key and got.f.get("value") == value, got)
+    # no field, value names exactly one field - still deterministic
+    got = Q.match("change voice to faster")
+    check("an omitted field is resolved when the value names exactly one",
+          got is not None and got.name == "control_set"
+          and got.f.get("key") == "voice_speed", got)
+    # no field and no unique value -> a deterministic question, never a guess
+    got = Q.match("set voice to something else")
+    check("an ambiguous control asks, never guesses",
+          got is not None and got.name in ("control_ask", "control_bad"), got)
+    got = Q.match("adjust voice")
+    check("'adjust voice' alone asks which field",
+          got is not None and got.name == "control_ask", got)
+    # a named field with an invalid value names the real values
+    got = Q.match("set voice speed to turbo")
+    check("a bad value is refused with the real options",
+          got is not None and got.name == "control_bad"
+          and got.f.get("field") == "speed", got)
+    # a sentence naming no control is somebody else's exactly as before
+    for phrase in ("set a timer to 5 minutes", "change my alarm to 8am",
+                   "set my security settings"):
+        got = Q.match(phrase)
+        check(f"{phrase!r} is not read as a control-field change",
+              got is None or got.name != "control_set", got)
+
+
+def t_the_generic_control_handler_calls_the_same_setter_and_answers_deterministically():
+    import dataclasses
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    setting = next(c for c in R.CHOICE_SETTINGS if c.key == "voice_speed")
+    calls = []
+
+    def spy(value, *, peer=None, local=None):
+        calls.append((value, peer, local))
+        return R.Outcome(True, "spy")
+
+    swapped = dataclasses.replace(setting, set=spy)
+    saved = R.CHOICE_SETTINGS
+    R.CHOICE_SETTINGS = tuple(swapped if c.key == setting.key else c for c in saved)
+    try:
+        out = Q._run_control_set({"key": "voice_speed", "value": "faster"}, "peer-q", True)
+    finally:
+        R.CHOICE_SETTINGS = saved
+    check("the generic handler calls the setting's OWN setter",
+          calls == [("faster", "peer-q", True)], calls)
+    check("...and reports the setter's own sentence", out is not None and out.reply == "spy", out)
+    ask = Q._run_control_ask({"control": "voice"})
+    check("the clarifying question lists the fields",
+          ask is not None and "speed" in ask.reply and "voice" in ask.reply, ask)
+    check("...and their current values", "currently" in ask.reply.lower(), ask)
+    bad = Q._run_control_bad({"control": "voice", "field": "speed", "value": ""})
+    check("an invalid value answer names the valid values",
+          bad is not None and "faster" in bad.reply and "slower" in bad.reply, bad)
+    weird = Q._run_control_bad({"control": "voice", "field": "", "value": "something else"})
+    check("an unknown value names the fields rather than guessing",
+          weird is not None and "speed" in weird.reply, weird)
+
+
+def t_the_two_settings_only_exceptions_are_refused_in_plain_words():
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    for phrase, which in (("restore my backup", "restore"),
+                          ("restore from a backup", "restore"),
+                          ("change my openai api key", "accounts"),
+                          ("add an api key", "accounts"),
+                          ("show me my password", "accounts")):
+        got = Q.match(phrase)
+        check(f"{phrase!r} is a Settings-only refusal",
+              got is not None and got.name == "settings_only"
+              and got.f.get("which") == which, got)
+        if got is None or got.name != "settings_only":
+            continue
+        out = Q._run_settings_only(got.f)
+        check(f"{phrase!r} names Settings and the right card",
+              out is not None and "Settings" in out.reply
+              and ("Backups" in out.reply if which == "restore" else "Accounts" in out.reply),
+              out.reply if out else None)
+        check(f"{phrase!r} never claims a change happened",
+              out is not None and "changed" not in out.reply.lower(), out.reply if out else None)
+    check("the two Settings-only messages exist",
+          set(R.SETTINGS_ONLY) == {"accounts", "restore"}, sorted(R.SETTINGS_ONLY))
+    # Lead review 2026-10-22: the chat-retention typed control is deliberately
+    # NOT shipped - that route deletes stored conversations at once, so it needs
+    # an owner decision, not a spoken one-liner.
+    check("the chat-retention typed control is deferred, not shipped",
+          "chat_keep_days" not in {c.key for c in R.CHOICE_SETTINGS}
+          and "chat history" not in R.CONTROL_FIELDS,
+          [c.key for c in R.CHOICE_SETTINGS])

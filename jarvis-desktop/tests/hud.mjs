@@ -125,7 +125,7 @@ async function openHud(browser, status, pageOptions = {}) {
   // does, with no __TAURI__ at all; `tauriInvoke: "fail"` makes the mic's
   // command refused.
   if (!status.noShell) {
-    await page.addInitScript(({ mode, backend, hangs, decideFails }) => {
+    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout }) => {
       // Captured before the bootstrap replaces window.fetch.
       const origFetch = window.fetch.bind(window);
       const shellHeaders = { "X-Jarvis-Client": "hud", "X-Jarvis-Token": "test-token" };
@@ -138,8 +138,8 @@ async function openHud(browser, status, pageOptions = {}) {
             // H1: the injected bootstrap reads the saved layout. With no
             // saved document it leaves the page's own look alone, which is
             // what these page tests assume. H2 tests may pass `status.hudLayout`.
-            return status.hudLayout
-              ? { layout: status.hudLayout, source: "saved" }
+            return hudLayout
+              ? { layout: hudLayout, source: "saved" }
               : { layout: null, source: "none" };
           case "set_hud_layout": {
             // H2: the HUD page's own Edit mode saves here. This init script
@@ -242,6 +242,7 @@ async function openHud(browser, status, pageOptions = {}) {
         }
       } } };
     }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs),
+      hudLayout: status.hudLayout || null,
          decideFails: status.decideFails || "" });
   }
   // A browser's voice list, with one online voice and one local one, and
@@ -384,20 +385,41 @@ async function openHud(browser, status, pageOptions = {}) {
 
 
 /**
- * F1 (2026-10-22): the page has no layout pills any more. A HUD layout change
- * reaches an open page through the shell bootstrap's own `jarvis:hud-look`
- * event (the bootstrap reads the settings store); these tests dispatch the
- * same event the bootstrap dispatches, so the page's real listener and its
- * own applyLayout are what switch the view shape. No test writes a layout.
+ * H3 (2026-10-22): the page has no look pills and no `data-hud-layout`; a preset
+ * change reaches an open page through the shell bootstrap's own
+ * `jarvis:hud-shell` event. These tests dispatch the same event the bootstrap
+ * dispatches, so the page's real listener and its own applyShell are what
+ * switch the shell. No test writes a layout.
+ *
+ * The first three shells keep the old three names in this suite's vocabulary
+ * (the owner-facing presets are Cockpit / Studio / Ambient); the three H3
+ * additions are addressed by their own shell names.
  */
+const LOOK_TO_SHELL = Object.freeze({
+  cockpit: "three-column",
+  studio: "split-stage",
+  ambient: "center-core",
+});
+const SHELL_TO_LOOK = Object.freeze({
+  "three-column": "cockpit",
+  "split-stage": "studio",
+  "center-core": "ambient",
+});
+
 async function setHudLook(page, look) {
-  await page.evaluate((name) => {
-    window.dispatchEvent(new CustomEvent("jarvis:hud-look", { detail: name }));
-  }, look);
-  await K.until(page, `the page to switch to ${look}`, async () =>
-    (await page.evaluate(() => document.body.dataset.hudLayout)) === look, { ms: 5000 });
-  const html = await page.evaluate(() => document.documentElement.getAttribute("data-hud-layout"));
-  assert.equal(html, look, `html[data-hud-layout] did not follow the look to ${look}`);
+  const shell = LOOK_TO_SHELL[look] || look;
+  const facts = {
+    shell_template: shell,
+    density: "comfortable",
+    default_stage_tab: look === "studio" ? "galaxy" : "talk",
+  };
+  await page.evaluate((detail) => {
+    window.dispatchEvent(new CustomEvent("jarvis:hud-shell", { detail }));
+  }, facts);
+  await K.until(page, `the page to switch to ${shell}`, async () =>
+    (await page.evaluate(() => document.body.dataset.hudShell)) === shell, { ms: 5000 });
+  const html = await page.evaluate(() => document.documentElement.getAttribute("data-hud-shell"));
+  assert.equal(html, shell, `html[data-hud-shell] did not follow the shell to ${shell}`);
 }
 
 /**
@@ -985,7 +1007,7 @@ for (const [width, height] of [[960, 640], [1280, 820]]) {
         vw: innerWidth, vh: innerHeight,
         scrollW: document.documentElement.scrollWidth,
         bodyW: document.body.scrollWidth,
-        layout: document.body.dataset.hudLayout,
+        layout: document.body.dataset.hudShell,
         badge: box("#hud-layout-badge"),
         editToggle: box("#hud-edit-toggle"),
         pills: document.querySelectorAll("[data-hud-layout-choice]").length,
@@ -1111,11 +1133,11 @@ await check("at 150% DPI (deviceScaleFactor 1.5) the header and the Layout badge
   assert.ok(m.edit && m.edit.visible && m.edit.inView,
     `[Edit HUD] is not inside a 1280-CSS viewport at DPR 1.5 (${JSON.stringify(m.edit)})`);
   assert.match(m.badgeText, /^Layout: /, `the badge does not name the layout: ${m.badgeText}`);
-  // L1/FT-1: the badge reveals the Focus presets card without entering Edit HUD.
+  // H3: the badge opens the Layouts menu without entering Edit HUD.
   await page.click("#hud-layout-badge");
   await page.waitForTimeout(200);
   assert.equal((await measure()).expanded, "true", "the layout badge did not reveal the presets");
-  await page.click("#hud-layout-badge");
+  await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
   assert.equal((await measure()).expanded, "false", "the layout badge did not hide the presets again");
   for (const layout of ["studio", "ambient", "cockpit"]) {
@@ -1161,8 +1183,8 @@ await check("at every CSS width a 150%-DPI window can produce, the Layout badge 
     assert.equal(await page.evaluate(() =>
       document.getElementById("hud-layout-badge").getAttribute("aria-expanded")), "true",
       `the badge did not reveal the presets at CSS ${w}x${h}`);
-    await page.click("#hud-layout-badge");
-    await page.waitForTimeout(150);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(120);
   }
   await page.close();
   assert.deepEqual(problems, []);
@@ -1226,8 +1248,6 @@ for (const [name, width, height, layout] of [
       browser, { jarvis: false, ollama: true, proxy: false }, { viewport: { width, height } });
     if (layout !== "cockpit") {
       await setHudLook(page, layout);
-      await K.until(page, `the page to switch to ${layout}`, async () =>
-        (await page.evaluate(() => document.body.dataset.hudLayout)) === layout, { ms: 5000 });
     }
     await page.waitForTimeout(450);
 
@@ -1294,21 +1314,19 @@ await check("Cockpit keeps the grid rail with no drawer toggle, and Studio's tab
     const rail = document.getElementById("rail-right");
     const r = rail.getBoundingClientRect();
     return {
-      layout: document.body.dataset.hudLayout,
+      layout: document.body.dataset.hudShell,
       toggleDisplay: getComputedStyle(toggle).display,
       closeDisplay: getComputedStyle(close).display,
       railVisible: getComputedStyle(rail).display !== "none" && r.width > 1 && r.x < innerWidth,
     };
   });
-  assert.equal(cockpit.layout, "cockpit", "the HUD no longer boots in Cockpit");
+  assert.equal(cockpit.layout, "three-column", "the HUD no longer boots in Cockpit");
   assert.equal(cockpit.toggleDisplay, "none",
     "the Telemetry drawer toggle is shown in the Cockpit layout");
   assert.equal(cockpit.closeDisplay, "none",
     "the drawer's Close button is shown in the Cockpit grid");
   assert.ok(cockpit.railVisible, "the Cockpit rail is not in the grid");
   await setHudLook(page, "studio");
-  await K.until(page, "the page to switch to studio", async () =>
-    (await page.evaluate(() => document.body.dataset.hudLayout)) === "studio", { ms: 5000 });
   await page.click('[data-hud-tab-choice="telemetry"]');
   await K.until(page, "Studio's Telemetry tab", async () =>
     (await page.evaluate(() => document.body.dataset.hudTab)) === "telemetry", { ms: 5000 });
@@ -2035,7 +2053,7 @@ for (const r of FIXTURE.route_headers) {
 
 /* ── The three HUD layouts (the owner's request of 2026-10-20) ───────────── *
  *  The work order's PART III+IV: one page, three UIs, switched by
- *  document.body.dataset.hudLayout and kept in localStorage under the key
+ *  document.body.dataset.hudShell and kept in localStorage under the key
  *  src/hud-window.js exports, so the Settings card and the page cannot read
  *  different keys. These checks drive the REAL page: the mode switch, the
  *  picker, the ids every layout must keep, and each layout's own behaviour.
@@ -2060,7 +2078,12 @@ const KEPT_IDS = [
   "rail-quickbar", "lane-compact", "appr-badge", "ambient-status", "studio-dock",
 ];
 
-const layoutOf = (page) => page.evaluate(() => document.body.dataset.hudLayout);
+const layoutOf = (page) => page.evaluate(() => {
+  const shell = document.body.dataset.hudShell;
+  const legacy = { "three-column": "cockpit", "split-stage": "studio",
+    "center-core": "ambient" };
+  return legacy[shell] || shell;
+});
 const badgeOf = (page) => page.evaluate(() => {
   const b = document.getElementById("hud-layout-badge");
   return b ? { text: b.textContent.trim(), expanded: b.getAttribute("aria-expanded"),
@@ -2071,15 +2094,17 @@ await check("F1: the HUD opens in Cockpit, and the read-only Layout badge says s
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   const state = await page.evaluate(() => ({
-    layout: document.body.dataset.hudLayout,
-    html: document.documentElement.getAttribute("data-hud-layout"),
+    layout: document.body.dataset.hudShell,
+    html: document.documentElement.getAttribute("data-hud-shell"),
+    density: document.body.dataset.hudDensity,
     pills: document.querySelectorAll("[data-hud-layout-choice]").length,
     stored: (() => { try { return localStorage.getItem("jarvis.hud.layout"); } catch (e) { return "unreadable"; } })(),
   }));
   const badge = await badgeOf(page);
   await page.close();
-  assert.equal(state.layout, "cockpit", "the default view shape is not Cockpit");
-  assert.equal(state.html, "cockpit", "html and body disagree about the default layout");
+  assert.equal(state.layout, "three-column", "the default shell is not Cockpit's");
+  assert.equal(state.html, "three-column", "html and body disagree about the default shell");
+  assert.equal(state.density, "comfortable", "the default density is not the shipped one");
   assert.equal(state.pills, 0, "the retired layout pills are still drawn");
   assert.equal(state.stored, null, "the page wrote the retired localStorage layout key");
   assert.ok(badge && badge.shown && badge.text === "Layout: Cockpit",
@@ -2101,7 +2126,7 @@ await check("the shell's saved view shape reaches the page, and every shape appl
   const badge = await badgeOf(page);
   // An unknown shape is not invented: normalLayout falls back to Cockpit.
   await page.evaluate(() => window.dispatchEvent(
-    new CustomEvent("jarvis:hud-look", { detail: "not-a-layout" })));
+    new CustomEvent("jarvis:hud-shell", { detail: { shell_template: "not-a-layout" } })));
   await page.waitForTimeout(150);
   const bogus = await layoutOf(page);
   await page.close();
@@ -2115,15 +2140,27 @@ await check("F1: the page cannot write a layout - no pill, no storage key, no di
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   const start = await layoutOf(page);
-  // Clicking the badge is a VIEW peek (L1), never a layout choice.
+  // Clicking the badge OPENS the Layouts menu (H3); it never changes or saves
+  // the layout by itself.
   await page.click("#hud-layout-badge");
   await page.waitForTimeout(200);
-  const afterPeek = await layoutOf(page);
+  const afterOpen = await page.evaluate(() => ({
+    shell: document.body.dataset.hudShell,
+    menu: Boolean(document.getElementById("hud-presets-menu")),
+    menuShown: (() => {
+      const menu = document.getElementById("hud-presets-menu");
+      return Boolean(menu && !menu.hidden);
+    })(),
+    expanded: (document.getElementById("hud-layout-badge") || {}).getAttribute
+      ? document.getElementById("hud-layout-badge").getAttribute("aria-expanded") : null,
+  }));
   const writes = await page.evaluate(() => (window.__hudLayoutWrites || []).slice());
   const stored = await page.evaluate(() => localStorage.getItem("jarvis.hud.layout"));
   await page.close();
   assert.equal(start, "cockpit");
-  assert.equal(afterPeek, "cockpit", "clicking the read-only badge changed the layout");
+  assert.equal(afterOpen.shell, "three-column", "opening the menu changed the shell");
+  assert.equal(afterOpen.menuShown, true, "the badge did not open the Layouts menu");
+  assert.equal(afterOpen.expanded, "true", "the badge did not say the menu is open");
   assert.deepEqual(writes, [], "the page wrote a layout document with no edit action");
   assert.equal(stored, null, "the page wrote the retired localStorage layout key");
   assert.deepEqual(problems, []);
@@ -2137,7 +2174,7 @@ await check("every view shape keeps every id, and the Layout badge is reachable 
     await setHudLook(page, name);
     await page.waitForTimeout(150);
     report.push(await page.evaluate((ids) => ({
-      layout: document.body.dataset.hudLayout,
+      layout: document.body.dataset.hudShell,
       missing: ids.filter((id) => !document.getElementById(id)),
       badgeShown: (() => {
         const b = document.getElementById("hud-layout-badge");
@@ -3400,6 +3437,69 @@ await check("H2: the editor works at the owner's 150% DPI and under reduced moti
   assert.ok(rmWrite, "a keyboard move under reduced motion was not saved");
   assert.equal(rmWrite.cards.find((card) => card.id === "budget").region, "stage_top");
   await rm.page.close();
+});
+
+
+/* =========================================================================
+ * H3 review H3-1/H3-6: the REAL Import dialog adds the pasted layout to My
+ * layouts instead of replacing the owner's saved library, and the DOM wiring
+ * (badge -> menu -> dialog -> save) works on the page.
+ * ========================================================================= */
+
+await check("H3: the Import dialog adds to My layouts and keeps the owner's existing layout", async () => {
+  const cockpit = presetLayout("cockpit");
+  const existing = normalizeLayout({
+    version: 1,
+    id: "custom-cockpit-1",
+    name: "My layout",
+    base_preset: "cockpit",
+    shell_template: "three-column",
+    density: "comfortable",
+    default_stage_tab: "talk",
+    cards: cockpit.cards,
+    user_presets: [{
+      id: "custom-cockpit-1", name: "My layout", base_preset: "cockpit",
+      shell_template: "three-column", density: "comfortable",
+      default_stage_tab: "talk", cards: cockpit.cards,
+    }],
+  });
+  const quiet = presetLayout("quiet");
+  const importText = JSON.stringify({
+    version: 1, kind: "jarvis.hud.layout", id: "quiet", name: "Quiet",
+    base_preset: "quiet", shell_template: "two-column-left",
+    density: "comfortable", default_stage_tab: "talk",
+    cards: quiet.cards, user_presets: [],
+  });
+  const { page, problems } = await openHud(browser, {
+    jarvis: false, ollama: true, proxy: false, hudLayout: existing,
+  });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+  await page.waitForTimeout(600);
+  await page.click("#hud-layout-badge");
+  await page.waitForSelector("#hud-presets-menu:not([hidden])", { timeout: 5000 });
+  await page.getByRole("menuitem", { name: /Export \/ Import/ }).click();
+  await page.waitForSelector("#hud-presets-import-json", { timeout: 5000 });
+  await page.fill("#hud-presets-import-json", importText);
+  await page.getByRole("button", { name: "Validate & import" }).click();
+  await K.until(page, "the imported layout to be saved", async () =>
+    (await page.evaluate(() => (window.__hudLayoutWrites || []).length)) > 0, { ms: 10000 });
+  const saved = await page.evaluate(() => window.__hudLayoutWrites.at(-1));
+  const dialogOpen = await page.evaluate(() => Boolean(document.querySelector("dialog[open]")));
+  const activeName = await page.evaluate(() => {
+    const badge = document.getElementById("hud-layout-badge");
+    return badge ? badge.textContent.trim() : "";
+  });
+  await page.close();
+  assert.ok(saved, "the Import dialog saved nothing");
+  const ids = saved.user_presets.map((entry) => entry.id);
+  assert.ok(ids.includes("custom-cockpit-1"),
+    `Import dropped the owner's existing layout: ${JSON.stringify(ids)}`);
+  assert.equal(saved.user_presets.length, 2,
+    `Import should add one layout: ${JSON.stringify(ids)}`);
+  assert.equal(saved.base_preset, "quiet", "the imported layout is not the active one");
+  assert.equal(dialogOpen, false, "the Import dialog stayed open after a successful import");
+  assert.match(activeName, /Layout: Quiet/, `the badge does not name the imported layout: ${activeName}`);
+  assert.deepEqual(problems, []);
 });
 
 await browser.close();
