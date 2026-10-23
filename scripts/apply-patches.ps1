@@ -1971,6 +1971,15 @@ $SHIPPED = @(
     # and lands flattened beside jarvis_hud.py, which serves it at
     # /hud-web-bridge.js. backend/test_hud_static.py fails if it drifts.
     'static/hud-web-bridge.js'
+    # PWA Slice 3b (2026-10-23): the manifest the page head links, the
+    # service worker the bridge registers in a secure context, and the
+    # home-screen icons the manifest names. All five are read beside
+    # jarvis_hud.py by the STATIC_ASSETS whitelist, like the files above.
+    'static/manifest.webmanifest'
+    'static/sw.js'
+    'static/jarvis-180.png'
+    'static/jarvis-192.png'
+    'static/jarvis-512.png'
     # --- The five the base carried but this list did not (2026-10-07) ---
     # All five were already in jarvis-backend/ and a SHIPPED module imports each,
     # but none was listed here and no patch delivered any of them - so a backend

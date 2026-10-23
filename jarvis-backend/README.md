@@ -58,14 +58,17 @@ plus these six files:
         hud-edit.js, hud-presets.js, private-speech.js,
         face-voice.js, face-moments.js, face-tuning.js,
         animal-shared.js, hud-layout.js, hud-layout-store.js,
-        hud-web-bridge.js (PWA Slice 2's browser bridge)
+        hud-web-bridge.js (PWA Slice 2's browser bridge),
+        manifest.webmanifest, sw.js and jarvis-180/192/512.png
+        (PWA Slice 3b's home-screen files)
 and one file this repository DERIVES rather than copies:
     _where.py                backend/_where.py, plus a trailer that says what it is
 ```
 
-The 22 static files above are the closed-world whitelist
-`jarvis_hud.py`'s `STATIC_ASSETS` serves at `GET /theme.css`, `/fonts/*` and
-`/<module>.js`: without them the page loads in a browser and every file it
+The 27 static files above are the closed-world whitelist
+`jarvis_hud.py`'s `STATIC_ASSETS` serves at `GET /theme.css`, `/fonts/*`,
+`/<module>.js`, `/manifest.webmanifest`, `/sw.js` and `/icons/*`: without
+them the page loads in a browser and every file it
 then asks for is a 404, so the HUD arrives half-dressed with no theme, no
 fonts and every shell module off. This repository keeps them in
 `backend/static/`; the page's real copies are in `jarvis-desktop/src/`, and

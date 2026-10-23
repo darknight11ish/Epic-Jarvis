@@ -7,9 +7,10 @@
  *   1. manifest.webmanifest parses, names Jarvis, standalone, starts/scopes at
  *      "/", and its two colours are the HUD's own deep-space surface tokens
  *      (read from tokens/themes.tokens.json, not typed in here);
- *   2. the three icons exist as real PNGs with the declared sizes, the
- *      maskable one keeps the mark inside Android's 80% safe zone, the regular
- *      one's mark is larger, and every icon sits on the token background;
+ *   2. the three icons exist as real PNGs with the declared sizes (180, 192 and
+ *      the 512 tile the manifest lists as "any maskable"), the maskable 512
+ *      keeps the mark inside Android's 80% safe zone, and every icon sits on
+ *      the token background;
  *   3. every manifest icon is a local path and the manifest names no remote
  *      origin;
  *   4. sw.js: no backend route, no per-person state handling, GET only,
@@ -19,8 +20,9 @@
  *      exactly the four files are cached, a backend GET and POST and a
  *      remote-origin fetch are NOT cached and still reach the network, and a
  *      same-origin page keeps falling through;
- *   6. the three HUD page copies are still untouched by this slice (no manifest
- *      link, no theme-color meta, no registration call: those hooks are later).
+ *   6. the page hook is wired: all three HUD copies link the manifest and carry
+ *      the theme-colour meta, and the external bridge registers the worker only
+ *      under window.isSecureContext (so the inline-script count stays 4).
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -106,9 +108,9 @@ function startRemote() {
 }
 
 const EXPECTED_CACHE_PATHS = [
-  "/icons/pwa-192.png",
-  "/icons/pwa-512.png",
-  "/icons/pwa-maskable-512.png",
+  "/icons/jarvis-180.png",
+  "/icons/jarvis-192.png",
+  "/icons/jarvis-512.png",
   "/manifest.webmanifest",
 ];
 
@@ -117,8 +119,7 @@ const tokens = JSON.parse(fs.readFileSync(TOKENS, "utf8"));
 const deepSpace = tokens.themes["deep-space"];
 const swSource = fs.readFileSync(SW, "utf8");
 
-const iconOf = (size, purpose) => manifest.icons.find(
-  (icon) => icon.sizes === `${size}x${size}` && (icon.purpose || "any") === purpose);
+const iconOf = (file) => manifest.icons.find((icon) => icon.src === `icons/${file}`);
 
 /* ── 1. Manifest fields and colours ─────────────────────────────────── */
 await check("manifest: Jarvis, standalone, / start + scope, id and orientation", () => {
@@ -139,13 +140,13 @@ await check("manifest: theme/background colours are the HUD's own deep-space tok
     `theme_color ${manifest.theme_color} is not deep-space swatchReactorGround ${deepSpace.swatchReactorGround.$value}`);
 });
 
-await check("manifest: exactly three local icons (192, 512, maskable 512), none remote", () => {
+await check("manifest: exactly three local icons (180, 192 and a maskable 512), none remote", () => {
   assert.ok(Array.isArray(manifest.icons), "no icons array");
   const described = manifest.icons.map((icon) => `${icon.sizes} ${icon.purpose || "any"} ${icon.type}`);
   assert.deepEqual(described, [
+    "180x180 any image/png",
     "192x192 any image/png",
-    "512x512 any image/png",
-    "512x512 maskable image/png",
+    "512x512 any maskable image/png",
   ]);
   for (const icon of manifest.icons) {
     assert.ok(!/^[a-z]+:\/\//i.test(icon.src), `remote icon address: ${icon.src}`);
@@ -206,22 +207,18 @@ await check("icons: token background, ice mark, and the maskable mark inside the
       return { w, h, corners, ink, bbox: [minX, minY, maxX, maxY] };
     }, url);
 
-    const regular = await readIcon("/" + iconOf(512, "any").src);
-    const maskable = await readIcon("/" + iconOf(512, "maskable").src);
-    const small = await readIcon("/" + iconOf(192, "any").src);
-    for (const [name, icon] of [["192", small], ["512", regular], ["maskable 512", maskable]]) {
+    const small = await readIcon("/" + iconOf("jarvis-180.png").src);
+    const medium = await readIcon("/" + iconOf("jarvis-192.png").src);
+    const tile = await readIcon("/" + iconOf("jarvis-512.png").src);
+    for (const [name, icon] of [["jarvis-180", small], ["jarvis-192", medium], ["jarvis-512", tile]]) {
       assert.deepEqual(icon.corners, ["#04070c", "#04070c", "#04070c", "#04070c"],
         `${name} icon does not sit on the token background`);
       assert.ok(icon.ink > 50, `${name} icon has no mark`);
     }
     const safe = { min: 512 * 0.10, max: 512 * 0.90 };
-    assert.ok(maskable.bbox[0] >= safe.min && maskable.bbox[1] >= safe.min
-      && maskable.bbox[2] <= safe.max && maskable.bbox[3] <= safe.max,
-    `the maskable mark leaves the 80% safe zone: ${JSON.stringify(maskable.bbox)}`);
-    const regularWidth = regular.bbox[2] - regular.bbox[0];
-    const maskableWidth = maskable.bbox[2] - maskable.bbox[0];
-    assert.ok(regularWidth > maskableWidth,
-      `the maskable mark (${maskableWidth}px) is not smaller than the regular one (${regularWidth}px)`);
+    assert.ok(tile.bbox[0] >= safe.min && tile.bbox[1] >= safe.min
+      && tile.bbox[2] <= safe.max && tile.bbox[3] <= safe.max,
+    `the maskable 512 mark leaves the 80% safe zone: ${JSON.stringify(tile.bbox)}`);
   } finally {
     await page.close();
     await browser.close();
@@ -367,14 +364,22 @@ await check("browser over loopback (secure context): caches the four files, noth
   }
 });
 
-/* ── 5. This slice does not touch the HUD page ─────────────────────── */
-await check("the three HUD page copies are untouched: hooks are a later slice", () => {
+/* ── 5. The page hook is wired, and the worker stays secure-context-only ── */
+await check("the page hook is wired: manifest + theme-colour meta in every HUD copy, worker only in a secure context", () => {
+  const bridge = fs.readFileSync(path.join(SRC, "hud-web-bridge.js"), "utf8");
+  assert.match(bridge, /if \(window\.isSecureContext && "serviceWorker" in navigator\)/,
+    "the bridge does not gate service-worker registration on isSecureContext");
+  assert.match(bridge, /navigator\.serviceWorker\.register\("\/sw\.js", \{ scope: "\/" \}\)/,
+    "the bridge does not register /sw.js at scope /");
   for (const file of TWINS) {
     const html = fs.readFileSync(file, "utf8");
     const name = path.basename(path.dirname(file)) + "/" + path.basename(file);
-    assert.ok(!/rel=["']?manifest/i.test(html), `${name} already links a manifest`);
-    assert.ok(!/name=["']theme-color/i.test(html), `${name} already has a theme-color meta`);
-    assert.ok(!/serviceWorker\.register/i.test(html), `${name} already registers a worker`);
+    assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest">/,
+      `${name} does not link the manifest`);
+    assert.match(html, /<meta name="theme-color" content="#0a1119">/,
+      `${name} has no theme-colour meta`);
+    const inline = (html.match(/<script(?![^>]*\bsrc\s*=)[^>]*>/g) || []).length;
+    assert.equal(inline, 4, `${name} inline-script count changed to ${inline}`);
   }
 });
 

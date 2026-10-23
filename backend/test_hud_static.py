@@ -19,13 +19,11 @@ WHAT THIS SUITE PROVES, against the real published base HUD and the real page:
      whitelist key; and every non-planned key is reachable from the page. A
      page file that is not whitelisted fails here - the point of "closed
      world" - and a whitelist entry nothing loads fails too.
-  2. **The PWA files that are not written yet are listed ahead of time**
-     (`manifest.webmanifest`, `sw.js`, the home-screen icons). Their request is
-     an honest 404 until the file lands beside the server: no crash, no guessed
-     file, and no stub file is created here. (The browser bridge was planned
-     this way in Slice 3a and is a served file now - PWA Slice 2 put it beside
-     the server - so the same deployment-honesty rule below checks it like any
-     other file the page loads.)
+  2. **Every PWA file is served today.** Slice 3a listed the ones the slices
+     had not written yet; Slice 2 put the bridge beside the server and Slice
+     3b put the manifest, the service worker and the home-screen icons there.
+     Nothing is left planned, and the deployment-honesty rule below checks
+     every served file the same way.
   3. **Exact MIME types, and no way around the dict.** The real
      `_serve_static` is lifted out of the base HUD with `ast` and run
      in-process against a temporary folder: a whitelisted file answers 200
@@ -51,6 +49,7 @@ is run in-process against a temporary folder.
 from __future__ import annotations
 
 import ast
+import json
 import posixpath
 import re
 import sys
@@ -79,15 +78,11 @@ CONTENT_TYPES = {
     ".png": "image/png",
 }
 
-#: Files the PWA slices after this one will write. Whitelisted now so the day
-#: they appear beside the server they are served; a request today is a 404.
-PLANNED = {
-    "/manifest.webmanifest": ".webmanifest",
-    "/sw.js": ".js",
-    "/icons/jarvis-180.png": ".png",
-    "/icons/jarvis-192.png": ".png",
-    "/icons/jarvis-512.png": ".png",
-}
+#: Nothing is planned any more: PWA Slice 3b delivered the last entries (the
+#: manifest, the service worker and the home-screen icons), so every
+#: whitelist key is a file this repository serves today. Kept as an empty
+#: dict because the checks below are written in terms of it.
+PLANNED = {}
 
 FAILED, PASSED = [], []
 
@@ -224,7 +219,8 @@ def expected_asset_refs(assets: dict) -> set:
     Start at the page's own references, then follow each served stylesheet's
     `url()` values and each served module's local imports until nothing new
     appears. That set is what a browser pulls in; the whitelist must equal it
-    (plus the planned entries, which nothing loads yet)."""
+    (the manifest's icons and the registered service worker included, though
+    neither is an <img>/<script> in the page itself)."""
     wanted = page_refs()
     seen = set()
     while True:
@@ -242,6 +238,23 @@ def expected_asset_refs(assets: dict) -> set:
         if new <= wanted:
             break
         wanted |= new
+    # PWA Slice 3b: the manifest names the home-screen icons, and the bridge
+    # registers the service worker; neither is an <img>/<script> in the page,
+    # so both are read from the files the page does load.
+    manifest_file = STATIC / "manifest.webmanifest"
+    if manifest_file.is_file():
+        try:
+            data = json.loads(manifest_file.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            data = {}
+        for icon in data.get("icons", ()):
+            src = icon.get("src", "") if isinstance(icon, dict) else ""
+            if src and not src.startswith(("/", "http:", "https:")):
+                wanted.add("/" + src)
+    bridge_file = STATIC / "hud-web-bridge.js"
+    if bridge_file.is_file() and 'serviceWorker.register("/sw.js"' in \
+            bridge_file.read_text(encoding="utf-8", errors="replace"):
+        wanted.add("/sw.js")
     return wanted
 
 
@@ -267,19 +280,19 @@ def t_the_whitelist_covers_everything_the_page_loads():
           not extra, "whitelisted but nothing loads it: " + ", ".join(extra))
     check("the page's asset references were actually read (not an empty set)",
           len(wanted) >= 20, f"{len(wanted)} reference(s): {sorted(wanted)[:6]}")
-    check("every planned PWA entry is whitelisted ahead of its slice",
-          set(PLANNED) <= set(assets), str(sorted(set(PLANNED) - set(assets))))
-    check("... and the entries still planned are the manifest, the service "
-          "worker and the home-screen icons",
-          set(PLANNED) == {"/manifest.webmanifest", "/sw.js",
-                           "/icons/jarvis-180.png", "/icons/jarvis-192.png",
-                           "/icons/jarvis-512.png"},
-          str(sorted(PLANNED)))
-    check("... and the browser bridge is no longer planned: the page loads it "
-          "and this server serves it (PWA Slice 2's delivery fix)",
-          "/hud-web-bridge.js" not in PLANNED
-          and "/hud-web-bridge.js" in assets
-          and (STATIC / "hud-web-bridge.js").is_file())
+    check("nothing is planned any more: every PWA file the page, the "
+          "manifest or the worker asks for is served today",
+          not PLANNED, str(sorted(PLANNED)))
+    check("... and the last planned files are real: the bridge, the manifest, "
+          "the service worker and the home-screen icons",
+          all(key in assets for key in ("/hud-web-bridge.js",
+                                        "/manifest.webmanifest", "/sw.js",
+                                        "/icons/jarvis-180.png",
+                                        "/icons/jarvis-192.png",
+                                        "/icons/jarvis-512.png"))
+          and (STATIC / "hud-web-bridge.js").is_file()
+          and (STATIC / "manifest.webmanifest").is_file()
+          and (STATIC / "sw.js").is_file())
 
 
 def t_every_content_type_is_exact_and_every_file_is_flat():
@@ -432,8 +445,12 @@ def t_the_files_reach_the_owner_pc():
         if not ours.is_file():
             missing_src.append(filename)
             continue
-        source = (DESKTOP / "fonts" / filename) if url.startswith("/fonts/") \
-            else (DESKTOP / filename)
+        if url.startswith("/fonts/"):
+            source = DESKTOP / "fonts" / filename
+        elif url.startswith("/icons/"):
+            source = DESKTOP / "icons" / filename
+        else:
+            source = DESKTOP / filename
         if not source.is_file() or ours.read_bytes() != source.read_bytes():
             drifted.append(filename)
         if f"static/{filename}" not in shipped or f"static/{filename}" not in where:

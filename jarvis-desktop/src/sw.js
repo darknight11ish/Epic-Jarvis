@@ -37,9 +37,9 @@ const CACHE_NAME = "jarvis-pwa-shell-v1";
  * frozen presentation file: no page, no script, no style, no data. */
 const SHELL_FILES = Object.freeze([
   "/manifest.webmanifest",
-  "/icons/pwa-192.png",
-  "/icons/pwa-512.png",
-  "/icons/pwa-maskable-512.png",
+  "/icons/jarvis-180.png",
+  "/icons/jarvis-192.png",
+  "/icons/jarvis-512.png",
 ]);
 const SHELL_PATHS = new Set(SHELL_FILES);
 

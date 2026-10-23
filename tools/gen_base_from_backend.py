@@ -37,6 +37,12 @@ re-taken", and nothing else:
                                  byte (`BESIDE_BINARY`) - decoding one as text
                                  raises, and a line-ending rewrite would
                                  corrupt it.
+        manifest.webmanifest, sw.js and the three home-screen icons
+                                 from backend/static/ too (PWA Slice 3b,
+                                 2026-10-23): the manifest the page links,
+                                 the worker the bridge registers, and the
+                                 icons the manifest names. The icons are
+                                 BYTES, like the fonts.
 
 Everything is written with LF line endings, which is this repository's rule
 (`.gitattributes`), and read with UTF-8. `jarvis-backend/README.md` and
@@ -183,9 +189,17 @@ BESIDE = (
     # 404s (the F1 cross-slice blocker the independent review found).
     ("hud-web-bridge.js", "{repo}/backend/static/hud-web-bridge.js",
      "the browser bridge the page loads at /hud-web-bridge.js (PWA Slice 2)"),
+    # PWA Slice 3b (2026-10-23): the home-screen manifest the page head
+    # links, and the service worker the bridge registers in a secure
+    # context. Both are text files served beside the server.
+    ("manifest.webmanifest", "{repo}/backend/static/manifest.webmanifest",
+     "the home-screen manifest the page links at /manifest.webmanifest"),
+    ("sw.js", "{repo}/backend/static/sw.js",
+     "the privacy-safe service worker the bridge registers at /sw.js"),
 )
 
-#: The beside-files that are BYTES, not text: the seven woff2 faces
+#: The beside-files that are BYTES, not text: the seven woff2 faces and the
+#: three PWA home-screen icons.
 #: `fonts.css` declares. Same shape as `BESIDE` - (name in the base, where it
 #: comes from, why) - but copied byte for byte: decoding a woff2 as UTF-8
 #: raises, and a newline-style rewrite would corrupt it. They are still part of
@@ -206,6 +220,14 @@ BESIDE_BINARY = (
      "a self-hosted face; served at /fonts/ibm-plex-mono-500.woff2"),
     ("ibm-plex-sans-400.woff2", "{repo}/backend/static/ibm-plex-sans-400.woff2",
      "a self-hosted face; served at /fonts/ibm-plex-sans-400.woff2"),
+    # PWA Slice 3b (2026-10-23): the home-screen icons the manifest names are
+    # BYTES like the fonts, copied the same way.
+    ("jarvis-180.png", "{repo}/backend/static/jarvis-180.png",
+     "the home-screen icon served at /icons/jarvis-180.png"),
+    ("jarvis-192.png", "{repo}/backend/static/jarvis-192.png",
+     "the home-screen icon served at /icons/jarvis-192.png"),
+    ("jarvis-512.png", "{repo}/backend/static/jarvis-512.png",
+     "the maskable home-screen icon served at /icons/jarvis-512.png"),
 )
 
 #: Files the base folder carries that are NOT part of the copy: the folder's

@@ -991,6 +991,16 @@
     note: note,
   };
 
+  /* PWA slice 3b (2026-10-23): the shell worker. Registration is the third
+   * line of the page hook; this external file hosts it so the page's
+   * inline-script count stays 4. Only a secure context may register a worker,
+   * so over the private mesh on plain http this does nothing - and nothing on
+   * screen claims otherwise. The worker caches only the manifest and icons,
+   * never a backend route. */
+  if (window.isSecureContext && "serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {});
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot, { once: true });
   } else {
