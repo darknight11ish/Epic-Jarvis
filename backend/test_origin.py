@@ -55,6 +55,12 @@ class FakeHandler:
         self.path = path
 
 
+#: A device on the owner's Tailscale/Meshnet, and a public address that is
+#: not: the two peers the mesh-Origin rule (Bite 1) turns on.
+MESH_PEER = ("100.96.1.25", 50000)
+PUBLIC_PEER = ("203.0.113.5", 50000)
+
+
 def t_origin_ok_is_the_decision_the_hud_makes():
     served = {"http://127.0.0.1:4719", "http://localhost:4719",
               "http://100.64.12.3:4719"}
@@ -126,6 +132,96 @@ def t_token_ok_is_the_decision_the_hud_makes():
           OC.token_ok(Broken(), token, lambda _h: "", lambda _h: "") is False)
 
 
+def t_bite1_mesh_origins_are_accepted_from_the_owners_network():
+    """Bite 1 of the PWA blueprint (2026-10-23): a browser on the owner's
+    iPad or second PC opens Jarvis by its Meshnet / Tailscale name, so the
+    Origin it sends is a name `_served_origins()` never lists - that set is
+    built from the bind address and the port, not from a DNS name. It must be
+    accepted - but only from a peer on this PC or the private mesh, only over
+    http(s), only on a port this server serves, and never for a third-party
+    page. A public address must get nothing new from any of it."""
+    served = {"http://127.0.0.1:4719"}       # the configuration: no `.nord`
+    accepted = ("http://mariorelan11-alps.nord:4719",
+                "https://mariorelan11-alps.nord:4719",
+                "http://my-pc.tailnet.ts.net:4719",
+                "https://my-pc.tailnet.ts.net:4719",
+                "http://100.96.1.25:4719",
+                "http://sub.mariorelan11-alps.nord:4719",
+                "http://mariorelan11-alps.nord",          # no explicit :4719
+                "http://localhost:4719",
+                "http://[::1]:4719")
+    for origin in accepted:
+        check(f"Bite 1: a mesh Origin is accepted from a mesh peer: {origin}",
+              OC.origin_ok(FakeHandler(headers={"Origin": origin},
+                                       client_address=MESH_PEER), served) is True)
+    for origin in accepted:
+        check(f"Bite 1: ... and from this PC (a loopback peer): {origin}",
+              OC.origin_ok(FakeHandler(headers={"Origin": origin},
+                                       client_address=("127.0.0.1", 5000)),
+                           served) is True)
+    refused = ("https://evil.com",
+               "http://mariorelan11-alps.nord:9999",       # not a served port
+               "http://mariorelan11-alps.nord.evil.com:4719",   # lookalike suffix
+               "http://notnord:4719",                      # no mesh suffix
+               "ftp://mariorelan11-alps.nord:4719",        # not a page scheme
+               "http://foo@mariorelan11-alps.nord:4719",   # userinfo in an Origin
+               "null")
+    for origin in refused:
+        check(f"Bite 1: ... and refused from a mesh peer: {origin}",
+              OC.origin_ok(FakeHandler(headers={"Origin": origin},
+                                       client_address=MESH_PEER), served) is False)
+    for origin in accepted:
+        check(f"Bite 1: a PUBLIC peer gains nothing from this rule: {origin}",
+              OC.origin_ok(FakeHandler(headers={"Origin": origin},
+                                       client_address=PUBLIC_PEER), served) is False)
+    for peer in (("", 1), ("not an address", 1)):
+        check(f"Bite 1: a peer that cannot be placed fails closed ({peer[0]!r})",
+              OC.origin_ok(FakeHandler(headers={
+                  "Origin": "http://mariorelan11-alps.nord:4719"},
+                  client_address=peer), served) is False)
+    # The two rules that did NOT change with this slice.
+    check("Bite 1: a configured Origin is still accepted, whatever the peer",
+          OC.origin_ok(FakeHandler(headers={"Origin": "http://127.0.0.1:4719"},
+                                   client_address=PUBLIC_PEER), served) is True)
+    check("Bite 1: a third-party Origin is still refused from this PC",
+          OC.origin_ok(FakeHandler(headers={"Origin": "http://evil.example"}),
+                       served) is False)
+
+
+def t_bite2_the_event_stream_from_a_browser_on_the_mesh():
+    """Bite 2's other half: a browser's EventSource cannot set a header, and
+    a same-origin subscription is sent with NO Origin. The no-Origin fallback
+    used to demand X-Jarvis-Client: hud, and the HUD's own
+    `_same_origin_stream` exemption only believed a loopback peer - so a
+    browser on the iPad or a second PC was refused 403 on /api/events and the
+    HUD stayed "stale", which holds Approve for ever. The stream itself, from
+    this PC or the mesh, asking for text/event-stream, is accepted; every
+    other route keeps the real Origin check."""
+    def stream(peer=MESH_PEER, path="/api/events", accept="text/event-stream"):
+        headers = {"Accept": accept} if accept is not None else {}
+        return OC.origin_ok(FakeHandler(headers=headers, client_address=peer,
+                                        path=path), set())
+
+    for peer in (MESH_PEER, ("127.0.0.1", 5000)):
+        check(f"Bite 2: a no-Origin /api/events from {peer[0]} is accepted",
+              stream(peer=peer) is True)
+    check("Bite 2: ... with ?since= on the path", stream(path="/api/events?since=12") is True)
+    check("Bite 2: ... but never from a public peer", stream(peer=PUBLIC_PEER) is False)
+    check("Bite 2: ... not for another route", stream(path="/api/status") is False)
+    check("Bite 2: ... and not without the event-stream Accept header",
+          stream(accept=None) is False)
+    check("Bite 2: an outside Origin is still refused on the stream",
+          OC.origin_ok(FakeHandler(headers={
+              "Origin": "https://evil.example",
+              "Accept": "text/event-stream"}, client_address=MESH_PEER,
+              path="/api/events"), set()) is False)
+    check("Bite 2: a peer that cannot be placed fails closed on the stream",
+          stream(peer=("", 1)) is False)
+    check("Bite 2: the HUD's own X-Jarvis-Client: hud fallback still works",
+          OC.origin_ok(FakeHandler(headers={"X-Jarvis-Client": "hud"},
+                                   client_address=MESH_PEER), set()) is True)
+
+
 def t_the_hud_patch_wires_it_to_this_module():
     check("the delegation patch ships", PATCH.is_file(), PATCH)
     text = PATCH.read_text(encoding="utf-8") if PATCH.is_file() else ""
@@ -150,6 +246,8 @@ def t_the_hud_patch_wires_it_to_this_module():
 if __name__ == "__main__":
     for fn in (t_origin_ok_is_the_decision_the_hud_makes,
                t_token_ok_is_the_decision_the_hud_makes,
+               t_bite1_mesh_origins_are_accepted_from_the_owners_network,
+               t_bite2_the_event_stream_from_a_browser_on_the_mesh,
                t_the_hud_patch_wires_it_to_this_module):
         print(f"\n--- {fn.__name__} ---")
         try:

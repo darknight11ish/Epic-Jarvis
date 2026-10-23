@@ -1576,7 +1576,7 @@ path ever appears in it (`routes.rs:67-101`).
 | Endpoint | Method | Desktop | Android | Notes |
 |---|---|---|---|---|
 | `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true` (both apps read `why` for one thing: `"the focus session"` means a focus session put Jarvis on Quiet, so the animal shows its focus buddy, not a sleeping face - the desktop derives `power_set_by = "focus"` from it, the phone reads it on the handshake and on every `power` event; docs/CRITTERS.md); `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§28). `started` (2026-09-25) is when the server process started, in epoch seconds (§29). The desktop falls back to `/api/status` for anything an older server leaves out. |
-| `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. **`ollama`** (a boolean, documented here 2026-10-14) is `_reachable(OLLAMA_URL + "/api/tags")` in `jarvis_hud.py:3206` - whether the PC's OWN model server is answering, at the address the chat itself uses. The owner's everyday lane runs on `http://127.0.0.1:11436` (`OLLAMA_URL` in his environment), not the default 11434, so only the PC can answer this. **Both apps draw a standing line from it, before and without a question** (the desktop windows from `check_server_health`, whose Ollama row IS this field; the phone from `StatusInfo.ollama`, on Home's status line), and **only a plain `false` draws it**: `true` is the model answering, and an absent field is a PC that did not say, which is not "down". The incident it answers: both of the owner's lanes were dead from about 16:30 to about 21:5x on 2026-10-14, this field said `false` the whole time, and neither app drew it - Jarvis admitted it only when he asked a question, with `model_not_running`. It is a different state from "Jarvis isn't connected" (the PC unreachable): here the PC is answering perfectly and only answers are missing. Nothing acts on it - no app starts or restarts a lane. |
+| `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. **`ollama`** (a boolean, documented here 2026-10-14) is `_reachable(OLLAMA_URL + "/api/tags")` in `jarvis_hud.py:3206` - whether the PC's OWN model server is answering, at the address the chat itself uses. The owner's everyday lane runs on `http://127.0.0.1:11436` (`OLLAMA_URL` in his environment), not the default 11434, so only the PC can answer this. **Both apps draw a standing line from it, before and without a question** (the desktop windows from `check_server_health`, whose Ollama row IS this field; the phone from `StatusInfo.ollama`, on Home's status line), and **only a plain `false` draws it**: `true` is the model answering, and an absent field is a PC that did not say, which is not "down". The incident it answers: both of the owner's lanes were dead from about 16:30 to about 21:5x on 2026-10-14, this field said `false` the whole time, and neither app drew it - Jarvis admitted it only when he asked a question, with `model_not_running`. It is a different state from "Jarvis isn't connected" (the PC unreachable): here the PC is answering perfectly and only answers are missing. Nothing acts on it - no app starts or restarts a lane. **`taint_latched` / `rush_latched`** (A4, 2026-10-23): read-only booleans (`true`, `false`, or `null` for "the PC has not said" - never "not latched"). They read the two persistent session latches the gate already keeps on this PC: the taint latch (`jarvis_gate.taint_active()`, a SQLite row, which fails CLOSED - `true` when its store cannot be read) and the rush latch (`jarvis_content_risk.rush_active()`, a small JSON state file). Persisting is the point: a screen can stay honest across a backend restart. Reading them adds, clears, approves and decides nothing - no new route, permission, card or grant; `/api/status` is already on the HUD's fixed allowlist (`hud_proxy.rs` `HUD_GET_PATHS`), and the HUD's fixed `#hud-safety` strip is the consumer its own slice wires. A missing module answers `null`; a latch that is armed answers `true`; clearing a latch is a PC-only code path with no route and no screen control. |
 | `/api/graph` | GET | **no longer** (the HUD page only, through `hud_proxy.rs`) | **no — by rule** | The memory graph stays off the phone. **Taken off the Brain's allowlist on 2026-09-28** (§71.3, privacy finding B1): its fact dots were not hidden by "Windows Hello for memory lists". Galaxy is drawn from `/api/memory/entities` instead. The HUD's copy loses its fact, document and person dots while the lists are hidden (`lock/rules.rs` `redact_graph`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. A failed read falls back to the phone's own last successful one, cached on disk and clearly marked as old - see the note below the table. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
@@ -5821,6 +5821,23 @@ The list read carries **one additive top-level `"phase2": true`** capability
 marker, so a newer UI talking to an older backend hides the edit/move/reorder
 controls instead of drawing ones it cannot honour. The marker is a boolean
 only and old clients ignore it; the `?id=` one-job read keeps its old shape.
+
+**Desktop UI (2026-10-22):** the HUD's Reminders panel and the Brain's
+Coming up draw ONE `Edit` control per editable row (and `Move up`/`Move down`
+on a to-do in its own list) **only when that marker is true**; an older
+backend draws exactly the Phase 1 panel. Edit opens an inline row editor:
+a timer's words + minutes (`seconds`), a one-off alarm/reminder's words +
+date/time (cardless), a repeating alarm/reminder's words + repeat rule (the
+ONE `schedule_repeat` 202 card, with the asking sentence shown before the
+answer and the old rule still shown), and a to-do's words + list (a
+list-only save is the `move` verb; a list riding with words is one `edit`).
+The desktop command is the existing `hud_schedule_act`/`brain_schedule_act`
+with an optional typed `change` - no new command, permission or capability -
+and a repeat edit's wait gets 1,200 s while every other schedule call keeps
+20 s. The phone's Coming up stays read-only for now; the verbs are ready for
+it. Honest limits: no edit history/undo in v1, no drag (buttons only), no
+new-list creation from the UI, and module-managed kinds are still changed
+where they were set up.
 
 Storage: a `rank INTEGER` column added through the same idempotent ALTER path
 as every later column, plus a one-time per-list backfill of the OPEN to-dos
@@ -16307,6 +16324,8 @@ all, which reads as "no label" - never as a broken registry.
 | `POST /api/devices/label` | `{"id": "d3f9a1c2e", "label": "Garden phone"}` and nothing else | The owner's own name for a device he already paired (docs/MULTI-DEVICE-DESIGN.md, 2026-10-09): **200** `{"ok": true, "id", "label", "name", "shown", "was_this_device"}`, immediate, **no card** from either app - a label grants nothing and revokes nothing, so it is never held on a stale link either. An empty `label` clears it, and `shown` goes back to the name the phone sent at pairing. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_labelable"}` for `"pc"`, `{"reason": "bad_label"}` when the label is over 40 characters or holds anything but letters and digits of any script, space and `- _ . ' ( )`, `{"reason": "bad_request"}` for anything else. Audit line `devices.labelled` with the id and whether it was cleared - **never the label**; a `devices` event. It can raise, answer and approve no card at all: `pair_device` stays PC only with Windows Hello. |
 | `POST /api/devices/shared` | `{"retired": true}` | **200** `{"ok": true, "retired": true, "retired_at"}`, immediate, no card, from either app. **409** `{"reason": "uses_it_yourself"}` when this very request used the shared key from another device - it would cut itself off. |
 | `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, **409** `{"first_pair_only": true}` while a device holds a key of its own (removing every device first is the way back), else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
+| `POST /api/devices/web-session` | No body. The key is presented as usual - `X-Jarvis-Token`, the `jarvis_token` cookie or `?token=` - and may be a device key or the old shared key | The browser session (2026-10-23, the PWA slice): **200** `{"ok": true, "device_id", "device_name", "kind", "from_this_pc"}` (`device_id` is a device id, `"pc"` or `"shared"`) and `Set-Cookie: jarvis_token=<key>; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000` (`; Secure` when the request arrived over https). This is the SAME cookie the HUD itself plants from `GET /?token=`, so the gate already reads it: a browser's `EventSource('/api/events')` - which cannot set a header - authenticates with it, and so does every other call. **403** `{"reason": "off_network"}` from a peer that is neither this PC nor on Tailscale/Meshnet; **503** while the device list cannot be read. The cookie PRESENTS the key - the registry keeps only its SHA-256 and every request re-checks it - so Remove cuts the session off at once. The key itself is in no body, audit line or error. |
+| `POST /api/devices/web-logout` | No body | **200** `{"ok": true}` and `Set-Cookie: jarvis_token=; Path=/; Max-Age=0; ...`, clearing the browser session cookie. Takes no key on purpose (clearing your own cookie must work after a device was removed); it revokes nothing - `POST /api/devices/remove` is the route that cuts a device off. |
 
 A 401 for a device key the PC removed (or never had) carries `"key":
 "device_removed"`; for the old shared key from another device after Retire,
@@ -16314,6 +16333,40 @@ A 401 for a device key the PC removed (or never had) carries `"key":
 device holds a key of its own (2026-10-05), `"key":
 "shared_first_pair_only"`. Both apps say the design's sentences (in the
 shared cases file); without `key`, today's words.
+
+**A browser needs a cookie, not a header** (2026-10-23, the PWA slice). A
+browser's `EventSource('/api/events')` cannot set `X-Jarvis-Token`, and
+putting the key in the query string leaves it in history and Referer, so
+`POST /api/devices/web-session` exchanges the key (sent as a normal header)
+for the HttpOnly `jarvis_token` cookie and the browser sends that by itself
+from then on. The same cookie is what the HUD's own `GET /?token=` bootstrap
+plants, and a device key is presented in the same three ways the HUD's
+shared token always has been: the header, that cookie, and the one-time
+`?token=` query (the last works even before a cookie exists, for the cold
+start the HUD page already uses). None of them is a second credential: each
+request re-checks the key's SHA-256 against the live registry, so Remove is
+immediate, and the key never appears in a response body, an audit line or an
+error.
+
+**Minting a browser's key on the PC** (2026-10-23). A phone pairs by scanning
+the PC's QR code and proving it holds the session secret; a browser cannot
+run that exchange. So the owner creates the browser's key at the PC:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_devices.py --add-device "iPad Safari" --kind tablet
+```
+
+It prints a new `jdk1...` key **once** and stores only its SHA-256; paste it
+into the web app's pairing sheet, which calls `POST /api/devices/web-session`
+and keeps the cookie. There is deliberately no route for this: a remote way
+to create credentials is exactly what the `pair_device` card gates, while
+this command runs only at a terminal on the PC, where the owner already
+controls Jarvis. `--kind` is display only (`phone`, `laptop` or `tablet`).
+**The shared-key cliff:** the moment any device holds its own key, the old
+shared HUD_TOKEN is refused from every other device (`shared_first_pair_only`
+above). Mint the browser's key instead of relying on the shared token for a
+tablet - a browser that only had `?token=` stops working after the first
+phone pairing, and this is the step that gives it its own key first.
 
 ### 90.6 Failing safe
 
@@ -24376,7 +24429,15 @@ tainted=False)` is a pure function (no clock, no network, no model) answering
   sharing that category (a documented regex: "send/email/share/forward/...
   <category> words"). Otherwise refused with a reason. A bare "send it" is
   not an authorisation; a tainted turn (it read outside text) is refused even
-  when asked.
+  when asked. **The owner's own records are not outside text** (RA-6,
+  2026-10-23): reading the spending table (`my_spending`) or a saved memory
+  (`memory_search`) in the turn does not taint it for this gate, so "read my
+  Q3 tax total from my spending CSV and email it to my accountant" stages the
+  draft card as usual; every other reading tool (email, web pages, files,
+  notes read back, the screen, the phone) still does. Only the tool path can
+  tell those apart - the classifier itself stays the pure function above -
+  and a later turn of the same conversation is still treated as tainted
+  (the chat log records only that a tool ran).
 
 `jarvis_email_draft.plan()` runs the classifier on the subject+body BEFORE the
 card is built: a refused draft is a `Plan` with a `problem` and no card, and

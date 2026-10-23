@@ -62,7 +62,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "what is the weather today",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -71,7 +71,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "prompt-coach",
@@ -112,7 +116,7 @@
       "reason": "typed control works; no desktop Settings location",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Check a prompt before you send it",
         "screen_path": "desktop Settings: prompt-coach; phone: All features and abilities (planned)"
       },
       "command": {
@@ -122,7 +126,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "prompt_coach"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "typed control works; no desktop Settings location"
     },
     {
       "id": "talk-button",
@@ -160,7 +170,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "start listening",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -169,7 +179,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "wake-word",
@@ -178,25 +192,12 @@
       "surface": "both",
       "where": "Turn it on in Settings, Voice, then tap Listen on the phone.",
       "control": {
-        "type": "adjust",
+        "type": "refused",
         "setting_keys": [],
-        "turn_on": "speak faster",
-        "turn_off": null,
-        "adjust": [
-          {
-            "phrase": "speak faster",
-            "intent": "voice_speed",
-            "place": "voice",
-            "kind": "choice"
-          },
-          {
-            "phrase": "set the voice speed to slower",
-            "intent": "control_set",
-            "place": "voice",
-            "kind": "choice"
-          }
-        ],
-        "intent": "voice_speed"
+        "turn_on": "turn on Say \"Hey Jarvis\"",
+        "turn_off": "turn off Say \"Hey Jarvis\"",
+        "adjust": [],
+        "intent": "feature_switch_refused"
       },
       "desktop": {
         "section": "voice",
@@ -216,22 +217,26 @@
         ],
         "found": true
       },
-      "status": "enforced",
-      "owner": "none-needed",
-      "reason": "typed control and both Settings locations verified",
+      "status": "planned",
+      "owner": "voiceprint-wiring",
+      "reason": "no own switch or typed control is wired today; a planned row, not a fake phrase",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "speak faster",
+        "example_phrase": "turn on Say \"Hey Jarvis\"",
         "screen_path": "desktop Settings: voice; phone: All features and abilities (planned)"
       },
       "command": {
-        "status": "adjust",
-        "reason_code": "command",
+        "status": "planned",
+        "reason_code": "planned-no-own-control",
         "owner": "voiceprint-wiring",
-        "reason": "",
+        "reason": "no own switch or typed control is wired today; a planned row, not a fake phrase",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "no own switch or typed control is wired today; a planned row, not a fake phrase"
     },
     {
       "id": "read-aloud",
@@ -240,25 +245,12 @@
       "surface": "both",
       "where": "Settings, Voice, \"Read aloud\". Speaking starts at the first comma once the phrase is long enough.",
       "control": {
-        "type": "adjust",
+        "type": "refused",
         "setting_keys": [],
-        "turn_on": "speak faster",
-        "turn_off": null,
-        "adjust": [
-          {
-            "phrase": "speak faster",
-            "intent": "voice_speed",
-            "place": "voice",
-            "kind": "choice"
-          },
-          {
-            "phrase": "set the voice speed to slower",
-            "intent": "control_set",
-            "place": "voice",
-            "kind": "choice"
-          }
-        ],
-        "intent": "voice_speed"
+        "turn_on": "turn on Jarvis reads its answers aloud",
+        "turn_off": "turn off Jarvis reads its answers aloud",
+        "adjust": [],
+        "intent": "feature_switch_refused"
       },
       "desktop": {
         "section": "voice",
@@ -280,20 +272,24 @@
       },
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
+      "reason": "the read-aloud control is not a registered switch and has no typed path yet",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "speak faster",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on Jarvis reads its answers aloud",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
-        "status": "adjust",
-        "reason_code": "command",
+        "status": "planned",
+        "reason_code": "planned-no-own-control",
         "owner": "voiceprint-wiring",
-        "reason": "",
+        "reason": "the read-aloud control is not a registered switch and has no typed path yet",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "the read-aloud control is not a registered switch and has no typed path yet"
     },
     {
       "id": "spoken-style",
@@ -302,25 +298,12 @@
       "surface": "both",
       "where": "It happens on its own for anything you ask by voice.",
       "control": {
-        "type": "adjust",
+        "type": "refused",
         "setting_keys": [],
-        "turn_on": "speak faster",
-        "turn_off": null,
-        "adjust": [
-          {
-            "phrase": "speak faster",
-            "intent": "voice_speed",
-            "place": "voice",
-            "kind": "choice"
-          },
-          {
-            "phrase": "set the voice speed to slower",
-            "intent": "control_set",
-            "place": "voice",
-            "kind": "choice"
-          }
-        ],
-        "intent": "voice_speed"
+        "turn_on": "turn on Short answers to spoken questions",
+        "turn_off": "turn off Short answers to spoken questions",
+        "adjust": [],
+        "intent": "feature_switch_refused"
       },
       "desktop": {
         "section": "voice",
@@ -342,20 +325,24 @@
       },
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
+      "reason": "spoken style is automatic, not a registered switch or typed control yet",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "speak faster",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on Short answers to spoken questions",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
-        "status": "adjust",
-        "reason_code": "command",
+        "status": "planned",
+        "reason_code": "planned-no-own-control",
         "owner": "voiceprint-wiring",
-        "reason": "",
+        "reason": "spoken style is automatic, not a registered switch or typed control yet",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "spoken style is automatic, not a registered switch or typed control yet"
     },
     {
       "id": "voice-training",
@@ -395,7 +382,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Teach Jarvis your voice",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -404,7 +391,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "voice-check",
@@ -444,7 +435,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on How strict the voice check is",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -453,7 +444,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "custom-voices",
@@ -514,7 +509,17 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "better_voice",
+        "voice_follows_face",
+        "voice_speaker"
+      ],
+      "own_intents": [
+        "settings_choice"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "manner",
@@ -572,7 +577,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "humor"
+      ],
+      "own_intents": [
+        "manner_from_now_on"
+      ],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "write-like-me",
@@ -613,8 +626,8 @@
       "reason": "typed control and both Settings locations verified",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on Write like me",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "switch",
@@ -623,7 +636,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "write_like_me"
+      ],
+      "own_intents": [
+        "settings_bool"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "interrupt",
@@ -663,7 +684,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Interrupt Jarvis while it talks",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -672,7 +693,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "live",
@@ -710,7 +735,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Jarvis Live",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -719,7 +744,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "live-extras",
@@ -757,7 +786,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on The extras around Live",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -766,7 +795,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "talk-to-type",
@@ -806,7 +839,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Talk-to-type",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -815,7 +848,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "chat-thread",
@@ -854,7 +891,7 @@
       "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on The whole conversation, and carrying it on",
         "screen_path": "desktop Settings: idle-new; phone: that app's own Settings"
       },
       "command": {
@@ -864,7 +901,11 @@
         "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "temporary-chat",
@@ -902,7 +943,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "start a temporary chat",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -911,7 +952,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "history-search",
@@ -949,7 +994,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Search what was said",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -958,7 +1003,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "briefing",
@@ -972,7 +1021,7 @@
           "briefing_senders"
         ],
         "turn_on": "turn on The morning briefing",
-        "turn_off": "turn off The morning briefing",
+        "turn_off": null,
         "adjust": [],
         "intent": "feature_switch"
       },
@@ -999,7 +1048,7 @@
       "reason": "typed control works; no desktop Settings location",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on The morning briefing",
         "screen_path": "desktop Settings: briefing-settings; phone: All features and abilities (planned)"
       },
       "command": {
@@ -1009,7 +1058,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "briefing_senders"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "typed control works; no desktop Settings location"
     },
     {
       "id": "coming-up",
@@ -1047,7 +1102,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "what is coming up",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1056,7 +1111,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "today",
@@ -1094,7 +1153,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Today",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1103,7 +1162,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "widgets",
@@ -1141,7 +1204,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Widgets you describe",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1150,7 +1213,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "jobs",
@@ -1188,7 +1255,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Background jobs",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1197,7 +1264,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "now",
@@ -1235,7 +1306,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What Jarvis is doing right now",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1244,7 +1315,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "attention-budget",
@@ -1295,7 +1370,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "speak up 3 times a day",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "adjust",
@@ -1304,7 +1379,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "settings_budget"
+      ],
+      "own_actions": {},
+      "label_note": "typed control works; no phone Settings location"
     },
     {
       "id": "focus",
@@ -1344,7 +1425,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "focus for 25 minutes",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1353,7 +1434,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "memory-tab",
@@ -1391,7 +1476,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on The Memory tab",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1400,7 +1485,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "memory-saved",
@@ -1439,8 +1528,8 @@
       "reason": "typed control works; no phone Settings location",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "what have you learned about me",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on background learning",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "switch",
@@ -1449,7 +1538,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "background_learning"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "typed control works; no phone Settings location"
     },
     {
       "id": "memory-waiting",
@@ -1487,7 +1582,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Facts waiting for your yes",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -1497,7 +1592,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "memory-known",
@@ -1537,7 +1636,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What Jarvis knows about you",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1546,7 +1645,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "memory-people",
@@ -1584,7 +1687,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on People and things",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1593,7 +1696,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "people-dossier",
@@ -1631,7 +1738,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Person dossier",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1640,7 +1747,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "pinned-facts",
@@ -1678,7 +1789,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Always keep in mind",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1687,7 +1798,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "between-us",
@@ -1725,7 +1840,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Between us",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1734,7 +1849,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "topics",
@@ -1779,7 +1898,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "stop using my work topic",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "adjust",
@@ -1788,7 +1907,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "topic_mode"
+      ],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "memory-learning",
@@ -1828,8 +1953,8 @@
       "reason": "Both learning switches live only in Brain -> Memory -> Learning; no Settings row exists on either app. A desktop-only card would also need a phone OpenPlace decision, so it is recorded rather than faked.",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on background learning",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "switch",
@@ -1846,7 +1971,14 @@
           "reason": "Both learning switches live only in Brain -> Memory -> Learning; no Settings row exists on either app. A desktop-only card would also need a phone OpenPlace decision, so it is recorded rather than faked."
         },
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "background_learning",
+        "learn_sensitive_topics"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Both learning switches live only in Brain -> Memory -> Learning; no Settings row exists on either app. A desktop-only card would also need a phone OpenPlace decision, so it is recorded rather than faked."
     },
     {
       "id": "wiki",
@@ -1884,7 +2016,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on The wiki Jarvis builds",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1893,7 +2025,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "deep-questions",
@@ -1931,7 +2067,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Deep questions",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1940,7 +2076,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "memory-as-of",
@@ -1978,7 +2118,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What did I believe on this date?",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -1987,7 +2127,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "import-chats",
@@ -2025,7 +2169,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Bring in old chats",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2034,7 +2178,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "history",
@@ -2073,8 +2221,8 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on chat history",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "switch",
@@ -2090,7 +2238,13 @@
           "reason": "The chat-history switch and its retention choice live only in Brain -> History; the desktop Settings page has no control for either (just a jump note), and the phone has no Settings row for them. The retention choice is NOT typed for now (2026-10-22 decision: no spoken path to immediate deletion)."
         },
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "chat_history"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "chat-tags",
@@ -2128,7 +2282,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Chat tags",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2137,7 +2291,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "forget-range",
@@ -2175,7 +2333,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "forget what you learned last week",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2184,7 +2342,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "galaxy",
@@ -2222,7 +2384,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Galaxy",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2231,7 +2393,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "media-read",
@@ -2272,7 +2438,7 @@
       "reason": "typed control works; no phone Settings location",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Read the words in a recording or video",
         "screen_path": "desktop Settings: media-index; phone: All features and abilities (planned)"
       },
       "command": {
@@ -2282,7 +2448,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "media_index"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "typed control works; no phone Settings location"
     },
     {
       "id": "look-at-this",
@@ -2323,7 +2495,7 @@
       "reason": "typed control and both Settings locations verified",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Look at this",
         "screen_path": "desktop Settings: screen-look; phone: All features and abilities (planned)"
       },
       "command": {
@@ -2333,7 +2505,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "screen_picture"
+      ],
+      "own_intents": [
+        "feature_switch"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "watch-with-me",
@@ -2373,7 +2553,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Watch with me",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2382,7 +2562,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "picture-mode",
@@ -2391,8 +2575,10 @@
       "surface": "both",
       "where": "Settings, Look at this and Watch with me, Picture mode.",
       "control": {
-        "type": "refused",
-        "setting_keys": [],
+        "type": "title",
+        "setting_keys": [
+          "screen_picture"
+        ],
         "turn_on": "turn on Picture mode",
         "turn_off": "turn off Picture mode",
         "adjust": [],
@@ -2416,22 +2602,30 @@
         ],
         "found": true
       },
-      "status": "not-a-setting",
+      "status": "enforced",
       "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "reason": "typed control and both Settings locations verified",
+      "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Picture mode",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "status": "switch",
+        "reason_code": "command",
+        "owner": "voiceprint-wiring",
+        "reason": "",
         "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+        "label_source": "Switchable / Adjustable (Typed & Settings)"
+      },
+      "own_keys": [
+        "screen_picture"
+      ],
+      "own_intents": [
+        "settings_bool"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "photo-reminder",
@@ -2469,7 +2663,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Photo to reminder",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2478,7 +2672,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "live-camera",
@@ -2516,7 +2714,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Show Jarvis the camera in Live",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2525,7 +2723,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "quiz",
@@ -2563,7 +2765,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Quiz me on a text",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2572,7 +2774,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "pictures",
@@ -2613,7 +2819,7 @@
       "reason": "typed control works; no phone Settings location",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Ask for a picture, and keep it",
         "screen_path": "desktop Settings: pictures; phone: All features and abilities (planned)"
       },
       "command": {
@@ -2623,7 +2829,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "pictures"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "typed control works; no phone Settings location"
     },
     {
       "id": "decks",
@@ -2661,7 +2873,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on My study decks",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2670,7 +2882,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "notes-write",
@@ -2708,7 +2924,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Write a note for you",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2717,7 +2933,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "folders",
@@ -2756,7 +2976,7 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Folders Jarvis may look in",
         "screen_path": "desktop Settings: folders; phone: All features and abilities (planned)"
       },
       "command": {
@@ -2766,7 +2986,11 @@
         "reason": "A multi-field or multi-step control (a file or folder picked on the PC, several values at once, or a route that lives in a patch-carried file): one typed value cannot reach the same setter safely yet. Recorded as a gap with an owner rather than guessed.",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "documents",
@@ -2806,7 +3030,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Ask about a PDF, a Word file or a Notion page",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2815,7 +3039,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "tutorials",
@@ -2853,7 +3081,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Tutorials and the FAQ",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2862,7 +3090,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "pc-help",
@@ -2902,7 +3134,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "why is my pc slow",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -2911,7 +3143,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "web-search",
@@ -2970,7 +3206,17 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "ask_before_every_search",
+        "web_search"
+      ],
+      "own_intents": [
+        "search_use",
+        "settings_bool"
+      ],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "browser-engine",
@@ -3011,7 +3257,7 @@
       "reason": "typed control works; no phone Settings location",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on A browser without a window",
         "screen_path": "desktop Settings: browser-engine; phone: All features and abilities (planned)"
       },
       "command": {
@@ -3021,7 +3267,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "headless_browser"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "typed control works; no phone Settings location"
     },
     {
       "id": "github-watchlist",
@@ -3059,7 +3311,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What's new on GitHub",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3068,7 +3320,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "chatbot",
@@ -3106,7 +3362,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "Jarvis, what is Talk to a chatbot for me",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3115,7 +3371,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "support",
@@ -3153,7 +3413,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "Jarvis, what is Deal with customer support for me",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3162,7 +3422,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "projects",
@@ -3200,7 +3464,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Projects",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3209,7 +3473,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "goals",
@@ -3247,7 +3515,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Goals",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3256,7 +3524,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "progress",
@@ -3294,7 +3566,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Progress",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3303,7 +3575,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "spending",
@@ -3342,7 +3618,7 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "how much did i spend",
+        "example_phrase": "turn on Spending summaries",
         "screen_path": "desktop Settings: spending; phone: All features and abilities (planned)"
       },
       "command": {
@@ -3352,7 +3628,11 @@
         "reason": "A multi-field or multi-step control (a file or folder picked on the PC, several values at once, or a route that lives in a patch-carried file): one typed value cannot reach the same setter safely yet. Recorded as a gap with an owner rather than guessed.",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "retirement",
@@ -3390,7 +3670,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "run a retirement what-if",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3399,7 +3679,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "chatbot-money",
@@ -3438,7 +3722,7 @@
       "reason": "Credentials and pairing are never typed or spoken into a chat - the owner's 2026-10-22 decision keeps Accounts/keys and the pairing token Settings-only. Say \"open accounts\" to jump there.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Chatbot keys and a monthly money limit",
         "screen_path": "desktop Settings: chatbot-api-keys; phone: points to the PC (security boundary)"
       },
       "command": {
@@ -3448,7 +3732,11 @@
         "reason": "Credentials and pairing are never typed or spoken into a chat - the owner's 2026-10-22 decision keeps Accounts/keys and the pairing token Settings-only. Say \"open accounts\" to jump there.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "sensitive-facts",
@@ -3486,7 +3774,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Health and money facts wait for your yes",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -3496,7 +3784,11 @@
         "reason": "Health, money and private details wait for the owner's yes: this is an Always-On safety rule, not a switch. The exception (\"also remember sensitive topics automatically\") is its own setting with its own card.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "crisis-help",
@@ -3534,7 +3826,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Crisis help",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -3544,7 +3836,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "home-status",
@@ -3553,19 +3849,12 @@
       "surface": "both",
       "where": "Just ask (\"is the garage door open?\"), once Home Assistant is set up on the PC.",
       "control": {
-        "type": "adjust",
+        "type": "refused",
         "setting_keys": [],
-        "turn_on": "stop asking before my calendar",
-        "turn_off": null,
-        "adjust": [
-          {
-            "phrase": "stop asking before my calendar",
-            "intent": "settings_asks_first",
-            "place": "asks-first",
-            "kind": "tier"
-          }
-        ],
-        "intent": "settings_asks_first"
+        "turn_on": "turn on Ask how the house is",
+        "turn_off": "turn off Ask how the house is",
+        "adjust": [],
+        "intent": "feature_switch_refused"
       },
       "desktop": {
         "section": null,
@@ -3584,21 +3873,31 @@
         "found": false
       },
       "status": "planned",
-      "owner": "Session B",
-      "reason": "typed control works; no phone Settings location",
+      "owner": "voiceprint-wiring",
+      "reason": "no own typed phrase is wired for the home-status feature yet",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "stop asking before my calendar",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on Ask how the house is",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
-        "status": "adjust",
-        "reason_code": "command",
+        "status": "planned",
+        "reason_code": "planned-no-own-control",
         "owner": "voiceprint-wiring",
-        "reason": "",
+        "reason": "no own typed phrase is wired for the home-status feature yet",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "settings_asks_first"
+      ],
+      "own_actions": {
+        "settings_asks_first": [
+          "home_read"
+        ]
+      },
+      "label_note": "no own typed phrase is wired for the home-status feature yet"
     },
     {
       "id": "lights",
@@ -3607,19 +3906,14 @@
       "surface": "both",
       "where": "A setting in Settings, What asks first, called \"Lights, plugs and fans without a card\".",
       "control": {
-        "type": "adjust",
-        "setting_keys": [],
-        "turn_on": "stop asking before my calendar",
-        "turn_off": null,
-        "adjust": [
-          {
-            "phrase": "stop asking before my calendar",
-            "intent": "settings_asks_first",
-            "place": "asks-first",
-            "kind": "tier"
-          }
+        "type": "section_switch",
+        "setting_keys": [
+          "lights_without_card"
         ],
-        "intent": "settings_asks_first"
+        "turn_on": "turn on lights without asking",
+        "turn_off": "turn off lights without asking",
+        "adjust": [],
+        "intent": "settings_bool"
       },
       "desktop": {
         "section": "asks-first",
@@ -3644,17 +3938,25 @@
       "reason": "typed control and both Settings locations verified",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "stop asking before my calendar",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on lights without asking",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
-        "status": "adjust",
+        "status": "switch",
         "reason_code": "command",
         "owner": "voiceprint-wiring",
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "lights_without_card"
+      ],
+      "own_intents": [
+        "settings_bool"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "locks",
@@ -3692,7 +3994,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Locks, doors, alarms and covers",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3701,7 +4003,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "calendar",
@@ -3744,11 +4050,11 @@
       },
       "status": "pc-only",
       "owner": "voiceprint-wiring",
-      "reason": "one app only today; the other app has no control",
-      "label": "Switchable / Adjustable (Typed & Settings)",
+      "reason": "PC-only / app-local ability: the phone has no control",
+      "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
         "example_phrase": "stop asking before my calendar",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "adjust",
@@ -3756,8 +4062,18 @@
         "owner": "voiceprint-wiring",
         "reason": "",
         "settings_gap": null,
-        "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
+      },
+      "own_keys": [],
+      "own_intents": [
+        "settings_asks_first"
+      ],
+      "own_actions": {
+        "settings_asks_first": [
+          "calendar_read"
+        ]
+      },
+      "label_note": ""
     },
     {
       "id": "weather-sky",
@@ -3816,7 +4132,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "keep the animal still",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "adjust",
@@ -3825,7 +4141,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "animal_sky",
+        "animal_switch",
+        "animal_weather"
+      ],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "email-read",
@@ -3836,11 +4160,11 @@
       "control": {
         "type": "adjust",
         "setting_keys": [],
-        "turn_on": "stop asking before my calendar",
+        "turn_on": "stop asking before reading my email",
         "turn_off": null,
         "adjust": [
           {
-            "phrase": "stop asking before my calendar",
+            "phrase": "stop asking before reading my email",
             "intent": "settings_asks_first",
             "place": "asks-first",
             "kind": "tier"
@@ -3871,8 +4195,8 @@
       "reason": "typed control works; no phone Settings location",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "stop asking before my calendar",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "stop asking before reading my email",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "adjust",
@@ -3881,7 +4205,17 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "settings_asks_first"
+      ],
+      "own_actions": {
+        "settings_asks_first": [
+          "email_read"
+        ]
+      },
+      "label_note": "typed control works; no phone Settings location"
     },
     {
       "id": "email-send",
@@ -3920,7 +4254,7 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "send an email",
+        "example_phrase": "turn on Send an email for you",
         "screen_path": "desktop Settings: email-sending; phone: All features and abilities (planned)"
       },
       "command": {
@@ -3930,7 +4264,11 @@
         "reason": "A multi-field or multi-step control (a file or folder picked on the PC, several values at once, or a route that lives in a patch-carried file): one typed value cannot reach the same setter safely yet. Recorded as a gap with an owner rather than guessed.",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "email-drafts",
@@ -3968,7 +4306,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Save a draft to your Drafts folder",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -3977,7 +4315,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "inbox-tidy",
@@ -4015,7 +4357,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Tidy the inbox by voice",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -4024,7 +4366,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "news-and-page-watches",
@@ -4062,7 +4408,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on News headlines, and pages that change",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -4071,7 +4417,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "connection",
@@ -4110,7 +4460,7 @@
       "reason": "Credentials and pairing are never typed or spoken into a chat - the owner's 2026-10-22 decision keeps Accounts/keys and the pairing token Settings-only. Say \"open accounts\" to jump there.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Pairing and the connection",
         "screen_path": "desktop Settings: connection; phone: points to the PC (security boundary)"
       },
       "command": {
@@ -4120,7 +4470,11 @@
         "reason": "Credentials and pairing are never typed or spoken into a chat - the owner's 2026-10-22 decision keeps Accounts/keys and the pairing token Settings-only. Say \"open accounts\" to jump there.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "devices",
@@ -4170,7 +4524,11 @@
         "reason": "Credentials and pairing are never typed or spoken into a chat - the owner's 2026-10-22 decision keeps Accounts/keys and the pairing token Settings-only. Say \"open accounts\" to jump there.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "phone-notifications",
@@ -4208,10 +4566,10 @@
       },
       "status": "pc-only",
       "owner": "voiceprint-wiring",
-      "reason": "one app only today; the other app has no control",
-      "label": "Switchable / Adjustable (Typed & Settings)",
+      "reason": "PC-only / app-local ability: the phone has no control",
+      "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Let Jarvis read phone notifications",
         "screen_path": "desktop Settings: phone-notify; phone: All features and abilities (planned)"
       },
       "command": {
@@ -4220,8 +4578,14 @@
         "owner": "voiceprint-wiring",
         "reason": "",
         "settings_gap": null,
-        "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
+      },
+      "own_keys": [
+        "phone_notifications"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "phone-watch",
@@ -4259,10 +4623,10 @@
       },
       "status": "pc-only",
       "owner": "voiceprint-wiring",
-      "reason": "one app only today; the other app has no control",
-      "label": "Switchable / Adjustable (Typed & Settings)",
+      "reason": "PC-only / app-local ability: the phone has no control",
+      "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Smartwatch notifications",
         "screen_path": "desktop Settings: watch-notify; phone: All features and abilities (planned)"
       },
       "command": {
@@ -4271,8 +4635,14 @@
         "owner": "voiceprint-wiring",
         "reason": "",
         "settings_gap": null,
-        "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
+      },
+      "own_keys": [
+        "smartwatch_notifications"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "phone-floating",
@@ -4283,8 +4653,8 @@
       "control": {
         "type": "refused",
         "setting_keys": [],
-        "turn_on": "turn on Floating Jarvis",
-        "turn_off": "turn off Floating Jarvis",
+        "turn_on": null,
+        "turn_off": null,
         "adjust": [],
         "intent": null
       },
@@ -4321,7 +4691,11 @@
         "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "phone-tiles",
@@ -4360,7 +4734,7 @@
       "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Quick Settings tiles",
         "screen_path": "desktop Settings: quick-tiles; phone: that app's own Settings"
       },
       "command": {
@@ -4370,7 +4744,11 @@
         "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "phone-screen-rate",
@@ -4409,7 +4787,7 @@
       "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Screen refresh rate",
         "screen_path": "desktop Settings: screen-rate; phone: that app's own Settings"
       },
       "command": {
@@ -4419,7 +4797,11 @@
         "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "also-on-phone",
@@ -4457,7 +4839,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Also on my phone",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -4466,7 +4848,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "find-phone",
@@ -4504,7 +4890,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "ring my phone",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -4513,7 +4899,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "phone-limits",
@@ -4551,7 +4941,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What the phone deliberately does not do",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -4560,7 +4950,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "appearance",
@@ -4599,7 +4993,7 @@
       "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Appearance",
         "screen_path": "desktop Settings: appearance-card; phone: that app's own Settings"
       },
       "command": {
@@ -4609,7 +5003,11 @@
         "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "crash-notes",
@@ -4658,7 +5056,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "faces",
@@ -4697,8 +5099,8 @@
       "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: that app's own Settings"
+        "example_phrase": "turn on Choose Jarvis's face",
+        "screen_path": "desktop Settings: All features and abilities; phone: that app's own Settings"
       },
       "command": {
         "status": "not-a-setting",
@@ -4707,7 +5109,11 @@
         "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "animal-options",
@@ -4775,7 +5181,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "animal_sky",
+        "animal_switch",
+        "animal_weather"
+      ],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "first-run",
@@ -4824,7 +5238,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "setup-questionnaire",
@@ -4873,7 +5291,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "menu-visibility",
@@ -4929,7 +5351,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "menu_visibility"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "shortcuts",
@@ -4968,7 +5396,7 @@
       "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Keyboard shortcuts",
         "screen_path": "desktop Settings: shortcuts; phone: that app's own Settings"
       },
       "command": {
@@ -4978,7 +5406,11 @@
         "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "models",
@@ -5015,8 +5447,8 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on Models",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -5025,7 +5457,11 @@
         "reason": "A multi-field or multi-step control (a file or folder picked on the PC, several values at once, or a route that lives in a patch-carried file): one typed value cannot reach the same setter safely yet. Recorded as a gap with an owner rather than guessed.",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "compute",
@@ -5062,8 +5498,8 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "example_phrase": "turn on Compute",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -5072,7 +5508,11 @@
         "reason": "A multi-field or multi-step control (a file or folder picked on the PC, several values at once, or a route that lives in a patch-carried file): one typed value cannot reach the same setter safely yet. Recorded as a gap with an owner rather than guessed.",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "skills",
@@ -5110,7 +5550,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Skills",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -5119,7 +5559,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "model-memory",
@@ -5157,7 +5601,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Memory on the Model page",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -5166,7 +5610,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "notifications",
@@ -5211,7 +5659,7 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on alarm sounds",
         "screen_path": "desktop Settings: notifications; phone: All features and abilities (planned)"
       },
       "command": {
@@ -5221,7 +5669,17 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "pc_alarm_sounds",
+        "pc_briefing_notification",
+        "pc_handoff_notification",
+        "pc_quiet_hours",
+        "pc_reminder_sounds"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "start-jarvis",
@@ -5232,8 +5690,8 @@
       "control": {
         "type": "refused",
         "setting_keys": [],
-        "turn_on": "turn on Starting Jarvis for you",
-        "turn_off": "turn off Starting Jarvis for you",
+        "turn_on": null,
+        "turn_off": null,
         "adjust": [],
         "intent": null
       },
@@ -5270,7 +5728,11 @@
         "reason": "A PC-only setting: its control is the PC's own store or one of jarvis_owner_check.PC_ONLY_ACTIONS, and a typed change would have to bypass that gate. Open-only, on purpose.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "work-tab",
@@ -5308,7 +5770,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on The Work tab",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -5317,7 +5779,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "job-list",
@@ -5355,7 +5821,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Jobs that keep going after the chat ends",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -5364,7 +5830,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "hardware",
@@ -5403,7 +5873,7 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Hardware and models",
         "screen_path": "desktop Settings: hardware; phone: All features and abilities (planned)"
       },
       "command": {
@@ -5413,7 +5883,11 @@
         "reason": "A multi-field or multi-step control (a file or folder picked on the PC, several values at once, or a route that lives in a patch-carried file): one typed value cannot reach the same setter safely yet. Recorded as a gap with an owner rather than guessed.",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "focus-presets",
@@ -5469,7 +5943,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "focus_preset"
+      ],
+      "own_intents": [
+        "control_set"
+      ],
+      "own_actions": {},
+      "label_note": "typed control works; no phone Settings location"
     },
     {
       "id": "second-card",
@@ -5512,7 +5994,7 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on one bigger model on both cards",
         "screen_path": "desktop Settings: second-card; phone: All features and abilities (planned)"
       },
       "command": {
@@ -5522,7 +6004,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "second_card_combined",
+        "second_card_suggest_correction",
+        "second_card_suggest_struggle"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "big-model",
@@ -5565,7 +6055,7 @@
       "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on the big model",
         "screen_path": "desktop Settings: big-model; phone: All features and abilities (planned)"
       },
       "command": {
@@ -5575,7 +6065,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "big_model",
+        "big_model_deep_questions",
+        "big_model_wiki"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "updates",
@@ -5624,7 +6122,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "tool-updates",
@@ -5663,7 +6165,7 @@
       "reason": "A PC-only setting: its control is the PC's own store or one of jarvis_owner_check.PC_ONLY_ACTIONS, and a typed change would have to bypass that gate. Open-only, on purpose.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Check for tool updates",
         "screen_path": "desktop Settings: tool-updates; phone: read-only (PC-only setting)"
       },
       "command": {
@@ -5673,7 +6175,11 @@
         "reason": "A PC-only setting: its control is the PC's own store or one of jarvis_owner_check.PC_ONLY_ACTIONS, and a typed change would have to bypass that gate. Open-only, on purpose.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "settings-file",
@@ -5712,7 +6218,7 @@
       "reason": "A PC-only setting: its control is the PC's own store or one of jarvis_owner_check.PC_ONLY_ACTIONS, and a typed change would have to bypass that gate. Open-only, on purpose.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on The settings file, the logs and starting with Windows",
         "screen_path": "desktop Settings: more-options; phone: read-only (PC-only setting)"
       },
       "command": {
@@ -5722,7 +6228,11 @@
         "reason": "A PC-only setting: its control is the PC's own store or one of jarvis_owner_check.PC_ONLY_ACTIONS, and a typed change would have to bypass that gate. Open-only, on purpose.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "backend-supports",
@@ -5771,7 +6281,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "about",
@@ -5820,7 +6334,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "hud-window",
@@ -5859,7 +6377,7 @@
       "reason": "A PC-only setting: its control is the PC's own store or one of jarvis_owner_check.PC_ONLY_ACTIONS, and a typed change would have to bypass that gate. Open-only, on purpose.",
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on The big HUD window",
         "screen_path": "desktop Settings: hud-window; phone: read-only (PC-only setting)"
       },
       "command": {
@@ -5869,7 +6387,11 @@
         "reason": "A PC-only setting: its control is the PC's own store or one of jarvis_owner_check.PC_ONLY_ACTIONS, and a typed change would have to bypass that gate. Open-only, on purpose.",
         "settings_gap": null,
         "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "backup",
@@ -5918,7 +6440,11 @@
         "reason": "A multi-field or multi-step control (a file or folder picked on the PC, several values at once, or a route that lives in a patch-carried file): one typed value cannot reach the same setter safely yet. Recorded as a gap with an owner rather than guessed.",
         "settings_gap": null,
         "label_source": "Settings-Only (By Design — Security Boundary)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "accounts",
@@ -5967,7 +6493,11 @@
         "reason": "Credentials and pairing are never typed or spoken into a chat - the owner's 2026-10-22 decision keeps Accounts/keys and the pairing token Settings-only. Say \"open accounts\" to jump there.",
         "settings_gap": null,
         "label_source": "Settings-Only (By Design — Security Boundary)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "reach",
@@ -6023,7 +6553,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "settings_tool"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "undo",
@@ -6061,7 +6597,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "undo that",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -6070,7 +6606,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "past-approvals",
@@ -6108,7 +6648,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Activity: cards you already decided",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -6117,7 +6657,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "limits",
@@ -6179,7 +6723,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "settings_budget"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "settings-by-asking",
@@ -6219,7 +6769,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Change a setting by asking, in any words",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -6228,7 +6778,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "start-the-model-lane",
@@ -6266,7 +6820,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Start the local model when it is not running",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -6275,7 +6829,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "restart-the-model-lane",
@@ -6313,7 +6871,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Jarvis starts the local model again by itself when it dies",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -6322,7 +6880,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "clipboard-time-machine",
@@ -6362,7 +6924,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Clipboard history, and three one-press cleanups for what you copy",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -6371,7 +6933,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "file-history",
@@ -6409,7 +6975,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on File history",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
       },
       "command": {
         "status": "not-a-setting",
@@ -6418,7 +6984,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "approvals",
@@ -6475,7 +7045,13 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [
+        "settings_card_mode"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "what-asks-first",
@@ -6533,7 +7109,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "lights_without_card"
+      ],
+      "own_intents": [
+        "settings_asks_first"
+      ],
+      "own_actions": {},
+      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "id": "app-lock",
@@ -6583,7 +7167,11 @@
         "reason": "A PC-only setting: its control is the PC's own store or one of jarvis_owner_check.PC_ONLY_ACTIONS, and a typed change would have to bypass that gate. Open-only, on purpose.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "captcha-handoff",
@@ -6657,7 +7245,17 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "handoff_front",
+        "handoff_mode"
+      ],
+      "own_intents": [
+        "control_set",
+        "settings_choice"
+      ],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "stale-link",
@@ -6695,7 +7293,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on When the connection is catching up",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -6705,7 +7303,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "stop-everything",
@@ -6743,7 +7345,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Stop everything",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -6753,7 +7355,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "trust",
@@ -6791,7 +7397,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Trust: content risk and the audit chain",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -6801,7 +7407,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "rush-latch",
@@ -6839,7 +7449,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on A warning when text tried to rush you",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -6849,7 +7459,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "outside-text",
@@ -6887,7 +7501,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Jarvis marks what it read from outside",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -6897,7 +7511,11 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "settings-entry",
@@ -6935,7 +7553,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Settings itself",
-        "screen_path": "desktop Settings: All features and abilities (planned); phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -6945,7 +7563,11 @@
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
-      }
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     },
     {
       "id": "data-sandbox",
@@ -6986,7 +7608,7 @@
       "reason": "typed control and both Settings locations verified",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "example_phrase": "turn on Small Python scripts for sums and averages",
         "screen_path": "desktop Settings: sandbox; phone: All features and abilities (planned)"
       },
       "command": {
@@ -6996,7 +7618,15 @@
         "reason": "",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
-      }
+      },
+      "own_keys": [
+        "sandbox_exec"
+      ],
+      "own_intents": [
+        "feature_switch"
+      ],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -8530,17 +9160,24 @@
     },
     {
       "kind": "feature",
+      "id": "wake-word",
+      "status": "planned",
+      "owner": "voiceprint-wiring",
+      "reason": "no own switch or typed control is wired today; a planned row, not a fake phrase"
+    },
+    {
+      "kind": "feature",
       "id": "read-aloud",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
+      "reason": "the read-aloud control is not a registered switch and has no typed path yet"
     },
     {
       "kind": "feature",
       "id": "spoken-style",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
+      "reason": "spoken style is automatic, not a registered switch or typed control yet"
     },
     {
       "kind": "feature",
@@ -8810,13 +9447,6 @@
     },
     {
       "kind": "feature",
-      "id": "picture-mode",
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row."
-    },
-    {
-      "kind": "feature",
       "id": "photo-reminder",
       "status": "not-a-setting",
       "owner": "none-needed",
@@ -8980,8 +9610,8 @@
       "kind": "feature",
       "id": "home-status",
       "status": "planned",
-      "owner": "Session B",
-      "reason": "typed control works; no phone Settings location"
+      "owner": "voiceprint-wiring",
+      "reason": "no own typed phrase is wired for the home-status feature yet"
     },
     {
       "kind": "feature",
@@ -8995,7 +9625,7 @@
       "id": "calendar",
       "status": "pc-only",
       "owner": "voiceprint-wiring",
-      "reason": "one app only today; the other app has no control"
+      "reason": "PC-only / app-local ability: the phone has no control"
     },
     {
       "kind": "feature",
@@ -9058,14 +9688,14 @@
       "id": "phone-notifications",
       "status": "pc-only",
       "owner": "voiceprint-wiring",
-      "reason": "one app only today; the other app has no control"
+      "reason": "PC-only / app-local ability: the phone has no control"
     },
     {
       "kind": "feature",
       "id": "phone-watch",
       "status": "pc-only",
       "owner": "voiceprint-wiring",
-      "reason": "one app only today; the other app has no control"
+      "reason": "PC-only / app-local ability: the phone has no control"
     },
     {
       "kind": "feature",
@@ -9709,14 +10339,16 @@
           "accepted": [
             "email_read",
             "ask"
-          ]
+          ],
+          "resolved": true
         },
         {
           "text": "stop asking before reading my notes",
           "accepted": [
             "notes_search",
             "do not ask"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -9742,7 +10374,8 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_asks_first yet",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": []
     },
     {
       "id": "reading-tools",
@@ -9756,7 +10389,9 @@
           "accepted": [
             "calendar_read",
             "off"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -9779,7 +10414,10 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_reading_tool yet",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "stop offering the calendar tool to the model"
+      ]
     },
     {
       "id": "manner",
@@ -9792,13 +10430,17 @@
           "text": "set the manner to formal",
           "accepted": [
             "formal"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         },
         {
           "text": "be more formal",
           "accepted": [
             "formal"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -9819,7 +10461,11 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_manner yet",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "set the manner to formal",
+        "be more formal"
+      ]
     },
     {
       "id": "web-search-provider",
@@ -9832,7 +10478,8 @@
           "text": "use searxng for web search",
           "accepted": [
             "searxng"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -9852,7 +10499,8 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_web_search_provider yet",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": []
     },
     {
       "id": "animal-tuning",
@@ -9866,7 +10514,8 @@
           "text": "make the animal sharper",
           "accepted": [
             "sharper"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -9886,7 +10535,8 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_animal_switch yet",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": []
     },
     {
       "id": "weather-source",
@@ -9899,7 +10549,8 @@
           "text": "use my home assistant for the weather",
           "accepted": [
             "home_assistant"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -9921,7 +10572,8 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_weather_source yet",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": []
     },
     {
       "id": "card-mode",
@@ -9935,7 +10587,9 @@
           "text": "make the approval cards shorter",
           "accepted": [
             "summary"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -9956,7 +10610,10 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_card_mode yet",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "make the approval cards shorter"
+      ]
     },
     {
       "id": "topic-mode",
@@ -9969,7 +10626,9 @@
           "text": "make this topic looser",
           "accepted": [
             "loose"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -9991,7 +10650,10 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_topic_mode yet",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "make this topic looser"
+      ]
     },
     {
       "id": "voice-speed-and-speaker",
@@ -10005,13 +10667,16 @@
           "text": "change my voice speed to fast",
           "accepted": [
             "fast"
-          ]
+          ],
+          "resolved": true
         },
         {
           "text": "use the built-in speaker",
           "accepted": [
             "built-in"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -10032,7 +10697,10 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "no existing setter/route for this multi-field control yet; the backend grammar owner is adding it",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "use the built-in speaker"
+      ]
     },
     {
       "id": "model-lanes",
@@ -10047,13 +10715,17 @@
           "text": "pin everyday chat to the second card",
           "accepted": [
             "second card"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         },
         {
           "text": "switch to the big model",
           "accepted": [
             "big model"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -10076,7 +10748,11 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "no existing setter/route for this multi-field control yet; the backend grammar owner is adding it",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "pin everyday chat to the second card",
+        "switch to the big model"
+      ]
     },
     {
       "id": "per-face-tuning",
@@ -10090,13 +10766,17 @@
           "text": "make the face bigger",
           "accepted": [
             "bigger"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         },
         {
           "text": "change how the face glows",
           "accepted": [
             "glow"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -10119,7 +10799,11 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "no existing setter/route for this multi-field control yet; the backend grammar owner is adding it",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "make the face bigger",
+        "change how the face glows"
+      ]
     },
     {
       "id": "chat-keep-days",
@@ -10133,13 +10817,17 @@
           "text": "keep chat history for 30 days",
           "accepted": [
             "30"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         },
         {
           "text": "keep chat history for 90 days",
           "accepted": [
             "90"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -10162,7 +10850,11 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "no existing setter/route for this multi-field control yet; the backend grammar owner is adding it",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "keep chat history for 30 days",
+        "keep chat history for 90 days"
+      ]
     },
     {
       "id": "handoff-mode-and-front",
@@ -10177,13 +10869,16 @@
           "text": "set handoff to quick",
           "accepted": [
             "quick"
-          ]
+          ],
+          "resolved": true
         },
         {
           "text": "bring the handoff to the front",
           "accepted": [
             "bring_to_front"
-          ]
+          ],
+          "resolved": false,
+          "planned": true
         }
       ],
       "accepted_values": [
@@ -10206,7 +10901,10 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "no existing setter/route for this multi-field control yet; the backend grammar owner is adding it",
-      "label": "Switchable / Adjustable (Typed & Settings)"
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "unresolved_phrases": [
+        "bring the handoff to the front"
+      ]
     },
     {
       "id": "mf-backup",
@@ -10219,7 +10917,8 @@
           "text": "turn on Backups",
           "accepted": [
             "typed value"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -10239,7 +10938,8 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "multi-field control: typed path still being wired; setter proof pending"
+      "reason": "multi-field control: typed path still being wired; setter proof pending",
+      "unresolved_phrases": []
     },
     {
       "id": "mf-email-send",
@@ -10252,7 +10952,8 @@
           "text": "turn on Send an email for you",
           "accepted": [
             "typed value"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -10272,7 +10973,8 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "multi-field control: typed path still being wired; setter proof pending"
+      "reason": "multi-field control: typed path still being wired; setter proof pending",
+      "unresolved_phrases": []
     },
     {
       "id": "mf-folders",
@@ -10285,7 +10987,8 @@
           "text": "turn on Folders Jarvis may look in",
           "accepted": [
             "typed value"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -10305,7 +11008,8 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "multi-field control: typed path still being wired; setter proof pending"
+      "reason": "multi-field control: typed path still being wired; setter proof pending",
+      "unresolved_phrases": []
     },
     {
       "id": "mf-hardware",
@@ -10318,7 +11022,8 @@
           "text": "turn on Hardware and models",
           "accepted": [
             "typed value"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -10338,7 +11043,8 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "multi-field control: typed path still being wired; setter proof pending"
+      "reason": "multi-field control: typed path still being wired; setter proof pending",
+      "unresolved_phrases": []
     },
     {
       "id": "mf-models",
@@ -10351,7 +11057,8 @@
           "text": "turn on Models",
           "accepted": [
             "typed value"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -10371,7 +11078,8 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "multi-field control: typed path still being wired; setter proof pending"
+      "reason": "multi-field control: typed path still being wired; setter proof pending",
+      "unresolved_phrases": []
     },
     {
       "id": "mf-spending",
@@ -10384,7 +11092,8 @@
           "text": "turn on Spending summaries",
           "accepted": [
             "typed value"
-          ]
+          ],
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -10404,7 +11113,8 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "multi-field control: typed path still being wired; setter proof pending"
+      "reason": "multi-field control: typed path still being wired; setter proof pending",
+      "unresolved_phrases": []
     }
   ],
   "owner_decisions": {
@@ -10416,7 +11126,7 @@
   },
   "multi_field_count": 19,
   "labels": {
-    "Switchable / Adjustable (Typed & Settings)": "A real switch or choice: type it or change it in Settings.",
+    "Switchable / Adjustable (Typed & Settings)": "A real switch or choice: type it or change it in Settings. Today 10 enforced, 30 planned, 0 PC-only; a planned row says 'Still being wired'.",
     "Settings-Only (By Design — Security Boundary)": "Changed only on the PC Settings page, never by typing (credentials, restore backup) — a security boundary by design.",
     "PC-Only Setting (Honest Refusal on Phone)": "A setting/ability that exists on one app only today; the other app honestly refuses rather than faking a control.",
     "Command-Only (Runs When You Ask — No Switch Needed)": "No switch exists: you ask and Jarvis runs it (or it is a read-only info page).",
@@ -10472,7 +11182,7 @@
       "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch."
     }
   ],
-  "label_legend": "Exactly five labels (owner + Gemini Q8, 2026-10-22): Switchable / Adjustable (Typed & Settings) · Settings-Only (By Design — Security Boundary) · PC-Only Setting (Honest Refusal on Phone) · Command-Only (Runs When You Ask — No Switch Needed) · Always On (Core Safety Rule — Cannot Be Turned Off)",
+  "label_legend": "Exactly five labels (owner + Gemini Q8, 2026-10-22): Switchable / Adjustable (Typed & Settings) [{'planned': 30, 'enforced': 10}] · Settings-Only (By Design — Security Boundary) [{'open-only': 2}] · PC-Only Setting (Honest Refusal on Phone) [{'pc-only': 16}] · Command-Only (Runs When You Ask — No Switch Needed) [{'not-a-setting': 69}] · Always On (Core Safety Rule — Cannot Be Turned Off) [{'not-a-setting': 12}]",
   "choice_settings": [
     {
       "key": "handoff_mode",
@@ -10620,5 +11330,31 @@
       "reason": "named choice setting newly wired; setter test/proof still pending"
     }
   ],
-  "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)"
+  "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
+  "label_breakdown": {
+    "Command-Only (Runs When You Ask — No Switch Needed)": {
+      "not-a-setting": 69
+    },
+    "Switchable / Adjustable (Typed & Settings)": {
+      "planned": 30,
+      "enforced": 10
+    },
+    "PC-Only Setting (Honest Refusal on Phone)": {
+      "pc-only": 16
+    },
+    "Always On (Core Safety Rule — Cannot Be Turned Off)": {
+      "not-a-setting": 12
+    },
+    "Settings-Only (By Design — Security Boundary)": {
+      "open-only": 2
+    }
+  },
+  "label_counts": {
+    "Switchable / Adjustable (Typed & Settings)": 40,
+    "Settings-Only (By Design — Security Boundary)": 2,
+    "PC-Only Setting (Honest Refusal on Phone)": 16,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 69,
+    "Always On (Core Safety Rule — Cannot Be Turned Off)": 12
+  },
+  "label_count_note": "Owner-approved 2026-10-23 counts: 40 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 69 Command-Only, 12 Always-On (139 total). Changes from the 2026-10-22 42/2/13/70/12: picture-mode moved to Switchable/Adjustable (ADJ-Q1); calendar, phone-notifications and phone-watch moved to PC-Only (ADJ-Q1)."
 }

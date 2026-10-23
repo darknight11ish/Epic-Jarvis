@@ -1,0 +1,62 @@
+        if path == "/api/status":
+            # DEF-002: the seconds were the probes, and the probes now happen on
+            # the poller's thread. `?force=1` asks for one right now, on this
+            # thread, for the screen that wants to know this second. An empty
+            # cache means no poller has run - a suite driving this handler
+            # without main() - so the first answer is still the honest live one.
+            from urllib.parse import parse_qs, urlparse
+            force = (parse_qs(urlparse(self.path).query).get("force") or [""])[0] == "1"
+            if force or not _STATUS_CACHE:
+                try:
+                    _status_poll_once()
+                except Exception:
+                    pass
+            with _STATUS_LOCK:
+                upstream = dict(_STATUS_CACHE)
+            jarvis_up = bool(upstream.get("jarvis", False))
+            models = list(upstream.get("models") or [])
+            lanes = []
+            if PROXY_FILE.exists():
+                try:
+                    raw = PROXY_FILE.read_text(encoding="utf-8", errors="replace")
+                    lanes = list(dict.fromkeys(
+                        re.findall(r"^\s*-?\s*model_name:\s*([A-Za-z0-9_\-]+)", raw, re.M)
+                    ))
+                except OSError:
+                    pass
+            cfg = _read_toml(CONFIG_FILE)
+            budget = jarvis_router.Budget.load().status() if ROUTING else {}
+            # A4 (2026-10-23): the session safety latches, READ-ONLY. They are
+            # stored on this PC - a SQLite row for the taint latch, a JSON state
+            # file for the rush latch - so the HUD's fixed safety strip can stay
+            # honest across a backend restart instead of going quiet the moment
+            # the process stops. This is a read: it clears nothing, approves
+            # nothing, and adds no route, permission or card. `None` means "the
+            # PC has not said" (never "not latched"), and taint_active() itself
+            # fails CLOSED - True when its store cannot be read - so the only
+            # word a page may draw from `true` is "staying local".
+            latch = {"taint_latched": None, "rush_latched": None}
+            try:
+                if jarvis_gate is not None:
+                    latch["taint_latched"] = bool(jarvis_gate.taint_active())
+            except Exception:
+                latch["taint_latched"] = True
+            try:
+                import jarvis_content_risk as _content_risk
+                latch["rush_latched"] = bool(_content_risk.rush_active())
+            except Exception:
+                latch["rush_latched"] = None
+            return self._send(200, {
+                "routing": ROUTING,
+                "jarvis_injects_memory": jarvis_injects_memory(),
+                "budget": budget,
+                "jarvis": jarvis_up,
+                "ollama": bool(upstream.get("ollama", False)),
+                "proxy": bool(upstream.get("proxy", False)),
+                "models": models,
+                "lanes": lanes,
+                "default_model": (cfg.get("intelligence") or {}).get("default_model", ""),
+                "tools": len((cfg.get("tools") or {}).get("enabled") or []),
+                "taint_latched": latch["taint_latched"],
+                "rush_latched": latch["rush_latched"],
+            })

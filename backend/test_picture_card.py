@@ -380,6 +380,53 @@ def t_A_unloads_the_chat_and_warms_it_back():
         PC._CARD_CACHE["cards"] = []
 
 
+def t_warm_lane_keeps_an_active_model_resident():
+    """Opt D11: in Active power mode a warm-up must send keep_alive=-1, not
+    the old "30m" that would reset the owner's OLLAMA_KEEP_ALIVE=-1. Quiet and
+    Standby keep the old value, and the existing unload path is untouched."""
+    calls = []
+    model = "qwen3.5:9b"
+    real_json, real_status = PC._json, PC.lane_status
+    saved_power = sys.modules.get("jarvis_power")
+
+    def fake_json(url, payload=None, timeout=120.0, method="GET"):
+        calls.append((url, payload))
+        if url.endswith("/api/ps"):
+            return {"models": [{"name": model, "size": 100, "size_vram": 100}]}
+        return {"done": True}
+
+    def fake_status(port):
+        return [{"name": model, "size": 100, "size_vram": 100}]
+
+    def power(mode):
+        mod = types.ModuleType("jarvis_power")
+        mod.current = lambda: mode
+        sys.modules["jarvis_power"] = mod
+
+    PC._json, PC.lane_status = fake_json, fake_status
+    try:
+        power("active")
+        calls.clear()
+        out = PC.warm_lane(11434, model)
+        gen = [p for u, p in calls if p is not None and u.endswith("/api/generate")]
+        check("Active power mode warms the lane with keep_alive=-1",
+              bool(gen) and gen[0].get("keep_alive") == -1 and out.get("ok") is True,
+              (gen, out))
+        power("quiet")
+        calls.clear()
+        out = PC.warm_lane(11434, model)
+        gen = [p for u, p in calls if p is not None and u.endswith("/api/generate")]
+        check("Quiet power mode keeps the old 30m warm-up",
+              bool(gen) and gen[0].get("keep_alive") == "30m" and out.get("ok") is True,
+              (gen, out))
+    finally:
+        PC._json, PC.lane_status = real_json, real_status
+        if saved_power is None:
+            sys.modules.pop("jarvis_power", None)
+        else:
+            sys.modules["jarvis_power"] = saved_power
+
+
 def t_B_moves_the_chat_C_touches_nothing():
     calls = []
     real_json = PC._json
@@ -527,13 +574,14 @@ def t_its_generator_check_is_semantic_not_byte_exact():
 
     The check was byte-exact, which made the hunk header's LINE NUMBER
     load-bearing. It is not: `git apply` finds a hunk by matching its context
-    contiguously, so the number is advisory. On 4d1812b7 the committed patch
-    says `@@ -6591,3 +6591,25 @@` and the generator derives
-    `@@ -6629,3 +6629,25 @@`, because jarvis_hud.py has since moved 38 lines.
-    Both files are 29 lines and line 3 is the only difference. That made CI red
-    on EVERY branch, including ones that never touch this patch, and held up ten
-    pull requests - while the 143-patch rehearsal passed with the stale number,
-    which is the proof it applies.
+    contiguously, so the number is advisory. The HUD has moved since the patch
+    was written (the D12 loopback helpers and A4's two session-latch fields add
+    138 lines before this anchor): the committed patch says
+    `@@ -6591,3 +6591,25 @@` and the generator derives
+    `@@ -6729,3 +6729,25 @@`. Both files are 29 lines and line 3 is the only
+    difference. That made CI red on EVERY branch, including ones that never
+    touch this patch - while the 143-patch rehearsal passed with the stale
+    number, which is the proof it applies.
 
     A check that only accepts byte equality is not checking anything the owner
     cares about; a check that accepts everything is worse than none. So this
@@ -571,13 +619,13 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     check("the committed patch's header is the stale one this was measured on",
           committed[2] == b"@@ -6591,3 +6591,25 @@", committed[2])
     check("the generated header is the one this was measured on",
-          generated[2] == b"@@ -6629,3 +6629,25 @@", generated[2])
+          generated[2] == b"@@ -6729,3 +6729,25 @@", generated[2])
 
     ok, summary, why = gen.check(have, want)
     check("the committed patch PASSES the semantic check even though its hunk "
-          "header is 38 lines stale", ok, why)
+          "header is 138 lines stale", ok, why)
     check("... and the skew is reported, not swallowed",
-          ok and "38 line(s)" in (summary or ""), summary)
+          ok and "138 line(s)" in (summary or ""), summary)
 
     def must_fail(label, bad):
         ok, summary, why = gen.check(bad, want)

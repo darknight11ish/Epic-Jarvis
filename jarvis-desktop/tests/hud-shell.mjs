@@ -442,6 +442,22 @@ await check("H3-PM-2: Ambient's left rail is a drawer, not an unreachable hidden
     "edit mode does not keep the fixed Stop control above the auto-revealed rails");
   assert.match(editSrc, /revealRailsForEditing/, "the editor does not reveal hidden rails");
   assert.match(editSrc, /edit-reveal/, "the editor does not mark the revealed rails");
+  // P0.5 D-UI-3/4 (2026-10-23): one edit banner, a non-overlapping right rail
+  // in edit mode, and a full-width Ambient stage with a visible Controls pill.
+  assert.match(editSrc, /hud-edit-banner/, "the edit bar has no .hud-edit-banner");
+  assert.match(editSrc,
+    /Editing the HUD — drag a card or use its buttons\. Press Esc when done\./,
+    "the edit banner is not the single plain sentence");
+  assert.match(page,
+    /#rail-right \.hud-card\{[^}]*flex-shrink:0/,
+    "edit-mode right-rail cards can shrink and overlap");
+  assert.match(page, /grid-template-columns:0 minmax\(0,1fr\)/,
+    "Ambient still reserves a column for the fixed left rail");
+  assert.match(page, /html\[data-hud-shell="center-core"\] #stage\{[^}]*grid-column:1 \/ -1/,
+    "Ambient's stage does not span the full width");
+  assert.match(page, /aria-label="Open the Controls drawer"/,
+    "the Ambient Controls pill has no accessible label");
+  assert.match(page, />&#9776; Controls</, "the Controls pill has no visible label");
   // The HUD's fixed Stop everything control is real now (owner-approved
   // 2026-10-22): pinned in the page, the editor reason and both docs. The old
   // tracked-gap wording must be gone, and the page must actually carry the

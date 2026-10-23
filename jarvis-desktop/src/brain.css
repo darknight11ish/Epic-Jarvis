@@ -3301,3 +3301,15 @@ mark.find-current {
     forced-color-adjust: none;
   }
 }
+
+/* Reminders Phase 2 (2026-10-22): the row editor and the keyboard reorder. */
+.row-controls{display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin:2px 0 0 0;}
+.schedule-editor{margin-top:6px; padding:8px;
+  border:var(--stroke-hair) solid var(--border); border-radius:var(--radius-control);
+  background:var(--surface-sunken);}
+.schedule-editor-grid{display:flex; flex-wrap:wrap; gap:6px;}
+.schedule-editor-field{display:flex; align-items:center; gap:6px; min-width:0;}
+.schedule-editor-field label{font-size:12px; opacity:.75;}
+.schedule-editor-field input{min-width:120px;}
+.schedule-editor-note{margin:6px 0; font-size:12px; opacity:.75;}
+.schedule-editor-buttons{display:flex; gap:6px; margin-top:6px;}

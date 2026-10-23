@@ -876,10 +876,16 @@ def t_the_two_2026_10_14_hud_fixes_are_literal_deltas():
         shutil.rmtree(root, ignore_errors=True)
 
 
-#: The ten keys `/api/status` answers with, before and after the route rewrite.
+#: The ten keys `/api/status` answered with, before and after the route rewrite.
+#: A4 (2026-10-23) adds two more through the CHAINED delta below
+#: (`STATUS_LATCH_KEYS`); they are kept apart because the route delta's own
+#: old/new pair predates them and must still prove the ten.
 STATUS_PAYLOAD_KEYS = ('"routing"', '"jarvis_injects_memory"', '"budget"',
                        '"jarvis"', '"ollama"', '"proxy"', '"models"', '"lanes"',
                        '"default_model"', '"tools"')
+
+#: A4 (2026-10-23): the two read-only session-latch keys the chained delta adds.
+STATUS_LATCH_KEYS = ('"taint_latched"', '"rush_latched"')
 
 
 def _status_route_ast(source: str) -> str:
@@ -918,9 +924,15 @@ def t_the_api_status_route_delta_replaces_the_inline_route():
         # raising KeyError: the bite must read as "not planned", not as a crash.
         table = {"hud-status-route.patch": R.DELTA_TABLE.get("hud-status-route.patch") or {}}
         base_source = (REPO / "jarvis-backend" / "jarvis_hud.py").read_text(encoding="utf-8")
-        check("the NEW block is structurally the base HUD's own /api/status route",
+        # The chain's last link (`status-latches-new.txt`) proves byte-for-byte
+        # that the base's CURRENT route is the published text - see
+        # `t_the_session_latch_delta_chains_after_the_status_route_delta`. Here
+        # only the pre-A4 block's own shape is proved: it IS a /api/status route
+        # (the base has since grown A4's read-only latch fields on top of it).
+        check("the NEW block is structurally a /api/status route (the base's own "
+              "route before A4's latch fields were chained on)",
               _status_route_ast(textwrap.dedent(new)) != ""
-              and _status_route_ast(textwrap.dedent(new)) == _status_route_ast(base_source))
+              and _status_route_ast(textwrap.dedent(new)) != _status_route_ast(base_source))
         check("the OLD block is the live inline-probing route (no cache, no force)",
               'jarvis_up = _reachable(f"{JARVIS_URL}/health")' in old
               and '_reachable(f"{OLLAMA_URL}/api/tags")' in old
@@ -989,6 +1001,116 @@ def t_the_api_status_route_delta_replaces_the_inline_route():
         check("(e) a live route that is already cached is never staged",
               refusals4 == [] and staged4 == {}
               and [d.status for d in _d4] == ["already"], (_d4, staged4, refusals4))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_session_latch_delta_chains_after_the_status_route_delta():
+    """A4 (2026-10-23): the two persistent session safety latches, READ-ONLY, in
+    `/api/status`. The live PC never gets `jarvis-backend/*` copied over it, so
+    the change must ride the same literal-delta mechanism as the route itself -
+    and it CHAINS: its OLD block is exactly the cached route the
+    `hud-status-route` entry leaves behind (byte-identical to
+    `status-route-new.txt`, proved here), and its NEW block is the published
+    base's route with the two fields, byte for byte. Bite: without the entry the
+    plan stages nothing and (a) fails; a live file carrying the OLD cached route
+    twice is refused; a fresh (inline-route) live file gets BOTH changes, in
+    order."""
+    root = tmpdir()
+    try:
+        old = "\n".join(R._delta_lines(R.STATUS_LATCHES_OLD_FILE))
+        new = "\n".join(R._delta_lines(R.STATUS_LATCHES_NEW_FILE))
+        route_old = "\n".join(R._delta_lines(R.STATUS_ROUTE_OLD_FILE))
+        route_new = "\n".join(R._delta_lines(R.STATUS_ROUTE_NEW_FILE))
+        base_source = (REPO / "jarvis-backend" / "jarvis_hud.py").read_text(encoding="utf-8")
+        table = {"hud-status-latches.patch":
+                 R.DELTA_TABLE.get("hud-status-latches.patch") or {}}
+        full_table = {
+            "hud-status-route.patch": R.DELTA_TABLE.get("hud-status-route.patch") or {},
+            "hud-status-latches.patch": table["hud-status-latches.patch"],
+        }
+
+        # ---- the delta's own bytes: chained, and the base's own route -------
+        check("the latch delta's OLD block is exactly the cached route the route "
+              "delta leaves behind (the chain cannot drift)",
+              old != "" and old == route_new)
+        check("... and the NEW block is the published base's route text, byte for byte",
+              new != "" and base_source.count(new) == 1)
+        check("the latch delta is ordered AFTER the status-route delta in DELTA_TABLE",
+              list(R.DELTA_TABLE).index("hud-status-route.patch")
+              < list(R.DELTA_TABLE).index("hud-status-latches.patch"))
+        check("the NEW block is structurally the base HUD's own /api/status route",
+              _status_route_ast(textwrap.dedent(new)) != ""
+              and _status_route_ast(textwrap.dedent(new))
+              == _status_route_ast(base_source))
+        check("... and it carries the ten existing keys plus the two latch keys",
+              all(k in new for k in STATUS_PAYLOAD_KEYS + STATUS_LATCH_KEYS)
+              and len(STATUS_PAYLOAD_KEYS) == 10 and len(STATUS_LATCH_KEYS) == 2)
+        check("... the fields are read from the two real latches, read-only",
+              "jarvis_gate.taint_active()" in new
+              and "jarvis_content_risk" in new and "rush_active()" in new)
+        check("... a READ only: the route adds no clear/approve/decide call",
+              all(word not in new for word in
+                  ("clear_taint", "clear_rush", "confirm_auto", "decide_approval",
+                   "latch_taint(", "latch_rush(", "/api/approve", "/api/deny")))
+
+        # ---- (a) this PC: the cached route is already there -> one insert ----
+        live = make_live(root / "pc")
+        write(live / "jarvis_hud.py", MINI_HUD.replace(route_old, route_new))
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 table=table, literals=True)
+        check("(a) a live file that already has the cached route plans the latch "
+              "delta as a literal REPLACE",
+              refusals == [] and [(d.patch, d.status) for d in deltas]
+              == [("hud-status-latches.patch", "insert")], (deltas, refusals))
+        text = staged.get("jarvis_hud.py", "")
+        check("(a) the staged HUD carries the latch keys and none of the old cached route",
+              new in text and route_new not in text, text[:200])
+        check("(a) ... and the staged HUD still compiles",
+              R.rehearse(staged) == [], R.rehearse(staged))
+        backup = R.Backup(live, stamp="status-latches")
+        written = R.apply_deltas(staged, live, backup)
+        check("(a) ... and the apply wrote exactly the staged text",
+              written == ["jarvis_hud.py"]
+              and (live / "jarvis_hud.py").read_bytes() == text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                  table=table, literals=True)
+        check("(a) ... a second plan sees the latch delta ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"], (again, staged2, refusals2))
+
+        # ---- (b) a fresh live folder: route delta first, then the latch -------
+        live2 = make_live(root / "fresh")
+        deltas2, staged2b, refusals2b = R.plan_deltas(live2, [], show=fake_show,
+                                                      table=full_table, literals=True)
+        check("(b) a fresh (inline-route) live folder gets BOTH changes in order",
+              refusals2b == []
+              and [(d.patch, d.status) for d in deltas2]
+              == [("hud-status-route.patch", "insert"),
+                  ("hud-status-latches.patch", "insert")], (deltas2, refusals2b))
+        text2 = staged2b.get("jarvis_hud.py", "")
+        check("(b) ... the staged HUD ends with the cached route AND the latch keys",
+              new in text2 and route_new not in text2 and route_old not in text2,
+              text2[:200])
+        check("(b) ... and it still compiles", R.rehearse(staged2b) == [],
+              R.rehearse(staged2b))
+        R.apply_deltas(staged2b, live2, R.Backup(live2, stamp="chain"))
+        _d2, staged2c, refusals2c = R.plan_deltas(live2, [], show=fake_show,
+                                                  table=full_table, literals=True)
+        check("(b) ... and a second plan sees both ALREADY_PRESENT",
+              refusals2c == [] and staged2c == {}
+              and [d.status for d in _d2] == ["already", "already"],
+              (_d2, staged2c, refusals2c))
+
+        # ---- (c) a half-applied live file is refused, never guessed ---------
+        write(live2 / "jarvis_hud.py",
+              MINI_HUD.replace(route_old, route_new) + "\n\n" + route_new + "\n")
+        _d3, staged3, refusals3 = R.plan_deltas(live2, [], show=fake_show,
+                                                table=table, literals=True)
+        check("(c) a live file where the OLD cached route appears twice is REFUSED",
+              staged3 == {} and any("hud-status-latches.patch" in r
+                                    and "appears 2 time" in r for r in refusals3),
+              (staged3, refusals3))
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1722,6 +1844,7 @@ def main():
                t_insertion_uses_its_anchor_and_refuses_a_bad_one,
                t_the_two_2026_10_14_hud_fixes_are_literal_deltas,
                t_the_api_status_route_delta_replaces_the_inline_route,
+               t_the_session_latch_delta_chains_after_the_status_route_delta,
                t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block,
                t_deltas_are_planned_and_refused_hermetically,
                t_an_unknown_delta_is_refused_before_writing,

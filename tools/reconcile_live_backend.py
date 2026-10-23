@@ -168,6 +168,19 @@ REASONING_NEW_FILE = "reasoning-new.txt"
 STATUS_ROUTE_OLD_FILE = "status-route-old.txt"
 STATUS_ROUTE_NEW_FILE = "status-route-new.txt"
 
+#: A4 (2026-10-23): the session taint/rush latch in /api/status. A CHANGE to an
+#: already-carried route, so it CHAINS: this old block is the text the
+#: hud-status-route entry above leaves in the live file (the cached route with
+#: no latch read), and the new block is the published base's route with the two
+#: read-only fields. In DELTA_TABLE it is ordered AFTER hud-status-route, so a
+#: fresh live folder sees the route replace first and this second, while this PC
+#: (route already present) gets the latch fields added. The old block must
+#: appear EXACTLY once or the deploy is refused, never guessed at; `status-latches-old.txt`
+#: is byte-identical to `status-route-new.txt` on purpose (proved by a test), so
+#: the chain cannot drift apart.
+STATUS_LATCHES_OLD_FILE = "status-latches-old.txt"
+STATUS_LATCHES_NEW_FILE = "status-latches-new.txt"
+
 #: Review ruling 8.2's guard change (PR #680) reaches the live PC the same way
 #: the two HUD fixes do, and for a reason that reads like a silent trap:
 #: `gate-touches.patch` is ALREADY in the live `_jarvis-state.json` patch list,
@@ -270,6 +283,19 @@ DELTA_TABLE = {
                        "force = (parse_qs(urlparse(self.path).query)"),
             "file": STATUS_ROUTE_NEW_FILE,
             "replace_file": STATUS_ROUTE_OLD_FILE,
+        },
+    },
+    # A4 (2026-10-23): the two session safety latches, read-only, on the cached
+    # route the entry above leaves behind. CHAINED on purpose and ordered after
+    # it: a fresh live folder gets the route replace then this; a folder that
+    # already carries the cached route (this PC) gets the latch fields added.
+    # The probes are the two post-image keys, so a half-applied route can never
+    # be mistaken for a complete one, and the old block must appear exactly once.
+    "hud-status-latches.patch": {
+        "jarvis_hud.py": {
+            "probes": ('"taint_latched"', '"rush_latched"'),
+            "file": STATUS_LATCHES_NEW_FILE,
+            "replace_file": STATUS_LATCHES_OLD_FILE,
         },
     },
     # Review ruling 8.2 (PR #680): the guard change is carried to the live

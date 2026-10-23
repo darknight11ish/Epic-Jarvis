@@ -125,7 +125,7 @@ async function openHud(browser, status, pageOptions = {}) {
   // does, with no __TAURI__ at all; `tauriInvoke: "fail"` makes the mic's
   // command refused.
   if (!status.noShell) {
-    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout, preview }) => {
+    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout, preview, lockFlags }) => {
       // Captured before the bootstrap replaces window.fetch.
       const origFetch = window.fetch.bind(window);
       const shellHeaders = { "X-Jarvis-Client": "hud", "X-Jarvis-Token": "test-token" };
@@ -204,6 +204,16 @@ async function openHud(browser, status, pageOptions = {}) {
             if (cmd === "hud_schedule_act") {
               body = { id: args.id, do: args.action };
               if (typeof args.seconds === "number") body.seconds = args.seconds;
+              // Phase 2 (2026-10-22): the same verb choice `change_body` makes in
+              // Rust - a list-only edit is the backend's move - and the same fields.
+              if (args.change && typeof args.change === "object") {
+                const keys = Object.keys(args.change);
+                body = { id: args.id, do: args.action };
+                if (args.action === "edit" && keys.length === 1 && keys[0] === "list") {
+                  body.do = "move";
+                }
+                for (const key of keys) body[key] = args.change[key];
+              }
             }
             const r = await origFetch(backend + path, { method: "POST",
               headers: { ...shellHeaders, "Content-Type": "application/json" },
@@ -217,6 +227,9 @@ async function openHud(browser, status, pageOptions = {}) {
           // (the owner's ask of 2026-10-09). Granted in surfaces.toml's
           // `hud-voice` set; this stand-in refuses anything not granted.
           case "hide_quickbar": return null;
+          // The two yes/no lock answers (commands.rs `get_lock_flags`, granted
+          // through `hud-link`): no token, no words, nothing written.
+          case "get_lock_flags": return lockFlags;
           case "mark_answer": {
             const r = await origFetch(backend + "/api/feedback/mark", { method: "POST",
               headers: { ...shellHeaders, "Content-Type": "application/json" },
@@ -256,7 +269,8 @@ async function openHud(browser, status, pageOptions = {}) {
     }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs),
       hudLayout: status.hudLayout || null,
       preview: status.preview || null,
-         decideFails: status.decideFails || "" });
+         decideFails: status.decideFails || "",
+         lockFlags: status.lockFlags || { appLock: false, privateAnswers: false } });
   }
   // A browser's voice list, with one online voice and one local one, and
   // an utterance class that accepts them (the real one only takes real
@@ -321,6 +335,12 @@ async function openHud(browser, status, pageOptions = {}) {
         // body the page asked for is the body the backend takes.
         scheduleWrites.push({ wrote: url.pathname,
                               body: JSON.parse(req.postData() || "{}") });
+        // Review 737 #3: a scenario can make the PC REFUSE the change, to
+        // prove the editor and the typed words survive it.
+        if (status.scheduleActRefuse) {
+          return route.fulfill({ status: 409, headers: cors,
+            json: { ok: false, error: status.scheduleActRefuse } });
+        }
         return route.fulfill({ status: 200, headers: cors, json:
           url.pathname === "/api/schedule/add"
             ? (status.scheduleAddReply || { ok: true, said: "Reminder set for tomorrow at 18:00." })
@@ -1526,6 +1546,11 @@ await check("a HUD card that REPLACES data takes TWO presses in the injected win
                                     replaces_note: c.note,
                                     risk: { reversible: "no", reach: "local",
                                             swipe_ok: false } })) });
+  // H4 review (unknown-link Approve): the rail holds Approve until the shell
+  // has said the link is live; push that same verdict the bootstrap sends, so
+  // this test drives the two-press guard, not the boot hold.
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+  await page.waitForTimeout(150);
   const place = (card) => page.evaluate((c) => {
     const box = document.getElementById("approvals");
     box.hidden = false;
@@ -1625,7 +1650,7 @@ await check("the HUD page holds no token, and every request it makes goes throug
   assert.deepEqual(direct, [], `the page reached the backend by itself: ${JSON.stringify(direct)}`);
   assert.equal(chats.length, 1, "the chat did not reach the backend through the shell");
   assert.ok(log.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."), JSON.stringify(log));
-  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout"].includes(c)), [],
+  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout", "get_lock_flags"].includes(c)), [],
     `the HUD called ${JSON.stringify(held.invoked)}`);
   // Every read is one hud_proxy.rs allows (HUD_GET_PATHS and /api/retrieve).
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
@@ -1756,7 +1781,8 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
     pressed: document.getElementById("mic").getAttribute("aria-pressed"),
   }));
   await page.close();
-  assert.deepEqual(after.invokes.map((c) => c[0]).filter((c) => c !== "hud_get" && c !== "get_hud_layout"),
+  assert.deepEqual(after.invokes.map((c) => c[0])
+    .filter((c) => c !== "hud_get" && c !== "get_hud_layout" && c !== "get_lock_flags"),
     ["summon_push_to_talk"],
     "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
   assert.equal(after.listening, false, "the page's own (browser) recogniser started");
@@ -2391,6 +2417,10 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
       rows: rows.length,
       visibleRows: visibleRows.length,
       composerCentred: Math.abs((composer.left + composer.right) / 2 - (shellBox.left + shellBox.right) / 2) < 8,
+      stageStartsAtLeft: document.getElementById("stage").getBoundingClientRect().left <= 1,
+      stageWidth: Math.round(document.getElementById("stage").getBoundingClientRect().width),
+      shellWidth: Math.round(shellBox.width),
+      controlsLabel: document.getElementById("left-toggle").textContent.trim(),
       linksHold: !!document.getElementById("log"),
     };
   });
@@ -2403,11 +2433,28 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
     label: document.getElementById("history-toggle").textContent,
     pressed: document.getElementById("history-toggle").getAttribute("aria-pressed"),
   }));
+  // D-UI-4: the [Controls] pill is the visible way into the hidden left rail
+  // outside edit mode, and it really opens it.
+  assert.equal(shape.controlsLabel, "☰ Controls", "Ambient has no visible [☰ Controls] label");
+  await page.click("#left-toggle");
+  await page.waitForTimeout(250);
+  const controlsOpen = await page.evaluate(() => {
+    const rail = document.querySelector(".rail.left").getBoundingClientRect();
+    const toggle = document.getElementById("left-toggle");
+    return { open: rail.left >= -1, expanded: toggle.getAttribute("aria-expanded") };
+  });
+  assert.equal(controlsOpen.open, true, "the [Controls] pill did not open the Ambient left rail");
+  assert.equal(controlsOpen.expanded, "true", "the [Controls] pill does not report the rail open");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
   await page.close();
   assert.equal(shape.leftRailOffScreen, true, "Ambient draws the navigation rail over the core");
   assert.equal(shape.leftToggleShown, true, "Ambient has no [Navigation] toggle for its left rail");
   assert.equal(shape.rightRailOffScreen, true, "Ambient draws the telemetry rail over the core");
   assert.equal(shape.coreWidth, 320, "the Ambient core is not 320px");
+  assert.equal(shape.stageStartsAtLeft, true, "Ambient leaves an empty left column beside the stage");
+  assert.ok(shape.stageWidth >= shape.shellWidth - 2,
+    `Ambient's stage is narrower than the shell (${shape.stageWidth} vs ${shape.shellWidth})`);
   assert.equal(shape.barPosition, "fixed", "the top-right pill is not floating");
   assert.equal(shape.statusShown, true, "the top-left status pill is missing");
   assert.equal(shape.historyShown, true, "the history drawer toggle is missing");
@@ -2421,15 +2468,23 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
   assert.deepEqual(problems, []);
 });
 
-await check("the footer Jarvis-bar pill is there with the shell, and gone in a plain browser", async () => {
+await check("one open-the-bar control is drawn; the duplicate pill and dock icon stay dormant", async () => {
   const shelled = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   const withShell = await shelled.page.evaluate(() => {
     const pill = document.getElementById("rail-quickbar");
+    const dock = document.getElementById("dock-quickbar");
+    const visible = ["hud-open-bar", "rail-quickbar", "dock-quickbar"].filter((id) => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && cs.display !== "none" && cs.visibility !== "hidden";
+    });
     return {
-      present: Boolean(pill),
-      hidden: pill ? pill.hidden : true,
-      ready: pill ? pill.hasAttribute("data-ready") : false,
-      shown: pill ? pill.getBoundingClientRect().width > 0 : false,
+      present: Boolean(pill) && Boolean(dock),
+      pillShown: pill ? pill.getBoundingClientRect().width > 0 : false,
+      dockShown: dock ? dock.getBoundingClientRect().width > 0 : false,
+      visibleControls: visible,
     };
   });
   await shelled.page.close();
@@ -2442,12 +2497,47 @@ await check("the footer Jarvis-bar pill is there with the shell, and gone in a p
     };
   });
   await plain.page.close();
-  assert.equal(withShell.present, true, "the footer pill is not in the page at all");
-  assert.equal(withShell.hidden, false, "the footer pill is hidden though the shell is there");
-  assert.equal(withShell.ready, true);
-  assert.equal(withShell.shown, true, "the footer pill is not drawn in the Cockpit rail");
-  assert.equal(withoutShell.ready, false, "a plain browser drew a Jarvis-bar pill with no bar to open");
+  assert.equal(withShell.present, true, "a duplicate launcher id was removed instead of being kept for old tests");
+  assert.equal(withShell.pillShown, false, "the footer Jarvis-bar pill is still drawn");
+  assert.equal(withShell.dockShown, false, "the Studio dock lightning is still drawn");
+  assert.deepEqual(withShell.visibleControls, ["hud-open-bar"],
+    "exactly one bar launcher should be visible (the shell's own button)");
+  assert.equal(withoutShell.ready, false, "a plain browser marked a bar pill ready with no bar to open");
   assert.equal(withoutShell.shown, false);
+});
+
+await check("P0.6: Windows is asked for the monochrome presentation of the two dock emoji", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  // The owner's field test (2026-10-23): the alarm and lightning drew as colour
+  // Windows emoji among monochrome dock glyphs. Two things make them text:
+  // the U+FE0E variation selector on the character, and the CSS asking for the
+  // text presentation. Both are readable from the DOM, so this holds on every
+  // runner; the PIXEL result can only be checked on Windows and is evidence in
+  // the PR, not a CI check.
+  const glyphs = await page.evaluate(() => {
+    const read = (selector) => {
+      const span = document.querySelector(selector);
+      if (!span) return null;
+      const button = span.closest(".dock-btn");
+      return {
+        text: span.textContent,
+        vs15: span.textContent.includes("\uFE0E"),
+        emoji: button ? getComputedStyle(button).getPropertyValue("font-variant-emoji").trim() : "",
+      };
+    };
+    return {
+      reminders: read('#studio-dock .dock-btn[data-hud-tab-choice="reminders"] span'),
+      quickbar: read("#dock-quickbar span"),
+    };
+  });
+  await page.close();
+  assert.equal(glyphs.reminders && glyphs.reminders.vs15, true,
+    "the alarm glyph carries no U+FE0E text-presentation selector");
+  assert.equal(glyphs.quickbar && glyphs.quickbar.vs15, true,
+    "the lightning glyph carries no U+FE0E text-presentation selector");
+  assert.equal(glyphs.reminders.emoji, "text",
+    "the dock does not ask the platform for the text presentation (font-variant-emoji)");
+  assert.deepEqual(problems, []);
 });
 
 
@@ -2869,9 +2959,9 @@ const remindersPanel = (page) => page.evaluate(() => {
   };
 });
 
-const openReminders = async (schedule) => {
+const openReminders = async (schedule, extra = {}) => {
   const opened = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
-    schedule });
+    schedule, ...extra });
   await setHudLook(opened.page, "studio");
   await opened.page.waitForTimeout(150);
   await opened.page.evaluate((n) => document.querySelector(
@@ -3248,6 +3338,51 @@ await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escap
     assert.equal(card.sizes, 4, `${card.id} does not offer four sizes`);
     assert.equal(card.regionSelect, true, `${card.id} has no direct region selector`);
   }
+  const rail = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll("#rail-right [data-hud-card]")]
+      .filter((node) => !node.hidden && node.getBoundingClientRect().height > 0);
+    const boxes = cards.map((node) => {
+      const r = node.getBoundingClientRect();
+      return { id: node.getAttribute("data-hud-card"), top: r.top, bottom: r.bottom };
+    }).sort((a, b) => a.top - b.top);
+    const overlaps = [];
+    for (let i = 1; i < boxes.length; i += 1) {
+      if (boxes[i].top < boxes[i - 1].bottom - 1) {
+        overlaps.push([boxes[i - 1].id, boxes[i].id]);
+      }
+    }
+    // The rail scrolls: budget/voice may start below the fold, so bring each
+    // card on screen before asking what a real click would hit. The geometry
+    // above is taken before scrolling, so an overlap is still caught.
+    const hits = cards.map((node) => {
+      node.scrollIntoView({ block: "nearest" });
+      const r = node.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        id: node.getAttribute("data-hud-card"),
+        hit: Boolean(at && (at === node || node.contains(at))),
+      };
+    });
+    return {
+      bannerCount: document.querySelectorAll(".hud-edit-banner").length,
+      bannerText: (document.querySelector(".hud-edit-banner .hud-edit-words") || {}).textContent || "",
+      statusText: (document.getElementById("hud-edit-status") || {}).textContent || "",
+      cards: boxes,
+      hits,
+      overlaps,
+    };
+  });
+  assert.equal(rail.bannerCount, 1, "Edit HUD drew more than one banner");
+  assert.equal(rail.bannerText,
+    "Editing the HUD — drag a card or use its buttons. Press Esc when done.",
+    "the edit banner is not the single plain sentence");
+  assert.equal(rail.statusText, "", "the edit bar repeated its banner in the status line");
+  assert.deepEqual(rail.overlaps, [],
+    `right-rail cards overlap in Edit HUD: ${JSON.stringify(rail.overlaps)}`);
+  assert.ok(rail.cards.length >= 2, "the right rail has fewer than two cards to test");
+  for (const card of rail.hits) {
+    assert.equal(card.hit, true, `right-rail card ${card.id} is covered in Edit HUD`);
+  }
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
   const after = await page.evaluate(() => document.body.getAttribute("data-hud-edit"));
@@ -3295,15 +3430,18 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
     const toggleBox = box(toggle);
     const barBox = box(bar);
     const railBox = box(rail);
+    const stageBox = box(document.getElementById("stage"));
     return {
       toggle: atCentre(toggle),
       top: top ? top.getAttribute("data-hud-card") : null,
       tool: atCentre(tool),
-      toggleBox, barBox, railBox,
+      toggleBox, barBox, railBox, stageBox,
+      railPosition: rail ? getComputedStyle(rail).position : null,
       railShown: Boolean(rail && getComputedStyle(rail).display !== "none"
         && rail.getBoundingClientRect().width > 0),
       railTop: railBox ? railBox.y : null,
       barBottom: barBox ? barBox.y + barBox.h : null,
+      vw: innerWidth,
     };
   });
   await page.keyboard.press("Escape");
@@ -3314,12 +3452,21 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
   assert.ok(hit.top, "no visible card shell to test the top toolbar");
   assert.ok(hit.tool,
     `the Studio rail covers the top ${hit.top} card's toolbar (${JSON.stringify({ bar: hit.barBox, rail: hit.railBox })})`);
-  // The structural half: the rail starts BELOW the header band, not merely
-  // under it in paint order.
-  assert.ok(hit.railTop >= hit.barBottom - 2,
-    `the Studio rail starts at y=${hit.railTop}, inside the header band ending at ${hit.barBottom}`);
-  assert.ok(hit.toggleBox.y + hit.toggleBox.h <= hit.railTop + 1,
-    `[Edit HUD] sits at y=${hit.toggleBox.y} and the rail starts at ${hit.railTop}`);
+  // The structural half, P0.6 (owner field test, 2026-10-23): in Edit HUD the
+  // Studio rail is no longer a fixed overlay that must start BELOW the header
+  // band - that overlay was the jumble the owner photographed. It is now a
+  // normal in-flow column beside the stage: it starts at the window's top and
+  // sits to the RIGHT of the stage, so it cannot cover anything in it.
+  assert.equal(hit.railPosition, "static",
+    `the Studio rail is still an out-of-flow overlay in Edit HUD (${hit.railPosition})`);
+  assert.ok(hit.railTop <= 1,
+    `the Studio rail starts at y=${hit.railTop} instead of the window's top`);
+  assert.ok(hit.stageBox && hit.railBox.x >= hit.stageBox.x + hit.stageBox.w - 1,
+    `the Studio rail starts at x=${hit.railBox.x}, at or left of the stage's right edge ${hit.stageBox && hit.stageBox.x + hit.stageBox.w}`);
+  assert.ok(hit.railBox.x + hit.railBox.w <= hit.vw + 1,
+    `the Studio rail leaves the window (${hit.railBox.x + hit.railBox.w} > ${hit.vw})`);
+  assert.ok(hit.toggleBox.x >= 0 && hit.toggleBox.x + hit.toggleBox.w <= hit.vw + 1,
+    `[Edit HUD] is outside the window at x=${hit.toggleBox.x}`);
   assert.deepEqual(problems, []);
 });
 
@@ -3923,6 +4070,555 @@ await check("H3: DPR 1.5 / 900-1280 widths keep the saved shell and a working dr
   }
 });
 
+
+/* =========================================================================
+ * H4 (2026-10-22): the safety rail — App lock, queue-scoped rush evidence,
+ * catching up with Deny still enabled. The strip is outside every editable
+ * region, so no preset, import or edit-mode action can hide it.
+ * ========================================================================= */
+
+const LINK = (page, detail) => page.evaluate((d) => window.__jarvisFeed("link", d), detail);
+const APPROVALS_RAISED = [{ id: "91", action: "send_email", tier: "ask", replaces: false,
+  raised: { quote: "<script>alert(1)</script> act now", source: "an email" },
+  expires_in: 120 }];
+const PLAIN_CARD = [{ id: "91", action: "send_email", tier: "ask", replaces: false, expires_in: 120 }];
+
+/** Does a box overlap `#hud-safety`? Boxes only; no screenshots. */
+async function safetyOverlaps(page) {
+  return page.evaluate(() => {
+    const rail = document.getElementById("hud-safety");
+    const rb = rail.getBoundingClientRect();
+    const hits = [];
+    const nodes = [];
+    const ids = ["hud-edit-toggle", "hud-edit-bar", "hud-open-bar", "rail-quickbar",
+      "dock-quickbar", "input", "send", "mic", "drawer-close", "hud-stop"];
+    for (const id of ids) {
+      const node = document.getElementById(id);
+      if (node) nodes.push({ name: id, node });
+    }
+    const drawerButtons = document.querySelectorAll("#rail-right button");
+    for (let i = 0; i < drawerButtons.length; i += 1) {
+      nodes.push({ name: "drawer-control", node: drawerButtons[i] });
+    }
+    const buttons = document.querySelectorAll("#approvals .appr .yes, #approvals .appr .no, #approvals .appr .why");
+    for (let i = 0; i < buttons.length; i += 1) {
+      nodes.push({ name: "card-button", node: buttons[i] });
+    }
+    // H4-1: the strip has no controls in v1, so every protected control under
+    // it must still answer elementFromPoint (click-through, not just no box).
+    const blocked = [];
+    for (let i = 0; i < nodes.length; i += 1) {
+      const entry = nodes[i];
+      const node = entry.node;
+      if (!node || node.hidden) continue;
+      const b = node.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      if (hit && hit.closest && hit.closest("#hud-safety")) blocked.push(entry.name);
+    }
+    for (let i = 0; i < nodes.length; i += 1) {
+      const entry = nodes[i];
+      const node = entry.node;
+      if (!node || node.hidden) continue;
+      const b = node.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      const overlap = rb.left < b.right && b.left < rb.right && rb.top < b.bottom && b.top < rb.bottom;
+      if (overlap) hits.push(entry.name);
+    }
+    return { hits, blocked, railVisible: !rail.hidden };
+  });
+}
+
+await check("H4: catching up shows the rail, Approve waits and Deny keeps working", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD });
+  await LINK(page, { connected: true, stale: true });
+  await page.waitForTimeout(300);
+  const rail = await page.evaluate(() => ({
+    visible: !document.getElementById("hud-safety").hidden,
+    link: document.getElementById("hud-safety-link").textContent,
+    lock: document.getElementById("hud-safety-lock").hidden,
+    taint: document.getElementById("hud-safety-taint").hidden,
+  }));
+  assert.equal(rail.visible, true, "the safety rail stayed hidden while catching up");
+  assert.equal(rail.lock, true, "an App-lock chip appeared with the lock off");
+  assert.equal(rail.taint, true, "a rush chip appeared with no raised evidence");
+  assert.match(rail.link, /Deny still works/);
+  const card = page.locator("#approvals .appr").first();
+  assert.equal(await card.locator(".no").isEnabled(), true, "Deny was held on a stale link");
+  assert.equal(await card.locator(".yes").isDisabled(), true, "Approve was offered on a stale link");
+  assert.equal(await card.locator(".yes").getAttribute("aria-describedby"), "hud-safety-link");
+  assert.ok((await card.locator(".yes").getAttribute("title") || "").includes("Deny still works"));
+  const before = await page.evaluate(() => window.__invokes.filter((c) => c[0] === "decide_approval").length);
+  await card.locator(".no").click();
+  await page.waitForTimeout(300);
+  const decisions = await page.evaluate(() => window.__invokes
+    .filter((c) => c[0] === "decide_approval").map((c) => c[1]));
+  assert.equal(decisions.length, before + 1, "Deny did not reach decide_approval");
+  assert.deepEqual(decisions[decisions.length - 1], { id: "91", approved: false });
+  // The one status row still says "reconnecting" once; the rail adds no dupe.
+  const row = await page.locator("#brand-sub").innerText();
+  assert.equal((row.match(/reconnecting/gi) || []).length, 1, row);
+  const overlaps = await safetyOverlaps(page);
+  assert.deepEqual(overlaps.hits, [], `the safety rail covers a control: ${overlaps.hits}`);
+  assert.deepEqual(overlaps.blocked, [], `the safety rail pointer-blocks: ${overlaps.blocked}`);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: linked is silent here (the one status row already says it)", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: true, ollama: true, proxy: false });
+  await LINK(page, { connected: true, stale: false });
+  await page.waitForTimeout(250);
+  const state = await page.evaluate(() => ({
+    hidden: document.getElementById("hud-safety").hidden,
+    rail: document.getElementById("hud-safety").textContent,
+  }));
+  assert.equal(state.hidden, true, "the rail duplicated the linked status row");
+  assert.equal(state.rail.includes("linked"), false, state.rail);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: offline uses Rust's own first sentence, and Deny stays enabled", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: [{ id: "92", action: "read_files" }] });
+  await LINK(page, { connected: false, stale: true, error: "Jarvis is not answering. Start it on the PC." });
+  await page.waitForTimeout(300);
+  const words = await page.locator("#hud-safety-link").innerText();
+  assert.ok(words.startsWith("No link to Jarvis on your PC: "), words);
+  assert.ok(words.includes("Jarvis is not answering."), "Rust's own sentence was not carried");
+  assert.equal(await page.locator("#approvals .appr .no").first().isEnabled(), true);
+  assert.equal(await page.locator("#approvals .appr .yes").first().isDisabled(), true);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: App lock and hidden memory lists show, from the already-granted flags", async () => {
+  const locked = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, lockFlags: { appLock: true, privateAnswers: false } });
+  await locked.page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-lock");
+    return node && !node.hidden && node.textContent.length > 0;
+  }, null, { timeout: 8000 });
+  const words = await locked.page.locator("#hud-safety-lock").innerText();
+  assert.match(words, /App lock is on\. This window hides when you step away/);
+  assert.equal(await locked.page.locator("#approvals .appr").count(), 0,
+    "reading the lock flags raised an approval card");
+  await locked.page.close();
+  assert.deepEqual(locked.problems, []);
+  const hidden = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, lockFlags: { appLock: false, privateAnswers: true } });
+  await hidden.page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-lock");
+    return node && !node.hidden && node.textContent.length > 0;
+  }, null, { timeout: 8000 });
+  assert.match(await hidden.page.locator("#hud-safety-lock").innerText(),
+    /Memory lists are hidden until you unlock\./);
+  await hidden.page.close();
+  assert.deepEqual(hidden.problems, []);
+});
+
+await check("H4: the rush banner is the waiting card's evidence, escaped, never run", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: APPROVALS_RAISED });
+  await page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-taint");
+    return node && !node.hidden && node.textContent.length > 0;
+  }, null, { timeout: 8000 });
+  const taint = await page.locator("#hud-safety-taint").innerText();
+  assert.match(taint, /on the card that is waiting/);
+  assert.ok(taint.includes('"') || taint.includes("\u201c"), taint);
+  assert.ok(taint.includes("<script>alert(1)</script> act now"), "the quote is not shown as words");
+  assert.match(taint, /can never be hidden/);
+  assert.equal(await page.locator("#approvals script").count(), 0, "a card quote was injected as HTML");
+  assert.equal(await page.locator("#hud-safety-taint").getAttribute("role"), "alert");
+  // A queue with no raised evidence: no banner, never a guess at the latch.
+  const quiet = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: [{ id: "93", action: "read_files" }] });
+  await quiet.page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-taint");
+    return node && node.hidden;
+  }, null, { timeout: 8000 });
+  assert.equal(await quiet.page.locator("#hud-safety-taint").isHidden(), true,
+    "a rush banner was drawn with no raised evidence");
+  await quiet.page.close();
+  assert.deepEqual(quiet.problems, []);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4/A4: the persistent latches show read-only, and unknown stays silent", async () => {
+  // Both armed: one chip, both plain sentences, no control, still one strip.
+  const both = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, taint_latched: true, rush_latched: true });
+  await both.page.waitForFunction(() => {
+    const node = document.getElementById("hud-safety-latch");
+    return node && !node.hidden && node.textContent.length > 0;
+  }, null, { timeout: 8000 });
+  const words = await both.page.locator("#hud-safety-latch").innerText();
+  assert.match(words, /staying on your PC/, words);
+  assert.match(words, /tried to rush you recently/, words);
+  assert.ok(!/taint|latch|tier|armed/i.test(words), `internal jargon on screen: ${words}`);
+  assert.equal(await both.page.locator("#hud-safety-latch").getAttribute("role"), "status");
+  assert.equal(await both.page.locator("#hud-safety button, #hud-safety input, #hud-safety select").count(), 0,
+    "the persistent-latch chip grew a control");
+  assert.equal(await both.page.locator("#hud-safety").getAttribute("role"), "region",
+    "the rail stopped being the one fixed strip");
+  await both.page.close();
+  assert.deepEqual(both.problems, []);
+
+  // The PC has not said (null): silent - never drawn as "not latched".
+  const unknown = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, taint_latched: null, rush_latched: null });
+  await unknown.page.waitForTimeout(700);
+  assert.equal(await unknown.page.locator("#hud-safety-latch").isHidden(), true,
+    "an unread latch was drawn as a verdict");
+  assert.equal(await unknown.page.locator("#hud-safety").isHidden(), true,
+    "the rail drew a chip with no fact");
+  await unknown.page.close();
+  assert.deepEqual(unknown.problems, []);
+
+  // false: silent too, and a stale link still holds ONLY Approve (Rule 4).
+  const calm = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, taint_latched: false, rush_latched: false,
+      pending: PLAIN_CARD });
+  await LINK(calm.page, { connected: true, stale: true });
+  await calm.page.waitForTimeout(300);
+  assert.equal(await calm.page.locator("#hud-safety-latch").isHidden(), true,
+    "a false latch drew a chip");
+  assert.equal(await calm.page.locator("#approvals .appr .no").first().isEnabled(), true);
+  assert.equal(await calm.page.locator("#approvals .appr .yes").first().isDisabled(), true,
+    "the latch chip changed Rust's stale-link rule");
+  await calm.page.close();
+  assert.deepEqual(calm.problems, []);
+});
+
+await check("H4: a preset or a hostile saved document cannot hide the strip", async () => {
+  const HOSTILE = { version: 1, id: "custom-hostile-1", name: "Hostile",
+    base_preset: "quiet", theme: "dark", density: "comfortable",
+    default_stage_tab: "talk",
+    cards: [{ id: "safety", region: "header", order: 0, col_span: 12, row_span: 1, visible: false },
+      { id: "app_lock", region: "header", order: 1, col_span: 12, row_span: 1, visible: false },
+      { id: "taint", region: "header", order: 2, col_span: 12, row_span: 1, visible: false }],
+    user_presets: [], updated_at: 1 };
+  for (const hudLayout of [{ version: 1, base_preset: "quiet", cards: [] }, HOSTILE]) {
+    const opened = await openHud(browser,
+      { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD, hudLayout });
+    await LINK(opened.page, { connected: true, stale: true });
+    await opened.page.waitForTimeout(300);
+    const state = await opened.page.evaluate(() => ({
+      present: Boolean(document.getElementById("hud-safety")),
+      visible: !document.getElementById("hud-safety").hidden,
+      ghosts: document.querySelectorAll("#safety, #app-lock, #taint, [data-hud-card=\"safety\"]").length,
+    }));
+    assert.equal(state.present, true, "a preset/hostile document removed the strip element");
+    assert.equal(state.visible, true, "a preset/hostile document hid the strip");
+    assert.equal(state.ghosts, 0, "a ghost safety card was drawn");
+    await opened.page.close();
+    assert.deepEqual(opened.problems, []);
+  }
+});
+
+await check("H4: the strip is clear of every protected control at 1280 and 1024 (DPR 1)", async () => {
+  for (const [width, height] of [[1280, 820], [1024, 768]]) {
+    const opened = await openHud(browser,
+      { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD },
+      { viewport: { width, height } });
+    await LINK(opened.page, { connected: true, stale: true });
+    await opened.page.waitForTimeout(300);
+    const overlaps = await safetyOverlaps(opened.page);
+    assert.deepEqual(overlaps.hits, [], `${width}x${height}: the rail covers ${overlaps.hits}`);
+    assert.deepEqual(overlaps.blocked, [], `${width}x${height}: pointer-blocks ${overlaps.blocked}`);
+    assert.equal(overlaps.railVisible, true);
+    await opened.page.close();
+    assert.deepEqual(opened.problems, []);
+  }
+});
+
+await check("H4: no layout, import or edit mode can hide the rail, and it has no controls", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD });
+  await LINK(page, { connected: true, stale: true });
+  await page.waitForTimeout(250);
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(300);
+  const state = await page.evaluate(() => {
+    const rail = document.getElementById("hud-safety");
+    let node = rail.parentElement;
+    let fixedAncestor = false;
+    while (node) {
+      if (node.hasAttribute("data-hud-card") || node.hasAttribute("data-hud-region")) fixedAncestor = true;
+      node = node.parentElement;
+    }
+    return {
+      visible: !rail.hidden,
+      label: document.getElementById("hud-safety-fixed").textContent,
+      labelShown: !document.getElementById("hud-safety-fixed").hidden,
+      controls: rail.querySelectorAll("button, input, select, [data-hud-card-handle]").length,
+      fixedAncestor,
+      cards: document.querySelectorAll("#hud-safety .appr, #hud-safety .hud-card").length,
+    };
+  });
+  assert.equal(state.visible, true, "entering edit mode hid the safety rail");
+  assert.equal(state.labelShown, true, "the 'always visible' line is not shown in edit mode");
+  assert.match(state.label, /Always visible/);
+  assert.equal(state.controls, 0, "the rail grew a control");
+  assert.equal(state.fixedAncestor, false, "the rail sits inside an editable region or card");
+  assert.equal(state.cards, 0, "the rail borrowed a card/appr shell");
+  const overlaps = await safetyOverlaps(page);
+  // #741 reveals the right rail OVER the stage in Edit HUD, so its buttons can
+  // sit under the top-centre strip while editing. The strip is click-through
+  // (asserted below), and the reviewer accepted that transient edit-mode
+  // overlap as cosmetic; every PROTECTED control outside that revealed rail
+  // must still be clear of it, and nothing may be pointer-blocked.
+  assert.deepEqual(overlaps.hits.filter((hit) => hit !== "drawer-control"), [],
+    `edit mode covers/overlaps the rail: ${overlaps.hits}`);
+  assert.deepEqual(overlaps.blocked, [], `edit mode pointer-blocks: ${overlaps.blocked}`);
+  // H4-3: a HEALTHY edit mode (no chip true) still shows the strip and its
+  // "Always visible" line; the line must be hidden outside edit mode.
+  await page.keyboard.press("Escape");
+  await LINK(page, { connected: true, stale: false });
+  await page.waitForTimeout(250);
+  const normal = await page.evaluate(() => ({
+    strip: document.getElementById("hud-safety").hidden,
+    label: getComputedStyle(document.getElementById("hud-safety-fixed")).display,
+  }));
+  assert.equal(normal.strip, true, "a linked, healthy HUD showed the strip");
+  assert.equal(normal.label, "none", "the 'always visible' line showed outside edit mode");
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(250);
+  const editing = await page.evaluate(() => ({
+    strip: document.getElementById("hud-safety").hidden,
+    label: getComputedStyle(document.getElementById("hud-safety-fixed")).display,
+    chips: document.querySelectorAll("#hud-safety-lock:not([hidden]), #hud-safety-latch:not([hidden]), #hud-safety-taint:not([hidden]), #hud-safety-link:not([hidden])").length,
+  }));
+  assert.equal(editing.strip, false, "healthy edit mode hid the safety rail");
+  assert.equal(editing.label, "block", "edit mode did not show the 'always visible' line");
+  assert.equal(editing.chips, 0, "a silent edit-mode rail drew a chip");
+  await page.keyboard.press("Escape");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H4: geometry at 900x600, DPR 1.5 and reduced motion; Deny stays clickable", async () => {
+  const opened = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD },
+    { viewport: { width: 900, height: 600 }, deviceScaleFactor: 1.5 });
+  const { page, problems } = opened;
+  await LINK(page, { connected: true, stale: true });
+  await page.waitForTimeout(350);
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(300);
+  const overlaps = await safetyOverlaps(page);
+  // #741 reveals the right rail OVER the stage in Edit HUD; that transient
+  // overlay's buttons are the reviewer-accepted cosmetic overlap, and the
+  // strip is click-through (asserted next). Every other control must be clear.
+  assert.deepEqual(overlaps.hits.filter((hit) => hit !== "drawer-control"), [],
+    `DPR 1.5 / 900x600: the rail covers ${overlaps.hits}`);
+  assert.deepEqual(overlaps.blocked, [], `DPR 1.5 pointer-blocks: ${overlaps.blocked}`);
+  const deny = page.locator("#approvals .appr .no").first();
+  assert.equal(await deny.isEnabled(), true);
+  await deny.click();
+  await page.waitForTimeout(250);
+  const decided = await page.evaluate(() => window.__invokes
+    .filter((c) => c[0] === "decide_approval").map((c) => c[1].approved));
+  assert.deepEqual(decided, [false], "Deny at DPR 1.5 did not reach the shell");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.waitForTimeout(150);
+  const motion = await page.evaluate(() => {
+    const rail = document.getElementById("hud-safety");
+    const chip = document.getElementById("hud-safety-link");
+    const s1 = getComputedStyle(rail);
+    const s2 = getComputedStyle(chip);
+    return [s1.animationName, s1.transitionDuration, s2.animationName, s2.transitionDuration];
+  });
+  assert.equal(motion[0], "none", "reduced motion: the rail animates");
+  assert.equal(motion[1], "0s", "reduced motion: the rail transitions");
+  assert.equal(motion[2], "none");
+  assert.equal(motion[3], "0s");
+  assert.equal(await page.locator("#hud-safety").isVisible(), true);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+/* =========================================================================
+ * REMINDERS PHASE 2 (2026-10-22, backend #730): Edit, move by list and the
+ * keyboard reorder. Drawn only when the PC's own read says `phase2: true`;
+ * ONE change at a time; a repeat edit is the ONE 202 card and says so.
+ * ========================================================================= */
+
+const PHASE2_SCHEDULE = {
+  available: true, phase2: true, now: 1000, tz: "UTC",
+  jobs: [
+    { id: "s0123456789", kind: "reminder", text: "Call Mum", state: "active",
+      due: 4102444800, when: "tomorrow at 18:00", repeats: false },
+    { id: "s012345678a", kind: "timer", text: "Tea", state: "active",
+      left: 300, duration: 300, when: "in 5 minutes" },
+    { id: "s012345678b", kind: "alarm", text: "Wake", state: "active", repeats: true,
+      rule: { every: "weekday", at: "07:00" }, repeat: "every weekday at 07:00",
+      when: "tomorrow at 07:00" },
+    { id: "s012345678e", kind: "reminder", text: "Water plants", state: "active",
+      repeats: true, rule: { every: "week", at: "09:00", days: [0, 2, 4, 5, 6] },
+      repeat: "every week on Mon, Wed, Fri, Sat, Sun at 09:00",
+      when: "tomorrow at 09:00" },
+  ],
+  todo: [
+    { id: "s012345678c", kind: "todo", text: "Buy milk", state: "active", list: "", rank: 0 },
+    { id: "s012345678d", kind: "todo", text: "Eggs", state: "active", list: "", rank: 1 },
+  ],
+  went_off: [], lists: [{ name: "shopping", title: "Shopping list", open: 1 }],
+};
+
+const phase2Page = async (schedule = PHASE2_SCHEDULE, extra = {}) =>
+  openReminders(schedule, extra);
+
+const rowOf = (page, id) => page.locator(`#reminders-body [data-rem-id="${id}"]`);
+
+await check("Phase 2: the PC's marker gates every control; older backend and hidden words draw none", async () => {
+  const old = await openReminders(REMINDERS_SCHEDULE);
+  assert.equal(await old.page.locator("#reminders-body [data-rem-control]").count(), 0,
+    "a backend without the phase2 marker got an edit control");
+  await old.page.close();
+  const hidden = await phase2Page({ ...PHASE2_SCHEDULE, hidden: true, hidden_count: 2 });
+  assert.equal(await hidden.page.locator("#reminders-body [data-rem-control]").count(), 0,
+    "App lock / hidden lists still offered Edit");
+  await hidden.page.close();
+  const p2 = await phase2Page();
+  assert.equal(await p2.page.locator('#reminders-body [data-rem-control="edit"]').count(), 6,
+    "each editable row draws one Edit");
+  assert.equal(await rowOf(p2.page, "s012345678c").locator('[data-rem-control="up"]').isDisabled(), true);
+  assert.equal(await rowOf(p2.page, "s012345678d").locator('[data-rem-control="down"]').isDisabled(), true);
+  assert.deepEqual(p2.problems, []);
+  await p2.page.close();
+});
+
+await check("Phase 2: edit the words, the timer's minutes and a one-off's date/time, cardless", async () => {
+  const { page, problems, scheduleWrites } = await phase2Page();
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="text"]', "Call Mum tonight");
+  await page.click('[data-rem-editing="s0123456789"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  let acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts, [{ id: "s0123456789", do: "edit", text: "Call Mum tonight" }]);
+
+  await rowOf(page, "s012345678a").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s012345678a"] [data-rem-field="minutes"]', "10");
+  await page.click('[data-rem-editing="s012345678a"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts[1], { id: "s012345678a", do: "edit", seconds: 600 });
+
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="date"]', "2030-09-15");
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="time"]', "18:00");
+  await page.click('[data-rem-editing="s0123456789"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts[2], { id: "s0123456789", do: "edit", date: "2030-09-15", time: "18:00" });
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+await check("Phase 2: a repeat edit is ONE 202 card - the asking sentence, the old rule shown", async () => {
+  const { page, scheduleWrites } = await phase2Page(PHASE2_SCHEDULE,
+    { scheduleActReply: { ok: true, waiting: true, job: PHASE2_SCHEDULE.jobs[2] } });
+  await rowOf(page, "s012345678b").locator('[data-rem-control="edit"]').click();
+  assert.equal(await page.locator('[data-rem-editing="s012345678b"] [data-rem-field="date"]').count(), 0,
+    "a repeating job's editor offered a Date (the PC refuses that)");
+  await page.fill('[data-rem-editing="s012345678b"] [data-rem-field="time"]', "08:00");
+  await page.click('[data-rem-editing="s012345678b"] button[type="submit"]');
+  await page.waitForTimeout(400);
+  const body = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body)[0];
+  assert.deepEqual(body, { id: "s012345678b", do: "edit",
+    repeat: { every: "weekday", at: "08:00" } });
+  assert.match(await page.locator("#rem-note").innerText(),
+    /Asked the PC\. Nothing changes until you answer the card\./);
+  // Nothing was claimed: the row still shows the OLD repeating rule.
+  assert.match(await rowOf(page, "s012345678b").innerText(), /every weekday at 07:00/);
+  await page.close();
+});
+
+await check("Phase 2: a list-only save is the backend's move; a reorder sends the PC's rank", async () => {
+  const { page, scheduleWrites } = await phase2Page();
+  await rowOf(page, "s012345678c").locator('[data-rem-control="edit"]').click();
+  await page.selectOption('[data-rem-editing="s012345678c"] [data-rem-field="list"]', "shopping");
+  await page.click('[data-rem-editing="s012345678c"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  let acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts[0], { id: "s012345678c", do: "move", list: "shopping" });
+
+  await rowOf(page, "s012345678d").locator('[data-rem-control="up"]').click();
+  await page.waitForTimeout(300);
+  acts = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(acts[1], { id: "s012345678d", do: "reorder", rank: 0 });
+  await page.close();
+});
+
+await check("Phase 2: Escape cancels an edit with no request; nothing changed sends none", async () => {
+  const { page, scheduleWrites } = await phase2Page();
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="text"]', "Something else");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('[data-rem-editing="s0123456789"]').count(), 0,
+    "Escape did not close the editor");
+  assert.deepEqual(scheduleWrites, [], "a cancelled edit sent a write");
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.click('[data-rem-editing="s0123456789"] button[type="submit"]');
+  await page.waitForTimeout(200);
+  assert.deepEqual(scheduleWrites, [], "an unchanged save sent a write");
+  await page.close();
+});
+
+
+/* =========================================================================
+ * #737 review fixes: the owner's own custom days, a refused save keeping the
+ * editor, and no unnecessary field churn.
+ * ========================================================================= */
+
+await check("#737: a week rule's own days are shown and saved unchanged (never Mon-Fri)", async () => {
+  const { page, problems, scheduleWrites } = await phase2Page();
+  await rowOf(page, "s012345678e").locator('[data-rem-control="edit"]').click();
+  const state = await page.evaluate(() => {
+    const form = document.querySelector('[data-rem-editing="s012345678e"]');
+    return {
+      repeat: form.querySelector('[data-rem-field="repeat"]').value,
+      days: [...form.querySelectorAll('[data-rem-field="days"] input:checked')].map((c) => c.value),
+    };
+  });
+  assert.equal(state.repeat, "custom", "a week rule was shown as something other than Custom days");
+  assert.deepEqual(state.days, ["0", "2", "4", "5", "6"],
+    "the owner's own days were not pre-selected");
+  await page.fill('[data-rem-editing="s012345678e"] [data-rem-field="time"]', "09:30");
+  await page.click('[data-rem-editing="s012345678e"] button[type="submit"]');
+  await page.waitForTimeout(300);
+  const body = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body)[0];
+  assert.deepEqual(body, { id: "s012345678e", do: "edit",
+    repeat: { every: "week", at: "09:30", days: [0, 2, 4, 5, 6] } },
+  "the save rewrote the owner's days");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("#737: a refused save keeps the editor and the owner's typed words", async () => {
+  const { page, problems, scheduleWrites } = await phase2Page(PHASE2_SCHEDULE,
+    { scheduleActRefuse: "That is changed where it was set up." });
+  await rowOf(page, "s0123456789").locator('[data-rem-control="edit"]').click();
+  await page.fill('[data-rem-editing="s0123456789"] [data-rem-field="text"]', "The words I typed");
+  await page.click('[data-rem-editing="s0123456789"] button[type="submit"]');
+  await page.waitForTimeout(400);
+  assert.match(await page.locator("#rem-error").innerText(),
+    /That is changed where it was set up\./);
+  assert.equal(await page.locator('[data-rem-editing="s0123456789"]').count(), 1,
+    "a refused save destroyed the editor");
+  assert.equal(await page.inputValue('[data-rem-editing="s0123456789"] [data-rem-field="text"]'),
+    "The words I typed", "a refused save threw the typed words away");
+  assert.equal(scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").length, 1,
+    "a refused save sent more than the one request");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
 
 await browser.close();
 if (fails.length) {

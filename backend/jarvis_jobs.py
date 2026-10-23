@@ -778,10 +778,24 @@ def _plan_handler(ctx: "JobContext", params: dict) -> dict:
                     st["error"] = str(need.reason or need)
                     _save_plan_steps(ctx.job_id, params)
                     raise
+                if waiting is not None:
+                    # PA-9: this plan already has ONE card waiting for the
+                    # owner. A later (read-only) step must not raise a second
+                    # grant/card for the same turn; it queues behind the one
+                    # card and asks on a later tick, after that card is
+                    # answered.
+                    ctx._plan_waiting = True
+                    st["status"] = "queued_behind_approval"
+                    st["pending_action"] = str(need.action)
+                    _save_plan_steps(ctx.job_id, params)
+                    continue
                 st["status"] = "waiting_approval"
                 st["pending_action"] = str(need.action)
                 st["card_id"] = str(getattr(need, "card_id", "") or need.action)
                 waiting = need
+                # A second step that asks while this card is open must not
+                # create a second pending grant (PA-9); require() sees this.
+                ctx._plan_waiting = True
                 continue
             st["status"] = "done"
             try:
@@ -829,6 +843,10 @@ class JobContext:
         self.tainted: bool = bool(row.get("tainted"))
         self.attempts: int = int(row.get("attempts") or 0)
         self._progress: float = float(row.get("progress") or 0.0)
+        # PA-9: set by _plan_handler once a plan already has ONE card waiting.
+        # A later step's require() must not create a second pending grant for
+        # the same turn; it parks behind the open card instead.
+        self._plan_waiting: bool = False
 
     # ---- what it may do ------------------------------------------------
     @property
@@ -877,6 +895,13 @@ class JobContext:
             raise NeedsApproval(
                 action, f"{action} is set to 'never' in jarvis-framework.toml; "
                         f"no grant can authorise it", denied=True)
+
+        if self._plan_waiting:
+            # PA-9: one card per pending proposal/turn. The earlier step's
+            # card is still open; do NOT record a second grant request here.
+            raise NeedsApproval(
+                action, f"waiting for the earlier step's card before asking "
+                        f"for {action}")
 
         state = _write(lambda c: _grant_step(c, self.job_id, action))
         if state == "granted":

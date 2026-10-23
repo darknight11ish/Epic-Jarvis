@@ -530,6 +530,38 @@ def t_cards_pause_it():
           and acc["words"].startswith("Paused: can't check for cards - "), acc)
 
 
+def t_a_setting_transcript_cannot_bypass_a_card():
+    """Hermetic transcript -> card-pause proof (ADJ-Q4, 2026-10-23).
+
+    The Live voice->answer path lives in the owner's HUD, so the repository
+    cannot run the real route. It CAN prove the repository-owned half: a
+    transcript that is a real setting change is not even accepted while a card
+    raised since Live started waits; the card must be decided first. That is the
+    part a spoken "yes" could otherwise bypass.
+    """
+    import jarvis_quick as Q
+    words = "turn on lights without asking"
+    intent = Q.match(words)
+    check("the test transcript really is a setting change",
+          intent is not None and intent.name == "settings_bool"
+          and (intent.f or {}).get("key") == "lights_without_card"
+          and (intent.f or {}).get("on") is True, intent)
+    w = World()
+    e = w.engine
+    e.start("phone")
+    w.card(age=1)
+    acc = e.accepts("phone")
+    check("a card raised since Live started pauses before the transcript is answered",
+          not acc["ok"] and acc["state"] == "paused" and acc["code"] == "card",
+          acc)
+    check("the pause is the card rule, not a different refusal",
+          acc["words"] == L.PAUSE_WORDS["card"], acc)
+    w.cards = []
+    acc = e.accepts("phone")
+    check("once the card is decided the same transcript is accepted",
+          acc["ok"], acc)
+
+
 def t_other_voices():
     w = World()
     e = w.engine

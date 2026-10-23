@@ -1,0 +1,122 @@
+--- a/jarvis_extract.py
++++ b/jarvis_extract.py
+@@ -195,7 +195,21 @@
+             if re.match(r"^(is|are|was|were|do|does|did|can|could|would|should|will|have|has)\s+"
+                         r"(i|you|we|they|he|she|it|there|that|this)\b", text, re.I):
+                 continue
+-            if text.lower() in known or text.lower() in have or pending_n >= cap:
++            if text.lower() in known or text.lower() in have:
++                continue
++            if pending_n >= cap:
++                # Counted, not just silently folded into the same `continue`
++                # as the dedupe check. Once the queue is at its cap, every
++                # further proposal this pass produces was going on the floor
++                # with no record of it ever having existed - visible only as
++                # the boolean `queue_full` staying true, which cannot
++                # distinguish "nothing new to learn" from "still learning
++                # things, and losing all of them". This is a running total
++                # for the process's life, not a persisted count: it exists so
++                # the owner can tell the difference, not to reconstruct what
++                # was lost.
++                global _dropped_full
++                _dropped_full += 1
+                 continue
+             replaces = f.get("replaces")
+             # Settle the target now, so the approval card can name the fact
+@@ -253,31 +267,78 @@
+ 
+ 
+ def decide(proposal_id: int, accept: bool) -> Optional[int]:
+-    """Returns the new fact id on accept, 0 on reject, None if unknown."""
++    """Returns the new fact id on accept, 0 on reject, None if unknown.
++
++    CLAIMED BEFORE ACTED ON. This used to SELECT the row, check it was
++    pending, and only then act - a plain check-then-act with nothing between
++    the two. Two concurrent decide(id, True) calls (a double-tap, a retried
++    request, two devices open on the same review card) could both pass the
++    SELECT before either commits its UPDATE, and both then call _accept(),
++    writing two fact rows for one human decision. store.add_fact() has its
++    own lock against concurrent writers, so nothing crashed and nothing
++    corrupted - it just quietly duplicated a memory the owner decided about
++    exactly once. The UPDATE below is the claim: only the caller whose
++    UPDATE actually changes a row proceeds, and a loser sees exactly what an
++    already-decided proposal looks like - None - rather than a race.
++    """
+     store = M.store()
+     with closing(store._connect()) as c:
+         _init(c)
+-        row = c.execute("SELECT * FROM proposals WHERE id=? AND state='pending'", (proposal_id,)).fetchone()
+-        if not row:
+-            return None
+         if accept:
+-            return _accept(c, store, dict(row))
+-        c.execute("UPDATE proposals SET state='rejected', decided=? WHERE id=?", (time.time(), proposal_id))
+-        return 0
++            row = c.execute(
++                "SELECT * FROM proposals WHERE id=? AND state='pending'",
++                (proposal_id,)).fetchone()
++            if not row:
++                return None
++            claimed = c.execute(
++                "UPDATE proposals SET state='accepting' WHERE id=? AND state='pending'",
++                (proposal_id,))
++            if claimed.rowcount == 0:
++                # Something else claimed it between the SELECT and here.
++                return None
++            try:
++                return _accept(c, store, dict(row))
++            except Exception:
++                # Give the row back rather than leave it stuck in a state
++                # neither pending() nor decide() recognise.
++                c.execute("UPDATE proposals SET state='pending' WHERE id=?",
++                         (proposal_id,))
++                raise
++        cur = c.execute(
++            "UPDATE proposals SET state='rejected', decided=? WHERE id=? AND state='pending'",
++            (time.time(), proposal_id))
++        return 0 if cur.rowcount else None
++
++
++#: A running total, never decremented, of proposals dropped because the
++#: queue was already at its cap. See the comment where it is incremented, in
++#: propose(). Reset to 0 on process restart - this is a diagnostic for "is
++#: this still happening", not a durable log.
++_dropped_full = 0
+ 
+ 
+ def setup_status() -> dict:
+-    return {"enabled": bool(_cfg("enabled", True)),
+-            "setup_complete": bool(_cfg("setup_complete", False)),
+-            # Always false, and reported so a client that warns about it
+-            # keeps working. The config key is honoured nowhere: nothing in
+-            # Jarvis writes a fact the owner has not decided on.
+-            "auto_accept": False,
+-            "pending": len(_pending_rows()),
+-            "queue_full": _queue_full(),
+-            "note": None if _cfg("setup_complete", False) else
+-                    "extraction is a scaffold: review its proposals and tune the prompt "
+-                    "against real conversations"}
++    out = {"enabled": bool(_cfg("enabled", True)),
++           "setup_complete": bool(_cfg("setup_complete", False)),
++           # Always false, and reported so a client that warns about it
++           # keeps working. The config key is honoured nowhere: nothing in
++           # Jarvis writes a fact the owner has not decided on.
++           "auto_accept": False,
++           "pending": len(_pending_rows()),
++           "queue_full": _queue_full(),
++           "note": None if _cfg("setup_complete", False) else
++                   "extraction is a scaffold: review its proposals and tune the prompt "
++                   "against real conversations"}
++    if _dropped_full:
++        # Only when it has happened, same rule jarvis_memory's bad_vectors
++        # counter follows: a permanent "dropped_full: 0" line is noise on
++        # every screen that renders this.
++        out["dropped_full"] = _dropped_full
++        out["dropped_full_note"] = (
++            f"{_dropped_full} proposal(s) since this backend started were "
++            "never queued because the review queue was already full - "
++            "clear some pending items to keep learning new things")
++    return out
+ 
+ 
+ def _pending_rows() -> list[dict]:

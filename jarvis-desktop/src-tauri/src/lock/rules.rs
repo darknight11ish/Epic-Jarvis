@@ -642,6 +642,7 @@ mod tests {
     fn the_hud_schedule_read_loses_its_words_but_keeps_its_shape() {
         let body = serde_json::json!({
             "available": true,
+            "phase2": true,
             "now": 1000.0,
             "tz": "America/Los_Angeles",
             "jobs": [
@@ -652,7 +653,7 @@ mod tests {
             ],
             "todo": [
                 {"id": "s012345678b", "kind": "todo", "text": "Buy milk", "state": "active",
-                 "list": "shopping"}
+                 "list": "shopping", "rank": 0}
             ],
             "went_off": [],
             "lists": [{"name": "shopping", "title": "Shopping list", "open": 1}]
@@ -682,6 +683,10 @@ mod tests {
             v["todo"][0]["list"], "hidden-1",
             "the item points at the same stand-in"
         );
+        // Phase 2's new fields are a boolean and a number - never words - so the
+        // hidden read keeps them while it blanks the words around them.
+        assert_eq!(v["phase2"], true, "the capability marker is not a word");
+        assert_eq!(v["todo"][0]["rank"], 0, "a rank is a number, kept");
         assert_eq!(
             redact_hud_read("/api/schedule", "not json"),
             r#"{"available":false,"hidden":true}"#

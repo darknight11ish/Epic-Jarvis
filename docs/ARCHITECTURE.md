@@ -2778,6 +2778,8 @@ are deliberate and recorded rather than left to be discovered:
 
 | what | why |
 |---|---|
+| Settings -> Abilities & commands feature directory (#748, corrected 2026-10-23) | **Desktop only, one-sided on purpose:** the directory is a words-only index of all 139 features generated from `contract/feature-controls.json`; the Android app has no directory row or screen yet, and its contract evidence says `All features and abilities (planned)`. The phone keeps its own Settings screens and search. This is a planned B-side follow-up, not a backend route: the directory calls nothing and draws no control. |
+| Live voice-to-setting adjustment proof (2026-10-23) | **NOT-TESTABLE in this repository, one-sided by ownership:** the Live clip/answer path lives in the owner's HUD file, outside this repo. The repository proves the typed adjustment path and a hermetic rule that a card raised during Live pauses the Live engine before a transcript is answered; it cannot prove a Live voice sentence reaches a setting. Cards are tap-only by design. |
 | The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). Since 2026-09-28 only the desktop's HUD window reads it (the Brain's Galaxy is drawn from people and things instead, privacy finding B1, docs/JARVIS-API.md §71.3), and the HUD's copy loses its fact and person dots while the memory lists are hidden. |
 | Galaxy, made of people and things (Brain -> Advanced, 2026-09-28) | The memory graph, which stays off the phone (`CLAUDE.md`). It reads `/api/memory/entities` (the row below), so no route of its own. |
 | "History of this fact" (`/api/memory/fact-history`, 2026-09-28, docs/JARVIS-API.md §71.2) | The phone lists only facts saved automatically that are still in use ("Saved automatically"). Those are never corrections, so they almost never have an earlier wording, and a view that brings back the retired wordings of any fact is the deep memory editing that stays on the desktop (the rows below about Forget and Erase draw the same line). The phone's "What did I believe on this date?" still shows retired facts as they were on a date. |
@@ -3025,6 +3027,53 @@ is unofficial and no live request is made in the suite):
 `docs/DESIGN-PRICE-RADAR.md`.
 
 **The `Alt+Space` startup race is now self-healing, and the honest limit is Windows itself** (R6, 2026-10-21; `hotkeys.rs`, `lib.rs`, `settings.js`). Registering a global hotkey at login competes with every other Run-key program, and Windows gives the loser no warning - before this, a machine where PowerToys Run or Copilot held `Alt+Space` simply had no spotlight and nothing in the app could say so or fix it (`autostart.rs` documented the race as deliberately unfixed; the startup code only printed the refusal). Now: the startup registration still reports every verdict, and **only the summon action** (`toggle_quickbar`, whose default is `Alt+Space`; watched by id, so an owner who moved the key is retried on the key they chose) gets up to **three bounded background retries at 2 s / 6 s / 15 s** on the existing Tauri async runtime when the OS refuses it. Each attempt asks the plugin's own live registry first and never re-registers a key this process already owns; it never unregisters or retouches the other shortcuts; and it never blocks setup - the tray's **Show or hide the Jarvis bar** remains the fallback, and Win+Shift+J and the rest are unchanged. The OS verdict + retry count + last reason live in managed state (`alt_space_status`); Settings -> Shortcuts shows an honest line ("alt+space is currently held by another program on this PC. Jarvis retried N times after logon.") and one **[Re-claim Alt+Space]** button (`reclaim_alt_space`) that makes exactly one more attempt and repaints what the OS answered - it never rebinds anything and never picks another key for the owner. **The honest limit**: if another program keeps the key, no amount of retrying can take it; the retries cover the logon rush only, the button works once that program lets go, and the tray is always there. The real boot race (two programs racing at login on the owner's PC) is owner-tested, not provable from a test suite; the unit tests drive the pure retry machine with an injected registration fn (fails twice then succeeds on the third - exactly three attempts; fails all four including the initial one - false + the last reason), and the Settings page + command seam is driven in the existing Playwright harness. One-sided on purpose: global hotkeys are a PC thing (the phone has no equivalent, like the other hotkey rows above).
+
+**The HUD's safety rail is fixed and outside every editable region** (H4,
+2026-10-22; A4, 2026-10-23; `src/hud-safety.js`). App lock / hidden memory
+lists (through the already-granted `get_lock_flags`), the queue-scoped
+rush/outside-text evidence from the pending queue's `raised` object, the two
+persistent session latches' own words (read-only, from `/api/status`; see
+below), and the catching-up state live in one
+`#hud-safety` strip that is not a card, has no `data-hud-card` or
+`data-hud-region`, is not in `CARD_REGISTRY` or the layout document, and is
+painted from live truth only — so no preset, import, hand-edited settings file
+or edit-mode action can hide or move it (a hostile import naming such cards is
+dropped by `normalizeLayout`; a non-default preset and a hostile saved document
+are tested at the page level and the strip survives both, stays visible in
+edit mode with its "Always visible" line, and is click-through at 1280x820 and
+1024x768 at DPR 1 and 900x600 at DPR 1.5, clear of the bar launcher, the
+quickbar pills, the composer and the approvals buttons; reduced motion adds no
+animation). While the link is stale, the card's
+**Approve waits and Deny stays enabled** — matching `stale_answer_refusal`,
+which holds only an approved decision — and the strip says why in words. Two
+honest limits: the real fixed Stop everything control (#742, `#hud-stop`) is one
+of the protected controls the geometry tests keep clear of the strip - and the
+strip still has no controls of its own (nothing on it approves, decides or
+clears anything). **Since A4 (2026-10-23) the two persistent session latches are
+readable too**: the PC's own `/api/status` carries `taint_latched` /
+`rush_latched`, read-only (true/false/null, where null is "the PC has not said" —
+never "not latched" — and a taint read that fails answers true, the gate's own
+fail-closed rule), so the strip can say "this session is staying on your PC" and
+"something Jarvis read tried to rush you recently; approvals ask for one more
+look" with no card waiting and across a backend restart. The queue-scoped banner
+stays separate and never claims a latch from a card alone; none of this adds a
+command, permission, card, route or grant (`/api/status` was already on the HUD's
+fixed allowlist), and no control can clear either latch. The real locked-window
+state is still Rust hiding the HUD, so there is no in-page locked overlay by
+design. No new command, grant, capability, inline script or CSP change; the
+phone's own stale-approval and App-lock rules are unchanged (this rail is the HUD
+window's face of facts the phone already shows in its own surfaces).
+
+**Reminders Phase 2 editing is on the desktop first, and that is one-sided on
+purpose for now** (2026-10-22, backend #730). The PC's backend already offers
+`edit`/`move`/`reorder` to every client, and the HUD's Reminders panel and the
+Brain's Coming up draw them; the phone's Coming up stays a read surface, because
+a phone-side row editor is its own slice (a small screen, a keyboard-free
+picker, and the phone's own stale-link/App-lock handling), and building it
+half-tested in this one would be worse than saying so. Nothing is faked on the
+phone: it calls none of the three verbs, so `tools/check_parity.py` sees no
+drift. The verbs are ready for it, and JARVIS-API section 21 documents the
+shapes it will use.
 
 ## 9. Where the backend lives
 

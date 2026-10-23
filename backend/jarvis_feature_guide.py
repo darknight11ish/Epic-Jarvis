@@ -926,13 +926,22 @@ ADJUST_SECTIONS = {
 
 #: Stable reason codes for a feature that cannot be changed by typing.
 REASON_CODES = ("command", "no-command", "credentials", "app-local",
-                "read-only", "multi-field", "pc-only", "not-a-setting")
+                "read-only", "multi-field", "pc-only", "not-a-setting",
+                "planned-no-own-control")
 
 #: Feature id -> (reason_code, plain reason, owner). Every feature in the
 #: catalogue is either command-controllable or named here; the suite fails on
 #: a silent omission, and also fails if an id named here IS controllable
 #: (that would be a stale excuse). The reasons say WHY, not "not supported".
 NO_COMMAND_REASON = {
+    # The three planned Switchable rows (2026-10-23) still need an allowlist
+    # reason for matrix_rows_without_reason(); their label stays Switchable and
+    # their row status stays planned, so this reason is reported, not a hidden pass.
+    "wake-word": ("planned", "no own switch or typed control is wired today; planned row", "voiceprint-wiring"),
+    "read-aloud": ("planned", "the read-aloud control is not a registered switch and has no typed path yet", "voiceprint-wiring"),
+    "spoken-style": ("planned", "spoken style is automatic, not a registered switch or typed control yet", "voiceprint-wiring"),
+    "home-status": ("planned", "no own typed phrase is wired for the home-status feature yet", "voiceprint-wiring"),
+
     # The reasoned allowlist (2026-10-22). Every feature the catalogue
     # publishes is either command-controllable (a switch or a working
     # adjust phrase, proved by control_matrix()) or named here with a
@@ -970,7 +979,6 @@ NO_COMMAND_REASON = {
     "forget-range": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "galaxy": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
     "watch-with-me": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
-    "picture-mode": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "photo-reminder": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "live-camera": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "quiz": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
@@ -1056,6 +1064,13 @@ EXTRA_CONTROLS = {
     "write-like-me": ("write_like_me",),
     # "Your past chats" is the feature whose on/off switch is chat history.
     "history": ("chat_history",),
+    # The lights feature's real switch is the "without a card" row in asks-first,
+    # not the asks-first representative sentence (2026-10-23 fix: the old
+    # EXTRA_ADJUST entry made the feature show "stop asking before my calendar").
+    "lights": ("lights_without_card",),
+    # Picture mode's real switch is screen_picture; the old matrix had no link
+    # here, so its Command-Only row typed into the switch without owning it.
+    "picture-mode": ("screen_picture",),
 }
 
 #: Features that ARE command-controllable but have NO desktop Settings control
@@ -1094,11 +1109,102 @@ EXTRA_ADJUST = {
     "email-read": ("asks-first",),
     "calendar": ("asks-first",),
     "home-status": ("asks-first",),
-    "lights": ("asks-first",),
-    "read-aloud": ("voice",),
-    "spoken-style": ("voice",),
     "weather-sky": ("animal-options",),
 }
+
+
+#: Features that are genuinely Switchable/Adjustable in principle, but have NO
+#: own typed control wired today. The old matrix gave them a section's
+#: representative phrase (voice speed for wake-word/read-aloud, asks-first for
+#: lights), which was untrue. Keep the owner's 42-label count, mark the row
+#: planned with its own honest reason, and show no fixed phrase - the directory
+#: says "Still being wired" instead of a phrase that changes a different thing.
+PLANNED_SWITCHABLE = {
+    "wake-word": ("voiceprint-wiring",
+                  "no own switch or typed control is wired today; a planned row, not a fake phrase"),
+    "read-aloud": ("voiceprint-wiring",
+                   "the read-aloud control is not a registered switch and has no typed path yet"),
+    "spoken-style": ("voiceprint-wiring",
+                     "spoken style is automatic, not a registered switch or typed control yet"),
+    "home-status": ("voiceprint-wiring",
+                    "no own typed phrase is wired for the home-status feature yet"),
+}
+
+#: A feature whose section representative phrase names a different tool needs
+#: its own sentence. Email read and calendar read are both asks-first actions,
+#: but "stop asking before my calendar" is not the email feature's words.
+FEATURE_ADJUST_PHRASES = {
+    "email-read": ("asks-first", "stop asking before reading my email"),
+}
+
+#: Owner-approved 2026-10-23 label corrections (Gemini ADJ-Q1): these three
+#: rows are real controls on ONE app only, so they belong under the PC-Only
+#: label even though their typed control exists. The old matrix labelled them
+#: Switchable/Adjustable because it looked only at status, not at which app
+#: the feature lives on.
+PC_ONLY_FEATURES = {"calendar", "phone-notifications", "phone-watch"}
+
+#: Feature id -> (own setting keys, own intent names, expected action values).
+#: Used by control_matrix() and the checker: a phrase is this feature's words
+#: only when it resolves to one of its OWN settings, not to a section-mate's.
+OWN_CONTROLS = {
+    "animal-options": ((), ("animal_switch", "animal_sky", "animal_weather"), {}),
+    "approvals": ((), ("settings_card_mode",), {}),
+    "attention-budget": ((), ("settings_budget",), {}),
+    "calendar": ((), ("settings_asks_first",), {"settings_asks_first": {"calendar_read"}}),
+    "captcha-handoff": (("handoff_mode", "handoff_front"),
+                        ("control_set", "settings_choice"), {}),
+    "custom-voices": (("voice_speaker",), ("settings_choice",), {}),
+    "data-sandbox": (("sandbox_exec",), ("feature_switch",), {}),
+    "email-read": ((), ("settings_asks_first",), {"settings_asks_first": {"email_read"}}),
+    "focus-presets": (("focus_preset",), ("control_set",), {}),
+    "home-status": ((), ("settings_asks_first",), {"settings_asks_first": {"home_read"}}),
+    "lights": (("lights_without_card",), ("settings_bool",), {}),
+    "limits": ((), ("settings_budget",), {}),
+    "manner": ((), ("manner_from_now_on",), {}),
+    "menu-visibility": ((), ("menu_visibility",), {}),
+    "picture-mode": (("screen_picture",), ("settings_bool",), {}),
+    "reach": ((), ("settings_tool",), {}),
+    "topics": ((), ("topic_mode",), {}),
+    "weather-sky": ((), ("animal_switch", "animal_sky", "animal_weather"), {}),
+    "web-search": (("web_search",), ("search_use", "settings_bool"), {}),
+    "what-asks-first": ((), ("settings_asks_first",), {}),
+    "write-like-me": (("write_like_me",), ("settings_bool",), {}),
+    "look-at-this": (("screen_picture",), ("feature_switch",), {}),
+}
+OWN_ACTIONS = {
+    "email-read": {"settings_asks_first": {"email_read"}},
+    "calendar": {"settings_asks_first": {"calendar_read"}},
+    "home-status": {"settings_asks_first": {"home_read"}},
+}
+
+
+def _own_words(fid: str, intent) -> bool:
+    """True when this intent changes the FEATURE's own setting, not a section-mate's.
+
+    control_matrix() stores intents as their name strings (`_quick_intent`), so
+    the string branch is the one the matrix uses; the object branch keeps this
+    helper usable by tests that hold a full Intent.
+    """
+    if intent is None:
+        return False
+    keys, intents, actions = OWN_CONTROLS.get(fid, ((), (), {}))
+    name = intent if isinstance(intent, str) else str(getattr(intent, "name", "") or "")
+    if not name:
+        return False
+    if name not in intents and not (name in ("settings_bool", "feature_switch")
+                                    and keys):
+        return False
+    if not isinstance(intent, str):
+        if name in actions:
+            got = (intent.f or {}).get("action")
+            if got not in actions[name]:
+                return False
+        if name in ("settings_bool", "feature_switch", "settings_choice", "control_set"):
+            key = (intent.f or {}).get("key")
+            if keys and key not in keys:
+                return False
+    return True
 
 
 def _example_text(fid: str, status: str, title: str, adjust: list) -> str:
@@ -1243,20 +1349,31 @@ def _build_matrix() -> list:
             # setting row, where typed on/off and card gating work as before.
             switch_keys = []
             switches = []
+        planned_switchable = fid in PLANNED_SWITCHABLE
+        if planned_switchable:
+            # A planned row shows no typed phrase at all: the old section
+            # sentence (voice speed / asks-first) changed a DIFFERENT feature.
+            switch_keys = []
+            switches = []
         on_phrase = _phrase(f"turn on {title}")
         off_phrase = _phrase(f"turn off {title}")
         how_to = _phrase(f"how do I turn on {title}")
         adjust = []
-        places = list(sections)
-        for extra_place in EXTRA_ADJUST.get(fid, ()):
-            if extra_place not in places:
-                places.append(extra_place)
-        for sid in places:
-            for phrase, kind in ADJUST_SECTIONS.get(sid, ()):
-                intent = _quick_intent(phrase)
-                if _adjust_ok(intent):
-                    adjust.append({"place": sid, "phrase": phrase,
-                                   "intent": intent, "kind": kind})
+        if not planned_switchable:
+            places = list(sections)
+            for extra_place in EXTRA_ADJUST.get(fid, ()):
+                if extra_place not in places:
+                    places.append(extra_place)
+            for sid in places:
+                phrases = ADJUST_SECTIONS.get(sid, ())
+                own = FEATURE_ADJUST_PHRASES.get(fid)
+                if own and own[0] == sid:
+                    phrases = ((own[1], "tier"),)
+                for phrase, kind in phrases:
+                    intent = _quick_intent(phrase)
+                    if _adjust_ok(intent) and _own_words(fid, intent):
+                        adjust.append({"place": sid, "phrase": phrase,
+                                       "intent": intent, "kind": kind})
         if R is not None:
             for choice in R.CHOICE_SETTINGS:
                 if choice.where not in places:
@@ -1268,7 +1385,7 @@ def _build_matrix() -> list:
                 sample = min(options, key=lambda k: (k != options[k], len(k)))
                 phrase = f"set {choice.names[0]} to {sample}"
                 intent = _quick_intent(phrase)
-                if _adjust_ok(intent):
+                if _adjust_ok(intent) and _own_words(fid, intent):
                     adjust.append({"place": choice.where,
                                    "phrase": phrase,
                                    "intent": intent,
@@ -1281,7 +1398,11 @@ def _build_matrix() -> list:
             status = "open-only"
         else:
             status = "not-a-setting"
-        if status in ("switch", "adjust"):
+        if planned_switchable:
+            status = "planned"
+            owner, reason = PLANNED_SWITCHABLE[fid]
+            reason_code = "planned-no-own-control"
+        elif status in ("switch", "adjust"):
             reason_code, reason, owner = "command", "", "voiceprint-wiring"
         else:
             got = NO_COMMAND_REASON.get(fid)
@@ -1311,9 +1432,19 @@ def _build_matrix() -> list:
             "settings_gap": SETTINGS_GAPS.get(fid),
             # The owner-facing five labels (Q8) and the directory/search fields
             # both apps render (Q2b) - exactly one class per feature.
-            "control_class": _label_from(status, reason_code, fid),
-            "control_label": _label_from(status, reason_code, fid),
-            "label": _label_from(status, reason_code, fid),
+            "control_class": (LABEL_PC_ONLY if fid in PC_ONLY_FEATURES
+                              else (LABEL_SWITCH_ADJUST if planned_switchable
+                                    else _label_from(status, reason_code, fid))),
+            "control_label": (LABEL_PC_ONLY if fid in PC_ONLY_FEATURES
+                              else (LABEL_SWITCH_ADJUST if planned_switchable
+                                    else _label_from(status, reason_code, fid))),
+            "label": (LABEL_PC_ONLY if fid in PC_ONLY_FEATURES
+                      else (LABEL_SWITCH_ADJUST if planned_switchable
+                            else _label_from(status, reason_code, fid))),
+            "own_keys": sorted(set(list(switch_keys)
+                                    + list(OWN_CONTROLS.get(fid, ((), (), {}))[0]))),
+            "own_intents": sorted(set(OWN_CONTROLS.get(fid, ((), (), {}))[1])),
+            "own_actions": {k: sorted(v) for k, v in OWN_ACTIONS.get(fid, {}).items()},
             "example": _example_text(fid, status, title, adjust),
             "screen_path": _screen_path_text(status, reason_code, sections),
             "is_toggle": status == "switch",
@@ -1471,6 +1602,13 @@ def _label_from(status: str, reason: str, fid: str) -> str:
         return LABEL_SETTINGS_ONLY
     if fid in ALWAYS_ON_IDS:
         return LABEL_ALWAYS_ON
+    # Owner-approved 2026-10-23 (ADJ-Q1): three one-app controls are PC-Only
+    # even though their typed control exists, and three genuinely-adjustable
+    # features have no own typed control yet (planned, still Switchable).
+    if fid in PC_ONLY_FEATURES:
+        return LABEL_PC_ONLY
+    if fid in PLANNED_SWITCHABLE:
+        return LABEL_SWITCH_ADJUST
     if status in ("switch", "adjust") or reason == "multi-field":
         return LABEL_SWITCH_ADJUST
     if reason in ("pc-only", "app-local", "credentials"):

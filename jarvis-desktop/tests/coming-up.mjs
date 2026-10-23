@@ -759,7 +759,13 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
     const c = read(`src-tauri/capabilities/${other}.json`);
     assert.ok(!c.includes("brain-schedule"), `${other} holds brain-schedule`);
   }
-  assert.match(rs, /pub\(crate\) const ACTIONS: &\[&str\] = &\[\s*"pause",\s*"resume",\s*"delete",\s*"done",\s*"add_time",\s*"snooze",?\s*\];/);
+  // Phase 2 (2026-10-22): the six one-job actions stay, and the three new
+  // verbs are named too (one job still - never "all" or a list).
+  const actionsConst = rs.slice(rs.indexOf("pub(crate) const ACTIONS"), rs.indexOf("];", rs.indexOf("pub(crate) const ACTIONS")));
+  for (const action of ["pause", "resume", "delete", "done", "add_time", "snooze",
+    "edit", "move", "reorder"]) {
+    assert.ok(actionsConst.includes(`"${action}"`), `ACTIONS lost ${action}`);
+  }
   // The toast's Snooze: only for the kinds that can be snoozed, and the
   // relaunch lands in one snooze held on a stale link.
   const toastBody = rs.slice(rs.indexOf("pub async fn toast_fired("));
@@ -835,6 +841,146 @@ await check("F5 hook: the phone's known action gap is recorded, not assumed away
   }
   assert.equal(kt.includes('"add_time"'), PHONE_HAS_ADD_TIME,
     "the phone's add_time state changed: re-check the shared table and the phone surfaces");
+});
+
+/* ── Phase 2 (2026-10-22): Edit, move by list, keyboard reorder ─────────── */
+
+const { canEdit: sharedCanEdit, rankOf: sharedRankOf, EDIT_LABEL, UP_LABEL, SAVE_LABEL } =
+  await import("../src/hud-actions.js");
+
+await check("Phase 2: the shared gate and the PC's own rank, read the same by both windows", () => {
+  const v = readSchedule({ phase2: true, jobs: [], todo: [
+    { id: "s00000000e1", kind: "todo", text: "milk", state: "active", list: "", rank: 0 },
+    { id: "s00000000e2", kind: "todo", text: "eggs", state: "active", list: "", rank: 1 },
+  ] });
+  assert.equal(v.phase2, true, "the PC's phase2 marker was dropped by the read");
+  assert.equal(v.todo[0].rank, 0);
+  assert.equal(v.todo[1].rank, 1);
+  assert.equal(readSchedule({ jobs: [], todo: [] }).phase2, false,
+    "an older backend must read as phase2 false");
+  // The gate is one function for both windows.
+  const timer = { id: "s00000000e3", kind: "timer", text: "", state: "active", rank: null };
+  assert.equal(sharedCanEdit(timer, { phase2: true }), true);
+  assert.equal(sharedCanEdit(timer, { phase2: false }), false, "an older backend offers Edit");
+  assert.equal(sharedCanEdit({ ...timer, hidden: true }, { phase2: true }), false);
+  assert.equal(sharedCanEdit({ ...timer, state: "waiting" }, { phase2: true }), false);
+  assert.equal(sharedCanEdit({ ...timer, kind: "tellme" }, { phase2: true }), false,
+    "a module-managed kind is edited where it was set up");
+  assert.equal(sharedRankOf({ rank: 4 }, 0), 4);
+  assert.equal(sharedRankOf({ rank: null }, 2), 2);
+});
+
+await check("Phase 2: a to-do's ONE Edit button changes its words through brain_schedule_act", async () => {
+  const page = await workTab({ schedule: { phase2: true, jobs: [], todo: [
+    { id: "s00000000e1", kind: "todo", text: "milk", state: "active", list: "", rank: 0 },
+    { id: "s00000000e2", kind: "todo", text: "eggs", state: "active", list: "", rank: 1 },
+  ] } });
+  const row = page.locator("#todo-list .row-item").first();
+  assert.equal(await page.locator("#todo-list").getByRole("button", { name: EDIT_LABEL }).count(), 2,
+    "each editable to-do draws one Edit");
+  assert.equal(await row.getByRole("button", { name: UP_LABEL }).isDisabled(), true,
+    "the first row's Move up is not disabled");
+  await row.getByRole("button", { name: EDIT_LABEL }).click();
+  await page.locator('#todo-list .schedule-editor input[data-field="What"]').fill("oat milk");
+  await page.getByRole("button", { name: SAVE_LABEL }).click();
+  await page.waitForTimeout(300);
+  const sent = await page.evaluate(() => window.__scheduleCalls.slice());
+  assert.deepEqual(sent.filter((c) => c.cmd === "brain_schedule_act"),
+    [{ cmd: "brain_schedule_act", id: "s00000000e1", action: "edit",
+       change: { text: "oat milk" } }]);
+  assert.equal(sent.filter((c) => c.cmd === "brain_schedule_act").length, 1, "one change per tap");
+  await page.close();
+});
+
+await check("Phase 2: an older backend draws no Edit at all (no fake controls)", async () => {
+  const page = await workTab({ schedule: { jobs: [], todo: [
+    { id: "s00000000e1", kind: "todo", text: "milk", state: "active", list: "" },
+  ] } });
+  assert.equal(await page.locator("#todo-list").getByRole("button", { name: EDIT_LABEL }).count(), 0,
+    "a backend without the phase2 marker got an Edit button");
+  await page.close();
+});
+
+
+/* ── #737 review fixes: custom days, no-op repeat card, list prefill ────── */
+
+const REVIEW_JOBS = [
+  { id: "s00000000f1", kind: "reminder", text: "Water plants", state: "active",
+    repeats: true, rule: { every: "week", at: "09:00", days: [0, 2, 4, 5, 6] },
+    repeat: "every week on Mon, Wed, Fri, Sat, Sun at 09:00", when: "tomorrow at 09:00" },
+  { id: "s00000000f3", kind: "reminder", text: "Call Mum", state: "active",
+    due: NOW + 3600, when: "in an hour" },
+];
+const REVIEW_TODO = [
+  { id: "s00000000f2", kind: "todo", text: "milk", state: "active", list: "shopping" },
+];
+const REVIEW_LISTS = [{ name: "shopping", title: "Shopping list", open: 1 }];
+
+await check("#737: the Brain shows and saves the owner's own custom days", async () => {
+  const page = await workTab({ schedule: { phase2: true, jobs: REVIEW_JOBS,
+    todo: REVIEW_TODO, lists: REVIEW_LISTS } });
+  const row = page.locator('#coming-up .row-item[data-id="s00000000f1"]');
+  await row.getByRole("button", { name: EDIT_LABEL }).click();
+  const form = page.locator('#coming-up .schedule-editor').first();
+  assert.equal(await form.locator('[data-field="Repeat"]').inputValue(), "custom");
+  assert.deepEqual(await form.locator("[data-day]:checked").evaluateAll((boxes) => boxes.map((b) => b.value)),
+    ["0", "2", "4", "5", "6"], "the owner's days were not pre-selected");
+  await form.locator('[data-field="Time"]').fill("09:30");
+  await form.getByRole("button", { name: SAVE_LABEL }).click();
+  await page.waitForTimeout(300);
+  const sent = await page.evaluate(() => window.__scheduleCalls.slice());
+  assert.deepEqual(sent.filter((c) => c.cmd === "brain_schedule_act"),
+    [{ cmd: "brain_schedule_act", id: "s00000000f1", action: "edit",
+       change: { repeat: { every: "week", at: "09:30", days: [0, 2, 4, 5, 6] } } }]);
+  await page.close();
+});
+
+await check("#737: an unchanged repeat raises no card (only the changed field is sent)", async () => {
+  const page = await workTab({ schedule: { phase2: true, jobs: REVIEW_JOBS,
+    todo: REVIEW_TODO, lists: REVIEW_LISTS } });
+  const row = page.locator('#coming-up .row-item[data-id="s00000000f1"]');
+  await row.getByRole("button", { name: EDIT_LABEL }).click();
+  const form = page.locator('#coming-up .schedule-editor').first();
+  await form.locator('[data-field="What"]').fill("Water the plants");
+  await form.getByRole("button", { name: SAVE_LABEL }).click();
+  await page.waitForTimeout(300);
+  const sent = await page.evaluate(() => window.__scheduleCalls.slice());
+  assert.deepEqual(sent.filter((c) => c.cmd === "brain_schedule_act"),
+    [{ cmd: "brain_schedule_act", id: "s00000000f1", action: "edit",
+       change: { text: "Water the plants" } }],
+    "an unchanged repeat was sent (it would raise the ONE card for nothing)");
+  await page.close();
+});
+
+await check("#737: the named list is selected by its own key (not its title)", async () => {
+  const page = await workTab({ schedule: { phase2: true, jobs: REVIEW_JOBS,
+    todo: REVIEW_TODO, lists: REVIEW_LISTS } });
+  const row = page.locator('[data-id="s00000000f2"]');
+  await row.getByRole("button", { name: EDIT_LABEL }).click();
+  const form = page.locator('.schedule-editor').first();
+  assert.equal(await form.locator('[data-field="List"]').inputValue(), "shopping",
+    "the current list was not selected");
+  await form.locator('[data-field="List"]').selectOption("todo");
+  await form.getByRole("button", { name: SAVE_LABEL }).click();
+  await page.waitForTimeout(300);
+  const sent = await page.evaluate(() => window.__scheduleCalls.slice());
+  assert.deepEqual(sent.at(-1), { cmd: "brain_schedule_act", id: "s00000000f2",
+    action: "edit", change: { list: "todo" } });
+  await page.close();
+});
+
+await check("#737: an untouched one-off sends no date or time churn", async () => {
+  const page = await workTab({ schedule: { phase2: true, jobs: REVIEW_JOBS,
+    todo: REVIEW_TODO, lists: REVIEW_LISTS } });
+  const row = page.locator('#coming-up .row-item[data-id="s00000000f3"]');
+  await row.getByRole("button", { name: EDIT_LABEL }).click();
+  const form = page.locator('#coming-up .schedule-editor').first();
+  await form.getByRole("button", { name: SAVE_LABEL }).click();
+  await page.waitForTimeout(300);
+  const sent = await page.evaluate(() => window.__scheduleCalls.slice());
+  assert.deepEqual(sent.filter((c) => c.cmd === "brain_schedule_act"), [],
+    "an unchanged one-off sent a write");
+  await page.close();
 });
 
 await browser.close();

@@ -87,3 +87,45 @@ export function actionNames(job, wentOff = false) {
 export function kindAllowsAddTime(kind) {
   return kind === "timer";
 }
+
+/* ------------------------------------------------------------------ *
+ * Phase 2 (2026-10-22, the owner's Reminders request): the row editor's
+ * words, the kinds it may edit, and the keyboard reorder's rank. The HUD's
+ * Reminders panel and the Brain's Coming up read these, so the two windows
+ * cannot come to different words for the same control; the PC's own
+ * jarvis_schedule._act_phase2 is the authority on every refusal.
+ * ------------------------------------------------------------------ */
+
+export const EDIT_LABEL = "Edit";
+export const SAVE_LABEL = "Save changes";
+export const CANCEL_LABEL = "Cancel";
+export const MOVE_TO_TODO_LABEL = "To-do list";
+export const UP_LABEL = "Move up";
+export const DOWN_LABEL = "Move down";
+export const ASKED_REPEAT_WORDS =
+  "Asked the PC. Nothing changes until you answer the card.";
+export const REPEAT_CARD_WORDS =
+  "A repeat change asks with one card; the old schedule stays active until " +
+  "you answer it.";
+export const NOTHING_CHANGED_WORDS = "Nothing changed.";
+export const TIMER_MINUTES_HINT = "1 to 1440 minutes (24 hours).";
+
+/** The kinds whose ONE item may be edited, moved or reordered. */
+export const EDITABLE_KINDS = Object.freeze(["timer", "alarm", "reminder", "todo"]);
+
+/**
+ * Whether a row offers Edit at all. `phase2` is the PC's own read marker:
+ * an older backend draws nothing. Hidden words (App lock / hidden memory
+ * lists) also draw nothing - editing needs the words and list names.
+ */
+export function canEdit(job, { phase2 = false, hidden = false } = {}) {
+  if (!job || typeof job !== "object" || !phase2 || hidden) return false;
+  if (job.hidden === true) return false;
+  if (!EDITABLE_KINDS.includes(String(job.kind || ""))) return false;
+  return job.state === "active" || job.state === "paused";
+}
+
+/** The rank an Up/Down button moves from: the PC's own, else the row's index. */
+export function rankOf(job, index = 0) {
+  return Number.isInteger(job && job.rank) ? job.rank : index;
+}

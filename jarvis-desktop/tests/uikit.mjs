@@ -392,7 +392,7 @@ export const BRAIN = {
             reranker: { state: "on", model: "Xenova/ms-marco-MiniLM-L-6-v2", why: "", used: 14 },
             said_again: 3, sleep_time: { enabled: false, remind: true } },
   memory_pending: { available: true, setup: { setup_complete: false, note:
-      "extraction is a scaffold: review its proposals and tune the prompt against real conversations" },
+      "New facts wait under ‘Waiting for you’ below until you approve them." },
     pending: [
     { id: 41, text: "Prefers invoices filed by supplier, not by month.", source: "conversation",
       confidence: 0.82, created: Date.now()/1000 - 3600 },
@@ -1876,6 +1876,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const out = JSON.parse(JSON.stringify({ available: true, jobs: sc.jobs, todo: sc.todo,
               ...(sc.went_off ? { went_off: sc.went_off } : {}),
               ...(sc.lists ? { lists: sc.lists } : {}),
+              // Phase 2 (2026-10-22): the real brain_schedule passes the
+              // backend's own read through, marker included; so must this stand-in.
+              ...(sc.phase2 ? { phase2: true } : {}),
               // The Today board (GTD-2): what brain/schedule.rs adds under
               // `cockpit` from GET /api/today/cockpit.
               ...(sc.cockpit ? { cockpit: sc.cockpit } : {}) }));
