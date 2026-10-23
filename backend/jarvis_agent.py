@@ -770,11 +770,20 @@ def _prepare_draft_email(args: dict, watch: Optional["_TurnWatch"] = None):
     # the direct-call path passes its `_TurnWatch` here. Without it the old
     # behaviour is kept (empty prompt, gate latch fallback), never an assumed
     # clean turn.
+    #
+    # RA-6 (Gemini residual audit, 2026-10-23): "read outside text" for this
+    # gate means text from OUTSIDE the owner's own records. Reading the
+    # owner's own spending table or a saved memory does not refuse the draft
+    # the owner explicitly asked for; every other reading tool still does.
+    # `watch.tainted` (an earlier turn of this conversation) is honoured as it
+    # was - conservative, and unchanged.
     prompt = ""
     tainted = None
     if watch is not None:
         prompt = str(getattr(watch, "newest_own_words", "") or "")
-        tainted = bool(getattr(watch, "read", None) or getattr(watch, "tainted", False))
+        reads = getattr(watch, "read", None) or {}
+        outside_read = any(name not in OWN_RECORD_READ_TOOLS for name in reads)
+        tainted = bool(outside_read or getattr(watch, "tainted", False))
     p = DRAFT.plan(args.get("to"), args.get("cc"), args.get("subject", ""),
                    args.get("body", ""), reply_to_message_id=args.get("reply_to_message_id"),
                    user_prompt=prompt, tainted=tainted)
@@ -1129,6 +1138,27 @@ def _run_run_data_script(args: dict, state, **_) -> dict:
 #: Not in NEEDS_A_PERSON (it changes nothing and sends nothing). Offered only
 #: while a folder is listed, like my_files.
 SPENDING_TOOL = "my_spending"
+
+#: The reads that are the OWNER'S OWN records, never untrusted outside text:
+#: the spending table this PC added up from the owner's own bank file
+#: (`my_spending`), and a saved memory (`memory_search`), which this project
+#: learns from the owner's own words only (CLAUDE.md, 2026-09-24: "never from
+#: web pages, emails, documents, notes or tool output").
+#:
+#: Wave D-2's outbound Tier-2 gate (`jarvis_email_draft.plan` ->
+#: `jarvis_scrub.classify_outbound_sensitivity`) is allowed only on a turn that
+#: has NOT read outside text. Counted naively, reading one of these is "a tool
+#: ran", so "read my Q3 tax total from my spending CSV and email it to my
+#: accountant" refused itself as tainted - Gemini's residual audit RA-6 / Trap
+#: C4, 2026-10-23. The data read here is the data the owner asked to be
+#: emailed, and it cannot have steered the request.
+#:
+#: Deliberately NARROW: every other reading tool (email, web pages, files,
+#: notes read back, the screen, the phone, the calendar) still counts, because
+#: those can carry text from outside. `_prepare_draft_email` is the only
+#: reader of this set (`test_trap_c4_outbound_taint.py` holds both directions).
+OWN_RECORD_READ_TOOLS = frozenset({SPENDING_TOOL, "memory_search"})
+
 SPENDING_ONE_TABLE = ("refused: one table is already on the owner's screen for this answer. "
                       "Answer from it, and tell the owner they can ask the next question in "
                       "a new message.")
