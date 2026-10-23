@@ -112,7 +112,34 @@ Added by `feat/models-on-d-and-storage-tiers` (PR #229):
 3. **A test that a loosening request still raises its card**, end to end through
    the real gate — the same shape as decision 1's gate tests.
 
-## 6. Anything that needs the owner
+## 6. The 2026-10-23 truth correction (what changed after the audit)
+
+The adjustment-truth audit found that the first control matrix over-claimed. The follow-up
+fix (task-118, same PR) makes the claim smaller and checkable:
+
+- **Counts are now 40 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 69 Command-Only,
+  12 Always-On (139 features).** The previous 42/2/13/70/12 was wrong: `picture-mode`
+  really sets `screen_picture` (so it is Switchable/Adjustable), and `calendar`,
+  `phone-notifications` and `phone-watch` are PC-only controls (so they are PC-Only).
+  Only 10 of the 40 switchable rows are fully enforced; 30 are planned and carry a
+  **Planned** badge and "Typed phrase: planned - not wired yet" - never a fake "Try:".
+- **The feature phrase must be its own.** The guide no longer copies a section's
+  representative sentence into every feature that covers the section (that made
+  `wake-word` show `speak faster` and `lights` show `stop asking before my calendar`).
+  `tools/check_feature_controls.py` now fails if a displayed Switchable sentence does
+  not resolve to the feature's own setting/intent; a Command-Only/Always-On title may
+  not resolve to a setting change; every multi-field phrase must resolve or be marked
+  planned; and every displayed phrase must resolve.
+- **Android has no directory yet.** The directory is desktop-only. The phone's live
+  paths still say "All features and abilities (planned)"; its own Settings screens and
+  search remain the phone's way to find settings. This is a planned B-side follow-up,
+  not a hidden Android feature.
+- **Live's voice path is NOT-TESTABLE here.** The clip/answer route lives in the HUD
+  (outside this repository). The repository proves the typed path and one hermetic
+  rule: a card raised since Live started pauses the engine before a transcript is
+  answered. Cards remain tap-only, so a spoken "yes" cannot approve anything.
+
+## 7. Anything that needs the owner
 
 Nothing in this slice. The one open question is whether the phone should offer
 the same "what can I change?" answer; the phone is another conversation's

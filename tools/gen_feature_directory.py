@@ -69,6 +69,26 @@ LABELS = (
 PLANNED_NOTE = "Settings control today; typed path still being wired."
 
 
+def _resolves(phrase: str) -> bool:
+    try:
+        import sys
+        sys.path.insert(0, str(REPO / "backend"))
+        import jarvis_quick
+        return jarvis_quick.match(phrase) is not None
+    except Exception:
+        return False
+
+#: Owner-approved counts after the 2026-10-23 ADJ-Q1 correction
+#: (picture-mode -> Switchable; calendar/phone-notifications/phone-watch -> PC-Only).
+EXPECTED_LABEL_COUNTS = {
+    "Switchable / Adjustable (Typed & Settings)": 40,
+    "Settings-Only (By Design — Security Boundary)": 2,
+    "PC-Only Setting (Honest Refusal on Phone)": 16,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 69,
+    "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
+}
+
+
 def fail(message: str) -> None:
     print(f"gen_feature_directory: {message}", file=sys.stderr)
     raise SystemExit(1)
@@ -113,6 +133,10 @@ def read_contract() -> dict:
             fail(f"{fid}: no screen path - a directory row may not invent one")
     if len(set(ids)) != len(ids):
         fail("the contract lists a feature id twice")
+    counts = {label: sum(1 for row in features if row.get("label") == label) for label in LABELS}
+    if counts != EXPECTED_LABEL_COUNTS:
+        fail("label counts are not the owner-approved 40/2/16/69/12: "
+             f"got {counts!r}")
     return {"raw": raw, "data": data}
 
 
@@ -169,13 +193,18 @@ def rows(data: dict) -> list:
         # `where` and the canonical file is never modified here.
         if where_desktop.endswith(" (planned)"):
             where_desktop = where_desktop[:-len(" (planned)")].strip()
+        if not note:
+            note = str(row.get("label_note") or "").strip()
         out.append({
             "id": fid,
             "title": str(row.get("name") or fid),
             "group": str(row.get("group") or ""),
             "surface": str(row.get("surface") or ""),
             "label": row["label"],
+            "status": str(row.get("status") or ""),
+            "label_note": str(row.get("label_note") or "").strip(),
             "example": str(evidence["example_phrase"]).strip(),
+            "example_ok": _resolves(str(evidence["example_phrase"]).strip()),
             "where": where,
             "where_desktop": where_desktop,
             "where_phone": where_phone,
@@ -189,7 +218,10 @@ def rows(data: dict) -> list:
 
 
 def render(data: dict, raw: bytes) -> tuple[str, str]:
-    sha = hashlib.sha256(raw).hexdigest()
+    # Hash the canonical LF bytes. This checkout can hold the contract as CRLF
+    # (autocrlf) while CI checks out the committed LF blob; hashing the local
+    # bytes made source_sha256 platform-dependent and failed the frontend suite.
+    sha = hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
     payload = {
         "schema": 1,
         "source": "contract/feature-controls.json",

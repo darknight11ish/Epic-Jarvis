@@ -651,7 +651,7 @@ def t_every_feature_has_a_matrix_row_and_a_reason():
     by_id = {r["id"]: r for r in rows}
     for r in rows:
         check(f"{r['id']} has a known status",
-              r["status"] in ("switch", "adjust", "open-only", "not-a-setting"),
+              r["status"] in ("switch", "adjust", "open-only", "not-a-setting", "planned"),
               r["status"])
         if r["status"] not in ("switch", "adjust"):
             check(f"{r['id']} carries a stable reason code",
@@ -774,11 +774,11 @@ def t_the_five_owner_labels_are_exact_and_every_feature_has_one():
               "stale-link", "stop-everything", "crisis-help", "sensitive-facts",
               "memory-waiting", "settings-entry", "devices"}, sorted(FG.ALWAYS_ON_IDS))
     check("PC-Only is the pc-only, app-local and non-account key rows",
-          counts[FG.LABEL_PC_ONLY] == 13, counts)
+          counts[FG.LABEL_PC_ONLY] == 16, counts)
     check("Command-Only is the remaining abilities + read-only pages",
-          counts[FG.LABEL_COMMAND_ONLY] == 70, counts)
+          counts[FG.LABEL_COMMAND_ONLY] == 69, counts)
     check("Switchable/Adjustable is the real switch, choice and multi-field rows",
-          counts[FG.LABEL_SWITCH_ADJUST] == 42, counts)
+          counts[FG.LABEL_SWITCH_ADJUST] == 40, counts)
     # Lead review: the six Switchable rows without a typed proof carry a
     # visible planned marker (backup is Settings-Only, so not counted here).
     planned = [r for r in FG.control_matrix() if r.get("planned")]

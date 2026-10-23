@@ -67,6 +67,24 @@ BOOL_OWNERS = {"voiceprint-wiring", "setup-ui", "Session B", "none-needed"}
 NON_CONTROL = {"feature_switch_refused", "feature_howto", "feature_explain",
                "feature_state", "feature_unknown", "animal_ask", "search_use"}
 ALL_STATUSES = {"enforced", "planned", "open-only", "pc-only", "not-a-setting"}
+LAB_SWITCH = "Switchable / Adjustable (Typed & Settings)"
+LAB_SETTINGS_ONLY = "Settings-Only (By Design — Security Boundary)"
+LAB_PC_ONLY = "PC-Only Setting (Honest Refusal on Phone)"
+LAB_COMMAND = "Command-Only (Runs When You Ask — No Switch Needed)"
+LAB_ALWAYS = "Always On (Core Safety Rule — Cannot Be Turned Off)"
+#: Intents that CHANGE state. A Command-Only / Always-On title that resolves to
+#: one of these is a real typed switch hidden behind the wrong label.
+MUTATING_INTENTS = {"settings_bool", "settings_choice", "settings_control",
+                    "feature_switch", "control_set", "menu_visibility",
+                    "settings_asks_first", "settings_tool", "settings_budget",
+                    "settings_card_mode", "manner_from_now_on", "topic_mode",
+                    "animal_switch", "animal_sky", "animal_weather"}
+KEYED_INTENTS = {"settings_bool", "settings_choice", "feature_switch",
+                 "control_set", "settings_control"}
+#: Intents that EXPLAIN or honestly refuse, never change state. Everything else
+#: resolving to a non-own intent is a wrong prompt, not a refusal.
+NOT_A_CHANGE = {"feature_switch_refused", "feature_howto", "feature_explain",
+                "feature_state", "feature_unknown", "animal_ask"}
 
 
 def load_modules(root: Path):
@@ -241,6 +259,96 @@ def main(argv=None):
         if args.strict and status != "enforced":
             print("NOT-ENFORCED  %-14s %-28s %-14s %s" % (status, fid, row.get("owner"), row.get("reason")[:80]))
 
+    # ---- guard 1: a Switchable phrase must change THIS feature's own setting
+    # A section-mate's representative sentence (wake-word -> "speak faster") used
+    # to pass simply by resolving. It must now resolve to the feature's own key or
+    # own intent, and a keyed intent's key must be in the feature's own_keys.
+    for row in contract.get("features", []):
+        fid = row.get("id")
+        if row.get("label") not in (LAB_SWITCH, LAB_PC_ONLY):
+            continue
+        control = row.get("control") or {}
+        own_keys = set(row.get("own_keys") or [])
+        own_intents = set(row.get("own_intents") or [])
+        own_actions = row.get("own_actions") or {}
+        phrases = [control.get("turn_on"), control.get("turn_off")]
+        for adjust in control.get("adjust") or []:
+            if adjust.get("env_dependent") and adjust.get("reason"):
+                # The voice-name choice is the owner's configured list; the
+                # pure matcher resolves it only when that list is present. The
+                # contract records why, exactly as the old enforced check did.
+                continue
+            if adjust.get("phrase"):
+                phrases.append(adjust.get("phrase"))
+        for phrase in phrases:
+            if not phrase:
+                continue
+            it = match(q, phrase)
+            if not c.need(it is not None, "%s: displayed phrase %r does not resolve" % (fid, phrase)):
+                continue
+            if it.name not in own_intents and it.name in NOT_A_CHANGE:
+                # planned/PC-only rows may legitimately show an honest refusal
+                # ("this is not a switch"); only a CHANGE must be this feature's.
+                continue
+            if it.name in own_intents:
+                expected = own_actions.get(it.name)
+                if expected:
+                    c.need((it.f or {}).get("action") in expected,
+                           "%s: phrase %r changes %r, not this feature's own action %r"
+                           % (fid, phrase, (it.f or {}).get("action"), expected))
+                if it.name in KEYED_INTENTS and own_keys:
+                    c.need((it.f or {}).get("key") in own_keys,
+                           "%s: phrase %r changes key %r, not one of its own %r"
+                           % (fid, phrase, (it.f or {}).get("key"), sorted(own_keys)))
+                continue
+            if it.name in KEYED_INTENTS and (it.f or {}).get("key") in own_keys:
+                continue
+            c.fail("%s: displayed phrase %r resolves to %r, which is not this feature's own control"
+                   % (fid, phrase, it.name))
+
+    # ---- guard 2: Command-Only / Always-On titles cannot change a setting ----
+    for row in contract.get("features", []):
+        fid = row.get("id")
+        label = row.get("label")
+        if label not in (LAB_COMMAND, LAB_ALWAYS):
+            continue
+        name = str(row.get("name") or "")
+        # The title and id only: an Always-On row may still ADJUST a display
+        # (approvals -> card mode). The promise is that the feature itself cannot
+        # be switched off by typing its name.
+        attempts = ["turn on " + name, "turn off " + name, "enable " + name,
+                    "disable " + name, "set " + name + " to off",
+                    "turn on " + fid.replace("-", " "), "turn off " + fid.replace("-", " ")]
+        for phrase in attempts:
+            if not phrase:
+                continue
+            it = match(q, phrase)
+            if it is not None and it.name in MUTATING_INTENTS:
+                c.fail("%s: Command-Only/Always-On title %r changes a setting (%s)"
+                       % (fid, phrase, it.name))
+
+    # ---- guard 3: every displayed Switchable/Adjustable phrase resolves ----
+    for row in contract.get("features", []):
+        if row.get("label") != LAB_SWITCH:
+            continue
+        control = row.get("control") or {}
+        phrases = [control.get("turn_on"), control.get("turn_off")]
+        for adjust in control.get("adjust") or []:
+            if adjust.get("env_dependent") and adjust.get("reason"):
+                continue
+            phrases.append(adjust.get("phrase"))
+        for phrase in phrases:
+            if not phrase:
+                continue
+            c.need(match(q, phrase) is not None,
+                   "%s: a Switchable/Adjustable phrase does not resolve: %r"
+                   % (row.get("id"), phrase))
+        # A planned or PC-only row must SAY so, not just look like a proven row.
+        if row.get("status") in ("planned", "pc-only"):
+            c.need(bool(str(row.get("label_note") or "").strip()),
+                   "%s: a %s row labelled Switchable/Adjustable needs a label_note"
+                   % (row.get("id"), row.get("status")))
+
     # ---- BOOL_SETTINGS: every switch, its phrases and its desktop row ------
     bmatrix = {b.get("key"): b for b in contract.get("bool_settings", [])}
     for key in sorted(set(bool_by_key) - set(bmatrix)):
@@ -312,6 +420,16 @@ def main(argv=None):
         "Always On (Core Safety Rule — Cannot Be Turned Off)",
     ]
     c.need(list(labels) == approved, "the contract must define exactly the five owner-approved labels, in order: %r" % (list(labels),))
+    # Owner-approved 2026-10-23 (ADJ-Q1): 40 / 2 / 16 / 69 / 12.
+    expected_label_counts = {
+        LAB_SWITCH: 40, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
+        LAB_COMMAND: 69, LAB_ALWAYS: 12,
+    }
+    actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
+    c.need(actual_label_counts == expected_label_counts,
+           "owner-approved label counts must be 40/2/16/69/12; got %r" % (dict(actual_label_counts),))
+    c.need(contract.get("label_counts") == expected_label_counts,
+           "contract label_counts must be 40/2/16/69/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.
@@ -491,6 +609,14 @@ def main(argv=None):
             c.need(isinstance(ph, dict) and isinstance(ph.get("text"), str) and ph["text"].strip()
                    and isinstance(ph.get("accepted"), list) and ph["accepted"],
                    "%s: a multi-field phrase has no text/accepted value" % mid)
+            if not isinstance(ph, dict) or not isinstance(ph.get("text"), str):
+                continue
+            resolves = match(q, ph["text"]) is not None
+            c.need(bool(ph.get("resolved")) == resolves,
+                   "%s: phrase %r resolves=%r but the contract says resolved=%r"
+                   % (mid, ph["text"], resolves, ph.get("resolved")))
+            c.need(resolves or ph.get("planned") is True,
+                   "%s: unresolved phrase %r is NOT marked planned" % (mid, ph["text"]))
         for feat in m.get("features") or []:
             c.need(feat in ids, "%s: names a feature the matrix does not have: %r" % (mid, feat))
         handler = m.get("handler")
