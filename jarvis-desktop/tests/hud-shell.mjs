@@ -440,6 +440,29 @@ await check("H3-PM-2: Ambient's left rail is a drawer, not an unreachable hidden
     "edit mode does not force the tab-revealed rail back on");
   assert.match(editSrc, /revealRailsForEditing/, "the editor does not reveal hidden rails");
   assert.match(editSrc, /edit-reveal/, "the editor does not mark the revealed rails");
+  // The HUD has no clickable stop-all (post-merge review, 2026-10-22): the
+  // claims must name the real paths and keep the gap visible, so this pin
+  // fails if the sentence drifts back into "all four protected cards stay
+  // visible and reachable" or a stop control appears without the claim/docs
+  // being updated with it.
+  const ARCH = readFileSync(join(ROOT, "docs", "ARCHITECTURE.md"), "utf8");
+  const DECISIONS = readFileSync(join(ROOT, "docs", "DECISIONS.md"), "utf8");
+  assert.match(editSrc, /this page has no stop control yet/,
+    "the editor's emergency-stop reason does not admit the missing page control");
+  assert.match(editSrc, /Alt\+Shift\+X/,
+    "the editor's emergency-stop reason does not name the real stop hotkey");
+  assert.match(ARCH, /\*\*Tracked gap:\*\* the HUD page/,
+    "ARCHITECTURE lost the tracked emergency-stop gap");
+  assert.match(ARCH, /no DOM and no clickable stop-all/,
+    "ARCHITECTURE does not say the HUD has no clickable stop-all");
+  assert.match(ARCH, /Alt\+Shift\+X/, "ARCHITECTURE does not name the real stop hotkey");
+  assert.match(DECISIONS, /\*\*Tracked gap:\*\* the HUD has no clickable stop-all/,
+    "DECISIONS lost the tracked emergency-stop gap");
+  assert.match(DECISIONS, /Alt\+Shift\+X/, "DECISIONS does not name the real stop hotkey");
+  assert.equal(/all four protected cards stay visible and\s+reachable/.test(ARCH + DECISIONS),
+    false, "the old 'all four protected cards stay visible and reachable' overclaim survived");
+  assert.equal(/id="hud-stop"|id="emergency-stop"|id="emergency_stop"/.test(page),
+    false, "the HUD page grew a stop control without updating the tracked-gap claim");
 });
 
 await check("H3: the bootstrap renders shell/density/tab and writes the first-paint mirror", () => {

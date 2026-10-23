@@ -68,6 +68,7 @@ await check("H3-PM-1: choosing one of My layouts keeps the rest of the library",
   assert.equal(layout.id, "custom-cockpit-1", "the chosen saved layout is not active");
   assert.deepEqual(layout.user_presets.map((entry) => entry.id), ["custom-cockpit-1"],
     "choosing a saved layout lost the library");
+  assert.equal(await writes(page), 1, "choosing a saved layout made more than one write");
   await page.close();
   assert.deepEqual(page.__errors, []);
 });
@@ -82,6 +83,7 @@ await check("H3-PM-1: Reset HUD to Cockpit keeps My layouts", async () => {
   assert.equal(layout.base_preset, "cockpit", "Reset did not choose Cockpit");
   assert.deepEqual(layout.user_presets.map((entry) => entry.id), ["custom-cockpit-1"],
     "Reset deleted My layouts");
+  assert.equal(await writes(page), 1, "Reset made more than one write");
   await page.close();
   assert.deepEqual(page.__errors, []);
 });

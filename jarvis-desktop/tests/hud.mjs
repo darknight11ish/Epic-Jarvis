@@ -3671,7 +3671,36 @@ await check("H3: Edit HUD auto-reveals rails, so every protected control the pag
       assert.equal(state.right.editReveal, true, `${shell}: right drawer not revealed for editing`);
     }
     await page.keyboard.press("Escape");
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(250);
+    const restored = await page.evaluate(() => {
+      const box = (selector) => {
+        const node = document.querySelector(selector);
+        if (!node) return null;
+        const r = node.getBoundingClientRect();
+        return { editReveal: node.classList.contains("edit-reveal"),
+          display: getComputedStyle(node).display,
+          x: Math.round(r.x), w: Math.round(r.width) };
+      };
+      return { editing: document.body.getAttribute("data-hud-edit"),
+        shell: document.body.dataset.hudShell,
+        left: box(".rail.left"), right: box("#rail-right") };
+    });
+    assert.equal(restored.editing, "off", `${shell}: Escape did not leave edit mode`);
+    assert.equal(restored.shell, shell, `${shell}: leaving edit changed the shell`);
+    if (["center-core", "two-column-right", "single-stage-bento"].includes(shell)) {
+      assert.equal(restored.left.editReveal, false,
+        `${shell}: the left drawer stayed marked after leaving edit mode`);
+      assert.ok(restored.left.x < -100,
+        `${shell}: the left drawer stayed on screen after leaving edit mode (${JSON.stringify(restored.left)})`);
+    }
+    if (["two-column-left", "center-core", "single-stage-bento"].includes(shell)) {
+      assert.equal(restored.right.editReveal, false,
+        `${shell}: the right drawer stayed marked after leaving edit mode`);
+    }
+    if (shell === "split-stage") {
+      assert.equal(restored.right.display, "none",
+        "split-stage: the tab-revealed rail stayed forced on after leaving edit mode");
+    }
     await page.close();
     assert.deepEqual(problems, [], `${shell}: page errors`);
   }

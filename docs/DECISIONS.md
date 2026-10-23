@@ -2898,8 +2898,12 @@ are gone, and the window keeps the owner's own layouts:
    shell that hides a rail has a way back - a slide-over drawer (Ambient
    `center-core`, `two-column-right`, `single-stage-bento`) or the stage tabs
    (`split-stage`'s right rail via Telemetry/Memory/Today). Entering Edit HUD
-   auto-reveals every hidden rail, so all four protected cards stay visible and
-   reachable while editing. The 4-into-3 `LOOKS` alias map, `LOOK_BY_PRESET`,
+   auto-reveals every hidden rail, so the protected controls the HUD draws stay
+   visible/reachable while editing and all four `PROTECTED_IDS` stay forced
+   visible in the document. **Tracked gap:** the HUD has no clickable stop-all;
+   its real Stop everything paths are the Alt+Shift+X hotkey, the tray and the
+   widget (a HUD stop control is a separate UI/command decision, not claimed).
+   The 4-into-3 `LOOKS` alias map, `LOOK_BY_PRESET`,
    `lookForPreset`, `data-hud-layout` and the stale "until H2" comments are
    **deleted**, pinned by a source test. Only a three-field
    `jarvis.hud.preview` localStorage mirror remains, for the first frame only -
