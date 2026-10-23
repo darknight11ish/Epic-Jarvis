@@ -316,10 +316,57 @@ def _hidden_chars(text: str, allow: str = "") -> bool:
 _MESSAGE_ID_RE = re.compile(r"^<[\x21-\x3b\x3d\x3f-\x7e]+@[\x21-\x3b\x3d\x3f-\x7e]+>$")
 
 
+def _tainted(caller_value: Optional[bool]) -> bool:
+    """The turn's taint for the classifier: the caller's own value, else
+    the gate's latch, else True - never treat an unknown turn as clean."""
+    if caller_value is not None:
+        return bool(caller_value)
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.taint_active())
+    except Exception:                                    # noqa: BLE001
+        return True
+
+
+def _outbound_classification(text: str, *, user_prompt: str = "",
+                            tainted: Optional[bool] = None) -> dict:
+    """Wave D-2: the two-tier outbound classifier, imported lazily.
+
+    It is handed BOTH facts the ruling requires: the owner's own prompt words
+    (`user_prompt`, so Tier 2 can be authorised by them) and the turn's taint
+    (`_tainted()`: the caller's value, else the gate's latch, else True).
+
+    FAIL CLOSED (review fix, 2026-10-22): if the classifier cannot run - the
+    module is missing, the import raises, the call raises - this answers
+    `allowed: False, tier: 1, reasons: ["classifier_unavailable"]`, never
+    "nothing sensitive was found". A guard that cannot answer must not let a
+    draft through, and no owner prompt can override Tier 1.
+    """
+    try:
+        import jarvis_scrub as scrub
+        return scrub.classify_outbound_sensitivity(
+            text, user_prompt=user_prompt, tainted=_tainted(tainted))
+    except Exception:                                     # noqa: BLE001
+        # FAIL CLOSED: a classifier that cannot answer must not let a
+        # draft through. Tier 1 is "never out", so no prompt overrides it.
+        return {"allowed": False, "tier": 1,
+                "reasons": ["classifier_unavailable"], "categories": [],
+                "redacted_text": text}
+
+
 def plan(to=None, cc=None, subject: str = "", body: str = "",
-        reply_to_message_id: Optional[str] = None) -> Plan:
+        reply_to_message_id: Optional[str] = None,
+        user_prompt: str = "", tainted: Optional[bool] = None) -> Plan:
     """Work out the one draft this would save. Opens no socket. A plan with
     a `problem` is never saved and needs no card: the problem says why.
+
+    Wave D-2: the draft's words are classified before the plan is made.
+    Tier 1 (card numbers, government ids, vault:// handles, API keys,
+    pairing tokens) is never allowed out, even when the request asks for
+    it; Tier 2 (health / personal-finance figures) is allowed only when
+    the owner's own prompt explicitly authorises that category and the
+    turn has not read outside text. A refusal is a `problem`, so it
+    raises no card and saves nothing.
 
     Unlike jarvis_email_send.plan, `to` and `cc` may both be empty - a draft
     does not need a confirmed recipient yet (see the module docstring)."""
@@ -391,6 +438,29 @@ def plan(to=None, cc=None, subject: str = "", body: str = "",
     if not dedup_to and not dedup_cc and not subject and not body.strip():
         return refused("there is nothing to draft yet - give it a recipient, a subject "
                        "or some text")
+
+    # Wave D-2: what this draft would send out is classified BEFORE the
+    # card is built. Tier 1 (card/SSN/vault/api key/pairing token) is
+    # never allowed out, even if asked; Tier 2 (health / personal finance)
+    # needs the owner's own explicit words in an untainted turn. The
+    # classifier is pure, so a bad draft is refused with plain words and
+    # no approval card is raised for it.
+    classed = _outbound_classification(f"{subject}\n{body}",
+                                       user_prompt=user_prompt,
+                                       tainted=tainted)
+    if classed.get("allowed") is not True:
+        tier = int(classed.get("tier") or 0)
+        cats = ", ".join(classed.get("categories") or []) or "sensitive information"
+        if tier == 1:
+            return refused(
+                f"this draft contains {cats}, which never goes out from Jarvis - "
+                "card numbers, government ids, stored passwords, API keys and "
+                "pairing tokens are refused even when you ask. Nothing is saved.")
+        return refused(
+            f"this draft mentions {cats}, and this turn did not ask me to share "
+            "that category (or it read outside text that could have asked for "
+            "you). Say plainly what to share, e.g. 'email my accountant my tax "
+            "balance', and nothing is staged until then.")
 
     in_reply_to = ""
     if reply_to_message_id not in (None, ""):

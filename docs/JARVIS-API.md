@@ -24318,3 +24318,113 @@ change. Both apps get all of this through the SAME chat pipeline with **no app
 change** (a quick answer is already rendered by both), so
 `tools/check_parity.py` is unaffected and there is no
 `docs/ARCHITECTURE.md` section 8 one-sidedness to record from this slice.
+
+
+## 155. Duet Wave D-2: read-only work that does not wait, two outbound tiers, source provenance, and the walk brain-dump (backend only, added 2026-10-22)
+
+**What it is.** Four pieces of the DeepSeek Duet wave, all additive: a plan of
+background steps whose read-only parts keep working while an approval card
+waits; a two-tier classifier for anything about to be staged outbound, plus
+three categories the browser tool refuses outright; a `source_provenance` tag
+on spending and document summaries; and the walk brain-dump that becomes an
+evening report. No new route, no new dependency, no deploy: the backend files
+are the whole change and the twins in `jarvis-backend/` are byte-identical.
+
+**D-2.1 - a plan's read-only steps do not wait for a card.** `jarvis_jobs.py`
+gains `create_plan(steps, *, label, caps, when, tainted)`. Each step is
+`{"handler": <registered name>, "params": {}, "readonly": bool,
+"depends_on": [earlier step indexes]}` (at most 24 steps; a dependency must
+name an EARLIER step, so a plan is acyclic by construction). It is the same
+job row, capability set and taint as `create()`; the difference is what
+happens when a step asks for a capability outside the frozen set:
+
+* that step is marked `waiting_approval` with `pending_action` and
+  `card_id` (the job's one-shot grant request is the card channel - jobs never
+  call `jarvis_gate.check`, and this module has no approval API at all);
+* every remaining step that is `readonly: true` and does not transitively
+  depend on the waiting step **keeps running in the same tick**;
+* every remaining step that depends on it, or that changes something and is
+  ordered after it without being read-only, is marked
+  `queued_behind_approval` and runs on a later tick - after the owner's yes
+  is spent by `ctx.require`;
+* Stop/Cancel halts at the next step boundary (`ctx.checkpoint()`), and the
+  statuses already reached are saved first. There is no Pause state in this
+  module (a job is one row in `queued|running|waiting_approval|done|failed|
+  cancelled`); the HUD's Stop is `cancel()`.
+* When every step is done, the result carries piece D-1.4's exact vocabulary:
+  `"review_status": "ready_for_review"`. Nothing in the runner marks the job
+  reviewed, collected or delivered - only the owner's action does.
+
+Continuing steps can never approve, deny or mutate the waiting card: the
+runner does not touch the grants table, and a step only ever gets the same
+`JobContext` a single-handler job gets.
+
+**D-2.2 - two tiers outbound, and three outright refusals.**
+`jarvis_scrub.classify_outbound_sensitivity(outbound_text, *, user_prompt="",
+tainted=False)` is a pure function (no clock, no network, no model) answering
+`{allowed, tier, reasons, categories, redacted_text, tainted}`:
+
+* **Tier 1 - never out, even when asked.** Luhn-valid 13-19 digit card
+  numbers (the shape alone is not enough; the checksum decides), US
+  SSNs/government ids, `vault://` handles, API-key shapes (`sk-`, `sk_live_`,
+  `ghp_`, `github_pat_`, `AKIA`, `AIza`, `xox*`, PEM private keys), and
+  pairing tokens (`jdk1.d<8 hex>.<43>`, exactly `jarvis_devices.KEY_PATTERN`).
+  `redacted_text` masks the shapes with the module's own `[redacted ...]`
+  marker, so a refusal can show a scrubbed draft and never the value.
+* **Tier 2 - health and personal-finance figures.** Allowed ONLY when
+  `tainted is False` AND the owner's own `user_prompt` explicitly authorises
+  sharing that category (a documented regex: "send/email/share/forward/...
+  <category> words"). Otherwise refused with a reason. A bare "send it" is
+  not an authorisation; a tainted turn (it read outside text) is refused even
+  when asked.
+
+`jarvis_email_draft.plan()` runs the classifier on the subject+body BEFORE the
+card is built: a refused draft is a `Plan` with a `problem` and no card, and
+the words say which tier and why. Ordinary drafts are unchanged.
+
+`jarvis_browser_control.check_outright_refusal(url="", action_text="")` answers
+`None` or `{ok: False, code: "outright_refused_category", category, why,
+allowed_with_approval: False}` for **securities trading**, **inter-account
+money transfer / wire / ACH / crypto**, and **third-party account access**.
+`plan()`, `run()` and `run_steps()` call it at the top, so those requests are
+refused before a card is ever raised: a card would offer a yes this tool will
+never act on.
+
+**D-2.3 - source provenance on summaries and hits.**
+`jarvis_spending`: `result_for_model`/`subscriptions_for_model` (the summaries
+the model reads) carry `"source_provenance": {"kind": "spreadsheet", "files":
+[...], "label": "From: <file>"}` in `_run_tool`. `jarvis_documents`: every
+`search()` hit and every `read()` answer carries the same shape with
+`kind: "file"` and the exact filename. It is **additive** - every existing key
+and sentence is unchanged - and it is **withheld** (`None` / absent) when the
+trusted private-view state says `app_locked` or `hide_memory_lists`, because
+the file names are the owner's own material. The drawn spending TABLE keeps
+exactly its old keys, because it is the two-apps contract fixture
+(`tools/gen_spending_cases.py` serialises it) and adding a key there would
+change both apps' snapshots for no user-visible gain.
+
+**D-2.4 - the walk brain-dump and the evening report.**
+`jarvis_live.stage_walk_brain_dump(text_or_utterances, *, session_id="default",
+now_ts=None)` splits the owner's spoken paragraph on ordinal markers ("first",
+"second", "also", "and another thing", "next", "finally") and sentence
+boundaries, classifies each item `read_only_prep` (research/read/check/prepare/
+draft/note/review/find) or `needs_approval_card` (email/send/buy/book/pay/call/
+remind/schedule/publish...), stores them per session (bounded at 60) and
+answers counts + words. `build_evening_report(session_id="default", *,
+hide_memory_lists=False, app_locked=False, now_ts=None)` bundles the prepared
+items (each with `source_provenance.kind = "walk_note"`) and the items still
+waiting for a card; under the hidden/locked state the item text and provenance
+are withheld while the counts stay. **Nothing is sent and nothing is approved**
+- there is no outbound path in this section.
+
+**Tests.** `backend/test_duet_d2.py` (45 checks): the four-step continuation
+(step 3's read-only step runs while step 2 waits, step 4 queues; the bite is
+the recorded order, so removing the continuation fails it), the owner's yes
+completes the plan and the result says `ready_for_review`, cancellation runs
+no handler; Tier 1 refused with an explicit prompt (card, SSN, vault handle,
+API key, pairing token) and redacted; Tier 2 refused unrequested and tainted,
+allowed explicitly requested and untainted; an email draft with a card number
+gets a `problem` instead of a card; brokerage/wire/third-party refusals from
+`check_outright_refusal`, `run_steps` and `plan()`; spending and document
+provenance present and withheld; the three-item walk splits 1 prep + 2 cards
+and the report withholds under lock.

@@ -417,7 +417,10 @@ _HANDLERS: dict[str, Callable] = {}
 _HANDLER_LOCK = threading.Lock()
 
 
-def register(name: str, fn: Callable) -> Callable:
+_READONLY_HANDLERS: set = set()
+
+
+def register(name: str, fn: Callable, *, readonly: bool = False) -> Callable:
     """Make `fn` runnable as a job body under `name`.
 
     The handler is called as fn(ctx, params): `ctx` is the JobContext below,
@@ -432,6 +435,11 @@ def register(name: str, fn: Callable) -> Callable:
         raise TypeError(f"handler {name!r} is not callable")
     with _HANDLER_LOCK:
         _HANDLERS[name] = fn
+    with _HANDLER_LOCK:
+        if readonly:
+            _READONLY_HANDLERS.add(name)
+        else:
+            _READONLY_HANDLERS.discard(name)
     return fn
 
 
@@ -639,6 +647,163 @@ def create(handler: str, params: Optional[dict] = None, label: str = "",
            "label": row["label"], "tainted": is_tainted}, note="scheduled")
     return jid
 
+
+
+
+# --------------------------------------------------------------------------
+#   Wave D-2.1 (2026-10-22): a plan of steps, and what happens when one of
+#   them parks on an approval card
+# --------------------------------------------------------------------------
+#
+# A plan is a job whose params hold STEPS instead of one handler call. Each
+# step has its own handler, params, `readonly` flag and `depends_on` indexes.
+# When a step asks for a capability the frozen set does not carry, its
+# NeedsApproval parks the job as before - but the other steps that are
+# read-only and do NOT depend on it run first, in this same tick, and the
+# ones that depend on it (or that change something and come after it) are
+# marked `queued_behind_approval`. A continuing step can NEVER approve,
+# deny or mutate the waiting card: this module has no approval API at all,
+# and the runner below does not call the grant table.
+#
+# The exact vocabulary piece D-1 uses for "the owner must look at it" is
+# reused, not redefined: `review_status = "ready_for_review"`.
+
+PLAN_HANDLER = "duet_plan_steps"
+MAX_PLAN_STEPS = 24
+
+
+def _plan_step(i: int, step: dict) -> dict:
+    if not isinstance(step, dict):
+        raise TypeError(f"plan step {i} must be a dict")
+    handler = str(step.get("handler") or "").strip()
+    if not handler:
+        raise ValueError(f"plan step {i} needs a handler name")
+    if handler not in _HANDLERS:
+        raise ValueError(f"plan step {i} names no registered handler: {handler!r} "
+                         f"(known: {', '.join(handlers()) or 'none'})")
+    params = step.get("params") or {}
+    if not isinstance(params, dict):
+        raise TypeError(f"plan step {i} params must be a dict")
+    try:
+        json.dumps(params)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"plan step {i} params must be JSON-serialisable: {exc}") from exc
+    deps = step.get("depends_on") or []
+    if not isinstance(deps, (list, tuple)):
+        raise TypeError(f"plan step {i} depends_on must be a list of earlier step numbers")
+    clean_deps = []
+    for d in deps:
+        if not isinstance(d, int) or isinstance(d, bool) or not 0 <= d < i:
+            raise ValueError(f"plan step {i} depends_on must name EARLIER steps only "
+                             f"(0..{i - 1}); got {d!r}")
+        clean_deps.append(d)
+    if step.get("readonly") is True and handler not in _READONLY_HANDLERS:
+        raise ValueError(f"plan step {i} declares readonly but its handler "
+                         f"{handler!r} has not been registered as read-only "
+                         f"(register(..., readonly=True)); declaring a mutating "
+                         f"handler read-only cannot make it safe")
+    return {"name": str(step.get("name") or handler)[:80], "handler": handler,
+            "params": dict(params), "readonly": bool(step.get("readonly") is True),
+            "depends_on": clean_deps, "status": "pending", "card_id": "",
+            "pending_action": "", "result": None, "error": ""}
+
+
+def create_plan(steps, label: str = "", caps=(), when: Any = None,
+                tainted: Optional[bool] = None) -> str:
+    """Schedule a plan of steps and return its job id.
+
+    `steps` is a list of dicts: {"handler", "params", "readonly",
+    "depends_on"} (see `_plan_step`). Read-only steps with no dependency may
+    run while another step waits for a human; everything else queues behind
+    that card. The frozen `caps` are the job's ceiling exactly as for
+    `create()`, and a step's handler's `ctx.require()` is what parks it.
+    """
+    steps = list(steps or [])
+    if not steps:
+        raise ValueError("a plan needs at least one step")
+    if len(steps) > MAX_PLAN_STEPS:
+        raise ValueError(f"a plan may hold at most {MAX_PLAN_STEPS} steps")
+    clean = [_plan_step(i, s) for i, s in enumerate(steps)]
+    return create(PLAN_HANDLER, {"steps": clean}, label=label or "a background plan",
+                  caps=caps, when=when, tainted=tainted)
+
+
+def _save_plan_steps(job_id: str, params: dict) -> None:
+    """Persist the step statuses so the next tick resumes where this one left
+    off. Only the params column changes; the frozen caps do not."""
+    blob = json.dumps(params)
+
+    def _go(c: sqlite3.Connection):
+        c.execute("UPDATE jobs SET params=? WHERE id=? AND cancel=0", (blob, job_id))
+    _write(_go)
+
+
+def _plan_handler(ctx: "JobContext", params: dict) -> dict:
+    """Run the steps this tick may run, then park on any waiting card.
+
+    The loop is deliberately one pass in step order, so the owner's plan runs
+    in the order it was written: a step runs when its dependencies are done;
+    a read-only step with no dependency keeps running while an earlier step
+    waits; a dependent or mutating step after the waiting one is marked
+    `queued_behind_approval` and runs on a later tick, after the card is
+    answered. Stopping (cancel) halts at the next step boundary - the statuses
+    already done are saved first.
+    """
+    steps = params.get("steps") or []
+    if not steps:
+        raise ValueError("this plan job has no steps")
+    waiting = None
+    try:
+        for i, st in enumerate(steps):
+            ctx.checkpoint()          # Stop/Cancel: halt at a step boundary
+            if st.get("status") in ("done", "skipped"):
+                continue
+            deps = st.get("depends_on") or []
+            dep_states = [steps[d].get("status") for d in deps]
+            if any(s == "waiting_approval" for s in dep_states) or (
+                    waiting is not None and st.get("readonly") is not True):
+                st["status"] = "queued_behind_approval"
+                continue
+            if any(s != "done" for s in dep_states):
+                continue              # an earlier dependency has not finished yet
+            with _HANDLER_LOCK:
+                fn = _HANDLERS.get(st.get("handler") or "")
+            if fn is None:            # the row outlived its registration
+                raise ValueError(f"no handler named {st.get('handler')!r} is registered")
+            try:
+                result = fn(ctx, dict(st.get("params") or {}))
+            except NeedsApproval as need:
+                if need.denied:
+                    st["status"] = "failed"
+                    st["error"] = str(need.reason or need)
+                    _save_plan_steps(ctx.job_id, params)
+                    raise
+                st["status"] = "waiting_approval"
+                st["pending_action"] = str(need.action)
+                st["card_id"] = str(getattr(need, "card_id", "") or need.action)
+                waiting = need
+                continue
+            st["status"] = "done"
+            try:
+                st["result"] = result if json.dumps(result) else None
+            except (TypeError, ValueError):
+                st["result"] = {"unserialisable": type(result).__name__}
+        _save_plan_steps(ctx.job_id, params)
+    except Cancelled:
+        _save_plan_steps(ctx.job_id, params)
+        raise
+    if waiting is not None:
+        raise waiting                # parks the job exactly as a single step would
+    done = sum(1 for s in steps if s.get("status") in ("done", "skipped"))
+    return {"plan": True, "steps": steps, "steps_done": done,
+            "steps_total": len(steps),
+            # Piece D-1.4's vocabulary, reused: the owner's explicit action is
+            # what marks a tracked job reviewed/completed - nothing here does.
+            "review_status": "ready_for_review",
+            "review_line": "The plan finished. Only you can mark it reviewed."}
+
+
+register(PLAN_HANDLER, _plan_handler)
 
 # --------------------------------------------------------------------------
 #   The context a handler is given
