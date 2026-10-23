@@ -96,6 +96,10 @@ function paint() {
   if (el.sw) {
     el.sw.disabled = busy || held;
     el.sw.textContent = view.on === true ? OFF_OFF : OFF_ON;
+    // The button IS the switch: expose its state to assistive technology,
+    // and update it whenever the PC's status repaints the label.
+    el.sw.setAttribute("aria-checked",
+      view.on === true ? "true" : "false");
   }
   if (el.linkNote) {
     el.linkNote.textContent = held ? WAITING_LINK : "";

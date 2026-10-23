@@ -1497,7 +1497,7 @@
         <h3 class="subhead" id="ch-title">Chat history on this PC</h3>
         <p class="state" id="ch-state" role="status">Asking Jarvis…</p>
         <div id="ch-body" hidden>
-          <button class="btn" id="ch-switch" type="button">Turn chat history on</button>
+          <button class="btn" id="ch-switch" type="button" role="switch" aria-checked="false">Turn chat history on</button>
           <div class="field">
             <label class="label" for="ch-keep">How long my chats are kept</label>
             <select id="ch-keep"></select>
@@ -2224,7 +2224,7 @@
           </p>
           <p class="state" id="bc-state" role="status">Asking Jarvis…</p>
           <div id="bc-body" hidden>
-            <button class="btn" id="bc-switch" type="button">Turn the big coding model on</button>
+            <button class="btn" id="bc-switch" type="button" role="switch" aria-checked="false">Turn the big coding model on</button>
             <p class="note" id="bc-link-note" hidden></p>
             <p class="sc-line" id="bc-line" role="status"></p>
             <p class="sc-line" id="bc-running" role="status" hidden></p>
