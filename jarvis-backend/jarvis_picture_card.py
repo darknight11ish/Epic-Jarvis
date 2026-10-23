@@ -546,14 +546,35 @@ def unload_lane(port: int, model: str, timeout: float = 120.0) -> dict:
     return {"ok": not still, "seconds": seconds, "still_resident": still, "words": words}
 
 
+def _power_is_active() -> bool:
+    """Whether the owner's power mode is Active right now.
+
+    Active keeps models resident: OLLAMA_KEEP_ALIVE=-1 is the owner's own
+    setting (`jarvis_power` / MODEL-TOPOLOGY), and loading a model with the
+    old literal "30m" would reset that to half an hour. A missing power module
+    (an older PC, a suite) is not Active; the old 30m behaviour stays.
+    """
+    try:
+        import jarvis_power
+        return str(jarvis_power.current()) == "active"
+    except Exception:
+        return False
+
+
 def warm_lane(port: int, model: str, context: Optional[int] = None,
-              keep_alive: str = "30m", timeout: float = 600.0) -> dict:
+              keep_alive: object = "30m", timeout: float = 600.0) -> dict:
     """Bring one model back onto its card, and say how long that cost.
 
     It waits until /api/ps shows the model really ON the card (``size_vram``
     above zero), so the seconds returned are the real reload, not the moment
     the request was accepted.
+
+    In Active power mode the load asks for ``keep_alive: -1`` (stay resident),
+    rather than sending the old "30m" and resetting the owner's own
+    OLLAMA_KEEP_ALIVE=-1. In Quiet/Standby the lane is unchanged.
     """
+    if _power_is_active():
+        keep_alive = -1
     started = time.time()
     payload = {"model": model, "prompt": "", "keep_alive": keep_alive,
                "options": {"num_predict": 1}}

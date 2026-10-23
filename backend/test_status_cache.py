@@ -30,6 +30,7 @@ reaching for a network would be a trap for whoever runs the suite offline.
 """
 import sys
 import threading
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -195,6 +196,66 @@ def main() -> int:
         check("a service that is down is reported down, and its model list is not asked for",
               mod._STATUS_CACHE["jarvis"] is False and calls["http"] == 0,
               dict(mod._STATUS_CACHE))
+
+        # ---- D12: loopback CONNECT timeout + concurrent status probes ------
+        # A dead loopback port used to hold the caller for the full 1.5 s
+        # read timeout (measured 3.1 s for two dead services). The connect is
+        # capped at 0.20 s; the read timeout is unchanged, so a slow-but-alive
+        # local service is still given its normal time. The three independent
+        # probes run together, so the whole forced poll stays under 250 ms.
+        real_conn = mod.socket.create_connection
+        real_open = mod.urllib.request.urlopen
+        connects, opens = [], []
+        mod._reachable = real_reachable       # the real helper, with a fake socket
+        class _Sock:
+            def close(self):
+                return None
+
+        def dead_conn(addr, timeout=None):
+            connects.append((addr, timeout))
+            time.sleep(timeout or 0)
+            raise TimeoutError("loopback test")
+
+        def dead_open(req, timeout=None):
+            opens.append(timeout)
+            raise mod.urllib.error.URLError("test down")
+        mod.socket.create_connection = dead_conn
+        mod.urllib.request.urlopen = dead_open
+        try:
+            started = time.perf_counter()
+            ok = mod._reachable("http://127.0.0.1:8000/health")
+            elapsed = time.perf_counter() - started
+            check("a loopback probe uses a 0.20 s socket CONNECT timeout",
+                  connects and connects[-1][0] == ("127.0.0.1", 8000)
+                  and connects[-1][1] == 0.20, connects)
+            check("... a dead loopback probe returns in under 250 ms",
+                  ok is False and elapsed < 0.25, elapsed)
+            connects.clear()
+            opens.clear()
+            mod._reachable("http://example.invalid/health", timeout=1.5)
+            check("a non-loopback probe does NOT use the loopback connect path",
+                  connects == [], connects)
+            check("... and its own HTTP timeout is unchanged",
+                  opens and opens[-1] == 1.5, opens)
+        finally:
+            mod.socket.create_connection = real_conn
+            mod.urllib.request.urlopen = real_open
+
+        real_slow_reach = mod._reachable
+
+        def slow_loopback(url, timeout=1.5):
+            if "127.0.0.1" in url or "localhost" in url:
+                time.sleep(0.20)
+                return False
+            return True
+        mod._reachable = slow_loopback
+        mod._STATUS_CACHE.clear()
+        started = time.perf_counter()
+        mod._status_poll_once()
+        elapsed = time.perf_counter() - started
+        check("the three loopback probes run concurrently, so ?force=1's "
+              "probe stays under 250 ms", elapsed < 0.25, elapsed)
+        mod._reachable = real_slow_reach
     finally:
         mod._reachable, mod._http_json = real_reachable, real_http
         mod._origin_ok, mod._token_ok = real_origin, real_token
