@@ -932,6 +932,11 @@ LAST_WORDS = {
     "timed_out": "Nobody answered the card in time, so nothing was set up.",
     "refused": CARD_REFUSED_WORDS,
     "withdrawn": "It was deleted while the card waited, so nothing was set up.",
+    # PA-6: the repeat card is bound to the rule and words it was raised for.
+    # If either changed while the card waited, the card would overwrite a newer
+    # edit - so it refuses, says so, and the owner can ask again.
+    "stale": ("That reminder changed while the card waited, so nothing was "
+              "overwritten. Ask me again to change it."),
 }
 
 
@@ -1404,7 +1409,12 @@ class Scheduler:
         running exactly as it did. Approved: the new rule (and the edit's own
         new words, when it had any) are applied in one transaction and the next
         run is recomputed from the new rule. Denied/timed-out/refused: nothing
-        changes at all. The audit lines carry ids and outcomes only."""
+        changes at all. The audit lines carry ids and outcomes only.
+
+        PA-6: the card is bound to the rule and words it was raised for. If a
+        newer edit changed either while the card waited, approving the older
+        card would silently overwrite that newer edit, so the card is STALE:
+        it applies nothing, says so, and the owner can ask again."""
         with self._lock, self._db() as c:
             row = self._row(c, jid)
         if row is None or row["state"] not in ("active", "paused"):
@@ -1414,26 +1424,34 @@ class Scheduler:
         prompt = self._edit_card_text(kind, rule, text, self.now())
 
         def finish(outcome: str) -> None:
+            if outcome == "approved":
+                with self._lock, self._db() as c:
+                    cur = self._row(c, jid)
+                    if cur is None or cur["state"] not in ("active", "paused"):
+                        # Deleted, fired or otherwise left the list while the
+                        # card waited: applying it would overwrite something
+                        # else, so it withdraws.
+                        outcome = "withdrawn"
+                    elif (cur["rule"] != plan.get("base_rule")
+                          or cur["text"] != plan.get("base_text")):
+                        # A newer edit (its own words or its repeat rule) landed
+                        # while this card waited. Do not overwrite it.
+                        outcome = "stale"
+                    else:
+                        now = self.now()
+                        sets, args = ["rule = ?", "changed = ?"], [json.dumps(rule), now]
+                        if plan.get("text") is not None:
+                            sets.insert(0, "text = ?")
+                            args.insert(0, plan["text"])
+                        if cur["state"] == "active":
+                            sets.append("due = ?")
+                            args.append(next_run(rule, now))
+                        c.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?",
+                                  (*args, jid))
             _audit("schedule.card", {"id": jid, "outcome": outcome})
             if outcome != "approved":
                 self.last_card[jid] = outcome
                 return
-            with self._lock, self._db() as c:
-                cur = self._row(c, jid)
-                if cur is None or cur["state"] not in ("active", "paused"):
-                    # Changed or deleted while the card waited: applying it
-                    # would overwrite something else, so it withdraws.
-                    self.last_card[jid] = "withdrawn"
-                    return
-                now = self.now()
-                sets, args = ["rule = ?", "changed = ?"], [json.dumps(rule), now]
-                if plan.get("text") is not None:
-                    sets.insert(0, "text = ?")
-                    args.insert(0, plan["text"])
-                if cur["state"] == "active":
-                    sets.append("due = ?")
-                    args.append(next_run(rule, now))
-                c.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", (*args, jid))
             self.last_card[jid] = "approved"
             self._changed(jid, kind)
 
@@ -1772,10 +1790,14 @@ class Scheduler:
             new_due = at
         if has_repeat:
             # ONE card, old rule still active until it is answered. Only the
-            # field NAMES go in the audit line, in a fixed order.
+            # field NAMES go in the audit line, in a fixed order. The card is
+            # ALSO bound to the rule and words it was raised for (PA-6): a
+            # newer edit that lands while it waits makes it stale, never
+            # overwritten by the older card.
             named = [name for name, present in
                      (("repeat", True), ("text", has_text), ("when", False)) if present]
-            return {"card": {"rule": new_rule, "text": new_text, "fields": named}}
+            return {"card": {"rule": new_rule, "text": new_text, "fields": named,
+                             "base_rule": row["rule"], "base_text": row["text"]}}
         target_key = None
         if has_list:
             target = self._list_target(c, fields.get("list"))

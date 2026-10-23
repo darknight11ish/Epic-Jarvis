@@ -47,6 +47,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -115,6 +116,59 @@ class World:
         return S.Scheduler(self.path, clock=self.clock, gate=self.gate,
                            tier_of=lambda a: self.tier,
                            spawn=lambda fn: fn(), publish=lambda k, d: None)
+
+
+class DeferredWorld(World):
+    """A World whose approval card stays OPEN until the test answers it.
+
+    PA-6 needs a card to be genuinely pending while a newer edit lands on the
+    same job. The ordinary World answers the gate inline, so the card can never
+    be raced. Here the card question blocks a real thread; `approve()` releases
+    it. Every `_ask_edit` gate call is recorded, so a test can approve the first
+    or the second card deliberately.
+    """
+
+    def __init__(self, t, *, name=None):
+        global _N
+        _N += 1
+        self.clock = Clock(t)
+        self.events, self.cards, self.audit, self.prompts = [], [], [], []
+        self.waits, self.threads = [], []
+        self.path = _TMP / f"{name or 'deferred'}-{_N}.db"
+
+        def spawn(fn):
+            th = threading.Thread(target=fn, daemon=True)
+            self.threads.append(th)
+            th.start()
+
+        self.s = S.Scheduler(self.path, clock=self.clock, gate=self.gate,
+                             tier_of=lambda a: "ask", spawn=spawn,
+                             publish=lambda k, d: self.events.append((k, d)))
+
+    def gate(self, action, detail, prompt):
+        self.cards.append((action, detail, prompt))
+        self.prompts.append(prompt)
+        event = threading.Event()
+        self.waits.append(event)
+        event.wait(10)
+        return Verdict(True, "ask", "approved")
+
+    def wait_for_cards(self, count):
+        deadline = time.time() + 10
+        while len(self.cards) < count and time.time() < deadline:
+            time.sleep(0.01)
+        return len(self.cards) >= count
+
+    def approve(self, index=0):
+        self.waits[index].set()
+
+    def join(self):
+        for th in self.threads:
+            th.join(10)
+
+    def last_audit_outcome(self):
+        rows = [d for e, d in _AUDIT if e == "schedule.card"]
+        return rows[-1].get("outcome") if rows else None
 
 
 _real_audit = S._audit
@@ -580,6 +634,68 @@ def t_repeat_edit_on_repeating_job_keeps_old_until_approved():
     code, out = w.s.act(todo["id"], "edit",
                         fields={"repeat": {"every": "day", "at": "07:00"}})
     check("a to-do cannot repeat - the edit is 409", code == 409, (code, out))
+
+
+# --------------------------------------------------------------------------
+#   PA-6: a pending repeat card is bound to the rule/words it was raised for
+# --------------------------------------------------------------------------
+
+
+def t_pa6_stale_repeat_card_never_overwrites_a_newer_text_edit():
+    w = DeferredWorld(local(2026, 9, 25, 12, 0), name="pa6-text")
+    job = w.s.add_at("reminder", local(2026, 9, 26, 9, 0), "call Mum")
+    code, out = w.s.act(job["id"], "edit",
+                        fields={"repeat": {"every": "weekday", "at": "07:30"}})
+    check("PA-6: the repeat card is raised and left open (202)",
+          code == 202 and w.wait_for_cards(1), (code, out, w.cards))
+    code2, out2 = w.s.act(job["id"], "edit", fields={"text": "call Dad"})
+    check("... a newer text-only edit still lands while the card waits",
+          code2 == 200 and w.s.job(job["id"])["text"] == "call Dad", (code2, out2))
+    w.approve(0)
+    w.join()
+    after = w.s.job(job["id"])
+    check("PA-6: approving the OLD card is refused `stale`, not applied",
+          w.s.last_card.get(job["id"]) == "stale", w.s.last_card)
+    check("... the newer words survive and the old rule is not overwritten",
+          after["text"] == "call Dad" and after.get("rule") == job.get("rule")
+          and after["due"] == job["due"], after)
+    check("... the stale card has honest words and an ids/outcome-only audit line",
+          "nothing was overwritten" in S.LAST_WORDS["stale"]
+          and "changed" in S.LAST_WORDS["stale"]
+          and w.last_audit_outcome() == "stale",
+          (S.LAST_WORDS.get("stale"), w.last_audit_outcome()))
+
+
+def t_pa6_two_pending_repeat_cards_first_wins_and_second_is_stale():
+    w = DeferredWorld(local(2026, 9, 25, 12, 0), name="pa6-two")
+    job = w.s.add_repeat("alarm", S.check_rule({"every": "day", "at": "07:00"}), "wake")
+    old = w.s.job(job["id"])
+    code_a, _ = w.s.act(job["id"], "edit",
+                        fields={"repeat": {"every": "weekday", "at": "08:00"}})
+    check("PA-6: the first repeat card is raised open", code_a == 202 and w.wait_for_cards(1))
+    code_b, _ = w.s.act(job["id"], "edit",
+                        fields={"repeat": {"every": "day", "at": "09:00"}})
+    check("... and a second repeat card can be raised before the first is answered",
+          code_b == 202 and w.wait_for_cards(2), w.cards)
+    w.approve(0)
+    deadline = time.time() + 10
+    first_rule = old.get("rule")
+    while time.time() < deadline and w.s.job(job["id"]).get("rule") == first_rule:
+        time.sleep(0.01)
+    first_rule = w.s.job(job["id"]).get("rule")
+    check("PA-6: the first approved card applies its rule once",
+          first_rule != old.get("rule") and first_rule is not None, first_rule)
+    w.approve(1)
+    w.join()
+    after = w.s.job(job["id"])
+    check("PA-6: the second (now older) card is `stale` and changes nothing",
+          w.s.last_card.get(job["id"]) == "stale"
+          and after.get("rule") == first_rule and after["text"] == old["text"], after)
+    check("... no third card was raised and both audit outcomes are present",
+          len(w.cards) == 2
+          and [d.get("outcome") for e, d in _AUDIT if e == "schedule.card"][-2:]
+          == ["approved", "stale"],
+          [d for e, d in _AUDIT if e == "schedule.card"][-3:])
 
 
 # --------------------------------------------------------------------------

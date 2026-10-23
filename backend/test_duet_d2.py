@@ -214,6 +214,59 @@ def t_d21_stop_halts_at_a_step_boundary_and_nothing_else_runs():
           == "cancelled", job_row(jid))
 
 
+# PA-9: a plan holds ONE pending card for the turn. A read-only step that runs
+# while an earlier mutating step waits must not raise its own second grant.
+SECOND_ACTION = "duet_d2_second_probe_action"
+
+
+def _gather_asking(ctx, params):
+    ORDER.append("gather_asking")
+    ctx.require(SECOND_ACTION)
+    ORDER.append("gather_asking_after")
+    return {"gathered_asking": True}
+
+
+def t_pa9_a_plan_never_raises_a_second_card_for_the_same_turn():
+    del ORDER[:]
+    fresh()
+    J.register("d2_gather", _gather, readonly=True)
+    J.register("d2_send", _send)
+    J.register("d2_gather_asking", _gather_asking, readonly=True)
+    jid = J.create_plan([
+        {"name": "gather", "handler": "d2_gather", "readonly": True},
+        {"name": "send", "handler": "d2_send", "readonly": False},
+        {"name": "gather_asking", "handler": "d2_gather_asking", "readonly": True},
+    ], label="one-card plan", caps=[])
+    J.run_due(now=time.time() + 1)
+    pending = [g for g in J.pending_grants(jid) if g.get("state") == "pending"]
+    steps = plan_steps(jid)
+    check("PA-9: the plan has exactly ONE pending grant (no duplicate card)",
+          len(pending) == 1, pending)
+    check("... the earlier mutating step is the one waiting",
+          [s.get("status") for s in steps]
+          == ["done", "waiting_approval", "queued_behind_approval"],
+          [(s.get("name"), s.get("status")) for s in steps])
+    check("... the read-only step started but never asked a second card",
+          ORDER == ["gather", "send", "gather_asking"], ORDER)
+    J.run_due(now=time.time() + 2)
+    pending_again = [g for g in J.pending_grants(jid) if g.get("state") == "pending"]
+    check("PA-9: idempotent re-entry returns the SAME one pending grant",
+          len(pending_again) == 1 and pending_again[0]["id"] == pending[0]["id"],
+          (pending, pending_again))
+    J.decide_grant(pending[0]["id"], True, by="test")
+    J.run_due(now=time.time() + 60)
+    pending_second = [g for g in J.pending_grants(jid) if g.get("state") == "pending"]
+    check("PA-9: after the first card the queued read-only step asks its OWN new "
+          "card - still one at a time, never two",
+          len(pending_second) == 1
+          and (job_row(jid) or {}).get("state") == "waiting_approval", pending_second)
+    J.decide_grant(pending_second[0]["id"], True, by="test")
+    J.run_due(now=time.time() + 120)
+    check("... and the plan finishes with zero pending grants",
+          not [g for g in J.pending_grants(jid) if g.get("state") == "pending"]
+          and (job_row(jid) or {}).get("state") == "done", job_row(jid))
+
+
 # --------------------------------------------------------------------------
 #   D-2.2A - the two-tier outbound classifier
 # --------------------------------------------------------------------------
@@ -531,6 +584,7 @@ def main() -> int:
     for fn in (t_d21_a_readonly_step_continues_while_another_waits_and_the_rest_queue,
                t_d21_the_owner_answers_and_the_plan_finishes_with_ready_for_review,
                t_d21_stop_halts_at_a_step_boundary_and_nothing_else_runs,
+               t_pa9_a_plan_never_raises_a_second_card_for_the_same_turn,
                t_d22a_tier1_is_refused_even_with_an_explicit_owner_prompt,
                t_d22a_tier2_needs_an_untainted_turn_and_the_owners_own_words,
                t_d22a_email_draft_refuses_a_tier1_draft_before_the_card,
