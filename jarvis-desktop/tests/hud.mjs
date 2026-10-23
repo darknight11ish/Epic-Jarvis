@@ -1801,6 +1801,11 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // this set is NOT is as load-bearing as what it is: no amend, no
       // bulk, nothing the card's own two buttons do not need.
       "hud-approvals",
+      // The fixed Stop everything control (owner-approved 2026-10-22): the
+      // same `stop_everything` command as Alt+Shift+X, the tray and the widget.
+      // Stop only - approves and starts nothing - and a separate set so this
+      // window never gains the broad `task-control` pause/resume rights.
+      "hud-stop",
       // The left rail's five focus presets, the OWNER'S ASK of 2026-10-21:
       // the BAR'S OWN `apply_focus_preset` (its one "Use this preset"), so
       // the PC raises the same switch_model card and the page never posts
@@ -1834,6 +1839,8 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
   assert.match(cap.description, /hud-approvals/,
     "the capability does not say what the HUD's approve grant is");
+  assert.match(cap.description, /hud-stop/,
+    "the capability does not say what the HUD's Stop everything grant is");
   assert.match(cap.description, /App lock is on/,
     "the capability does not say that App lock refuses an approval from here");
   const surfaces = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
@@ -1858,6 +1865,10 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
   const approvePerms = hudApprove.slice(hudApprove.indexOf("permissions = ["),
     hudApprove.indexOf("]") + 1);
   assert.deepEqual(approvePerms.match(/allow-[a-z-]+/g), ["allow-decide-approval"]);
+  const hudStop = surfaces.slice(surfaces.indexOf('identifier = "hud-stop"'));
+  const stopPerms = hudStop.slice(hudStop.indexOf("permissions = ["),
+    hudStop.indexOf("]") + 1);
+  assert.deepEqual(stopPerms.match(/allow-[a-z-]+/g), ["allow-stop-everything"]);
   // The token is never put in the page.
   const lib = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
   assert.doesNotMatch(BOOT, /__JARVIS_TOKEN__/);
