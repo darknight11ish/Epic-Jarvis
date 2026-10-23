@@ -105,6 +105,26 @@ sentence from "the list is empty", and the Android parser checks for it before
 anything else (`JarvisApi.kt:136`). An empty approval queue is reassuring;
 a missing approval queue is not, and they must not look the same.
 
+### The page's own files (browser mode, 2026-10-23)
+
+`GET /` answers with `jarvis_hud.html`; a browser then loads that page's
+stylesheet, fonts and modules from the same origin. Those are the only other
+files the server hands out: `jarvis_hud.py`'s `STATIC_ASSETS` is an explicit
+closed-world whitelist — `url_path -> (file beside the server, exact
+Content-Type)` — with `X-Content-Type-Options: nosniff`, the HUD's
+`Cache-Control: no-store` on every answer, exact MIME types, and the same gate
+as the page: the token is required (a browser's `<link>`/`<script>` requests
+carry the SameSite=Strict `jarvis_token` cookie), and an `Origin`, when one is
+present, must pass the origin check. There is no directory serving: an
+unlisted path, `..`, an encoded traversal, a trailing slash, a case variant or
+an absolute URL is a 404, never a file lookup. The served set today is
+`/theme.css`, `/fonts/fonts.css`, the seven self-hosted `.woff2` faces and the
+page's twelve `.js` modules. `/hud-web-bridge.js`, `/manifest.webmanifest`,
+`/sw.js` and `/icons/jarvis-180|192|512.png` are listed ahead of the slices
+that write them, so each answers 404 until its file exists beside the server.
+`backend/test_hud_static.py` keeps the page and the whitelist in step in both
+directions.
+
 ---
 
 ## 2. The event stream

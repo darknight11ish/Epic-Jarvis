@@ -232,6 +232,27 @@ GATE_FINAL_HELPERS_NEW_FILE = "gate-final-helpers-new.txt"
 GATE_FINAL_PENDING_OLD_FILE = "gate-final-pending-old.txt"
 GATE_FINAL_PENDING_NEW_FILE = "gate-final-pending-new.txt"
 
+#: PWA Slice 3a (2026-10-23): the browser's own files. The page at "/" was the
+#: only file the server could answer, so every stylesheet, font and module the
+#: page loads was a 404 in a normal browser - a half-dressed HUD whose shell
+#: modules never mounted. The fix is a CLOSED-WORLD whitelist (`STATIC_ASSETS`)
+#: plus one handler that reads each named file from beside the server; the two
+#: live in DISJOINT regions of `jarvis_hud.py`, so they are TWO literal inserts.
+#: The block bytes are the published base HUD's own text
+#: (`jarvis-backend/jarvis_hud.py`), and
+#: `backend/test_reconcile_live_backend.py` proves that removing the two blocks
+#: and re-inserting them at their anchors reconstructs the base file byte for
+#: byte - and that each anchor appears exactly once in the real live HUD.
+HUD_STATIC_ASSETS_FILE = "hud-static-assets.txt"
+HUD_STATIC_ROUTE_FILE = "hud-static-route.txt"
+
+#: The two anchors the static blocks go in front of: the class that serves
+#: requests, and the page route inside its GET dispatch. Both are checked to
+#: appear exactly once in the live file; a missing or ambiguous anchor is a
+#: refusal, never a guess.
+HUD_STATIC_ASSETS_ANCHOR = "class Handler(BaseHTTPRequestHandler):"
+HUD_STATIC_ROUTE_ANCHOR = '        if path in ("/", "/index.html"):'
+
 #: The line the two guard helpers are inserted in front of. `check()` is
 #: defined once in `jarvis_gate.py`; the tool refuses if that is not true in
 #: the live file.
@@ -418,6 +439,27 @@ DELTA_TABLE = {
                        'd["replaces_note"] = _kinds.get("note", "")'),
             "file": GATE_FINAL_PENDING_NEW_FILE,
             "replace_file": GATE_FINAL_PENDING_OLD_FILE,
+        },
+    },
+    # PWA Slice 3a (2026-10-23): the browser's own files, as TWO literal
+    # inserts - the whitelist table + its handler in front of the class, and
+    # the three-line dispatch branch in front of the page route. Neither
+    # replaces anything, so a second deploy sees the probes and stages
+    # nothing; each anchor must appear exactly once in the live HUD (the
+    # read-only dry run says they do) and a missing/duplicate one is refused,
+    # never guessed.
+    "hud-static-assets.patch": {
+        "jarvis_hud.py": {
+            "probes": ("def _serve_static(", "STATIC_ASSETS = {"),
+            "anchor": HUD_STATIC_ASSETS_ANCHOR,
+            "file": HUD_STATIC_ASSETS_FILE,
+        },
+    },
+    "hud-static-route.patch": {
+        "jarvis_hud.py": {
+            "probes": ("if path in STATIC_ASSETS:",),
+            "anchor": HUD_STATIC_ROUTE_ANCHOR,
+            "file": HUD_STATIC_ROUTE_FILE,
         },
     },
 }
