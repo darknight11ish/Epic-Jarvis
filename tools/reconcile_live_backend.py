@@ -181,6 +181,19 @@ STATUS_ROUTE_NEW_FILE = "status-route-new.txt"
 STATUS_LATCHES_OLD_FILE = "status-latches-old.txt"
 STATUS_LATCHES_NEW_FILE = "status-latches-new.txt"
 
+#: D12 (2026-10-23): the 0.20 s loopback CONNECT cap. #752 changed the
+#: published base HUD, but NO patch carries this change and no DELTA_TABLE
+#: entry shipped it - so the owner's live `_http_json`/`_reachable` are still
+#: the older pair that waits the full 1.5 s HTTP timeout on a dead local port
+#: (measured about 3.1 s for `?force=1` across two dead services). The fix
+#: existed on paper only. This is a literal REPLACE of the live pair with the
+#: published base's helpers + wrapped functions; no earlier delta has ever
+#: touched this region, so the OLD block is the live file's own untouched text
+#: (extracted from it, not from a previous delta) and the NEW block is the
+#: base's own text byte for byte. Ordered after A4's entries in DELTA_TABLE.
+LOOPBACK_OLD_FILE = "hud-loopback-connect-old.txt"
+LOOPBACK_NEW_FILE = "hud-loopback-connect-new.txt"
+
 #: Review ruling 8.2's guard change (PR #680) reaches the live PC the same way
 #: the two HUD fixes do, and for a reason that reads like a silent trap:
 #: `gate-touches.patch` is ALREADY in the live `_jarvis-state.json` patch list,
@@ -296,6 +309,23 @@ DELTA_TABLE = {
             "probes": ('"taint_latched"', '"rush_latched"'),
             "file": STATUS_LATCHES_NEW_FILE,
             "replace_file": STATUS_LATCHES_OLD_FILE,
+        },
+    },
+    # D12 (2026-10-23): the 0.20 s loopback CONNECT cap #752 added to the
+    # published base HUD. NO patch carries it, and until now no DELTA_TABLE
+    # entry did either - `jarvis-backend/jarvis_hud.py` had the fix while the
+    # owner's live `_http_json`/`_reachable` were still the old pair that waits
+    # the full 1.5 s HTTP timeout on a dead local port. This literal delta
+    # REPLACES the live pair with the base's helpers + wrapped functions; it is
+    # ordered AFTER A4's entries so the chain stays one path. The probes are two
+    # post-image names ONLY the new block contains; the OLD block must appear
+    # exactly once, or a half-applied or differently-edited live file is refused
+    # rather than guessed at.
+    "hud-loopback-connect.patch": {
+        "jarvis_hud.py": {
+            "probes": ("_LOOPBACK_CONNECT_S", "def _loopback_connect_ok("),
+            "file": LOOPBACK_NEW_FILE,
+            "replace_file": LOOPBACK_OLD_FILE,
         },
     },
     # Review ruling 8.2 (PR #680): the guard change is carried to the live
