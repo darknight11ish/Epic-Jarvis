@@ -14,6 +14,16 @@
      was silently rendering in system fonts. The same families are already
      bundled under fonts/ (SIL OFL, latin subset). -->
 <link rel="stylesheet" href="fonts/fonts.css">
+<!-- PWA slice 2 (2026-10-23): the browser bridge. It is ONE external classic
+     script so the page's inline-script count stays 4 (tests/csp-inline.mjs
+     pins it) and the CSP is unchanged. Inside the Tauri webview it returns
+     immediately - the injected hud_bootstrap.js owns every one of its jobs
+     there - so the desktop path is exactly as before. In a plain browser it
+     pairs this device, runs the live stream over fetch(), keeps this
+     browser's own HUD layout, and focuses the chat box from the one
+     "Open the Jarvis bar" control. Nothing here holds the pairing key on
+     disk: the PC's HttpOnly cookie is the session. -->
+<script src="hud-web-bridge.js"></script>
 <!--
   Theme before first paint, the same synchronous read from localStorage every
   other window does (settings.html, onboarding.html): this page also opens as
@@ -3399,78 +3409,49 @@ function loadSpeechRule(){
 let turnRoute = null;
 
 /* ==================================================================
- * Voice — browser speech in, browser speech out.
- * Swap these two for the local pipeline (whisper + Kokoro) later by
- * replacing startListening() and speak() only; nothing else changes.
+ * Voice — OUT is the OS voice (it only reads text). IN is NOT here.
+ *
+ * A client must not do speech-to-text (CLAUDE.md, standing rule), and the
+ * browser's built-in cloud speech recogniser uploads microphone audio to
+ * Apple/Google. That path is REMOVED, not hidden: this page creates no
+ * recogniser object at all (the desktop bootstrap used to delete the
+ * browser's; there is nothing left to delete). Browser voice IN arrives with
+ * the HTTPS/AudioWorklet slice through the PC's own /api/voice/utterance
+ * pipeline; until then the mic says so in plain words.
  * ================================================================== */
 const voice = (() => {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let rec = null, listening = false, audioCtx = null, analyser = null, raf = 0, micStream = null;
+  const webMode = Boolean(window.__JARVIS_WEB_MODE);
+  let listening = false;
 
-  if(SR){
-    rec = new SR();
-    rec.continuous = false; rec.interimResults = true; rec.lang = "en-US";
-    rec.onresult = e => {
-      let text = "";
-      for(let i = e.resultIndex; i < e.results.length; i++) text += e.results[i][0].transcript;
-      $("input").value = text;
-      // Claimed as voice. It is the browser's transcript, not the PC's, so
-      // the PC records it as "voice_unverified" (JARVIS-API.md section 18).
-      // Inside the app this never runs: hud_bootstrap.js removes the
-      // browser's recogniser, which uploads audio.
-      S.inputTag = "voice";
-      if(e.results[e.results.length-1].isFinal){ stop(); send(); }
-    };
-    rec.onerror = () => stop();
-    rec.onend = () => { if(listening) stop(); };
+  $("r-stt").textContent = webMode ? "needs HTTPS" : "unsupported";
+  if(webMode && $("mic")){
+    $("mic").title = "Voice in a browser needs HTTPS. Until then, use Jarvis on your PC.";
+    $("mic").setAttribute("aria-label", $("mic").title);
   }
-  $("r-stt").textContent = SR ? "ready" : "unsupported";
 
-  async function meter(){
-    try{
-      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-      micStream = stream;
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-      audioCtx.createMediaStreamSource(stream).connect(analyser);
-      const buf = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
-        analyser.getByteTimeDomainData(buf);
-        let sum = 0;
-        for(let i=0;i<buf.length;i++){ const v = (buf[i]-128)/128; sum += v*v; }
-        S.level = Math.min(1, Math.sqrt(sum/buf.length) * 4.2);
-        $("r-level").textContent = Math.round(S.level*100);
-        $("r-levelbar").style.width = (S.level*100)+"%";
-        raf = requestAnimationFrame(tick);
-      };
-      tick();
-    }catch(err){
-      $("r-stt").textContent = "mic blocked";
+  function browserVoiceNote(){
+    const words = "Voice in a browser needs HTTPS. Until then, use Jarvis on your PC.";
+    if(window.__jarvisWebBridge && typeof window.__jarvisWebBridge.note === "function"){
+      window.__jarvisWebBridge.note(words);
     }
+    if($("r-stt")) $("r-stt").textContent = "needs HTTPS";
   }
 
-  function start(){
-    if(!rec || listening) return;
-    listening = true;
-    $("mic").setAttribute("aria-pressed","true");
-    reactor.set("listening");
-    if(!analyser) meter();
-    try{ rec.start(); }catch(e){}
+  function start(announce){
+    // No recogniser exists. On the desktop the shell owns the mic
+    // (hud_bootstrap.js hudMicNote), so this is a silent no-op there, exactly
+    // as before; in a browser a MIC CLICK explains itself instead of
+    // listening. The Space shortcut passes announce=false: a keyboard shortcut
+    // should not scribble a note across the screen every time it is pressed.
+    if(webMode && announce !== false) browserVoiceNote();
   }
   function stop(){
     if(!listening) return;
     listening = false;
-    // Release the device: the old version left the track live, so the
-    // browser's mic-in-use light stayed on for the life of the tab.
-    try{ if(micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; } }catch(e){}
-    try{ if(raf){ cancelAnimationFrame(raf); raf = null; } }catch(e){}
-    try{ if(audioCtx && audioCtx.state !== "closed"){ audioCtx.close(); } }catch(e){}
-    $("mic").setAttribute("aria-pressed","false");
+    if($("mic")) $("mic").setAttribute("aria-pressed","false");
     S.level = 0;
-    $("r-levelbar").style.width = "0%";
+    if($("r-levelbar")) $("r-levelbar").style.width = "0%";
     reactor.set("idle");
-    try{ rec.stop(); }catch(e){}
   }
 
   function speak(text){
@@ -3488,7 +3469,7 @@ const voice = (() => {
     speechSynthesis.speak(u);
   }
 
-  return { start, stop, speak, get listening(){ return listening; }, supported: !!SR };
+  return { start, stop, speak, get listening(){ return listening; }, supported: false };
 })();
 
 /* ==================================================================
@@ -3882,10 +3863,10 @@ $("input").addEventListener("input", e => {
 $("input").addEventListener("paste", () => { S.inputTag = "pasted"; });
 $("input").addEventListener("drop", () => { S.inputTag = "pasted"; });
 
-$("mic").addEventListener("click", () => voice.listening ? voice.stop() : voice.start());
+$("mic").addEventListener("click", () => voice.listening ? voice.stop() : voice.start(true));
 document.addEventListener("keydown", e => {
   if(e.code === "Space" && document.activeElement !== $("input") && !e.repeat){
-    e.preventDefault(); voice.start();
+    e.preventDefault(); voice.start(false);
   }
 });
 document.addEventListener("keyup", e => {
@@ -4793,8 +4774,17 @@ async function apprDecide(id, ok, el){
     const j = await r.json();
     // 409 means it already timed out or was answered elsewhere. Say so rather
     // than letting the tap look like it approved something.
-    if(!j.ok) el.querySelector(".det").textContent =
-      "This request is no longer waiting — " + (j.error || "already decided.");
+    if(!j.ok){
+      // PWA slice 2, Gemini ruling Q3(b): a browser cannot SIGN a risky
+      // approval (that needs the paired phone's enrolled key, or the PC's
+      // Windows Hello), and the PC refuses it by name. Say where to answer it
+      // instead of claiming it is "no longer waiting".
+      const risky = j.key === "no_approval_key"
+        || /approval key/i.test(String(j.error || ""));
+      el.querySelector(".det").textContent = risky
+        ? "This is a risky approval: answer it on your PC or your paired phone."
+        : "This request is no longer waiting — " + (j.error || "already decided.");
+    }
   }catch(e){}
   setTimeout(() => { el.remove(); apprPoll(); }, 1200);
 }
@@ -6366,8 +6356,14 @@ mountSafetyRail().then((rail) => {
  * hides itself: there is no shell to save a layout through. */
 import { mountHudEditor } from "./hud-edit.js";
 import { mountHudPresets } from "./hud-presets.js";
+/* PWA slice 2: a plain browser keeps per-DEVICE layouts (localStorage, via
+ * hud-layout-store.js) instead of the host PC's store, so the editor and the
+ * Layouts menu are offered there too. The store still uses Tauri IPC when
+ * __TAURI__ is present, so the desktop path is unchanged. */
+const hudShellStore = Boolean(window.__TAURI__ && window.__TAURI__.core)
+  || Boolean(window.__JARVIS_WEB_MODE);
 mountHudEditor({
-  shellPresent: Boolean(window.__TAURI__ && window.__TAURI__.core),
+  shellPresent: hudShellStore,
 }).then((editor) => {
   window.__jarvisHudEdit = editor;
 }).catch(() => {
@@ -6377,7 +6373,7 @@ mountHudEditor({
  * (duplicate / rename / delete / reset / copy-paste JSON). Another external
  * module, so the page's inline-script count and CSP are unchanged. */
 mountHudPresets({
-  shellPresent: Boolean(window.__TAURI__ && window.__TAURI__.core),
+  shellPresent: hudShellStore,
 });
 </script>
 
