@@ -2417,6 +2417,10 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
       rows: rows.length,
       visibleRows: visibleRows.length,
       composerCentred: Math.abs((composer.left + composer.right) / 2 - (shellBox.left + shellBox.right) / 2) < 8,
+      stageStartsAtLeft: document.getElementById("stage").getBoundingClientRect().left <= 1,
+      stageWidth: Math.round(document.getElementById("stage").getBoundingClientRect().width),
+      shellWidth: Math.round(shellBox.width),
+      controlsLabel: document.getElementById("left-toggle").textContent.trim(),
       linksHold: !!document.getElementById("log"),
     };
   });
@@ -2429,11 +2433,28 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
     label: document.getElementById("history-toggle").textContent,
     pressed: document.getElementById("history-toggle").getAttribute("aria-pressed"),
   }));
+  // D-UI-4: the [Controls] pill is the visible way into the hidden left rail
+  // outside edit mode, and it really opens it.
+  assert.equal(shape.controlsLabel, "☰ Controls", "Ambient has no visible [☰ Controls] label");
+  await page.click("#left-toggle");
+  await page.waitForTimeout(250);
+  const controlsOpen = await page.evaluate(() => {
+    const rail = document.querySelector(".rail.left").getBoundingClientRect();
+    const toggle = document.getElementById("left-toggle");
+    return { open: rail.left >= -1, expanded: toggle.getAttribute("aria-expanded") };
+  });
+  assert.equal(controlsOpen.open, true, "the [Controls] pill did not open the Ambient left rail");
+  assert.equal(controlsOpen.expanded, "true", "the [Controls] pill does not report the rail open");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
   await page.close();
   assert.equal(shape.leftRailOffScreen, true, "Ambient draws the navigation rail over the core");
   assert.equal(shape.leftToggleShown, true, "Ambient has no [Navigation] toggle for its left rail");
   assert.equal(shape.rightRailOffScreen, true, "Ambient draws the telemetry rail over the core");
   assert.equal(shape.coreWidth, 320, "the Ambient core is not 320px");
+  assert.equal(shape.stageStartsAtLeft, true, "Ambient leaves an empty left column beside the stage");
+  assert.ok(shape.stageWidth >= shape.shellWidth - 2,
+    `Ambient's stage is narrower than the shell (${shape.stageWidth} vs ${shape.shellWidth})`);
   assert.equal(shape.barPosition, "fixed", "the top-right pill is not floating");
   assert.equal(shape.statusShown, true, "the top-left status pill is missing");
   assert.equal(shape.historyShown, true, "the history drawer toggle is missing");
@@ -3273,6 +3294,51 @@ await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escap
     assert.equal(card.handle, true, `${card.id} has no drag handle`);
     assert.equal(card.sizes, 4, `${card.id} does not offer four sizes`);
     assert.equal(card.regionSelect, true, `${card.id} has no direct region selector`);
+  }
+  const rail = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll("#rail-right [data-hud-card]")]
+      .filter((node) => !node.hidden && node.getBoundingClientRect().height > 0);
+    const boxes = cards.map((node) => {
+      const r = node.getBoundingClientRect();
+      return { id: node.getAttribute("data-hud-card"), top: r.top, bottom: r.bottom };
+    }).sort((a, b) => a.top - b.top);
+    const overlaps = [];
+    for (let i = 1; i < boxes.length; i += 1) {
+      if (boxes[i].top < boxes[i - 1].bottom - 1) {
+        overlaps.push([boxes[i - 1].id, boxes[i].id]);
+      }
+    }
+    // The rail scrolls: budget/voice may start below the fold, so bring each
+    // card on screen before asking what a real click would hit. The geometry
+    // above is taken before scrolling, so an overlap is still caught.
+    const hits = cards.map((node) => {
+      node.scrollIntoView({ block: "nearest" });
+      const r = node.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        id: node.getAttribute("data-hud-card"),
+        hit: Boolean(at && (at === node || node.contains(at))),
+      };
+    });
+    return {
+      bannerCount: document.querySelectorAll(".hud-edit-banner").length,
+      bannerText: (document.querySelector(".hud-edit-banner .hud-edit-words") || {}).textContent || "",
+      statusText: (document.getElementById("hud-edit-status") || {}).textContent || "",
+      cards: boxes,
+      hits,
+      overlaps,
+    };
+  });
+  assert.equal(rail.bannerCount, 1, "Edit HUD drew more than one banner");
+  assert.equal(rail.bannerText,
+    "Editing the HUD — drag a card or use its buttons. Press Esc when done.",
+    "the edit banner is not the single plain sentence");
+  assert.equal(rail.statusText, "", "the edit bar repeated its banner in the status line");
+  assert.deepEqual(rail.overlaps, [],
+    `right-rail cards overlap in Edit HUD: ${JSON.stringify(rail.overlaps)}`);
+  assert.ok(rail.cards.length >= 2, "the right rail has fewer than two cards to test");
+  for (const card of rail.hits) {
+    assert.equal(card.hit, true, `right-rail card ${card.id} is covered in Edit HUD`);
   }
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);

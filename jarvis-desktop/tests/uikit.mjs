@@ -392,7 +392,7 @@ export const BRAIN = {
             reranker: { state: "on", model: "Xenova/ms-marco-MiniLM-L-6-v2", why: "", used: 14 },
             said_again: 3, sleep_time: { enabled: false, remind: true } },
   memory_pending: { available: true, setup: { setup_complete: false, note:
-      "extraction is a scaffold: review its proposals and tune the prompt against real conversations" },
+      "New facts wait under ‘Waiting for you’ below until you approve them." },
     pending: [
     { id: 41, text: "Prefers invoices filed by supplier, not by month.", source: "conversation",
       confidence: 0.82, created: Date.now()/1000 - 3600 },

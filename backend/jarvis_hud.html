@@ -1423,6 +1423,39 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
      every rail (20/26/30/40/41) and below the Layouts menu (70). */
   body[data-hud-edit="on"] #hud-stop{position:relative; z-index:60;}
 
+  /* P0.5 D-UI-3 (2026-10-23): the right rail is a scrolling column in Edit
+     HUD. The REMINDERS card used to paint over SECOND BRAIN & VAULT because
+     the rail/region could shrink their children; every card is now a
+     non-shrinking, in-flow item with its own row, and the region scrolls
+     instead of stacking cards on top of each other. */
+  body[data-hud-edit="on"] #rail-right{
+    overflow-y:auto; min-height:0;
+  }
+  body[data-hud-edit="on"] #rail-right .hud-region-right{
+    display:grid; grid-template-columns:repeat(12, minmax(0,1fr));
+    grid-auto-rows:max-content; align-content:start; overflow-y:auto;
+    flex:0 0 auto; min-height:0;
+  }
+  body[data-hud-edit="on"] #rail-right .hud-card{
+    flex-shrink:0; min-height:0; margin:0; align-self:start; position:relative;
+  }
+  body[data-hud-edit="on"] #rail-right .hud-card .rail-section{margin-top:0;}
+
+  /* P0.5 D-UI-4 (2026-10-23): Ambient is one full-width stage. Its left rail
+     is a fixed drawer, so the grid must not reserve an empty column for it;
+     the stage spans every column and the [Controls] pill is always the way
+     into the hidden rail outside edit mode. */
+  html[data-hud-shell="center-core"] #shell{
+    grid-template-columns:0 minmax(0,1fr);
+  }
+  html[data-hud-shell="center-core"] #stage{
+    grid-column:1 / -1; width:100%;
+  }
+  html[data-hud-shell="center-core"] .stage-bar{
+    max-width:calc(100vw - 32px); flex-wrap:wrap;
+  }
+  html[data-hud-shell="center-core"] .left-toggle{display:inline-flex;}
+
   /* ---- Layouts menu + copy/paste JSON dialogs (H3) --------------------- */
   .hud-presets-menu{
     position:fixed; z-index:70; width:min(352px, calc(100vw - 16px));
@@ -1732,7 +1765,8 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
            read-only `Layout: <Preset Name>` badge next to [Edit HUD] instead
            (hud-edit.js). Nothing in this page writes a layout. -->
       <button class="ghost left-toggle" id="left-toggle" type="button"
-              aria-controls="rail-left" aria-expanded="false">Navigation</button>
+              aria-controls="rail-left" aria-expanded="false"
+              aria-label="Open the Controls drawer" title="Controls">&#9776; Controls</button>
       <button class="ghost rail-toggle" id="rail-toggle" type="button"
               aria-controls="rail-right" aria-expanded="false">Telemetry</button>
       <!-- Fixed, outside every card/region/layout document. Same command as
@@ -4968,7 +5002,7 @@ subscribe();
     function paint() {
       var open = isOpen();
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      toggle.textContent = open ? "Hide navigation" : "Navigation";
+      toggle.textContent = open ? "Hide Controls" : "\u2630 Controls";
       if (close) {
         close.setAttribute("aria-hidden", open ? "false" : "true");
         close.tabIndex = open ? 0 : -1;

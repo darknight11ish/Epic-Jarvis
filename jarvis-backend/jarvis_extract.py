@@ -498,8 +498,7 @@ def setup_status() -> dict:
            "pending": len(_pending_rows()),
            "queue_full": _queue_full(),
            "note": None if _cfg("setup_complete", False) else
-                   "extraction is a scaffold: review its proposals and tune the prompt "
-                   "against real conversations"}
+                    "New facts wait under ‘Waiting for you’ below until you approve them."}
     if _dropped_full:
         # Only when it has happened, same rule jarvis_memory's bad_vectors
         # counter follows: a permanent "dropped_full: 0" line is noise on
