@@ -541,6 +541,10 @@ await check("the learning card says \"background learning\", and a \"Remember:\"
   await page.close();
   assert.match(learning, /Background learning/);
   assert.match(learning, /Saved without a card: it was in your own words\./);
+  assert.match(learning, /New facts wait under .*Waiting for you.*until you approve them/,
+    "the Learning note is not the plain user sentence");
+  assert.doesNotMatch(learning, /scaffold|tune the prompt/,
+    "the developer scaffold note is still shown in the Learning card");
   // CONTROL: a queued "Remember:" (a card) has nothing to add.
   const queued = { ...pending, setup: { ...pending.setup,
     remember_last: { queued: true, auto_saved: false, note: "Made a card." } } };

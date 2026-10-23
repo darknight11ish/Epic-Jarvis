@@ -630,7 +630,7 @@ export function mountHudEditor(options = {}) {
     if (editing) {
       entrySnapshot = layout;
       undoStack.length = 0;
-      announce("Editing the HUD. Drag a card, or use its buttons. Escape finishes.");
+      announce("");
     } else if (saveTimer) {
       flushSave();
     }
@@ -793,7 +793,7 @@ export function mountHudEditor(options = {}) {
     const stage = byId("stage");
     if (!stage) return;
     barEl = doc.createElement("div");
-    barEl.className = "hud-edit-bar";
+    barEl.className = "hud-edit-bar hud-edit-banner";
     barEl.id = "hud-edit-bar";
     barEl.hidden = true;
     barEl.setAttribute("role", "region");
@@ -802,7 +802,7 @@ export function mountHudEditor(options = {}) {
     // and a capture bar has no dynamic text needing markup.
     const words = doc.createElement("span");
     words.className = "hud-edit-words";
-    words.textContent = "Editing the HUD - drag a card, or use its buttons.";
+    words.textContent = "Editing the HUD — drag a card or use its buttons. Press Esc when done.";
     const status = doc.createElement("span");
     status.className = "hud-edit-status";
     status.id = "hud-edit-status";
