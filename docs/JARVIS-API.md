@@ -354,10 +354,20 @@ fifteen minutes, and changeable in Settings on either app, 5 minutes to an hour;
 it was 600, and 180 before that). Seconds left,
 not a clock time, so the phone's clock does not have to agree with the PC's.
 Without the patch the field is absent and no countdown is shown.
-`backend/test_approval_contract.py` builds these rows from the real
-`notice_for` and `expires_in` code into
-`jarvis-client/app/src/test/resources/contract/pending-rows.json`, which the
-phone's and the desktop's tests decode.
+
+**The field is also absent for the four cards that have NO deadline** (the
+owner's ruling of 2026-10-23, Q1; `backend/no-expiry-cards.patch`): pairing a
+device (`pair_device`, `unretire_shared_key`), registering a phone's approval
+key (`register_approval_key`) and restoring a backup (`restore_backup`) wait for
+the owner instead of running out. Every other action - including every routine
+one and every action nobody classified - keeps the 15-minute window above. The
+field is left OFF for the four, never `0` (which both apps read as "expired
+now") and never a very large number (which would draw a countdown that ends in a
+refusal that never comes). Both clients already treat an absent field as "no
+countdown", so no client change is needed; `backend/test_gate_no_expiry.py`
+drives the gate and `backend/test_approval_contract.py` still builds the
+fixture from the real `notice_for` and `expires_in` code into
+`jarvis-client/app/src/test/resources/contract/pending-rows.json`.
 
 ### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
 
@@ -374,7 +384,9 @@ a client:
   connection: loopback, a sender address equal to the address it arrived at
   (the PC calling its own Tailscale address), or one of the PC's own
   addresses; anything that cannot be placed counts as the PC. The request
-  stays open while the prompt is up, at most the card's `expires_in`. A
+  stays open while the prompt is up, at most the card's own window (the
+  shipped 900 when it has one; the Windows Hello prompt itself is bounded by
+  that same number even for the four cards with no deadline). A
   phone approval, or a card that is not risky, is not held.
 - **The answers it can give instead of the owner's handler's:**
 

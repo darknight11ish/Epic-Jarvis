@@ -242,6 +242,22 @@ immediate to turn off, and neither raises a card that something else answers:
 No approval card is ever answered for the owner, and no control approves
 more than one card.
 
+**A card waits 15 minutes and then refuses itself** (`approval_timeout_seconds`,
+900 in the shipped config since 2026-10-13, and changeable in Settings), because
+an unanswered request must not run. Four cards have no deadline at all, by the
+owner's ruling of 2026-10-23 (Q1, `backend/no-expiry-cards.patch`): pairing a
+device (`pair_device`, `unretire_shared_key`), registering a phone's approval
+key (`register_approval_key`) and restoring a backup (`restore_backup`). Those
+three ceremonies need the owner at the PC and can take longer than the window;
+a card that lapsed half way through loses the work. Every other card keeps the
+window, including "forget a time frame" and every switch that loosens a rule -
+the rescued work behind this patch exempted 23 actions and the owner refused
+that scope. **Waiting is not approving:** a never-expiring card still runs
+nothing until a person answers it, is still answerable only while it is the live
+card (a cancelled or replaced pairing is withdrawn), and a denial is still a
+denial. The gate decides this from its own action ids only - there is no flow
+argument and no caller-supplied value that can ask for it.
+
 It also means Jarvis never drives its own approval surfaces. "Control the
 computer" refuses every window of Jarvis's own, and "control the phone"
 stops before any tap while a Jarvis app is in front (security audit M3,

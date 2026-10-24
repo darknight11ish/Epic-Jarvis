@@ -279,6 +279,19 @@ $PATCHES = @(
     # `d["notice"]` line); ui-control-wiring and note-capture only add lines
     # above it, so anywhere after approval-notice works - last is simplest.
     'approval-expiry.patch'
+    # Which cards expire at all (the owner's ruling of 2026-10-23, Q1): ONLY
+    # pairing a device, registering a phone's approval key and restoring a
+    # backup wait without a deadline; every routine card keeps the 15-minute
+    # window approval-expiry just added. Its context in jarvis_gate.pending()
+    # is approval-expiry's output, so it must come after that patch; its other
+    # hunks sit on the module's own APPROVAL_TIMEOUT block, on check()'s
+    # deadline line, and on the stale-row sweep in _init(), none of which an
+    # earlier patch writes. Its jarvis_owner_check.py and jarvis_devices.py
+    # halves are those modules' own lines: both are shipped whole, not
+    # patched. Windows Hello still guards every risky card, and the re-read
+    # after the prompt is what keeps a card with no deadline answerable only
+    # while it is the live one.
+    'no-expiry-cards.patch'
     # Refuses every spelling of "every network interface" ("0", "0x0", ...)
     # as the bind address. Its context is loopback-too's output (the
     # _loopback_companion function and its call in main()), so it goes

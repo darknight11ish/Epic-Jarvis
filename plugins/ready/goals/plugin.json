@@ -4,5 +4,5 @@
   "module": "jarvis_goals",
   "install": "handler",
   "replaces_patch": "goals.patch",
-  "stack_order": 84
+  "stack_order": 85
 }

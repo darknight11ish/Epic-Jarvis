@@ -4,5 +4,5 @@
   "module": "jarvis_decks",
   "install": "handler",
   "replaces_patch": "decks.patch",
-  "stack_order": 108
+  "stack_order": 109
 }
