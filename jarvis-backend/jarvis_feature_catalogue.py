@@ -3,7 +3,7 @@
 The owner's feature list, as data: 139 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 13be728d24b4f49cd6f44a315f116a89d7d8bc03de3b476cab7560de6a6a5d5b); the apps' Features pages read their own
+`features/features.json` (sha256 65cb6a272bdf8dd06c50f14957173f9c718069f4f88451fae6615623466dded5); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "13be728d24b4f49cd6f44a315f116a89d7d8bc03de3b476cab7560de6a6a5d5b"
+SOURCE_SHA256 = "65cb6a272bdf8dd06c50f14957173f9c718069f4f88451fae6615623466dded5"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -666,9 +666,9 @@ FEATURES = (
         "group": "Notes and files",
         "title": "Web search",
         "what": "Jarvis looks something up on the web.",
-        "where": "Just ask. The provider is chosen in Settings, Web search - SearXNG by default, then DuckDuckGo, Exa, Tavily and Brave.",
+        "where": "Just ask. The provider is chosen in Settings, Web search - SearXNG by default, then DuckDuckGo, Exa, Tavily, Brave and DeepSeek.",
         "asks": "A search straight from your own question goes without asking. After outside text, or when the search words would repeat something private, one card shows the exact words. A setting makes it ask every time.",
-        "limit": "If the chosen provider is down, Jarvis says so and offers to switch - it never silently uses another. Brave can cost money past its monthly credit.",
+        "limit": "If the chosen provider is down, Jarvis says so and offers to switch - it never silently uses another. Brave can cost money past its monthly credit, and DeepSeek charges $0.75 for 1,000 searches from the account's balance.",
         "surface": "both",
         "covers": ["settings.web-search"],
     },

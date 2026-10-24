@@ -276,10 +276,10 @@ fn main() {
             "get_tutorials",
             "mark_tutorial",
             "get_faq",
-            // Settings' "Web search" (backend/web-search.patch): the five
+            // Settings' "Web search" (backend/web-search.patch): the six
             // providers and their "why" lines, ONE change at a time (turning
             // "Ask before every web search" off raises a card on the PC), a
-            // test search, and the Exa / Tavily / Brave key written straight into
+            // test search, and the Exa / Tavily / Brave / DeepSeek key written straight into
             // Credential Manager on this PC - never sent over HTTP, never
             // shown again. Settings window only.
             "get_web_search",

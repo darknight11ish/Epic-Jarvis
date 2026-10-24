@@ -17,6 +17,18 @@ baseline (the tool's `--check` ratchet is what keeps it from growing).
 - The full machine-readable report, with every path:line, word and string, is
   `docs/REVIEW-8-ZERO-JARGON-BASELINE-2026-10-23.json`.
 
+**Updated 2026-10-23: five more developer terms.** `target_digest`, `cosine`,
+`SQLITE_BUSY`, `ECONNREFUSED` and `ENETUNREACH` - the terms Section 3 of the
+owner's work order names and this first pass missed - are now rules in
+`TERM_RULES` (`tools/check_zero_jargon.py`). Re-measured the same day on the
+tree this change lands on (`014af87f5`): **still 255** user-facing developer-word
+hits and **25** bare refusals. The five terms catch **nothing user-facing
+today**, so the recorded baseline does not move. The file count reads **689**
+rather than 688 only because one more shipped backend module landed on `main`
+after this page's opening tree (backend 194 -> 195); the committed JSON is left
+as the opening measurement it says it is. The plain wording to write when a hit
+is fixed is `docs/PLAIN-WORDS-REPLACEMENTS-2026-10-23.md`.
+
 | surface | hits | what it mostly is |
 |---|---|---|
 | backend | 192 | internal field names and Python module names inside messages (`sha_before`, `allowed_domains`, `element_token`, `jarvis_hud.py`), the state words `taint`/`latch`, `localhost` |
@@ -68,7 +80,7 @@ a bare "API" in the same sentence still fails.
 python -B tools/check_zero_jargon.py                 # report mode, exit 0
 python -B tools/check_zero_jargon.py --check         # fails only if the tree got WORSE than this baseline
 python -B tools/check_zero_jargon.py --report docs/REVIEW-8-ZERO-JARGON-BASELINE-2026-10-23.json
-python -B backend/test_zero_jargon.py                # the scanner's own hermetic tests (27 checks)
+python -B backend/test_zero_jargon.py                # the scanner's own hermetic tests (45 checks)
 ```
 
 The ratchet is registered in two places, following the repository's own
