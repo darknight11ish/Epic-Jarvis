@@ -395,8 +395,19 @@ object Entities {
         return n + ", " + factCount(facts)
     }
 
-    /** Every fact the plate holds, added up - one number, no double counting. */
-    fun totalFacts(entities: List<Entity>): Int = entities.sumOf { it.count }
+    /**
+     * Every DISTINCT fact the plate holds - one number, no double counting.
+     *
+     * One fact can name more than one person or thing ("Priya and Dan live in
+     * Portugal" is one fact behind two names), so adding each name's own count
+     * would count that fact once per name. The headline would then be
+     * "name-fact links", which cannot be reconciled with what Jarvis holds
+     * whenever two names share a fact - exactly the case the Galaxy exists to
+     * show (AND-2, found 2026-10-24). The per-name count on a row is left as it
+     * was, because "Priya, 2 facts" is true on its own.
+     */
+    fun totalFacts(entities: List<Entity>): Int =
+        entities.flatMap { it.factIds }.toHashSet().size
 
     /**
      * Up to [limit] names with the most shared names, best first: the same
@@ -461,6 +472,23 @@ object Entities {
             if (ids.isEmpty()) null else e.copy(factIds = ids)
         }
     }
+
+    /**
+     * The as-of rows the plate may draw for [epoch], or null while it has none
+     * for THAT date: [rows] is returned only when [rowsEpoch] says they were
+     * read for exactly that epoch.
+     *
+     * A date chip changes the heading at once, but the facts are a second read
+     * that can be slow or can fail. Keeping the rows apart from the date they
+     * belong to is what let "7d"'s facts sit under "30d"'s label (AND-1, found
+     * 2026-10-24); this gate is the one rule that makes that impossible - on
+     * the frame before the new read starts, and when the read fails too.
+     */
+    fun asOfFactsFor(
+        epoch: Long?,
+        rows: List<MemoryAsOf.RawFact>?,
+        rowsEpoch: Long?,
+    ): List<MemoryAsOf.RawFact>? = if (epoch != null && rowsEpoch == epoch) rows else null
 
     /** What one name's as-of facts came to: the ones that were true then, and
      * the retired ones (drawn muted under [RETIRED]), in the PC's newest-first

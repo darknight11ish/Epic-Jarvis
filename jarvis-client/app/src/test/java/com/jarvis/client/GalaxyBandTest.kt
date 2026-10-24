@@ -41,14 +41,25 @@ class GalaxyBandTest {
     }
 
     @Test
-    fun totalFactsAddsEveryNameAndNothingElse() {
+    fun totalFactsCountsEachFactOnce() {
         val list = listOf(
             entity("a", "Ana", "person", 1, 2),
             entity("b", "Ben", "person", 1),
             entity("c", "Cara", null, 3, 4, 5),
         )
-        assertEquals(6, Entities.totalFacts(list))
+        // Fact 1 names BOTH Ana and Ben, so adding each name's own count would
+        // say 6 links; Jarvis holds 5 facts, and the headline is facts (AND-2).
+        assertEquals(5, Entities.totalFacts(list))
         assertEquals(0, Entities.totalFacts(emptyList()))
+        // When every name shares one fact, the headline is still one fact.
+        assertEquals(
+            1,
+            Entities.totalFacts(
+                listOf(entity("a", "Ana", "person", 7), entity("b", "Ben", "person", 7)),
+            ),
+        )
+        // And a row's own count is untouched: two facts name Ana.
+        assertEquals(2, list.first().count)
     }
 
     @Test
