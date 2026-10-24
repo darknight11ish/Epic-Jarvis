@@ -64,8 +64,12 @@ import kotlinx.coroutines.launch
  * ([Backup]'s own comment has the whole reasoning). Tapping it asks the PC for
  * a backup (`prepare`), which mints this run's one-time recovery code and
  * writes NOTHING. The code is then shown full-screen, in four groups of five,
- * and the run CANNOT be finished until the owner ticks that he has saved it.
- * Only then does the phone say "write it" (`commit`) and the PC writes the file.
+ * and the run CANNOT be ended until the owner ticks that he has saved it.
+ * Ending it is a request the PC REFUSES from here - the write is the PC's own
+ * act, and from 2026-10-24 the PC finishes the run itself (Settings, Backups,
+ * "A backup was started from your phone"), typing the same code. So this
+ * screen never says a backup was written; a refusal says where to finish it,
+ * and [Backup.PREPARED_ELSEWHERE] covers a run left waiting.
  *
  * WHY THE CODE IS DRAWN THIS LOUDLY. A backup is locked with its own code, the
  * code is stored nowhere, and a new backup deletes the oldest of five. So a run
@@ -230,6 +234,20 @@ internal fun BackupSection(canAct: Boolean) {
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textLo,
                 )
+                // A run THIS phone started and the PC has not written: said
+                // plainly, because the alternative is a screen that lets the
+                // owner believe a backup exists when nothing has been written
+                // (2026-10-24). A dead run is not drawn this way - the PC hides
+                // an expired one from the read.
+                if (v?.prepared == true) {
+                    Gap(6)
+                    Text(
+                        Backup.PREPARED_ELSEWHERE,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.warnInk,
+                        modifier = Modifier.liveStatus(),
+                    )
+                }
             }
             said?.let {
                 Gap(6)
@@ -364,7 +382,7 @@ private fun RecoveryCodeDialog(
                 }
                 Gap(10)
                 Primary(
-                    text = if (writing) "Writing it on your PC…" else Backup.COMMIT_LABEL,
+                    text = if (writing) "Asking your PC to finish it…" else Backup.COMMIT_LABEL,
                     modifier = Modifier.fillMaxWidth(),
                     // The tick is the gate: without it there is no way to write
                     // a file whose code has not been read.

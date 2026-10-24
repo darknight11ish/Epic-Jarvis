@@ -747,12 +747,16 @@ COMMIT_WRONG_CODE = ("That is not the code for the backup waiting to be written,
                      "was written and your folder is unchanged. Ask for a backup again.")
 #: A caller that is not this PC asking to COMMIT. `PC_ONLY` (the backups panel)
 #: is not this: it reads as advice to go and set backups up. This says what
-#: actually happened to the ask.
-COMMIT_PC_ONLY = ("The backup is written on your PC, so nothing was written from here. Ask "
-                  "for a backup in Jarvis on your phone, then keep the code it shows: your "
-                  "PC writes the file when you tap that you have saved it. If you cannot "
-                  "reach your phone, make one at the PC - Settings, Backups, \"Back up "
-                  "now\".")
+#: actually happened to the ask - and, since 2026-10-24, what to do next: the
+#: phone's tap does NOT write anything, because the write is the PC's own act.
+#: It used to say "your PC writes the file when you tap that you have saved it",
+#: which promised a write the phone's tap can never make; the PC finishes the
+#: run instead (`view(here=True)["prepared"]`, `finish_phone_backup`).
+COMMIT_PC_ONLY = ("The backup is written on your PC, so nothing was written from here. The "
+                  "code your phone showed is the only thing that opens it: open Jarvis on "
+                  "your PC, then Settings, Backups, and finish the run there - it asks for "
+                  "that code. If you cannot reach your phone, make one at the PC - Settings, "
+                  "Backups, \"Back up now\".")
 #: `verify.why` values, in the phone's own words. Each says what was ACTUALLY
 #: checked: the file's own bytes, never that it can be opened.
 CHECK_WORDS = {
@@ -1480,8 +1484,7 @@ def status_view() -> dict:
     refusal can be seen, so a failed backup is never reported as a success."""
     with _B_LOCK:
         last_attempt = dict(_B_STATE["last"]) if _B_STATE["last"] else None
-    with _P_LOCK:
-        prepared = dict(_P_STATE["pending"]) if _P_STATE["pending"] else None
+    prepared = _pending_for_reader()
     st = _load_settings()
     folder = st["folder"]
     rows = list_backups(folder) if folder else []
@@ -1512,8 +1515,7 @@ def status_view() -> dict:
         "last_attempt": ({"ok": bool(last_attempt.get("ok")),
                           "at": last_attempt.get("at"),
                           "error": last_attempt.get("error") or ""} if last_attempt else None),
-        "prepared": ({"at": prepared.get("at"), "expires_at": prepared.get("expires_at")}
-                     if prepared else None),
+        "prepared": prepared,
     }
 
 
@@ -1807,6 +1809,25 @@ def _is_expired(row: dict) -> bool:
         return True
 
 
+def _pending_for_reader() -> Optional[dict]:
+    """A waiting run, as a READ may carry it: `{at, expires_at}` or None.
+
+    Both reads that may say a run is waiting ask here - `view(here=True)` on
+    the PC and `status_view()` on the phone - so neither can drift into showing
+    a run that has already expired, and neither can ever carry the run's `code`
+    or its `id`: this function builds a NEW dict with those two fields and
+    nothing else, rather than handing out a copy of the stored row.
+
+    A read does not clear an expired row (`_clear_pending` from a read would be
+    a write); the commit path already drops it when it refuses (`COMMIT_NO_RUN`),
+    and a new ask replaces it."""
+    with _P_LOCK:
+        row = dict(_P_STATE["pending"]) if _P_STATE["pending"] else {}
+    if not row or _is_expired(row):
+        return None
+    return {"at": row.get("at"), "expires_at": row.get("expires_at")}
+
+
 def request_prepare(body=None, *, peer=None, local=None, here: Optional[bool] = None) -> tuple:
     """POST /api/backup/prepare {} - the phone asks for a backup.
 
@@ -1866,6 +1887,16 @@ def request_commit(body=None, *, peer=None, local=None, here: Optional[bool] = N
             # The run stays open, so a mistyped code can be corrected. Nothing
             # is written either way - that is the guarantee, not the message.
             return 400, {"ok": False, "error": COMMIT_WRONG_CODE}
+        # CLAIMED, under the lock, BEFORE anything is written (2026-10-24).
+        # The write below runs outside this lock, so clearing the run only at
+        # the end let two windows both pass the checks above and both write a
+        # file with the same code - and the second one's `_retain` could then
+        # push an older backup out of the five kept. Popping the run here means
+        # the second caller finds none and is refused `COMMIT_NO_RUN`, which is
+        # what a press after a success already gets. Every failure path below
+        # clears the run again, which is now a no-op: the invariant stays "no
+        # successful or failed commit leaves a live run behind".
+        _P_STATE["pending"].clear()
     st = _load_settings()
     if not st["folder"]:
         _clear_pending()
@@ -3244,7 +3275,12 @@ def view(*, here: bool = False) -> dict:
            "last_backup": last_backup, "pending_folder_card": pending,
            "last_folder_card": last_folder_card, "pending_restore_card": restore_pending,
            "last_restore": last_restore, "recovery_code_pending": recovery_code_pending(),
-           "erase_limit": ERASE_LIMIT}
+           "erase_limit": ERASE_LIMIT,
+           # A run the PHONE started and the PC has not written yet, so the
+           # PC's Backups panel can offer to finish it (2026-10-24). The same
+           # two fields the phone reads out of `status_view`, built by the same
+           # helper - and never the code or the id, which no read carries.
+           "prepared": _pending_for_reader()}
 
 
 # ---------------------------------------------------------------------------

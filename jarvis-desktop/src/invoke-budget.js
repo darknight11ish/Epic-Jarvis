@@ -79,6 +79,7 @@ export const APPLY_BUDGET_MS = 1_250_000;
 /** A command that really works for minutes - see LONG_BUDGET_MS. */
 const LONG = new Set([
   "backup_now",        // copies every database the owner has
+  "finish_phone_backup", // the same write, for a run the phone started
   "restore_backup",    // rewrites them, and waits on an approval card first
   "delete_older_backups",
   "set_backup_folder", // a native folder picker: the owner may take minutes

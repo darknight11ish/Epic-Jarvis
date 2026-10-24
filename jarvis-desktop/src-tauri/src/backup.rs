@@ -67,6 +67,11 @@ const LIST_PATH: &str = "/api/backup/list";
 const PREVIEW_PATH: &str = "/api/backup/restore/preview";
 const RESTORE_PATH: &str = "/api/backup/restore";
 const DELETE_OLDER_PATH: &str = "/api/backup/delete-older";
+/// The route the PHONE started a run on, finished from the PC's own click
+/// (2026-10-24, the owner's decision). The route already existed and is
+/// unchanged: `/api/backup/commit` is THIS PC ONLY on the backend, and that
+/// refusal is the feature - a phone's own tap can never write the file.
+const COMMIT_PATH: &str = "/api/backup/commit";
 
 /// What a backend without `jarvis_backup.py` / `backup.patch` is told. The
 /// phone says the same about its read-only status line.
@@ -448,6 +453,33 @@ pub async fn backup_now(app: AppHandle) -> Result<serde_json::Value, String> {
     post(&app, NOW_PATH, serde_json::json!({}), BACKUP_TIMEOUT).await
 }
 
+/// "Write it" under "A backup was started from your phone": finishes the run
+/// the PHONE asked for, using the recovery code the phone showed (2026-10-24).
+///
+/// The body is exactly `{"code": ...}` - `request_commit` compares only the
+/// code, never the run's `id`, so the PC needs nothing from the phone but what
+/// the owner wrote down. The route is the existing PC-only `/api/backup/commit`;
+/// no route was added and the gate on it is untouched (a phone's own commit is
+/// still refused 403 `pc_only`, and that refusal is the feature).
+///
+/// **NOT held on a stale link** ([`held_on_stale`]), exactly like "Back up
+/// now": it raises no approval card, so there is no card's answer to wait for.
+/// The write is the owner's own click with the code in hand - rule 4 is about
+/// approvals, and none is raised anywhere on this path.
+#[tauri::command]
+pub async fn finish_phone_backup(
+    app: AppHandle,
+    code: String,
+) -> Result<serde_json::Value, String> {
+    post(
+        &app,
+        COMMIT_PATH,
+        serde_json::json!({ "code": code }),
+        BACKUP_TIMEOUT,
+    )
+    .await
+}
+
 /// Pick a file, type its recovery code, see counts and a date - never
 /// content. Changes nothing.
 #[tauri::command]
@@ -500,7 +532,8 @@ pub async fn delete_older_backups(app: AppHandle) -> Result<serde_json::Value, S
 mod tests {
     use super::{
         change_answer, destination_problem, drive_of, held_on_stale, inside, other_drive_note,
-        read_answer, BACKUP_MISSING, DELETE_OLDER_PATH, FOLDER_PATH, NOW_PATH, RESTORE_PATH,
+        read_answer, BACKUP_MISSING, COMMIT_PATH, DELETE_OLDER_PATH, FOLDER_PATH, NOW_PATH,
+        RESTORE_PATH,
     };
     use std::path::{Path, PathBuf};
 
@@ -550,6 +583,64 @@ mod tests {
         assert!(!held_on_stale(NOW_PATH));
         assert!(!held_on_stale(super::LIST_PATH));
         assert!(!held_on_stale(super::PREVIEW_PATH));
+        // "Write it" under the phone's run raises NO card, exactly like "Back up
+        // now", so it must not be held: being held would refuse the owner's own
+        // click on a link that is merely catching up, for a card that never was.
+        assert!(!held_on_stale(COMMIT_PATH));
+    }
+
+    /// The PC finishes a run the PHONE started (2026-10-24). The route is the
+    /// EXISTING commit route - not a new one - and the body is exactly the code
+    /// the phone showed, because the backend compares only `body["code"]` and
+    /// never the run's id.
+    #[test]
+    fn finishing_a_phone_started_backup_uses_the_existing_commit_route() {
+        assert_eq!(COMMIT_PATH, "/api/backup/commit");
+        assert_eq!(COMMIT_PATH, format!("{}/commit", super::PATH));
+        let source = include_str!("backup.rs");
+        let rest = source
+            .split("pub async fn finish_phone_backup(")
+            .nth(1)
+            .expect("finish_phone_backup is in this file");
+        let command = rest.split("#[tauri::command]").next().unwrap_or(rest);
+        assert!(
+            command.contains("COMMIT_PATH"),
+            "it posts to the commit route"
+        );
+        assert!(
+            command.contains(r#"serde_json::json!({ "code": code })"#),
+            "the body is exactly the code, and nothing else: {command}"
+        );
+    }
+
+    /// A dead run (409 `COMMIT_NO_RUN`) and a phone-side commit (403
+    /// `COMMIT_PC_ONLY`) both arrive as the backend's own plain words, so the
+    /// panel cannot invent a friendlier - and false - second explanation.
+    #[test]
+    fn a_refused_finish_is_the_backends_own_sentence() {
+        let gone = "That backup run has expired or was never started, so nothing was written. \
+                    Ask for a backup again from your phone.";
+        let err = change_answer(
+            409,
+            &serde_json::json!({"ok": false, "error": gone}).to_string(),
+        )
+        .unwrap_err();
+        assert_eq!(err, gone);
+        assert!(err.contains("nothing was written"), "{err}");
+
+        let pc_only = "The backup is written on your PC, so nothing was written from here. The \
+                       code your phone showed is the only thing that opens it: open Jarvis on \
+                       your PC, then Settings, Backups, and finish the run there.";
+        let err = change_answer(
+            403,
+            &serde_json::json!({"ok": false, "error": pc_only}).to_string(),
+        )
+        .unwrap_err();
+        assert_eq!(err, pc_only);
+        assert!(
+            err.contains("Settings, Backups"),
+            "the refusal says where to finish it: {err}"
+        );
     }
 
     /// The folders the two refusals below are about. What is *in* them does not

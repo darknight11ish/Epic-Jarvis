@@ -2226,6 +2226,167 @@ def t_the_code_must_come_back_before_anything_is_written():
           "answers it", "COMMIT_ROUTE" in __import__("inspect").getsource(B.install))
 
 
+# ---------------------------------------------------------------------------
+#   The PC FINISHES a run the phone started (2026-10-24, the owner's decision)
+# ---------------------------------------------------------------------------
+# The phone may ASK; the write is PC-only by design. Until now the phone showed
+# a recovery code and its finish call was always refused 403 `pc_only`, so a
+# phone-started backup was never written - and the PC had no way to write it
+# either, because `GET /api/backup` did not say a run was waiting. These four
+# hold the new path: the PC's own read carries the waiting run, the PC's own
+# commit writes it with the code the phone showed, a dead run is never shown as
+# waiting, and two presses cannot write two files.
+
+
+def t_the_pc_can_see_a_run_its_phone_started():
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    before = _folder_bytes(backups)
+
+    live = B.request_prepare({}, peer="100.64.0.7", local="100.64.0.1")[1]
+    pid, code = live["id"], live["recovery_code"]
+
+    c, seen = B.handle_get(B.PATH, peer="127.0.0.1", local="127.0.0.1")
+    check("the PC's own read answers it", c == 200 and seen.get("available") is True, seen)
+    check("... and now says a run is WAITING, so the PC can offer to finish it",
+          isinstance(seen.get("prepared"), dict)
+          and seen["prepared"].get("at") == live["at"]
+          and seen["prepared"].get("expires_at") == live["expires_at"], seen.get("prepared"))
+    check("... with those two fields and NOTHING else - no code, no run id",
+          set(seen["prepared"]) == {"at", "expires_at"}, seen["prepared"])
+    whole = json.dumps(seen)
+    check("... and the whole answer carries neither the code nor the id",
+          code not in whole and code.replace("-", "") not in whole and pid not in whole,
+          whole)
+    check("... and ASKING still wrote nothing at all: the folder is byte-for-byte as it was",
+          _folder_bytes(backups) == before, sorted(_names(backups)))
+
+    c, elsewhere = B.handle_get(B.PATH, peer="100.64.0.7", local="100.64.0.1")
+    check("a phone reading the same route is told no such thing: `prepared` is not in its "
+          "answer at all, so it can never be shown a run as if it could finish it",
+          c == 200 and "prepared" not in elsewhere, elsewhere)
+    check("... though the phone's OWN read does say it, from the status route",
+          B.handle_get(B.STATUS_ROUTE, peer="100.64.0.7", local="100.64.0.1")[1]
+          ["prepared"] == {"at": live["at"], "expires_at": live["expires_at"]})
+
+
+def t_the_pc_finishes_the_backup_the_phone_started():
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    live = B.request_prepare({}, peer="100.64.0.7", local="100.64.0.1")[1]
+    code = live["recovery_code"]
+    before = _names(backups)
+
+    # Exactly the body the desktop's new command sends: `{"code": ...}` and
+    # nothing else. The id is never compared (`request_commit` reads only
+    # `body["code"]`), which is why the PC needs nothing from the phone but the
+    # code the owner wrote down.
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"code": code},
+                           peer="127.0.0.1", local="127.0.0.1")
+    check("the PC's own commit writes the backup the phone asked for",
+          c == 200 and out.get("ok") is True, (c, out))
+    new = _names(backups) - before
+    check("... exactly one new file, and nothing else in the folder moved",
+          len(new) == 1 and before <= _names(backups), sorted(new))
+    check("... and the code the PHONE showed really does open it",
+          B.decrypt_blob((backups / out["name"]).read_bytes(), code) is not None)
+    check("... the folder's own read counts it, so the phone's next read is true",
+          B.status_view()["kept"] == 1 and B.status_view()["verify"]["ok"] is True,
+          B.status_view())
+    check("... and the run is over: the PC's read says nothing is waiting any more",
+          B.handle_get(B.PATH, peer="127.0.0.1", local="127.0.0.1")[1]["prepared"] is None)
+    check("... and the phone's status read agrees",
+          B.handle_get(B.STATUS_ROUTE, peer="100.64.0.7", local="100.64.0.1")[1]
+          ["prepared"] is None)
+
+
+def t_a_dead_run_is_never_shown_as_waiting():
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    live = B.request_prepare({}, peer="100.64.0.7", local="100.64.0.1")[1]
+    code = live["recovery_code"]
+    before = _folder_bytes(backups)
+
+    # The clock runs out while nobody presses anything: the row is still in the
+    # PC's memory, and both reads must hide it rather than offer to finish a run
+    # that can no longer be written.
+    B._P_STATE["pending"]["expires_at"] = time.time() - 1
+    check("an expired run is not offered on the PC's read",
+          B.handle_get(B.PATH, peer="127.0.0.1", local="127.0.0.1")[1]["prepared"] is None)
+    check("... nor on the phone's status read",
+          B.handle_get(B.STATUS_ROUTE, peer="100.64.0.7", local="100.64.0.1")[1]
+          ["prepared"] is None)
+
+    # And pressing anyway is refused, writes nothing, and drops the row.
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"code": code},
+                           peer="127.0.0.1", local="127.0.0.1")
+    check("committing a dead run is refused as a run with nothing behind it",
+          c == 409 and "nothing was written" in out["error"], (c, out))
+    check("... nothing at all was written", _folder_bytes(backups) == before,
+          sorted(_names(backups)))
+    check("... and the run is dropped, so it cannot come back",
+          not B._P_STATE["pending"] and B.status_view()["prepared"] is None)
+
+
+def t_two_presses_cannot_write_two_files():
+    """The race the 2026-10-24 change closes.
+
+    `request_commit` used to check the code, release `_P_LOCK`, WRITE outside
+    it, and clear the run only afterwards. Two windows (or a double press on
+    one) could both pass the check before either cleared it: two files with the
+    same code, and the second one's `_retain` could push an older backup out of
+    the five kept. The run is now claimed under the lock before the write."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    B.backup_now(str(backups))                 # one real backup already in the folder
+    before = _names(backups)
+    live = B.request_prepare({}, peer="100.64.0.7", local="100.64.0.1")[1]
+    code = live["recovery_code"]
+
+    inside, release, got = threading.Event(), threading.Event(), threading.Lock()
+    results: list = []
+
+    def slow_run(folder, keep_code):
+        # A real write, held open so the second press overlaps it - exactly the
+        # window the old code lost. `backup_now` makes the real file.
+        inside.set()
+        release.wait(30)
+        return B.backup_now(folder, code=keep_code)
+
+    def press():
+        c, out = B.request_commit({"code": code}, peer="127.0.0.1", local="127.0.0.1",
+                                  run=slow_run)
+        with got:
+            results.append((c, out))
+
+    first = threading.Thread(target=press)
+    first.start()
+    check("the first press reaches the write", inside.wait(30))
+    second = threading.Thread(target=press)
+    second.start()
+    second.join(30)
+    check("... and the second press does NOT wait for it and then write too: refused",
+          not second.is_alive() and [c for c, _o in results] == [409], results)
+    check("... with the words a person can act on",
+          all("Ask for a backup again" in o["error"] for _c, o in results), results)
+    release.set()
+    first.join(60)
+    codes = sorted(c for c, _o in results)
+    check("one press wrote, the other was refused: 200 and 409, never two wins",
+          codes == [200, 409], results)
+    new = _names(backups) - before
+    check("... and exactly ONE new file landed, so no older backup was pushed out",
+          len(new) == 1 and len(_names(backups)) == len(before) + 1, sorted(new))
+    check("... which that one code opens", any(
+        B.decrypt_blob((backups / n).read_bytes(), code) is not None for n in new))
+    check("... and no run is left waiting afterwards", B.status_view()["prepared"] is None)
+
+
+
 def t_a_backup_that_failed_is_never_reported_as_a_success():
     """The rule this whole feature turns on. A failure has to be visible on the
     phone, because the alternative - a green tick and no file - is the one

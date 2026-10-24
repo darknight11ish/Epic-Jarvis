@@ -1242,6 +1242,7 @@ pub fn run() {
             backup::list_backups,
             backup::set_backup_folder,
             backup::backup_now,
+            backup::finish_phone_backup,
             backup::preview_restore,
             backup::restore_backup,
             backup::delete_older_backups,

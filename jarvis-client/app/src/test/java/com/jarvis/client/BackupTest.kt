@@ -295,6 +295,46 @@ class BackupTest {
                 .containsMatchIn(runtime))
     }
 
+    @Test
+    fun thePhoneSaysTheBackupIsFinishedOnThePc() {
+        // 2026-10-24, the owner's decision: the phone may ASK, and the PC
+        // FINISHES it. The phone's own finish call is still refused 403
+        // `pc_only` - that refusal is the feature - so the words may no longer
+        // promise a write here, nor tell him to ask again from the phone,
+        // which is the same refusal over again.
+        assertTrue("the label says where the write happens:\n${Backup.COMMIT_LABEL}",
+            Backup.COMMIT_LABEL.contains("PC"))
+        assertFalse("the label must not promise a write the phone cannot make",
+            Backup.COMMIT_LABEL.contains("write the backup", ignoreCase = true))
+
+        val refusal = Backup.commitRefusal(ApiError.Server(403, ""))
+        assertTrue("it says where to finish the run:\n$refusal",
+            refusal.contains("Settings, Backups"))
+        assertTrue("and that nothing has been written yet:\n$refusal",
+            refusal.contains("Nothing has been written yet"))
+        assertFalse("asking again from the phone is what was always refused:\n$refusal",
+            refusal.contains("Ask for a backup again from the phone"))
+        assertTrue("and it opens with \"Your PC\", the words pinned above too:\n$refusal",
+            refusal.startsWith("Your PC"))
+
+        // A run left waiting on the PC is said plainly, and never as a backup
+        // that exists.
+        assertTrue(Backup.PREPARED_ELSEWHERE.contains("waiting to be finished on your PC"))
+        assertTrue(Backup.PREPARED_ELSEWHERE.contains("Nothing has been written yet"))
+
+        // The plate draws it from the PC's own `prepared`, and only while no
+        // run is in hand on this screen.
+        val plate = code(PLATE)
+        assertTrue("the waiting line is drawn", plate.contains("Backup.PREPARED_ELSEWHERE"))
+        assertTrue("... from the PC's own read", plate.contains("v?.prepared == true"))
+        assertFalse("the old spinner claimed the PC was writing it:\n$plate",
+            plate.contains("Writing it on your PC"))
+        assertFalse("and no other words claim a write either:\n$plate",
+            plate.contains("write the backup"))
+        // The label itself is the model's, and its words are its own.
+        assertTrue(plate.contains("Backup.COMMIT_LABEL"))
+    }
+
     // ------------------------------------------------------------- helpers --
 
     /**

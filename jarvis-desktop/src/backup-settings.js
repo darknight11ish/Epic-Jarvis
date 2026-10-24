@@ -13,6 +13,10 @@
  *    a stale link.
  *  - backup_now: no card - the folder was already approved. Returns a
  *    fresh recovery code, shown here ONCE and never asked for again.
+ *  - finish_phone_backup(code): "Write it" under the block a PHONE-started
+ *    run puts here (2026-10-24). The route is the existing PC-only
+ *    commit - no new route - and no card, for the same reason as
+ *    "Back up now": the write is the owner's own click, code in hand.
  *  - list_backups: the files in the folder, newest first. A read.
  *  - preview_restore(name, code): decrypts to show counts and a date -
  *    never content. Changes nothing.
@@ -59,6 +63,14 @@ const WHICH_BACKUP = (at) => "This code opens only the backup made " +
   (at ? `${when(at)}` : "just now") + ". Every backup has its own code, so write the " +
   "date down next to it.";
 const NO_FOLDER_WHY = "Choose a folder before backing up.";
+/** The block a run the PHONE started puts here (2026-10-24). The deadline is
+ * the backend's own `expires_at`, so the owner knows how long the code has;
+ * and it says plainly that NOTHING has been written yet, because that is the
+ * one thing the dialog on the phone used to get wrong. */
+const PHONE_WAITING = (until) => "It waits until " + (until || "it expires") +
+  ". Nothing has been written yet - the file appears when you press Write it. " +
+  "The code your phone showed is the only thing that opens it.";
+const PHONE_NO_CODE = "Type the recovery code your phone showed first.";
 const MISSING = "Your PC's Jarvis cannot make backups yet - run apply-patches.ps1 on this PC.";
 
 /** Never trusts the bridge's raw answer blindly (the same defence
@@ -83,6 +95,10 @@ const el = {
   folderWhy: $("bk-folder-why"),
   now: $("bk-now"),
   last: $("bk-last"),
+  phone: $("bk-phone"),
+  phoneWhen: $("bk-phone-when"),
+  phoneCode: $("bk-phone-code"),
+  phoneWrite: $("bk-phone-write"),
   codeBox: $("bk-code-box"),
   codeTitle: $("bk-code-title"),
   codeWarn: $("bk-code-warn"),
@@ -202,6 +218,20 @@ function paint() {
     : (!view.folder ? NO_FOLDER_WHY : "");
   el.folderWhy.hidden = !el.folderWhy.textContent;
   el.now.disabled = busy || !view.folder;
+  // A run the PHONE started, waiting for this PC to write it. The read carries
+  // only `{at, expires_at}` - never the code or the run id - so the code can
+  // only be typed by someone holding it, which is the point: the write proves
+  // the code is in the owner's hands, not just in the PC's memory.
+  const prepared = view.prepared;
+  if (el.phone) {
+    el.phone.hidden = !prepared;
+    if (prepared) {
+      el.phoneWhen.textContent = PHONE_WAITING(prepared.expires_at
+        ? when(prepared.expires_at) : "");
+      el.phoneCode.disabled = busy;
+      el.phoneWrite.disabled = busy;
+    }
+  }
   const lastBackup = view.last_backup;
   el.last.textContent = lastBackup
     ? (lastBackup.ok
@@ -332,6 +362,46 @@ async function backupNow() {
   await load();
 }
 
+/** "Write it": finishes the run the PHONE started, with the code it showed.
+ *
+ * The route is the existing PC-only commit - no new route was added and the
+ * gate on it is untouched - and no approval card is raised: rule 4 governs
+ * approvals, and the write is the owner's own click with the code in his hand,
+ * exactly like "Back up now". Not held on a stale link either, for the same
+ * reason (`backup.rs`'s `held_on_stale`).
+ *
+ * A wrong code is refused 400 and the run STAYS OPEN, so a typo is fixable; a
+ * dead run is refused 409 with the backend's own sentence, and the block
+ * disappears on the read that follows. Either way nothing was written. */
+async function finishPhone() {
+  const code = (el.phoneCode.value || "").trim();
+  if (!code) {
+    say(PHONE_NO_CODE, "bad");
+    return;
+  }
+  busy = true;
+  say("Writing the backup…");
+  paint();
+  try {
+    const out = await TAURI.core.invoke("finish_phone_backup", { code });
+    if (out && out.ok && out.recovery_code) {
+      el.phoneCode.value = "";
+      // The SAME code the phone showed, shown once more here: this is the
+      // machine codes are kept on (design note, 2026-10-24).
+      showCode("Your new backup's recovery code", out.recovery_code, out.at);
+      say(out.message || "Backed up.", "ok");
+    } else {
+      say(String((out && (out.message || out.error)) || "Could not write the backup."),
+        out && out.ok === false ? "bad" : "");
+    }
+  } catch (error) {
+    say(problemWords(error), "bad");
+  } finally {
+    busy = false;
+  }
+  await load();
+}
+
 async function doPreview(name, code, out) {
   if (!code) {
     out.textContent = "Type the recovery code first.";
@@ -415,6 +485,15 @@ async function deleteOlder() {
 if (el.section) {
   el.chooseFolder.addEventListener("click", chooseFolder);
   el.now.addEventListener("click", backupNow);
+  if (el.phoneWrite) el.phoneWrite.addEventListener("click", finishPhone);
+  if (el.phoneCode) {
+    // Enter finishes the run, the same as pressing the button - and the field
+    // holds the code only until the panel is left (`showCode` keeps its own
+    // copy on screen, never in storage).
+    el.phoneCode.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !busy) finishPhone();
+    });
+  }
   if (el.deleteOlder) el.deleteOlder.addEventListener("click", deleteOlder);
   el.codeCopy.addEventListener("click", async () => {
     try {

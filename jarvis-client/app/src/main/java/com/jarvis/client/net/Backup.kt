@@ -81,8 +81,14 @@ object Backup {
             "you finish - so if you lose the code before saving it, tap Cancel and nothing " +
             "changes."
 
-    /** The button that finishes the run. Its label says what it does. */
-    const val COMMIT_LABEL = "I have saved the code - write the backup"
+    /**
+     * The button that ends the run here. Its label says what it does - and what
+     * it cannot: the write is the PC's own act, so pressing this saves nothing
+     * by itself (2026-10-24). It used to say "I have saved the code - write the
+     * backup", which promised a write the phone is refused; the PC finishes the
+     * run instead, under Settings, Backups.
+     */
+    const val COMMIT_LABEL = "Save the code, then finish this on your PC"
 
     /** Above that button, and it must be ticked: a code cannot be swept past. */
     const val SAVED_TICK = "I have written this code down somewhere safe"
@@ -93,6 +99,18 @@ object Backup {
     const val DONE_LEAD =
         "Your PC wrote the backup. The code above opens it and nothing else does - it is not " +
             "shown again."
+
+    /**
+     * A run started HERE is still waiting on the PC (2026-10-24). Drawn while
+     * `GET /api/backup/status` reports `prepared` and no run is in hand on this
+     * screen: the write is the PC's own act, so the phone must not claim a
+     * backup exists - it says where the file appears, and that nothing has
+     * been written yet. A dead run is never drawn this way: the PC hides an
+     * expired one from that read.
+     */
+    const val PREPARED_ELSEWHERE =
+        "A backup started here is waiting to be finished on your PC. " +
+            "Nothing has been written yet."
 
     /** The state could not be read at all. */
     const val MISSING = "Your PC's Jarvis cannot make backups yet - run apply-patches.ps1 on " +
@@ -403,11 +421,17 @@ object Backup {
         "Your PC is not answering, so nothing was asked for. Nothing has changed - try again " +
             "when your PC is reachable."
 
-    /** The PC refused the commit because the caller was not the PC. */
+    /**
+     * The PC refused the commit because the caller was not the PC. That refusal
+     * is the FEATURE, not the bug (2026-10-24): the write into the PC's folder
+     * is the PC's own act. So the words now say where the run is finished,
+     * instead of telling the owner to ask again from the phone - which never
+     * worked, because this same refusal is what a phone's ask always gets.
+     */
     const val PC_ONLY_WRITE =
         "Your PC writes the backup, and it did not accept the write from your phone. Nothing " +
-            "was written. Ask for a backup again from the phone; if it keeps happening, make " +
-            "one at the PC - Settings, Backups."
+            "has been written yet. Open Jarvis on your PC, then Settings, Backups, and write " +
+            "the backup your phone started - it asks for the code above."
 
     /**
      * The run's code no longer matches the PC's (it expired, or a newer ask

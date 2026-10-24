@@ -459,6 +459,15 @@ CLASSIFICATION = {
     # setting the folder, the PC's own one-call "Back up now", listing,
     # previewing and restoring.
     "/api/backup": ("ported", "\"Backups\": the folder, whether a card is waiting, the last backup and the last restore's outcome (a one-time recovery code included exactly once). Desktop: Settings, Backups (backup.rs get_backup, settings window only), the full view. Phone: the same route is read for the one line it has always carried (\"Last backup: ...\"); the folder's own state comes from `/api/backup/status` (docs/ARCHITECTURE.md section 8)."),
+    # 2026-10-24: `/api/backup/commit` moved OUT of PHONE_ONLY and in HERE. The
+    # owner's decision (the phone may ASK, the write is PC-only) left a run the
+    # phone started with no way to be written: the phone's finish call is always
+    # refused 403 `pc_only`, and the PC had nothing to finish it with. The
+    # desktop now finishes such a run from Settings, Backups ("A backup was
+    # started from your phone", `finish_phone_backup`), typing the code the
+    # phone showed. Both apps call this one route; only the PC can make it
+    # write, and the phone's own refusal is unchanged.
+    "/api/backup/commit": ("ported", "The owner says he has kept the code, and the PC writes the file (2026-10-13; docs/JARVIS-API.md §45; jarvis_backup.request_commit). THIS PC ONLY: the write into the PC's folder is the PC's own action, and a caller that is not the PC is refused before the body is read - that refusal is the feature, not a gap. A wrong, missing, expired or already-used code writes nothing; the run is claimed under the module's lock before the write, so two presses write ONE file. Since 2026-10-24 the DESKTOP calls it too: `finish_phone_backup` finishes a run the PHONE started, from Settings, Backups, with the code the phone showed - so a phone-started run is no longer a code with no file behind it. No new route, no approval card (the write is the owner's own click, code in hand), and nothing automatic. ARCHITECTURE.md section 8."),
     "/api/backup/folder": ("deliberate", "Setting the backup folder is the PC's alone: the desktop opens the Windows folder picker in Rust (the same one \"Folders Jarvis may look in\" uses) and the PC raises ONE approval card (change_own_config); the PC refuses the route from any other device (jarvis_owner_check.from_this_pc). A phone has no view of the PC's folders to pick from. ARCHITECTURE.md section 8."),
     "/api/backup/now": ("deliberate", "The PC's own ONE-CALL \"Back up now\": it writes one file into a folder already on this PC and returns that file's one-time recovery code in the same answer, with no chance to show the code before the file exists. Still refused from any device but the PC. The phone does not call it and must not: its own two-call path (`/api/backup/prepare` + `/api/backup/commit`) is what puts the code in front of the owner first. ARCHITECTURE.md section 8."),
     "/api/backup/list": ("deliberate", "The kept backup files, by name and date - PC-only, the same reason as the folder above: a phone has nothing to do with a list of files on the PC's disk. The phone's own state line comes from `/api/backup/status`, which names the folder's last segment and a count, never a file list. ARCHITECTURE.md section 8."),
@@ -657,15 +666,16 @@ PHONE_ONLY = {
     # The phone's half of Backups (2026-10-13: the owner asked for a "Back up
     # now" button on the phone on 2026-10-10 and was told why there could not
     # be one; this is it built for real). "phone-only", NOT "desktop-todo": the
-    # desktop does not need either route. It IS the PC, it already has the
-    # folder picker and the one-call "Back up now" (`/api/backup/now`), and it
-    # can read the folder's state out of its own `GET /api/backup`. The two
-    # routes exist because a phone cannot write to the PC's disk and because a
-    # run whose one-time code never reached the owner would push an older,
-    # openable backup out of the five kept - see jarvis_backup.PREPARE_ROUTE.
+    # desktop does not need these two. It IS the PC, it already has the folder
+    # picker and the one-call "Back up now" (`/api/backup/now`), and it can read
+    # the folder's state out of its own `GET /api/backup`. The two routes exist
+    # because a phone cannot write to the PC's disk and because a run whose
+    # one-time code never reached the owner would push an older, openable
+    # backup out of the five kept - see jarvis_backup.PREPARE_ROUTE.
+    # (`/api/backup/commit` is NOT here: since 2026-10-24 the desktop calls it
+    # too, to finish a run the phone started - see CLASSIFICATION above.)
     "/api/backup/status": ("phone-only", "What the backup FOLDER holds, for the phone (2026-10-13; docs/JARVIS-API.md §45; jarvis_backup.status_view): the folder's LAST segment, how many backups are kept and how many are there, when the last one was made, and whether the newest file is complete and well formed. Read-only, any paired device, and it carries no recovery code and no full path. The desktop reads the same facts from its own `GET /api/backup` (the folder, `keep`, `last_backup`), so it has no reason to call this. ARCHITECTURE.md section 8."),
     "/api/backup/prepare": ("phone-only", "The phone ASKS the PC for a backup (2026-10-13; docs/JARVIS-API.md §45; jarvis_backup.request_prepare). It mints this run's one-time recovery code and writes NOTHING AT ALL - the folder is byte-for-byte unchanged - so the code can be put in front of the owner before any file exists. The desktop is the PC and calls `/api/backup/now` instead, in one step, because it can show the code on the screen that made it. ARCHITECTURE.md section 8."),
-    "/api/backup/commit": ("phone-only", "The owner says he has kept the code, and the PC writes the file (2026-10-13; docs/JARVIS-API.md §45; jarvis_backup.request_commit). THIS PC ONLY: the write into the PC's folder is the PC's own action, and a caller that is not the PC is refused before the body is read. A wrong, missing, expired or already-used code writes nothing. The desktop does not need it - its own \"Back up now\" writes in the same call that mints the code. ARCHITECTURE.md section 8."),
     # "Approval cards read short" (the owner's request of 2026-10-09; docs/JARVIS-API.md
     # section 127): the "Start short" / "Always show everything" choice for every
     # approval card, kept in card-prefs.json on the PC so BOTH apps read the one
