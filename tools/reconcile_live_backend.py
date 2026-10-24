@@ -17,11 +17,12 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        `--ref` names, and prints both SHAs and the fix. Every module's bytes AND
        the `$SHIPPED`/`$PATCHES` lists come from `--ref`, but the ready plug-ins
        and `scripts/add-plugin.ps1` still come from the checkout, so running from
-       another commit would deploy half of one tree and half of another. A dry run
-       from a stale checkout once planned 251 shipped files while `origin/main`
-       carried 253, silently hid the two modules #790 had added, and still printed
-       `RESULT: PASS` (TOOL-1, 2026-10-24). `--allow-worktree-mismatch` is the
-       explicit override for tests and exotic checkouts.
+       another commit would deploy half of one tree and half of another. A checkout
+       behind `origin/main` once planned 251 shipped files while the ref carried 253,
+       silently hiding the two modules #790 had added; the dry run stops after that
+       plan, and an `--apply` from the same checkout still ended `RESULT: PASS`
+       (TOOL-1, 2026-10-24). `--allow-worktree-mismatch` is the explicit override for
+       tests and exotic checkouts.
 
     1. SHIPPED SYNC. Reads the authoritative `$SHIPPED` and `$PATCHES` lists out of
        `scripts/apply-patches.ps1` **at `--ref`**
@@ -678,7 +679,7 @@ def read_patch_lists(repo: Path, ref: Optional[str] = None,
     list that says WHICH modules to ship must come from the same commit. Reading the
     working tree's copy instead is TOOL-1 (2026-10-24): a stale checkout planned 251
     files while the ref carried 253, printed "to add: none" for the two modules the
-    ref had just added, and still finished PASS.
+    ref had just added, and an --apply from it still finished PASS.
 
     `ref=None` reads the working tree's `scripts/apply-patches.ps1`. That is the
     test / no-git path; `run_deploy` always passes its `--ref`, so a deploy never
