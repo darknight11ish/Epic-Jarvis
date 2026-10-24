@@ -128,6 +128,13 @@ object OpenPlace {
         // drawn), so "open first time setup" lands on it rather than the top of
         // Settings; the changes themselves are made on the PC.
         "setup-questionnaire" to Where.Go(Screen.SETTINGS, "setup-questionnaire"),
+        // "All features and abilities" (2026-10-22, #749): the phone's own
+        // directory row (SettingsScreen.kt, item "all-features"), so "open all
+        // features and abilities" lands on it. A PHONE-ONLY registry Section:
+        // the desktop's directory card has no id of its own (it is a generated
+        // read-only index, not a settings section), so there is no desktop row
+        // for this id to name. It changes nothing - the screen only lists.
+        "all-features" to Where.Go(Screen.SETTINGS, "all-features"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).

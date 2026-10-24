@@ -265,6 +265,26 @@ def main():
         check("a Settings page that lost a toggle row fails",
               page_gone.returncode == 1 and "follow-system" in page_gone.stdout, page_gone.stdout + page_gone.stderr)
 
+        # Both halves of the directory are live (#748 desktop, #749 phone), so a
+        # re-added " (planned)" names a screen the owner can open anyway. This
+        # was the honest marker while the phone half did not exist; it is the
+        # dishonest one now, and the checker must refuse it.
+        reset_surfaces(tmp)
+        doc = read_json(tmp)
+        row = next(f for f in doc["features"]
+                   if "All features and abilities" in
+                   ((f.get("label_evidence") or {}).get("screen_path") or ""))
+        path = row["label_evidence"]["screen_path"]
+        row["label_evidence"]["screen_path"] = path.replace(
+            "phone: All features and abilities", "phone: All features and abilities (planned)")
+        write_json(tmp, doc)
+        planned_again = run(tmp)
+        check("a re-added ' (planned)' on the shipped phone directory fails",
+              planned_again.returncode == 1
+              and row["id"] in planned_again.stdout
+              and "(planned)" in planned_again.stdout,
+              planned_again.stdout + planned_again.stderr)
+
     print("\nfeature controls: %d passed, %d failed" % (passed, failed))
     return 1 if failed else 0
 

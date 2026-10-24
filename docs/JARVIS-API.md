@@ -14502,7 +14502,10 @@ outside text as usual.
   {"kind": "reminder", "date", "time", "text"}` (section 21.2) with the
   boxes as the owner left them. A one-off reminder: no card, like any the
   owner sets. Held on a stale link. A time that has passed is refused in
-  words.
+  words. A picture with SEVERAL dates keeps them (2026-10-16): one tap adds
+  one reminder, that proposal then reads as added, and the other dates are
+  still there to be added the same way - each tap is its own one-off
+  reminder. The picture's whole words go on the first add.
 - **Also on my phone** - the phone only (ARCHITECTURE section 8): the
   phone's own calendar opens with the event filled in (15 minutes long, as
   section 21.10), and the owner saves it there. Nothing is sent to the PC.

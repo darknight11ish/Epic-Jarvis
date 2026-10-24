@@ -2235,9 +2235,9 @@ STATIC_ASSETS = {
     "/animal-shared.js": ("animal-shared.js", "text/javascript; charset=utf-8"),
     "/hud-layout.js": ("hud-layout.js", "text/javascript; charset=utf-8"),
     "/hud-layout-store.js": ("hud-layout-store.js", "text/javascript; charset=utf-8"),
-    # planned by the PWA slices that are not written yet (the bridge, the
-    # manifest and service worker, the home-screen icons): a request is a 404
-    # today, and turns into the real file the day that slice puts it beside us
+    # PWA Slice 2's bridge and Slice 3b's manifest, worker and icons are real
+    # files now (2026-10-23): the page links the manifest and the bridge
+    # registers the worker; every entry here is served from beside the server.
     "/hud-web-bridge.js": ("hud-web-bridge.js", "text/javascript; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
     "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
