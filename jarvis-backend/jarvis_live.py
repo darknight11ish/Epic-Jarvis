@@ -355,6 +355,14 @@ STREAM_OFF_REASON = ("Jarvis can't stream Live audio yet - the persistent "
 STREAM_NOT_BUILT_REASON = ("Jarvis can't stream Live audio yet - the persistent "
                            "stream is not built.")
 
+#: The speech hand-off seam (Slice G, G2). The transport (`jarvis_live_stream`)
+#: is built and switched off; it calls this callable with one complete WAV when
+#: the phone sends `end_turn`. It stays None until the slice that wires the
+#: one-shot `hear()` path sets it - until then a served stream refuses the turn
+#: in plain words rather than pretending to answer, and the switch is OFF by
+#: default anyway. Tests inject their own callable here.
+_STREAM_SINK = None
+
 
 def stream_enabled() -> bool:
     """The `[live] stream` switch: OFF by default, and a missing key is OFF.
@@ -1799,11 +1807,33 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         parsed = urlsplit(str(getattr(self, "path", "") or ""))
         route = parsed.path.rstrip("/")
         if route == STREAM_ROUTE:
-            # Slice G's frozen stub: the switch and the refusal, no audio path.
-            # Auth is the same gate as every Live request, checked first.
+            # Slice G: auth is the same gate as every Live request, checked
+            # first. While the switch is OFF the frozen 501 stub answers and no
+            # frame is ever read; while it is ON the socket is handed to the
+            # minimal RFC 6455 transport (jarvis_live_stream), and `end_turn`
+            # runs one whole turn (jarvis_live_turn: hear -> the PC's own chat
+            # route -> say). `_STREAM_SINK` stays a test/override seam.
             if not _allowed(self):
                 return None
-            return self._send(*stream_stub())
+            if not stream_enabled():
+                return self._send(*stream_stub())
+            try:
+                import jarvis_live_stream
+                import jarvis_live_turn
+            except Exception:
+                return self._send(501, {"ok": False, "available": False,
+                                        "enabled": True, "stream": "not_built",
+                                        "error": STREAM_NOT_BUILT_REASON})
+            try:
+                jarvis_live_stream.serve(self, engine=ENGINE,
+                                         sink=_STREAM_SINK or jarvis_live_turn.turn)
+            except Exception as exc:
+                try:
+                    self._send(503, {"ok": False, "available": False,
+                                     "error": type(exc).__name__})
+                except Exception:
+                    pass
+            return None
         if route != ROUTE:
             return get0(self)
         if not _allowed(self):

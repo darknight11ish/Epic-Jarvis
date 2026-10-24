@@ -646,6 +646,15 @@ SHIPPED = (
     # ... and the camera's photo test, run once when the second card is in
     # (no patch: the owner runs it by hand)
     "jarvis_live_photo_test.py",
+    # The phone's persistent Live stream, Slice G/G2 (2026-10-23): a minimal
+    # RFC 6455 transport behind `[live] stream` (OFF by default), and the
+    # frozen /api/live/stream route jarvis_live.py already answers a 501 stub
+    # on. No audio is read while the switch is off.
+    "jarvis_live_stream.py",
+    # ... and one whole turn over it, Slice G/G2b (2026-10-23): one WAV in ->
+    # the one-shot hear() check -> the PC's own /api/chat over loopback ->
+    # say() -> 16 kHz PCM frames out (whole-WAV hand-off for now).
+    "jarvis_live_turn.py",
     # "Forget a time frame" (2026-09-28): a checked list, ONE card, 10
     # minutes to undo; GET/POST /api/memory/forget_range (forget-range.patch)
     "jarvis_forget_range.py",

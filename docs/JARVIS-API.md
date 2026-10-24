@@ -12631,6 +12631,49 @@ right, a median answer time of 3 s or less, the slowest 6 s or less, and
 never naming a person. The photos are not in the repository (licences):
 the crowd photo must be a licensed stock photo.
 
+### 63.7 The phone's persistent stream, `GET /api/live/stream` (Slice G; built, switched OFF)
+
+The design is `docs/DESIGN-PHONE-LIVE-STREAM.md` (2026-10-21, the owner's five
+answers). The route and the switch were frozen first; this slice adds the PC
+transport behind them.
+
+- `GET /api/live/stream` answers **501** with a plain sentence while
+  `[live] stream` is off - the shipped state. A missing key or table is OFF;
+  only a real `true`, or the word `1`/`true`/`yes`/`on`, turns it on. The
+  request body is never read, so no audio can be accepted while it is off.
+- With the switch ON, the request must be an **RFC 6455 WebSocket upgrade**
+  and it passes the same origin/token rules as every Live request: no
+  `X-Jarvis-Token` is `401`, before any frame is read. After
+  `{"t":"hello","device":"phone","live_id":...}` the PC answers
+  `{"t":"ready","epoch":<1..255>,"frame_ms":64,"rate":16000}`. Phone -> PC
+  audio frames are `binary: varint length | epoch byte | u32 sequence |
+  int16 PCM at 16 kHz mono` (one frame = 64 ms = 1,024 samples = 2,048 bytes);
+  PC -> phone speech frames use the same shape. Control messages are the
+  design's text list (`ready`, `turn_started`, `speech_start`/`speech_end`,
+  `not_owner`, `refused`, `dropped`, `pause`, `bye`).
+- A replayed sequence number, a stale epoch, an unmasked or oversized client
+  frame, control before `hello`, and a session the engine does not accept are
+  each refused with a plain sentence and a close - never a silent half turn.
+- **One turn runs on the PC (G2b, same switch).** On `end_turn` the PC runs
+  the SAME one-shot check every Live clip goes through
+  (`jarvis_speech.hear(wav, source="live", mic="phone")`: session, cards,
+  mute, the owner check, then words), asks its OWN `/api/chat` route over
+  127.0.0.1 with the chat message marked `live: true` (so the Live note and
+  side-talk rules apply) and the phone's own token, then speaks the answer
+  with `jarvis_speech.say()` and sends its PCM as the design's frames. A
+  voice that is not the owner, and a clip that made no words, are silent: no
+  answer, no speech. **The hand-off is whole-WAV for now** - the owner hears
+  nothing until the whole answer exists; first-fragment TTS streaming is a
+  later phase, and the extra loopback hop is measured in the design's G4
+  slice rather than assumed cheap.
+- **It is switched OFF and nothing turns it on automatically.** The switch is
+  the owner's: one approval card raised from either app (design section 8),
+  and that card path is a later slice too. The switch is the only way in.
+- **No dependency was added.** The PC backend is stdlib-only and the lock file
+  cannot be regenerated, so the needed RFC 6455 subset is hand-rolled in
+  `jarvis_live_stream.py` (server role, no extensions, no subprotocols). It
+  opens no listener of its own and writes no file and no audio.
+
 ## 64. Forget a time frame (added 2026-09-28)
 
 **What it is.** The owner decided on 2026-09-28 (CLAUDE.md): the owner may

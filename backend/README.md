@@ -16188,6 +16188,54 @@ python3 tools/gen_live_cases.py --check
 - The camera path is off (`CAMERA_WIRED = False`) and the phone does not
   take pictures yet.
 
+# The phone's persistent stream: `jarvis_live_stream.py` + `jarvis_live_turn.py` (Slice G/G2+G2b, 2026-10-23, switched OFF)
+
+The design is `docs/DESIGN-PHONE-LIVE-STREAM.md`. `jarvis_live.py` keeps its
+frozen `/api/live/stream` 501 stub while `[live] stream` is off - the shipped
+state; with the switch ON, that route upgrades to a minimal RFC 6455
+WebSocket, and `end_turn` runs one whole turn on the PC. **Nothing here turns
+the switch on, and a real phone + PC measurement is still the next slice.**
+
+- `backend/jarvis_live_stream.py` (new, shipped whole): the transport. Same
+  origin/token gate before the upgrade; masked client frames only; frames
+  capped at 64 KiB; a 2 s RAM ring; an epoch byte plus a monotonic 32-bit
+  sequence (a replay or a stale epoch is refused); the `hello` session gate;
+  ping/pong and clean close. It opens no listener of its own, writes no file
+  and keeps no audio.
+- `backend/jarvis_live_turn.py` (new, shipped whole): one whole turn. The
+  ring's WAV goes through the SAME one-shot `hear()` check every Live clip
+  uses (session, cards, mute, the owner check, then words); a voice that is
+  not the owner, or a clip with no words, is silent. The words are asked
+  through the PC's OWN `/api/chat` route over 127.0.0.1, with the message
+  marked `live: true` and the phone's own token, and the answer is spoken
+  with `say()` and sent as 16 kHz PCM frames. **The hand-off is whole-WAV for
+  now** - the owner hears nothing until the whole answer exists;
+  first-fragment TTS streaming is a later phase, and the extra loopback hop
+  is measured in the design's G4 slice.
+- `backend/jarvis_live.py`: the route hands the socket over only when
+  `stream_enabled()`; the speech sink is `jarvis_live_turn.turn`
+  (`_STREAM_SINK` stays a test/override seam). With the switch OFF the stub
+  answers exactly as before.
+- `backend/test_live_stream.py` (new): a REAL loopback HTTP server plus a real
+  `socket` client - 45 checks covering the switch gate, the handshake, the
+  frames, replay/epoch refusal, unmasked/oversized refusal, session refusal,
+  the RAM-only ring, the wired turn end to end (with its steps stubbed), and
+  the shipped lists/base twin. No phone, no microphone, no model.
+- `backend/test_live_turn.py` (new): 19 checks for the turn itself - the
+  whole path with stubs, the silent outcomes, the plain failures, a REAL
+  loopback `/api/chat` (token, HUD header, `live: true`, SSE joining), the
+  WAV/frame helpers, and the shipped list.
+- `backend/rebuilt/jarvis-framework.toml` (and the base twin) still carry
+  `[live] stream = false`.
+
+## Not checked, said plainly
+
+- The phone half (sender and player) is not built; the switch is OFF; nothing
+  was measured on real hardware. The recovery time, battery cost and the
+  one-turn latency are all NOT-MEASURED (design section 9).
+- The speech hand-off is whole-WAV: no first-fragment streaming yet, and the
+  loopback hop's cost is NOT-MEASURED.
+
 # Mouths that match the words: `jarvis_mouth.py` (2026-09-28)
 
 ## In plain words
