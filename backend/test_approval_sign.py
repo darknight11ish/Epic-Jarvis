@@ -367,14 +367,18 @@ def t_the_card_is_pc_only_and_in_every_table():
     check("devices.patch: the no-rule-from-denial set and the risk table both name it",
           patch.count('"register_approval_key"') == 2, patch.count('"register_approval_key"'))
     text, _log = __import__("_stack").stand_in("jarvis_gate.py")
-    # FOUR since 2026-10-21, and none is a duplicate row: the blind-approval
+    # FIVE since 2026-10-23, and none is a duplicate row: the blind-approval
     # guards add `_REPLACES_ACTIONS` (gate-touches.patch, marking the card as
     # replacing data) and, with review ruling 8.1, `_REPLACES_KINDS` (the
-    # warning category per action). The gate still has exactly one
-    # `_TOOL_ACTIONS` entry and one `_RISK` row, which is what this check is
-    # for; devices.patch still holds the only two lines it ever did.
+    # warning category per action), and `no-expiry-cards.patch` (rescue #4, the
+    # owner's ruling of 2026-10-23, Q1) names the action in
+    # `APPROVAL_NEVER_EXPIRES` so this one card waits for the owner instead of
+    # running out. The gate still has exactly one `_TOOL_ACTIONS` entry and one
+    # `_RISK` row, which is what this check is for - a duplicate there would
+    # still push the count above this number; devices.patch still holds the
+    # only two lines it ever did.
     check("the stacked gate has it in each list once, plus the guards' tables",
-          text is not None and text.count('"register_approval_key"') == 4,
+          text is not None and text.count('"register_approval_key"') == 5,
           text.count('"register_approval_key"') if text is not None else None)
 
 

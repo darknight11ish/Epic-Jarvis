@@ -4,5 +4,5 @@
   "module": "jarvis_sky",
   "install": "handler",
   "replaces_patch": "sky.patch",
-  "stack_order": 96
+  "stack_order": 97
 }

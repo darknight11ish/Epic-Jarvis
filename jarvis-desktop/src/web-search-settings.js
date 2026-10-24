@@ -3,7 +3,7 @@
  * section 23; backend jarvis_search.py, web-search.patch).
  *
  * Rust commands (src-tauri/src/web_search.rs), Settings only:
- *  - get_web_search: the five providers with the PC's own "why use this one"
+ *  - get_web_search: the six providers with the PC's own "why use this one"
  *    lines, which is chosen, whether each is ready, the SearXNG address,
  *    "Ask before every web search", and Whoogle's reason for being left out;
  *  - set_web_search: ONE change - the provider or the address at once, "Ask
@@ -12,8 +12,8 @@
  *    approval card. Held on a stale link, here (greyed) and in Rust;
  *  - test_web_search: one search for a fixed word through the chosen
  *    provider, and what happened in plain words. Held on a stale link too;
- *  - save_search_key / forget_search_key: the Exa, Tavily or Brave Search key,
- *    straight into Credential Manager on this PC. The box is emptied as soon
+ *  - save_search_key / forget_search_key: the Exa, Tavily, Brave or DeepSeek
+ *    key, straight into Credential Manager on this PC. The box is emptied as soon
  *    as it is sent, and the key is never shown again - only whether one is
  *    saved. The phone has no such box (ARCHITECTURE.md section 8).
  *
@@ -153,8 +153,8 @@ function paintProviders() {
 }
 
 function paintKeys() {
-  // The three services that take a key (Exa, Tavily, Brave) become one tab
-  // each, the service's own name as the tab's words - the same shape as the
+  // The four services that take a key (Exa, Tavily, Brave, DeepSeek) become one
+  // tab each, the service's own name as the tab's words - the same shape as the
   // Chatbot API keys card, and the owner's request of 2026-10-11. Everything
   // else on this card (which search to use, asking first, the SearXNG address)
   // is unchanged and stays outside the strip.

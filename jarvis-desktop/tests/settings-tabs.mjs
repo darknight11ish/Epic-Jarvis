@@ -1,6 +1,6 @@
 /**
  * The tab strips on the two settings cards that hold a key apiece - "Chatbot
- * API keys" and the web-search services (Exa, Tavily, Brave). The owner's
+ * API keys" and the web-search services (Exa, Tavily, Brave, DeepSeek). The owner's
  * request of 2026-10-11: "a tab for chatgpt, a tab for deepseek, etc ... opening
  * the tabs gives their specific menu".
  *

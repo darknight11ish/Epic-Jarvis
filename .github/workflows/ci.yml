@@ -74,21 +74,32 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: jarvis-desktop/src-tauri
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
 
-  frontend:
+  # Sharded 2026-10-23: the 219 desktop suites are independent processes with
+  # no shared state, and running them one after another in this one job had
+  # grown to about 71 minutes (measured 71m12s and 72m42s that month), which
+  # made every merge conflict cost a full re-run. Four shards split them by
+  # their position in the sorted tests/*.mjs list, so each suite runs exactly
+  # once, and the wall clock is about a quarter. The required ruleset check is
+  # still named "frontend": the fan-in job lower in this workflow owns that
+  # name and passes only when all four shards succeeded. A shard that finds no
+  # suites fails on purpose, so a broken split cannot pass by running nothing.
+  frontend-shard:
+    name: frontend-shard (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    # 90, was 45. The suites run one after another in this one job and have
-    # grown to about 45 minutes: main's run for PR #29 took 43, and PR #30's
-    # merge was CANCELLED at the 45-minute limit with every test still passing
-    # (2026-09-29). Raising the limit skips nothing; if it keeps growing, split
-    # the loop below across a matrix instead.
-    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    # 60 is generous for one shard (about 18 minutes when the split was made);
+    # the old single job needed 90 because it ran all ~219 suites in sequence.
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: jarvis-desktop
@@ -129,31 +140,67 @@ jobs:
       # three used to run here. Playwright is not a dependency of the app
       # (tests/README.md says why), so it is installed for this job only.
       # uikit.mjs is the harness, not a suite; shots.mjs only writes
-      # screenshots. Every suite runs even after one fails, so one red run
-      # lists every failure at once.
+      # screenshots. Every suite runs exactly once across the four shards, and
+      # every suite in a shard runs even after one fails, so one red run lists
+      # every failure in that shard at once.
       - name: Install Playwright's Chromium (for the page tests only)
         shell: bash
         run: |
           set -euo pipefail
           npm install --no-save --no-audit --no-fund playwright
           npx playwright install --with-deps chromium
-      - name: Every desktop test suite
+      - name: Every desktop test suite in this shard
         shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: "4"
         run: |
           set -uo pipefail
           failed=()
+          ran=0
+          i=0
           for f in tests/*.mjs; do
             name=$(basename "$f")
             case "$name" in uikit.mjs|shots.mjs) continue ;; esac
+            i=$((i+1))
+            if [ $(( (i-1) % SHARDS )) -ne $(( SHARD-1 )) ]; then continue; fi
+            ran=$((ran+1))
             echo "::group::$name"
             if node "$f"; then echo "ok  $name"; else failed+=("$name"); fi
             echo "::endgroup::"
           done
-          if [ "${#failed[@]}" -gt 0 ]; then
-            echo "::error::${#failed[@]} desktop suite(s) failed: ${failed[*]}"
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::shard ${SHARD}/${SHARDS} ran no suites - the split is broken"
             exit 1
           fi
-          echo "Every desktop suite passed."
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::${#failed[@]} desktop suite(s) failed in shard ${SHARD}/${SHARDS}: ${failed[*]}"
+            exit 1
+          fi
+          echo "Shard ${SHARD}/${SHARDS}: every one of its ${ran} suites passed."
+
+  # This is the required check named "frontend". It does no work of its own:
+  # it exists so the ruleset's check name survives sharding. GitHub aggregates
+  # a matrix job's result into needs.<job>.result, so "success" here means all
+  # four shards passed; a failed or cancelled shard turns this job red.
+  frontend:
+    name: frontend
+    needs: [frontend-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every frontend shard to be green
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="${{ needs.frontend-shard.result }}"
+          echo "frontend-shard result: ${result}"
+          if [ "${result}" != "success" ]; then
+            echo "::error::one or more frontend shards did not succeed (${result})"
+            exit 1
+          fi
+          echo "All four frontend shards succeeded."
+
 
   backend:
     # The backend suites, including every contract test (the ones that read
@@ -1387,7 +1434,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch
         with:
           toolchain: stable
-      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
           tool: cargo-deny
       - run: cargo deny check licenses advisories sources
