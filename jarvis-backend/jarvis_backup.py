@@ -671,6 +671,17 @@ DB_BUSY_TIMEOUT_S = 10.0
 #:             "Delete really deletes" is the promise the Settings card makes.
 #:             The recording itself stays in the owner's own folder, backed up
 #:             by whatever he keeps them in - never by this.
+#:
+#: health.db  the owner's own medical record (jarvis_medical_advocate.py;
+#:            2026-10-24). Its module keeps it in its own folder, under
+#:            medical/, NOT directly in the settings folder - so the archive's
+#:            settings glob and database list could not reach it even by
+#:            accident. It is named here anyway because the decision is the
+#:            owner's, not a default: whether every medical record should sit
+#:            in every archive (including a cloud-synced folder, if that is
+#:            where backups go) is an open question, and until it is decided
+#:            the record stays out. See docs/MEDICAL-STORE.md and
+#:            backend/test_medical_advocate.py, which pin this.
 NOT_BACKED_UP = {
     "agents.db": "template tables the modules recreate; empty today (0 rows)",
     "audit.db": "a security trail, not memory; restoring a stale one misleads",
@@ -679,6 +690,7 @@ NOT_BACKED_UP = {
     "telemetry.db": "machine measurements, not the owner's data; writer off",
     "documents-index.db": "derived word index; rebuilt from the folders on the next search",
     "media-index.db": "kept readable speech; excluded so Delete cannot be undone from an older backup",
+    "health.db": "the medical record; excluded until the owner decides whether every archive should carry it",
 }
 
 #: Non-SQLite stores under the settings folder that are deliberately NOT

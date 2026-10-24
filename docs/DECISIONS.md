@@ -3138,3 +3138,78 @@ fails against the old reader (2 checks red) and passes against the fix (5 of
 5). `jarvis-client/.../PastApprovalsTest.kt` pins the Kotlin reader the same
 way; CI is the first compiler for it, since there is no Android build at this
 desk.
+
+## 2026-10-24 - the medical record is its own file, and the local medical model is an explainer with no authority
+
+The owner asked for medical records "kept separate from other information",
+a health conversation that stays on the PC, and MedGemma 1.5 4B on the second
+card as a helper to "verify FHIR records and lab terminology 100% offline".
+Tonight's slice built the smallest honest version of that, and wrote down where
+the words in the request are stronger than the code.
+
+**What was built and why each part.** The record lives in
+`~/.openjarvis/medical/health.db` - its own folder and its own file, not one
+more name in `memory.db` - in `backend/jarvis_medical_advocate.py`, shipped
+whole with no route and no screen. Every read and write sets
+`jarvis_gate.latch_taint(why="health_data")` *before* it opens anything and
+fails closed with `MedicalStoreUnavailable` when the latch cannot be set; a
+medical read therefore pins the chat to local models for the gate's
+**30 minutes**, and no longer. `erase_all()` empties only that file (secure
+delete, a truncated write-ahead log, then a vacuum), and a test proves a
+neighbouring `memory.db` is byte-for-byte untouched and never created. The
+local model client is the ONE HTTP path already in `jarvis_second_card`
+(`generate()` gained a narrow `model=`/`keep_alive=` override whose default
+request is unchanged), so this feature adds no second client and inherits that
+module's loopback refusal; it probes `127.0.0.1:11435` in 0.20 s, strips the
+`<unused94> ... <unused95>` thinking markers MedGemma leaks, and on any failure
+returns a calm fallback that names the main local model on `:11436`.
+`validate_bundle()` is a deterministic offline checker of a named subset of FHIR
+R4 (32 checks: Bundle rules, required elements and required-bound status
+values, id and instant shapes, reference syntax and in-bundle resolution,
+Observation value/unit/range/flag/component contradictions, duplicate rows and a
+magnitude heuristic, and code SHAPE), with `summarise()`; its verdict is
+`no_errors_found`, `errors_found` or `not_checked` - never "valid" - every code
+meaning is listed under `unverified`, and the optional model is attributed with
+`authority: "none"` and can never move a finding.
+
+**What the request asked for that this slice does NOT do, and why.** It is not
+encrypted: there is no key and no sealed path, so it is a plain SQLite file in
+the owner's own profile - the same honest limit `study.db` records as "sealed or
+not kept", and this store meets neither. It is NOT in `.jbak` backups:
+`jarvis_backup.SOURCE_DBS` is an explicit allowlist, `health.db` is now named in
+`NOT_BACKED_UP` with its reason, and both the new suite and `test_backup.py`'s
+`17 + 8` count pin the exclusion so nobody can add medical data to backups
+silently. The latch is NOT permanent: the two settings that look like they
+promise a whole-conversation latch (`taint_persists_for_conversation`,
+`always_taint_conversation`) are read by nobody; a non-expiring latch is a code
+change for a later slice. There is no biometric lock screen, no phone or desktop
+screen, no backup toggle, no import of a bundle into the store, and no federal
+API (RxNav, MedlinePlus, openFDA, DailyMed) and no outbound de-identifier - the
+federal-API route is network, so "100% offline" would be false, and a bare LOINC
+code already reveals which tests the owner had; `jarvis_scrub.py` is not reused
+because its own header says it is not an egress filter. **"Verify lab
+terminology" is not achievable offline**: the LOINC, RxNorm/ RxCUI, ICD-10-CM,
+SNOMED CT and UCUM tables are not on this PC, so the checker reports code shapes
+and lists every meaning as not checked. And the 4B model is not a terminology
+authority - measured 2026-10-24, it answered a basic metabolic panel LOINC spot
+check with `8141` (and `81416-1`/`81417-1` elsewhere) where the usual code is
+`24323-8` - so nothing it says may be written down as "verified".
+
+**Two decisions are still the owner's, and nothing changes until he says.**
+First, whether `health.db` should be carried in backups: excluding it (today's
+behaviour) means a bare-metal restore loses the record; including it puts every
+medical row into every archive, including a cloud-synced folder if that is where
+backups go. Second, how long a medical read should pin the chat: the 30-minute
+gate latch for now (free, already built, ends by itself), or a non-expiring
+latch until the conversation ends (needs code, not config). Both are recorded in
+`docs/MEDICAL-STORE.md` in plain words, with the trade-off each way.
+
+**What is honestly testable tonight, and what is not.** 80 hermetic tests
+(`backend/test_medical_advocate.py`) cover the store round-trip, the latch
+ordering and fail-closed behaviour, the path separation, the backup pin, the
+loopback guard, the lane's three states, the fallback note, the marker strip and
+the FHIR canaries, each with a positive control. The lane itself was measured on
+the owner's PC on 2026-10-24 (100% GPU, 16,384 context, `size_vram`
+2,817,953,626 bytes) and left running. A real portal export, a real phone screen
+and a real medical review remain NOT-TESTABLE - and NOT-TESTABLE is never a
+pass.
