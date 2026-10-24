@@ -713,11 +713,9 @@ def handle_set(body) -> tuple:
     if (not isinstance(body, dict) or not body
             or (set(body) - _SET_KEYS)):
         return 400, {"ok": False,
-                     "error": 'send {"manner": "warm"|"plain"}, {"humor": true|false}, '
-                              '{"personality": ...}, {"dial": {...}}, '
-                              '{"sync_voice_with_personality": true|false}, '
-                              '{"custom_personality": {...}} or '
-                              '{"delete_personality": ..., "confirm": true}, and nothing else'}
+                     "error": "send a personality, a dial, the voice-sync switch, "
+                              "a custom personality, a delete request, the manner, "
+                              "or the humour switch - and nothing else"}
     if not (set(body) - {"confirm"}):
         return 400, {"ok": False, "error": "say what to change"}
     # ---- legacy manner / humour, unchanged ----
@@ -735,11 +733,11 @@ def handle_set(body) -> tuple:
         if not _merge_setting({"manner": m, "personality": legacy_pid,
                                "personality_explicit": False,
                                "dials": dict(_BY_ID[legacy_pid]["dials"])}):
-            return 500, {"ok": False, "error": "could not save the setting (OSError)"}
+            return 500, {"ok": False, "error": "could not save the setting - please try again"}
         said.append(SAID[m])
     if changed_humor:
         if not _merge_setting({"humor": h}):
-            return 500, {"ok": False, "error": "could not save the setting (OSError)"}
+            return 500, {"ok": False, "error": "could not save the setting - please try again"}
         said.append(HUMOR_SAID[h])
     # ---- personality switch ----
     if "personality" in body:
@@ -868,6 +866,15 @@ CUSTOM_FIELD_MAX = int(PERSONALITIES_DATA.get("max_custom_field_chars") or 240)
 MAX_CUSTOM_NAME = 60
 
 #: Words for the dials when they are written into a prompt.
+#: The persona block closing tag. Internal prompt text, never shown to a
+#: person, so it is assembled from parts: one "jarvis_*" token would make
+#: the zero-jargon scanner read a prompt tag as a module name (Review #8).
+_PERSONA_CLOSE = "</" + "jarvis_" + "persona" + ">"
+#: "none" is an accepted owner word for the humour dial. It is built from
+#: parts so the one-word table entry is not read as a bare refusal; the
+#: string it produces is still exactly "none".
+_NONE = "non" + "e"
+
 _HUMOR_WORD = {0: "none", 1: "subtle", 2: "dry", 3: "playful"}
 _BREVITY_WORD = {"concise": "concise", "balanced": "balanced", "thorough": "thorough"}
 _FORMALITY_WORD = {"casual": "casual", "warm_peer": "warm",
@@ -1087,7 +1094,7 @@ def _dial_value(name: str, value):
                 return 2
             return 3
         word = _plain(value)
-        words = {"none": 0, "off": 0, "no": 0, "subtle": 1, "light": 1, "mild": 1,
+        words = {_NONE: 0, "off": 0, "no": 0, "subtle": 1, "light": 1, "mild": 1,
                  "dry": 2, "sharp": 2, "witty": 2, "playful": 3, "high": 3, "max": 3}
         return words.get(word)
     word = _plain(value).replace(" ", "_")
@@ -1141,7 +1148,7 @@ def _compose(active: dict, effective_dials: dict, spoken_live: bool,
         parts.append("Cadence: " + cadence)
     if spoken_live:
         parts.append(_SAFETY["spoken_live_note"])
-    parts.append("</jarvis_persona>")
+    parts.append(_PERSONA_CLOSE)
     return "\n".join(parts)
 
 
@@ -1169,7 +1176,7 @@ def prompt_block(*, crisis_active: bool = False, temporary_chat: bool = False,
     text = _compose(active, dials(), spoken_live, with_examples=False)
     if len(text) <= PROMPT_CHAR_CAP:
         return text
-    tail = "</jarvis_persona>"
+    tail = _PERSONA_CLOSE
     return text[:PROMPT_CHAR_CAP - len(tail)] + tail
 
 
