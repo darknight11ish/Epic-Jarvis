@@ -687,6 +687,14 @@ await check("the default view still draws after switching back, and nothing erro
   const statAfter = await page.locator("#graph-stat").innerText();
   assert.equal(statAfter, statBefore, "the constellation's count line changed");
   assert.ok(await page.locator("#graph-overlay .galaxy-node-button").count() > 0);
+  // The guides are removed by the constellation's own paint, which lands a frame
+  // or two after the key press - the same reason the mid-assembly check above
+  // waits for it. Asserting synchronously here failed on this PC's Windows run
+  // and in CI run 40060312564 (2026-10-24): the status line and the nodes were
+  // already right while the guides layer was still on screen.
+  await page.waitForFunction(() =>
+    document.querySelectorAll('#graph-svg [data-layer="guides"]').length === 0,
+  { timeout: 5000 });
   assert.equal(await page.locator('#graph-svg [data-layer="guides"]').count(), 0);
   assert.deepEqual(page.__errors, [], `the page logged errors: ${page.__errors.join("; ")}`);
   await page.close();
