@@ -846,7 +846,13 @@ def _run_notes_search(args: dict, plan_obj, **_) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "notes search is not available here"}
     import jarvis_notes as NOTES
-    return NOTES.run(plan_obj, approved=True)
+    result = NOTES.run(plan_obj, approved=True)
+    # Web-Gap 4 (2026-10-23): a result that is a note saved from outside text
+    # carries `source_taint`; latch the same process-wide taint every other
+    # outside read sets, so the turn is treated as outside-text-shaped.
+    if isinstance(result, dict) and result.get("source_taint"):
+        _latch_tainted_note_read()
+    return result
 
 
 #: "Folders Jarvis may look in" (jarvis_documents.py; the owner's decisions of
@@ -1105,6 +1111,20 @@ def _latch_sandbox_tool_read() -> bool:
     try:
         import jarvis_gate
         return bool(jarvis_gate.latch_taint(why="sandbox_tool_file"))
+    except Exception:
+        return False
+
+
+def _latch_tainted_note_read() -> bool:
+    """A `notes_search` returned a note saved from outside text (Web-Gap 4).
+
+    The result was already labelled as outside data; this adds the process-wide
+    taint latch, the same one every other outside read sets, so the turn stays
+    on the local lane and the gate treats it as outside text. Never raises: a
+    backend without jarvis_gate.py keeps the search usable."""
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.latch_taint(why="tainted_saved_note"))
     except Exception:
         return False
 
@@ -1723,6 +1743,9 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
         if step.tool in _TASK_MODULES:
             kwargs["checkpoint"] = checkpoint
         result = tool.execute(checked_args, state, **kwargs)
+        # Web-Gap 4: remember a note saved after outside text, before took_in
+        # marks the read. The registry only holds the write's own reference.
+        _mark_note_provenance(step.tool, result, watch)
         # Each step's result is outside text for the rest of the turn, just
         # as a direct call's is: what it read, its sources, and - for a later
         # note write in this same plan - the "after outside text" rule above
@@ -3198,6 +3221,27 @@ NOTE_AFTER_READING = ("Jarvis read outside text in this conversation, so it asks
                       "before writing to your notes.")
 NOTE_AFTER_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before writing "
                         "to your notes.")
+
+
+def _mark_note_provenance(name: str, result, watch: "_TurnWatch") -> None:
+    """Remember a note written in an outside-shaped turn (Web-Gap 4, 2026-10-23).
+
+    The write already needed a person's yes (NOTE_WRITES). Once it is saved, a
+    later `notes_search` should still know where it came from: `jarvis_notes`
+    keeps a tiny reference-only registry, and the search path marks and wraps
+    the result. Called for a tool result only, before `watch.took_in` (whose
+    read-marking would otherwise make every note write look like a read).
+    Never raises, and records nothing if the write failed, the tool is not a
+    note writer, or the turn was not shaped by outside text."""
+    try:
+        if name not in NOTE_WRITES or not isinstance(result, dict):
+            return
+        if result.get("ok") is not True or not watch.note_needs_a_person():
+            return
+        import jarvis_notes as NOTES
+        NOTES.mark_from_tool(name, result)
+    except Exception:
+        return
 
 
 #: Web search (jarvis_search.py). The owner's decisions of 2026-09-25 - "When
@@ -10505,6 +10549,10 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             if task_id is not None:
                 tc.end(task_id)
             out.set_status("thinking")
+        # Web-Gap 4 (2026-10-23): a note saved after outside text keeps its
+        # provenance for a later notes_search. Before took_in, so this write's
+        # own confirmation is not counted as the read that shaped it.
+        _mark_note_provenance(name, result, watch)
         if name == RETIREMENT_TOOL and isinstance(result, dict) and "_retirement_result" in result:
             # The figures go into the answer as code's own text, never to the
             # model: keep the result for the answering round and take it out
