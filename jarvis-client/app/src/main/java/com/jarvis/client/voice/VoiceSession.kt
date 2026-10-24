@@ -601,6 +601,10 @@ class VoiceSession(
             old.join()
             if (interrupted === old) interrupted = null
         }
+        // Jarvis Live owns the microphone, even between its turns: a wake clip
+        // here would be a second recording beside it, and a training take would
+        // pick up whatever either of them is playing (2026-10-24).
+        if (liveOn()) return null
         val previous = job
         if (previous != null && !previous.isCompleted) return null
         if (_phase.value != Phase.OFF) return null
@@ -727,6 +731,14 @@ class VoiceSession(
         stopWhen: () -> Boolean,
         onLevel: (Float) -> Unit,
     ): VoiceTraining.Take {
+        // Jarvis Live keeps the microphone open between its turns too. A
+        // second recorder beside it would hear Jarvis's own answer, and that
+        // voice would land in the clip sent for the voice print - four of the
+        // training sentences start "Hey Jarvis", so Live answers them
+        // (2026-10-24).
+        if (liveOn()) {
+            return VoiceTraining.Take.Failed(LiveRules.SEEN.getValue("busy_mic") + ".")
+        }
         if (_phase.value != Phase.OFF || job?.isCompleted == false) {
             return VoiceTraining.Take.Failed(
                 "The talk button is using the microphone. Try again in a moment.",

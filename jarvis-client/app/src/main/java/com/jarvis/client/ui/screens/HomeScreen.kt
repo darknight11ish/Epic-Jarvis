@@ -3599,8 +3599,12 @@ private fun Composer(
     // The one snapshot read of the draft in the whole screen, so a keystroke
     // recomposes this composable and nothing above it.
     val text = draft()
-    // Shared text alone is something to send: it goes as its own message.
-    val canSend = (text.isNotBlank() || state.sharedLine != null) && state.link == LinkState.CONNECTED
+    // A picture still being prepared is not attached yet: sending now would
+    // send the words without it and leave the photo to ride the NEXT question
+    // (2026-10-24). The Photo button already refuses during that window; Send
+    // and the keyboard's Send action did not.
+    val canSend = (text.isNotBlank() || state.sharedLine != null) &&
+        state.link == LinkState.CONNECTED && !state.pictureBusy
 
     Column(
         Modifier

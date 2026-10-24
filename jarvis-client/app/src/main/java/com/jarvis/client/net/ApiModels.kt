@@ -420,6 +420,30 @@ data class ProposalOption(
     val weight: String = "",
 )
 
+/**
+ * The approvals the PC only ever answers on the PC itself, with Windows Hello:
+ * a client-side copy of `jarvis_owner_check.PC_ONLY_ACTIONS` (eight on
+ * 2026-10-24, listed here in the PC's own order).
+ *
+ * The phone cannot ask the server which cards are PC-only, and copying only the
+ * one action it used to know is what offered an Approve button on the other
+ * seven, then blamed the pairing key when the PC refused (the full audit's C2,
+ * 2026-10-24). `AuditPlumbingTest` names all eight so a change on the PC side
+ * that is not carried here fails a test rather than a tap.
+ */
+object PcOnlyActions {
+    val ALL: Set<String> = setOf(
+        "loosen_what_asks_first",
+        "enable_reading_tool",
+        "restore_backup",
+        "pair_device",
+        "unretire_shared_key",
+        "register_approval_key",
+        "handoff_keep_offering",
+        "handoff_bring_to_front",
+    )
+}
+
 @Serializable
 data class PendingItem(
     val id: String,
@@ -519,12 +543,15 @@ data class PendingItem(
             ?.content?.toDoubleOrNull()
 
     /**
-     * Whether this card may only be approved on the PC: loosening "What asks
-     * first" (the owner's decision of 2026-09-26) - one card plus Windows
-     * Hello, on the PC. The PC refuses its approval from any other device
-     * (jarvis_owner_check.PC_ONLY_ACTIONS). Denying still works here.
+     * Whether this card may only be approved on the PC itself, with Windows
+     * Hello: any of [PcOnlyActions.ALL].
+     *
+     * The PC refuses its approval from any other device
+     * (`jarvis_owner_check.PC_ONLY_ACTIONS`). Denying still works here. The list
+     * used to be one hard-coded action, so seven PC-only cards were offered an
+     * Approve button that could only fail (C2, 2026-10-24).
      */
-    val pcOnly: Boolean get() = action == AsksFirst.LOOSEN_ACTION
+    val pcOnly: Boolean get() = action in PcOnlyActions.ALL
 
     /**
      * Whether a swipe may decide this item.
