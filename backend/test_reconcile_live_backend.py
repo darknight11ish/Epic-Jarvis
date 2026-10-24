@@ -10,7 +10,10 @@ real PC:
 
   1. the authoritative `$SHIPPED` / `$PATCHES` lists parse out of
      `scripts/apply-patches.ps1`, `rebuilt/<name>` flattens to the live base name, and a
-     duplicate, `..` or base-folder entry is refused;
+     duplicate, `..` or base-folder entry is refused; and `read_patch_lists` reads the
+     lists from the REF being deployed (`git show <ref>:scripts/apply-patches.ps1`),
+     proved against a real two-commit temporary git repository whose working tree is
+     behind the ref - the stale-checkout shape that hid two shipped modules (TOOL-1);
   2. the HUD-delta decision: a patch whose distinctive lines are present is
      ALREADY_PRESENT; one that is absent but has an anchor rule is inserted at exactly
      the configured anchor; an absent patch with no rule, or a missing/ambiguous anchor,
@@ -26,17 +29,24 @@ real PC:
      conditional probes skip honestly, and the token never appears in the output;
   8. a full dry run and a full apply on a temporary "PC" (fake git blobs, fake probes,
      fake add-plugin runner) are idempotent: the second apply changes nothing and all
-     probes pass;
+     probes pass; the fixture's working-tree list is deliberately STALE, so those runs
+     also prove the plan came from the ref and not the checkout;
   9. the backup journal: it is printed BEFORE any live write, a mid-apply or plug-in
      failure is rolled back from it (old bytes restored, new files removed), a probe
      failure after a COMPLETE write keeps the files and names the backup/journal
      instead, and `rollback_backup`/`--rollback` restores a partial state from the
-     journal - all on temporary folders.
+     journal - all on temporary folders;
+ 10. the ref guard: a checkout whose HEAD is not the commit `--ref` names is refused
+     (exit 2) with both SHAs and the fix printed, nothing is staged, and
+     `--allow-worktree-mismatch` proceeds to the normal dry-run output; an empty
+     `--ref` is refused too (it would read the list from the working tree but the
+     bytes from the git index); the CLI flag reaches `run_deploy`.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the two patches the
 deploy uses and the published base HUD `jarvis-backend/jarvis_hud.py` (the literal
 route delta's bytes are compared with it), for the parser/extraction tests (read-only).
+The ref-read proof builds its own two-commit git repository under a temporary folder.
 """
 from __future__ import annotations
 
@@ -44,6 +54,7 @@ import ast
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -182,11 +193,45 @@ def make_live(root: Path, *, with_deltas=False, app_control_section=False) -> Pa
     return live
 
 
+#: The fixture PC's ref: the real lists' shape, with the three files and two patches
+#: the fake git blobs answer. `fake_show` returns THIS text for the script path.
+FIXTURE_SCRIPT = """$SHIPPED = @(
+    'jarvis_agent.py'
+    'rebuilt/jarvis_compute.py'
+    'jarvis_hud.html'
+)
+$PATCHES = @(
+    'app-control.patch'
+    'setup.patch'
+)
+"""
+
+#: The fixture's WORKING-TREE copy of the script is deliberately STALE: one module
+#: and one patch, while the ref above lists three and two. Every end-to-end check
+#: therefore also proves the plan came from the ref - if the tool ever reads the
+#: checkout's copy again, `jarvis_compute.py` is never added, `/api/setup` never
+#: reaches the HUD, and those checks fail (the TOOL-1 shape, as a bite).
+STALE_FIXTURE_SCRIPT = """$SHIPPED = @(
+    'jarvis_agent.py'
+)
+$PATCHES = @(
+    'app-control.patch'
+)
+"""
+
+#: The SHA pair a fixture's stub resolver returns when HEAD == ref. A fixture is not
+#: a real git repository; the guard's real `git rev-parse` path is proved by its own
+#: test against a real temporary git repository.
+FIXTURE_HEAD = "1" * 40
+
+
 def patch_text(name: str) -> bytes:
     return (REPO / "backend" / name).read_bytes()
 
 
 def fake_show(repo, ref, repo_path):
+    if repo_path == R.PATCH_SCRIPT:
+        return FIXTURE_SCRIPT.encode("utf-8")
     base = Path(repo_path).name
     if base in ("app-control.patch", "setup.patch"):
         return patch_text(base)
@@ -253,6 +298,121 @@ def t_the_list_parser_refuses_rather_than_reading_nothing():
         except R.Refused as exc:
             refused = str(exc)
         check(f"flattening refuses {entry!r}", needle in refused, refused)
+
+
+def _git(repo: Path, *args: str) -> str:
+    """Run git in `repo`; fail the test loudly when it will not run."""
+    proc = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
+    if proc.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)} failed: {(proc.stderr or '').strip()}")
+    return (proc.stdout or "").strip()
+
+
+def make_two_commit_repo(root: Path):
+    """A REAL tiny git repository: commit 1 lists one module, commit 2 lists two.
+
+    The working tree is left checked out at commit 1 - the stale-checkout shape
+    TOOL-1 measured, where `git show <ref>:scripts/apply-patches.ps1` (commit 2)
+    names a module the working tree's copy (commit 1) does not. Returns
+    (repo, first_sha, second_sha)."""
+    repo = root / "gitrepo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    _git(repo, "config", "user.name", "Reconcile Test")
+    first = ("$SHIPPED = @(\n    'jarvis_old.py'\n)\n"
+             "$PATCHES = @(\n    'old.patch'\n)\n")
+    second = ("$SHIPPED = @(\n    'jarvis_old.py'\n    'jarvis_new_module.py'\n)\n"
+              "$PATCHES = @(\n    'old.patch'\n    'new.patch'\n)\n")
+    write(repo / "scripts" / "apply-patches.ps1", first)
+    _git(repo, "add", "scripts/apply-patches.ps1")
+    _git(repo, "commit", "-q", "-m", "one")
+    first_sha = _git(repo, "rev-parse", "HEAD")
+    write(repo / "scripts" / "apply-patches.ps1", second)
+    _git(repo, "add", "scripts/apply-patches.ps1")
+    _git(repo, "commit", "-q", "-m", "two")
+    second_sha = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", first_sha)
+    return repo, first_sha, second_sha
+
+
+def t_the_lists_are_read_from_the_ref_not_the_working_tree():
+    """TOOL-1: the list must come from the commit whose bytes are deployed.
+
+    A real two-commit repository, checked out at the OLD commit: the working tree's
+    script has one module, the ref's script has two. Reading without a ref reproduces
+    the bug's shape (the new module is absent); reading with the ref returns it, even
+    with no working-tree script at all."""
+    root = tmpdir()
+    try:
+        repo, first_sha, second_sha = make_two_commit_repo(root)
+        old = R.read_patch_lists(repo)
+        check("the working tree's list is the OLD one (the bug's shape)",
+              old == (["jarvis_old.py"], ["old.patch"]), old)
+        by_ref = R.read_patch_lists(repo, ref=second_sha)
+        check("... while the ref's list has the module the working tree lacks",
+              "jarvis_new_module.py" in by_ref[0]
+              and "jarvis_new_module.py" not in old[0], by_ref[0])
+        check("... and the ref's $PATCHES list too",
+              by_ref[1] == ["old.patch", "new.patch"], by_ref[1])
+        check("a ref naming the checkout's own commit reads that commit",
+              R.read_patch_lists(repo, ref="HEAD") == old)
+        # The ref guard's REAL rev-parse path, on this real repository.
+        accepted = True
+        try:
+            R.check_worktree_at_ref(repo, "HEAD")
+        except R.Refused as exc:
+            accepted = str(exc)
+        check("the real guard accepts a worktree that IS at the ref", accepted is True,
+              accepted)
+        refused = ""
+        try:
+            R.check_worktree_at_ref(repo, second_sha)
+        except R.Refused as exc:
+            refused = str(exc)
+        check("the real guard refuses HEAD != --ref and prints both SHAs",
+              first_sha in refused and second_sha in refused and "git checkout" in refused,
+              refused)
+        refused = ""
+        try:
+            R.check_worktree_at_ref(repo, "no-such-ref")
+        except R.Refused as exc:
+            refused = str(exc)
+        check("the real guard names an unknown ref and how to fetch it",
+              "fetch no-such-ref" in refused, refused)
+        # No working-tree fallback: the ref is read even when the file is gone.
+        (repo / "scripts" / "apply-patches.ps1").unlink()
+        check("the ref is read even when the working tree has no script",
+              "jarvis_new_module.py" in R.read_patch_lists(repo, ref=second_sha)[0])
+        refused = ""
+        try:
+            R.read_patch_lists(repo)
+        except R.Refused as exc:
+            refused = str(exc)
+        check("without a ref, a missing script is still refused",
+              "scripts/apply-patches.ps1" in refused, refused)
+        refused = ""
+        try:
+            R.read_patch_lists(repo, ref="no-such-ref")
+        except R.Refused as exc:
+            refused = str(exc)
+        check("an unknown ref is refused, never read from the working tree",
+              "no-such-ref" in refused and "git show" in refused, refused)
+        # A ref whose script has no list block is refused, not read as empty.
+        write(repo / "scripts" / "apply-patches.ps1", "Write-Host 'no lists'\n")
+        _git(repo, "add", "scripts/apply-patches.ps1")
+        _git(repo, "commit", "-q", "-m", "third: no lists")
+        bad_sha = _git(repo, "rev-parse", "HEAD")
+        refused = ""
+        try:
+            R.read_patch_lists(repo, ref=bad_sha)
+        except R.Refused as exc:
+            refused = str(exc)
+        check("a ref whose script has no list block is refused, not read as empty",
+              "$SHIPPED" in refused, refused)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 # --------------------------------------------------------------------------
@@ -671,18 +831,13 @@ def t_a_missing_token_fails_the_probes_without_printing_one():
 # --------------------------------------------------------------------------
 
 def make_fixture_pc(root: Path):
-    """A fake repository + live backend. Returns (repo, live, show)."""
+    """A fake repository + live backend. Returns (repo, live, show).
+
+    The working-tree script is STALE_FIXTURE_SCRIPT on purpose; the ref the deploy
+    is told to use is FIXTURE_SCRIPT (via `fake_show`), so a plan that reads the
+    checkout instead of the ref visibly loses `jarvis_compute.py` and `/api/setup`."""
     repo = root / "repo"
-    write(repo / "scripts" / "apply-patches.ps1", """$SHIPPED = @(
-    'jarvis_agent.py'
-    'rebuilt/jarvis_compute.py'
-    'jarvis_hud.html'
-)
-$PATCHES = @(
-    'app-control.patch'
-    'setup.patch'
-)
-""")
+    write(repo / "scripts" / "apply-patches.ps1", STALE_FIXTURE_SCRIPT)
     write(repo / "scripts" / "add-plugin.ps1", "# stub\n")
     (repo / ".git").mkdir(parents=True)
     live = make_live(root)
@@ -706,7 +861,10 @@ def run_fixture(repo: Path, live: Path, *, apply: bool, out_lines=None,
 
     client = probe_client or client
 
-    return R.run_deploy(repo, live, apply=apply, ref="origin/main",
+    return R.run_deploy(repo, live, apply=apply, ref=kw.pop("ref", "origin/main"),
+                        allow_worktree_mismatch=kw.pop("allow_worktree_mismatch", False),
+                        resolve_shas=kw.pop(
+                            "resolve_shas", lambda _repo, _ref: (FIXTURE_HEAD, FIXTURE_HEAD)),
                         show=kw.pop("show", fake_show),
                         out=out, probe_client=client,
                         token_reader=lambda _live: TOKEN,
@@ -772,6 +930,100 @@ def t_cli_is_dry_run_by_default_and_validates_paths():
         check("a nonexistent backend path is refused (exit 2)", code == 2, code)
         code2 = R.main(["--backend-path", str(live), "--apply", "--dry-run"])
         check("--apply and --dry-run together are refused (exit 2)", code2 == 2, code2)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_worktree_not_at_the_ref_is_refused():
+    """TOOL-1's other half (Gemini Ruling Q9): HEAD must be the commit --ref names.
+
+    Two SHAs are stubbed so the test needs no real git repository: the fixture's
+    resolver says HEAD and the ref are different commits, which must refuse with
+    exit 2, print both SHAs and the fix, and stage nothing. The explicit override
+    must proceed to the ordinary dry-run plan."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        head, ref_sha = "a" * 40, "b" * 40
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines,
+                           resolve_shas=lambda _repo, _ref: (head, ref_sha))
+        text = "\n".join(lines)
+        check("a checkout at another commit is refused (exit 2)", code == 2,
+              (code, lines[-4:]))
+        check("... the refusal prints both SHAs", head in text and ref_sha in text,
+              lines[-4:])
+        check("... it says REFUSED and why", "REFUSED:" in text
+              and "deploys the files at --ref" in text, lines[-4:])
+        check("... it says how to fix it (checkout the ref, or a worktree at it)",
+              "git checkout" in text and "worktree already at" in text, lines[-4:])
+        check("... nothing was staged (no backup folder)",
+              not any(p.name.startswith("_jarvis-deploy-backup-tool-")
+                      for p in live.iterdir()))
+
+        lines2 = []
+        code2 = run_fixture(repo, live, apply=False, out_lines=lines2,
+                            resolve_shas=lambda _repo, _ref: (head, ref_sha),
+                            allow_worktree_mismatch=True)
+        text2 = "\n".join(lines2)
+        check("--allow-worktree-mismatch proceeds to the normal dry run", code2 == 0,
+              (code2, lines2[-6:]))
+        check("... it says the guard was overridden",
+              "allow-worktree-mismatch is set" in text2, lines2[-8:])
+        check("... the ref-read still planned the shipped sync",
+              "SHIPPED (3 files in $SHIPPED" in text2, lines2[-14:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_an_empty_ref_is_refused():
+    """`--ref ""` is the one string that defeated both halves of TOOL-1's fix.
+
+    `read_patch_lists(repo, "")` falls back to THIS working tree's script, and
+    `git show ":backend/<path>"` resolves to the git INDEX, so the plan would come
+    from two trees - while the ref guard is skipped by its own `elif ref`. It is
+    reachable by accident (`--ref $sha` with `$sha` unset in PowerShell is ""), so
+    it must refuse with exit 2 and stage nothing."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        for empty in ("", "   "):
+            lines = []
+            code = run_fixture(repo, live, apply=False, out_lines=lines, ref=empty)
+            text = "\n".join(lines)
+            check(f"an empty --ref ({empty!r}) is refused (exit 2)", code == 2,
+                  (code, lines[-3:]))
+            check("... it says REFUSED and names both mixed sources",
+                  "REFUSED:" in text and "working tree" in text
+                  and "git index" in text, lines[-3:])
+            check("... it names the default to pass instead",
+                  "origin/main" in text, lines[-3:])
+        check("... nothing was staged (no backup folder)",
+              not any(p.name.startswith("_jarvis-deploy-backup-tool-")
+                      for p in live.iterdir()))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_cli_flag_reaches_the_deploy():
+    """--allow-worktree-mismatch is CLI plumbing: main() must pass it through."""
+    root = tmpdir()
+    try:
+        _repo, live, _show = make_fixture_pc(root)
+        seen = {}
+
+        def fake_deploy(repo_path, live_path, **kw):
+            seen.clear()
+            seen.update(kw)
+            return 0
+
+        with mock.patch.object(R, "run_deploy", fake_deploy):
+            code = R.main(["--backend-path", str(live), "--allow-worktree-mismatch"])
+            check("main() passes --allow-worktree-mismatch to run_deploy",
+                  code == 0 and seen.get("allow_worktree_mismatch") is True, seen)
+            R.main(["--backend-path", str(live)])
+            check("... and it is False when the flag is absent",
+                  seen.get("allow_worktree_mismatch") is False, seen)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -2148,6 +2400,7 @@ def main():
                t_a_duplicated_final_old_block_is_refused,
                t_the_real_live_gate_gets_the_final_guard_read_only,
                t_the_list_parser_refuses_rather_than_reading_nothing,
+               t_the_lists_are_read_from_the_ref_not_the_working_tree,
                t_a_patch_parses_into_per_file_added_lines,
                t_presence_is_decided_from_distinctive_lines,
                t_insertion_uses_its_anchor_and_refuses_a_bad_one,
@@ -2173,6 +2426,9 @@ def main():
                t_traces_retention_is_retired_not_blocked,
                t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing,
                t_cli_is_dry_run_by_default_and_validates_paths,
+               t_a_worktree_not_at_the_ref_is_refused,
+               t_an_empty_ref_is_refused,
+               t_the_cli_flag_reaches_the_deploy,
                t_the_backup_journal_rolls_back_overwritten_and_new_paths,
                t_a_mid_apply_failure_rolls_back_and_prints_the_backup,
                t_a_plugin_failure_rolls_back_the_already_written_files,
