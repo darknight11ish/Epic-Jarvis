@@ -147,7 +147,7 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     now says in plain words.
 
 EXPLICITLY NOT BACKED UP (CLAUDE.md rule 3; the owner's own words)
-  * The pairing token and every API key (Exa, Tavily, Brave, GitHub, ...):
+  * The pairing token and every API key (Exa, Tavily, Brave, DeepSeek, GitHub, ...):
     all of them live in Windows Credential Manager under their OWN target
     names (jarvis_token_store.py, jarvis_search.py) - never in a `*.json`
     settings file - and this module reads exactly one Credential Manager

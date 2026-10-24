@@ -3154,7 +3154,7 @@
       "name": "Web search",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Just ask. The provider is chosen in Settings, Web search - SearXNG by default, then DuckDuckGo, Exa, Tavily and Brave.",
+      "where": "Just ask. The provider is chosen in Settings, Web search - SearXNG by default, then DuckDuckGo, Exa, Tavily, Brave and DeepSeek.",
       "control": {
         "type": "title",
         "setting_keys": [

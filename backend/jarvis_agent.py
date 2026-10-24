@@ -34,7 +34,7 @@ rounds after it runs continue on that lane - see offered_tools() and
 choose_lane(), and run_local_turn's `lane_choice`. Docker-based execution and
 connectors remain excluded with the reasons README.md gives. General web
 search is here since 2026-09-25 (`web_search`, jarvis_search.py, the owner's
-choice of five providers) with its own rule for when it asks - see
+choice of six providers) with its own rule for when it asks - see
 WEB_SEARCH_* below. Sending one email is here since 2026-09-25 too
 (`send_email`, jarvis_email_send.py, the owner's decision after the Muse
 audit): one card per email showing all of it, a person's yes only, the
