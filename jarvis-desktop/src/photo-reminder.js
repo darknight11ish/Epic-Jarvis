@@ -19,7 +19,11 @@
  * OUTSIDE TEXT. The words came from a picture someone else made. They are
  * put on the page with textContent only (never as HTML), never sent to the
  * AI model from here, never learned, and dropped when the proposal closes -
- * nothing here stores them.
+ * nothing here stores them. A letter can hold SEVERAL dates, and one tap sets
+ * ONE reminder: the first add drops the picture's whole words-read block and
+ * the outside-text note, and keeps the proposals that are left, so "pick
+ * another" is still true after a tap (2026-10-16 - before this, one add took
+ * the other dates off the page).
  *
  * The phone says the same words (net/PhotoReminder.kt);
  * backend/test_photo_remind.py checks both against the PC's.
@@ -43,6 +47,9 @@ export const NO_TIME = "No time found - 09:00 is filled in. Change it if you nee
 export const PASSED = "That time has already passed - change the date or time.";
 export const ADD_LABEL = "Add a Jarvis reminder";
 export const CLOSE_LABEL = "Close";
+/** On a proposal that has already been added; the same words on the phone. */
+export const ADDED = "(added)";
+export const addedWords = (label) => `${label} ${ADDED}`;
 export const READING = "Reading the words in the picture on your PC…";
 export const WORDS_READ = "Words read from the picture";
 export const WHAT_LABEL = "What";
@@ -61,6 +68,11 @@ export const JPEG_QUALITY = 0.82;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
+/** "9:05" and "09:05" are the same time; the reminder that goes out is padded. */
+const hhmm = (t) => {
+  const m = /^(\d{1,2}):(\d\d)$/.exec(String(t == null ? "" : t).trim());
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : String(t == null ? "" : t).trim();
+};
 
 /**
  * The PC's answer, made safe to draw: at most three proposals, each with a
@@ -102,9 +114,11 @@ function el(doc, tag, cls, text) {
 
 /**
  * Draws the proposal into `box`. `invoke` must reject on failure (Rust's
- * sentence); `canAct()` says whether the link is live; `onDone(said)` after
- * a reminder was added (the box then holds only the PC's sentence);
- * `onClose()` when closed. Returns {close, sync}.
+ * sentence); `canAct()` says whether the link is live; `onDone(said)` after a
+ * reminder was added - the proposal then STAYS (the PC's sentence becomes the
+ * status line, and the proposal just added reads as added) so the other dates
+ * on the same letter can be added too; `onClose()` when closed. Returns
+ * {close, sync}.
  */
 export function mountProposal(box, out, { invoke, canAct = () => true, onDone, onClose, say,
   buttonClass = "btn small" }) {
@@ -114,7 +128,8 @@ export function mountProposal(box, out, { invoke, canAct = () => true, onDone, o
   const wrap = el(doc, "div", "photo-proposal");
   wrap.setAttribute("role", "group");
   wrap.setAttribute("aria-label", TITLE);
-  wrap.append(el(doc, "p", "photo-said", view.said));
+  const status = el(doc, "p", "photo-said", view.said);
+  wrap.append(status);
 
   const first = view.found[0] || { title: "", date: "", time: "09:00", timeFound: false };
   const what = el(doc, "input", "photo-what");
@@ -139,16 +154,25 @@ export function mountProposal(box, out, { invoke, canAct = () => true, onDone, o
   fill(first);
   if (!view.found.length) hint.hidden = true;
 
+  // Every proposal the PC offered, and the ones this page has already set a
+  // reminder from. A proposal is the date and the time the PC found: the
+  // backend offers a given date and time once (jarvis_photo_remind.py drops a
+  // repeat), so that pair is what says "the boxes hold this proposal".
+  const picks = [];
+  const added = new Set();
+  const keyOf = (d, t) => `${d} ${hhmm(t)}`;
+  const boxesKey = () => keyOf(date.value, time.value);
   if (view.found.length > 1) {
-    const picks = el(doc, "div", "photo-picks");
+    const picksBox = el(doc, "div", "photo-picks");
     view.found.forEach((f) => {
-      const b = el(doc, "button", `${buttonClass} photo-pick`,
-        `${f.when || `${f.date} ${f.time}`}${f.title ? ` - ${f.title}` : ""}`);
+      const label = `${f.when || `${f.date} ${f.time}`}${f.title ? ` - ${f.title}` : ""}`;
+      const b = el(doc, "button", `${buttonClass} photo-pick`, label);
       b.type = "button";
-      b.addEventListener("click", () => fill(f));
-      picks.append(b);
+      b.addEventListener("click", () => { fill(f); sync(); });
+      picks.push({ f, b, label });
+      picksBox.append(b);
     });
-    wrap.append(picks);
+    wrap.append(picksBox);
   }
 
   const field = (label, input) => {
@@ -185,7 +209,10 @@ export function mountProposal(box, out, { invoke, canAct = () => true, onDone, o
     box.hidden = true;
     if (onClose) onClose();
   };
-  const sync = () => { add.disabled = !canAct(); };
+  // The tap is shut while the boxes already hold a proposal this page has
+  // added: the owner has to pick another date or change one to set a second
+  // reminder, so a quick second tap cannot set the same reminder twice.
+  const sync = () => { add.disabled = !canAct() || added.has(boxesKey()); };
   sync();
   add.addEventListener("click", async () => {
     sync();
@@ -200,15 +227,30 @@ export function mountProposal(box, out, { invoke, canAct = () => true, onDone, o
     try {
       const answer = await invoke("photo_add_reminder", got.args);
       const said = String((answer && answer.said) || "Reminder set.");
-      // The picture's words go; only the PC's own sentence stays.
-      closed = true;
-      box.replaceChildren(el(doc, "p", "photo-said photo-done", said));
+      // The PC's own sentence is the STATUS LINE from here on, not the whole
+      // box: one tap set one reminder, and the dates still on the letter stay
+      // here to be added. The picture's own words and the note about them go
+      // with the first add, and the proposal just used says so (2026-10-16).
+      const key = keyOf(got.args.date, got.args.time);
+      added.add(key);
+      const hit = picks.find((p) => keyOf(p.f.date, p.f.time) === key);
+      if (hit) {
+        hit.b.textContent = addedWords(hit.label);
+        hit.b.classList.add("photo-pick-added");
+        hit.b.disabled = true;
+      }
+      for (const gone of wrap.querySelectorAll(".photo-words, .photo-outside")) gone.remove();
+      status.textContent = said;
+      status.classList.add("photo-done");
+      err.textContent = "";
+      err.hidden = true;
       tell(said);
       if (onDone) onDone(said);
+      sync();
     } catch (error) {
       err.textContent = String(error && error.message ? error.message : error);
       err.hidden = false;
-      add.disabled = false;
+      sync();
     }
   });
   shut.addEventListener("click", close);

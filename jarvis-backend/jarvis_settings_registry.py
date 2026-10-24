@@ -479,6 +479,17 @@ SECTIONS: tuple = (
     # reader to find; test_settings_registry.py holds the two together now.
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
             app="desktop"),
+    # "All features and abilities" (2026-10-22, #749): the phone's directory of the
+    # 139 features. PHONE ONLY, and the reason is the same one the desktop page
+    # gives: the desktop's own directory card has NO `<section class="card" id>`
+    # (settings.html says so beside the card - it is a generated, read-only index,
+    # not a settings section, and it calls nothing). The phone's directory is a
+    # real `item(key = "all-features")` row (SettingsScreen.kt), so "open all
+    # features and abilities" can name it there; a phone-only row therefore, like
+    # "Approval cards" and the notification rows above. It changes nothing.
+    Section("all-features", ("all features and abilities", "all features",
+                             "abilities and commands", "the feature directory"),
+            app="phone"),
     # "Limits and how often Jarvis does things" (2026-10-08): the limits and
 )
 

@@ -211,12 +211,21 @@ class FindAnythingTest {
             // Settings row and a place for it in MenuPlaces, so the catalogue is
             // one larger because a place really was added.
             //
+            // 123 -> 124 (2026-10-23, #749): `settings.all-features` is the
+            // phone's own "All features and abilities" row
+            // (SettingsScreen.kt, item "all-features"; the registry's Section
+            // is phone-only, like the other phone rows). It is never hideable
+            // - it is the map of where every other control lives - and it
+            // opens a real screen, so it has a place in MenuPlaces and a row
+            // here. The catalogue is one larger because a real place was
+            // added.
+            //
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 123 menus has all of its names searched for.
+            // of the 124 menus has all of its names searched for.
             "the catalogue must still carry the names at all",
-            123,
+            124,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

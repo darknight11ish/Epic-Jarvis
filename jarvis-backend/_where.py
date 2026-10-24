@@ -788,6 +788,19 @@ SHIPPED = (
     "static/animal-shared.js",
     "static/hud-layout.js",
     "static/hud-layout-store.js",
+    # PWA Slice 2 (2026-10-23): the browser bridge the HUD page loads with a
+    # <script src>. It ships with the page's other files and lands flattened
+    # beside jarvis_hud.py, which serves it at /hud-web-bridge.js.
+    "static/hud-web-bridge.js",
+    # PWA Slice 3b (2026-10-23): the manifest the page head links, the
+    # service worker the bridge registers in a secure context, and the
+    # home-screen icons the manifest names. Served beside jarvis_hud.py
+    # like the files above.
+    "static/manifest.webmanifest",
+    "static/sw.js",
+    "static/jarvis-180.png",
+    "static/jarvis-192.png",
+    "static/jarvis-512.png",
     # --- the five the base already carried but SHIPPED did not list (2026-10-07) ---
     # Found by comparing a working backend against this list: all five were
     # already IN jarvis-backend/, and a SHIPPED module imports each of them, but

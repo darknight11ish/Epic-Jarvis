@@ -62,7 +62,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "what is the weather today",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -117,7 +117,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Check a prompt before you send it",
-        "screen_path": "desktop Settings: prompt-coach; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: prompt-coach; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -170,7 +170,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "start listening",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -223,7 +223,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Say \"Hey Jarvis\"",
-        "screen_path": "desktop Settings: voice; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: voice; phone: All features and abilities"
       },
       "command": {
         "status": "planned",
@@ -276,7 +276,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Jarvis reads its answers aloud",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "planned",
@@ -329,7 +329,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Short answers to spoken questions",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "planned",
@@ -382,7 +382,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Teach Jarvis your voice",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -435,7 +435,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on How strict the voice check is",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -500,7 +500,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "set the built-in voice to am puck",
-        "screen_path": "desktop Settings: voices; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: voices; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -568,7 +568,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "from now on be brief",
-        "screen_path": "desktop Settings: manner; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: manner; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -627,7 +627,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Write like me",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -684,7 +684,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Interrupt Jarvis while it talks",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -735,7 +735,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Jarvis Live",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -786,7 +786,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on The extras around Live",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -839,7 +839,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Talk-to-type",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -943,7 +943,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "start a temporary chat",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -994,7 +994,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Search what was said",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1049,7 +1049,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on The morning briefing",
-        "screen_path": "desktop Settings: briefing-settings; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: briefing-settings; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -1102,7 +1102,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "what is coming up",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1153,7 +1153,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Today",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1204,7 +1204,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Widgets you describe",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1255,7 +1255,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Background jobs",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1306,7 +1306,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What Jarvis is doing right now",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1370,7 +1370,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "speak up 3 times a day",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -1425,7 +1425,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "focus for 25 minutes",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1476,7 +1476,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on The Memory tab",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1529,7 +1529,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on background learning",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -1582,7 +1582,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Facts waiting for your yes",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -1636,7 +1636,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What Jarvis knows about you",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1687,7 +1687,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on People and things",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1738,7 +1738,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Person dossier",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1789,7 +1789,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Always keep in mind",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1840,7 +1840,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Between us",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -1890,7 +1890,7 @@
         "search": [
           "topics"
         ],
-        "found": false
+        "found": true
       },
       "status": "planned",
       "owner": "voiceprint-wiring",
@@ -1898,7 +1898,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "stop using my work topic",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -1954,7 +1954,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on background learning",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -2016,7 +2016,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on The wiki Jarvis builds",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2067,7 +2067,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Deep questions",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2118,7 +2118,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What did I believe on this date?",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2169,7 +2169,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Bring in old chats",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2222,7 +2222,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on chat history",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -2282,7 +2282,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Chat tags",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2333,7 +2333,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "forget what you learned last week",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2384,7 +2384,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Galaxy",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2439,7 +2439,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Read the words in a recording or video",
-        "screen_path": "desktop Settings: media-index; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: media-index; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -2496,7 +2496,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Look at this",
-        "screen_path": "desktop Settings: screen-look; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: screen-look; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -2553,7 +2553,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Watch with me",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2608,7 +2608,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Picture mode",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -2663,7 +2663,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Photo to reminder",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2714,7 +2714,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Show Jarvis the camera in Live",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2765,7 +2765,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Quiz me on a text",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2820,7 +2820,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Ask for a picture, and keep it",
-        "screen_path": "desktop Settings: pictures; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: pictures; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -2873,7 +2873,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on My study decks",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2924,7 +2924,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Write a note for you",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -2977,7 +2977,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Folders Jarvis may look in",
-        "screen_path": "desktop Settings: folders; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: folders; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -3030,7 +3030,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Ask about a PDF, a Word file or a Notion page",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3081,7 +3081,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Tutorials and the FAQ",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3134,7 +3134,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "why is my pc slow",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3197,7 +3197,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "switch web search to exa",
-        "screen_path": "desktop Settings: web-search; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: web-search; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -3258,7 +3258,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on A browser without a window",
-        "screen_path": "desktop Settings: browser-engine; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: browser-engine; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -3311,7 +3311,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What's new on GitHub",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3362,7 +3362,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "Jarvis, what is Talk to a chatbot for me",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3413,7 +3413,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "Jarvis, what is Deal with customer support for me",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3464,7 +3464,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Projects",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3515,7 +3515,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Goals",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3566,7 +3566,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Progress",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3619,7 +3619,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Spending summaries",
-        "screen_path": "desktop Settings: spending; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: spending; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -3670,7 +3670,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "run a retirement what-if",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -3774,7 +3774,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Health and money facts wait for your yes",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -3826,7 +3826,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Crisis help",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -3878,7 +3878,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Ask how the house is",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "planned",
@@ -3939,7 +3939,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on lights without asking",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -3994,7 +3994,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Locks, doors, alarms and covers",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -4054,7 +4054,7 @@
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
         "example_phrase": "stop asking before my calendar",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -4132,7 +4132,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "keep the animal still",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -4196,7 +4196,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "stop asking before reading my email",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -4255,7 +4255,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Send an email for you",
-        "screen_path": "desktop Settings: email-sending; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: email-sending; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -4306,7 +4306,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Save a draft to your Drafts folder",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -4357,7 +4357,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Tidy the inbox by voice",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -4408,7 +4408,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on News headlines, and pages that change",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -4570,7 +4570,7 @@
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
         "example_phrase": "turn on Let Jarvis read phone notifications",
-        "screen_path": "desktop Settings: phone-notify; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: phone-notify; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -4627,7 +4627,7 @@
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
         "example_phrase": "turn on Smartwatch notifications",
-        "screen_path": "desktop Settings: watch-notify; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: watch-notify; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -4839,7 +4839,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Also on my phone",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -4890,7 +4890,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "ring my phone",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -4941,7 +4941,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What the phone deliberately does not do",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -5047,7 +5047,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Hang and crash notes",
-        "screen_path": "desktop Settings: crash-notes; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: crash-notes; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -5172,7 +5172,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "keep the animal still",
-        "screen_path": "desktop Settings: animal-options; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: animal-options; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -5229,7 +5229,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Set up Jarvis",
-        "screen_path": "desktop Settings: first-run; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: first-run; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -5282,7 +5282,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on First-time setup questionnaire",
-        "screen_path": "desktop Settings: setup-questionnaire; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: setup-questionnaire; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -5342,7 +5342,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "hide the brain menu",
-        "screen_path": "desktop Settings: menu-visibility; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: menu-visibility; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -5448,7 +5448,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Models",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -5499,7 +5499,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Compute",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -5550,7 +5550,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Skills",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -5601,7 +5601,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Memory on the Model page",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -5660,7 +5660,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on alarm sounds",
-        "screen_path": "desktop Settings: notifications; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: notifications; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -5770,7 +5770,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on The Work tab",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -5821,7 +5821,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Jobs that keep going after the chat ends",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -5874,7 +5874,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Hardware and models",
-        "screen_path": "desktop Settings: hardware; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: hardware; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -5934,7 +5934,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "set the focus preset to fast",
-        "screen_path": "desktop Settings: focus-presets; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: focus-presets; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -5995,7 +5995,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on one bigger model on both cards",
-        "screen_path": "desktop Settings: second-card; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: second-card; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -6025,7 +6025,8 @@
         "setting_keys": [
           "big_model",
           "big_model_wiki",
-          "big_model_deep_questions"
+          "big_model_deep_questions",
+          "big_coder"
         ],
         "turn_on": "turn on the big model",
         "turn_off": "turn off the big model",
@@ -6056,7 +6057,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on the big model",
-        "screen_path": "desktop Settings: big-model; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: big-model; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -6067,6 +6068,7 @@
         "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
       "own_keys": [
+        "big_coder",
         "big_model",
         "big_model_deep_questions",
         "big_model_wiki"
@@ -6113,7 +6115,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Updates",
-        "screen_path": "desktop Settings: updates; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: updates; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -6272,7 +6274,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on What this backend supports",
-        "screen_path": "desktop Settings: backend-supports; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: backend-supports; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -6325,7 +6327,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on About Jarvis",
-        "screen_path": "desktop Settings: about; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: about; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -6431,7 +6433,7 @@
       "label": "Settings-Only (By Design — Security Boundary)",
       "label_evidence": {
         "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop Settings: backup; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: backup; phone: All features and abilities"
       },
       "command": {
         "status": "open-only",
@@ -6544,7 +6546,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "let the ai model read my calendar",
-        "screen_path": "desktop Settings: reach; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: reach; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -6597,7 +6599,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "undo that",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -6648,7 +6650,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Activity: cards you already decided",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -6714,7 +6716,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "speak up 3 times a day",
-        "screen_path": "desktop Settings: limits; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: limits; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -6769,7 +6771,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Change a setting by asking, in any words",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -6820,7 +6822,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Start the local model when it is not running",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -6871,7 +6873,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Jarvis starts the local model again by itself when it dies",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -6924,7 +6926,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Clipboard history, and three one-press cleanups for what you copy",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -6975,7 +6977,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on File history",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -7035,7 +7037,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "show the whole approval card",
-        "screen_path": "desktop Settings: approval-cards; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: approval-cards; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -7100,7 +7102,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "stop asking before my calendar",
-        "screen_path": "desktop Settings: asks-first; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: asks-first; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -7236,7 +7238,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "set the captcha hand-off to patient",
-        "screen_path": "desktop Settings: handoff, handoff-front; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: handoff, handoff-front; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -7293,7 +7295,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on When the connection is catching up",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -7345,7 +7347,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Stop everything",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -7397,7 +7399,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Trust: content risk and the audit chain",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -7449,7 +7451,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on A warning when text tried to rush you",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -7501,7 +7503,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Jarvis marks what it read from outside",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -7553,7 +7555,7 @@
       "label": "Always On (Core Safety Rule — Cannot Be Turned Off)",
       "label_evidence": {
         "example_phrase": "turn on Settings itself",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities (planned)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities",
         "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch"
       },
       "command": {
@@ -7609,7 +7611,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Small Python scripts for sums and averages",
-        "screen_path": "desktop Settings: sandbox; phone: All features and abilities (planned)"
+        "screen_path": "desktop Settings: sandbox; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -9134,6 +9136,19 @@
       "where": "settings",
       "in_desktop_settings": true,
       "in_phone_settings": false
+    },
+    {
+      "id": "all-features",
+      "names": [
+        "all features and abilities",
+        "all features",
+        "abilities and commands",
+        "the feature directory"
+      ],
+      "app": "phone",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": true
     }
   ],
   "known_gaps": [

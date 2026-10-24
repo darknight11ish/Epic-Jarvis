@@ -449,6 +449,36 @@ object SettingsSearch {
             source = JUMP + listOf("net/SetupQuestionnaire.kt"),
         ),
         Row(
+            // "All features and abilities" (2026-10-22): the phone directory of
+            // the 139 features, in the PC's five labels (FeatureDirectory.kt is
+            // GENERATED from contract/feature-controls.json by
+            // jarvis-client/tools/gen_feature_directory.py).
+            key = "all-features", title = "All features and abilities",
+            label = "All features; abilities; what can Jarvis do; feature list; " +
+                "typed commands; switches; safety rules; where to change a setting; " +
+                // The BOOL_SETTINGS names that have no Settings row of their own
+                // on the phone: Brain (memory/history), a plate, or the PC. The
+                // directory says where each one lives, so typing its name finds
+                // that answer instead of "Nothing here matches that" (2026-10-22).
+                "background learning; sensitive topics; ask before every search; " +
+                "sandbox; media index; searchable recordings; pictures; briefing " +
+                "senders; big coder; big model; alarm sounds; reminder sounds; " +
+                "briefing notification; handoff notification; quiet hours; voice " +
+                "follows the face; better voice; write like me; second card; " +
+                // The phone-owned gaps: browser-engine and the notification rows.
+                "browser without a window; windowless browser; Obscura; browser " +
+                "engine; phone notifications; smartwatch notifications; watch " +
+                "notifications; notifications on a watch",
+            quotes = listOf(
+                "All features and abilities",
+                "Every feature Jarvis knows about, in the PC's own words.",
+            ),
+            // The quotes live in the plate; PLATES is the plates' folder and the
+            // source list is relative to it, so the folder prefix is not itself
+            // an entry.
+            source = listOf(PLATES + "FeatureDirectoryPlate.kt"),
+        ),
+        Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
             label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),
             source = SCREEN,
