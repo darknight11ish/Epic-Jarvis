@@ -1810,21 +1810,23 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             # Slice G: auth is the same gate as every Live request, checked
             # first. While the switch is OFF the frozen 501 stub answers and no
             # frame is ever read; while it is ON the socket is handed to the
-            # minimal RFC 6455 transport (jarvis_live_stream), which refuses
-            # every turn with a plain sentence until the speech hand-off slice
-            # sets _STREAM_SINK.
+            # minimal RFC 6455 transport (jarvis_live_stream), and `end_turn`
+            # runs one whole turn (jarvis_live_turn: hear -> the PC's own chat
+            # route -> say). `_STREAM_SINK` stays a test/override seam.
             if not _allowed(self):
                 return None
             if not stream_enabled():
                 return self._send(*stream_stub())
             try:
                 import jarvis_live_stream
+                import jarvis_live_turn
             except Exception:
                 return self._send(501, {"ok": False, "available": False,
                                         "enabled": True, "stream": "not_built",
                                         "error": STREAM_NOT_BUILT_REASON})
             try:
-                jarvis_live_stream.serve(self, engine=ENGINE, sink=_STREAM_SINK)
+                jarvis_live_stream.serve(self, engine=ENGINE,
+                                         sink=_STREAM_SINK or jarvis_live_turn.turn)
             except Exception as exc:
                 try:
                     self._send(503, {"ok": False, "available": False,

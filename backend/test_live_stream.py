@@ -29,6 +29,8 @@ is the next slice and is NOT claimed here.
 from __future__ import annotations
 
 import base64
+import io
+import wave
 import json
 import os
 import socket
@@ -229,15 +231,26 @@ def audio(s, epoch, seq, pcm_len=2048, byte=0x00):
 class Sink:
     def __init__(self, *, speech=((b"\x01\x00" * 1024),), ok=True):
         self.wavs = []
+        self.calls = []
         self.speech = speech
         self.ok = ok
 
-    def __call__(self, wav: bytes):
+    def __call__(self, wav: bytes, ctx=None):
         self.wavs.append(wav)
+        self.calls.append(dict(ctx or {}))
         if not self.ok:
             return {"ok": False, "why": L.STREAM_NOT_BUILT_REASON}
         return {"ok": True, "speech": list(self.speech)}
 
+
+def make_wav(pcm: bytes, rate: int = S.SAMPLE_RATE) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(bytes(pcm))
+    return buf.getvalue()
 
 # ---------------------------------------------------------------- checks ----
 
@@ -305,6 +318,10 @@ def t_handshake_ready_and_one_turn_end_to_end():
         check("the sink received ONE complete WAV of the ring",
               len(sink.wavs) == 1 and sink.wavs[0].startswith(b"RIFF")
               and sink.wavs[0][8:12] == b"WAVE", sink.wavs[:1])
+        check("the sink is handed the request facts the turn needs (token, port, device)",
+              len(sink.calls) == 1 and sink.calls[0].get("token") == TOKEN
+              and int(sink.calls[0].get("port") or 0) == srv.port
+              and sink.calls[0].get("device") == "phone", sink.calls[:1])
         start = recv_json(s)
         op, payload = recv_frame(s)
         end = recv_json(s)
@@ -399,18 +416,73 @@ def t_control_before_hello_and_bad_session_are_refused():
         srv.close()
 
 
-def t_unwired_sink_refuses_the_turn_honestly():
-    srv = Server(switch=True, sink="none")
+def t_a_turn_that_cannot_run_is_refused_not_faked():
+    srv = Server(switch=True, sink=Sink(ok=False))
     try:
         s, _, _ = ws_connect(srv.port)
         epoch = int(hello(s)["epoch"])
         audio(s, epoch, 1)
         send_json(s, {"t": "end_turn"})
+        msg = recv_json(s)
+        check("a turn whose steps cannot run is refused, not faked",
+              msg.get("t") == "refused" and "not built" in str(msg.get("why")), msg)
+        send_json(s, {"t": "bye"})
         bye = recv_json(s)
-        check("with no speech hand-off wired, a turn is refused, not faked",
-              bye.get("t") == "bye" and "not built" in str(bye.get("why")), bye)
+        check("... and the stream is still usable afterwards",
+              bye.get("t") == "bye", bye)
         s.close()
     finally:
+        srv.close()
+
+
+def t_the_real_turn_path_is_wired_end_to_end():
+    """The adapter uses jarvis_live_turn.turn; with its steps stubbed, a real
+    stream produces real speech frames (no model, no voice check, no TTS)."""
+    import jarvis_live_turn as T
+
+    class Heard:
+        def as_dict(self):
+            return {"is_owner": True, "text": "what time is it"}
+
+    seen = {}
+
+    def fake_hear(wav):
+        return Heard()
+
+    def fake_chat(text, *, token, port):
+        seen["text"], seen["token"], seen["port"] = text, token, int(port)
+        return {"ok": True, "text": "It is nine o'clock."}
+
+    pcm = b"\x07\x00" * 1024
+    def fake_say(text):
+        return make_wav(pcm)
+
+    old = (T.HEAR, T.CHAT, T.SAY)
+    T.HEAR, T.CHAT, T.SAY = fake_hear, fake_chat, fake_say
+    srv = Server(switch=True, sink="unset")
+    try:
+        s, _, _ = ws_connect(srv.port)
+        epoch = int(hello(s)["epoch"])
+        audio(s, epoch, 1)
+        send_json(s, {"t": "end_turn"})
+        started = recv_json(s)
+        speech = recv_json(s)
+        op, payload = recv_frame(s)
+        ended = recv_json(s)
+        n, pos = S.get_varint(payload)
+        check("the wired turn answers as speech frames on the socket",
+              started.get("t") == "turn_started" and speech.get("t") == "speech_start"
+              and op == 0x2 and n == len(pcm)
+              and payload[pos:] == pcm and ended.get("t") == "speech_end",
+              (started, speech, op, ended))
+        check("the turn asked the PC's own chat with the phone's token and port",
+              seen.get("text") == "what time is it" and seen.get("token") == TOKEN
+              and seen.get("port") == srv.port, seen)
+        send_json(s, {"t": "bye"})
+        recv_json(s)
+        s.close()
+    finally:
+        T.HEAR, T.CHAT, T.SAY = old
         srv.close()
 
 

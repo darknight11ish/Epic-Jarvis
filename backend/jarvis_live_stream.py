@@ -360,10 +360,12 @@ def serve(handler, *, engine=None, sink=None,
     handshake, and nothing is written anywhere except the socket.
 
     `engine` is the live session engine (duck-typed: `accepts(device)` and
-    `status()`); `sink(wav_bytes) -> dict` performs one turn and is injected so
-    this transport can be tested without speech models. Until the hand-off
-    slice wires a real sink, `sink=None` refuses every turn in plain words.
-    """
+    `status()`); `sink(wav_bytes, ctx) -> dict` performs one turn and is
+    injected so this transport can be tested without speech models. `ctx`
+    carries the request facts the turn needs - the token the stream arrived
+    with (for the PC's own loopback chat call), this server's port and the
+    device name - and is never logged. `sink=None` refuses every turn in plain
+    words."""
     try:
         accept = handshake_headers(handler.headers)
     except StreamRefused as exc:
@@ -377,6 +379,12 @@ def serve(handler, *, engine=None, sink=None,
     write_handshake(handler, accept)
     sock = handler.connection
     state = StreamState()
+    device = ""
+    token = str(handler.headers.get("X-Jarvis-Token") or "")
+    try:
+        port = int((handler.server.server_address or (None, 0))[1])
+    except Exception:
+        port = 0
     try:
         sock.settimeout(idle_timeout)
         while not state.ended:
@@ -439,7 +447,8 @@ def serve(handler, *, engine=None, sink=None,
                         break
                     wav = state.end_turn()
                     try:
-                        out = sink(wav) or {}
+                        out = sink(wav, {"token": token, "port": port,
+                                         "device": device}) or {}
                     except StreamRefused as exc:
                         write_json(sock, {"t": "refused", "why": WORDS[exc.why]})
                         continue
