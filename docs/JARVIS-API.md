@@ -6933,8 +6933,8 @@ asks or remembers - only how it phrases things." `backend/jarvis_manner.py`,
 
 | Route | What |
 |---|---|
-| `GET /api/manner` | `{"available": true, "manner": "warm"\|"plain", "default": "warm", "title", "detail", "spoken", "choices": [{"id", "label", "why"}], "humor": bool, "humor_default": false, "humor_title", "humor_detail"}` - the words both apps show. `humor` is §27.5's own switch, added 2026-09-27. |
-| `POST /api/manner` | `{"manner": "warm"\|"plain"}` and/or `{"humor": true\|false}` - either key alone, or both together, in one request; at once, 200 `{"ok": true, "said", ...view}` (`said` names whichever changed, both if both did). **No approval card either way**: it does not trust, show or send anything more. An empty body, an unknown key, or a bad value for a key that IS present is 400. Sending only `"manner"` never resets `"humor"`, and only `"humor"` never resets `"manner"` - the route reads the file, changes just the key(s) sent, and writes it back. Both apps hold it on a stale link like every change. |
+| `GET /api/manner` | `{"available": true, "manner": "warm"\|"plain", "default": "warm", "title", "detail", "spoken", "choices": [{"id", "label", "why"}], "humor": bool, "humor_default": false, "humor_title", "humor_detail"}` - the words both apps show. `humor` is §27.5's own switch, added 2026-09-27. Since 2026-10-23 it also carries the personality presets (§27.7): `personality`, `personalities`, `dials`, `voice_sync`, `custom_personalities`, plus the long legacy aliases `sync_voice_with_personality` and `user_personalities`. |
+| `POST /api/manner` | `{"manner": "warm"\|"plain"}` and/or `{"humor": true\|false}` - either key alone, or both together, in one request; at once, 200 `{"ok": true, "said", ...view}` (`said` names whichever changed, both if both did). **No approval card either way**: it does not trust, show or send anything more. An empty body, an unknown key, or a bad value for a key that IS present is 400. Sending only `"manner"` never resets `"humor"`, and only `"humor"` never resets `"manner"` - the route reads the file, changes just the key(s) sent, and writes it back. Both apps hold it on a stale link like every change. Since 2026-10-23 the same route also accepts `personality`, `dials`, `voice_sync` (or `sync_voice_with_personality`), `custom_personality`, and `{"custom": {"op": "save"\|"delete", ...}}` - all cardless; see §27.7. |
 
 Without `jarvis_manner.py` the routes answer 503 `{"available": false}` and
 answers are worded as before.
@@ -7048,6 +7048,73 @@ reads the file, changes only the key(s) sent, and writes it back).
   Ollama without `run_local_turn`, so it gets no manner line, and no humour
   clause either - the same gap the spoken-style note has.
 - The big model's deep questions and the wiki builder do not use it.
+
+### 27.7 Personality presets and tuning dials (added 2026-10-23)
+
+The owner's decision of 2026-10-22: Jarvis can slip into one of **eight
+personalities** - `warm_peer` (Warm Collaborator, the default), `classic_butler`,
+`tactical_ops`, `dry_wit`, `friday_partner`, `socratic_mentor`,
+`devils_advocate`, `calm_stoic` - with **four tuning dials** (`humor` 0-3,
+`brevity` concise/balanced/thorough, `formality` casual/warm_peer/formal_butler/
+tactical, `address` first_name/sir/ma'am/boss/captain/none), plus up to **20
+"My Personalities"** presets. It is wording and voice only, exactly like manner:
+it changes no rule, no card, no tier, no memory and nothing that is sent
+anywhere, and the legacy words `warm` and `plain` still work (they map to
+`warm_peer` and `tactical_ops`).
+
+**GET** extends the §27.1 payload with:
+
+| Field | Shape |
+|---|---|
+| `personality` | the active preset id (`"classic_butler"`) |
+| `personalities` | the eight built-ins + saved ones: `{"id", "title", "description", "switch_ack", "greeting_subtitle", "quote", "voice_blend", "voice_speed", "voice": {"blend", "fallback", "speed"}, "dials": {"humor", "brevity", "formality", "address"}, "builtin"}` |
+| `dials` | the active preset's four dials with any saved overrides applied |
+| `voice_sync` | bool - whether switching a personality also switches the spoken voice (default true) |
+| `custom_personalities` | saved presets, in the full shape a Duplicate needs: `{"id", "name", "line", "example", "example_user", "example_jarvis", "dials", "based_on", "voice_spec", "voice_speed"}`. The `id` is whatever the panel/caller chose (`mine-...`) or a generated `custom-...`; use and delete accept it as-is. |
+
+The long names `sync_voice_with_personality` and `user_personalities` are kept
+as aliases of `voice_sync` / `custom_personalities`, and `personality_default`,
+`dial_choices`, `max_user_personalities` and `reflex_kinds` are informational.
+
+**POST** accepts, all **cardless** (`0` approval cards, `< 5 ms`, no model):
+
+- `{"personality": "<id or alias>"}` - switches preset; `said` is the preset's
+  in-character `switch_ack` ("Very good, sir. Classic British Butler protocols
+  are online and at your service."). `"talk to me like TARS"`, "switch to
+  F.R.I.D.A.Y. mode" and the other natural phrasings go through
+  `jarvis_quick.match()` to this same write.
+- `{"dials": {"humor": 2, "brevity": "concise", ...}}` or
+  `{"dial": {"name": ..., "value": ...}}` - one or several dials.
+- `{"voice_sync": true|false}` (alias `sync_voice_with_personality`).
+- `{"custom_personality": {"name", "base_preset", "custom_trait",
+  "example_user", "example_jarvis", "dials"}}` - save a "My Personalities"
+  preset; `{"delete_personality": id, "confirm": true}` deletes one (no
+  confirm asks first). The panel's own shape
+  `{"custom": {"op": "save", "name", "line", "example", "dials", "based_on"}}`
+  and `{"custom": {"op": "delete", "id", "confirm": true}}` are accepted too.
+  Every user-written field, **including the name**, is stripped of SecAlign
+  markers, refused if it tries to change Jarvis's instructions, and scrubbed of
+  secrets before it is stored; the name is capped at 60 characters and the
+  other fields at 240, with at most 20 saved presets.
+
+What it changes in a turn, and only this: the local model's request gets the
+active preset's compact `<jarvis_persona>` block (measured at <= 721 characters
+worst case, under the 750-character ~180-token cap) plus a one-line recency
+hint just before the newest question; the block's spoken-live variant keeps
+`Jarvis Live` answers to 1-3 sentences with no Markdown; a **crisis turn
+replaces the whole persona block with the calm support text**, so no preset can
+joke or criticise through a difficult moment; the #492 sensitive-fact line
+stays exactly `"It's on your screen."`; and the quick (0 ms) confirmations -
+timer, reminder, done, stopped, muted, walk brain-dump - answer in the active
+preset's own words. Kokoro voice/speed follow a chosen preset unless the owner
+turns voice sync off.
+
+Known gaps, said plainly (2026-10-23): **`jarvis_live.py` does not yet inject
+the persona block or switch personality mid-session**; the weighted Kokoro
+style-vector blend resolver exists and is tested but the TTS path still uses
+the preset's fallback voice (sherpa-onnx takes one voices file per engine);
+real voice playback, a real Live session and PC latency are NOT-TESTABLE in
+this repository.
 
 ## 28. Stop everything (added 2026-09-25)
 

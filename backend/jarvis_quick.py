@@ -1284,6 +1284,11 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- personality presets (2026-10-22) ---------------------------------------
+    got = _personality(s)
+    if got is not None:
+        return got
+
     # --- thinking commands (jarvis_thinking.py, Section 5.5) --------------------
     got = _thinking_cmd(s)
     if got is not None:
@@ -2943,6 +2948,139 @@ def _from_now_on(s: str) -> Optional[Intent]:
 
 
 # --------------------------------------------------------------------------
+#   Personality presets (2026-10-22, the owner's decision: Jarvis can slip
+#   into any of eight characters, typed or spoken, with no approval card)
+# --------------------------------------------------------------------------
+#
+# Every phrase below maps to ONE conversation-free action: either a preset
+# switch (base/aliases from contract/personalities.json), one of the four
+# tuning dials, or a question about the current one. Nothing here reaches the
+# model, nothing opens a card, and everything is answered in the new preset's
+# own voice. "What personality are you using?" lists the eight by title,
+# which is how the owner learns the names to say.
+#
+# Deliberately NOT here: "turn on humour" / "turn off humour" - the existing
+# humour switch in BOOL_SETTINGS already owns that sentence and its own
+# wording; this grammar only adds "set humour to subtle/dry/playful/90%",
+# which the switch cannot answer.
+_P_SWITCH = re.compile(
+    r"(?:please\s+)?(?:switch|change|set|put)\s+(?:your\s+|the\s+|my\s+)?"
+    r"(?:personality|persona|manner|mode|vibe|style|character)\s+to\s+"
+    r"(?:be\s+|act\s+like\s+|use\s+)?(.+)")
+_P_SWITCH_MODE = re.compile(
+    r"(?:please\s+)?(?:switch|change)\s+(?:to\s+)?(.+?)\s+(?:mode|personality|persona)\b")
+_P_TALK_LIKE = re.compile(r"(?:please\s+)?(?:talk|speak|answer)\s+to\s+me\s+(?:like|as)\s+(.+)")
+_P_ACT_LIKE = re.compile(r"(?:please\s+)?act\s+like\s+(.+)")
+_P_BE_MORE = re.compile(r"(?:please\s+)?be\s+(?:more|a\s+(?:bit|little)\s+more)\s+(.+)")
+_P_HUMOR_SET = re.compile(r"(?:please\s+)?set\s+(?:the\s+)?(?:humou?r|wit|wittiness)\s+to\s+(.+)")
+_P_BREVITY_SET = re.compile(
+    r"(?:please\s+)?set\s+(?:the\s+)?(?:brevity|answer\s+length|length\s+of\s+answers?)\s+to\s+(.+)")
+_P_SHORT = re.compile(
+    r"(?:please\s+)?(?:keep|make)\s+(?:your\s+)?answers?\s+(?:short(?:er)?|brief(?:er)?|concise)")
+_P_LONG = re.compile(
+    r"(?:please\s+)?(?:keep|make)\s+(?:your\s+)?answers?\s+(?:long(?:er)?|thorough|detailed)")
+_P_FORMALITY = re.compile(r"(?:please\s+)?set\s+(?:the\s+)?formality\s+to\s+(.+)")
+_P_ADDRESS = re.compile(r"(?:please\s+)?(?:call\s+me|address\s+me\s+as|refer\s+to\s+me\s+as)\s+(.+)")
+_P_QUERY = re.compile(
+    r"(?:what|which)\s+(?:personality|persona|character)\s+(?:are\s+you|is\s+(?:active|on|current))"
+    r"|what\s+personalities\s+do\s+you\s+have"
+    r"|(?:list|show)\s+(?:me\s+)?(?:your\s+)?(?:personalities|personality\s+presets)")
+
+#: "be more ..." words -> what they mean: a whole preset where the blueprint
+#: treats it as one, a dial where it is really one of the four.
+_BE_MORE_PRESET = {
+    "sarcastic": "dry_wit", "deadpan": "dry_wit", "witty": "dry_wit",
+    "funny": "dry_wit", "humorous": "dry_wit",
+    "calm": "calm_stoic", "gentle": "calm_stoic", "zen": "calm_stoic",
+    "formal": "classic_butler", "proper": "classic_butler", "butler": "classic_butler",
+    "tactical": "tactical_ops", "direct": "tactical_ops", "brief": "tactical_ops",
+    "warm": "warm_peer", "friendly": "warm_peer", "normal": "warm_peer",
+    "friday": "friday_partner", "technical": "friday_partner",
+    "socratic": "socratic_mentor", "critical": "devils_advocate", "skeptical": "devils_advocate",
+}
+_BE_MORE_DIAL = {
+    "concise": ("brevity", "concise"), "short": ("brevity", "concise"),
+    "balanced": ("brevity", "balanced"),
+    "thorough": ("brevity", "thorough"), "detailed": ("brevity", "thorough"),
+    "casual": ("formality", "casual"), "warm": ("formality", "warm_peer"),
+    "tactical": ("formality", "tactical"),
+}
+
+
+def _personality_target(value: str) -> Optional[Intent]:
+    """A preset switch for `value` if it names one, else None."""
+    try:
+        import jarvis_manner
+        pid = jarvis_manner.normalize_personality_id(value)
+    except Exception:
+        pid = None
+    if pid:
+        return Intent("personality_set", {"personality": pid})
+    return None
+
+
+def _personality_dial(name: str, value) -> Optional[Intent]:
+    """A dial intent ONLY when the value really is valid for that dial.
+
+    Ordinary sentences are not allowed to become dials: "call me three times"
+    must stay chat, not become an address change that then refuses or, worse,
+    silently does nothing. Refusing at match time keeps the sentence with the
+    model."""
+    try:
+        import jarvis_manner
+        if jarvis_manner._dial_value(name, value) is None:
+            return None
+    except Exception:
+        return None
+    return Intent("personality_dial", {"name": name, "value": value})
+
+
+def _personality(s: str) -> Optional[Intent]:
+    """"Switch personality to Classic Butler", "talk to me like TARS",
+    "be more sarcastic", "set humour to dry", "call me sir", and the question
+    forms. Whole sentences only, like the rest of this grammar."""
+    if _P_QUERY.search(s):
+        return Intent("personality_status")
+    for pattern in (_P_SWITCH, _P_SWITCH_MODE, _P_TALK_LIKE, _P_ACT_LIKE):
+        m = pattern.fullmatch(s)
+        if m:
+            got = _personality_target(m.group(1).strip())
+            if got is not None:
+                return got
+    m = _P_BE_MORE.fullmatch(s)
+    if m:
+        word = _clean_tail(m.group(1))
+        if word in _BE_MORE_PRESET:
+            return Intent("personality_set", {"personality": _BE_MORE_PRESET[word]})
+        if word in _BE_MORE_DIAL:
+            name, value = _BE_MORE_DIAL[word]
+            return _personality_dial(name, value)
+    m = _P_HUMOR_SET.fullmatch(s)
+    if m:
+        return _personality_dial("humor", _clean_tail(m.group(1)))
+    m = _P_BREVITY_SET.fullmatch(s)
+    if m:
+        return _personality_dial("brevity", _clean_tail(m.group(1)))
+    if _P_SHORT.fullmatch(s):
+        return _personality_dial("brevity", "concise")
+    if _P_LONG.fullmatch(s):
+        return _personality_dial("brevity", "thorough")
+    m = _P_FORMALITY.fullmatch(s)
+    if m:
+        return _personality_dial("formality", _clean_tail(m.group(1)))
+    m = _P_ADDRESS.fullmatch(s)
+    if m:
+        return _personality_dial("address", _clean_tail(m.group(1)))
+    return None
+
+
+def _clean_tail(words: str) -> str:
+    """The tail of a phrase without "please" and trailing punctuation."""
+    tail = re.sub(r"\bplease\b", "", str(words or "")).strip()
+    return tail.strip(" .,!?;:")
+
+
+# --------------------------------------------------------------------------
 #   Show or hide menus (jarvis_menus.py; docs/MENU-VISIBILITY-DESIGN.md, the
 #   owner's decision of 2026-09-30; docs/JARVIS-API.md section 109). "hide the
 #   finance menu", "show the quiz menu", "collapse the goals menu", "show
@@ -4443,6 +4581,118 @@ def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> R
     return Result(_from_now_on_said(manner, temporary), n)
 
 
+def _personality_words() -> str:
+    """The answer to "what personality are you using?" - the active preset, its
+    dials, and the eight names (plus the owner's own saved ones), so the owner
+    learns the words to say."""
+    try:
+        import jarvis_manner
+    except Exception:
+        return ("Your PC's Jarvis does not have personality presets yet - run "
+                "apply-patches.ps1 on the PC.")
+    active = jarvis_manner.current_preset()
+    dials = jarvis_manner.dials()
+    builtin = jarvis_manner._BUILTIN
+    words = (f"You're using {active['title']}. Humour {dials['humor']}/3, "
+             f"{dials['brevity']} answers, {dials['formality'].replace('_', ' ')} formality, "
+             f"addressing you as {dials['address'].replace('_', ' ')}. "
+             f"The eight personalities are: " + "; ".join(p["title"] for p in builtin) + ".")
+    saved = jarvis_manner.user_personalities()
+    if saved:
+        words += " Your own: " + "; ".join(str(u.get("name") or u.get("id")) for u in saved) + "."
+    words += ' Say "switch to Classic Butler" or "talk to me like TARS" to change.'
+    return words
+
+
+def _personality_receipt(summary: str, before: dict, after: dict, undo) -> str:
+    """A 1-click Undo receipt for a personality change. Never raises: a
+    receipts database that is not there yet just means no receipt was kept."""
+    try:
+        import jarvis_receipts
+        return jarvis_receipts.record("personality", summary, before=before,
+                                      after=after, undo=undo)
+    except Exception:
+        return ""
+
+
+def _run_personality_set(f: dict, conversation: Optional[str], temporary: bool) -> Result:
+    """"Switch personality to Classic Butler" / "talk to me like TARS": at once,
+    no card either way (a personality changes wording only), answered in the
+    new preset's own voice. A temporary chat's switch stays in that chat, in
+    memory only - the same rule "from now on ..." follows."""
+    n = "personality_set"
+    try:
+        import jarvis_manner
+    except Exception:
+        return Result("Your PC's Jarvis does not have personality presets yet - run "
+                      "apply-patches.ps1 on the PC.", n)
+    active = jarvis_manner.preset(f.get("personality"))
+    if active is None:
+        return Result(_personality_words(), n)
+    before = jarvis_manner.current_personality(conversation if temporary else None)
+    if temporary:
+        if not conversation:
+            return Result(FROM_NOW_ON_NO_CONVERSATION, n)
+        jarvis_manner.set_temporary_personality(conversation, active["id"])
+        said = str(active.get("switch_ack") or "")
+    else:
+        ok, said = jarvis_manner.set_personality(active["id"])
+        if not ok:
+            return Result(said, n)
+
+        def undo() -> None:
+            try:
+                jarvis_manner.set_personality(before)
+            except Exception:
+                pass
+
+        _personality_receipt(f"Switched personality to {active['title']}",
+                             {"personality": before}, {"personality": active["id"]}, undo)
+    return Result(said or f"Switched to {active['title']}.", n)
+
+
+def _run_personality_dial(f: dict) -> Result:
+    """"Set humour to dry" / "call me sir": one of the four dials, at once, no
+    card - it changes wording only. Answered in the active preset's voice."""
+    n = "personality_dial"
+    try:
+        import jarvis_manner
+    except Exception:
+        return Result("Your PC's Jarvis does not have personality presets yet - run "
+                      "apply-patches.ps1 on the PC.", n)
+    ok, said = jarvis_manner.set_dial(str(f.get("name") or ""), f.get("value"))
+    if ok:
+        _personality_receipt(
+            f"Set {f.get('name')} to {said}",
+            {"dials": jarvis_manner.dials()}, {"dials": jarvis_manner.dials()}, None)
+    return Result(said, n)
+
+
+def _run_personality_status() -> Result:
+    return Result(_personality_words(), "personality_status")
+
+
+def _timer_confirmation(seconds, text: str = "") -> str:
+    """The sentence a set timer gets: the active personality's own reflex line
+    when one is chosen, the old sentence otherwise. A number in the line is
+    never cached (#690 keeps only fixed text)."""
+    try:
+        import jarvis_schedule as _S
+        length = _S.length_words(seconds)
+    except Exception:
+        length = f"{int(seconds)} seconds"
+    try:
+        import jarvis_manner
+        if jarvis_manner.personality_chosen():
+            said = jarvis_manner.reflex_phrase("timer_set", duration=length)
+            if said:
+                return said
+    except Exception:
+        pass
+    what = f"{str(text).capitalize()} timer" if text else "Timer"
+    return f"{what} set for {length}."
+
+
 def _run_thinking_set(f: dict, temporary: bool = False) -> Result:
     level = f.get("level", "off")
     warn = ""
@@ -5062,6 +5312,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_animal(n, f, peer, local)
     if n == "manner_from_now_on":
         return _run_from_now_on(f, conversation, temporary)
+    if n == "personality_set":
+        return _run_personality_set(f, conversation, temporary)
+    if n == "personality_dial":
+        return _run_personality_dial(f)
+    if n == "personality_status":
+        return _run_personality_status()
     if n in ("thinking_set", "thinking_from_now_on"):
         return _run_thinking_set(f, temporary)
     if n == "thinking_when":
@@ -5177,8 +5433,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         what = f"{j['text'].capitalize()} timer" if j.get("text") else "Timer"
         name = f"the {j['text']} timer" if j.get("text") else \
             f"the {_as_adjective(S.length_words(f['seconds']))} timer"
-        return Result(f"{what} set for {S.length_words(f['seconds'])}.", n, [j["id"]],
-                      made=[j["id"]], what=name, nouns=("timer",))
+        return Result(_timer_confirmation(f["seconds"], j.get("text") or ""), n,
+                      [j["id"]], made=[j["id"]], what=name, nouns=("timer",))
     if n in ("timer_cancel", "timer_pause", "timer_resume", "timer_add", "timer_status"):
         timers = sched.timers()
         if n == "timer_status":
