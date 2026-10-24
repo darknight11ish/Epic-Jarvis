@@ -300,6 +300,36 @@ class EntitiesTest {
         assertTrue(Entities.asOfEntities(list, none).isEmpty())
     }
 
+    @Test
+    fun aDatesFactsAreNeverDrawnUnderAnotherDatesHeading() {
+        val week = MemoryAsOf.parseRows(
+            obj("""{"facts": [{"id": 9, "text": "a", "current": true}]}"""),
+        )!!
+        val epoch = 1_760_000_000L
+        // The rows in hand are drawn for exactly the date they were read for.
+        assertEquals(week, Entities.asOfFactsFor(epoch, week, epoch))
+        // Tapping "30d" while "7d" is on screen changes the heading at once, and
+        // the facts are a second read: the old rows must not be drawn under the
+        // new label, not even for the frame before that read starts (AND-1).
+        assertNull(Entities.asOfFactsFor(epoch - 30L * 86_400L, week, epoch))
+        // A read that fails answers no rows for its date, so nothing is drawn
+        // and the plate says why instead of showing the previous date's list.
+        assertNull(Entities.asOfFactsFor(epoch, week, null))
+        // "Now" is not an as-of date at all, and no rows is no list.
+        assertNull(Entities.asOfFactsFor(null, week, epoch))
+        assertNull(Entities.asOfFactsFor(epoch, null, epoch))
+        // And the plate really asks this rule rather than reading the raw state,
+        // so a future edit cannot quietly draw one date's rows under another's
+        // heading again while this test stays green.
+        val plate = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/EntitiesPlate.kt",
+        ).readText()
+        assertTrue(
+            "the as-of plate draws its raw row state instead of asking which date the rows belong to",
+            plate.contains("val facts = Entities.asOfFactsFor(asOfEpoch, asOfFacts, asOfFactsEpoch)"),
+        )
+    }
+
     private fun repoFile(rel: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
         while (dir != null) {

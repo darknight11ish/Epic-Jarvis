@@ -119,6 +119,9 @@ internal fun PeopleAndThingsSection(
     var asOfLabel by remember { mutableStateOf("") }
     var asOfWhich by remember { mutableStateOf("") }
     var asOfFacts by remember { mutableStateOf<List<MemoryAsOf.RawFact>?>(null) }
+    // The epoch those rows were read for. Kept beside them so a row list can
+    // never be drawn under another date's heading (AND-1, 2026-10-24).
+    var asOfFactsEpoch by remember { mutableStateOf<Long?>(null) }
     var asOfBusy by remember { mutableStateOf(false) }
     var asOfError by remember { mutableStateOf<String?>(null) }
     var dateOpen by remember { mutableStateOf(false) }
@@ -154,6 +157,7 @@ internal fun PeopleAndThingsSection(
         val epoch = asOfEpoch
         if (epoch == null) {
             asOfFacts = null
+            asOfFactsEpoch = null
             asOfBusy = false
             asOfError = null
             return@LaunchedEffect
@@ -167,6 +171,7 @@ internal fun PeopleAndThingsSection(
                     asOfError = "The PC's answer for that date did not carry the facts."
                 } else {
                     asOfFacts = rows
+                    asOfFactsEpoch = epoch
                 }
             }
             is ApiResult.Failed -> asOfError = JarvisRuntime.noticeFor(r.error)
@@ -180,7 +185,12 @@ internal fun PeopleAndThingsSection(
         asOfLabel = if (epoch == null) "" else
             (Entities.dateText(epoch.toDouble()) ?: "")
         asOfError = null
-        if (epoch == null) asOfFacts = null
+        // The rows are one date's answer, so a new date drops them: a chip must
+        // never show the previous date's facts under its own heading (AND-1).
+        // The epoch remembered with the rows is the other half of the same rule
+        // - [Entities.asOfFactsFor] draws them only for the date they belong to.
+        asOfFacts = null
+        asOfFactsEpoch = null
     }
 
     Section(Entities.TITLE, trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
@@ -250,7 +260,9 @@ internal fun PeopleAndThingsSection(
             val all = entities
             val err = readError
             val asOf = asOfEpoch != null
-            val facts = asOfFacts
+            // Only the rows read for THIS date are drawn, so the heading and
+            // the list below it can never describe two different dates (AND-1).
+            val facts = Entities.asOfFactsFor(asOfEpoch, asOfFacts, asOfFactsEpoch)
             val open = all?.firstOrNull { it.id == openId }
             // The chip and the search narrow the list; the as-of chips narrow
             // each name's OWN fact ids to the ones active then (the PC's
