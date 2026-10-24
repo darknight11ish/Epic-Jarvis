@@ -340,11 +340,15 @@ pub fn approval_needs_local_check(
     }
 }
 
-/// A card's `expires_in` when the row does not say (the shipped
-/// `approval_timeout_seconds`).
-pub const DEFAULT_CARD_SECONDS: u64 = 180;
-/// The longest an Approve waits for the backend, whatever a row says.
-const LONGEST_APPROVAL_WAIT: Duration = Duration::from_secs(600);
+/// A card's `expires_in` when the row does not say. The backend leaves the
+/// field OFF for the cards that never expire (pairing, a phone's approval key,
+/// restoring a backup) and bounds its own Windows Hello prompt at 900 s, so a
+/// desktop that gave up sooner would abandon a prompt the backend is still
+/// waiting on.
+pub const DEFAULT_CARD_SECONDS: u64 = 900;
+/// The longest an Approve waits for the backend, whatever a row says: the
+/// backend's own 900 s bound plus the few seconds for the answer to come back.
+const LONGEST_APPROVAL_WAIT: Duration = Duration::from_secs(DEFAULT_CARD_SECONDS + 5);
 
 /// How long an Approve may wait for the backend's answer. Normally `short`
 /// (a small round trip); when the backend asks Windows Hello itself, the
@@ -1129,20 +1133,20 @@ mod tests {
             approval_wait(short, true, Some(&row)),
             Duration::from_secs(155)
         );
-        // Unknown: the shipped 180 seconds.
-        assert_eq!(approval_wait(short, true, None), Duration::from_secs(185));
+        // Unknown: the backend's own 900-second bound, plus the answer grace.
+        assert_eq!(approval_wait(short, true, None), Duration::from_secs(905));
         row["expires_in"] = json!("soon");
         assert_eq!(
             approval_wait(short, true, Some(&row)),
-            Duration::from_secs(185)
+            Duration::from_secs(905)
         );
-        // Never below the normal wait, never above ten minutes.
+        // Never below the normal wait, never above the backend's bound.
         row["expires_in"] = json!(0);
         assert_eq!(approval_wait(short, true, Some(&row)), short);
         row["expires_in"] = json!(86_400);
         assert_eq!(
             approval_wait(short, true, Some(&row)),
-            Duration::from_secs(600)
+            Duration::from_secs(905)
         );
     }
 
