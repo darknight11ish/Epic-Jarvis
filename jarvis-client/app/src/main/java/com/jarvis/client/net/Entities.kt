@@ -380,6 +380,57 @@ object Entities {
         else -> SHARES.replace("{n}", n.toString())
     }
 
+    // --------------------------------------- the Galaxy band (2026-10-23) ---
+    // The owner's choice for the phone's Galaxy (2026-10-23): a read-only
+    // "Galaxy at a glance" band above this list, instead of a canvas. It reads
+    // nothing new: the names and their facts are the two reads the plate
+    // already makes, and the connections are the same [sharedPartners] rule
+    // the rows already say in words. Phone-only words, like the A1 chips.
+    const val GALAXY_TITLE = "Galaxy at a glance"
+    const val GALAXY_TOP = "Most connected"
+
+    /** "32 names, 118 facts" - the band's one-line summary. */
+    fun galaxySummary(names: Int, facts: Int): String {
+        val n = if (names == 1) "1 name" else "$names names"
+        return n + ", " + factCount(facts)
+    }
+
+    /** Every fact the plate holds, added up - one number, no double counting. */
+    fun totalFacts(entities: List<Entity>): Int = entities.sumOf { it.count }
+
+    /**
+     * Up to [limit] names with the most shared names, best first: the same
+     * [sharedPartners] rule the rows already use. Ties go to the name with more
+     * facts, then by name, so the order never depends on the order the PC sent.
+     * A name that shares no fact is not in the band - there would be nothing to
+     * connect it to. Empty list when there are no names.
+     */
+    fun mostConnected(entities: List<Entity>, limit: Int = 8): List<Entity> {
+        if (limit <= 0) return emptyList()
+        val partners = sharedPartners(entities)
+        return entities
+            .filter { (partners[it.id] ?: 0) > 0 }
+            .sortedWith(
+                compareByDescending<Entity> { partners[it.id] ?: 0 }
+                    .thenByDescending { it.count }
+                    .thenBy { it.name.lowercase(Locale.ROOT) },
+            )
+            .take(limit)
+    }
+
+    /**
+     * What the band says for one name, for the screen reader and the label:
+     * "Priya, 4 facts, shares facts with 2 names". The shares half is left out
+     * when [shared] is zero, so a label never promises an edge that is not there.
+     */
+    fun galaxyNameLine(e: Entity, shared: Int): String {
+        val base = rowLine(e)
+        if (shared <= 0) return base
+        val shares = if (shared == 1) "shares facts with 1 name"
+        else "shares facts with $shared names"
+        return "$base, $shares"
+    }
+
     // ------------------------------------------------------------- as of ---
 
     /** "Facts as of 12 Oct 2026" for the chip row's own heading. */

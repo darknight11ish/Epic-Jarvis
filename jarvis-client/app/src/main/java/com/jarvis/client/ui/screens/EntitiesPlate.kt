@@ -187,6 +187,14 @@ internal fun PeopleAndThingsSection(
         Plate {
             Text(Entities.UNDER, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
             Gap(6)
+            // The owner's phone Galaxy (2026-10-23): a read-only glance above
+            // the list. It is hidden while the list shows a past date, because
+            // then the counts on screen are that date's, not today's.
+            val band = entities
+            if (asOfEpoch == null && !band.isNullOrEmpty()) {
+                GalaxyBand(band)
+                Gap(8)
+            }
             TextInput(search, { search = it }, placeholder = Entities.SEARCH)
             Gap(2)
             FlowRow(
@@ -369,6 +377,56 @@ private fun AsOfChip(label: String, on: Boolean, onClick: () -> Unit) {
         },
         onClick = onClick,
     )
+}
+
+/**
+ * "Galaxy at a glance" - the phone's read-only Galaxy picture, chosen by the
+ * owner on 2026-10-23 (option A of three). It is deliberately NOT a canvas and
+ * NOT a control: the signed 2026-10-21 ruling keeps the phone as a read-only
+ * list with zero canvas, so this draws the same facts as plain labels.
+ *
+ * The names are [Pill]s, whose own docstring says what that shape means: "this
+ * is a label, not a control". They are not tappable, so TalkBack does not
+ * announce "button" over things that do nothing - the same rule the
+ * connections list below already follows. The row is spoken as one line:
+ * "Priya, 4 facts, shares facts with 2 names".
+ *
+ * It adds NO read: [Entities.mostConnected] and [Entities.totalFacts] work on
+ * the list the plate has already fetched, using the same shared-facts rule the
+ * list rows use. No animation, no GL/AGSL, no write, no route.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GalaxyBand(entities: List<Entities.Entity>) {
+    val chrome = LocalChrome.current
+    val partners = remember(entities) { Entities.sharedPartners(entities) }
+    val connected = remember(entities) { Entities.mostConnected(entities) }
+    Kicker(Entities.GALAXY_TITLE)
+    Gap(2)
+    Text(
+        Entities.galaxySummary(entities.size, Entities.totalFacts(entities)),
+        style = MaterialTheme.typography.labelLarge,
+        color = chrome.textMid,
+    )
+    if (connected.isNotEmpty()) {
+        Gap(6)
+        Text(Entities.GALAXY_TOP, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Gap(4)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            connected.forEach { e ->
+                val shared = partners[e.id] ?: 0
+                Pill(
+                    Entities.rowLine(e),
+                    modifier = Modifier.semantics {
+                        contentDescription = Entities.galaxyNameLine(e, shared)
+                    },
+                )
+            }
+        }
+    }
 }
 
 /**
