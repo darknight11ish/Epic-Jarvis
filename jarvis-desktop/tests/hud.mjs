@@ -4620,6 +4620,126 @@ await check("#737: a refused save keeps the editor and the owner's typed words",
   assert.deepEqual(problems, []);
 });
 
+/* =========================================================================
+ * P8 idle (2026-10-23): the Galaxy's drawing loop must run only while the map
+ * is the view on screen and the window is visible, and the two infinite CSS
+ * animations must pause while the window is hidden. The live paths (stream,
+ * approvals, speech, the face iframe) are deliberately NOT touched.
+ *
+ * Count the frames by wrapping the page's own requestAnimationFrame: the loop
+ * asks for the next frame through the global on every frame, so a wrapper
+ * counts exactly the loop's turns. (The wrapper is installed after load, which
+ * is fine: the loop makes a request every frame, so the next one is wrapped.)
+ * The simulated `document.hidden` proves the page's OWN guard; the real
+ * browser's hidden/minimised lifecycle is NOT-TESTABLE in headless Chromium
+ * and is a field row, never a pass.
+ * ========================================================================= */
+
+await check("P8 idle: the Galaxy drawing loop stops when the map is left, and resumes when it is shown again", async () => {
+  const { page, problems } = await openGalaxy(browser, GALAXY_GRAPH);
+  await page.evaluate(() => {
+    const orig = window.requestAnimationFrame.bind(window);
+    window.__rafFrames = 0;
+    window.requestAnimationFrame = (cb) => orig((ts) => { window.__rafFrames++; cb(ts); });
+  });
+  await page.waitForTimeout(300);
+  const visibleA = await page.evaluate(() => window.__rafFrames);
+  await page.waitForTimeout(300);
+  const visibleB = await page.evaluate(() => window.__rafFrames);
+  assert.ok(visibleB > visibleA,
+    `the Galaxy did not draw while the map was on screen (${visibleA} -> ${visibleB} frames)`);
+  await page.click('[data-view="talk"]');
+  await page.waitForTimeout(250);
+  const stoppedA = await page.evaluate(() => window.__rafFrames);
+  await page.waitForTimeout(400);
+  const stoppedB = await page.evaluate(() => window.__rafFrames);
+  assert.equal(stoppedB, stoppedA,
+    `the Galaxy kept drawing after the map was left (${stoppedA} -> ${stoppedB} frames)`);
+  await page.click('[data-view="brain"]');
+  await page.waitForTimeout(300);
+  const resumedA = await page.evaluate(() => window.__rafFrames);
+  await page.waitForTimeout(300);
+  const resumedB = await page.evaluate(() => window.__rafFrames);
+  assert.ok(resumedB > resumedA,
+    `the Galaxy did not resume when the map was shown again (${resumedA} -> ${resumedB} frames)`);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("P8 idle: a hidden window stops the Galaxy and pauses the infinite CSS animations; a visible one resumes both", async () => {
+  const { page, problems } = await openGalaxy(browser, GALAXY_GRAPH);
+  await page.evaluate(() => {
+    const orig = window.requestAnimationFrame.bind(window);
+    window.__rafFrames = 0;
+    window.requestAnimationFrame = (cb) => orig((ts) => { window.__rafFrames++; cb(ts); });
+    window.__setHidden = (hidden) => {
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+      Object.defineProperty(document, "visibilityState",
+        { configurable: true, get: () => (hidden ? "hidden" : "visible") });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+    // One element for each of the page's two infinite animations, so the CSS
+    // rule can be measured without waiting for a real stream or a held talk
+    // button. They are plain DOM nodes: no page code watches these classes.
+    const caret = document.createElement("div");
+    caret.className = "msg";
+    caret.innerHTML = '<div class="body"><span class="cursor"></span></div>';
+    document.body.append(caret);
+    const hot = document.createElement("button");
+    hot.className = "act";
+    hot.setAttribute("aria-pressed", "true");
+    document.body.append(hot);
+  });
+  await page.waitForTimeout(250);
+  const visibleA = await page.evaluate(() => window.__rafFrames);
+  await page.waitForTimeout(250);
+  const visibleB = await page.evaluate(() => window.__rafFrames);
+  assert.ok(visibleB > visibleA, "the Galaxy was not drawing while visible");
+  const shotA = await page.locator("#galaxy").screenshot();
+  await page.waitForTimeout(250);
+  const shotB = await page.locator("#galaxy").screenshot();
+  assert.notEqual(Buffer.compare(shotA, shotB), 0,
+    "the Galaxy picture was frozen while the window was visible");
+
+  await page.evaluate(() => window.__setHidden(true));
+  await page.waitForTimeout(150);
+  const hiddenA = await page.evaluate(() => window.__rafFrames);
+  await page.waitForTimeout(400);
+  const hiddenB = await page.evaluate(() => window.__rafFrames);
+  const css = await page.evaluate(() => ({
+    cls: document.documentElement.classList.contains("hud-window-hidden"),
+    cursor: getComputedStyle(document.querySelector(".msg .body .cursor")).animationPlayState,
+    hot: getComputedStyle(document.querySelector(".act[aria-pressed='true']")).animationPlayState,
+  }));
+  assert.equal(css.cls, true, "the hidden class was not put on the document");
+  assert.equal(css.cursor, "paused", "the streaming caret kept animating while the window was hidden");
+  assert.equal(css.hot, "paused", "the pressed talk button kept animating while the window was hidden");
+  assert.equal(hiddenB, hiddenA,
+    `the Galaxy kept drawing while the window was hidden (${hiddenA} -> ${hiddenB} frames)`);
+  const hiddenShotA = await page.locator("#galaxy").screenshot();
+  await page.waitForTimeout(250);
+  const hiddenShotB = await page.locator("#galaxy").screenshot();
+  assert.equal(Buffer.compare(hiddenShotA, hiddenShotB), 0,
+    "the Galaxy picture kept changing while the window was hidden");
+
+  await page.evaluate(() => window.__setHidden(false));
+  await page.waitForTimeout(250);
+  const back = await page.evaluate(() => ({
+    cls: document.documentElement.classList.contains("hud-window-hidden"),
+    cursor: getComputedStyle(document.querySelector(".msg .body .cursor")).animationPlayState,
+    hot: getComputedStyle(document.querySelector(".act[aria-pressed='true']")).animationPlayState,
+  }));
+  assert.equal(back.cls, false, "the hidden class was not taken off the document");
+  assert.equal(back.cursor, "running", "the streaming caret did not resume when the window came back");
+  assert.equal(back.hot, "running", "the pressed talk button did not resume when the window came back");
+  const backA = await page.evaluate(() => window.__rafFrames);
+  await page.waitForTimeout(300);
+  const backB = await page.evaluate(() => window.__rafFrames);
+  assert.ok(backB > backA, "the Galaxy did not resume when the window came back");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
 await browser.close();
 if (fails.length) {
   console.log(`\n${fails.length} failed: ${fails.join(", ")}`);
