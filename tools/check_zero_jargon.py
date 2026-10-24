@@ -49,16 +49,22 @@ WHAT IS SCANNED (the three product surfaces)
 
 WHAT IS A "DEVELOPER WORD". The rules live in ``TERM_RULES`` below: the internal
 state vocabulary (``taint``, ``untainted``, ``latch``, ``digest_mismatch``,
-``from_this_pc``), the search/ML stack (``FTS5``, ``BM25``, ``RRF``, ``ONNX``,
-``WAL``, ``shard``, ``corpus``, ``daemon``, ``mutex``, ``semaphore``), module
-names (``jarvis_*.py``), snake_case config keys, exception class names,
+``target_digest``, ``from_this_pc``), the search/ML stack (``FTS5``, ``BM25``,
+``RRF``, ``ONNX``, ``cosine``, ``WAL``, ``shard``, ``corpus``, ``daemon``,
+``mutex``, ``semaphore``), the system error tokens (``SQLITE_BUSY``,
+``ECONNREFUSED``, ``ENETUNREACH``), module names (``jarvis_*.py``), snake_case
+config keys, exception class names,
 ``traceback``, and the developer words the work order names (``null``, ``None``,
 ``NaN``, ``undefined``, ``API``, ``localhost``, ``loopback``, ``HTTP``,
 ``socket``, ``stdout``, ``stderr``, ``errno``, ``sqlite``, ``payload``,
 ``stack``), HTTP status codes written into user text (``HTTP 500``, ``status
 422`` - a bare ``500`` is not flagged because ``$500`` is money), and raw JSON
-fragments. Matching is whole-word and, where a word is also an ordinary English
-word, case-sensitive on purpose (``None`` the Python value, not "none of").
+fragments. ``target_digest``, ``cosine``, ``SQLITE_BUSY``, ``ECONNREFUSED``
+and ``ENETUNREACH`` were added on 2026-10-23 (Section 3 of the owner's work
+order); the replacement wording for every rule is
+``docs/PLAIN-WORDS-REPLACEMENTS-2026-10-23.md``. Matching is whole-word and,
+where a word is also an ordinary English word, case-sensitive on purpose
+(``None`` the Python value, not "none of").
 
 THE ALLOWLIST (``tools/zero-jargon-allow.txt``) is for technical words the
 owner has deliberately chosen to see and already understands: model names
@@ -129,6 +135,10 @@ TERM_RULES = (
     ("internal_state", "taint_latched", re.compile(r"\btaint_latched\b")),
     ("internal_state", "rush_latched", re.compile(r"\brush_latched\b")),
     ("internal_state", "digest_mismatch", re.compile(r"\bdigest_mismatch\b")),
+    # The approval card's target digest, named by Section 3 of the 2026-10-23
+    # work order. It is above the generic config_key rule so the report names
+    # the field ("target_digest") instead of the vaguer "config key".
+    ("internal_state", "target_digest", re.compile(r"\btarget_digest\b")),
     ("internal_state", "from_this_pc", re.compile(r"\bfrom_this_pc\b")),
     ("internal_state", "untainted", re.compile(r"\buntainted\b", re.I)),
     ("internal_state", "taint", re.compile(r"\btaint(?:ed|s)?\b", re.I)),
@@ -137,6 +147,10 @@ TERM_RULES = (
     ("search_and_ml", "BM25", re.compile(r"\bbm25\b", re.I)),
     ("search_and_ml", "RRF", re.compile(r"\brrf\b", re.I)),
     ("search_and_ml", "ONNX", re.compile(r"\bonnx\b", re.I)),
+    # Whole word (and plural), case-insensitive: the maths word is caught in a
+    # sentence, an identifier such as cosine_score stays the config_key rule's
+    # finding, and the unrelated word "cosign" is not matched at all.
+    ("search_and_ml", "cosine", re.compile(r"\bcosines?\b", re.I)),
     ("search_and_ml", "WAL", re.compile(r"\bwal\b", re.I)),
     ("search_and_ml", "shard", re.compile(r"\bshards?\b", re.I)),
     ("search_and_ml", "corpus", re.compile(r"\bcorpus\b|\bcorpora\b", re.I)),
@@ -161,6 +175,13 @@ TERM_RULES = (
     ("dev_word", "stderr", re.compile(r"\bstderr\b", re.I)),
     ("dev_word", "errno", re.compile(r"\berrno\b", re.I)),
     ("dev_word", "sqlite", re.compile(r"\bsqlite3?\b", re.I)),
+    # The database/network error tokens Section 3 of the 2026-10-23 work order
+    # names: the exact strings that leak out of sqlite3 and socket errors.
+    # Whole word, case-insensitive. The ordinary English words around them -
+    # "busy", "refused", "unreachable" - are not matched on their own.
+    ("dev_word", "SQLITE_BUSY", re.compile(r"\bsqlite_busy\b", re.I)),
+    ("dev_word", "ECONNREFUSED", re.compile(r"\beconnrefused\b", re.I)),
+    ("dev_word", "ENETUNREACH", re.compile(r"\benetunreach\b", re.I)),
     ("dev_word", "payload", re.compile(r"\bpayloads?\b", re.I)),
     ("dev_word", "stack", re.compile(r"\bstack\b", re.I)),
     ("http_status", "HTTP status code",
