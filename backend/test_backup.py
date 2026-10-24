@@ -17,11 +17,13 @@ fake key provider stands in). What it proves:
    in this module, on disk or in memory, keeps a copy of it once the
    response that showed it has been sent.
 4. What is inside, once decrypted with the right code: the four real
-   databases (verified counts), the settings JSONs, the toml, notes and
-   voice folders, and the chat-history key - and NOT the excluded things:
-   a decoy log file, a decoy token file, the voice-models and voices
-   folders (downloaded engine files and the custom-voice bank, neither of
-   them the owner's own voice-print).
+   databases (verified counts), the settings JSONs, the toml and notes
+   folders, and the chat-history key - and NOT the excluded things: the
+   voice enrolment folder (sealed to THIS PC, so unusable after a
+   bare-metal restore - the manifest says re-enrol; 2026-10-23), a decoy
+   log file, a decoy token file, the voice-models and voices folders
+   (downloaded engine files and the custom-voice bank, neither of them
+   the owner's own voice-print).
 5. Retention: making more than KEEP backups deletes only the oldest, and
    two backups made in the same second never overwrite each other.
 6. Restore: the wrong code is refused (never opens the file); it needs
@@ -426,7 +428,15 @@ def t_what_is_backed_up_and_what_is_excluded():
     check("the settings JSON is in", "settings/folders.json" in names)
     check("notes are in", "notes/todo.md" in names
           and zf_read(zip_bytes, "notes/todo.md") == b"buy milk")
-    check("the voice folder (the print) is in", "voice/owner.json" in names)
+    check("the voice folder (the print) is NOT carried: it is sealed to this PC "
+          "and a bare-metal restore could not open it (2026-10-23)",
+          not any(n.startswith("voice/") for n in names),
+          sorted(n for n in names if n.startswith("voice/")))
+    check("... and the manifest says so in the owner's words",
+          manifest.get("voice_profile_backed_up") is False
+          and manifest.get("voice_files") == 0
+          and "enrol your voice again" in str(manifest.get("voice_note") or "").lower(),
+          manifest.get("voice_note"))
     check("manifest.json is in, for the preview", "manifest.json" in names)
     check("no .log file made it in", not any(n.endswith(".log") for n in names))
     check("voice-models (downloaded engine files) is excluded", not any("voice-models" in n

@@ -108,10 +108,17 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     prefix to the settings folder already.
   * jarvis-framework.toml, wherever `jarvis_framework.config_path()` finds
     the owner's real copy.
-  * The notes folder (`notes/`) and the voice enrolment folder (`voice/` -
-    the owner's own voice-print, NOT `voice-models/`, which holds
-    downloaded engine files, or `voices/`, the custom-voice bank), both
-    copied whole, recursively.
+  * The notes folder (`notes/`), copied whole, recursively.
+  * **NOT the voice enrolment folder (`voice/`)** (2026-10-23, Backup-Gap 1):
+    the owner's own voice-print is sealed with a key in Windows Credential
+    Manager on THIS PC, so after a bare-metal restore it could not be opened on
+    the new PC. Carrying it would restore files that look present and are dead.
+    This module leaves it out, records `voice_profile_backed_up: false` and its
+    plain-words note in the manifest, and the restore path never writes a voice
+    file it cannot open on this PC (older archives that carried sealed voice
+    files are skipped with `voice_needs_re_enrolment` rather than copied).
+    `voice-models/` (downloaded engine files) and `voices/` (the custom-voice
+    bank) were never carried either.
   * The chat-history encryption key, read from Windows Credential Manager
     (jarvis_chat_log.CredentialKey, KEY_TARGET) and kept, base64, as ONE
     small file INSIDE the archive - which is encrypted before it ever
@@ -639,6 +646,18 @@ NOT_BACKED_UP_PATHS = {
 SETTINGS_NAMES = ("config.toml", "speed.jsonl")
 
 STUDY_DB = "study.db"
+
+#: Plain words for the one thing a backup deliberately does NOT carry
+#: (2026-10-23, Backup-Gap 1 of Gemini's security work order). The voice
+#: profile is sealed with a key in Windows Credential Manager on THIS PC; after
+#: a bare-metal restore that key is gone, so the sealed files could not be
+#: opened on the new PC. Carrying them would restore files the owner believes
+#: are back while they are dead - so they are left out, the manifest says so in
+#: these exact words, and a restore never writes a voice file it cannot open.
+VOICE_REENROL_NOTE = (
+    "Your voice profile is not carried in a backup: it is locked to this PC, "
+    "so it would not work on a new one. After a bare-metal restore, enrol your "
+    "voice again in Settings, Voice.")
 
 
 def not_backed_up_reason(path) -> str:
@@ -1211,7 +1230,13 @@ def build_archive() -> tuple:
     without touching anything else in the archive."""
     conf = _config_dir()
     manifest = {"created_at": time.time(), "databases": {}, "settings_files": 0,
-                "notes_files": 0, "voice_files": 0, "chat_history_key": False,
+                "notes_files": 0, "voice_files": 0,
+                # Backup-Gap 1 (2026-10-23): the voice profile is NOT carried,
+                # and the manifest says so in the owner's words. `voice_files`
+                # stays as 0 for older readers.
+                "voice_profile_backed_up": False,
+                "voice_note": VOICE_REENROL_NOTE,
+                "chat_history_key": False,
                 "study_decks_key": False, "framework_toml": False,
                 "source_files": 0, "named_settings": {}}
     buf = io.BytesIO()
@@ -1265,14 +1290,16 @@ def build_archive() -> tuple:
             for f in _walk_files(notes_root):
                 zf.write(f, arcname=f"notes/{f.relative_to(notes_root)}")
                 manifest["notes_files"] += 1
-            voice_root = conf / "voice"
-            for f in _walk_files(voice_root):
-                zf.write(f, arcname=f"voice/{f.relative_to(voice_root)}")
-                manifest["voice_files"] += 1
+            # The voice enrolment folder is deliberately NOT walked (2026-10-23,
+            # Backup-Gap 1): the files are sealed with a Windows Credential
+            # Manager key on THIS PC, which a bare-metal restore does not have,
+            # so they would come back as dead files the owner believes are
+            # usable. The manifest carries the plain-words note instead, and
+            # restore refuses to write any voice file it cannot open here.
             # Deliberately NOT walked: the guardian store (guardian/) and the
             # two other non-SQLite files in NOT_BACKED_UP_PATHS. This module
-            # never recurses an arbitrary settings subfolder - the notes and
-            # voice walks above are the only two - so a 250 MiB blob store
+            # never recurses an arbitrary settings subfolder - the notes walk
+            # above is the only recursive one left - so a 250 MiB blob store
             # cannot bloat an archive. The recorded reasons are the decision.
             # The backend's own program files, so a backup brings the CODE back
             # with the data (2026-10-05). Top level only: `glob`, not
@@ -2523,6 +2550,35 @@ def validate_archive_member_path(
     return clean
 
 
+def _voice_file_usable(data) -> bool:
+    """True only when THIS PC can actually open a voice file from an archive.
+
+    The voice profile is sealed with a Windows Credential Manager key created on
+    the PC that enrolled it; after a bare-metal restore that key is gone. A
+    restore must not write such a file and count it as restored - the owner
+    would believe their voice is back when it is dead. So each `voice/` member
+    of an OLDER archive is opened in RAM here first (no write, no plaintext on
+    disk); only an openable one is staged. Anything else is skipped and the
+    restore says re-enrolment is needed. Never raises: an unreadable file is
+    simply not usable."""
+    try:
+        doc = json.loads(data.decode("utf-8") if isinstance(data, (bytes, bytearray))
+                         else str(data))
+    except Exception:
+        return False
+    try:
+        import jarvis_voice
+        if jarvis_voice.is_sealed_doc(doc):
+            jarvis_voice.unseal_envelope(doc, what="the backup's voice file")
+            return True
+    except Exception:
+        return False
+    # A plain JSON voice file is not one this module writes; the sealed form is
+    # the only production shape. Fail closed rather than restore an unsealed
+    # print to disk (the #600 invariant).
+    return False
+
+
 def verify_staged_sqlite_db(db_path) -> tuple:
     """(True, "ok") or (False, plain why) for a staged database file.
 
@@ -2588,6 +2644,11 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     applied = {"databases": 0, "settings_files": 0, "notes_files": 0, "voice_files": 0,
                "framework_toml": False, "chat_history_key": False, "study_decks_key": False,
                "source_files": 0,
+               # Backup-Gap 1 (2026-10-23): an OLDER archive may still carry
+               # sealed voice files. They are counted here only when they could
+               # NOT be opened on this PC, and the note says re-enrol.
+               "voice_files_skipped": 0, "voice_needs_re_enrolment": False,
+               "voice_note": "",
                "skipped": 0, "chat_history_key_failed": False, "study_decks_key_failed": False,
                # The EXACT names behind those counts (2026-10-20, ruling 8.1).
                # Filled below and handed to the audit record and the receipt.
@@ -2610,8 +2671,15 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             validate_archive_member_path(info.filename,
                                          is_symlink=_member_is_link(info))
         # Read ONCE, outside the loop: the one list of what may land in the
-        # settings folder (see `_named_settings_entries`).
+        # settings folder (see `_named_settings_entries`), and the manifest's
+        # own claim about the voice profile (Backup-Gap 1, 2026-10-23).
         allowed_settings = set(_named_settings_entries(zf.namelist()))
+        archive_manifest: dict = {}
+        try:
+            if "manifest.json" in zf.namelist():
+                archive_manifest = json.loads(zf.read("manifest.json") or b"{}")
+        except Exception:
+            archive_manifest = {}
         for info in zf.infolist():
             name = info.filename
             if name.endswith("/") or name == "manifest.json":
@@ -2640,8 +2708,22 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 shown = name[len("notes/"):]
                 where = ("notes_files", _inside(conf / "notes", shown))
             elif name.startswith("voice/"):
+                # Backup-Gap 1 (2026-10-23): an OLDER archive may still carry
+                # sealed voice files. Open each one in RAM first; only a file
+                # this PC can really use is staged. An unopenable one is never
+                # written (it would be dead data counted as restored) - it is
+                # skipped and the outcome says re-enrolment is needed.
                 shown = name[len("voice/"):]
-                where = ("voice_files", _inside(conf / "voice", shown))
+                dest = _inside(conf / "voice", shown)
+                voice_data = zf.read(info)
+                if dest is None or not _voice_file_usable(voice_data):
+                    applied["voice_files_skipped"] += 1
+                    applied["voice_needs_re_enrolment"] = True
+                    applied["skipped"] += 1
+                    continue
+                plan.append((dest, voice_data, False, "voice_files", shown))
+                applied["voice_files"] += 1
+                continue
             elif name.startswith(SOURCE_PREFIX):
                 # The backend's own program files go back into the folder this
                 # module runs from (2026-10-05) - `_source_dir()`, read HERE and
@@ -2756,6 +2838,15 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     for group, names in done.items():
         applied["restored"][group] = sorted(names)
     applied["restored"]["keys"] = sorted(applied["restored"]["keys"])
+    # Backup-Gap 1 (2026-10-23): say plainly what happened to the voice
+    # profile. A NEW archive says it was never carried; an OLDER one that
+    # carried sealed files this PC could not open says re-enrolment is needed.
+    if archive_manifest.get("voice_profile_backed_up") is False:
+        note = str(archive_manifest.get("voice_note") or VOICE_REENROL_NOTE).strip()
+        if note:
+            applied["voice_note"] = note
+    elif applied["voice_needs_re_enrolment"]:
+        applied["voice_note"] = VOICE_REENROL_NOTE
     return applied
 
 

@@ -247,6 +247,97 @@ def t_backup_gap_2_bad_archive_touches_no_live_file():
             B._config_dir = saved
 
 
+# ---------------------------------------------------------------------------
+#   Backup-Gap 1: the voice profile is not carried, and restore never pretends
+# ---------------------------------------------------------------------------
+
+def _voice_module():
+    sys.path.append(str(HERE / "rebuilt"))
+    import jarvis_voice  # noqa: E402 - deliberately lazy; rebuilt beside the backend
+    return jarvis_voice
+
+
+def t_backup_gap_1_voice_is_not_carried():
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = Path(tmp) / "config"
+        (conf / "voice").mkdir(parents=True)
+        (conf / "voice" / "owner.json").write_text('{"sealed_v": 1}', encoding="utf-8")
+        saved = B._config_dir
+        B._config_dir = lambda: conf
+        try:
+            zip_bytes, manifest = B.build_archive()
+        finally:
+            B._config_dir = saved
+        names = zipfile.ZipFile(io.BytesIO(zip_bytes)).namelist()
+        check("Backup-Gap 1: the voice profile is NOT carried in a backup",
+              not any(n.startswith("voice/") for n in names),
+              sorted(n for n in names if n.startswith("voice/")))
+        check("... and the manifest records why, in the owner's words",
+              manifest.get("voice_profile_backed_up") is False
+              and manifest.get("voice_files") == 0
+              and "enrol your voice again" in str(manifest.get("voice_note") or "").lower(),
+              manifest.get("voice_note"))
+
+
+def t_backup_gap_1_restore_refuses_an_unopenable_voice_file():
+    voice = _voice_module()
+    saved_provider = voice.KEY_PROVIDER
+    try:
+        def _no_key(create):  # a new PC: the old key does not exist
+            raise RuntimeError("no key on this PC")
+        voice.KEY_PROVIDER = _no_key
+        sealed = json.dumps({"sealed_v": 1, "alg": "AES-256-GCM",
+                             "nonce_b64": "AAAAAAAAAAAAAAAA",
+                             "ciphertext_b64": "AAAA"}).encode("utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            conf = Path(tmp) / "config"
+            conf.mkdir()
+            saved = B._config_dir
+            B._config_dir = lambda: conf
+            try:
+                applied = B._apply_restore(_zip([
+                    ("voice/owner.json", sealed),
+                    ("settings/keep.json", b'{"a": 1}'),
+                ]))
+            finally:
+                B._config_dir = saved
+            check("an older archive's voice file this PC cannot open is NOT written",
+                  not (conf / "voice" / "owner.json").exists(), applied)
+            check("... it is counted as skipped and reported as re-enrol, not restored",
+                  applied.get("voice_files_skipped") == 1
+                  and applied.get("voice_needs_re_enrolment") is True
+                  and "enrol your voice again" in str(applied.get("voice_note") or "").lower(),
+                  applied)
+            check("... the rest of the archive still restores",
+                  (conf / "keep.json").read_bytes() == b'{"a": 1}', applied)
+    finally:
+        voice.KEY_PROVIDER = saved_provider
+
+
+def t_backup_gap_1_same_pc_restore_still_works():
+    voice = _voice_module()
+    saved_provider = voice.KEY_PROVIDER
+    try:
+        key = b"\x07" * 32
+        voice.KEY_PROVIDER = lambda create: key
+        envelope = json.dumps(voice.seal_envelope(b'{"centroid": [0.1]}')).encode("utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            conf = Path(tmp) / "config"
+            conf.mkdir()
+            saved = B._config_dir
+            B._config_dir = lambda: conf
+            try:
+                applied = B._apply_restore(_zip([("voice/owner.json", envelope)]))
+            finally:
+                B._config_dir = saved
+            check("a voice file this PC CAN open restores normally",
+                  (conf / "voice" / "owner.json").read_bytes() == envelope
+                  and applied.get("voice_files") == 1
+                  and not applied.get("voice_needs_re_enrolment"), applied)
+    finally:
+        voice.KEY_PROVIDER = saved_provider
+
+
 def main() -> int:
     for name, fn in sorted(globals().items()):
         if name.startswith("t_") and callable(fn):
