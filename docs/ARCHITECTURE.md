@@ -3102,6 +3102,21 @@ phone: it calls none of the three verbs, so `tools/check_parity.py` sees no
 drift. The verbs are ready for it, and JARVIS-API section 21 documents the
 shapes it will use.
 
+**The Galaxy layout presets are the desktop's, on purpose** (2026-10-23; the
+Galaxy rework's Phase G0: `jarvis-desktop/src/galaxy-presets.js`, `brain.js`).
+The three flat views - **Star map**, **Clean tree** and **Zen ring** - and the
+switcher that chooses them (chips in the Galaxy bar, hotkeys `6`/`7`/`8`, a
+remembered choice) are the **desktop Brain window's alone** for now: the phone
+deliberately has no memory graph (the standing rule recorded elsewhere in this
+section), and the editable HUD stage keeps its own canvas renderer until Phase
+G1 shares the same layout math with it. Nothing here reads or writes the PC: the
+layouts are pure position maths, the choice is stored on this device only, in
+the Brain window's own `localStorage` (`jarvis.galaxy.preset`); unlike the
+theme, nothing about it is persisted on the PC and no route is involved. No
+backend route or phone source names any of it - so `tools/check_parity.py` has
+nothing to classify. The five rich 3D presets the blueprint also lists are shown
+as disabled "not built yet" chips, never faked.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
