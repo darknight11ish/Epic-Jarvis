@@ -112,7 +112,11 @@ before trusting the rest.
 **Built** (backend only, in `backend/jarvis_medical_advocate.py`):
 
 - the isolated store: four record kinds, write-ahead logging, secure delete,
-  and an `erase_all()` that empties only that one file and then rebuilds it;
+  and an `erase_all()` that empties only that one file and then rebuilds it -
+  and **does not need the encryption key**: a lost or replaced key never stops
+  you wiping the record, because erasing deletes the sealed bytes without
+  decrypting anything (the 30-minute latch is still required, first, as for
+  every other operation on this file);
 - **encryption at rest**: every record field sealed with AES-256-GCM under a
   key of its own in Windows Credential Manager. No record payload is ever
   written to disk in plain text, and a test reads the raw file bytes (and any
@@ -229,7 +233,7 @@ M.init_store()                     # makes the folder, the file and the key
 M.add_record("labs", label="HbA1c", observed="2026-10-01",
              value="6.1", unit="%", source="paper report")
 M.list_records("labs", 20)         # newest first, opened with the key
-M.erase_all()                      # empties this file only
+M.erase_all()                      # empties this file only; no key needed
 ```
 
 The four record kinds are `conditions`, `medications`, `labs` and `visits`. A
@@ -306,21 +310,26 @@ history. Jarvis itself still sends nothing anywhere.
 
 ## How this is checked
 
-`backend/test_medical_advocate.py` (93 tests, no socket, no model, no owner PC,
+`backend/test_medical_advocate.py` (95 tests, no socket, no model, no owner PC,
 in-memory key - it never touches Windows Credential Manager) proves the store
 round-trip, **that no record word reaches the disk in plain text** (it writes a
 distinctive secret and scans the raw file and any journal beside it), the
 payload is not readable JSON, the plain-metadata list above, the latch ordering
-and fail-closed behaviour for a missing, broken, short or replaced key, the
-separation pins, the loopback guard, the 120-second timeout, the lane's three
-states, the fallback note, the thinking-marker strip, and the FHIR canaries -
-each against a positive control or a negative one beside it.
+and fail-closed behaviour for a missing, broken, short or replaced key, that
+`erase_all()` still wipes when no key can be had, that a sealed payload moved
+between rows is refused instead of decoded, the separation pins, the loopback
+guard, the 120-second timeout, the lane's three states, the fallback note, the
+thinking-marker strip, and the FHIR canaries - each against a positive control
+or a negative one beside it.
 
 The backup is pinned by three tests: two in the medical suite (the name is in
-`SOURCE_DBS`, not in `NOT_BACKED_UP`, and the key has its own target), and a
-real round-trip in `backend/test_backup.py` - backup on a PC that has the key,
+`SOURCE_DBS`, not in `NOT_BACKED_UP`, and the key has its own target), and two
+real round-trips in `backend/test_backup.py` - backup on a PC that has the key,
 restore on a "new PC" whose Credential Manager entry does not exist, then read
-the record back. The same suite's own count is now **18 carried + 7 excluded**.
+the record back; and the harder one, a new PC that had already minted its OWN
+medical key before the restore, where the archive's key replaces it and a stale
+`-wal` beside the restored file is removed. The same suite's own count is now
+**18 carried + 7 excluded**.
 
 Nothing on this page is a claim about a live portal export, a real phone, or a
 medical review. Those remain NOT-TESTABLE until someone runs them.

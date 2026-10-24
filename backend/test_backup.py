@@ -1340,6 +1340,72 @@ def t_the_medical_record_travels_and_restores_on_a_pc_that_never_had_the_key():
             sys.modules["jarvis_gate"] = gate
 
 
+def t_a_restore_after_a_new_key_was_minted_opens_the_old_record():
+    """Attack 2.2 of the pre-push audit (2026-10-24), proved.
+
+    The hard case is not an EMPTY Credential Manager: a new PC that ran Jarvis
+    once before restoring has already minted its OWN random medical key. The
+    restore must put the backup's key back over it, and the record must open
+    (the module asks for its key per operation, so no stale in-memory key can
+    win). A stale -wal beside the restored medical file must go too.
+    """
+    import base64
+    import sys
+    import jarvis_chat_log
+    import jarvis_medical_advocate as MED
+
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    old_key = b"\x33" * 32
+    new_key = b"\x44" * 32
+    secret = "RESTORE-AFTER-NEW-KEY-MARKER-5591"
+    db = conf / "medical" / "health.db"
+
+    class _Gate:
+        def latch_taint(self, why=""):
+            return True
+
+    saved = (os.environ.get(MED.STORE_ENV), MED.key_provider,
+             sys.modules.get("jarvis_gate"))
+    os.environ[MED.STORE_ENV] = str(db)
+    MED.key_provider = MED._credential_key      # the REAL production provider
+    sys.modules["jarvis_gate"] = _Gate()
+    try:
+        with _FakeCredentials() as cm:
+            cm.items[MED.KEY_TARGET] = base64.b64encode(old_key).decode()
+            cm.items[jarvis_chat_log.KEY_TARGET] = base64.b64encode(b"\x01" * 32).decode()
+            MED.add_record("visits", label="Cardiology follow-up", note=secret)
+            out = B.backup_now(str(backups))
+            code = out["recovery_code"]
+            blob = (backups / out["name"]).read_bytes()
+        # The new PC: its own medical key was minted before the restore, and a
+        # stale WAL of an older file sits beside where health.db will land.
+        (conf / "medical").mkdir(parents=True, exist_ok=True)
+        (conf / "medical" / "health.db-wal").write_bytes(b"old wal")
+        with _FakeCredentials() as new_pc:
+            new_pc.items[MED.KEY_TARGET] = base64.b64encode(new_key).decode()
+            new_pc.items[jarvis_chat_log.KEY_TARGET] = base64.b64encode(b"\x02" * 32).decode()
+            applied = B._apply_restore(B.decrypt_blob(blob, code))
+            check("the restore replaced the new PC's own minted medical key with the "
+                  "backup's, and the stale medical -wal is gone",
+                  applied["medical_key"] is True
+                  and new_pc.items.get(MED.KEY_TARGET) == base64.b64encode(old_key).decode()
+                  and not (conf / "medical" / "health.db-wal").exists(), applied)
+            rows = MED.list_records("visits")
+        check("... and the old record opens with it: the words are back, not InvalidTag",
+              len(rows) == 1 and rows[0]["note"] == secret, rows)
+    finally:
+        env, MED.key_provider, gate = saved
+        if env is None:
+            os.environ.pop(MED.STORE_ENV, None)
+        else:
+            os.environ[MED.STORE_ENV] = env
+        if gate is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = gate
+
+
 def _keeps(d) -> bool:
     try:
         d.keep({"new_deck": "New"}, [{"front": "x", "back": "", "passage": ""}])

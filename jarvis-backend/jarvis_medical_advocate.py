@@ -18,7 +18,9 @@ WHAT THIS IS, IN ONE PARAGRAPH
 
 Three narrow things that share one subject, and nothing else: (1) a small
 encrypted SQLite store for the owner's own medical record, in its own folder
-and its own file, so it is never mixed into memory.db; (2) a FHIR R4 Bundle checker that
+and its own file, so it is never mixed into memory.db (erase_all() wipes this
+one file and does NOT need the key, so a lost key never stops the owner
+wiping it); (2) a FHIR R4 Bundle checker that
 runs entirely on this PC, reports the file's shape and its own internal
 contradictions, and lists every question it cannot answer; (3) a thin client
 for the local MedGemma 1.5 4B model on the medical lane (127.0.0.1:11435),
@@ -564,31 +566,46 @@ def erase_all() -> dict:
 
     secure_delete overwrites the deleted cells; a truncated checkpoint and a
     VACUUM then rebuild the file so no old blob is left in free pages. The
-    key's own check row stays, so the store remains usable. memory.db,
-    projects.db and today.db are never opened here.
+    key's own check row stays, so the store remains usable.
+
+    The latch comes first and still fails closed, but the KEY is deliberately
+    NOT required: an owner whose Credential Manager key was lost or replaced
+    must still be able to wipe the record, and nothing has to be decrypted to
+    erase sealed rows (a DELETE works on the bytes). The one thing that still
+    refuses is losing the privacy switch itself - that is the project's rule
+    for every read and write touching this file.
     """
     _latch_taint()
-    aead = _cipher()
     path = store_path()
     erased = {name: 0 for name in KINDS}
     if not path.is_file():
         return {"ok": True, "erased": erased, "path": str(path), "created": False}
-    path = _ensure_store(aead)
     conn = _connect(path)
     try:
         conn.execute("BEGIN IMMEDIATE")
         for name in KINDS:
-            cursor = conn.execute(f"DELETE FROM {name}")
-            erased[name] = int(cursor.rowcount or 0)
-        conn.execute("DELETE FROM health_audit_log")
+            try:
+                cursor = conn.execute(f"DELETE FROM {name}")
+                erased[name] = int(cursor.rowcount or 0)
+            except sqlite3.OperationalError:
+                # An older or empty file may not carry every table; nothing to
+                # erase in one it does not have, and the wipe still goes on.
+                erased[name] = 0
+        try:
+            conn.execute("DELETE FROM health_audit_log")
+        except sqlite3.OperationalError:
+            pass
         conn.execute("COMMIT")
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.execute("VACUUM")
-        _audit(conn, "erase_all", count=sum(erased.values()))
+        try:
+            _audit(conn, "erase_all", count=sum(erased.values()))
+        except sqlite3.OperationalError:
+            pass
     except Exception:
         try:
             conn.execute("ROLLBACK")
-        except Exception:
+        except Exception:                          # noqa: BLE001 - best effort
             pass
         raise
     finally:

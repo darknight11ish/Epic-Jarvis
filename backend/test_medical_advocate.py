@@ -13,7 +13,10 @@ an owner-only file that is not in `backend/`.
 The claims, one line each:
 
   * the store round-trips, is WAL, and `erase_all()` removes its rows without
-    touching (or creating) a memory file;
+    touching (or creating) a memory file - and still wipes when the key cannot
+    be had, because a lost key must never block an erasure;
+  * each sealed payload is bound to its own kind and row id: a ciphertext moved
+    between rows is refused, never decoded as if it belonged there;
   * the latch is set BEFORE any file is opened, and a latch that raises leaves
     no folder and no file behind (MedicalStoreUnavailable) - next to a positive
     control that the same call DOES create the file when the latch works;
@@ -217,6 +220,55 @@ class StoreTests(_StoreCase):
         finally:
             conn.close()
 
+    def test_erase_all_still_wipes_when_the_key_cannot_be_had(self):
+        """A lost or replaced key must never stop the owner wiping the record.
+
+        Requested by the Lead's pre-push audit (2026-10-24): read/write fail
+        closed without the key, and erase_all() still deletes the sealed rows
+        because a DELETE needs no decryption. The privacy switch is still
+        required - that is proved by its own tests - and the key check row is
+        left in place, so the store keeps refusing a wrong key afterwards.
+        """
+        for kind in MED.KINDS:
+            MED.add_record(kind, label=f"a {kind} row", note="private words")
+        saved = MED.key_provider
+        MED.key_provider = lambda: (_ for _ in ()).throw(RuntimeError("no key store"))
+        try:
+            with self.assertRaises(MED.MedicalStoreUnavailable):
+                MED.list_records("labs")
+            result = MED.erase_all()
+        finally:
+            MED.key_provider = saved
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["erased"]["labs"], 1)
+        conn = sqlite3.connect(str(self.db))
+        try:
+            for kind in MED.KINDS:
+                self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {kind}").fetchone()[0], 0)
+        finally:
+            conn.close()
+        # ... and with the key back the store is usable and empty, not corrupt.
+        self.assertEqual(MED.list_records("labs"), [])
+
+    def test_a_swapped_sealed_payload_is_refused_not_decoded(self):
+        """AES-GCM associated data binds each payload to its kind and row id.
+
+        Pre-push audit (2026-10-24): a ciphertext moved between two rows (or two
+        tables) must fail closed - never decrypt as if it belonged there.
+        """
+        first = MED.add_record("labs", label="HbA1c", value="6.1")
+        second = MED.add_record("medications", label="Metformin")
+        conn = sqlite3.connect(str(self.db))
+        try:
+            conn.execute(
+                "UPDATE labs SET payload = (SELECT payload FROM medications WHERE id=?) "
+                "WHERE id=?", (second["id"], first["id"]))
+            conn.commit()
+        finally:
+            conn.close()
+        with self.assertRaises(MED.MedicalStoreUnavailable):
+            MED.list_records("labs")
+
     def test_the_audit_log_holds_actions_and_ids_never_record_words(self):
         MED.add_record("labs", label="a secret label", note="a private note",
                        value="6.1")
@@ -369,18 +421,28 @@ class StoreTests(_StoreCase):
 class KeyTests(_StoreCase):
     """Fail closed: no key, a wrong key, or no crypto means nothing is touched."""
 
-    def test_a_missing_key_refuses_every_operation_and_creates_nothing(self):
+    def test_a_missing_key_refuses_every_read_and_write_and_creates_nothing(self):
+        """Reads and writes fail closed without a key; a WIPE deliberately does not.
+
+        Pre-push audit (2026-10-24): an owner whose key was lost must still be
+        able to erase the record, so erase_all() is the one operation that does
+        not ask for the key (it decrypts nothing). It still creates nothing when
+        there was no file, and `test_erase_all_still_wipes_when_the_key_cannot_
+        be_had` proves the wiping half.
+        """
         def no_key():
             raise MED.MedicalStoreUnavailable("there is no key on this PC")
         MED.key_provider = no_key
         for call in (MED.init_store,
                      lambda: MED.add_record("labs", label="x"),
-                     lambda: MED.list_records("labs"),
-                     MED.erase_all):
+                     lambda: MED.list_records("labs")):
             with self.assertRaises(MED.MedicalStoreUnavailable):
                 call()
             self.assertFalse(self.db.exists())
             self.assertFalse(self.db.parent.exists())
+        self.assertTrue(MED.erase_all()["ok"])
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.db.parent.exists())
 
     def test_a_provider_that_breaks_is_reported_in_plain_words(self):
         def broken():

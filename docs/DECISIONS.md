@@ -3242,11 +3242,18 @@ a missing / broken / short / replaced key and for a file from the unencrypted
 version, the path separation, the backup pins, the loopback guard, the
 120-second timeout reaching the HTTP call, the lane's three states, the
 fallback note, the marker strip and the FHIR canaries, each with a positive
-control. `backend/test_backup.py` adds a real round-trip: a record is written
+control. `backend/test_backup.py` adds two real round-trips: a record is written
 with a fake Credential Manager, backed up, the local file is deleted, and a
 "new PC" with an EMPTY Credential Manager restores the archive and reads the
-record back with the key the restore put there. The lane itself was measured on
-the owner's PC on 2026-10-24 (100% GPU, 16,384 context, `size_vram`
-2,817,953,626 bytes) and left running. A real portal export, a real phone screen
-and a real medical review remain NOT-TESTABLE - and NOT-TESTABLE is never a
-pass.
+record back with the key the restore put there; the second is the harder case -
+that new PC had already minted its OWN medical key before restoring, and the
+restore replaces it with the backup's so the record still opens, with a stale
+`-wal` beside the restored file removed. The pre-push audit also pinned the two
+store-side holes: a sealed payload moved between rows is refused (the AAD binds
+it to its kind and row label), and `erase_all()` still wipes when no key can be
+had - a lost key must never stop the owner erasing their own record - while the
+latch still comes first. The lane itself was measured on the owner's PC on
+2026-10-24 (100% GPU, 16,384 context, `size_vram` 2,817,953,626 bytes), then
+stopped again so the coding lane keeps its port; one line starts it. A real
+portal export, a real phone screen and a real medical review remain
+NOT-TESTABLE - and NOT-TESTABLE is never a pass.
