@@ -523,8 +523,14 @@ body {
   line-height: 1.2;
   white-space: nowrap;
   pointer-events: none;
-  /* Centred on the dot, then moved below it by the module. */
-  margin-left: -50%;
+  /* Centred on the dot, then moved below it by the module.
+     `translate` (not `margin-left: -50%`): a percentage margin on an absolutely
+     positioned element resolves against the CONTAINING BLOCK's width - half the
+     stage - so every name sat half a stage to the left of its dot. A percentage
+     in the `translate` property resolves against the label's OWN width, which
+     is what "centred" means here. Found by tests/galaxy-presets.mjs while
+     proving the flat layouts' labels are legible (2026-10-23). */
+  translate: -50% 0;
 }
 
 /* The control: a transparent button exactly over its dot. Big enough to hit
@@ -573,6 +579,117 @@ body {
 
 .galaxy-link.is-lit {
   stroke: var(--edge-active);
+}
+
+/* A flat layout is a stationary diagram, not the physics constellation. The
+   fact-sharing links are part of the constellation's picture; drawn across a
+   flat layout they cross every ring and row and turn a clean diagram into a web
+   (seen on the G0 screenshots before this rule existed). They are hidden while a
+   flat layout is on, and the layout's own guides are the drawing: rings and
+   spokes, the four row lines, or the zen halo's chords. brain.js toggles the
+   class on the stage. */
+.galaxy-stage.is-flat-layout .galaxy-link {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Layout presets (Phase G0 of the Galaxy rework, 2026-10-23; galaxy-presets.js)
+   --------------------------------------------------------------------------
+   A row of small chips in the Galaxy bar: the default constellation, the three
+   flat layouts (hotkeys 6/7/8) and the five presets that are not built yet -
+   shown disabled rather than hidden. Chips reuse the legend's shape so the bar
+   reads as one set of controls; the pressed state is border + text, never
+   colour alone. The guide circles/lines/chords below the picture are the
+   layouts' own decoration and deliberately faint: they are a map, not content.
+   -------------------------------------------------------------------------- */
+
+.galaxy-presets {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  /* Its own row: nine chips with words do not fit beside the search box and the
+     legend, and without this the row overflowed the window (the zen-ring
+     screenshot was scrolled sideways because of it). */
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.preset-chip:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.preset-chip[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--surface-sunken);
+}
+
+.preset-chip:disabled {
+  /* Disabled, not removed: the five rich presets are planned, and "not built
+     yet" is the honest word for them (a hidden button would read as "never
+     planned"). 0.72 keeps the label readable while clearly inactive. */
+  opacity: 0.72;
+  cursor: default;
+}
+
+.preset-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.preset-hint {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.galaxy-preset-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 52ch;
+}
+
+/* The layouts' guides: rings, sector spokes, row lines and inward chords. The
+   SVG layer is pointer-events:none like the rest of the drawing; these are
+   decoration under the controls. */
+.galaxy-guide-ring {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.galaxy-guide-ring.is-halo {
+  opacity: 0.7;
+}
+
+.galaxy-guide-line {
+  stroke: var(--edge);
+  stroke-width: 1;
+  opacity: 0.3;
+}
+
+.galaxy-guide-chord {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1;
+  opacity: 0.38;
 }
 
 /* The stage takes focus for pan and zoom, so it needs a ring of its own - the
