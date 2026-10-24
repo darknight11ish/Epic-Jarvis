@@ -1493,6 +1493,41 @@ def _spawn(fn: Callable[[], None]) -> None:
     threading.Thread(target=fn, name="jarvis-devices-card", daemon=True).start()
 
 
+def _gate_module():
+    """The gate module itself, or None.
+
+    `_gate` above is the FUNCTION the card is raised through; taking a card
+    off the list again is a second entry point of the same module
+    (`jarvis_gate.withdraw`), and tests stand the function in without standing
+    the module in. So this asks for the module, tolerates its absence, and the
+    one caller checks whether the name it wants is really there.
+    """
+    try:
+        import jarvis_gate
+        return jarvis_gate
+    except Exception:
+        return None
+
+
+def _take_off(rid, why: str) -> None:
+    """Withdraw a waiting card if this backend has `jarvis_gate.withdraw`.
+
+    Only the pairing and approval-key cards can reach this. They are the cards
+    that no longer have a clock (jarvis_gate.APPROVAL_NEVER_EXPIRES), so a
+    cancelled or replaced one would otherwise wait on the owner's screen for
+    ever. getattr, not a plain call: a backend without that patch has no
+    withdraw, and this must leave such a backend exactly as it was - there the
+    card still lapses on its own, as every card always did.
+    """
+    take_off = getattr(_gate_module(), "withdraw", None)
+    if not rid or not callable(take_off):
+        return
+    try:
+        take_off(rid, why)
+    except Exception:
+        pass
+
+
 def _owner_check_armed() -> bool:
     try:
         import jarvis_owner_check
@@ -1846,6 +1881,7 @@ def claim(body, *, peer, local=None, own=None, gate: Optional[Callable] = None,
 def _decide(s: Session, gate: Callable, tier_of: Callable) -> None:
     """Raise the pair_device card and wait for it (its own thread)."""
     text = card_text(s.name or "", s.words or [])
+    v = None
     try:
         if tier_of(ACTION) != "ask":
             raise LookupError("tier")
@@ -1860,6 +1896,15 @@ def _decide(s: Session, gate: Callable, tier_of: Callable) -> None:
         if _S["session"] is not s or s.state != "waiting_for_card":
             # Cancelled, replaced, burnt or expired while the card waited:
             # withdrawn - approving it makes no key.
+            #
+            # Take the card off the list too. A pair_device card has no clock
+            # any more (jarvis_gate.APPROVAL_NEVER_EXPIRES - the owner's ruling
+            # of 2026-10-23), so without this it would wait on screen for ever
+            # offering a decision that can no longer do anything. On a backend
+            # without that patch `_take_off` finds no `withdraw` and does
+            # nothing, exactly as before.
+            _take_off(getattr(v, "request_id", None),
+                      "the pairing it asked about was cancelled or replaced")
             _audit("devices.pair", {"state": "withdrawn", "card": outcome})
             return
         if outcome == "approved":
@@ -2472,7 +2517,12 @@ def _k_decide(device_id: str, pid: str, spki: str, name: str, gate: Callable,
         _AK_WITHDRAWN.discard(pid)
     if withdrawn or not current:
         # Replaced by a newer request, or the device was removed: approving
-        # this card stores nothing.
+        # this card stores nothing. It has no clock either (the approval-key
+        # flow is one of the three the owner exempted on 2026-10-23), so take
+        # it off the list here or it waits for ever for a decision that can no
+        # longer store anything. No-op on a backend without `withdraw`.
+        _take_off(pid, "the approval-key request it asked about was cancelled "
+                       "or replaced")
         _audit("devices.approval_key", {"id": device_id, "state": "withdrawn", "card": outcome})
         return
     if outcome != "approved":

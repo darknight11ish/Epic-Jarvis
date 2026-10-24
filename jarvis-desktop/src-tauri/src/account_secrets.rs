@@ -8,8 +8,8 @@
 //! SetEnvironmentVariable`, `backend/README.md`'s own PowerShell lines). This
 //! gives each its own box in Settings, written straight into Windows
 //! Credential Manager on this PC - never sent over HTTP to the backend, and
-//! never to the phone, exactly like [`crate::web_search`]'s Exa/Tavily/Brave
-//! key boxes.
+//! never to the phone, exactly like [`crate::web_search`]'s Exa/Tavily/Brave/
+//! DeepSeek key boxes.
 //!
 //! Three commands, Settings window only (permissions/surfaces.toml,
 //! `settings-surface`):

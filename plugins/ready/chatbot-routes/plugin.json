@@ -4,5 +4,5 @@
   "module": "jarvis_chatbot_routes",
   "install": "handler",
   "replaces_patch": "chatbot-routes.patch",
-  "stack_order": 93
+  "stack_order": 94
 }

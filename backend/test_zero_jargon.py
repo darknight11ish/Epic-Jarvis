@@ -19,6 +19,11 @@ scanner itself before anyone trusts the list it makes:
     finding on their own surface;
   * a bare ``"error": "Failed"`` is reported separately as a bare refusal,
     while ``"status": "denied"`` (an enum value, not a message) is not;
+  * the five developer terms added on 2026-10-23 (``target_digest``,
+    ``cosine``, ``SQLITE_BUSY``, ``ECONNREFUSED``, ``ENETUNREACH``) are each
+    caught under their own name, and ordinary English near them (``busy``,
+    ``refused``, ``unreachable``, ``target``, ``daily digest``, ``cosign``) is
+    not;
   * the machine-readable report is valid JSON with path:line, word and the
     string, and its counts agree with its findings;
   * a file that cannot be parsed is REPORTED, never silently skipped;
@@ -287,6 +292,77 @@ def t_the_real_tree_is_measured_against_the_committed_baseline():
     check("... and the check says so in words, not silence",
           "ok" in proc.stdout.lower() and "baseline" in proc.stdout.lower(),
           proc.stdout[-500:])
+
+
+def t_each_new_developer_term_is_caught():
+    """The five terms Section 3 names were missing before 2026-10-23.
+
+    ``target_digest``, ``cosine``, ``SQLITE_BUSY``, ``ECONNREFUSED`` and
+    ``ENETUNREACH`` are real words the owner can be shown, and the scanner
+    reported none of them: each must now be caught, on the right line, under
+    its own name (``target_digest`` must not arrive as a generic "config key").
+    """
+    lines = (
+        "The card's target_digest did not match.",
+        "Scores come from cosine similarity.",
+        "SQLITE_BUSY while saving; try again in a moment.",
+        "ECONNREFUSED talking to your PC.",
+        "ENETUNREACH: the phone has no route.",
+    )
+    terms = ("target_digest", "cosine", "SQLITE_BUSY", "ECONNREFUSED",
+             "ENETUNREACH")
+    with tempfile.TemporaryDirectory(prefix="zj-newterms-") as tmp:
+        root = Path(tmp)
+        body = "def reply():\n" + "".join(
+            f'    return {{"error": {json.dumps(line)}}}\n' for line in lines)
+        write(root, "backend/jarvis_fake.py", body)
+        report = scan(root)
+        for offset, (term, line) in enumerate(zip(terms, lines)):
+            found = [f for f in report["findings"] if f["term"] == term]
+            check(f"the new term {term} is caught", len(found) == 1,
+                  [(f["term"], f["string"]) for f in report["findings"]])
+            check(f"... at the right file and line ({term})",
+                  bool(found) and found[0]["path"] == "backend/jarvis_fake.py"
+                  and found[0]["line"] == offset + 2, found)
+            check(f"... and the string it reports is the planted one ({term})",
+                  bool(found) and found[0]["string"] == line, found)
+
+
+def t_ordinary_words_near_the_new_terms_are_not_flagged():
+    """A whole-word rule must not fire on ordinary English.
+
+    ``busy`` is not ``SQLITE_BUSY``, ``unreachable`` is not ``ENETUNREACH``,
+    ``refused`` is not ``ECONNREFUSED``, ``target``/``daily digest`` is not
+    ``target_digest``, and ``cosign`` is not ``cosine``. The extractor is
+    proved to read these very lines first, so "not flagged" is a decision the
+    scanner made and not the silence of a fixture it never opened.
+    """
+    lines = (
+        "The bank will cosign the loan.",
+        "Your PC is busy saving; try again in a moment.",
+        "The link is unreachable; check the cable, then try again.",
+        "It refused the file because it is already open.",
+        "The target was not changed.",
+        "Your daily digest is ready.",
+    )
+    with tempfile.TemporaryDirectory(prefix="zj-ordinary-") as tmp:
+        root = Path(tmp)
+        body = "def reply():\n" + "".join(
+            f'    return {{"error": {json.dumps(line)}}}\n' for line in lines)
+        path = write(root, "backend/jarvis_fake.py", body)
+        candidates, errors = Z.backend_candidates(path, "backend/jarvis_fake.py")
+        seen = {candidate.text for candidate in candidates}
+        check("the ordinary-word fixture is really read by the scanner",
+              not errors and all(line in seen for line in lines),
+              (errors, sorted(seen)))
+        report = scan(root)
+        check("ordinary words (cosign/busy/unreachable/refused/target/digest) "
+              "are not flagged",
+              report["counts"]["total"] == 0,
+              [(f["term"], f["string"]) for f in report["findings"]])
+        check("... and none of them is counted as a bare refusal either",
+              report["counts"]["bare_refusals"] == 0,
+              report["bare_refusals"])
 
 
 if __name__ == "__main__":

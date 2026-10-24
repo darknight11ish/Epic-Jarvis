@@ -57,7 +57,7 @@ beside `web-search.json` (`jarvis_accounts.py`; accounts.patch, 2026-10-06).
 An ADDRESS is not a secret, so it is a plain JSON file; the two that ARE
 worth stealing are not here at all - `imap_user()` / `imap_password()`
 (ease-of-use audit row 15) read them the same way `jarvis_search.py` reads
-the Exa/Tavily/Brave keys: the environment variable first, if the owner
+the Exa/Tavily/Brave/DeepSeek keys: the environment variable first, if the owner
 already set one - unchanged, nothing that works today stops working -
 otherwise Windows Credential Manager, under `IMAP_USER_TARGET` /
 `IMAP_PASSWORD_TARGET`, entered on the PC only in the desktop's Settings
