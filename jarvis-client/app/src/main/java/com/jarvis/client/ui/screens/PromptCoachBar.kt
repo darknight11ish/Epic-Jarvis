@@ -79,7 +79,9 @@ private val SUGGESTION_MAX_HEIGHT = 220.dp
  * @param draft the words in the box, read as a lambda so a keystroke does not
  *   recompose this (the composer's own reason for taking it that way).
  * @param view what the PC last said about the coach, or null before it
- *   answered. Off, and unanswered, both draw nothing.
+ *   answered. Nothing is drawn before it answers, and nothing while the coach
+ *   is off; a PC with no coach at all draws its own [PromptCoach.MISSING] line
+ *   ([coachBarShown]).
  * @param thread the conversation above the box, from [HomeState.thread] -
  *   memory only, and never kept by the coach.
  * @param link the link, so the button is offered only while the PC can be
@@ -92,6 +94,24 @@ private val SUGGESTION_MAX_HEIGHT = 220.dp
  *   drawn, is exactly the text that was coached (`current` above).
  * @param sendSuggestion puts this rewrite in the box and sends it.
  */
+/**
+ * Whether the "Coach this" bar is drawn at all.
+ *
+ * Not before the PC has answered (null). A PC with no coach route is drawn,
+ * because its own [PromptCoach.MISSING] line is what tells the owner why there
+ * is no button. With the route known, the bar is drawn while the coach is ON
+ * and hidden while it is simply OFF - the settings screen is where "off" is
+ * explained.
+ *
+ * The old gate returned whenever `v == null || v.on`, which hid the bar exactly
+ * when the coach was switched ON (so the feature could not be used) and drew it
+ * when OFF, where the PC answers "The prompt coach is switched off."
+ * (`backend/jarvis_prompt_coach.py:1220`). The 2026-10-24 round-2 audit, H1;
+ * `PromptCoachGateTest` holds this rule and the bar's use of it.
+ */
+internal fun coachBarShown(view: PromptCoach.View?): Boolean =
+    view != null && (!view.routeKnown || view.on)
+
 @Composable
 internal fun PromptCoachBar(
     draft: () -> String,
@@ -121,10 +141,8 @@ internal fun PromptCoachBar(
         coachedText = ""
     }
 
-    val v = view
-    // Off, or not read yet: no button, no line, nothing at all. The switch's
-    // own screen is where "off" is explained.
-    if (v == null || v.on) return
+    if (!coachBarShown(view)) return
+    val v = view ?: return
 
     if (!v.routeKnown) {
         // The PC answered that it has no prompt coach at all. The owner asked
