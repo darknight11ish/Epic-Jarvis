@@ -6025,7 +6025,8 @@
         "setting_keys": [
           "big_model",
           "big_model_wiki",
-          "big_model_deep_questions"
+          "big_model_deep_questions",
+          "big_coder"
         ],
         "turn_on": "turn on the big model",
         "turn_off": "turn off the big model",
@@ -6067,6 +6068,7 @@
         "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
       "own_keys": [
+        "big_coder",
         "big_model",
         "big_model_deep_questions",
         "big_model_wiki"

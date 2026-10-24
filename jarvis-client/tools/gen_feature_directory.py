@@ -11,8 +11,9 @@ and cannot drift from the contract. It is the phone-side generator: the shared
 contract generator produces the JSON, this one turns it into Kotlin.
 
 The artifact is data only: labels, words, example phrase, screen path, and (for
-rows the contract says are real switches) the setting keys. The screen decides
-nothing itself; `FeatureDirectoryTest` pins count/labels/example/path rules.
+rows the contract labels Switchable/Adjustable) the setting keys. The screen
+decides nothing itself; `FeatureDirectoryTest` pins count/labels/example/path
+rules, including that no other label may name a setting.
 """
 from __future__ import annotations
 
@@ -45,9 +46,20 @@ def kt(s) -> str:
 def row(f: dict) -> dict:
     control = f.get("control") or {}
     evidence = f.get("label_evidence") or {}
-    keys = [str(k) for k in (control.get("setting_keys") or [])]
-    adjusts = [str(a) for a in (control.get("adjust") or [])]
     label = str(f.get("label") or "")
+    # The directory is a PHONE surface and draws no toggle. `setting_keys` is
+    # the contract's record of the switch keys a row's control names; this app
+    # may only name one on a Switchable/Adjustable row, because every other
+    # label says the phone has no control for the feature (PC-Only included).
+    # A PC-Only row can still be a real switch on the PC - the contract records
+    # that, and the desktop page never renders keys at all - but listing it here
+    # would offer a control this app does not have, which is the fake-switch
+    # rule FeatureDirectoryTest holds. So the keys are dropped for every other
+    # label, never rendered.
+    keys = [str(k) for k in (control.get("setting_keys") or [])]
+    if label != LABELS[0]:
+        keys = []
+    adjusts = [str(a) for a in (control.get("adjust") or [])]
     command = f.get("command") or {}
     return {
         "id": str(f.get("id") or ""),

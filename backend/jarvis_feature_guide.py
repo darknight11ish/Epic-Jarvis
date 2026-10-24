@@ -1071,6 +1071,12 @@ EXTRA_CONTROLS = {
     # Picture mode's real switch is screen_picture; the old matrix had no link
     # here, so its Command-Only row typed into the switch without owning it.
     "picture-mode": ("screen_picture",),
+    # The 30B coder's opt-in switch is drawn INSIDE the desktop Settings card
+    # "Big model (slow)" (settings.html, `id="big-model"`, the `#bc-switch`
+    # row), so the big-model feature is the row that answers "the big coder" -
+    # the phone has no Settings row of its own for it, and its directory sends
+    # that name to the big-model row instead (2026-10-23, #749).
+    "big-model": ("big_coder",),
 }
 
 #: Features that ARE command-controllable but have NO desktop Settings control

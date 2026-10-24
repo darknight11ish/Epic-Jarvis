@@ -98,6 +98,17 @@ object MenuPlaces {
         // needs its PLACE here: Find anything lists every phone menu with a
         // place, and MenuVisibilityTest holds this map to the screen's rows.
         "setup-questionnaire" to "settings.setup-questionnaire",
+        // "All features and abilities" (2026-10-23, #749): the phone's own
+        // directory row (SettingsScreen.kt, `item(key = "all-features")`), and
+        // a menu the registry now gives the phone (`settings.all-features`,
+        // backend/jarvis_menus.py). It is NEVER hideable - it is the phone's
+        // map of where every other control lives, so hiding it would strand
+        // the way to find the rest - and it is still a real row with a real
+        // menu id, so it needs its PLACE here rather than a line in
+        // MenuVisibilityTest's "not a menu" list: that test holds this map to
+        // the screen's rows, and a row here is what makes it findable in
+        // FindAnything (which lists every phone menu that has a place).
+        "all-features" to "settings.all-features",
     )
 
     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */
