@@ -243,7 +243,7 @@ explicit that the queue itself is fetched from `/api/pending` — **not**
 
 | Endpoint | Method | Body / params | Desktop | Android | Notes |
 |---|---|---|---|---|---|
-| `/api/pending` | GET | — | `stream.rs:641`, `brain/routes.rs` (not listed; fetched by the stream) | `JarvisApi.kt:274` | Answers `{"available", "pending", "history"}`. **Not a bare array.** |
+| `/api/pending` | GET | — | `stream.rs:641`, `brain/routes.rs` (not listed; fetched by the stream) | `JarvisApi.kt:274` | Answers `{"available", "pending", "history"}`. **Not a bare array.** `history` rows carry `created`/`decided` (measured on the live backend 2026-10-24); both apps read those names, and the `created_at`/`decided_at` aliases first (§42.1). |
 | `/api/approve` | POST | see below | `commands.rs:954` | `JarvisApi.kt:395` | **The two clients send different bodies.** |
 | `/api/deny` | POST | see below | `commands.rs:954` | `JarvisApi.kt:397` | Same. |
 | `/api/pending/<id>/amend` | POST | `{"note": "…"}` | via `amend_approval` | `JarvisApi.amend` | **Real since `backend/task-control.patch`.** Keeps a note with one waiting card; approves and denies nothing. See §11. |
@@ -9158,10 +9158,10 @@ approval cards, and shows the array it already had a `history` key for.
 
 ### 42.1 What is confirmed about `history` rows, and how
 
-Two things, both read out of this repository's own backend tests (not
-guessed, and not run here - `jarvis_gate.py` cannot be imported without the
-owner's PC, but the source text quoted below is read as text by the tests
-that ship in this repo):
+Two things were read out of this repository's published gate
+(`jarvis-backend/jarvis_gate.py`, the copy this repository can test) -
+`backend/test_gate_egress.py` reads the source as text - and the row shape
+itself was measured on the owner's live backend on 2026-10-24:
 
 - **The array exists and is sent today.** `docs/JARVIS-API.md` §3's own
   table has said `/api/pending` answers `{"available", "pending",
@@ -9180,14 +9180,30 @@ that ship in this repo):
   also why this list can safely show `notice.title`/the action-name
   fallback (below) on a lock screen: neither reads `detail` or `prompt`.
 
-**Everything else about the row's exact field names is ASSUMED, not
-confirmed**, and both apps' readers are written to degrade rather than
-guess wrong:
+**The row shape was measured on the live gate on 2026-10-24.** A read of
+`GET /api/pending` at 13:52 PT against the running backend answered `history`
+rows with exactly `id, action, tier, state, created, decided, decided_by` -
+no `decided_at` - and a decided row's `decided` was a number such as
+`1792875072.03678`. That confirmed `decided_by` and it settled the "when"
+question below: both apps had been reading `decided_at` from rows that never
+carried it, so a decided card showed when it was RAISED.
 
-- **`decided_by` (device) is a real column** - `backend/gate-outcome.patch`
-  reads `row["decided_by"]` when auditing a decided row - but whether
-  `history()` SELECTs it, and what string it holds for the gate's own
-  approve/deny, could not be confirmed. Every OTHER approval-adjacent route
+**The fix is in the two readers, and it needs no backend change (2026-10-24).**
+The desktop (`brain.js` `activityWhen`) and the phone (`GateHistory.kt`) now
+take `decided_at` first and fall back to `decided` (`decided_at ?? decided`),
+and `created_at` first, falling back to `created`, for the raise time. Against
+the measured row that is the whole fix: `decided` is a real value on a decided
+row, and a reader that looks for it finds the decision time. Nothing was added
+to `history()` on purpose - see the last paragraph of this section for why the
+column-name fallback is what makes the fix reachable at all.
+
+**The meaning of each field is still read defensively**, and both apps'
+readers degrade rather than guess wrong when a row does not carry one:
+
+- **`decided_by` (device) is a real column, and the measured row carries
+  it** (`backend/gate-outcome.patch` reads `row["decided_by"]` when auditing
+  a decided row), but what string it holds for the gate's own approve/deny
+  was not measured. Every OTHER approval-adjacent route
   in this codebase that reports which device acted uses exactly two words,
   computed from the request's origin (`backend/focus.patch`,
   `power-mode.patch`, `task-control.patch`, `note-capture.patch`: `by =
@@ -9216,25 +9232,27 @@ guess wrong:
   `card-words.js`) - `Jarvis wants your OK for "<action, spaced out>"`,
   safe on a lock screen either way because it never reads `detail` or
   `prompt`.
-- **When.** `decided_at` if the row has one, else `created`. Neither name
-  is confirmed for `history()` specifically; `created` is confirmed as a
-  column on the live row (`t_site_1_the_row_keeps_it`: `SELECT
-  id,action,tier,detail,prompt,created,raised FROM approvals`).
+- **When.** `decided_at` first, else `decided`, for the decision time;
+  `created_at` first, else `created`, for the raise time. The alias is read
+  first even though the measured row does not carry one: both readers prefer
+  it, so a later backend that adds it needs no app change. On the measured row
+  `created` is a column and `decided` carries the decision time on a decided
+  row, so both names are real values, never a guess. A zero or unreadable
+  value is not a time: it falls through to the other name and ends at 0
+  rather than showing NaN.
 
-**No backend change was made** to try to add or guess at the exact shape of
-`history()` - the copy of `jarvis_gate.py` running on the owner's PC is not the
-one this repository holds as its published base
-(`jarvis-backend/jarvis_gate.py`), so any patch
-against its unseen source would be lines invented rather than read, and
-could not be trusted to apply on the owner's PC (every other patch in
-`backend/` matches real context lines from the file it patches; this would
-not have been able to). If the real `history()` rows turn out to be missing
-`decided_by`/`device` entirely, both apps already show that plainly (no
-device line at all) rather than failing or inventing one - the owner
-confirming the real shape from their own PC is what would turn "assumed"
-above into "confirmed", and a later change could then add the exact right
-field name to the two apps' readers below, with no server-side change
-needed unless the field is missing outright.
+**No backend change was made (2026-10-24), and that is deliberate.**
+`history()` keeps its `SELECT` of the seven measured columns and its seven
+keys. The only file this repository could change is
+`jarvis-backend/jarvis_gate.py`, the published base - and the deploy tool
+never copies that directory over the owner's install: live changes travel
+only as `backend/*.patch` deltas. An alias added in the base alone would
+therefore be a claim that never reaches the PC; delivering it would need a
+new patch plus a `DELTA_TABLE` anchor in the hardened deploy tool, for a key
+whose only readers are the two clients fixed here. The clients' fallback is
+what makes the fix land on the backend as it is. `decided_by`, `state`,
+`tier` and the action-name title fallback are read exactly as described in the
+bullets above.
 
 ### 42.2 Both apps
 

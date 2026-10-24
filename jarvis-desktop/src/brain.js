@@ -12092,11 +12092,16 @@ function activityOutcome(h) {
   return "Not reported";
 }
 
-/** When to show: the decision time if the row has one, else when it was raised. */
+/** When to show: the decision time if the row has one, else when it was raised.
+ *
+ * The gate's `history()` row carries `created`/`decided`; since 2026-10-24 it
+ * also carries the same two values as `created_at`/`decided_at`. Read either
+ * name, the alias first, so a newer PC and an older one both show the decision
+ * time instead of the raise time. */
 function activityWhen(h) {
-  const decided = Number(h.decided_at);
+  const decided = Number(h.decided_at ?? h.decided);
   if (Number.isFinite(decided) && decided > 0) return decided;
-  const created = Number(h.created);
+  const created = Number(h.created_at ?? h.created);
   return Number.isFinite(created) && created > 0 ? created : 0;
 }
 

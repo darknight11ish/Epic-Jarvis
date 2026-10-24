@@ -3109,3 +3109,32 @@ while a later successful write still produces the right, openable file.
 folder, the unchanged kept count, the truncated file not counting, and the
 later success - each with the negative-control numbers recorded in the branch's
 own report.
+
+## 2026-10-24 - the C3 decision-time bug is fixed in the two apps; `history()` stays exactly as measured
+
+The live read settled the C3 question the 2026-10-24 bug audit had left open:
+`GET /api/pending` history rows carry `id, action, tier, state, created,
+decided, decided_by` and no `decided_at` (measured 13:52 PT; a decided row's
+`decided` was `1792875072.03678`), while the desktop (`brain.js`
+`activityWhen`) and the phone (`GateHistory.kt`) both read `decided_at` - so a
+decided card showed its raise time, or nothing, as its decision time.
+
+**Decided: fix the readers, not the PC.** Both clients now read
+`decided_at ?? decided` for the decision time and `created_at ?? created` for
+the raise time, which is the whole fix against the measured row - `decided` is
+a real value on a decided row. No alias was added to
+`jarvis-backend/jarvis_gate.py` and no patch was written. The base is never
+copied over the owner's install (a live change travels only as a
+`backend/*.patch` delta), so an alias typed into the base would be a claim
+that never reaches the PC; delivering it would need a new patch plus a
+`DELTA_TABLE` anchor in the deploy tool, and the only readers of `decided_at`
+are the two clients being fixed here. The fallback is what makes the fix land
+on the backend as it is. If a later wave wants the alias on the wire, both
+readers already prefer it, and the measured shape above is the anchor.
+
+Evidence: `jarvis-desktop/tests/activity-when.mjs` lifts the real
+`activityWhen` and pins an old-shape row and a row carrying both names - it
+fails against the old reader (2 checks red) and passes against the fix (5 of
+5). `jarvis-client/.../PastApprovalsTest.kt` pins the Kotlin reader the same
+way; CI is the first compiler for it, since there is no Android build at this
+desk.

@@ -121,6 +121,52 @@ class PastApprovalsTest {
     }
 
     @Test
+    fun `the live gate's own row (only decided) still shows its decision time`() {
+        // Measured on the live gate at 13:52 PT on 2026-10-24: a decided
+        // `/api/pending` history row carries `created` and `decided` and NO
+        // `decided_at`. Reading only the alias left `decidedAt` null, so the
+        // card showed when it was RAISED - the bug this test exists for.
+        val read = decode(
+            """
+            [
+              {"id": "old", "action": "send_email", "tier": "ask", "state": "approved",
+               "created": 1792800000.5, "decided": 1792875072.03678, "decided_by": "this PC"}
+            ]
+            """.trimIndent(),
+        )
+        assertEquals(1, read.items.size)
+        assertEquals(0, read.skipped)
+        val item = read.items[0]
+        assertEquals(1792875072.03678, item.decidedAt ?: 0.0, 0.0001)
+        assertTrue("a decided time must be non-zero", (item.decidedAt ?: 0.0) > 0.0)
+        // The list shows the decision time, not the raise time.
+        assertEquals(item.decidedAt ?: 0.0, item.whenAt, 0.0001)
+        assertEquals("Approved", item.outcomeLabel)
+        assertEquals("this PC", item.device)
+    }
+
+    @Test
+    fun `a newer PC's aliases are the same times, and a pending row has neither decision name set`() {
+        // Since 2026-10-24 `history()` sends BOTH `created`/`decided` and
+        // `created_at`/`decided_at` with equal values.
+        val read = decode(
+            """
+            [
+              {"id": "new", "created": 1792800000, "created_at": 1792800000,
+               "decided": 1792875072.5, "decided_at": 1792875072.5, "state": "denied"}
+            ]
+            """.trimIndent(),
+        )
+        assertEquals(1792875072.5, read.items[0].decidedAt ?: 0.0, 0.001)
+        assertEquals(1792800000.0, read.items[0].createdAt, 0.001)
+        // A waiting card carries both decision keys as null; its raise time
+        // may arrive under either name and must still be shown.
+        val pending = decode("""[{"id": "p", "created_at": 1792800000.5, "decided": null}]""").items[0]
+        assertNull(pending.decidedAt)
+        assertEquals(1792800000.5, pending.whenAt, 0.001)
+    }
+
+    @Test
     fun `a row with no id costs that row and nothing else`() {
         val read = decode(
             """

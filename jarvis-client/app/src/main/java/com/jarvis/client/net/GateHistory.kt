@@ -39,9 +39,9 @@ data class GateHistoryItem(
     val id: String,
     val action: String? = null,
     val tier: String = "ask",
-    /** Seconds since epoch. 0 when the row said nothing. */
+    /** Seconds since epoch. 0 when the row said nothing. `created_at`, else `created`. */
     val createdAt: Double = 0.0,
-    /** Seconds since epoch, when the row says when it was decided. */
+    /** Seconds since epoch, when the row says when it was decided. `decided_at`, else `decided`. */
     val decidedAt: Double? = null,
     /** The row's own word for how it ended - `state` or `outcome` - lowercased. */
     val state: String = "",
@@ -110,8 +110,13 @@ private fun normaliseGateHistoryRow(row: JsonElement): GateHistoryItem? {
     val id = idOf(obj["id"]) ?: return null
     val action = textOf(obj["action"])
     val tier = textOf(obj["tier"]) ?: "ask"
-    val created = doubleOf(obj["created"]) ?: 0.0
-    val decidedAt = doubleOf(obj["decided_at"])
+    // Two names for each time, the alias first: the gate's `history()` sends
+    // `created`/`decided` and, since 2026-10-24, the same two values as
+    // `created_at`/`decided_at`. Reading only the alias (as this did before
+    // that date) left `decidedAt` null on every row the live gate sent, so a
+    // decided card showed the raise time instead of the decision time.
+    val created = doubleOf(obj["created_at"]) ?: doubleOf(obj["created"]) ?: 0.0
+    val decidedAt = doubleOf(obj["decided_at"]) ?: doubleOf(obj["decided"])
     val state = (textOf(obj["state"]) ?: textOf(obj["outcome"]) ?: "").lowercase()
     val device = textOf(obj["decided_by"]) ?: textOf(obj["device"]) ?: textOf(obj["by"])
     val notice = (obj["notice"] as? JsonObject)?.let {
