@@ -4,5 +4,5 @@
   "module": "jarvis_photo_remind",
   "install": "handler",
   "replaces_patch": "photo-reminder.patch",
-  "stack_order": 89
+  "stack_order": 90
 }

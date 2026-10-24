@@ -354,10 +354,20 @@ fifteen minutes, and changeable in Settings on either app, 5 minutes to an hour;
 it was 600, and 180 before that). Seconds left,
 not a clock time, so the phone's clock does not have to agree with the PC's.
 Without the patch the field is absent and no countdown is shown.
-`backend/test_approval_contract.py` builds these rows from the real
-`notice_for` and `expires_in` code into
-`jarvis-client/app/src/test/resources/contract/pending-rows.json`, which the
-phone's and the desktop's tests decode.
+
+**The field is also absent for the four cards that have NO deadline** (the
+owner's ruling of 2026-10-23, Q1; `backend/no-expiry-cards.patch`): pairing a
+device (`pair_device`, `unretire_shared_key`), registering a phone's approval
+key (`register_approval_key`) and restoring a backup (`restore_backup`) wait for
+the owner instead of running out. Every other action - including every routine
+one and every action nobody classified - keeps the 15-minute window above. The
+field is left OFF for the four, never `0` (which both apps read as "expired
+now") and never a very large number (which would draw a countdown that ends in a
+refusal that never comes). Both clients already treat an absent field as "no
+countdown", so no client change is needed; `backend/test_gate_no_expiry.py`
+drives the gate and `backend/test_approval_contract.py` still builds the
+fixture from the real `notice_for` and `expires_in` code into
+`jarvis-client/app/src/test/resources/contract/pending-rows.json`.
 
 ### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
 
@@ -374,7 +384,9 @@ a client:
   connection: loopback, a sender address equal to the address it arrived at
   (the PC calling its own Tailscale address), or one of the PC's own
   addresses; anything that cannot be placed counts as the PC. The request
-  stays open while the prompt is up, at most the card's `expires_in`. A
+  stays open while the prompt is up, at most the card's own window (the
+  shipped 900 when it has one; the Windows Hello prompt itself is bounded by
+  that same number even for the four cards with no deadline). A
   phone approval, or a card that is not risky, is not held.
 - **The answers it can give instead of the owner's handler's:**
 
@@ -6326,7 +6338,7 @@ phone, settings for a PC feature live on the phone's Brain screen. `ported` in
 `tests/fixtures/web-search-cases.json` / `contract/web-search-cases.json`,
 written by `tools/gen_web_search_cases.py` from the real code.
 
-### 23.1 The five providers
+### 23.1 The six providers
 
 | id | label | where the words go | needs |
 |---|---|---|---|
@@ -6335,6 +6347,7 @@ written by `tools/gen_web_search_cases.py` from the real code.
 | `exa` | Exa | `POST https://api.exa.ai/search`, `x-api-key: <key>`, body `{"query", "numResults": 5, "contents": {"highlights": true}}` (address, header and field names read from the official exa-py 2.22.2 source); the snippet is the page's highlighted passages joined, else the start of its text - page content, so outside text, cut to 300 characters like every snippet | a key (free, no payment card) |
 | `tavily` | Tavily | `POST https://api.tavily.com/search`, `Authorization: Bearer <key>` | a key (free, no payment card) |
 | `brave` | Brave Search | `GET https://api.search.brave.com/res/v1/web/search?q=...&count=5`, `X-Subscription-Token: <key>` | a key, and an account with a payment card - **charged past the free monthly credit** |
+| `deepseek` (opt-in, added 2026-10-23) | DeepSeek web search (needs a key) | `POST https://api.deepseek.com/v1/tools/search`, `Authorization: Bearer <key>`, body `{"query", "count": 5, "need_content": false}`; the result's `summary` (written for a model) becomes the snippet, `snippet` is the fallback, and `date` may be null; `content`, `date`, `site_name`, `site_icon`, `authority` and `rerank_score` are not used | a key; the account's balance is charged **$0.75 per 1,000 successful searches** (a failed search or one that finds nothing is not billed) |
 
 Whoogle is left out, and `left_out` says why (both apps show it): "Not
 offered: its own README says it no longer returns results, since Google
@@ -6343,6 +6356,17 @@ blocked searching without JavaScript in 2025."
 Brave was removed and added back on the same day (the owner, 2026-09-25):
 it stays, fifth, and its "why use this one" line says plainly that it can
 cost money: "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
+
+DeepSeek is **opt-in and sixth** (added 2026-10-23; nothing about the default
+or the other five changes, and SearXNG is still the default): its own Search
+API, read from its guide at
+`https://api-docs.deepseek.com/guides/search`. Only `query`, `count` and
+`need_content` are sent: the guide's optional `ori_question` (conversation
+context) and `localization` (an address) are deliberately never sent. Its
+query is 1 to 128 characters - narrower than this module's 300 - so a longer
+search is refused in `plan()` before any card or socket. Its rate limit is
+100 searches a second per account; past it DeepSeek answers 429, which Jarvis
+says in words and never retries silently.
 
 Each provider's **"why use this one"** line (`why`) comes from the PC and both
 apps show it word for word; each app also carries a copy, used only when an
@@ -6373,7 +6397,7 @@ Every route needs the pairing token and passes the origin check.
 |---|---|---|---|
 | `GET /api/search` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_search.py` | A read. |
 | `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}`, `{"enabled": bool}` (the on/off switch, 23.6) | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card, `stop_asking_before_every_web_search`) and for `enabled: true` after it was switched off (ONE card, `web_search_enable`); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
-| `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit, or a little of Exa's free credit. Held on a stale link in both apps. |
+| `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit, a little of Exa's free credit, or one billed DeepSeek search ($0.75 per 1,000). Held on a stale link in both apps. |
 
 The view:
 
@@ -6481,13 +6505,15 @@ the rest of the conversation counts as having read outside text.
 
 ### 23.4 The keys (rule 3)
 
-The Exa, Tavily and Brave keys live in **Windows Credential Manager** on the
-PC, as `Jarvis Backend/Exa key`, `Jarvis Backend/Tavily key` and
-`Jarvis Backend/Brave Search key` (UTF-8,
+The Exa, Tavily, Brave and DeepSeek keys live in **Windows Credential Manager**
+on the PC, as `Jarvis Backend/Exa key`, `Jarvis Backend/Tavily key`,
+`Jarvis Backend/Brave Search key` and `Jarvis Backend/DeepSeek Search key`
+(UTF-8,
 the same format as the pairing token). They are entered **on the PC only**:
 the desktop's Settings, Web search (`save_search_key` / `forget_search_key`,
 written by Rust straight into Credential Manager - never sent over HTTP), or
-`py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) in the backend folder (it asks for the
+`py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`,
+`key deepseek`) in the backend folder (it asks for the
 key without showing it). **The phone has no way to enter one** (ARCHITECTURE
 section 8). A key is read fresh for each search, registered with the log
 scrubber (`jarvis_scrub.register_secret`), sent only to its own service's
@@ -6498,11 +6524,13 @@ says only `key_saved: true|false`.
 ### 23.5 Known gaps, said plainly
 
 - **Brave can cost money, and Jarvis cannot stop it.** Past the free monthly credit Brave charges the card and answers as usual - it does not refuse - so nothing Jarvis sees tells a free search from a paid one. There is no guard against that in Jarvis. The only limit is the one you set in Brave's own dashboard (a spending limit, if Brave offers one for your plan - not checked here). Brave's 402 and 429 answers are said in words (402: "your free credit for this month is used up, or your payment card was not accepted"), but by the time Brave is billing, it no longer sends them for going over the credit.
-- **Nothing here has reached a real SearXNG, DuckDuckGo, Exa, Tavily or
-  Brave.** Every test uses local stand-in servers and a stand-in `ddgs`.
+- **Nothing here has reached a real SearXNG, DuckDuckGo, Exa, Tavily,
+  Brave or DeepSeek.** Every test uses local stand-in servers and a stand-in
+  `ddgs`.
   The error codes for "credits used up" (Tavily 432/433; Exa 402, and 429
   read as "too many searches, or the credit is used up"; Brave 402/429, and
-  401/403/422 for a refused key) are not seen: Tavily's and Brave's from
+  401/403/422 for a refused key; DeepSeek 401/402/408/429/5xx from its own
+  error table) are not seen: Tavily's and Brave's from
   their documentation as understood, Exa's assumed - exa-py only raises on any
   status of 400 or more, so it says nothing about which means what. Exa's
   free credit ($10 a month, roughly 1,400 searches, no payment card) and
@@ -6917,8 +6945,8 @@ asks or remembers - only how it phrases things." `backend/jarvis_manner.py`,
 
 | Route | What |
 |---|---|
-| `GET /api/manner` | `{"available": true, "manner": "warm"\|"plain", "default": "warm", "title", "detail", "spoken", "choices": [{"id", "label", "why"}], "humor": bool, "humor_default": false, "humor_title", "humor_detail"}` - the words both apps show. `humor` is §27.5's own switch, added 2026-09-27. |
-| `POST /api/manner` | `{"manner": "warm"\|"plain"}` and/or `{"humor": true\|false}` - either key alone, or both together, in one request; at once, 200 `{"ok": true, "said", ...view}` (`said` names whichever changed, both if both did). **No approval card either way**: it does not trust, show or send anything more. An empty body, an unknown key, or a bad value for a key that IS present is 400. Sending only `"manner"` never resets `"humor"`, and only `"humor"` never resets `"manner"` - the route reads the file, changes just the key(s) sent, and writes it back. Both apps hold it on a stale link like every change. |
+| `GET /api/manner` | `{"available": true, "manner": "warm"\|"plain", "default": "warm", "title", "detail", "spoken", "choices": [{"id", "label", "why"}], "humor": bool, "humor_default": false, "humor_title", "humor_detail"}` - the words both apps show. `humor` is §27.5's own switch, added 2026-09-27. Since 2026-10-23 it also carries the personality presets (§27.7): `personality`, `personalities`, `dials`, `voice_sync`, `custom_personalities`, plus the long legacy aliases `sync_voice_with_personality` and `user_personalities`. |
+| `POST /api/manner` | `{"manner": "warm"\|"plain"}` and/or `{"humor": true\|false}` - either key alone, or both together, in one request; at once, 200 `{"ok": true, "said", ...view}` (`said` names whichever changed, both if both did). **No approval card either way**: it does not trust, show or send anything more. An empty body, an unknown key, or a bad value for a key that IS present is 400. Sending only `"manner"` never resets `"humor"`, and only `"humor"` never resets `"manner"` - the route reads the file, changes just the key(s) sent, and writes it back. Both apps hold it on a stale link like every change. Since 2026-10-23 the same route also accepts `personality`, `dials`, `voice_sync` (or `sync_voice_with_personality`), `custom_personality`, and `{"custom": {"op": "save"\|"delete", ...}}` - all cardless; see §27.7. |
 
 Without `jarvis_manner.py` the routes answer 503 `{"available": false}` and
 answers are worded as before.
@@ -7032,6 +7060,73 @@ reads the file, changes only the key(s) sent, and writes it back).
   Ollama without `run_local_turn`, so it gets no manner line, and no humour
   clause either - the same gap the spoken-style note has.
 - The big model's deep questions and the wiki builder do not use it.
+
+### 27.7 Personality presets and tuning dials (added 2026-10-23)
+
+The owner's decision of 2026-10-22: Jarvis can slip into one of **eight
+personalities** - `warm_peer` (Warm Collaborator, the default), `classic_butler`,
+`tactical_ops`, `dry_wit`, `friday_partner`, `socratic_mentor`,
+`devils_advocate`, `calm_stoic` - with **four tuning dials** (`humor` 0-3,
+`brevity` concise/balanced/thorough, `formality` casual/warm_peer/formal_butler/
+tactical, `address` first_name/sir/ma'am/boss/captain/none), plus up to **20
+"My Personalities"** presets. It is wording and voice only, exactly like manner:
+it changes no rule, no card, no tier, no memory and nothing that is sent
+anywhere, and the legacy words `warm` and `plain` still work (they map to
+`warm_peer` and `tactical_ops`).
+
+**GET** extends the §27.1 payload with:
+
+| Field | Shape |
+|---|---|
+| `personality` | the active preset id (`"classic_butler"`) |
+| `personalities` | the eight built-ins + saved ones: `{"id", "title", "description", "switch_ack", "greeting_subtitle", "quote", "voice_blend", "voice_speed", "voice": {"blend", "fallback", "speed"}, "dials": {"humor", "brevity", "formality", "address"}, "builtin"}` |
+| `dials` | the active preset's four dials with any saved overrides applied |
+| `voice_sync` | bool - whether switching a personality also switches the spoken voice (default true) |
+| `custom_personalities` | saved presets, in the full shape a Duplicate needs: `{"id", "name", "line", "example", "example_user", "example_jarvis", "dials", "based_on", "voice_spec", "voice_speed"}`. The `id` is whatever the panel/caller chose (`mine-...`) or a generated `custom-...`; use and delete accept it as-is. |
+
+The long names `sync_voice_with_personality` and `user_personalities` are kept
+as aliases of `voice_sync` / `custom_personalities`, and `personality_default`,
+`dial_choices`, `max_user_personalities` and `reflex_kinds` are informational.
+
+**POST** accepts, all **cardless** (`0` approval cards, `< 5 ms`, no model):
+
+- `{"personality": "<id or alias>"}` - switches preset; `said` is the preset's
+  in-character `switch_ack` ("Very good, sir. Classic British Butler protocols
+  are online and at your service."). `"talk to me like TARS"`, "switch to
+  F.R.I.D.A.Y. mode" and the other natural phrasings go through
+  `jarvis_quick.match()` to this same write.
+- `{"dials": {"humor": 2, "brevity": "concise", ...}}` or
+  `{"dial": {"name": ..., "value": ...}}` - one or several dials.
+- `{"voice_sync": true|false}` (alias `sync_voice_with_personality`).
+- `{"custom_personality": {"name", "base_preset", "custom_trait",
+  "example_user", "example_jarvis", "dials"}}` - save a "My Personalities"
+  preset; `{"delete_personality": id, "confirm": true}` deletes one (no
+  confirm asks first). The panel's own shape
+  `{"custom": {"op": "save", "name", "line", "example", "dials", "based_on"}}`
+  and `{"custom": {"op": "delete", "id", "confirm": true}}` are accepted too.
+  Every user-written field, **including the name**, is stripped of SecAlign
+  markers, refused if it tries to change Jarvis's instructions, and scrubbed of
+  secrets before it is stored; the name is capped at 60 characters and the
+  other fields at 240, with at most 20 saved presets.
+
+What it changes in a turn, and only this: the local model's request gets the
+active preset's compact `<jarvis_persona>` block (measured at <= 721 characters
+worst case, under the 750-character ~180-token cap) plus a one-line recency
+hint just before the newest question; the block's spoken-live variant keeps
+`Jarvis Live` answers to 1-3 sentences with no Markdown; a **crisis turn
+replaces the whole persona block with the calm support text**, so no preset can
+joke or criticise through a difficult moment; the #492 sensitive-fact line
+stays exactly `"It's on your screen."`; and the quick (0 ms) confirmations -
+timer, reminder, done, stopped, muted, walk brain-dump - answer in the active
+preset's own words. Kokoro voice/speed follow a chosen preset unless the owner
+turns voice sync off.
+
+Known gaps, said plainly (2026-10-23): **`jarvis_live.py` does not yet inject
+the persona block or switch personality mid-session**; the weighted Kokoro
+style-vector blend resolver exists and is tested but the TTS path still uses
+the preset's fallback voice (sherpa-onnx takes one voices file per engine);
+real voice playback, a real Live session and PC latency are NOT-TESTABLE in
+this repository.
 
 ## 28. Stop everything (added 2026-09-25)
 
@@ -9324,7 +9419,7 @@ HTTP; an address is not a secret, so it takes §23's SearXNG-address shape - a
 backend route over a plain JSON file - and it is in section 116.
 
 **The mechanism** is `backend/jarvis_token_store.resolve_secret(env_name,
-target)` - the general form of §23.4's Exa/Tavily/Brave key pattern, added
+target)` - the general form of §23.4's Exa/Tavily/Brave/DeepSeek key pattern, added
 to the same module that already keeps the pairing token in Credential
 Manager (`jarvis_token_store.WindowsStore`, parametrized by `target` rather
 than hard-coded to the pairing token's own name). For each of the four:
@@ -9490,7 +9585,7 @@ One `.jbak` file: a zip archive, encrypted, holding -
   points at `apply-patches.ps1` for getting later updates back.
 
 **Never backed up**, on purpose (rule 3): the pairing token and every API
-key (Exa, Tavily, Brave, GitHub, ...) - all of them live in Windows
+key (Exa, Tavily, Brave, DeepSeek, GitHub, ...) - all of them live in Windows
 Credential Manager under their own target names, never in a settings
 file, and this module reads exactly two Credential Manager entries, the
 chat-history key and the review decks' key. Also never: model files (large; Ollama keeps its own
@@ -21542,7 +21637,7 @@ from the blind-credential-handle idea generally.
 
 **Where the value lives.** Windows Credential Manager, through
 `jarvis_token_store.WindowsStore` - the same store, the same generic-credential
-format and the same three ctypes calls the pairing token and the Exa/Tavily/Brave
+format and the same three ctypes calls the pairing token and the Exa/Tavily/Brave/DeepSeek
 keys already use, one entry per name under `Jarvis Backend/vault/<name>`. This
 section adds no second mechanism to keep in step with the old one. **Values are
 never written to any file**: `<config folder>/vault.json` holds the names, the
@@ -21582,7 +21677,7 @@ rather than of every caller remembering it: with no host given, a bound handle
 does not resolve at all.
 
 **The one real use, and why that one.** `jarvis_search.py` builds the credential
-header for the Exa, Tavily and Brave keys from the provider's own handle, and
+header for the Exa, Tavily, Brave and DeepSeek keys from the provider's own handle, and
 `_send()` substitutes it. Those three keys are the right first call site because
 each goes to exactly ONE host that is fixed in code (`api.exa.ai`,
 `api.tavily.com`, `api.search.brave.com`) - so the host binding can be enforced

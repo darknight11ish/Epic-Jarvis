@@ -4,5 +4,5 @@
   "module": "jarvis_progress",
   "install": "handler",
   "replaces_patch": "progress.patch",
-  "stack_order": 111
+  "stack_order": 112
 }

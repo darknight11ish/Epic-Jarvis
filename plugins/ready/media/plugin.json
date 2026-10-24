@@ -4,5 +4,5 @@
   "module": "jarvis_media",
   "install": "handler",
   "replaces_patch": "media.patch",
-  "stack_order": 75
+  "stack_order": 76
 }

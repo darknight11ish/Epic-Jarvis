@@ -34,7 +34,7 @@ rounds after it runs continue on that lane - see offered_tools() and
 choose_lane(), and run_local_turn's `lane_choice`. Docker-based execution and
 connectors remain excluded with the reasons README.md gives. General web
 search is here since 2026-09-25 (`web_search`, jarvis_search.py, the owner's
-choice of five providers) with its own rule for when it asks - see
+choice of six providers) with its own rule for when it asks - see
 WEB_SEARCH_* below. Sending one email is here since 2026-09-25 too
 (`send_email`, jarvis_email_send.py, the owner's decision after the Muse
 audit): one card per email showing all of it, a person's yes only, the
@@ -846,7 +846,13 @@ def _run_notes_search(args: dict, plan_obj, **_) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "notes search is not available here"}
     import jarvis_notes as NOTES
-    return NOTES.run(plan_obj, approved=True)
+    result = NOTES.run(plan_obj, approved=True)
+    # Web-Gap 4 (2026-10-23): a result that is a note saved from outside text
+    # carries `source_taint`; latch the same process-wide taint every other
+    # outside read sets, so the turn is treated as outside-text-shaped.
+    if isinstance(result, dict) and result.get("source_taint"):
+        _latch_tainted_note_read()
+    return result
 
 
 #: "Folders Jarvis may look in" (jarvis_documents.py; the owner's decisions of
@@ -1105,6 +1111,20 @@ def _latch_sandbox_tool_read() -> bool:
     try:
         import jarvis_gate
         return bool(jarvis_gate.latch_taint(why="sandbox_tool_file"))
+    except Exception:
+        return False
+
+
+def _latch_tainted_note_read() -> bool:
+    """A `notes_search` returned a note saved from outside text (Web-Gap 4).
+
+    The result was already labelled as outside data; this adds the process-wide
+    taint latch, the same one every other outside read sets, so the turn stays
+    on the local lane and the gate treats it as outside text. Never raises: a
+    backend without jarvis_gate.py keeps the search usable."""
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.latch_taint(why="tainted_saved_note"))
     except Exception:
         return False
 
@@ -1723,6 +1743,9 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
         if step.tool in _TASK_MODULES:
             kwargs["checkpoint"] = checkpoint
         result = tool.execute(checked_args, state, **kwargs)
+        # Web-Gap 4: remember a note saved after outside text, before took_in
+        # marks the read. The registry only holds the write's own reference.
+        _mark_note_provenance(step.tool, result, watch)
         # Each step's result is outside text for the rest of the turn, just
         # as a direct call's is: what it read, its sources, and - for a later
         # note write in this same plan - the "after outside text" rule above
@@ -3198,6 +3221,27 @@ NOTE_AFTER_READING = ("Jarvis read outside text in this conversation, so it asks
                       "before writing to your notes.")
 NOTE_AFTER_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before writing "
                         "to your notes.")
+
+
+def _mark_note_provenance(name: str, result, watch: "_TurnWatch") -> None:
+    """Remember a note written in an outside-shaped turn (Web-Gap 4, 2026-10-23).
+
+    The write already needed a person's yes (NOTE_WRITES). Once it is saved, a
+    later `notes_search` should still know where it came from: `jarvis_notes`
+    keeps a tiny reference-only registry, and the search path marks and wraps
+    the result. Called for a tool result only, before `watch.took_in` (whose
+    read-marking would otherwise make every note write look like a read).
+    Never raises, and records nothing if the write failed, the tool is not a
+    note writer, or the turn was not shaped by outside text."""
+    try:
+        if name not in NOTE_WRITES or not isinstance(result, dict):
+            return
+        if result.get("ok") is not True or not watch.note_needs_a_person():
+            return
+        import jarvis_notes as NOTES
+        NOTES.mark_from_tool(name, result)
+    except Exception:
+        return
 
 
 #: Web search (jarvis_search.py). The owner's decisions of 2026-09-25 - "When
@@ -7911,30 +7955,55 @@ def _manner_now(conversation_id: Optional[str] = None) -> Optional[str]:
         return None
 
 
-def manner_message(manner: Optional[str]) -> Optional[dict]:
-    """The system message for `manner` ("warm" / "plain"), or None."""
+def manner_message(manner: Optional[str], *, crisis: bool = False) -> Optional[dict]:
+    """The system message for the active way of talking, or None.
+
+    A CHOSEN PERSONALITY (2026-10-22) sends its whole compact persona block -
+    the style, the dials, the two cadence exemplars - and, when this turn is a
+    crisis turn, the calm support block INSTEAD of every persona line (the
+    hard safety override; nobody can configure it away). A PC that never chose
+    a preset keeps the old one-line manner note exactly as before."""
     if manner is None:
         return None
     try:
         import jarvis_manner
+        if jarvis_manner.personality_chosen():
+            return {"role": "system",
+                    "content": jarvis_manner.prompt_block(crisis_active=crisis)}
         return {"role": "system", "content": jarvis_manner.note(manner)}
     except Exception:
         return None
 
 
-def with_manner_note(msgs: list, manner: Optional[str]) -> list:
-    """A new list: `msgs` with the manner line just before the newest user
-    message - never first (see with_spoken_note, whose placing this is).
-    `msgs` itself is not changed; no manner, or no user message, returns a
-    plain copy."""
-    note = manner_message(manner)
+def with_manner_note(msgs: list, manner: Optional[str], *,
+                     crisis: bool = False) -> list:
+    """A new list: `msgs` with the way-of-talking note(s) just before the
+    newest user message - never first (see with_spoken_note, whose placing
+    this is). `msgs` itself is not changed; no manner, or no user message,
+    returns a plain copy.
+
+    A chosen personality inserts its persona block AND, immediately after it
+    (nearest the question), the one-line post_history_hint, so a long chat or
+    a long Live session cannot drift out of character. A crisis turn inserts
+    the calm support block instead of the persona (manner_message does that).
+    A PC with no chosen personality gets exactly the old single note."""
+    note = manner_message(manner, crisis=crisis)
     users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
     if note is None or not users:
         return list(msgs)
+    insert = [note]
+    try:
+        import jarvis_manner
+        if jarvis_manner.personality_chosen() and not crisis:
+            hint = jarvis_manner.post_history_hint()
+            if hint:
+                insert.append({"role": "system", "content": hint})
+    except Exception:
+        pass
     at = users[-1]
     if at == 0:
-        return [{"role": "system", "content": LANE_SYSTEM}, note] + list(msgs)
-    return list(msgs[:at]) + [note] + list(msgs[at:])
+        return [{"role": "system", "content": LANE_SYSTEM}] + insert + list(msgs)
+    return list(msgs[:at]) + insert + list(msgs[at:])
 
 
 # --------------------------------------------------------------------------
@@ -8411,7 +8480,7 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     out = tidy_assistant_whitespace(msgs)
     # The owner's manner (warm or plain): wording only, never first, and
     # before the spoken note so that one is nearer the question.
-    out = with_manner_note(out, manner)
+    out = with_manner_note(out, manner, crisis=crisis)
     if focus:
         # I144: additive on top of manner, never instead of it - nearer
         # the question than manner, further than spoken/cut-off/crisis.
@@ -10505,6 +10574,10 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             if task_id is not None:
                 tc.end(task_id)
             out.set_status("thinking")
+        # Web-Gap 4 (2026-10-23): a note saved after outside text keeps its
+        # provenance for a later notes_search. Before took_in, so this write's
+        # own confirmation is not counted as the read that shaped it.
+        _mark_note_provenance(name, result, watch)
         if name == RETIREMENT_TOOL and isinstance(result, dict) and "_retirement_result" in result:
             # The figures go into the answer as code's own text, never to the
             # model: keep the result for the answering round and take it out
