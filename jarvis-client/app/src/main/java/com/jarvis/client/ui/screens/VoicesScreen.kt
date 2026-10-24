@@ -157,6 +157,13 @@ fun VoicesScreen(
         typed = ""
         fromFile = false
         problem = null
+        // Closing the plate must also stop a take already running: the back
+        // button above already sets this, and without it the recorder ran to
+        // its cap with nothing on screen saying so - then wrote the finished
+        // take into `clip`, which the NEXT attempt read back as its own
+        // (2026-10-24). Set before `adding = false` does not matter; the flag
+        // is read by the running record() call.
+        stopFlag.set(true)
         onClearPicked()
     }
 
@@ -318,6 +325,9 @@ fun VoicesScreen(
                             onName = { name = it.take(s.limits.maxNameChars) },
                             fromFile = fromFile,
                             onFromFile = {
+                                // "Pick a file" mid-recording stops the take
+                                // too, for the same reason resetAdd does.
+                                stopFlag.set(true)
                                 fromFile = it
                                 clip = null
                                 problem = null

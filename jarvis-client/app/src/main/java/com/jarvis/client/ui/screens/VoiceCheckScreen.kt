@@ -164,8 +164,12 @@ fun VoiceCheckScreen(
             } finally {
                 testing = false
             }
-            // Scored and thrown away on the PC; nothing kept here either.
-            for (k in clips.indices) clips[k] = null
+            // Scored and thrown away on the PC; nothing kept here either - but
+            // only when the PC really got them. A failed send is not a reason
+            // to make him read twenty sentences again, so the recordings stay
+            // for a retry, the same rule the training screen already follows
+            // (2026-10-24).
+            if (tested?.ok == true) for (k in clips.indices) clips[k] = null
         }
     }
 

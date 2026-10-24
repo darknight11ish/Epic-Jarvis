@@ -413,7 +413,13 @@ class LiveService : Service() {
         while (running && count < maxSamples) {
             // Every few steps: may the microphone still be open?
             if (++checks % CHECK_EVERY_STEPS == 0 && !stillOpen(overReply)) return null
-            if (!readFully(rec, buf)) return null
+            // A negative read is a dead recorder, not "nothing was said":
+            // returning null here made `listen`'s `?: continue` re-read the
+            // same dead recorder with no delay for ever, at full CPU and still
+            // holding the microphone (2026-10-24). Thrown, it reaches the catch
+            // in onStartCommand, which says the microphone stopped, and
+            // `listen`'s own finally closes the recorder.
+            if (!readFully(rec, buf)) throw MicStopped()
             ring.push(buf)
             if (count + buf.size > out.size) out = out.copyOf(minOf(maxSamples, out.size * 2))
             val take = minOf(buf.size, out.size - count)
@@ -480,6 +486,19 @@ class LiveService : Service() {
 
     private fun audioMode(): Int =
         (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.mode ?: AudioManager.MODE_NORMAL
+
+    /**
+     * The microphone stopped answering.
+     *
+     * `AudioRecord.read` reports a dead track with a negative code rather than
+     * an exception (see [readFully]). Returning null for it was indistinguishable
+     * from "nothing was said", so the listen loop re-read the same dead recorder
+     * with no delay for ever, at full CPU, still holding it open (2026-10-24).
+     * Thrown, it reaches `onStartCommand`'s catch, which classifies an unknown
+     * exception as MIC_STOPPED and tells the owner; `listen`'s own `finally`
+     * closes the recorder.
+     */
+    private class MicStopped : IllegalStateException("the microphone stopped answering")
 
     private fun readFully(rec: AudioRecord, buf: ShortArray): Boolean {
         var got = 0
