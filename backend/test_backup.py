@@ -164,6 +164,12 @@ def fresh_conf() -> Path:
     conf = Path(tempfile.mkdtemp(dir=str(TMP), prefix="conf-"))
     B._config_dir = lambda: conf
     D._config_dir = lambda: conf
+    # The medical record lives in <settings>/medical/health.db, in a module of
+    # its own (jarvis_medical_advocate.store_path()). Left alone, backup would
+    # ask that module and read whatever the owner's real ~/.openjarvis holds -
+    # a test must never touch it. Point it into this scratch conf; a test that
+    # wants a medical record writes one there.
+    B._medical_db = lambda: conf / "medical" / "health.db"
     fw.CONFIG_DIR = conf
     # build_archive() also reads the folder jarvis_backup.py is RUNNING FROM,
     # for the backend's own program files (2026-10-05). Left alone that is this
@@ -457,15 +463,21 @@ def t_what_is_backed_up_and_what_is_excluded():
     # phrase in a comment or docstring, which may legitimately explain WHY
     # the pairing token and search keys are excluded.
     targets = re.findall(r"WindowsStore\(target=([\w.]+)\)", src)
-    check("the ONLY Credential Manager targets this module ever opens are jarvis_chat_log's "
-          "and jarvis_decks's own KEY_TARGET (never the pairing token's or a search provider's key)",
-          targets == ["jarvis_chat_log.KEY_TARGET", "jarvis_decks.KEY_TARGET"], targets)
+    check("the ONLY Credential Manager targets this module ever opens are jarvis_chat_log's, "
+          "jarvis_decks's and jarvis_medical_advocate's own KEY_TARGETs (never the pairing "
+          "token's or a search provider's key)",
+          targets == ["jarvis_chat_log.KEY_TARGET", "jarvis_decks.KEY_TARGET",
+                      "jarvis_medical_advocate.KEY_TARGET"], targets)
     import jarvis_decks
     check("jarvis_decks.KEY_TARGET really is the study decks' own key, not the chat-history one",
           jarvis_decks.KEY_TARGET == "Jarvis Backend/study decks key"
           and jarvis_decks.KEY_TARGET != jarvis_chat_log.KEY_TARGET)
     check("jarvis_chat_log.KEY_TARGET really is the chat-history key, not some other secret",
           jarvis_chat_log.KEY_TARGET == "Jarvis Backend/chat history key")
+    import jarvis_medical_advocate
+    check("the medical record's key is its OWN Credential Manager entry, not chat history's",
+          jarvis_medical_advocate.KEY_TARGET == "Jarvis Backend/medical key"
+          and jarvis_medical_advocate.KEY_TARGET != jarvis_chat_log.KEY_TARGET)
     reads = re.findall(r"jarvis_chat_log\.CredentialKey\(([^)]*)\)", src)
     check("CredentialKey (used to READ a key for backup) is jarvis_chat_log's own class, called "
           "with no target (the chat-history key) or with jarvis_decks.KEY_TARGET - no other target",
@@ -624,23 +636,24 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     # exclusion; anything else is a name somebody forgot. This is the check
     # that fails if `SOURCE_DBS` loses an entry.
     #
-    # 17, not the 14 this branch first counted: this branch adds knowledge.db and
+    # 18, not the 14 this branch first counted: this branch adds knowledge.db and
     # traces.db (14 -> 16 at the time), and main then added receipts.db (#432,
     # the action receipts and their Undo snapshots) and voiceprint.db (#436,
     # "Write Like Me"); (2026-10-21) price-radar.db, the flight price history
     # (jarvis_price_radar.py), joined because a fare observed yesterday cannot
-    # be re-fetched. 8 exclusions since 2026-10-24, when health.db (the
-    # owner's medical record, jarvis_medical_advocate.py) joined the seven:
-    # it lives in its own medical/ folder, so this list is where its
-    # exclusion is written down rather than left to the settings glob.
+    # be re-fetched. health.db (the owner's medical record,
+    # jarvis_medical_advocate.py) joined on 2026-10-24, the owner's decision
+    # ("I wanted it encrypted as well and part of that file"), which took the
+    # exclusions from 8 to 7 and the carried databases from 17 to 18 - it lives
+    # in its own medical/ folder and now travels under db/medical/health.db.
     # Both numbers are asserted rather than derived, on purpose - the point is
     # that adding a database is a decision somebody has to make here as well as
     # in the module, and this is the line that asks.
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases of the owner's install, split 17 + 8, are all accounted for",
-          len(B.SOURCE_DBS) == 17 and len(B.NOT_BACKED_UP) == 8,
+    check("the databases of the owner's install, split 18 + 7, are all accounted for",
+          len(B.SOURCE_DBS) == 18 and len(B.NOT_BACKED_UP) == 7,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 
@@ -1233,6 +1246,98 @@ def t_a_restore_reopens_the_decks():
     check("forget_key() makes the running store reopen with the restored key",
           one._aead is None and not one._revealed)
     DK._reset_for_tests()
+
+
+def t_the_medical_record_travels_and_restores_on_a_pc_that_never_had_the_key():
+    """THE OWNER'S REVERSAL, proved end to end (2026-10-24).
+
+    He answered "I wanted it encrypted as well and part of that file": every
+    record field is AES-GCM sealed at rest, and a .jbak carries the record AND
+    its own Credential Manager key, so a new PC - one with an empty Credential
+    Manager - can open the restored record. The old pin (health.db excluded,
+    NOT_BACKED_UP) is reversed; this test is what now holds the new answer.
+
+    No real Credential Manager and no real ~/.openjarvis is touched: the store
+    is a scratch file, and Windows Credential Manager is `_FakeCredentials`.
+    """
+    import base64
+    import sys
+    import jarvis_chat_log
+    import jarvis_medical_advocate as MED
+
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    key = b"\x11" * 32
+    secret = "MEDICAL-SECRET-MARKER-8842"
+    db = conf / "medical" / "health.db"
+
+    class _Gate:
+        def latch_taint(self, why=""):
+            return True
+
+    saved = (os.environ.get(MED.STORE_ENV), MED.key_provider,
+             sys.modules.get("jarvis_gate"))
+    os.environ[MED.STORE_ENV] = str(db)
+    MED.key_provider = MED._credential_key      # the REAL production provider
+    sys.modules["jarvis_gate"] = _Gate()
+    try:
+        with _FakeCredentials() as cm:
+            cm.items[MED.KEY_TARGET] = base64.b64encode(key).decode()
+            cm.items[jarvis_chat_log.KEY_TARGET] = base64.b64encode(b"\x01" * 32).decode()
+            MED.add_record("labs", label="HbA1c", observed="2026-10-01", value="6.1",
+                           unit="%", note=secret)
+            out = B.backup_now(str(backups))
+            code = out["recovery_code"]
+            blob = (backups / out["name"]).read_bytes()
+            zip_bytes = B.decrypt_blob(blob, code)
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            names = set(zf.namelist())
+            archived = zf.read("db/medical/health.db")
+            embedded = zf.read("secrets/medical-key.b64")
+            manifest = json.loads(zf.read("manifest.json"))
+        check("health.db travels in the archive, in its own medical/ folder, "
+              "with its own key and a manifest flag",
+              "db/medical/health.db" in names and "secrets/medical-key.b64" in names
+              and manifest.get("medical_key") is True
+              and "health.db" in manifest["databases"], sorted(names))
+        check("the embedded key is the medical store's 32 bytes, under its own target",
+              base64.b64decode(embedded) == key
+              and base64.b64decode(embedded) != b"\x01" * 32)
+        check("the archived medical database still holds no record word in the clear",
+              secret.encode() not in archived and b"HbA1c" not in archived)
+
+        # THE NEW PC: no health.db, and a Credential Manager with NOTHING in it.
+        shutil.rmtree(conf / "medical", ignore_errors=True)
+        with _FakeCredentials() as new_pc:
+            applied = B._apply_restore(B.decrypt_blob(blob, code))
+            restored = conf / "medical" / "health.db"
+            check("restore puts health.db back inside medical/ and the key into the "
+                  "medical Credential Manager entry",
+                  applied["medical_key"] is True and restored.is_file()
+                  and new_pc.items.get(MED.KEY_TARGET) == base64.b64encode(key).decode()
+                  and applied["restored"]["keys"].count("medical-key") == 1, applied)
+            check("... and each key landed under its OWN Credential Manager target, never "
+                  "crossed",
+                  new_pc.items.get(MED.KEY_TARGET) == base64.b64encode(key).decode()
+                  and new_pc.items.get(jarvis_chat_log.KEY_TARGET)
+                  == base64.b64encode(b"\x01" * 32).decode(),
+                  sorted(new_pc.items))
+            rows = MED.list_records("labs")
+        check("the record opens on the new PC through the restored key: the words are back",
+              len(rows) == 1 and rows[0]["label"] == "HbA1c" and rows[0]["note"] == secret
+              and rows[0]["value"] == "6.1", rows)
+        check("the restored file on disk is still sealed (the secret is not readable text)",
+              secret.encode() not in restored.read_bytes())
+    finally:
+        env, MED.key_provider, gate = saved
+        if env is None:
+            os.environ.pop(MED.STORE_ENV, None)
+        else:
+            os.environ[MED.STORE_ENV] = env
+        if gate is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = gate
 
 
 def _keeps(d) -> bool:

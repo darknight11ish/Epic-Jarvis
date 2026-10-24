@@ -17,8 +17,8 @@
 WHAT THIS IS, IN ONE PARAGRAPH
 
 Three narrow things that share one subject, and nothing else: (1) a small
-SQLite store for the owner's own medical record, in its own folder and its own
-file, so it is never mixed into memory.db; (2) a FHIR R4 Bundle checker that
+encrypted SQLite store for the owner's own medical record, in its own folder
+and its own file, so it is never mixed into memory.db; (2) a FHIR R4 Bundle checker that
 runs entirely on this PC, reports the file's shape and its own internal
 contradictions, and lists every question it cannot answer; (3) a thin client
 for the local MedGemma 1.5 4B model on the medical lane (127.0.0.1:11435),
@@ -37,15 +37,25 @@ THE FIVE HONEST LIMITS - read these before trusting anything else
         read, a later turn in the same chat can be routed to a cloud lane
         again. This module fails closed: if the latch cannot be set, the read
         or write does not happen.
-  (ii)  The record is its own file and is NOT in .jbak backups unless someone
-        adds it to jarvis_backup.SOURCE_DBS. That tuple is an explicit
-        allowlist. health.db is named in jarvis_backup.NOT_BACKED_UP with its
-        reason, so the exclusion is a decision written down rather than an
-        accident - but it means a bare-metal restore loses every medical row.
-  (iii) It is NOT encrypted at rest. There is no key, no cryptography and no
-        sealed path here: this is a plain SQLite file in the owner's own
-        profile, readable by anything running as the owner. "Offline" is not
-        "private". Do not describe this store as encrypted.
+  (ii)  The record IS carried in .jbak backups (the owner's decision,
+        2026-10-24, a deliberate reversal of this module's first version).
+        health.db is in jarvis_backup.SOURCE_DBS, travels under
+        db/medical/health.db - its own folder, never flattened beside
+        memory.db - and the archive also carries this store's 32-byte key
+        (encrypted with the rest of the archive, exactly as chat history's key
+        is), so a restore on another PC can open the record. The one limit: a
+        backup carries the file its own module points at, and a backup made
+        when the key cannot be read leaves health.db out rather than carry a
+        database nothing on the new PC could open.
+  (iii) It IS encrypted at rest: every record field is sealed with
+        AES-256-GCM under a 32-byte key kept in Windows Credential Manager
+        under its own target (KEY_TARGET), made on first use through the same
+        helper chat history uses. No record payload is ever written in plain
+        text. What still sits in the clear, said honestly: the file's name and
+        folder, its size and times, each row's number and a random per-row
+        label, when the row was made, and the audit rows (which action, which
+        kind, which row number, how many rows - never a record's words). Those
+        say a medical row exists and when, not what it says.
   (iv)  Chat history still contains the medical conversation (voice
         transcripts included), and chat-history.db IS backed up. Keeping the
         structured record in its own file does not remove the words from the
@@ -59,11 +69,11 @@ THE FIVE HONEST LIMITS - read these before trusting anything else
 WHAT IS NOT BUILT TONIGHT (say so rather than implying it)
 
 No route and no UI (so no phone screen and no desktop panel), no biometric lock
-screen, no backup toggle, no encryption, no non-expiring latch, no federal-API
-lookup, no outbound de-identifier, no import of a bundle into the store, no
-trend view and no clinical advice. The store's audit table records what
-happened (which action, which row id, how many rows) and never the words of a
-record or a question.
+screen, no backup toggle, no non-expiring latch, no federal-API lookup, no
+outbound de-identifier, no import of a bundle into the store, no trend view and
+no clinical advice. The store's audit table records what happened (which
+action, which row id, how many rows) and never the words of a record or a
+question.
 
 THE FHIR CHECKER'S HONEST SHAPE
 
@@ -80,10 +90,14 @@ second reader over numeric lab rows only: its block is `used: false` when it is
 absent, down, or answers junk, and the structural report is unchanged either
 way.
 
-Standard library only. No network at import time. The one HTTP path is
-jarvis_second_card's (imported lazily inside the functions that use it), which
-is also the one place that enforces loopback - this file has no socket,
-urllib or http client of its own.
+Standard library, plus `cryptography` for the store's AES-GCM (already a
+dependency of this project for chat history). Every optional import is
+guarded: without `cryptography`, or without Windows Credential Manager, this
+file still loads and every store call refuses in plain words
+(MedicalStoreUnavailable) rather than write anything. No network at import
+time. The one HTTP path is jarvis_second_card's (imported lazily inside the
+functions that use it), which is also the one place that enforces loopback -
+this file has no socket, urllib or http client of its own.
 """
 from __future__ import annotations
 
@@ -92,9 +106,17 @@ import json
 import math
 import os
 import re
+import secrets
 import sqlite3
 from pathlib import Path
 from typing import Callable, Optional
+
+try:
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+except Exception:                                  # noqa: BLE001 - optional
+    AESGCM = None  # type: ignore
+    InvalidTag = Exception  # type: ignore
 
 # --------------------------------------------------------------------------
 # Constants
@@ -116,6 +138,13 @@ TAINT_WHY = "health_data"
 STORE_ENV = "JARVIS_MEDICAL_DB"
 DB_NAME = "health.db"
 STORE_FOLDER = "medical"
+
+#: Where this store's own key is filed in Windows Credential Manager (the
+#: owner can see and delete it in Control Panel -> Credential Manager ->
+#: Windows Credentials). It is a SECOND key, not the chat history one: the
+#: same helper (jarvis_chat_log.CredentialKey) with this store's own name, the
+#: same way the review decks use their own.
+KEY_TARGET = "Jarvis Backend/medical key"
 
 #: The four record kinds. One table each, the same columns, so a row is a row.
 KINDS = ("conditions", "medications", "labs", "visits")
@@ -144,11 +173,13 @@ _THINKING_MARK = re.compile(r"</?unused9[45]>")
 
 
 class MedicalStoreUnavailable(RuntimeError):
-    """The latch could not be set, so the medical record was not touched.
+    """Nothing of the medical record was read or written.
 
-    A read or a write that cannot mark the conversation private is refused
-    rather than allowed: a medical read that does not latch is the one failure
-    this module exists to prevent, and it would otherwise be silent.
+    Raised when the privacy latch cannot be set, when the key cannot be had
+    from Windows Credential Manager (or is the wrong length), when the
+    encryption package is not installed, when the key does not open what is
+    already kept, or for a file an earlier version wrote unencrypted. Every
+    message is plain words and never holds the key.
     """
 
 
@@ -233,42 +264,38 @@ def store_path() -> Path:
     return root / STORE_FOLDER / DB_NAME
 
 
-_SCHEMA_SQL = """CREATE TABLE IF NOT EXISTS conditions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL,
-    started TEXT NOT NULL DEFAULT '', observed TEXT NOT NULL DEFAULT '',
-    value TEXT NOT NULL DEFAULT '', unit TEXT NOT NULL DEFAULT '',
-    source TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
-    created TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS medications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL,
-    started TEXT NOT NULL DEFAULT '', observed TEXT NOT NULL DEFAULT '',
-    value TEXT NOT NULL DEFAULT '', unit TEXT NOT NULL DEFAULT '',
-    source TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
-    created TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS labs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL,
-    started TEXT NOT NULL DEFAULT '', observed TEXT NOT NULL DEFAULT '',
-    value TEXT NOT NULL DEFAULT '', unit TEXT NOT NULL DEFAULT '',
-    source TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
-    created TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS visits (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL,
-    started TEXT NOT NULL DEFAULT '', observed TEXT NOT NULL DEFAULT '',
-    value TEXT NOT NULL DEFAULT '', unit TEXT NOT NULL DEFAULT '',
-    source TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
-    created TEXT NOT NULL);
+#: What every table has: the row's number, a RANDOM label that binds the sealed
+#: payload to this row (so a sealed row cannot be moved to another row of
+#: another kind and still open), the sealed payload, and when the row was made.
+#: `rid` is random and says nothing about the record; `created` is the one
+#: piece of record metadata that stays readable in the clear (limit iii).
+_TABLE_SQL = """CREATE TABLE IF NOT EXISTS {table} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rid TEXT NOT NULL,
+    payload BLOB NOT NULL,
+    created TEXT NOT NULL);"""
+
+_SCHEMA_SQL = "\n".join(_TABLE_SQL.format(table=name) for name in KINDS) + """
+CREATE TABLE IF NOT EXISTS health_meta (
+    k TEXT PRIMARY KEY, v BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS health_audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, action TEXT NOT NULL,
     kind TEXT NOT NULL DEFAULT '', record_id INTEGER, count INTEGER);"""
 
+#: The bytes every store seals once into `health_meta`, to prove on every open
+#: that the key in Credential Manager is the one this file was written with.
+_CHECK = b"jarvis medical record"
+_NONCE_LEN = 12
+
 # The write-ahead log keeps a crash from leaving a half-written record, and
-# secure_delete overwrites deleted cells. Neither is encryption (limit iii).
+# secure_delete overwrites deleted cells. Neither is encryption - the payload
+# is sealed before it ever reaches SQLite - but both make an erasure honest.
 _PRAGMAS = ("PRAGMA journal_mode=WAL", "PRAGMA secure_delete=ON",
             "PRAGMA busy_timeout=10000")
 
 
 def _connect(path: Path) -> sqlite3.Connection:
-    """One connection to the medical file, with its own two pragmas."""
+    """One connection to the medical file, with its own three pragmas."""
     conn = sqlite3.connect(str(path), timeout=10.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
     try:
@@ -280,16 +307,138 @@ def _connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
-def _ensure_store() -> Path:
-    """Make the folder and the tables. The caller has already latched."""
+# --------------------------------------------------------------------------
+# The key and the sealing, reusing the shape chat history already uses
+# --------------------------------------------------------------------------
+
+def _checked_key(key) -> bytes:
+    """The 32 bytes, or MedicalStoreUnavailable in plain words."""
+    if not isinstance(key, (bytes, bytearray)) or len(bytes(key)) != 32:
+        raise MedicalStoreUnavailable(
+            "The key that locks the medical record is not a 32-byte key, so nothing "
+            "was read or written.")
+    return bytes(key)
+
+
+def _credential_key() -> bytes:
+    """The 32-byte key from Windows Credential Manager, under KEY_TARGET.
+
+    The key is made on first use and read back before it is used, through the
+    SAME helper chat history and the review decks use
+    (`jarvis_chat_log.CredentialKey`), filed under this store's own target - a
+    second key, never the chats'. This module never writes it to a file, never
+    logs it and never returns it to a caller. The one other copy is inside a
+    .jbak archive, which is itself encrypted, exactly as chat history's key is.
+    """
+    try:
+        from jarvis_chat_log import CredentialKey
+    except Exception:                              # noqa: BLE001 - reported
+        raise MedicalStoreUnavailable(
+            "The program that keeps Jarvis's keys is not installed, so the medical "
+            "record was not read or written.") from None
+    try:
+        key = CredentialKey(KEY_TARGET)()
+    except Exception as exc:                       # noqa: BLE001 - reported
+        # Only that helper's own plain-words exception is repeated; anything
+        # else is named by type, so no key text could ever reach a message.
+        why = str(exc) if type(exc).__name__ == "KeyUnavailable" else type(exc).__name__
+        raise MedicalStoreUnavailable(
+            "The key that locks the medical record could not be had from Windows "
+            f"Credential Manager ({why}), so nothing was read or written.") from None
+    return _checked_key(key)
+
+
+#: The ONE key provider every store operation uses. The suites replace this
+#: with an in-memory key, exactly as jarvis_chat_log's own tests pass a
+#: `key_provider`; production never does. There is no environment variable
+#: that carries a key and no plain-text fallback anywhere.
+key_provider: Callable[[], bytes] = _credential_key
+
+
+def _cipher():
+    """The AES-GCM object, or MedicalStoreUnavailable in plain words."""
+    if AESGCM is None:
+        raise MedicalStoreUnavailable(
+            "The encryption package (cryptography) is not installed on this PC, so "
+            "the medical record was not read or written. Install it with: "
+            "py -3 -m pip install -r backend\\requirements.txt")
+    try:
+        key = key_provider()
+    except MedicalStoreUnavailable:
+        raise
+    except Exception as exc:                       # noqa: BLE001 - reported
+        raise MedicalStoreUnavailable(
+            "The key that locks the medical record could not be had, so nothing was "
+            f"read or written ({type(exc).__name__}).") from None
+    return AESGCM(_checked_key(key))
+
+
+def _seal(aead, plain: bytes, aad: bytes) -> bytes:
+    """One payload: a fresh random nonce, then the ciphertext and its tag."""
+    nonce = secrets.token_bytes(_NONCE_LEN)
+    return nonce + aead.encrypt(nonce, plain, aad)
+
+
+def _open(aead, blob, aad: bytes) -> bytes:
+    blob = bytes(blob)
+    return aead.decrypt(blob[:_NONCE_LEN], blob[_NONCE_LEN:], aad)
+
+
+def _aad(table: str, rid: str) -> bytes:
+    """The associated data: which kind, and which of its rows. Not a secret."""
+    return f"{table}|{rid}".encode("utf-8")
+
+
+def _ensure_store(aead) -> Path:
+    """Make the folder and the tables, then prove `aead` opens this file.
+
+    The caller has already latched and has a cipher. A key that does not open
+    the stored check refuses the whole operation, so a replaced or deleted key
+    is never read as "an empty record"; a table written by the earlier,
+    unencrypted version is refused in plain words and never read or
+    overwritten.
+    """
     path = store_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = _connect(path)
     try:
+        # BEFORE creating anything: an old file's schema is refused here, so no
+        # table is added to it and no record is read out of it.
+        _refuse_unencrypted_legacy(conn, path)
         conn.executescript(_SCHEMA_SQL)
+        row = conn.execute("SELECT v FROM health_meta WHERE k='check'").fetchone()
+        if row is None:
+            conn.execute("INSERT INTO health_meta (k, v) VALUES ('check', ?)",
+                         (_seal(aead, _CHECK, b"check"),))
+        else:
+            try:
+                ok = _open(aead, row[0], b"check") == _CHECK
+            except Exception:                      # noqa: BLE001 - a wrong key
+                ok = False
+            if not ok:
+                raise MedicalStoreUnavailable(
+                    "The key in Windows Credential Manager does not open the medical "
+                    "record kept on this PC (it was replaced or deleted), so nothing "
+                    f"was read or written. The record is at {path}")
     finally:
         conn.close()
     return path
+
+
+def _refuse_unencrypted_legacy(conn: sqlite3.Connection, path: Path) -> None:
+    """Refuse, in plain words, a file the old plain-SQLite version wrote.
+
+    Called before any table is created: an old table has no `payload` column,
+    and this raises rather than reading its rows or adding the new tables
+    around it. A new or empty file has no tables at all, so nothing matches.
+    """
+    for name in KINDS:
+        columns = {str(row[1]) for row in conn.execute(f"PRAGMA table_info({name})")}
+        if columns and "payload" not in columns:
+            raise MedicalStoreUnavailable(
+                "The medical file on this PC was written by an earlier version that "
+                "did not encrypt it, so this program will not read or overwrite it. "
+                f"No record was read. Move {path} aside to start a new record.")
 
 
 def _audit(conn: sqlite3.Connection, action: str, *, kind: str = "",
@@ -317,21 +466,24 @@ def _as_text(value, field: str) -> str:
 
 
 def init_store() -> str:
-    """Latch, then create the folder and the file if they are not there.
+    """Latch, then make/open the encrypted store. Returns its path.
 
-    Returns the path, as a string. The latch is the first thing this does: a
-    failure raises MedicalStoreUnavailable before a folder or a file exists.
+    The latch is the first thing this does, and the key is asked for before a
+    folder or a file exists: a failure raises MedicalStoreUnavailable and
+    leaves nothing behind.
     """
     _latch_taint()
-    return str(_ensure_store())
+    return str(_ensure_store(_cipher()))
 
 
 def add_record(kind: str, **fields) -> dict:
-    """Latch, then add one row. Returns the saved row (id included).
+    """Latch, then seal and add one row. Returns the saved row (id included).
 
     `label` is required. The accepted fields are FIELDS; an unknown keyword is
-    refused rather than quietly dropped. Nothing here stores a query, and the
-    audit row carries only the kind and the new id.
+    refused rather than quietly dropped. Every field is sealed as ONE JSON
+    payload before it is written, bound to its kind and its own random row
+    label. Nothing here stores a query, and the audit row carries only the
+    kind and the new id.
     """
     _latch_taint()
     table = _kind(kind)
@@ -342,26 +494,37 @@ def add_record(kind: str, **fields) -> dict:
     if not label:
         raise ValueError("a medical record needs a label so it can be told apart later")
     clean = {name: _as_text(fields.get(name), name) for name in FIELDS if name != "label"}
-    path = _ensure_store()
+    aead = _cipher()
+    path = _ensure_store(aead)
+    rid = secrets.token_hex(8)
+    payload = json.dumps({"label": label, **clean}, ensure_ascii=False,
+                         sort_keys=True).encode("utf-8")
     conn = _connect(path)
     try:
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.execute(
-            f"INSERT INTO {table} (label, started, observed, value, unit, source, note, created) "
-            "VALUES (?,?,?,?,?,?,?,?)",
-            (label, clean["started"], clean["observed"], clean["value"], clean["unit"],
-             clean["source"], clean["note"], _now()))
+            f"INSERT INTO {table} (rid, payload, created) VALUES (?,?,?)",
+            (rid, _seal(aead, payload, _aad(table, rid)), _now()))
         record_id = int(cursor.lastrowid or 0)
         _audit(conn, "add", kind=table, record_id=record_id)
+        conn.execute("COMMIT")
+    except Exception:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
     finally:
         conn.close()
     return {"id": record_id, "kind": table, "label": label, **clean}
 
 
 def list_records(kind: str, limit: int = 100) -> list:
-    """Latch, then read up to `limit` rows, newest first.
+    """Latch, then open and read up to `limit` rows, newest first.
 
     A missing file is an empty list, not an error and not a new file: reading
-    the record never creates it.
+    the record never creates it. The key is still asked for first, so this
+    fails closed when it cannot be had.
     """
     _latch_taint()
     table = _kind(kind)
@@ -369,32 +532,48 @@ def list_records(kind: str, limit: int = 100) -> list:
         wanted = max(1, min(int(limit), 1000))
     except (TypeError, ValueError):
         wanted = 100
-    path = store_path()
-    if not path.is_file():
+    aead = _cipher()
+    if not store_path().is_file():
         return []
+    path = _ensure_store(aead)
     conn = _connect(path)
     try:
         rows = conn.execute(
-            f"SELECT id, label, started, observed, value, unit, source, note, created "
-            f"FROM {table} ORDER BY id DESC LIMIT ?", (wanted,)).fetchall()
-        _audit(conn, "list", kind=table, count=len(rows))
+            f"SELECT id, rid, payload, created FROM {table} ORDER BY id DESC LIMIT ?",
+            (wanted,)).fetchall()
+        out = []
+        for row in rows:
+            try:
+                data = json.loads(
+                    _open(aead, row["payload"], _aad(table, row["rid"])).decode("utf-8"))
+            except Exception:                      # noqa: BLE001 - a damaged row
+                raise MedicalStoreUnavailable(
+                    "A medical record in the file on this PC could not be opened, so "
+                    f"the list was not returned. The record is at {path}") from None
+            item = {"id": int(row["id"]), "kind": table, "created": str(row["created"])}
+            item.update({name: str(data.get(name) or "") for name in FIELDS})
+            out.append(item)
+        _audit(conn, "list", kind=table, count=len(out))
     finally:
         conn.close()
-    return [dict(row) for row in rows]
+    return out
 
 
 def erase_all() -> dict:
-    """Latch, then delete every row from the medical file, and only that file.
+    """Latch, then delete every record row from the medical file, only that file.
 
     secure_delete overwrites the deleted cells; a truncated checkpoint and a
-    VACUUM then rebuild the file so the old text is not left in free pages.
-    memory.db, projects.db and today.db are never opened here.
+    VACUUM then rebuild the file so no old blob is left in free pages. The
+    key's own check row stays, so the store remains usable. memory.db,
+    projects.db and today.db are never opened here.
     """
     _latch_taint()
+    aead = _cipher()
     path = store_path()
     erased = {name: 0 for name in KINDS}
     if not path.is_file():
         return {"ok": True, "erased": erased, "path": str(path), "created": False}
+    path = _ensure_store(aead)
     conn = _connect(path)
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -530,7 +709,7 @@ def _lane_fallback(why: str = "") -> dict:
 
 
 def consult_local_medgemma(prompt: str, *, model: str = MEDGEMMA_MODEL,
-                           keep_alive: str = "15m", timeout: float = 25.0,
+                           keep_alive: str = "15m", timeout: float = 120.0,
                            taint_latch: Optional[Callable[[], object]] = None) -> dict:
     """Ask the local medical model one question; never anything but an opinion.
 
@@ -539,6 +718,12 @@ def consult_local_medgemma(prompt: str, *, model: str = MEDGEMMA_MODEL,
     fallback dict naming the main local model, and nothing is raised for it.
     On success the thinking markers are stripped and `authority` is "none":
     the answer is the model's opinion, not a fact and not a check on a code.
+
+    `timeout` is 120 seconds, not the 25 this first shipped with: measured on
+    2026-10-24, one answer from `medgemma1.5:4b-it-q4_K_M` took 28.35 s, so a
+    25-second limit cut the model off and the caller got the fallback instead
+    of the answer. A model that is still slow after two minutes is a model the
+    lane should be restarted for, not waited on indefinitely.
 
     `taint_latch` is a callable seam for the suites (and a later caller); None
     means this module's own gate call. A latch that cannot be set raises

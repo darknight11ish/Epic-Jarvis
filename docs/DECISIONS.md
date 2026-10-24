@@ -3145,7 +3145,10 @@ The owner asked for medical records "kept separate from other information",
 a health conversation that stays on the PC, and MedGemma 1.5 4B on the second
 card as a helper to "verify FHIR records and lab terminology 100% offline".
 Tonight's slice built the smallest honest version of that, and wrote down where
-the words in the request are stronger than the code.
+the words in the request are stronger than the code. It first shipped with the
+record **unencrypted and out of backups**, because that question was still the
+owner's to answer; he answered it the same evening, so this entry records both
+the first version and the reversal, in that order.
 
 **What was built and why each part.** The record lives in
 `~/.openjarvis/medical/health.db` - its own folder and its own file, not one
@@ -3172,15 +3175,9 @@ magnitude heuristic, and code SHAPE), with `summarise()`; its verdict is
 meaning is listed under `unverified`, and the optional model is attributed with
 `authority: "none"` and can never move a finding.
 
-**What the request asked for that this slice does NOT do, and why.** It is not
-encrypted: there is no key and no sealed path, so it is a plain SQLite file in
-the owner's own profile - the same honest limit `study.db` records as "sealed or
-not kept", and this store meets neither. It is NOT in `.jbak` backups:
-`jarvis_backup.SOURCE_DBS` is an explicit allowlist, `health.db` is now named in
-`NOT_BACKED_UP` with its reason, and both the new suite and `test_backup.py`'s
-`17 + 8` count pin the exclusion so nobody can add medical data to backups
-silently. The latch is NOT permanent: the two settings that look like they
-promise a whole-conversation latch (`taint_persists_for_conversation`,
+**What the request asked for that this slice does NOT do, and why.** The latch
+is NOT permanent: the two settings that look like they promise a
+whole-conversation latch (`taint_persists_for_conversation`,
 `always_taint_conversation`) are read by nobody; a non-expiring latch is a code
 change for a later slice. There is no biometric lock screen, no phone or desktop
 screen, no backup toggle, no import of a bundle into the store, and no federal
@@ -3193,22 +3190,62 @@ SNOMED CT and UCUM tables are not on this PC, so the checker reports code shapes
 and lists every meaning as not checked. And the 4B model is not a terminology
 authority - measured 2026-10-24, it answered a basic metabolic panel LOINC spot
 check with `8141` (and `81416-1`/`81417-1` elsewhere) where the usual code is
-`24323-8` - so nothing it says may be written down as "verified".
+`24323-8` - so nothing it says may be written down as "verified". The first
+version of this entry also recorded that the record was not encrypted and not in
+backups; that half was a pending decision, not a limit, and the next paragraph
+records what the owner said.
 
-**Two decisions are still the owner's, and nothing changes until he says.**
-First, whether `health.db` should be carried in backups: excluding it (today's
-behaviour) means a bare-metal restore loses the record; including it puts every
-medical row into every archive, including a cloud-synced folder if that is where
-backups go. Second, how long a medical read should pin the chat: the 30-minute
-gate latch for now (free, already built, ends by itself), or a non-expiring
-latch until the conversation ends (needs code, not config). Both are recorded in
-`docs/MEDICAL-STORE.md` in plain words, with the trade-off each way.
+**The owner's answer, the same day - a deliberate reversal (2026-10-24).** Asked
+whether the health database should stay out of the encrypted backups and
+unlocked, the owner said: **"I wanted it encrypted as well and part of that
+file."** Both halves were built immediately after, and they reverse this
+entry's first version on purpose:
 
-**What is honestly testable tonight, and what is not.** 80 hermetic tests
-(`backend/test_medical_advocate.py`) cover the store round-trip, the latch
-ordering and fail-closed behaviour, the path separation, the backup pin, the
-loopback guard, the lane's three states, the fallback note, the marker strip and
-the FHIR canaries, each with a positive control. The lane itself was measured on
+- **Encrypted at rest.** Every record field - label, dates, value, unit,
+  source, note - is sealed as ONE JSON payload per row with AES-256-GCM, under
+  a fresh 12-byte nonce and with the table name and a random per-row label as
+  associated data, so a sealed row cannot be moved to another row or kind and
+  still open. The 32-byte key is kept in Windows Credential Manager under its
+  own target, **`Jarvis Backend/medical key`**, created on first use and read
+  back before use, through the SAME `jarvis_chat_log.CredentialKey` helper chat
+  history and the review decks use - a second key, not the chats'. It is never
+  written to a file by this module and never logged. The module also seals a
+  check value into the store, so a replaced or deleted key raises
+  `MedicalStoreUnavailable` instead of being read as "an empty record"; a file
+  an earlier version wrote unencrypted is refused in plain words rather than
+  read or overwritten. The plain columns are the structural minimum: row
+  number, random row label, when the row was made, and the audit table's
+  action/kind/row-number/count. These say a medical row exists and when, not
+  what it says - written down in the module's docstring and in
+  `docs/MEDICAL-STORE.md`.
+- **In the backup.** `health.db` moved out of `jarvis_backup.NOT_BACKED_UP`
+  and into `SOURCE_DBS`; the archive carries it under `db/medical/health.db`
+  (its own folder, never flattened beside `memory.db`), and carries this
+  store's own key inside the encrypted archive as
+  `secrets/medical-key.b64`, exactly as chat history's key already travels.
+  A restore writes the database back into `medical/` and the key back into its
+  own Credential Manager entry, so a **new PC whose Credential Manager has
+  nothing in it** can open the restored record. If the key cannot be read when
+  the backup is made, the record is left out rather than carried unopenable -
+  the same rule `study.db` already follows. The pinned counts moved from
+  `17 + 8` to `18 + 7`.
+- **The MedGemma request timeout** was raised from 25 s to **120 s**: measured
+  on 2026-10-24, one answer took 28.35 s, so 25 s was cutting the model off and
+  returning the fallback instead of the answer.
+
+**What is honestly testable tonight, and what is not.** 93 hermetic tests
+(`backend/test_medical_advocate.py`) cover the store round-trip, **encryption
+at rest** (a distinctive secret is written, then the raw database bytes and any
+journal beside it are scanned for it and the payload is checked to be
+unreadable JSON), the plain-metadata list, the latch ordering, fail-closed for
+a missing / broken / short / replaced key and for a file from the unencrypted
+version, the path separation, the backup pins, the loopback guard, the
+120-second timeout reaching the HTTP call, the lane's three states, the
+fallback note, the marker strip and the FHIR canaries, each with a positive
+control. `backend/test_backup.py` adds a real round-trip: a record is written
+with a fake Credential Manager, backed up, the local file is deleted, and a
+"new PC" with an EMPTY Credential Manager restores the archive and reads the
+record back with the key the restore put there. The lane itself was measured on
 the owner's PC on 2026-10-24 (100% GPU, 16,384 context, `size_vram`
 2,817,953,626 bytes) and left running. A real portal export, a real phone screen
 and a real medical review remain NOT-TESTABLE - and NOT-TESTABLE is never a

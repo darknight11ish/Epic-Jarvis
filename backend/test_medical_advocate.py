@@ -18,7 +18,8 @@ The claims, one line each:
     no folder and no file behind (MedicalStoreUnavailable) - next to a positive
     control that the same call DOES create the file when the latch works;
   * the medical path is not the memory path, the three general readers never
-    name it, and the backup allowlist never carries it;
+    name it, and the backup carries the record (encrypted at rest, with its own
+    key) rather than excluding it;
   * the HTTP helper refuses a non-loopback address (and accepts this PC);
   * the lane probe says "down", "running" and "model not installed yet"
     without ever opening a socket, and the model's fallback names :11436;
@@ -122,7 +123,9 @@ class _FakeGate:
 
 
 class _StoreCase(unittest.TestCase):
-    """A scratch folder, a fake gate, and the environment put back."""
+    """A scratch folder, a fake gate, an in-memory key, and the env put back."""
+
+    KEY = b"\x2a" * 32
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="jarvis-medical-advocate-"))
@@ -133,8 +136,14 @@ class _StoreCase(unittest.TestCase):
         self.gate = _FakeGate()
         self._saved_gate = sys.modules.get("jarvis_gate")
         sys.modules["jarvis_gate"] = self.gate
+        # The same seam jarvis_chat_log's tests use: an in-memory key, never
+        # Windows Credential Manager. A suite that reached the real provider
+        # could CREATE a medical key in the owner's own Credential Manager.
+        self._saved_provider = MED.key_provider
+        MED.key_provider = lambda: self.KEY
 
     def tearDown(self):
+        MED.key_provider = self._saved_provider
         for name, value in self._saved_env.items():
             if value is None:
                 os.environ.pop(name, None)
@@ -296,6 +305,147 @@ class StoreTests(_StoreCase):
         self.assertFalse(result["created"])
         self.assertFalse(self.db.exists())
 
+    # ---------------------------------------------------------- encrypted at rest
+
+    def test_no_record_words_are_written_to_disk_in_plain_text(self):
+        secret = "HBA1C-7.9-SECRET-MARKER"
+        note = "PRIVATE-NOTE-4417"
+        MED.add_record("labs", label=secret, observed="2026-10-01", value="7.9",
+                       unit="%", source="SOURCE-CODE-881", note=note)
+        folder = self.db.parent
+        files = sorted(p for p in folder.rglob("*") if p.is_file())
+        self.assertIn(self.db, files)
+        self.assertEqual(self.db.read_bytes()[:16], b"SQLite format 3\x00")
+        for path in files:
+            raw = path.read_bytes()
+            for needle in (secret, note, "SOURCE-CODE-881", "2026-10-01"):
+                self.assertNotIn(needle.encode("utf-8"), raw,
+                                 f"{needle!r} is readable in {path.name}")
+        # ... while the record itself is intact through the key.
+        self.assertEqual(MED.list_records("labs")[0]["label"], secret)
+        self.assertEqual(MED.list_records("labs")[0]["note"], note)
+
+    def test_the_stored_payload_is_not_readable_json(self):
+        MED.add_record("labs", label="a label that would be JSON text")
+        conn = MED._connect(self.db)
+        try:
+            blob = bytes(conn.execute("SELECT payload FROM labs").fetchone()["payload"])
+        finally:
+            conn.close()
+        self.assertGreater(len(blob), 12)               # nonce + ciphertext + tag
+        try:
+            json.loads(blob.decode("utf-8"))
+            readable = True
+        except (UnicodeDecodeError, ValueError):
+            readable = False
+        self.assertFalse(readable, "the stored payload decodes as JSON")
+
+    def test_the_only_plain_metadata_is_the_structural_minimum(self):
+        """The leak the docstring promises: row number, random label, time."""
+        MED.add_record("labs", label="x", note="SECRET-WORDS")
+        conn = MED._connect(self.db)
+        try:
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(labs)")]
+            row = conn.execute("SELECT id, rid, created FROM labs").fetchone()
+            audit = [dict(item) for item in
+                     conn.execute("SELECT action, kind, record_id, count FROM health_audit_log")]
+        finally:
+            conn.close()
+        self.assertEqual(sorted(columns), ["created", "id", "payload", "rid"])
+        self.assertEqual(row["id"], 1)
+        self.assertEqual(len(row["rid"]), 16)           # random, says nothing
+        self.assertTrue(row["created"])
+        self.assertEqual([(a["action"], a["kind"], a["record_id"]) for a in audit],
+                         [("add", "labs", 1)])
+
+    def test_erase_all_leaves_no_readable_row_even_in_free_pages(self):
+        MED.add_record("labs", label="SECRET-BEFORE-ERASE")
+        MED.erase_all()
+        for path in sorted(p for p in self.db.parent.rglob("*") if p.is_file()):
+            self.assertNotIn(b"SECRET-BEFORE-ERASE", path.read_bytes(), path.name)
+        self.assertEqual(MED.list_records("labs"), [])
+
+
+class KeyTests(_StoreCase):
+    """Fail closed: no key, a wrong key, or no crypto means nothing is touched."""
+
+    def test_a_missing_key_refuses_every_operation_and_creates_nothing(self):
+        def no_key():
+            raise MED.MedicalStoreUnavailable("there is no key on this PC")
+        MED.key_provider = no_key
+        for call in (MED.init_store,
+                     lambda: MED.add_record("labs", label="x"),
+                     lambda: MED.list_records("labs"),
+                     MED.erase_all):
+            with self.assertRaises(MED.MedicalStoreUnavailable):
+                call()
+            self.assertFalse(self.db.exists())
+            self.assertFalse(self.db.parent.exists())
+
+    def test_a_provider_that_breaks_is_reported_in_plain_words(self):
+        def broken():
+            raise RuntimeError("no such key: SECRET-KEY-TEXT")
+        MED.key_provider = broken
+        with self.assertRaises(MED.MedicalStoreUnavailable) as caught:
+            MED.init_store()
+        self.assertIn("could not be had", str(caught.exception))
+        self.assertNotIn("SECRET-KEY-TEXT", str(caught.exception))
+        self.assertFalse(self.db.exists())
+
+    def test_a_wrong_length_key_is_refused(self):
+        MED.key_provider = lambda: b"\x01" * 31
+        with self.assertRaises(MED.MedicalStoreUnavailable) as caught:
+            MED.init_store()
+        self.assertIn("not a 32-byte key", str(caught.exception))
+        self.assertFalse(self.db.exists())
+
+    def test_no_encryption_package_refuses_in_plain_words(self):
+        with mock.patch.object(MED, "AESGCM", None):
+            with self.assertRaises(MED.MedicalStoreUnavailable) as caught:
+                MED.init_store()
+        self.assertIn("cryptography", str(caught.exception))
+        self.assertFalse(self.db.exists())
+
+    def test_the_production_key_path_refuses_when_the_key_store_is_absent(self):
+        saved = sys.modules.get("jarvis_chat_log")
+        sys.modules["jarvis_chat_log"] = None          # `import` raises
+        try:
+            with self.assertRaises(MED.MedicalStoreUnavailable) as caught:
+                MED._credential_key()
+        finally:
+            if saved is None:
+                sys.modules.pop("jarvis_chat_log", None)
+            else:
+                sys.modules["jarvis_chat_log"] = saved
+        self.assertIn("keys is not installed", str(caught.exception))
+        self.assertFalse(self.db.exists())
+
+    def test_a_replaced_key_refuses_rather_than_reading_an_empty_record(self):
+        MED.add_record("labs", label="HbA1c")
+        MED.key_provider = lambda: b"\x03" * 32
+        with self.assertRaises(MED.MedicalStoreUnavailable) as caught:
+            MED.list_records("labs")
+        self.assertIn("does not open", str(caught.exception))
+        # the file is still there, unread and unwritten
+        self.assertTrue(self.db.is_file())
+
+    def test_a_file_from_the_unencrypted_version_is_refused_not_read(self):
+        self.db.parent.mkdir(parents=True)
+        conn = sqlite3.connect(str(self.db))
+        conn.execute(
+            "CREATE TABLE labs (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " label TEXT NOT NULL, started TEXT NOT NULL DEFAULT '',"
+            " observed TEXT NOT NULL DEFAULT '', value TEXT NOT NULL DEFAULT '',"
+            " unit TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '',"
+            " note TEXT NOT NULL DEFAULT '', created TEXT NOT NULL)")
+        conn.execute("INSERT INTO labs (label, created) VALUES ('plain old row', '2026-10-01')")
+        conn.commit()
+        conn.close()
+        with self.assertRaises(MED.MedicalStoreUnavailable) as caught:
+            MED.list_records("labs")
+        self.assertIn("did not encrypt", str(caught.exception))
+        self.assertIn(b"plain old row", self.db.read_bytes())
+
 
 # --------------------------------------------------------------------------
 # The separation, as source text
@@ -326,25 +476,38 @@ class SeparationTests(_StoreCase):
         for name in ("memory.db", "projects.db", "today.db", "chat-history.db"):
             self.assertNotIn(name, named, f"the medical module uses {name} literally")
 
-    def test_backups_never_carry_the_medical_database(self):
-        # WHY THIS PIN EXISTS: SOURCE_DBS is an explicit allowlist, and a
-        # medical record in every archive (including a cloud-synced folder)
-        # is a decision the owner has NOT made. Adding the name here would
-        # silently put health data into every .jbak; this test is the thing
-        # that makes that a red check instead of a quiet edit.
-        lowered = [name.casefold() for name in BACKUP.SOURCE_DBS]
-        self.assertFalse([name for name in lowered
-                          if "health" in name or "medical" in name],
-                         f"medical data reached SOURCE_DBS: {BACKUP.SOURCE_DBS}")
-        self.assertIn("health.db", BACKUP.NOT_BACKED_UP)
-        self.assertTrue(len(BACKUP.NOT_BACKED_UP["health.db"]) > 20)
+    def test_the_medical_database_is_carried_in_the_backup_with_its_own_key(self):
+        # WHY THIS PIN EXISTS: on 2026-10-24 the owner chose "I wanted it
+        # encrypted as well and part of that file", reversing the first
+        # version's exclusion. SOURCE_DBS is an explicit allowlist and
+        # jarvis_backup now carries health.db under its own medical/ folder,
+        # together with a SECOND key (never chat history's). If either the
+        # name or the folder is quietly dropped, this goes red.
+        self.assertIn("health.db", BACKUP.SOURCE_DBS)
+        self.assertNotIn("health.db", BACKUP.NOT_BACKED_UP)
+        self.assertEqual(BACKUP.not_backed_up_reason("health.db"), "")
+        self.assertEqual(BACKUP.MEDICAL_ARCHIVE_DB, "medical/health.db")
+        self.assertEqual(MED.KEY_TARGET, "Jarvis Backend/medical key")
+        import jarvis_chat_log
+        self.assertNotEqual(MED.KEY_TARGET, jarvis_chat_log.KEY_TARGET)
 
     def test_the_backup_pin_can_bite(self):
-        """Positive control: the same rule DOES catch a planted name."""
-        planted = tuple(BACKUP.SOURCE_DBS) + ("health.db",)
-        lowered = [name.casefold() for name in planted]
-        self.assertTrue([name for name in lowered
-                         if "health" in name or "medical" in name])
+        """Positive control: the same rule DOES catch a planted exclusion."""
+        BACKUP.NOT_BACKED_UP["health.db"] = "planted by the positive control"
+        try:
+            self.assertEqual(BACKUP.not_backed_up_reason("health.db"),
+                             "planted by the positive control")
+        finally:
+            del BACKUP.NOT_BACKED_UP["health.db"]
+        self.assertEqual(BACKUP.not_backed_up_reason("health.db"), "")
+
+    def test_the_docstring_no_longer_says_the_record_is_plain_or_excluded(self):
+        text = (HERE / "jarvis_medical_advocate.py").read_text(encoding="utf-8")
+        doc = text[:text.index('"""', text.index('"""') + 3)]
+        self.assertIn("IS encrypted at rest", doc)
+        self.assertIn("IS carried in .jbak backups", doc)
+        self.assertNotIn("It is NOT encrypted at rest", doc)
+        self.assertNotIn("NOT in .jbak backups", doc)
 
     def test_the_medical_module_has_no_http_client_of_its_own(self):
         source = (HERE / "jarvis_medical_advocate.py").read_text(encoding="utf-8")
@@ -535,6 +698,27 @@ class LaneTests(_StoreCase):
         self.assertEqual(sent["model"], "medgemma1.5:4b-it-q4_K_M")
         self.assertEqual(sent["keep_alive"], "15m")
         self.assertEqual(sent["options"]["num_ctx"], 8192)
+
+    def test_the_consult_timeout_covers_a_real_answer(self):
+        """25 s cut the model off; measured 28.35 s on 2026-10-24.
+
+        The default must be at least 120 s, and it must be what really reaches
+        the HTTP call - a bigger number on a parameter nobody passes would be
+        the same bug with a nicer docstring.
+        """
+        import inspect
+        default = inspect.signature(MED.consult_local_medgemma).parameters["timeout"].default
+        self.assertGreaterEqual(default, 120.0)
+        seen = {}
+
+        def fake(url, payload=None, timeout=2.0):
+            seen["timeout"] = timeout
+            return {"response": "an answer"}
+
+        with mock.patch.object(SC, "_http_json", fake):
+            out = MED.consult_local_medgemma("q", taint_latch=lambda: True)
+        self.assertTrue(out["ok"], out)
+        self.assertGreaterEqual(seen["timeout"], 120.0)
 
 
 # --------------------------------------------------------------------------

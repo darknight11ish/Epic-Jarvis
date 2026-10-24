@@ -142,6 +142,17 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     unopenable. A restore writes the file and the key back together and makes
     the running store reopen (jarvis_decks.forget_key). Same recovery code, same
     lock; the deck words are never in the archive in the clear.
+  * **The medical record** (2026-10-24, the owner's decision: "I wanted it
+    encrypted as well and part of that file"). `health.db` in its own
+    `medical/` folder is snapshotted like every other database and carried
+    under `db/medical/health.db` - its own folder, never flattened beside
+    memory.db - with its own key as secrets/medical-key.b64
+    (jarvis_medical_advocate.KEY_TARGET, "Jarvis Backend/medical key"). Every
+    record field in it is AES-GCM sealed, so the key travels inside this
+    archive or the file is left out: a sealed medical database nothing on the
+    new PC could open is not a restore. This replaces the module's first
+    version, which named health.db in NOT_BACKED_UP while the owner's answer
+    was still pending; docs/DECISIONS.md records the reversal.
   * **The backend's own program files** - every `*.py` directly in the folder
     this module is running from (`_source_dir()`), kept as `source/<name>.py`.
     Added 2026-10-05, after an audit found FIVE files that existed in exactly
@@ -599,10 +610,21 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: history itself, which is the same "the owner's own data, not a cache" reason
 #: receipts.db and voiceprint.db are carried. It is read-only in the module that
 #: writes it until the owner turns [price_radar] on.
+#: health.db (2026-10-24) is the owner's own medical record
+#: (jarvis_medical_advocate.py). Its module keeps it in its own folder,
+#: <settings>/medical/health.db, so it is NOT read from `conf / name` like the
+#: rest: `_medical_db()` asks that module where the file really is, and the
+#: archive carries it under `db/medical/health.db` - its own folder, never
+#: flattened beside memory.db. The archive also carries the store's own
+#: Credential Manager key, or the file is left out: a sealed medical database
+#: nothing on the new PC could open is not a restore. The owner decided the
+#: record travels (2026-10-24, "I wanted it encrypted as well and part of that
+#: file"), reversing this module's first, exclusion-by-default version; that
+#: earlier reason is in docs/DECISIONS.md and docs/MEDICAL-STORE.md.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
               "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db",
               "tasks.db", "knowledge.db", "traces.db",
-              "receipts.db", "voiceprint.db", "price-radar.db")
+              "receipts.db", "voiceprint.db", "price-radar.db", "health.db")
 
 #: How long a snapshot/table-count connection waits for a lock before giving
 #: up. `sqlite3.connect(timeout=...)` IS SQLite's busy handler (it passes the
@@ -672,16 +694,12 @@ DB_BUSY_TIMEOUT_S = 10.0
 #:             The recording itself stays in the owner's own folder, backed up
 #:             by whatever he keeps them in - never by this.
 #:
-#: health.db  the owner's own medical record (jarvis_medical_advocate.py;
-#:            2026-10-24). Its module keeps it in its own folder, under
-#:            medical/, NOT directly in the settings folder - so the archive's
-#:            settings glob and database list could not reach it even by
-#:            accident. It is named here anyway because the decision is the
-#:            owner's, not a default: whether every medical record should sit
-#:            in every archive (including a cloud-synced folder, if that is
-#:            where backups go) is an open question, and until it is decided
-#:            the record stays out. See docs/MEDICAL-STORE.md and
-#:            backend/test_medical_advocate.py, which pin this.
+#: health.db was here for part of 2026-10-24 and is NOT: it was left out only
+#: until the owner decided. On 2026-10-24 he chose "I wanted it encrypted as
+#: well and part of that file", so the medical record joined SOURCE_DBS above
+#: (encrypted at rest, its key inside the archive, under db/medical/). The
+#: reversal and the reason are recorded in docs/DECISIONS.md; do not "restore"
+#: the exclusion without his word.
 NOT_BACKED_UP = {
     "agents.db": "template tables the modules recreate; empty today (0 rows)",
     "audit.db": "a security trail, not memory; restoring a stale one misleads",
@@ -690,7 +708,6 @@ NOT_BACKED_UP = {
     "telemetry.db": "machine measurements, not the owner's data; writer off",
     "documents-index.db": "derived word index; rebuilt from the folders on the next search",
     "media-index.db": "kept readable speech; excluded so Delete cannot be undone from an older backup",
-    "health.db": "the medical record; excluded until the owner decides whether every archive should carry it",
 }
 
 #: Non-SQLite stores under the settings folder that are deliberately NOT
@@ -899,6 +916,33 @@ def _source_dir() -> Path:
         return Path(__file__).resolve().parent
     except Exception:
         return Path.cwd()
+
+
+#: The medical record's own file name, and the archive name it travels under
+#: (2026-10-24). It is NOT a flat name in the settings folder: its module owns
+#: the `medical/` folder and the JARVIS_MEDICAL_DB override, and this module
+#: must carry the file the store actually reads, so both directions ask
+#: `_medical_db()`. The archive keeps the folder too (`db/medical/health.db`),
+#: so a restore puts it back inside `medical/` and never beside memory.db.
+MEDICAL_DB = "health.db"
+MEDICAL_ARCHIVE_DB = "medical/health.db"
+
+
+def _medical_db() -> Path:
+    """The medical record's real path on this PC, as its own module computes it.
+
+    Imported, not copied: jarvis_medical_advocate.store_path() owns the folder,
+    the file name and the JARVIS_MEDICAL_DB override, and a backup must carry
+    the same file the store reads. A backend without that module (an older
+    install) falls back to <settings>/medical/health.db, where the feature puts
+    it. Replaceable in tests exactly like `_config_dir()` and `_source_dir()`,
+    so a suite never reads or writes the owner's own record.
+    """
+    try:
+        import jarvis_medical_advocate as medical
+        return Path(medical.store_path())
+    except Exception:                              # noqa: BLE001 - absence is enough
+        return _config_dir() / "medical" / MEDICAL_DB
 
 
 def settings_path() -> Path:
@@ -1236,6 +1280,23 @@ def _study_decks_key_b64() -> Optional[str]:
         return None
 
 
+def _medical_key_b64() -> Optional[str]:
+    """The medical store's own encryption key, base64, or None when it cannot
+    be read. Read the SAME way jarvis_medical_advocate.py reads it - through
+    that module's own key provider and its own Credential Manager entry,
+    "Jarvis Backend/medical key", never chat history's - and only called when
+    health.db exists, so a backup never makes a medical key for a record
+    nobody has. No key, no health.db in the archive: see build_archive."""
+    try:
+        import jarvis_medical_advocate as medical
+        key = medical.key_provider()
+        if not isinstance(key, (bytes, bytearray)) or len(bytes(key)) != 32:
+            return None
+        return base64.b64encode(bytes(key)).decode("ascii")
+    except Exception:                              # noqa: BLE001 - reported by absence
+        return None
+
+
 def _toml_source() -> Optional[Path]:
     try:
         if fw is not None:
@@ -1317,15 +1378,17 @@ def build_archive() -> tuple:
                 "voice_profile_backed_up": False,
                 "voice_note": VOICE_REENROL_NOTE,
                 "chat_history_key": False,
-                "study_decks_key": False, "framework_toml": False,
+                "study_decks_key": False, "medical_key": False,
+                "framework_toml": False,
                 "source_files": 0, "named_settings": {}}
     buf = io.BytesIO()
     with tempfile.TemporaryDirectory(prefix="jarvis-backup-") as tmp:
         tmp_path = Path(tmp)
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             study_key_b64 = None
+            medical_key_b64 = None
             for name in SOURCE_DBS:
-                src = conf / name
+                src = _medical_db() if name == MEDICAL_DB else conf / name
                 dest = tmp_path / name
                 if name == STUDY_DB:
                     # Sealed words are useless (and a restore of them would
@@ -1335,12 +1398,28 @@ def build_archive() -> tuple:
                     study_key_b64 = _study_decks_key_b64()
                     if not study_key_b64:
                         continue
+                if name == MEDICAL_DB:
+                    # The same rule for the medical record (2026-10-24): every
+                    # payload in it is sealed, so its key travels inside this
+                    # encrypted archive or the file is left out. A restore on a
+                    # new PC has no Credential Manager entry of its own yet -
+                    # that is what the embedded key is for.
+                    if not src.is_file():
+                        continue
+                    medical_key_b64 = _medical_key_b64()
+                    if not medical_key_b64:
+                        continue
                 if _snapshot_db(src, dest):
                     manifest["databases"][name] = _table_counts(dest)
-                    zf.write(dest, arcname=f"db/{name}")
+                    arcname = (f"db/{MEDICAL_ARCHIVE_DB}" if name == MEDICAL_DB
+                               else f"db/{name}")
+                    zf.write(dest, arcname=arcname)
                     if name == STUDY_DB:
                         zf.writestr("secrets/study-decks-key.b64", study_key_b64)
                         manifest["study_decks_key"] = True
+                    if name == MEDICAL_DB:
+                        zf.writestr("secrets/medical-key.b64", medical_key_b64)
+                        manifest["medical_key"] = True
             own = {name.casefold() for name in _own_settings_files()}
             for jf in sorted(conf.glob("*.json")):
                 if jf.name.casefold() in own:
@@ -2822,6 +2901,7 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     conf.mkdir(parents=True, exist_ok=True)
     applied = {"databases": 0, "settings_files": 0, "notes_files": 0, "voice_files": 0,
                "framework_toml": False, "chat_history_key": False, "study_decks_key": False,
+               "medical_key": False,
                "source_files": 0,
                # Backup-Gap 1 (2026-10-23): an OLDER archive may still carry
                # sealed voice files. They are counted here only when they could
@@ -2829,6 +2909,7 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                "voice_files_skipped": 0, "voice_needs_re_enrolment": False,
                "voice_note": "",
                "skipped": 0, "chat_history_key_failed": False, "study_decks_key_failed": False,
+               "medical_key_failed": False,
                # The EXACT names behind those counts (2026-10-20, ruling 8.1).
                # Filled below and handed to the audit record and the receipt.
                "restored": {"databases": [], "settings_files": [], "notes_files": [],
@@ -2837,6 +2918,7 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     plan: list = []              # (dest, data, is_database)
     key_data = None
     study_key_data = None
+    medical_key_data = None
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         # REFUSE an unsafe archive BEFORE a single byte is read or written
         # (Backup-Gap 2, 2026-10-23). The `_inside` guard below still runs per
@@ -2870,7 +2952,16 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             shown = ""
             if name.startswith("db/"):
                 shown = name[len("db/"):]
-                where = ("databases", _inside(conf, shown, flat=True))
+                if shown == MEDICAL_ARCHIVE_DB:
+                    # The medical record's own folder (2026-10-24). Its one
+                    # archive name is matched EXACTLY - never joined from the
+                    # archive - and the destination comes from its module's own
+                    # path, so this cannot land anywhere the store does not
+                    # read. `flat=True` would refuse the folder on purpose for
+                    # every other database, and is still what runs for them.
+                    where = ("databases", _medical_db())
+                else:
+                    where = ("databases", _inside(conf, shown, flat=True))
             elif name.startswith("settings/"):
                 # The JSON files, plus the named ones whose extension is not
                 # `.json` (config.toml, speed.jsonl - 2026-10-13). Both land in
@@ -2930,6 +3021,8 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 key_data = data
             elif name == "secrets/study-decks-key.b64":
                 study_key_data = data
+            elif name == "secrets/medical-key.b64":
+                medical_key_data = data
     tag = uuid.uuid4().hex[:8]
     staged: list = []            # (dest, temp, is_database, group, shown name)
     swapped: list = []           # (dest, copy of the old file or None)
@@ -3014,7 +3107,27 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             jarvis_decks.forget_key()   # the running store must reopen with this key
         except Exception:
             applied["study_decks_key_failed"] = True
+    if medical_key_data is not None:
+        try:
+            import jarvis_token_store as ts
+            import jarvis_medical_advocate
+            ts.WindowsStore(target=jarvis_medical_advocate.KEY_TARGET).write(
+                medical_key_data.decode("ascii"))
+            applied["medical_key"] = True
+            applied["restored"]["keys"].append("medical-key")
+            # No forget_key() here: jarvis_medical_advocate reads its key on
+            # every operation rather than caching one for the process, so the
+            # next store call on this PC already uses the restored key.
+        except Exception:
+            # The files ARE restored; the outcome says the record may not open.
+            applied["medical_key_failed"] = True
     for group, names in done.items():
+        if group == "keys":
+            # `done` starts as one empty list per restored group, so the loop
+            # used to overwrite the key names appended above with [] - the
+            # receipt and the audit never named a single restored key (found
+            # by the medical round-trip test, 2026-10-24).
+            continue
         applied["restored"][group] = sorted(names)
     applied["restored"]["keys"] = sorted(applied["restored"]["keys"])
     # Backup-Gap 1 (2026-10-23): say plainly what happened to the voice

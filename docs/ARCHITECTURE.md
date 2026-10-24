@@ -3148,9 +3148,15 @@ screens and reads are unchanged). Because no backend route exists, and no app
 source names the module, `tools/check_parity.py` has nothing to classify - the
 gap is written down here rather than left to read as an oversight. The honest
 limits are on the same page and in the module's docstring: the latch expires
-after 30 minutes, the file is not encrypted, it is not in `.jbak` backups, chat
-history still contains the conversation, and the model is an explainer with no
-authority over codes. A phone screen, a desktop panel, a backup toggle and a
+after 30 minutes, **the record is encrypted at rest** (every field sealed with
+AES-256-GCM under its own key in Windows Credential Manager, first version of
+this paragraph said otherwise, reversed by the owner on 2026-10-24), **it is in
+`.jbak` backups** under `db/medical/health.db` with that key inside the
+encrypted archive so a new PC can open it, chat history still contains the
+conversation, and the model is an explainer with no authority over codes. What
+encryption does not hide is written down too: the file's name, its row numbers,
+a random per-row label, when each row was made, and the audit rows' action,
+kind and counts. A phone screen, a desktop panel, a backup toggle and a
 biometric lock screen are named follow-ups, not things this slice pretends to
 have.
 
