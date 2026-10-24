@@ -130,7 +130,7 @@ on a throwaway copy instead.
 | `schedule.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Timers, alarms, reminders and the to-do list, with one scheduler** (the owner's decisions, 2026-09-25). Adds `GET /api/schedule` and `POST /api/schedule/add` and `/act`, starts the scheduler at boot, answers "set a timer for 10 minutes" and the like in `/api/chat` WITHOUT the model, and the approval notice's words for `schedule_repeat` (anything that repeats is one card). Needs `jarvis_schedule.py` and `jarvis_quick.py` - see "Timers, alarms, reminders and the to-do list", at the very end. |
 | `memory-entities.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **"Who is my sister?" - people and things** (memory wave 3, 2026-09-25). Adds `GET /api/memory/entities` (the people and things facts are linked to, for the desktop's "About <name>"), leaves the "are these the same?" card out of `/api/memory/pending` unless asked for with `?merge_cards=1`, and gives `jarvis_extract.py` `propose_merge()` and `_accept_merge()` - accepting that card joins two entries and adds no fact. The work is in the shipped `rebuilt/jarvis_memory.py` (and `jarvis_past.py`, whose recall uses it); with an older copy the route answers 501. Last in the list, after `temporary-chat.patch`, whose route lines are its context. See "Memory wave 3", at the very end. |
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
-| `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of five providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
+| `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of six providers** (the owner's decisions, 2026-09-25; DeepSeek added as an opt-in sixth, 2026-10-23). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
 | `owner-check.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The approval gap, step 1** (docs/APPROVAL-GAP-DESIGN.md, the owner's decisions of 2026-09-25). `POST /api/approve` asks Windows Hello itself - showing the card's own title - before it accepts a RISKY approval that comes from this PC, refuses one on a PC with no Windows Hello, and stamps every approval it accepts; the gate believes no "approved" row this running backend did not stamp, so "approved" written straight into `approvals.db` is refused. Last in the list; its context is `gate-outcome.patch`'s approved branches and `log-scrub.patch`'s banner line. Needs `jarvis_owner_check.py` - without it EVERY approval is refused. See "The approval gap, step 1", at the very end. |
 | `focus.patch` | `jarvis_hud.py` | **Focus sessions** (the owner's decision of 2026-09-25). Adds `GET /api/focus` (the countdown, booleans and counts, the report card), `/api/focus/diag` (booleans only) and `/api/focus/callout` (the spoken line as sound, to this PC only), and `POST /api/focus/start` and `/api/focus/act`. No approval card. Its context is `reach.patch`'s GET block and `power-mode.patch`'s POST block. Needs `jarvis_focus.py` - see "Focus sessions", near the end. |
 | `thinking.patch` | `jarvis_hud.py` | **Thinking levels: how long a model may think before it answers** (the owner's decision of 2026-10-01, "Section 5.5"; `docs/JARVIS-API.md` section 121). Two route blocks: `GET /api/thinking` - every model Jarvis can run, the level it is set to, and the levels that model really supports, read from Ollama's own `/api/show` rather than assumed, so a model that cannot think is never offered "Deep" - and `POST /api/thinking` (`{"model": ..., "level": "off"\|"quick"\|"deep"\|"auto"}`, and since 2026-10-11 `{"when": "when_asked"\|"always"}` for WHEN thinking happens). A level is **per model**, not global, and `off` is the default. **No approval card either way**: it changes how long an answer may take, not what Jarvis may reach, and thinking text is never shown, saved or learned from. Its context is `focus.patch`'s own `if path in ("/api/focus", ...)` block, which does not exist until `focus.patch` has inserted it - so it goes after it, and applied first `git apply` fails on that hunk and stops the whole run. Needs `jarvis_thinking.py` (shipped whole); without it the two routes answer 503. See `test_thinking.py`. |
@@ -3790,7 +3790,7 @@ unchanged:**
 2. Otherwise Windows Credential Manager, under the secret's own target
    (below) - entered once in the desktop's Settings, "Accounts"
    (`account-secrets-settings.js`; `src-tauri/src/account_secrets.rs`),
-   exactly the same shape as the Exa/Tavily/Brave web search keys just
+   exactly the same shape as the Exa/Tavily/Brave/DeepSeek web search keys just
    above in this file, and never sent over HTTP to the backend or the
    phone.
 3. Otherwise `""` - simply not configured. Unlike the pairing token, none
@@ -10306,7 +10306,9 @@ approved shell command, and checks the command cannot see it.
 # Web search: `jarvis_search.py`, `web-search.patch` (2026-09-25)
 
 **What it is for.** Jarvis can look things up on the web. You choose where
-the search goes, from five (the owner's decisions of 2026-09-25):
+the search goes, from six (the owner's decisions of 2026-09-25; DeepSeek
+was added as an opt-in sixth on 2026-10-23, and SearXNG is still the
+default):
 
 | search | why use this one |
 |---|---|
@@ -10315,6 +10317,7 @@ the search goes, from five (the owner's decisions of 2026-09-25):
 | **Exa** | Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key. |
 | **Tavily** | Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key. |
 | **Brave Search** | Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key. |
+| **DeepSeek web search** (opt-in) | DeepSeek's own search service: results written for AI assistants, at $0.75 for 1,000 searches - a search that finds nothing is not charged. Needs an account with some credit on it and a key, and DeepSeek sees what you search, tied to your key. |
 
 **Whoogle is left out:** its own README says it no longer returns results,
 since Google blocked searching without JavaScript in 2025.
@@ -10366,14 +10369,14 @@ turning it off asks you with a card. Search words that look like a password
 or a key are refused outright, and Jarvis says why.
 
 **What leaves the PC.** Only the search words, to the one search you chose -
-and for Exa, Tavily and Brave, your key, to that company only. SearXNG runs on
+and for Exa, Tavily, Brave and DeepSeek, your key, to that company only. SearXNG runs on
 your PC and asks other search engines itself; they see the words and your
 internet address. What comes back (five results at most: a title, a link, a
 snippet) is treated like a web page: outside text.
 
-**Your keys (Exa, Tavily, Brave).** Kept in Windows Credential Manager on this
+**Your keys (Exa, Tavily, Brave, DeepSeek).** Kept in Windows Credential Manager on this
 PC (`Jarvis Backend/Exa key`, `Jarvis Backend/Tavily key`,
-`Jarvis Backend/Brave Search key`), never in a
+`Jarvis Backend/Brave Search key`, `Jarvis Backend/DeepSeek Search key`), never in a
 file, never in a log, never sent anywhere but their own service. You enter
 them **on the PC only** - in the desktop app's Settings, Web search, or with
 the line below. The phone has no box for a key on purpose: typing one there
@@ -10533,19 +10536,37 @@ Keys and copy the key. Paste it in Settings, "Brave Search key" - or:
 cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_search.py key brave
 ```
 
+**3f. DeepSeek instead - it charges by the search, from your balance.**
+Sign in at https://platform.deepseek.com, add some credit (Billing or Top
+up), then open API keys and copy the key. Paste it in Settings, "DeepSeek web
+search key" - or:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_search.py key deepseek
+```
+
+Then choose DeepSeek web search and press Test search (one billed search:
+$0.75 per 1,000, so a test costs about a twelfth of a penny; a search that
+finds nothing is not billed). Its search words may be at most 128
+characters, and it answers at most 100 searches a second for the whole
+account; a longer search is refused before anything is sent, and a 429 says
+so in plain words.
+
 To see what is set without showing any key:
 `py -3 jarvis_search.py status`. To remove a key:
-`py -3 jarvis_search.py forget-key exa` (or `tavily`, `brave`), or Remove key in
+`py -3 jarvis_search.py forget-key exa` (or `tavily`, `brave`, `deepseek`), or Remove key in
 Settings.
 
 ## What the code does
 
-- `jarvis_search.py` - the five providers behind one `plan()` (opens no
+- `jarvis_search.py` - the six providers behind one `plan()` (opens no
   socket; refuses words holding a password or key) and `run()` (only the
   chosen provider; results capped to 5, titles to 150 characters, snippets
   to 300; answers capped at 1 MB; 15 seconds each; redirects refused;
-  SearXNG with no proxy; Exa, Tavily and Brave over https only, to a fixed
-  address - Exa called directly, without its exa-py library; DuckDuckGo through `ddgs` with its DuckDuckGo engine only, at
+  SearXNG with no proxy; Exa, Tavily, Brave and DeepSeek over https only, to a fixed
+  address - Exa called directly, without its exa-py library, and DeepSeek
+  called with only its query, count and need_content (never its optional
+  conversation question or address); DuckDuckGo through `ddgs` with its DuckDuckGo engine only, at
   most about one search a second, and refused if a `ddgs` version has no
   DuckDuckGo engine, because `ddgs` would then quietly ask other engines).
   The settings, the card for "Ask before every web search" off, the three
@@ -10567,25 +10588,27 @@ Settings.
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_web_search.py
 ```
 
-About 230 checks, with local stand-in servers on 127.0.0.1 and a stand-in
-`ddgs` - nothing reaches the internet: the four lines in the PC's, the
+About 400 checks, with local stand-in servers on 127.0.0.1 and a stand-in
+`ddgs` - nothing reaches the internet: the six lines in the PC's,
 desktop's and the phone's words; no socket in `plan()`; a key in the search
 words refused without echoing it; SearXNG through no proxy, redirects and
 oversized answers refused, "not running" and "JSON off" said plainly with an
 offer to switch and nothing sent elsewhere; the SearXNG address kept to your
-own networks; the Exa, Tavily and Brave keys only in their own header to their own
-address, never after a redirect, never in a card, an answer or the log;
-DuckDuckGo only, paced; the settings and the card to ask less; when a search
-asks and that only a person's yes runs it; the sentences answered without
-the model; and the patch applied to what the earlier patches wrote.
+own networks; the Exa, Tavily, Brave and DeepSeek keys only in their own header to their own
+address, never after a redirect, never in a card, an answer or the log, with
+DeepSeek's answer parsing (summary, null date, empty results) and every one
+of its error codes; DuckDuckGo only, paced; the settings and the card to ask
+less; when a search asks and that only a person's yes runs it; the sentences
+answered without the model; and the patch applied to what the earlier
+patches wrote.
 
 ## Not checked, said plainly
 
 - **Brave: nothing in Jarvis stops it charging your card.** Past the free
   credit Brave bills and answers normally; Jarvis cannot tell. Only a limit
   you set in Brave's dashboard can.
-- **Nothing has reached a real DuckDuckGo, Exa, Tavily or Brave.** The
-  answers were written from their documentation and read in the dev
+- **Nothing has reached a real DuckDuckGo, Exa, Tavily, Brave or DeepSeek.**
+  The answers were written from their documentation and read in the dev
   container; their setup lines above have not been run on your PC (the
   PowerShell here could not be run by this session either - its checks blocked
   it - so read them once before pasting). **SearXNG is no longer in that list,
@@ -10598,9 +10621,10 @@ the model; and the patch applied to what the earlier patches wrote.
   start already has JSON switched on. Nothing here has yet been seen across a
   reboot, where the container is meant to come back by itself
   (`restart: unless-stopped`).
-- How Tavily, Exa and Brave say "your monthly credit is used up" (Tavily
+- How Tavily, Exa, Brave and DeepSeek say "your monthly credit is used up" (Tavily
   432/433 and Brave 402/429 from their documentation; Exa 402 or 429,
-  assumed) has not been seen. Brave's "roughly 1,000 searches" for $5 is not
+  assumed; DeepSeek 402 from its own error table) has not been seen. Brave's
+  "roughly 1,000 searches" for $5 is not
   checked against Brave's price list.
 - Exa: its address (`https://api.exa.ai/search`), its key header
   (`x-api-key`) and the request's field names were read from Exa's own

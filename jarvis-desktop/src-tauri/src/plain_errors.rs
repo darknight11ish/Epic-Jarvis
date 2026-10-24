@@ -154,12 +154,133 @@ pub(crate) fn manner_answer(status: u16, body: &str) -> Result<serde_json::Value
     Err(backend_refusal(status, body))
 }
 
-/// The body of the one change: "warm" or "plain", nothing else.
-pub(crate) fn manner_body(manner: &str) -> Result<serde_json::Value, String> {
-    if !MANNERS.contains(&manner) {
-        return Err("That is not one of the two choices.".to_string());
+/// The body of one manner change. The older call (`{"manner": "warm"}`) is
+/// unchanged; a Personality Presets change adds ONE of the other fields, so a
+/// switch never resets a different choice (the same rule the humour switch
+/// already follows).
+///
+/// The page sends names and numbers; this only checks their shape. What a
+/// personality MEANS (prompt, reflex phrases, voice blend) is the PC's
+/// (`contract/personalities.json`, `jarvis_manner.py`), never this window's.
+pub(crate) fn manner_change_body(
+    manner: Option<&str>,
+    personality: Option<&str>,
+    dials: Option<&serde_json::Value>,
+    voice_sync: Option<bool>,
+    custom: Option<&serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let mut out = serde_json::Map::new();
+    if let Some(manner) = manner {
+        if !MANNERS.contains(&manner) {
+            return Err("That is not one of the two choices.".to_string());
+        }
+        out.insert("manner".into(), serde_json::json!(manner));
     }
-    Ok(serde_json::json!({ "manner": manner }))
+    if let Some(personality) = personality {
+        let id = personality.trim();
+        let shape = (1..=40).contains(&id.len())
+            && id.starts_with(|c: char| c.is_ascii_lowercase())
+            && id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
+        if !shape {
+            return Err("That is not a personality this PC offers.".to_string());
+        }
+        out.insert("personality".into(), serde_json::json!(id));
+    }
+    if let Some(dials) = dials {
+        out.insert("dials".into(), dials_change(dials)?);
+    }
+    if let Some(on) = voice_sync {
+        out.insert("voice_sync".into(), serde_json::json!(on));
+    }
+    if let Some(custom) = custom {
+        out.insert("custom".into(), custom_change(custom)?);
+    }
+    if out.is_empty() {
+        return Err("Nothing to change.".to_string());
+    }
+    Ok(serde_json::Value::Object(out))
+}
+
+/// The four dials, checked against the same ids the page draws.
+fn dials_change(raw: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let map = raw.as_object().ok_or("That is not a set of dials.")?;
+    let known = ["humor", "brevity", "formality", "address"];
+    if map.is_empty() || map.keys().any(|k| !known.contains(&k.as_str())) {
+        return Err("That is not a set of dials.".to_string());
+    }
+    let mut out = serde_json::Map::new();
+    for (key, value) in map {
+        let ok = match key.as_str() {
+            "humor" => value.as_i64().is_some_and(|n| (0..=3).contains(&n)),
+            "brevity" => {
+                ["concise", "balanced", "thorough"].contains(&value.as_str().unwrap_or(""))
+            }
+            "formality" => ["casual", "warm_peer", "formal_butler", "tactical"]
+                .contains(&value.as_str().unwrap_or("")),
+            "address" => ["first_name", "sir", "ma'am", "boss", "captain", "none"]
+                .contains(&value.as_str().unwrap_or("")),
+            _ => false,
+        };
+        if !ok {
+            return Err("That is not one of the dials.".to_string());
+        }
+        out.insert(key.clone(), value.clone());
+    }
+    Ok(serde_json::Value::Object(out))
+}
+
+/// A saved custom personality, or its deletion. The PC keeps the list; this
+/// only bounds exactly what a page may send. Deletion carries the explicit
+/// `confirm: true` the PC asks for, and nothing is deleted without it.
+fn custom_change(raw: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let map = raw.as_object().ok_or("That is not a personality change.")?;
+    let op = map.get("op").and_then(|v| v.as_str()).unwrap_or("");
+    match op {
+        "delete" => {
+            let id = map.get("id").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if id.is_empty() || id.len() > 40 {
+                return Err("That is not a personality this PC saved.".to_string());
+            }
+            if map.get("confirm") != Some(&serde_json::Value::Bool(true)) {
+                return Err("Deleting a personality needs the explicit confirm first.".to_string());
+            }
+            Ok(serde_json::json!({ "op": "delete", "id": id, "confirm": true }))
+        }
+        "save" => {
+            let mut out = serde_json::Map::new();
+            out.insert("op".into(), serde_json::json!("save"));
+            for key in ["id", "name"] {
+                let value = map.get(key).and_then(|v| v.as_str()).unwrap_or("").trim();
+                if value.is_empty() || value.len() > 60 {
+                    return Err("Give the personality a name of up to 60 characters.".to_string());
+                }
+                out.insert(key.into(), serde_json::json!(value));
+            }
+            for key in ["line", "example", "based_on"] {
+                if let Some(value) = map.get(key).and_then(|v| v.as_str()) {
+                    let clean: String = value
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .take(240)
+                        .collect();
+                    out.insert(key.into(), serde_json::json!(clean.trim()));
+                }
+            }
+            if let Some(dials) = map.get("dials") {
+                out.insert("dials".into(), dials_change(dials)?);
+            }
+            Ok(serde_json::Value::Object(out))
+        }
+        _ => Err("That is not a personality change this PC knows.".to_string()),
+    }
+}
+
+/// The older body, kept so the two-choice path's tests still name it.
+#[cfg(test)]
+pub(crate) fn manner_body(manner: &str) -> Result<serde_json::Value, String> {
+    manner_change_body(Some(manner), None, None, None, None)
 }
 
 /// "How Jarvis talks": `GET /api/manner`.
@@ -177,10 +298,24 @@ pub async fn get_manner(app: AppHandle) -> Result<serde_json::Value, String> {
     manner_answer(status, &body)
 }
 
-/// Warm or plain, at once, with no card. Held on a stale link.
+/// One manner / personality change, at once, with no card. Held on a stale
+/// link. Every field is optional: the page sends the ONE that changed.
 #[tauri::command]
-pub async fn set_manner(app: AppHandle, manner: String) -> Result<serde_json::Value, String> {
-    let body = manner_body(&manner)?;
+pub async fn set_manner(
+    app: AppHandle,
+    manner: Option<String>,
+    personality: Option<String>,
+    dials: Option<serde_json::Value>,
+    voice_sync: Option<bool>,
+    custom: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let body = manner_change_body(
+        manner.as_deref(),
+        personality.as_deref(),
+        dials.as_ref(),
+        voice_sync,
+        custom.as_ref(),
+    )?;
     if app.state::<crate::stream::StreamState>().link().stale {
         return Err(STALE.to_string());
     }
@@ -408,5 +543,46 @@ mod tests {
         assert_eq!(ids, MANNERS);
         assert!(manner_answer(404, "").unwrap()["available"] == false);
         assert!(manner_answer(200, "{}").is_err());
+    }
+
+    /// Personality Presets (2026-10-23): one field per change, shape checked
+    /// here and meaning left to the PC. These are the cases a page can send.
+    #[test]
+    fn personality_change_bodies() {
+        let warm = manner_change_body(Some("warm"), None, None, None, None).unwrap();
+        assert_eq!(warm, serde_json::json!({ "manner": "warm" }));
+        let preset = manner_change_body(None, Some("classic_butler"), None, None, None).unwrap();
+        assert_eq!(
+            preset,
+            serde_json::json!({ "personality": "classic_butler" })
+        );
+        assert!(manner_change_body(None, Some("Classic Butler!"), None, None, None).is_err());
+        let dials = serde_json::json!({ "humor": 2, "brevity": "concise",
+                                        "formality": "formal_butler", "address": "sir" });
+        let got = manner_change_body(None, None, Some(&dials), None, None).unwrap();
+        assert_eq!(got["dials"], dials);
+        let bad = serde_json::json!({ "humor": 9 });
+        assert!(manner_change_body(None, None, Some(&bad), None, None).is_err());
+        let typo = serde_json::json!({ "humour": 1 });
+        assert!(manner_change_body(None, None, Some(&typo), None, None).is_err());
+        let sync = manner_change_body(None, None, None, Some(true), None).unwrap();
+        assert_eq!(sync, serde_json::json!({ "voice_sync": true }));
+        let save = serde_json::json!({
+            "op": "save", "id": "mine-tester", "name": "Tester",
+            "line": "Calm and quick.", "example": "On it.", "based_on": "calm_stoic",
+            "dials": { "humor": 0, "brevity": "concise",
+                       "formality": "warm_peer", "address": "first_name" },
+        });
+        let saved = manner_change_body(None, None, None, None, Some(&save)).unwrap();
+        assert_eq!(saved["custom"]["op"], "save");
+        assert_eq!(saved["custom"]["name"], "Tester");
+        let nameless = serde_json::json!({ "op": "save", "id": "mine-x", "name": "" });
+        assert!(manner_change_body(None, None, None, None, Some(&nameless)).is_err());
+        let delete = serde_json::json!({ "op": "delete", "id": "mine-tester" });
+        assert!(manner_change_body(None, None, None, None, Some(&delete)).is_err());
+        let confirmed = serde_json::json!({ "op": "delete", "id": "mine-tester", "confirm": true });
+        let gone = manner_change_body(None, None, None, None, Some(&confirmed)).unwrap();
+        assert_eq!(gone["custom"]["confirm"], true);
+        assert!(manner_change_body(None, None, None, None, None).is_err());
     }
 }
