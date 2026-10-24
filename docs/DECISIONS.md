@@ -2977,3 +2977,72 @@ implementation and its evidence are in `backend/no-expiry-cards.patch`,
 `backend/test_gate_no_expiry.py` (170 checks), `docs/ARCHITECTURE.md` section 2,
 `backend/README.md` and `docs/JARVIS-API.md` (`expires_in`), and the rescue pull request is
 #773.
+
+## 2026-10-23 - the phone's Galaxy stays a read-only list and gains an "at a glance" band
+
+Offered three choices, the owner picked the light one: the phone keeps the
+read-only `PeopleAndThingsSection` list (the signed 2026-10-21 ruling's "zero
+canvas" stands) and gains ONE read-only band above it - the number of names and
+facts, then the eight names that share facts with the most others, as plain
+labels that announce as text and never as buttons. A still picture and the
+animated 8 presets were NOT chosen; the animated presets would also need a new
+decision and desktop engines that do not exist yet. Slice 1 is planned in
+`.dsh-scratch/ANDROID-GALAXY-PHONE-PLAN-2026-10-23.md`; it reads nothing new
+(the two reads the plate already makes) and writes nothing.
+
+## 2026-10-23 - the desktop Galaxy is rebuilt as a faithful 3D port with a bundled library
+
+The owner chose the full 3D port of the v2.6 prototype for the desktop Brain
+window, and later for the editable HUD: a pinned, MIT-licensed three.js and
+OrbitControls vendored into the app (no CDN at runtime), every visible name kept
+as real HTML text over the drawing, a visible SVG fallback when WebGL is
+missing, the existing pause-when-hidden rule (#777), and no "simulate" control
+for any security state - the Sentinel view reads real local/approval/taint state
+only. The phone stays excluded. The three simple layouts (Star map, Clean tree,
+Zen ring) landing in SVG as #775 stay as the fallback. The plan is in
+`.dsh-scratch/GALAXY-WEBGL-PORT-PLAN-2026-10-23.md`; the GPU frame rate and how
+it feels on the owner's screen are his field test, not a claim here.
+
+## 2026-10-23 - DeepSeek search is tried for real by the owner, once
+
+The owner will save the DeepSeek Search key in Windows Credential Manager
+(`Jarvis Backend/DeepSeek Search key`) and run one real web search with the
+provider switched on, then say what happened. Until that call is observed, the
+DeepSeek network paths stay NOT-TESTABLE - never a pass. No key is ever placed in
+the repository, a log or an agent workspace.
+
+## 2026-10-23 - the new-PC setup script is fixed by rewriting the 13 stale patches
+
+The owner chose the deep fix over a docs stop-gap: `scripts/apply-patches.ps1`
+must succeed on a fresh `jarvis-backend` copy, which means rewriting the 13
+genuinely stale patches (the G8 bisect: 15 patches already present in the base,
+7 sequence casualties, 13 genuine drift). The success test is a real run on a
+fresh base with both Windows PowerShell 5.1 and pwsh 7, exit 0, and the docs
+updated to the proven command. Until then the documented new-PC step still
+exits 1 and that is recorded as a blocker, not worked around.
+
+## 2026-10-23 - the Python lock recipe is fixed before the filelock advisory is bumped
+
+The documented recipe cannot regenerate `requirements.lock`, so `filelock==4.0.0`'s
+three advisories (GHSA-v4x8-3wr5-3wq8, GHSA-9vhv-jxww-xfm5, GHSA-567q-5qvw-pf92)
+cannot be cleared honestly. The recipe is fixed first; only then is the bump to
+4.2.1 made through it. This is also why a new Python dependency (like a WebSocket
+library) could not be added for the phone Live stream.
+
+## 2026-10-23 - the phone live-stream transport is the hand-rolled minimal WebSocket
+
+The owner approved the transport design for Slice G/G2: a minimal RFC 6455
+WebSocket implemented with the standard library (no new dependency), with token
+and origin checked BEFORE the upgrade, 2,048-byte binary frames (one 64 ms frame
+at 16 kHz mono), the design's refusal paths, and one whole turn over the
+persistent stream. It lands as its own pull request after the cascade; the switch
+`[live] stream` ships OFF, and the phone Live 16 kHz stream still answers `501`
+on the backend until the phone half is wired and measured.
+
+## 2026-10-23 - dependency policy: Tauri 2.12.5 and the six GitHub Actions majors move now
+
+The safe patch updates already landed as #778. The owner approved the next step:
+Tauri 2.12.5 plus the six GitHub Actions major bumps, as their own pull request
+on fresh `main`; Android library bumps and the search-engine image tag stay held.
+The "one approval card per update" policy remains the chosen self-update shape
+and is still unbuilt.
