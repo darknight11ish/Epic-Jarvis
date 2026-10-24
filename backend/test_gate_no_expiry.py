@@ -45,6 +45,14 @@ for it (never 0); `jarvis_owner_check` - the Windows Hello gate - does not
 refuse it; and the pairing/approval-key modules withdraw a cancelled card
 instead of leaving a permanent ghost.
 
+The last three drive the real pairing and approval-key code against the real
+patched gate (audit 2026-10-24, B-1 and B-2): Cancel and the 600-second expiry
+must take the waiting pair_device card off the list so a later Approve cannot
+report success while minting nothing, and a retry of the SAME approval key
+must join the one card already waiting instead of orphaning the waiter that
+will store it. They replaced a source-text pin that passed while both bugs
+were live.
+
 HOW THE GATE IS LOADED. `jarvis_gate.py` is the owner's file; this repository
 holds the published base in `jarvis-backend/` (see jarvis-backend/README.md
 and backend/test_base_matches_repo.py). This suite copies that base into a
@@ -810,31 +818,249 @@ def t_owner_check_does_not_refuse_a_card_with_no_deadline():
         OC.set_verifier(None)
 
 
-def t_the_pairing_flows_take_a_cancelled_card_off_the_list():
-    """The other half of withdraw(): the two flows that need it call it.
+# ---------------------------------------------------------------------------
+# B-1 / B-2: the pairing card's life, and a duplicate approval-key retry
+# ---------------------------------------------------------------------------
+#
+# These replace a source-text pin ("_take_off(...)" appears in _decide). The
+# pin could not fail for the reason that matters: it passed while the wrong id
+# was withdrawn and while a cancelled session's card stayed on the list for
+# ever (audit B-1). What follows drives the real pairing code against the real
+# patched gate and asks the gate itself what is pending.
 
-    A static pin, deliberately: driving a full QR pairing needs a phone, the
-    mesh and a Windows Hello prompt. What is checked is the wiring that makes
-    a cancelled or replaced pairing/approval-key card disappear - and that it
-    is a no-op on a backend without the gate patch.
+#: A mesh address that is not this PC. `own` is passed explicitly everywhere,
+#: so nothing here has to know the build machine's own addresses.
+PEER_MESH = "100.101.2.3"
+
+
+def ask_tier(_action):
+    return "ask"
+
+
+def _devices_and_gate():
+    """(gate module, devices module, the folder, why not). Fresh modules.
+
+    The gate is the one `built()` makes - the published base with
+    no-expiry-cards.patch applied - and `jarvis_devices.py` is this
+    repository's own copy. So what runs is the real `cancel()`/`_tick()`/
+    `register_key()` calling the real `jarvis_gate.check()`, not stand-ins for
+    either.
     """
-    devices = text_of(BACKEND / "jarvis_devices.py")
-    check("jarvis_devices.py has the one withdraw helper",
-          "def _take_off(rid, why: str) -> None:" in devices)
-    check("...which asks the module for withdraw with getattr (a backend "
-          "without the patch has none)",
-          'take_off = getattr(_gate_module(), "withdraw", None)' in devices)
-    decide = slice_between(devices, "def _decide(", "def collect(")
-    check("a cancelled pair_device card is withdrawn",
-          "_take_off(getattr(v, \"request_id\", None)," in decide, decide[:200])
-    check("...and it keeps its old 'withdrawn' audit line",
-          '{"state": "withdrawn", "card": outcome}' in decide)
-    kdecide = slice_between(devices, "def _k_decide(", "\ndef ")
-    check("a replaced/removed approval-key card is withdrawn too",
-          "_take_off(pid, \"the approval-key request" in kdecide, kdecide[:200])
-    check("both copies of jarvis_devices.py are byte-identical",
-          (BACKEND / "jarvis_devices.py").read_bytes().replace(b"\r\n", b"\n")
-          == (BASE / "jarvis_devices.py").read_bytes().replace(b"\r\n", b"\n"))
+    d, why = built()
+    if d is None:
+        return None, None, None, why
+    G = load_module("jarvis_gate", d)
+    D = load_module("jarvis_devices", d)
+    D._reset_for_tests()
+    return G, D, d, ""
+
+
+def card_of(gate, action: str, seconds: float = 10.0):
+    """The pending card for `action`, as /api/pending would show it, or None."""
+    end = time.time() + seconds
+    while time.time() < end:
+        for row in gate.pending():
+            if row.get("action") == action:
+                return row
+        time.sleep(0.02)
+    return None
+
+
+def card_gone(gate, rid: str, seconds: float = 10.0) -> bool:
+    """True once `rid` is no longer among the waiting cards."""
+    end = time.time() + seconds
+    while time.time() < end:
+        if not any(row.get("id") == rid for row in gate.pending()):
+            return True
+        time.sleep(0.02)
+    return False
+
+
+class Pairing:
+    """One real QR pairing, driven by hand, with the clock under the test.
+
+    `jarvis_devices._now` is the clock `SESSION_SECONDS` is measured on (both
+    `_tick` and `_decide` read it), so moving it is exactly what the ten-minute
+    window sees - no sleeping for ten minutes.
+    """
+
+    def __init__(self, G, D):
+        self.G, self.D = G, D
+        self.now = 1_000_000.0
+        self._real_now = D._now
+        D._now = lambda: self.now
+        self.code, self.out = D.start({"address": "jarvis-pc.tail1234.ts.net", "port": 4719},
+                                      here=True, tier_of=ask_tier, armed=lambda: True)
+        if self.code != 200:
+            raise RuntimeError(f"start refused: {self.out}")
+        q = D.parse_qr(self.out["qr"])
+        nonce = D._b64u(bytes(range(16)))
+        self.k, self.nonce = q["secret"], nonce
+        t = D.transcript("qr", q["pair_id"], nonce, "Pixel 9")
+        self.body = {"method": "qr", "pair_id": q["pair_id"], "phone_nonce": nonce,
+                     "name": "Pixel 9", "proof": D.claim_proof(self.k, t)}
+
+    def claim(self):
+        code, ans = self.D.claim(self.body, peer=PEER_MESH, own=lambda: frozenset(),
+                                 gate=self.G.check, tier_of=ask_tier, spawn=self.D._spawn)
+        if code != 202:
+            raise RuntimeError(f"claim refused: {ans}")
+        return card_of(self.G, self.D.ACTION)
+
+    def advance(self, seconds):
+        self.now += seconds
+
+    def close(self):
+        """Leave no blocked waiter behind for the next test."""
+        try:
+            self.D.cancel(here=True)
+        except Exception:
+            pass
+        for row in self.G.pending():
+            try:
+                self.G.decide(row["id"], False, by="the test")
+            except Exception:
+                pass
+        self.D._now = self._real_now
+
+
+def t_a_cancelled_pairing_takes_its_card_off_the_list():
+    """BUG B-1, first trigger: Cancel ends the session while the card waits.
+
+    `_decide` is blocked inside check(), and a pair_device card has no deadline,
+    so before this fix the row stayed on /api/pending for ever - on both apps,
+    across backend restarts - and a later Approve ran Windows Hello, was
+    recorded as approved, and minted nothing.
+    """
+    G, D, d, why = _devices_and_gate()
+    if G is None:
+        return skip(why)
+    P = Pairing(G, D)
+    try:
+        card = P.claim()
+        check("the pairing card is waiting while the phone waits",
+              card is not None and card["action"] == D.ACTION, card)
+        if card is None:
+            return
+        code, out = D.cancel(here=True)
+        check("Cancel ends the session", code == 200 and out["was"] == "waiting_for_card", out)
+        check("...and its card leaves /api/pending", card_gone(G, card["id"]))
+        check("...and a late Approve is refused, never reported as a success",
+              G.decide(card["id"], True, by="the test") is False)
+        check("...so no device was made by that Approve",
+              not D.registry_path().exists())
+    finally:
+        P.close()
+
+
+def t_an_expired_pairing_takes_its_card_off_the_list():
+    """BUG B-1, second trigger: the SESSION expires at 600 s; the card did not.
+
+    The session's own ten minutes still run out even though the card never
+    does. When they do, the card must go with the session: otherwise the owner
+    presses Approve on a card whose session is dead, /api/approve answers 200
+    approved, and no key is minted and no device exists.
+    """
+    G, D, d, why = _devices_and_gate()
+    if G is None:
+        return skip(why)
+    P = Pairing(G, D)
+    try:
+        card = P.claim()
+        check("the pairing card is waiting while the session is live", card is not None)
+        if card is None:
+            return
+        P.advance(D.SESSION_SECONDS + 1)
+        code, view = D.session_view(here=True)     # this is what runs _tick()
+        check("the 600 seconds end the session", view["state"] == "expired", view)
+        check("...and the card leaves /api/pending with it", card_gone(G, card["id"]))
+        check("...and a late Approve is refused, never reported as a success",
+              G.decide(card["id"], True, by="the test") is False)
+        code, ans = D.collect({"pair_id": P.out["pair_id"],
+                               "proof": D.collect_proof(P.k, P.out["pair_id"], P.nonce)},
+                              peer=PEER_MESH, own=lambda: frozenset())
+        check("...and collect says expired, so the phone is told the truth",
+              code == 410 and ans["state"] == "expired", ans)
+        check("...and no device exists", not D.registry_path().exists())
+    finally:
+        P.close()
+
+
+def t_a_duplicate_approval_key_retry_keeps_the_one_card():
+    """BUG B-2: a retry of the SAME public key must not orphan the waiter.
+
+    The gate raises ONE card for one identical request. The old code replaced
+    `_AK[you]` before that card existed, so the retry's waiter met the
+    "already waiting" refusal next to its own id, deleted the slot, and the
+    original waiter then found the slot gone when the owner approved the card:
+    the Windows Hello yes was discarded and no key was stored.
+    """
+    G, D, d, why = _devices_and_gate()
+    if G is None:
+        return skip(why)
+    crypto = D._crypto()
+    if crypto is None:
+        return skip("cryptography is not installed, so no key can be parsed")
+    # Loaded BEFORE anything writes the device registry: `load_module` installs
+    # a fresh `jarvis_framework`, and `jarvis_devices._config_dir()` reads that
+    # module's CONFIG_DIR at call time - loading it after a registry write
+    # would move the registry out from under the flow under test.
+    OC = load_module("jarvis_owner_check", d)
+    D._reset_for_tests()
+    try:
+        device_id, _token = D._mint("Pixel 9")
+        der = crypto.ec.generate_private_key(crypto.ec.SECP256R1()).public_key().public_bytes(
+            crypto.serialization.Encoding.DER,
+            crypto.serialization.PublicFormat.SubjectPublicKeyInfo)
+        text = D._b64u(der)
+        spki, problem = D.parse_public_key(text)
+        if spki is None:
+            return skip(f"the generated key was not accepted: {problem}")
+
+        def register():
+            return D.register_key({"public_key": text}, you=device_id, gate=G.check,
+                                  tier_of=ask_tier, spawn=D._spawn, armed=lambda: True)
+
+        code, first = register()
+        card = card_of(G, D.KEY_ACTION)
+        check("the first registration is 202 waiting",
+              code == 202 and first == {"waiting": True} and card is not None, first)
+        if card is None:
+            return
+        slot = D._AK.get(device_id)
+        check("the first request owns the waiting slot", slot is not None)
+
+        code2, second = register()          # the retry, same key
+        check("the retry is answered 202 waiting too (that card covers it)",
+              code2 == 202 and second == {"waiting": True}, second)
+        check("...and it did NOT replace the waiting slot", D._AK.get(device_id) == slot,
+              (slot, D._AK.get(device_id)))
+        rows = [r for r in G.pending() if r.get("action") == D.KEY_ACTION]
+        check("...and there is still exactly one card", len(rows) == 1, rows)
+        # The gate believes an approval only when THIS process stamped it -
+        # i.e. when it came through POST /api/approve on the PC after Windows
+        # Hello. A test that just wrote `approved` into the row would be
+        # refused as unstamped (and rightly), so the stamp is taken here the
+        # way the approve route takes it.
+        OC.stamp(card["id"], D.KEY_ACTION)
+        check("the owner's single yes is accepted once",
+              G.decide(card["id"], True, by="the test") is True)
+        end = time.time() + 10
+        stored = None
+        while time.time() < end:
+            stored = D.approval_key_of(device_id)
+            if stored:
+                break
+            time.sleep(0.02)
+        check("...and THAT approval stored the key - the yes was not discarded",
+              stored == spki, stored)
+    finally:
+        for row in G.pending():
+            try:
+                G.decide(row["id"], False, by="the test")
+            except Exception:
+                pass
+        D._reset_for_tests()
 
 
 # ---------------------------------------------------------------------------
@@ -843,12 +1069,6 @@ def t_the_pairing_flows_take_a_cancelled_card_off_the_list():
 
 def text_of(path: Path) -> str:
     return path.read_text(encoding="utf-8")
-
-
-def slice_between(text: str, start: str, end: str) -> str:
-    i = text.index(start)
-    j = text.index(end, i + len(start))
-    return text[i:j]
 
 
 if __name__ == "__main__":
@@ -861,7 +1081,9 @@ if __name__ == "__main__":
                t_the_start_up_sweep_does_not_age_out_a_never_card,
                t_pending_sends_no_deadline_for_a_never_card,
                t_owner_check_does_not_refuse_a_card_with_no_deadline,
-               t_the_pairing_flows_take_a_cancelled_card_off_the_list):
+               t_a_cancelled_pairing_takes_its_card_off_the_list,
+               t_an_expired_pairing_takes_its_card_off_the_list,
+               t_a_duplicate_approval_key_retry_keeps_the_one_card):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

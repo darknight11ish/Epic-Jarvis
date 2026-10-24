@@ -1509,7 +1509,7 @@ def _gate_module():
         return None
 
 
-def _take_off(rid, why: str) -> None:
+def _take_off(rid, why: str) -> bool:
     """Withdraw a waiting card if this backend has `jarvis_gate.withdraw`.
 
     Only the pairing and approval-key cards can reach this. They are the cards
@@ -1518,14 +1518,18 @@ def _take_off(rid, why: str) -> None:
     ever. getattr, not a plain call: a backend without that patch has no
     withdraw, and this must leave such a backend exactly as it was - there the
     card still lapses on its own, as every card always did.
+
+    True only when a waiting card was really taken off (withdraw() answers
+    False for an id it does not know or one already answered), so a caller can
+    say in the audit trail that it happened rather than assume it.
     """
     take_off = getattr(_gate_module(), "withdraw", None)
     if not rid or not callable(take_off):
-        return
+        return False
     try:
-        take_off(rid, why)
+        return bool(take_off(rid, why))
     except Exception:
-        pass
+        return False
 
 
 def _owner_check_armed() -> bool:
@@ -1568,6 +1572,21 @@ def _verdict(v, action: str, tier_of) -> tuple:
     if outcome in ("denied", "timed_out"):
         return outcome, ""
     return "refused", str(getattr(v, "reason", "") or "refused")
+
+
+def _card_of(name, words) -> tuple:
+    """(text, detail) for a pair_device card - built in ONE place.
+
+    The gate identifies a card by its action plus exactly these two values (its
+    `_pending_target` digest covers the detail and, for one with no
+    parameters, the prompt), so `_waiting_card` can find the card again from
+    them while `check()` is still blocked on it. Two definitions would drift
+    and the lookup would silently stop naming anything.
+    """
+    text = card_text(name or "", list(words or []))
+    detail = {"text": text, "what": "connect a new device",
+              "device_name": name, "leaves_this_pc": False}
+    return text, detail
 
 
 def card_text(name: str, words: list) -> str:
@@ -1630,6 +1649,18 @@ class Session:
         self.words: Optional[list] = None
         self.why = ""
         self.device_id: Optional[str] = None
+        #: The gate's own id for this session's card, once anything knows it
+        #: (BUG B-1). A pair_device card has NO deadline since #773
+        #: (jarvis_gate.APPROVAL_NEVER_EXPIRES), so `check()` does not come
+        #: back until somebody answers the card: cancel, a new start and the
+        #: ten-minute expiry all have to withdraw it by an id nothing has
+        #: returned yet. `_watch_card` learns it, `_end` withdraws it.
+        self.card_id: Optional[str] = None
+        #: The card's own words, built once when the phone claims (see
+        #: `_card_of`). `_waiting_card` names the card from these while the
+        #: waiter is still blocked, so they are kept on the session.
+        self.card_text: Optional[str] = None
+        self.card_detail: Optional[dict] = None
         _hide(_b64u(self.secret), self.code, show_code(self.code), self.qr())
 
     def qr(self) -> str:
@@ -1658,12 +1689,23 @@ def _end(s: Session, state: str, why: str = "") -> None:
     """Called under _LOCK."""
     if s.state in END_STATES:
         return
+    was_waiting = s.state == "waiting_for_card"
     s.state = state
     s.why = why
     _ENDED[s.pair_id] = state
     while len(_ENDED) > _ENDED_MAX:
         del _ENDED[next(iter(_ENDED))]
     _audit("devices.pair", {"state": state})
+    if was_waiting:
+        # The card can no longer do anything: its session is over, so an
+        # Approve on it would report success and mint no key (audit B-1,
+        # HIGH). Nothing else will ever take it off - since #773 a pair_device
+        # card has no deadline, and the start-up sweep skips it - so this is
+        # the only place a cancel, a replacing start() or the 600-second
+        # expiry can do it. `card_id` is None in the small window before
+        # `_watch_card` has seen the card; it withdraws the card itself then.
+        if _take_off(s.card_id, f"the pairing it asked about ended ({state})"):
+            _audit("devices.pair", {"state": "withdrawn", "why": state})
 
 
 def _tick() -> Optional[Session]:
@@ -1673,6 +1715,90 @@ def _tick() -> Optional[Session]:
     if s is not None and s.state in LIVE_STATES and _now() >= s.expires:
         _end(s, "expired")
     return s
+
+
+def _gate_rows() -> list:
+    """`jarvis_gate.pending()` - the same list /api/pending serves - or [].
+
+    Read through the module, not through the `gate` seam: this is the one way
+    to learn a card's id while `check()` is still blocked on it, and standing
+    the seam in (as the pairing tests do) must not make that lookup lie.
+    """
+    rows = getattr(_gate_module(), "pending", None)
+    if not callable(rows):
+        return []
+    try:
+        return list(rows() or [])
+    except Exception:
+        return []
+
+
+def _waiting_card(s: Session) -> Optional[str]:
+    """The gate's id for this session's pair_device card, while it waits.
+
+    A card is identified the way the gate itself identifies a request: its
+    action plus the exact detail and prompt it was raised with (that is what
+    `_pending_target` digests for its one-card-per-identical-request rule). Two
+    pairings cannot share one - the four words come from a fresh secret every
+    time - so this names the right card rather than guessing among cards.
+    """
+    if s.card_id:
+        return s.card_id
+    if not s.card_text:
+        return None
+    for row in _gate_rows():
+        if row.get("action") != ACTION:
+            continue
+        if str(row.get("prompt") or "") != s.card_text:
+            continue
+        try:
+            detail = json.loads(row.get("detail") or "{}")
+        except Exception:
+            continue
+        if detail != s.card_detail:
+            continue
+        rid = row.get("id")
+        return str(rid) if rid else None
+    return None
+
+
+#: How long `_watch_card` looks for the card's id, and how often. The row is
+#: written within microseconds of the card being raised, so the first look
+#: almost always finds it; the budget only runs out when no card is ever raised
+#: (a tier refusal), and that costs one sleeping thread, nothing else.
+_WATCH_STEP = 0.02
+_WATCH_TRIES = 250
+
+
+def _watch_card(s: Session) -> None:
+    """Learn the card's id, and withdraw the card if the session died first.
+
+    WHY THIS THREAD EXISTS. `cancel()`, a replacing `start()` and the ten-
+    minute expiry all end the session while `_decide` is still blocked inside
+    `gate.check()`, so that thread holds no Verdict and no `request_id` to
+    name the card with. Since #773 a pair_device card has no deadline, so
+    `check()` never returns on its own either: without something watching for
+    the id, the card would stay on /api/pending for ever and a later Approve on
+    it would report success while minting nothing (audit B-1, HIGH).
+
+    The common case is closed by `_end` withdrawing through `s.card_id`. This
+    thread also closes the small window where the card appears only AFTER the
+    session ended (the end path had nothing to name yet): it sees that the
+    session is no longer waiting and takes the card off itself.
+    """
+    if not callable(getattr(_gate_module(), "withdraw", None)):
+        return              # a backend without the patch: no card to take off
+    for _ in range(_WATCH_TRIES):
+        rid = _waiting_card(s)
+        if rid:
+            with _LOCK:
+                s.card_id = rid
+                live = _S["session"] is s and s.state == "waiting_for_card"
+            if not live:
+                if _take_off(rid, "the pairing it asked about had already ended"):
+                    _audit("devices.pair", {"state": "withdrawn", "card": "late"})
+            return
+        time.sleep(_WATCH_STEP)
 
 
 def _reset_for_tests() -> None:
@@ -1689,6 +1815,7 @@ def _reset_for_tests() -> None:
         _OTHER.clear()
     with _SIGN_LOCK:
         _AK.clear()
+        _AK_KEY.clear()
         _AK_WITHDRAWN.clear()
         _NONCES.clear()
     with _REG_LOCK:
@@ -1862,6 +1989,10 @@ def claim(body, *, peer, local=None, own=None, gate: Optional[Callable] = None,
             return _wrong(s, peer)
         s.method, s.phone_nonce, s.name, s.kind = method, phone_nonce, name, kind
         s.words = words_for(word_numbers(k, t, s.pc_nonce))
+        # Built here, under the lock, before the state says a card waits: the
+        # watcher below and `_decide` both need these, and `_waiting_card`
+        # must never look for a card it cannot describe.
+        s.card_text, s.card_detail = _card_of(s.name, s.words)
         s.state = "waiting_for_card"
         answer = {"state": "waiting_for_card", "pair_id": s.pair_id, "pc_nonce": s.pc_nonce,
                   "pc_proof": pc_proof(k, t, s.pc_nonce), "words": list(s.words),
@@ -1873,26 +2004,43 @@ def claim(body, *, peer, local=None, own=None, gate: Optional[Callable] = None,
             if s.state == "waiting_for_card":
                 s.state, s.method, s.phone_nonce, s.name, s.words = (
                     "waiting_for_phone", None, None, None, None)
+                s.card_text, s.card_detail = None, None
         return 503, {"ok": False, "reason": "card", "error": PHONE_WORDS["card"]}
+    try:
+        # Not `spawn`: that seam is the card raiser the pairing tests stand in,
+        # and they count its calls. This is the sidecar that learns the card's
+        # id so a cancel or an expiry can take the card off the list.
+        _spawn(lambda: _watch_card(s))
+    except Exception:
+        pass        # the end paths still withdraw whenever they already know the id
     _audit("devices.pair", {"state": "claimed"})
     return 202, answer
 
 
 def _decide(s: Session, gate: Callable, tier_of: Callable) -> None:
     """Raise the pair_device card and wait for it (its own thread)."""
-    text = card_text(s.name or "", s.words or [])
+    text, detail = _card_of(s.name, s.words)
+    if s.card_text:
+        text = s.card_text
+        detail = s.card_detail or detail
     v = None
     try:
         if tier_of(ACTION) != "ask":
             raise LookupError("tier")
-        v = gate(ACTION, {"text": text, "what": "connect a new device",
-                          "device_name": s.name, "leaves_this_pc": False}, text)
+        v = gate(ACTION, detail, text)
         outcome, why = _verdict(v, ACTION, tier_of)
     except LookupError:
         outcome, why = "refused", "pair_device is not set to \"ask\""
     except Exception as exc:
         outcome, why = "refused", f"the approval gate failed ({type(exc).__name__})"
     with _LOCK:
+        s.card_id = getattr(v, "request_id", None) or s.card_id
+        if s.state == "waiting_for_card" and _now() >= s.expires:
+            # Nobody polled in time to run _tick(), so the session still reads
+            # as waiting although its ten minutes are up. End it here: a card
+            # answered after this could never mint anything, and _end takes it
+            # off the list.
+            _end(s, "expired", "the ten minutes were already up when the card was answered")
         if _S["session"] is not s or s.state != "waiting_for_card":
             # Cancelled, replaced, burnt or expired while the card waited:
             # withdrawn - approving it makes no key.
@@ -2326,6 +2474,14 @@ def shared(body, *, you: str, here: bool, gate: Optional[Callable] = None,
 _SIGN_LOCK = threading.Lock()
 _AK: dict = {}             # device id -> the id of its waiting register card
 _AK_WITHDRAWN: set = set() # card ids replaced or cancelled while they waited
+#: The public key each waiting request is for (device id -> SPKI).
+#:
+#: The gate raises ONE card per identical request, so a retry of the same key
+#: must join the request already waiting rather than replace it: replacing it
+#: would orphan the waiter that is blocked on that card, and the owner's one
+#: "yes" would then store nothing (audit B-2). This is what says "the same
+#: request" before any new card exists.
+_AK_KEY: dict = {}
 _NONCES: dict = {}         # nonce -> {"card", "device", "at"} (memory only)
 
 
@@ -2465,6 +2621,7 @@ def _forget_signing(device_id: str) -> None:
     withdrawn and every challenge it holds is dead."""
     with _SIGN_LOCK:
         pid = _AK.pop(device_id, None)
+        _AK_KEY.pop(device_id, None)
         if pid:
             _AK_WITHDRAWN.add(pid)
         for n in [n for n, v in _NONCES.items() if v["device"] == device_id]:
@@ -2493,9 +2650,11 @@ def key_card_text(name: str, replacing: bool = False, words: Optional[Sequence[s
 
 
 def _k_decide(device_id: str, pid: str, spki: str, name: str, gate: Callable,
-              tier_of: Callable, replacing: bool = False) -> None:
+              tier_of: Callable, replacing: bool = False, joins: bool = False) -> None:
     """Raise the register_approval_key card and wait for it (its own thread).
-    `replacing`: the device already has a key, so the card says it is a swap."""
+    `replacing`: the device already has a key, so the card says it is a swap.
+    `joins`: this attempt arrived while the SAME key was already waiting, so it
+    shares `pid` with the waiter that raised that card - see the branch below."""
     words = words_for_spki(_unb64u(spki))
     text = key_card_text(name, replacing, words)
     try:
@@ -2509,20 +2668,44 @@ def _k_decide(device_id: str, pid: str, spki: str, name: str, gate: Callable,
         outcome, why = "refused", f"{KEY_ACTION} is not set to \"ask\""
     except Exception as exc:
         outcome, why = "refused", f"the approval gate failed ({type(exc).__name__})"
+    card = getattr(v, "request_id", None)
     with _SIGN_LOCK:
         current = _AK.get(device_id) == pid
-        if current:
-            del _AK[device_id]
         withdrawn = pid in _AK_WITHDRAWN
-        _AK_WITHDRAWN.discard(pid)
+        if not joins:
+            # The owner consumes its own mark. A joiner shares the id with the
+            # owner, so it must not clear the mark before the owner reads it.
+            _AK_WITHDRAWN.discard(pid)
+        # Only the waiter that OWNS the slot clears it - and a joiner does when
+        # the yes it waited for actually arrived, because that request is over.
+        # A joiner that asked nothing new must leave the slot exactly as it is.
+        if current and (not joins or outcome == "approved"):
+            del _AK[device_id]
+            _AK_KEY.pop(device_id, None)
+    if joins and not withdrawn and outcome != "approved":
+        # THE SAME REQUEST WAS ALREADY WAITING when this attempt arrived (audit
+        # B-2): the gate reused that card, or answered it, before this attempt
+        # could own anything. So it must change nothing - not the slot (that is
+        # what made the owner's single "yes" store no key), not the card (taking
+        # it off would throw that "yes" away). The waiter that raised it does
+        # the store. Deliberately decided from what this attempt was, not from
+        # what is pending NOW: an approval landing between the verdict and a
+        # lookup must not talk this attempt into taking the slot.
+        _audit("devices.approval_key", {"id": device_id, "state": "already_waiting",
+                                       "card": outcome})
+        return
     if withdrawn or not current:
         # Replaced by a newer request, or the device was removed: approving
         # this card stores nothing. It has no clock either (the approval-key
         # flow is one of the three the owner exempted on 2026-10-23), so take
         # it off the list here or it waits for ever for a decision that can no
         # longer store anything. No-op on a backend without `withdraw`.
-        _take_off(pid, "the approval-key request it asked about was cancelled "
-                       "or replaced")
+        #
+        # `card`, the gate's own id, NOT `pid`: `pid` is this module's request
+        # token (secrets.token_hex) while a card id is uuid4().hex[:12], so
+        # withdraw's `WHERE id=?` could never match it (audit B-1).
+        _take_off(card, "the approval-key request it asked about was cancelled "
+                        "or replaced")
         _audit("devices.approval_key", {"id": device_id, "state": "withdrawn", "card": outcome})
         return
     if outcome != "approved":
@@ -2581,19 +2764,34 @@ def register_key(body, *, you: str, gate: Optional[Callable] = None,
     if not (armed or _owner_check_armed)():
         return 503, {"ok": False, "error": DEVICES_WORDS["no_owner_check"]}
     pid = secrets.token_hex(8)
+    joins = False
     with _SIGN_LOCK:
         old = _AK.get(you)
-        if old:                         # a new request replaces the waiting one
-            _AK_WITHDRAWN.add(old)
-        _AK[you] = pid
+        if old is not None and _AK_KEY.get(you) == spki:
+            # THE SAME KEY IS ALREADY WAITING (audit B-2): this is a retry,
+            # almost always because the first answer was lost on the way to the
+            # phone. The gate raises ONE card for one identical request, so
+            # replacing the slot here would orphan the waiter already blocked
+            # on that card - and when the owner approved it, that waiter would
+            # find the slot replaced and store nothing, discarding the yes.
+            # So the retry JOINS the waiting request: same id, same waiter
+            # owns it, and the new waiter reports "already waiting" and stops.
+            pid = old
+            joins = True
+        else:
+            if old:                     # a genuinely different key replaces it
+                _AK_WITHDRAWN.add(old)
+            _AK[you] = pid
+            _AK_KEY[you] = spki
     name = str(row.get("name") or "This phone")
     replacing = bool(row.get("approval_key"))
     try:
-        spawn(lambda: _k_decide(you, pid, spki, name, gate, tier_of, replacing))
+        spawn(lambda: _k_decide(you, pid, spki, name, gate, tier_of, replacing, joins))
     except Exception:
         with _SIGN_LOCK:
             if _AK.get(you) == pid:
                 del _AK[you]
+                _AK_KEY.pop(you, None)
         return 503, {"ok": False, "error": "could not raise the approval card"}
     return 202, {"waiting": True}
 
