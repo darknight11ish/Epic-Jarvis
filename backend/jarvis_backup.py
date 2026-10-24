@@ -338,6 +338,7 @@ import json
 import os
 import secrets
 import sqlite3
+import stat
 import struct
 import tempfile
 import threading
@@ -2447,6 +2448,122 @@ class RestoreError(Exception):
         self.applied = applied
 
 
+class BackupRestoreRefusedError(ValueError):
+    """A restore archive was refused before any live file was touched.
+
+    Raised for an unsafe member (a name that would leave its own folder, a
+    symbolic or hard link, an absolute or drive-qualified name, or a name
+    outside the folders a backup may carry) and for a staged database that
+    fails its SQLite header or its own quick_check/integrity_check. The
+    message is plain words; the restore card never proceeds past it."""
+
+
+#: The 16 bytes every real SQLite database starts with.
+SQLITE_MAGIC_HEADER = b"SQLite format 3\x00"
+
+#: The only top-level names a .jbak may carry. The five folders are the ones
+#: `build_archive` writes; the two bare files are the framework's settings file
+#: and the archive's own manifest.
+_ARCHIVE_ALLOWED_EXACT = ("manifest.json", "jarvis-framework.toml")
+_ARCHIVE_ALLOWED_PREFIXES = ("db/", "settings/", "notes/", "voice/",
+                             SOURCE_PREFIX, "secrets/")
+
+
+def _member_is_link(info: zipfile.ZipInfo) -> bool:
+    """True for a ZipInfo whose Unix mode says it is a symbolic link.
+
+    ZIP has no portable link flag; a zip made by a Unix tool puts the mode in
+    the high 16 bits of `external_attr` (0o120000 there is a symlink). Jarvis's
+    own archives never contain one, so a member that carries it is a crafted or
+    foreign archive and is refused before anything is read."""
+    try:
+        mode = int(getattr(info, "external_attr", 0)) >> 16
+    except (TypeError, ValueError):
+        return False
+    return stat.S_ISLNK(mode)
+
+
+def validate_archive_member_path(
+    member_name: str,
+    *,
+    is_symlink: bool = False,
+    is_hardlink: bool = False,
+) -> str:
+    """The safe archive-relative name, or raise `BackupRestoreRefusedError`.
+
+    One place for the archive-reader's path rules so they cannot drift: no
+    link, no empty or NUL name, no absolute path, no drive letter or colon, no
+    `.`/empty-segment trick, no `..` in any position, and nothing outside the
+    six folders a backup carries. `is_hardlink` is here for a caller that knows
+    a link's kind from another format; ZIP is always asked about symlinks.
+    """
+    if is_symlink or is_hardlink:
+        raise BackupRestoreRefusedError(
+            f"the backup contains a link ({member_name}); nothing on this PC was changed")
+    if not isinstance(member_name, str) or not member_name or "\x00" in member_name:
+        raise BackupRestoreRefusedError(
+            "the backup contains a file with an empty or invalid name; "
+            "nothing on this PC was changed")
+    normalized = member_name.replace("\\", "/").strip()
+    if normalized.startswith("/") or ":" in normalized:
+        raise BackupRestoreRefusedError(
+            f"the backup contains an absolute path ({member_name}); "
+            "nothing on this PC was changed")
+    parts = [p for p in normalized.split("/") if p and p != "."]
+    if not parts or any(p == ".." for p in parts):
+        raise BackupRestoreRefusedError(
+            f"the backup contains a path that could escape its folder ({member_name}); "
+            "nothing on this PC was changed")
+    clean = "/".join(parts)
+    if not (clean in _ARCHIVE_ALLOWED_EXACT
+            or any(clean.startswith(prefix) for prefix in _ARCHIVE_ALLOWED_PREFIXES)):
+        raise BackupRestoreRefusedError(
+            f"the backup contains a file outside the backed-up folders ({clean}); "
+            "nothing on this PC was changed")
+    return clean
+
+
+def verify_staged_sqlite_db(db_path) -> tuple:
+    """(True, "ok") or (False, plain why) for a staged database file.
+
+    Read-only: the 16-byte header, then SQLite's own `quick_check` and
+    `integrity_check`. The archive carries SQLite snapshots, so a live `-wal`
+    holding rows never reaches here. Any failure is the plain reason the
+    restore is refused, and the live file is never touched."""
+    path = Path(db_path)
+    try:
+        if not path.is_file():
+            return False, f"the backup's database {path.name} is missing after unpacking"
+        size = path.stat().st_size
+        if size < 100:
+            return False, f"the backup's database {path.name} is cut short ({size} bytes)"
+        with path.open("rb") as fh:
+            header = fh.read(16)
+        if header != SQLITE_MAGIC_HEADER:
+            return False, f"the backup's database {path.name} is not a SQLite database"
+        conn = None
+        try:
+            conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True,
+                                   timeout=10.0)
+            quick = conn.execute("PRAGMA quick_check;").fetchall()
+            if quick != [("ok",)]:
+                return False, (f"the backup's database {path.name} did not pass its "
+                               f"quick check")
+            integ = conn.execute("PRAGMA integrity_check;").fetchall()
+            if integ != [("ok",)]:
+                return False, (f"the backup's database {path.name} did not pass its "
+                               f"full integrity check")
+        finally:
+            if conn is not None:
+                conn.close()
+    except BackupRestoreRefusedError:
+        raise
+    except Exception as exc:
+        return False, (f"the backup's database {path.name} could not be checked "
+                       f"({type(exc).__name__})")
+    return True, "ok"
+
+
 def _apply_restore(zip_bytes: bytes) -> dict:
     """Writes the archive's files back. Only adds and overwrites: a file that
     is present now but absent from the backup is left alone. Returns a short
@@ -2481,6 +2598,17 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     key_data = None
     study_key_data = None
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        # REFUSE an unsafe archive BEFORE a single byte is read or written
+        # (Backup-Gap 2, 2026-10-23). The `_inside` guard below still runs per
+        # destination, but this is the whole-archive gate: it also refuses a
+        # symbolic link, an absolute or drive-qualified name, a `..` anywhere,
+        # and any member outside the six folders a backup may carry. Raising
+        # here has touched nothing, so every live file is exactly as it was.
+        for info in zf.infolist():
+            if info.filename.endswith("/"):
+                continue
+            validate_archive_member_path(info.filename,
+                                         is_symlink=_member_is_link(info))
         # Read ONCE, outside the loop: the one list of what may land in the
         # settings folder (see `_named_settings_entries`).
         allowed_settings = set(_named_settings_entries(zf.namelist()))
@@ -2561,6 +2689,21 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     except BaseException as exc:
         _remove_all([t for _d, t, _i, _g, _s in staged])
         raise RestoreError(f"could not prepare the files ({type(exc).__name__})") from exc
+    # VERIFY the staged databases BEFORE the first live file is replaced
+    # (Backup-Gap 2, 2026-10-23): a cut-short or corrupted .db must refuse the
+    # whole restore while every live database is still the old one. The check
+    # reads the temp file only; nothing live has been touched yet.
+    bad = []
+    for _dest, tmp, is_db, _group, _shown in staged:
+        if is_db:
+            ok, why = verify_staged_sqlite_db(tmp)
+            if not ok:
+                bad.append(why)
+    if bad:
+        _remove_all([t for _d, t, _i, _g, _s in staged])
+        raise BackupRestoreRefusedError(
+            "the backup was refused, and nothing on this PC was changed: "
+            + "; ".join(bad[:3]) + ".")
     try:
         for dest, tmp, is_db, group, shown in staged:
             old = None

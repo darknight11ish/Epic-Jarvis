@@ -977,19 +977,28 @@ def t_the_backend_source_is_backed_up_and_put_back():
     check("nothing created a source/ folder inside the backend folder",
           not (backend / "source").exists())
 
-    # The second lock, exactly as db/ and settings/ have it.
+    # The second lock, exactly as db/ and settings/ have it. Since the
+    # Backup-Gap 2 hardening (2026-10-23) a name that escapes its folder no
+    # longer makes that ONE member skipped: the WHOLE archive is refused
+    # before a single live file is touched. The check below is therefore the
+    # stronger one - nothing from the archive lands anywhere, including the
+    # harmless members that would have been skipped-by-name before.
     outside = backend.parent / f"escaped-{time.time_ns()}.py"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("source/../evil.py", b"x")
         zf.writestr("source/sub/deep.py", b"x")
         zf.writestr("source/ok.py", b"# fine\n")
-    applied = B._apply_restore(buf.getvalue())
-    check("a source/ name that escapes the backend folder is refused, not written",
-          not outside.exists() and not (backend.parent / "evil.py").exists(), str(outside))
-    check("... and a nested one is refused too (build_archive writes one name per file)",
-          applied["skipped"] == 2 and applied["source_files"] == 1
-          and (backend / "ok.py").read_text(encoding="utf-8") == "# fine\n", applied)
+    try:
+        B._apply_restore(buf.getvalue())
+        check("a source/ archive with an escaping name is refused whole", False,
+              "the restore went ahead")
+    except B.BackupRestoreRefusedError:
+        check("a source/ archive with an escaping name is refused whole", True)
+    check("... nothing was written: not the escaping name, not the nested one, "
+          "not the harmless one",
+          not outside.exists() and not (backend.parent / "evil.py").exists()
+          and not (backend / "ok.py").exists(), str(outside))
 
     # A backup made before this change: no source/ entry anywhere. It must
     # restore exactly as it did, and must not touch the backend folder at all.
@@ -1404,6 +1413,12 @@ def t_restore_never_writes_outside_its_own_folders():
     archive held, so "db/../../x" landed outside the settings folder.
     build_archive never writes such a name; this is the second lock.
 
+    Since the Backup-Gap 2 hardening (2026-10-23, Gemini's security work
+    order) the lock is a WHOLE-ARCHIVE refusal: one unsafe member means the
+    archive is not extracted at all, rather than that member alone being
+    skipped. So the live folder must be untouched, and a clean archive must
+    still restore - both are asserted below.
+
     The watch folder is mkdtemp's, not `escaped-{time.time_ns()}`: a name from
     the Windows timer tick can be the one the previous call already took (see
     fresh_conf above), and a name that already exists would decide the
@@ -1422,11 +1437,24 @@ def t_restore_never_writes_outside_its_own_folders():
         zf.writestr("settings/fine.json", b"{}")
         zf.writestr("notes/folder/fine.md", b"ok")
         zf.writestr("manifest.json", "{}")
-    applied = B._apply_restore(buf.getvalue())
+    try:
+        B._apply_restore(buf.getvalue())
+        check("an archive with any escaping name is refused whole", False,
+              "the restore went ahead")
+    except B.BackupRestoreRefusedError:
+        check("an archive with any escaping name is refused whole", True)
     check("no name wrote outside the settings folder", os.listdir(outside) == []
           and sorted(os.listdir(conf.parent)) == before,
           (sorted(os.listdir(outside)), sorted(os.listdir(conf.parent))))
-    check("each bad name was skipped and counted", applied.get("skipped") == 6, applied)
+    check("... and none of the archive's members were applied",
+          not (conf / "fine.json").exists()
+          and not (conf / "notes" / "folder" / "fine.md").exists())
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("settings/fine.json", b"{}")
+        zf.writestr("notes/folder/fine.md", b"ok")
+        zf.writestr("manifest.json", "{}")
+    applied = B._apply_restore(buf.getvalue())
     check("ordinary names still restore",
           (conf / "fine.json").is_file() and (conf / "notes" / "folder" / "fine.md").is_file()
           and applied["settings_files"] == 1 and applied["notes_files"] == 1, applied)
