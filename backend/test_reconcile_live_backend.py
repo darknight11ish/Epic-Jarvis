@@ -38,8 +38,9 @@ real PC:
      journal - all on temporary folders;
  10. the ref guard: a checkout whose HEAD is not the commit `--ref` names is refused
      (exit 2) with both SHAs and the fix printed, nothing is staged, and
-     `--allow-worktree-mismatch` proceeds to the normal dry-run output; the CLI flag
-     reaches `run_deploy`.
+     `--allow-worktree-mismatch` proceeds to the normal dry-run output; an empty
+     `--ref` is refused too (it would read the list from the working tree but the
+     bytes from the git index); the CLI flag reaches `run_deploy`.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the two patches the
@@ -860,7 +861,7 @@ def run_fixture(repo: Path, live: Path, *, apply: bool, out_lines=None,
 
     client = probe_client or client
 
-    return R.run_deploy(repo, live, apply=apply, ref="origin/main",
+    return R.run_deploy(repo, live, apply=apply, ref=kw.pop("ref", "origin/main"),
                         allow_worktree_mismatch=kw.pop("allow_worktree_mismatch", False),
                         resolve_shas=kw.pop(
                             "resolve_shas", lambda _repo, _ref: (FIXTURE_HEAD, FIXTURE_HEAD)),
@@ -971,6 +972,35 @@ def t_a_worktree_not_at_the_ref_is_refused():
               "allow-worktree-mismatch is set" in text2, lines2[-8:])
         check("... the ref-read still planned the shipped sync",
               "SHIPPED (3 files in $SHIPPED" in text2, lines2[-14:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_an_empty_ref_is_refused():
+    """`--ref ""` is the one string that defeated both halves of TOOL-1's fix.
+
+    `read_patch_lists(repo, "")` falls back to THIS working tree's script, and
+    `git show ":backend/<path>"` resolves to the git INDEX, so the plan would come
+    from two trees - while the ref guard is skipped by its own `elif ref`. It is
+    reachable by accident (`--ref $sha` with `$sha` unset in PowerShell is ""), so
+    it must refuse with exit 2 and stage nothing."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        for empty in ("", "   "):
+            lines = []
+            code = run_fixture(repo, live, apply=False, out_lines=lines, ref=empty)
+            text = "\n".join(lines)
+            check(f"an empty --ref ({empty!r}) is refused (exit 2)", code == 2,
+                  (code, lines[-3:]))
+            check("... it says REFUSED and names both mixed sources",
+                  "REFUSED:" in text and "working tree" in text
+                  and "git index" in text, lines[-3:])
+            check("... it names the default to pass instead",
+                  "origin/main" in text, lines[-3:])
+        check("... nothing was staged (no backup folder)",
+              not any(p.name.startswith("_jarvis-deploy-backup-tool-")
+                      for p in live.iterdir()))
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -2397,6 +2427,7 @@ def main():
                t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing,
                t_cli_is_dry_run_by_default_and_validates_paths,
                t_a_worktree_not_at_the_ref_is_refused,
+               t_an_empty_ref_is_refused,
                t_the_cli_flag_reaches_the_deploy,
                t_the_backup_journal_rolls_back_overwritten_and_new_paths,
                t_a_mid_apply_failure_rolls_back_and_prints_the_backup,

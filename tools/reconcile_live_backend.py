@@ -14,8 +14,10 @@ WHY THIS EXISTS
 WHAT IT DOES, IN ORDER (see --help and the summary it prints)
 
     0. REF GUARD. Refuses (exit 2) when the working tree's HEAD is not the commit
-       `--ref` names, and prints both SHAs and the fix. Every module's bytes AND
-       the `$SHIPPED`/`$PATCHES` lists come from `--ref`, but the ready plug-ins
+       `--ref` names, and prints both SHAs and the fix. An empty `--ref` is refused
+       too: it is the one value that would read the file list from this tree and the
+       module bytes from the git index. Every module's bytes AND the
+       `$SHIPPED`/`$PATCHES` lists come from `--ref`, but the ready plug-ins
        and `scripts/add-plugin.ps1` still come from the checkout, so running from
        another commit would deploy half of one tree and half of another. A checkout
        behind `origin/main` once planned 251 shipped files while the ref carried 253,
@@ -1618,10 +1620,21 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     if apply and not (repo / ".git").exists() and not (repo / ".git").is_file():
         raise Refused(f"{repo} is not a git repository")
 
-    # 0. The checkout must be the tree being deployed (TOOL-1's other half). The
-    #    lists come from --ref now, but the ready plug-ins and add-plugin.ps1 still
-    #    come from HEAD, so a checkout at another commit is refused rather than
-    #    deploying half of one tree and half of another.
+    # 0. REF GUARD. First the ref itself: an empty --ref is not a ref. The lists
+    #    would come from THIS tree's script, `git show ":backend/..."` resolves to
+    #    the git INDEX, and the guard below is skipped by `elif ref`. Reachable by
+    #    accident: `--ref $sha` with $sha unset in PowerShell is "".
+    if not str(ref or "").strip():
+        out("REFUSED: --ref must not be empty. An empty ref would read the file list "
+            "from this working tree and the bytes from the git index (git show :path), "
+            "which is the mixed-tree deploy this tool refuses. Pass --ref <commit>; "
+            "the default is origin/main.")
+        return 2
+
+    #    Then the checkout: it must be the tree being deployed (TOOL-1's other
+    #    half). The lists come from --ref now, but the ready plug-ins and
+    #    add-plugin.ps1 still come from HEAD, so a checkout at another commit is
+    #    refused rather than deploying half of one tree and half of another.
     if allow_worktree_mismatch:
         out("  NOTE: --allow-worktree-mismatch is set; HEAD is not checked against "
             "--ref.")
