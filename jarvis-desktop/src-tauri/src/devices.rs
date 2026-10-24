@@ -812,30 +812,19 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
 // the old helper had (a cheap guard against the easiest copy, not a wall -
 // ARCHITECTURE section 3).
 
-/// Hides the settings window from screenshots, screen recordings and screen
-/// sharing (`on`), or puts it back. No window is ignored quietly: the code is
-/// still shown.
-///
-/// The Win32 call itself lives in `lock::set_affinity`, because since
-/// 2026-10-11 the same attribute is used for a second reason - keeping every
-/// Jarvis window out of a capture while App lock is on (the owner's decision;
-/// see `lock.rs`'s own section). Two copies of one Win32 call would be two
-/// things to keep in step, and worse, two things fighting: this guard's "off"
-/// would clear a block the lock still wanted.
-///
-/// So while the app is locked this does nothing at all, in either direction.
-/// The lock's own rule is the stricter one and owns the window then - and the
-/// pairing panel cannot be reached while locked anyway, because Settings is
-/// one of the windows App lock hides and asks Windows Hello for.
-fn guard_capture(app: &AppHandle, on: bool) {
-    let Some(window) = app.get_webview_window(crate::windows::SETTINGS_LABEL) else {
-        return;
-    };
-    if crate::lock::capture_blocked(app) {
-        return;
-    }
-    crate::lock::set_affinity(&window, on);
-}
+// It is not a Win32 call made here any more, either. Since 2026-10-11 the same
+// attribute is also what keeps every Jarvis window out of a capture while App
+// lock is on (the owner's decision; see `lock.rs`'s own section), and the two
+// features wrote it without knowing about each other. They fought: the unlock
+// sweep put every window back as capturable, so a pairing code that was still
+// live - 600 s of one - became capturable with the session still open, and
+// nothing re-armed it (BUG-AUDIT-2026-10-24 RUST-1).
+//
+// So a pairing code is a reason inside `lock::capture_blocked` now, recorded
+// through `lock::set_pairing_code_shown`, and `lock::sweep` is the only thing
+// that touches the attribute. Same attribute, same Win32 call, one writer. A
+// window Windows refuses to exclude is still shown the code - a cheap guard
+// against the easiest copy, not a wall.
 
 // ---------------------------------------------------------------------------
 // The commands
@@ -945,8 +934,11 @@ pub async fn pair_start(app: AppHandle, address: String) -> Result<serde_json::V
         }
     };
     remember_address(&app, &address_text(&host, port));
-    // Before the code reaches the page, never after (design 7.1).
-    guard_capture(&app, true);
+    // Before the code reaches the page, never after (design 7.1). The flag is
+    // the decision and the sweep is what puts it on the windows - the same
+    // sweep an unlock runs, so it cannot clear a live code's guard.
+    crate::lock::set_pairing_code_shown(true);
+    crate::lock::sweep(&app);
     Ok(serde_json::json!({
         "ok": true,
         "qr_svg": picture,
@@ -964,7 +956,10 @@ pub async fn pair_session(app: AppHandle) -> Result<serde_json::Value, String> {
     let view = session_answer(status, &text)?;
     let state = view.get("state").and_then(|s| s.as_str()).unwrap_or("none");
     if !session_active(state) {
-        guard_capture(&app, false);
+        // Ended or cancelled from the phone's side: the code cannot be typed
+        // any more, so the guard is the lock's rule again.
+        crate::lock::set_pairing_code_shown(false);
+        crate::lock::sweep(&app);
     }
     Ok(view)
 }
@@ -973,7 +968,10 @@ pub async fn pair_session(app: AppHandle) -> Result<serde_json::Value, String> {
 /// capture guard comes off whatever the PC answers.
 #[tauri::command]
 pub async fn pair_cancel(app: AppHandle) -> Result<serde_json::Value, String> {
-    guard_capture(&app, false);
+    // Whatever the PC answers, this session's code is done: no window needs
+    // guarding for it before the POST even leaves.
+    crate::lock::set_pairing_code_shown(false);
+    crate::lock::sweep(&app);
     let (status, text) = post_raw(&app, PAIR_CANCEL_PATH, serde_json::json!({})).await?;
     change_answer(status, &text)
 }
