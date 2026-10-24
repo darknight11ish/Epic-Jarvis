@@ -14032,6 +14032,20 @@ timer.
   (`py -3 -m pip install --upgrade <name>`, `cargo update -p <name>`) and
   stops. It never says "vulnerable" or anything about safety - that is
   `tools/check_python_advisories.py`'s different, already-built job.
+- **Card-ready evidence for every outdated row (added 2026-10-23).** Each
+  outdated row also carries the exact target version (`target`), the pinned
+  `requirements.lock` line a Python update would replace (`pinned_line`),
+  the release's upload date and whole-day age (`released`, `age_days`),
+  whether it has waited the owner's seven days (`eligible_after_7_days`;
+  null when the date is unknown, never guessed), the kind of bump (`bump`:
+  patch/minor/major/unknown), and the advisory ids PyPI lists for the
+  version currently pinned (`advisories`; empty means only "PyPI listed
+  none for it", not a statement that none exists). A failed advisory read
+  is a note on that row, never a crash. Rust rows take the release date
+  from the crates.io answer already fetched and carry `advisories: null`
+  with the plain note "Rust crates are not checked for advisories". This
+  costs one extra PyPI request per outdated Python package; nothing is
+  installed or changed by any of it.
 - **ONE approval card, ever - then never again.** The first time this is
   ever run, it asks (action `check_tool_updates`, tier `ask` only,
   `rebuilt/jarvis-framework.toml`) because it means reaching PyPI, crates.io

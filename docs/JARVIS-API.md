@@ -10490,6 +10490,8 @@ is purely "is it current".
 
 `Report` = `{"checked_at", "summary", "total_checked", "total_outdated", "total_unreachable", "groups": [{"ecosystem": "Python packages" \| "Rust crates" \| "GitHub tools", "available": bool, "why", "items": [{"name", "current", "latest", "outdated": bool, "command": str \| null, "note": str \| null}], "unreachable": [{"name", "current", "why"}]}]}`.
 
+Every row that is `outdated` also carries the card-ready evidence added 2026-10-23 (section 53.5): `target`, `pinned_line` (Python rows only), `released`, `age_days`, `eligible_after_7_days`, `bump` and `advisories`. Every key above keeps its old shape and meaning, and a row that is current carries none of the new ones.
+
 ### 53.1 One approval card, ever - then never again; never blocks on the check itself
 
 This is a new named way out of the PC (`docs/ARCHITECTURE.md` §4): it calls
@@ -10580,6 +10582,42 @@ something the owner does from their phone - the same reasoning that keeps
 the model catalogue and deep config editing off the phone (`CLAUDE.md`).
 `docs/ARCHITECTURE.md` §8 has the row. `tools/check_parity.py` classifies
 both routes `deliberate`.
+
+### 53.5 What each outdated row carries (added 2026-10-23)
+
+The owner's dependency-update policy (`.dsh-scratch/`'s dependency update
+audit, Part 4) is "one update per approval card". A card needs the facts, so
+every row that is `outdated` now also carries them - additively, with no
+existing key changed:
+
+- `target` - the exact version that would be installed (the same string as
+  `latest`, named so a card never shows "latest" with no version number).
+- `pinned_line` - Python rows only: the exact `requirements.lock` line a
+  Python update would replace, e.g. `filelock==4.0.0`. A marker such as
+  `; python_full_version >= '3.11'` is kept; the hashes are not part of it.
+- `released` - that release's own upload date, `YYYY-MM-DD`.
+- `age_days` - whole days between `released` and the report's clock.
+- `eligible_after_7_days` - **true only when `age_days >= 7`** (the owner's
+  seven-day wait); false when the release is younger than seven days;
+  **null when the release date is unknown - never guessed**.
+- `bump` - `"patch"`, `"minor"`, `"major"` or `"unknown"`, from the current
+  version to `target`. It labels the card and decides nothing.
+- `advisories` - Python rows only: the advisory ids PyPI lists for the
+  version CURRENTLY PINNED, from
+  `https://pypi.org/pypi/<name>/<current-version>/json` ->
+  `vulnerabilities[].id` (the same API and the same withdrawn-entry rule as
+  `tools/check_python_advisories.py`). An **empty list means only that PyPI
+  listed no advisory for it - not a statement that none exists**. A failed
+  advisory read is `null` with the reason in that row's `note`: never a
+  crash, and never an empty list that would read as "none listed". Rust rows
+  carry `advisories: null` with the note "Rust crates are not checked for
+  advisories" - crates.io has no advisory list this module reads, and
+  inventing one would be worse than saying so.
+
+The release date costs no extra request: PyPI's newest-version answer and
+crates.io's crate answer already carry it. The advisory list is ONE extra
+`pypi.org` request per outdated Python package; no other host is contacted,
+and nothing is applied - this stays a report.
 
 ## 54. "Who are you?" (added 2026-09-27)
 

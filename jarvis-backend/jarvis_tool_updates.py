@@ -69,6 +69,39 @@ WHAT IS CHECKED, AND WHY
    (unauthenticated, 60 requests an hour; a 403/429 becomes one WARN line
    in the report, never a crash).
 
+4. Evidence for one update card (ADDED 2026-10-23, audit Part 4 item 1).
+   The owner's chosen policy is "one update per approval card", so every
+   row that is OUTDATED also carries the facts a card would show, without
+   changing any key that was already there:
+   * `target` - the exact version that would be installed (the same string
+     as `latest`, named so a card never shows "latest" with no version).
+   * `pinned_line` - Python only: the exact `requirements.lock` line a
+     Python update would replace, e.g. `filelock==4.0.0` (a marker such as
+     `; python_full_version >= '3.11'` is kept; hashes are not part of it).
+   * `released` - the release's own upload date, `YYYY-MM-DD`.
+   * `age_days` - whole days between that date and `clock()`.
+   * `eligible_after_7_days` - true only when `age_days >= 7` (the owner's
+     seven-day wait); false under seven days; **null when the release date
+     is unknown - never guessed**.
+   * `bump` - `"patch"`, `"minor"`, `"major"` or `"unknown"`, from the
+     current version to `target`.
+   * `advisories` - Python only: the advisory ids PyPI lists for the
+     version currently pinned (`vulnerabilities[].id` from
+     `https://pypi.org/pypi/<name>/<current-version>/json`, the same API
+     `tools/check_python_advisories.py` reads; withdrawn ones left out, as
+     it leaves them out). An EMPTY list means only "PyPI listed no
+     advisory for it" - not a statement that none exists. A failed
+     advisory read is `null` with the reason in that row's `note`, never a
+     crash. Rust rows carry `advisories: null` with the note "Rust crates
+     are not checked for advisories" - crates.io has no advisory list this
+     module reads, and inventing one would be worse than saying so.
+   The release date costs no extra request: `/pypi/<name>/json` already
+   answers the newest version and that release's upload time, and the
+   crates.io answer already carries `versions[].created_at`. The advisory
+   list is ONE extra PyPI request per outdated Python package (same
+   `pypi.org` host); no other host is contacted, and none of this applies
+   anything.
+
 GITHUB TOOLS: WHY THE LIST BELOW IS EMPTY TODAY
 The brief's own two candidates were checked against the real docs, and
 neither actually fits this shape, so nothing is hand-written here as a
@@ -113,6 +146,7 @@ adds a new Python or npm dependency.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import re
@@ -395,17 +429,34 @@ def _problem_words(exc: BaseException) -> str:
     return s[:200]
 
 
-def _pypi_latest(name: str, *, fetch: Optional[Callable] = None) -> str:
-    fetch = fetch or _default_pypi_fetch
-    url = f"https://pypi.org/pypi/{urllib.parse.quote(name)}/json"
-    data = fetch(url)
+def _pypi_version(data) -> str:
     v = (data.get("info") or {}).get("version") if isinstance(data, dict) else None
     if not isinstance(v, str) or not v:
         raise ValueError("PyPI's answer had no version in it")
     return v
 
 
-def _crates_latest(name: str, *, fetch: Optional[Callable] = None) -> str:
+def _pypi_info(name: str, *, fetch: Optional[Callable] = None) -> dict:
+    """The whole `/pypi/<name>/json` answer. Its `info.version` is the newest
+    version; its `urls` (and the `releases` map) carry that release's own
+    upload time, so the 7-day evidence needs no second request per package."""
+    fetch = fetch or _default_pypi_fetch
+    url = f"https://pypi.org/pypi/{urllib.parse.quote(name)}/json"
+    data = fetch(url)
+    _pypi_version(data)  # raises the same plain ValueError on a bad answer
+    return data
+
+
+def _pypi_latest(name: str, *, fetch: Optional[Callable] = None) -> str:
+    return _pypi_version(_pypi_info(name, fetch=fetch))
+
+
+def _crates_info(name: str, *, fetch: Optional[Callable] = None) -> dict:
+    """The newest version of a crate and that version's own release date.
+
+    `/api/v1/crates/<name>` already carries every version's `created_at`, so
+    the card's release-date evidence costs no extra request. `released` is
+    the raw timestamp string or None - `_iso_day` below normalises it."""
     fetch = fetch or _default_crates_fetch
     url = f"https://crates.io/api/v1/crates/{urllib.parse.quote(name)}"
     data = fetch(url)
@@ -413,7 +464,18 @@ def _crates_latest(name: str, *, fetch: Optional[Callable] = None) -> str:
     v = crate.get("max_stable_version") or crate.get("newest_version")
     if not isinstance(v, str) or not v:
         raise ValueError("crates.io's answer had no version in it")
-    return v
+    released = None
+    versions = (data.get("versions") or []) if isinstance(data, dict) else []
+    for entry in versions:
+        if isinstance(entry, dict) and entry.get("num") == v:
+            raw = entry.get("created_at")
+            released = raw if isinstance(raw, str) else None
+            break
+    return {"latest": v, "released": released}
+
+
+def _crates_latest(name: str, *, fetch: Optional[Callable] = None) -> str:
+    return str(_crates_info(name, fetch=fetch)["latest"])
 
 
 def _github_latest_release(repo: str, *, fetch: Optional[Callable] = None) -> str:
@@ -455,6 +517,108 @@ def _version_key(v: str) -> tuple:
     return tuple(int(p) for p in parts) if parts else (0,)
 
 
+def _iso_day(raw) -> Optional[str]:
+    """A release timestamp from PyPI or crates.io as `YYYY-MM-DD`.
+
+    Accepts a full ISO 8601 timestamp (with `Z` or an offset) and a bare
+    date; anything else is None - the card's wait evidence must never be a
+    guessed date."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        moment = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=datetime.timezone.utc)
+    return moment.astimezone(datetime.timezone.utc).date().isoformat()
+
+
+def _pypi_release_day(data, version: str) -> Optional[str]:
+    """The upload date of the newest release from `/pypi/<name>/json`.
+
+    The spec prefers `urls[].upload_time_iso_8601` and falls back to
+    `releases[version][0].upload_time_iso_8601`; older payloads carry
+    `upload_time` instead, which is the same fact. All files of one release
+    share its date, so the first answer is used."""
+    if not isinstance(data, dict):
+        return None
+    for entry in data.get("urls") or []:
+        if isinstance(entry, dict):
+            day = _iso_day(entry.get("upload_time_iso_8601") or entry.get("upload_time"))
+            if day:
+                return day
+    releases = data.get("releases")
+    if isinstance(releases, dict) and isinstance(releases.get(version), list):
+        for entry in releases[version]:
+            if isinstance(entry, dict):
+                day = _iso_day(entry.get("upload_time_iso_8601") or entry.get("upload_time"))
+                if day:
+                    return day
+    return None
+
+
+def _age_days(released: Optional[str], clock: Callable[[], float]) -> Optional[int]:
+    """Whole days between a `YYYY-MM-DD` release date (midnight UTC) and now.
+
+    None when the date is unknown; a future date reads as a negative age,
+    which is honest and simply not eligible yet."""
+    if not released:
+        return None
+    try:
+        day = datetime.date.fromisoformat(released)
+    except ValueError:
+        return None
+    then = datetime.datetime.combine(day, datetime.time.min,
+                                     tzinfo=datetime.timezone.utc).timestamp()
+    return int((clock() - then) // 86400)
+
+
+def _bump_kind(current: str, target: str) -> str:
+    """`"patch"`, `"minor"`, `"major"` or `"unknown"` between two versions.
+
+    Digits are compared position by position (major, then minor, then
+    patch); a version this loose comparison cannot place - no digits at all,
+    or a change only after the first three parts - is `"unknown"` rather
+    than a guess. It is only ever a label for the card, never a decision."""
+    old = [int(p) for p in re.findall(r"\d+", str(current or ""))]
+    new = [int(p) for p in re.findall(r"\d+", str(target or ""))]
+    if not old or not new:
+        return "unknown"
+    for index, name in ((0, "major"), (1, "minor"), (2, "patch")):
+        old_part = old[index] if index < len(old) else 0
+        new_part = new[index] if index < len(new) else 0
+        if old_part != new_part:
+            return name
+    return "unknown"
+
+
+def _pypi_advisory_ids(name: str, version: str, *,
+                       fetch: Optional[Callable] = None) -> list:
+    """Advisory ids PyPI lists for ONE pinned release, withdrawn left out.
+
+    The same route `tools/check_python_advisories.py` reads
+    (`/pypi/<name>/<version>/json` -> `vulnerabilities[].id`). An empty list
+    means only "PyPI listed no advisory for it" - never a claim that none
+    exists. The caller turns a failure into that row's note, not a raise."""
+    fetch = fetch or _default_pypi_fetch
+    url = (f"https://pypi.org/pypi/{urllib.parse.quote(name)}/"
+           f"{urllib.parse.quote(str(version))}/json")
+    data = fetch(url)
+    out = []
+    entries = data.get("vulnerabilities") if isinstance(data, dict) else None
+    for entry in entries or []:
+        if not isinstance(entry, dict) or entry.get("withdrawn"):
+            continue
+        ident = entry.get("id")
+        if isinstance(ident, str) and ident.strip():
+            out.append(ident.strip())
+    return sorted(set(out))
+
+
 # ---------------------------------------------------------------------------
 #   Parsing the two lock files
 # ---------------------------------------------------------------------------
@@ -484,6 +648,28 @@ def _join_logical_lines(text: str) -> list:
     return logical
 
 
+def parse_python_lock_entries(text: str) -> list:
+    """[{name, version, line}] in file order, for the card's pinned-line
+    evidence.
+
+    `line` is the exact pin a Python update would replace: a marker
+    (`; python_full_version >= '3.11'`) is kept, the continuation backslash
+    and every `--hash` are not part of it."""
+    out = []
+    for joined in _join_logical_lines(text):
+        s = joined.strip()
+        if not s or s.startswith("#"):
+            continue
+        m = _PIP_PIN.match(s)
+        if not m:
+            continue
+        pin = s.split(" --hash", 1)[0].strip()
+        if pin.endswith("\\"):
+            pin = pin[:-1].strip()
+        out.append({"name": m.group(1), "version": m.group(2), "line": pin})
+    return out
+
+
 def parse_python_lock(text: str) -> dict:
     """{canonical name: (original name, pinned version)} - one entry per
     package. When the lock pins two versions for different Python versions
@@ -492,15 +678,9 @@ def parse_python_lock(text: str) -> dict:
     above), never as the number actually shown when the package is really
     installed here."""
     out: dict = {}
-    for line in _join_logical_lines(text):
-        s = line.strip()
-        if not s or s.startswith("#"):
-            continue
-        m = _PIP_PIN.match(s)
-        if not m:
-            continue
-        name, version = m.group(1), m.group(2)
-        out[re.sub(r"[-_.]+", "-", name).lower()] = (name, version)
+    for entry in parse_python_lock_entries(text):
+        out[re.sub(r"[-_.]+", "-", entry["name"]).lower()] = (entry["name"],
+                                                              entry["version"])
     return out
 
 
@@ -541,7 +721,9 @@ def _backend_dir() -> Path:
 
 
 def _python_group(backend_dir: Path, pypi_fetch: Optional[Callable],
-                  installed_version: Callable[[str], Optional[str]]) -> dict:
+                  installed_version: Callable[[str], Optional[str]],
+                  *, clock: Optional[Callable[[], float]] = None,
+                  advisory_fetch: Optional[Callable] = None) -> dict:
     path = backend_dir / "requirements.lock"
     try:
         text = path.read_text(encoding="utf-8")
@@ -549,29 +731,63 @@ def _python_group(backend_dir: Path, pypi_fetch: Optional[Callable],
         return {"ecosystem": "Python packages", "available": False,
                 "why": "requirements.lock is not beside jarvis_hud.py - run apply-patches.ps1 "
                        "on this PC.", "items": [], "unreachable": []}
-    pins = parse_python_lock(text)
+    # One entry per canonical name, LAST marker line wins - the same answer
+    # parse_python_lock gives, plus the exact pin line the card can show.
+    entries: dict = {}
+    for entry in parse_python_lock_entries(text):
+        entries[re.sub(r"[-_.]+", "-", entry["name"]).lower()] = entry
+    clock = clock or time.time
+    fetch_advisories = advisory_fetch or _default_pypi_fetch
     items, unreachable = [], []
-    for _canon, (orig, lock_version) in sorted(pins.items()):
+    for _canon in sorted(entries):
+        entry = entries[_canon]
+        orig, lock_version = entry["name"], entry["version"]
+        pinned_line = entry["line"]
         real = installed_version(orig)
         current = real or lock_version
         note = (None if real else "not installed in this Python right now - showing the "
                                    "version this project's lock file pins")
         try:
-            latest = _pypi_latest(orig, fetch=pypi_fetch)
+            data = _pypi_info(orig, fetch=pypi_fetch)
+            latest = _pypi_version(data)
         except Exception as exc:
             unreachable.append({"name": orig, "current": current, "why": _problem_words(exc)})
             continue
         outdated = _version_key(latest) > _version_key(current)
         item = {"name": orig, "current": current, "latest": latest, "outdated": outdated,
                 "command": f"py -3 -m pip install --upgrade {orig}" if outdated else None}
+        if outdated:
+            # The card-ready evidence (2026-10-23, audit Part 4 item 1).
+            released = _pypi_release_day(data, latest)
+            age = _age_days(released, clock)
+            item.update({
+                "target": latest,
+                "pinned_line": pinned_line,
+                "released": released,
+                "age_days": age,
+                # False when the release is younger than the owner's 7-day
+                # wait; null when the date is unknown - never guessed.
+                "eligible_after_7_days": (age >= 7 if age is not None else None),
+                "bump": _bump_kind(current, latest),
+            })
+            try:
+                item["advisories"] = _pypi_advisory_ids(
+                    orig, current, fetch=fetch_advisories)
+            except Exception as exc:
+                # A failed advisory read is said on THIS row, never a crash
+                # and never an empty list (which would read as "none").
+                item["advisories"] = None
+                words = f"the advisory list could not be read ({_problem_words(exc)})"
+                item["note"] = words
         if note:
-            item["note"] = note
+            item["note"] = f"{note}; {item['note']}" if item.get("note") else note
         items.append(item)
     return {"ecosystem": "Python packages", "available": True, "why": "", "items": items,
             "unreachable": unreachable}
 
 
-def _rust_group(backend_dir: Path, crates_fetch: Optional[Callable]) -> dict:
+def _rust_group(backend_dir: Path, crates_fetch: Optional[Callable],
+                *, clock: Optional[Callable[[], float]] = None) -> dict:
     path = backend_dir / "rust-crates.lock"
     try:
         text = path.read_text(encoding="utf-8")
@@ -584,8 +800,9 @@ def _rust_group(backend_dir: Path, crates_fetch: Optional[Callable]) -> dict:
         return {"ecosystem": "Rust crates", "available": False,
                 "why": "this Python cannot read rust-crates.lock (it needs Python 3.11 or "
                        "newer, or the tomli package)", "items": [], "unreachable": []}
+    clock = clock or time.time
     items, unreachable = [], []
-    latest_by_name: dict = {}
+    info_by_name: dict = {}
     # `cargo update -p <name>` refuses with "the specification is ambiguous"
     # the moment a name is pinned at two or more versions at once (a
     # transitive-dependency situation, not a mistake) - 61 of 576 names in
@@ -593,20 +810,37 @@ def _rust_group(backend_dir: Path, crates_fetch: Optional[Callable]) -> dict:
     # cargo accepts (bug audit 2026-09-27, backend finding #6).
     name_counts = Counter(name for name, _ in pins)
     for name, version in sorted(pins):
-        if name not in latest_by_name:
+        if name not in info_by_name:
             try:
-                latest_by_name[name] = ("ok", _crates_latest(name, fetch=crates_fetch))
+                info_by_name[name] = ("ok", _crates_info(name, fetch=crates_fetch))
             except Exception as exc:
-                latest_by_name[name] = ("err", _problem_words(exc))
-        kind, val = latest_by_name[name]
+                info_by_name[name] = ("err", _problem_words(exc))
+        kind, val = info_by_name[name]
         if kind == "err":
             unreachable.append({"name": name, "current": version, "why": val})
             continue
-        outdated = _version_key(val) > _version_key(version)
+        latest = str(val["latest"])
+        outdated = _version_key(latest) > _version_key(version)
         spec = f"{name}@{version}" if name_counts[name] > 1 else name
-        items.append({"name": name, "current": version, "latest": val, "outdated": outdated,
-                      "command": (f"cd jarvis-desktop\\src-tauri; cargo update -p {spec}"
-                                  if outdated else None)})
+        item = {"name": name, "current": version, "latest": latest, "outdated": outdated,
+                "command": (f"cd jarvis-desktop\\src-tauri; cargo update -p {spec}"
+                            if outdated else None)}
+        if outdated:
+            # The card-ready evidence. crates.io's answer already carries the
+            # release date; it has no advisory list this module reads, so the
+            # row says that plainly instead of inventing one.
+            released = _iso_day(val.get("released"))
+            age = _age_days(released, clock)
+            item.update({
+                "target": latest,
+                "released": released,
+                "age_days": age,
+                "eligible_after_7_days": (age >= 7 if age is not None else None),
+                "bump": _bump_kind(version, latest),
+                "advisories": None,
+                "note": "Rust crates are not checked for advisories",
+            })
+        items.append(item)
     return {"ecosystem": "Rust crates", "available": True, "why": "", "items": items,
             "unreachable": unreachable}
 
@@ -645,18 +879,24 @@ def _summary(outdated: int, checked: int, unreachable: int) -> str:
 def run_check(*, backend_dir: Optional[Path] = None, pypi_fetch: Optional[Callable] = None,
              crates_fetch: Optional[Callable] = None, github_fetch: Optional[Callable] = None,
              installed_version: Optional[Callable[[str], Optional[str]]] = None,
-             github_tools: tuple = GITHUB_TOOLS, clock: Optional[Callable[[], float]] = None
+             github_tools: tuple = GITHUB_TOOLS, clock: Optional[Callable[[], float]] = None,
+             advisory_fetch: Optional[Callable] = None
              ) -> dict:
     """The whole report: {"checked_at", "summary", "total_checked",
     "total_outdated", "groups": [...]}. Never raises for a network problem
     (each item that could not be checked lands in that group's
-    "unreachable" list instead) - only a genuine bug here would raise."""
+    "unreachable" list instead) - only a genuine bug here would raise.
+
+    `advisory_fetch` is the additional PyPI read the card evidence needs for
+    each OUTDATED Python package (see `_pypi_advisory_ids`); like every other
+    fetch it is injectable, so tests pass a fake and open no socket."""
     clock = clock or time.time
     backend_dir = backend_dir or _backend_dir()
     installed_version = installed_version or _installed_version
     groups = [
-        _python_group(backend_dir, pypi_fetch, installed_version),
-        _rust_group(backend_dir, crates_fetch),
+        _python_group(backend_dir, pypi_fetch, installed_version, clock=clock,
+                      advisory_fetch=advisory_fetch or _default_pypi_fetch),
+        _rust_group(backend_dir, crates_fetch, clock=clock),
         _github_group(github_fetch, github_tools),
     ]
     total_checked = sum(len(g["items"]) for g in groups)
