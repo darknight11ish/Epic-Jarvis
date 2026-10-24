@@ -1353,17 +1353,25 @@ pub async fn try_voice_animal(
     .await
 }
 
-/// "Hear it" (2026-09-29): the PC says one fixed line (its own words, never
-/// the app's) in one built-in voice, by NAME, without changing the voice
-/// Jarvis uses - `POST /api/voice/voices/sample {"voice": "bm_george"}` - and
-/// it comes back like "Try it": `{"ok": true, "audio": "data:audio/wav;..."}`
-/// for the page to play. No card, nothing saved, not held on a stale link
-/// (it changes nothing). Never a voice you recorded: the PC only takes a
-/// name from its own list. Refused here while the talk button records or
-/// Jarvis Live has the microphone ([`HEAR_BUSY`]) - the sound would go into
-/// the question - and while App lock would ask again ([`HEAR_LOCKED`]).
-/// Settings also refuses while Jarvis is speaking or listening, from the
-/// events it hears (voice-panel.js `jarvisBusy`).
+/// "Hear it" (2026-09-29): the PC says one fixed line in one built-in voice, by
+/// NAME, without changing the voice Jarvis uses - `POST
+/// /api/voice/voices/sample {"voice": "bm_george"}` - and it comes back like
+/// "Try it": `{"ok": true, "audio": "data:audio/wav;..."}` for the page to play.
+/// No card, nothing saved, not held on a stale link (it changes nothing). Never
+/// a voice you recorded: the PC only takes a name from its own list. Refused
+/// here while the talk button records or Jarvis Live has the microphone
+/// ([`HEAR_BUSY`]) - the sound would go into the question - and while App lock
+/// would ask again ([`HEAR_LOCKED`]). Settings also refuses while Jarvis is
+/// speaking or listening, from the events it hears (voice-panel.js
+/// `jarvisBusy`).
+///
+/// The body is EXACTLY the one field the PC accepts. The Personality Presets
+/// follow-up (2026-10-23, Slice 2a) first sent the character's blend, speed and
+/// switch line too; `POST /api/voice/voices/sample` is
+/// `set(body) == {"voice"}` and answers 400 to anything else, so every preset's
+/// sample failed. Those values stay stored with the character and shown in its
+/// badge; a blended-voice preview arrives with the Kokoro/Live slice, and until
+/// then this plays the base voice (the page says so in plain words).
 #[tauri::command]
 pub async fn hear_voice_sample(
     app: AppHandle,
