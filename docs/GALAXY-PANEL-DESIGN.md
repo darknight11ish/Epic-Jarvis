@@ -160,6 +160,21 @@ route exists by then"; on this tree there is **no `GET /api/galaxy/capabilities`
 built. When that read-only route lands, it is a list fed by it with no owner data and no actions -
 the same shape as this plate.
 
+**Widened 2026-10-23 (owner): a read-only "Galaxy at a glance" band above that list - still no
+canvas.** Offered three choices, the owner picked the light one: the phone shows the same galaxy as
+a **summary**, not a picture. The band says how many names and facts the plate holds
+(`Entities.galaxySummary`), then the **eight names that share facts with the most others** as plain
+labels (`Entities.mostConnected`, the same `sharedPartners` rule the rows use; a name that shares
+nothing is left out, ties go to fact count then name so the order never depends on what the PC
+sent). Each label reads as one line - "Priya, 4 facts, shares facts with 2 names" - and the labels
+are `Pill`s, not buttons, because nothing there is tappable. **No canvas, no animation, no GL/AGSL,
+no lines, no new read and no write**: counts and connections come from the two reads the plate
+already makes. It is hidden while the list shows a past date. The owner's other two options (a
+still picture, and the animated 8-preset canvas) were **not** taken: the signed 2026-10-21 ruling
+keeps the phone as a read-only list with zero canvas, and the desktop's five rich animated presets
+do not exist to adapt yet. Proven by `GalaxyBandTest.kt` (pure data) and the source pins in
+`PhoneGalaxyTest.kt`; the runtime look and TalkBack order are a field-test row.
+
 ## 5. Gate, routes, parity summary
 
 | Item | Desktop | Phone (option A) | Phone (option B) |
