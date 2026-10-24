@@ -4,5 +4,5 @@
   "module": "jarvis_brain_reads",
   "install": "handler",
   "replaces_patch": "brain-reads.patch",
-  "stack_order": 87
+  "stack_order": 88
 }

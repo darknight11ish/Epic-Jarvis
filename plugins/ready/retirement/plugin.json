@@ -4,5 +4,5 @@
   "module": "jarvis_retirement",
   "install": "handler",
   "replaces_patch": "retirement.patch",
-  "stack_order": 110
+  "stack_order": 111
 }
