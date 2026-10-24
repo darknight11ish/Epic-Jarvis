@@ -1,13 +1,14 @@
 # Pre-build guards for P-Doc, P-GH and P-Pub
 
 **Status: spec + drop-in helpers + adversarial tests. Nothing is wired into the
-product, no CI file is touched, and nothing has been pushed.** This is Section 7
-of the owner's work order ("COMPLETE EXECUTION OF ALL 8 REMAINING SYSTEM
-REVIEWS"), written before the three waves exist so their implementation starts
-with the guards already in place.
+product and no CI file is touched; the tests are a desk gate until someone adds
+them to the audit job.** This is Section 7 of the owner's work order ("COMPLETE
+EXECUTION OF ALL 8 REMAINING SYSTEM REVIEWS"), written before the three waves
+exist so their implementation starts with the guards already in place.
 
-The worktree is `review/7-pre-build-guards` off `origin/main` `014af87f5`. The
-files here are new; no existing file was changed.
+The worktree was `review/7-pre-build-guards` off `origin/main` `014af87f5`; it
+was merged with newer `main` before its pull request (new files only, no
+existing file changed on either side).
 
 | File | What it is | Trap |
 |---|---|---|
