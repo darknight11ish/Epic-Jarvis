@@ -41,6 +41,11 @@ import kotlinx.coroutines.launch
  * there. Close drops the proposal and the words read from the picture: they
  * live in [scan] only, which the caller clears.
  *
+ * A picture can hold SEVERAL dates: adding one reminder marks that proposal
+ * as added and leaves the others on the dialog, so they can be added too
+ * (2026-10-16 - before this, one add replaced the whole proposal with the
+ * PC's sentence). The words read from the picture go on the first add.
+ *
  * The words are outside text, shown as plain [Text] only.
  */
 @Composable
@@ -61,6 +66,7 @@ fun PhotoReminderDialog(
     var line by remember(scan) { mutableStateOf<String?>(null) }
     var busy by remember(scan) { mutableStateOf(false) }
     var done by remember(scan) { mutableStateOf<String?>(null) }
+    var added by remember(scan) { mutableStateOf(setOf<String>()) }
 
     Dialog(onDismissRequest = onClose) {
         Column(
@@ -72,80 +78,90 @@ fun PhotoReminderDialog(
         ) {
             Text(PhotoReminder.TITLE, style = MaterialTheme.typography.titleMedium)
             Gap(8)
-            val finished = done
-            if (finished != null) {
-                // Added: only the PC's own sentence stays, not the picture's words.
-                Text(finished, style = MaterialTheme.typography.bodyMedium)
+            // The PC's sentence - and, after an add, its own sentence about
+            // the reminder just set. A STATUS LINE, not a replacement for the
+            // proposal: the other dates on the picture are still here.
+            Text(done ?: scan.said, style = MaterialTheme.typography.bodyMedium)
+            val proposals = PhotoReminder.proposals(scan, added)
+            if (proposals.size > 1) {
                 Gap(8)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Quiet(PhotoReminder.CLOSE_LABEL, onClick = onClose)
+                proposals.forEach { p ->
+                    Quiet(
+                        if (p.added) PhotoReminder.addedWords(p.label) else p.label,
+                        enabled = !p.added,
+                        onClick = {
+                            chosen = p.found
+                            what = p.found.title
+                            date = p.found.date
+                            time = p.found.time
+                        },
+                    )
                 }
-            } else {
-                Text(scan.said, style = MaterialTheme.typography.bodyMedium)
-                if (scan.found.size > 1) {
-                    Gap(8)
-                    scan.found.forEach { f ->
-                        Quiet(
-                            (f.whenWords.ifEmpty { "${f.date} ${f.time}" }) +
-                                (if (f.title.isNotEmpty()) " - ${f.title}" else ""),
-                            onClick = {
-                                chosen = f
-                                what = f.title
-                                date = f.date
-                                time = f.time
-                            },
-                        )
-                    }
-                }
-                Gap(8)
-                TextInput(what, { what = it.take(200) }, Modifier.fillMaxWidth(), label = PhotoReminder.WHAT_LABEL)
-                Gap(8)
-                TextInput(date, { date = it.take(10) }, Modifier.fillMaxWidth(), label = PhotoReminder.DATE_LABEL)
-                Gap(8)
-                TextInput(time, { time = it.take(5) }, Modifier.fillMaxWidth(), label = PhotoReminder.TIME_LABEL)
-                PhotoReminder.hint(chosen)?.let {
-                    Gap(4)
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
-                }
-                line?.let {
-                    Gap(4)
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
-                }
-                Gap(12)
-                Primary(
-                    PhotoReminder.ADD_LABEL,
-                    Modifier.fillMaxWidth(),
-                    enabled = canAct && !busy,
-                    busy = busy,
-                    onClick = {
-                        val problem = PhotoReminder.problem(what, date, time)
-                        if (problem != null) {
-                            line = problem
-                            return@Primary
-                        }
-                        busy = true
-                        scope.launch {
-                            val (ok, said) = onAdd(what, date, time)
-                            busy = false
-                            if (ok) done = said else line = said
-                        }
-                    },
-                )
-                Gap(8)
-                Secondary(
-                    AlsoOnPhone.LABEL,
-                    Modifier.fillMaxWidth(),
-                    onClick = {
-                        val offer = PhotoReminder.calendarOffer(what, date, time)
-                        line = if (offer == null) {
-                            PhotoReminder.problem(what, date, time)
-                        } else {
-                            handToPhone(context, offer)
-                        }
-                    },
-                )
+            }
+            Gap(8)
+            TextInput(what, { what = it.take(200) }, Modifier.fillMaxWidth(), label = PhotoReminder.WHAT_LABEL)
+            Gap(8)
+            TextInput(date, { date = it.take(10) }, Modifier.fillMaxWidth(), label = PhotoReminder.DATE_LABEL)
+            Gap(8)
+            TextInput(time, { time = it.take(5) }, Modifier.fillMaxWidth(), label = PhotoReminder.TIME_LABEL)
+            PhotoReminder.hint(chosen)?.let {
                 Gap(4)
-                Text(AlsoOnPhone.NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+            }
+            line?.let {
+                Gap(4)
+                Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+            }
+            Gap(12)
+            Primary(
+                PhotoReminder.ADD_LABEL,
+                Modifier.fillMaxWidth(),
+                // Shut once the boxes hold a proposal that has just been added:
+                // the owner picks another date (or changes one) to add again,
+                // so a quick second tap cannot set the same reminder twice.
+                enabled = canAct && !busy && PhotoReminder.key(date, time) !in added,
+                busy = busy,
+                onClick = {
+                    val problem = PhotoReminder.problem(what, date, time)
+                    if (problem != null) {
+                        line = problem
+                        return@Primary
+                    }
+                    // What the boxes hold is what this add is about, so the
+                    // proposal to mark is decided before the PC answers.
+                    val key = PhotoReminder.key(date, time)
+                    busy = true
+                    scope.launch {
+                        val (ok, said) = onAdd(what, date, time)
+                        busy = false
+                        if (ok) {
+                            done = said
+                            added = added + key
+                            line = null
+                        } else {
+                            line = said
+                        }
+                    }
+                },
+            )
+            Gap(8)
+            Secondary(
+                AlsoOnPhone.LABEL,
+                Modifier.fillMaxWidth(),
+                onClick = {
+                    val offer = PhotoReminder.calendarOffer(what, date, time)
+                    line = if (offer == null) {
+                        PhotoReminder.problem(what, date, time)
+                    } else {
+                        handToPhone(context, offer)
+                    }
+                },
+            )
+            Gap(4)
+            Text(AlsoOnPhone.NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            // The picture's own words go on the first add, as they do on the
+            // PC: what stays is the proposals still to be added.
+            if (added.isEmpty()) {
                 if (scan.text.isNotBlank()) {
                     Gap(12)
                     Text(PhotoReminder.WORDS_READ, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
@@ -153,10 +169,10 @@ fun PhotoReminderDialog(
                 }
                 Gap(8)
                 Text(PhotoReminder.OUTSIDE_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-                Gap(8)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Quiet(PhotoReminder.CLOSE_LABEL, onClick = onClose)
-                }
+            }
+            Gap(8)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Quiet(PhotoReminder.CLOSE_LABEL, onClick = onClose)
             }
         }
     }

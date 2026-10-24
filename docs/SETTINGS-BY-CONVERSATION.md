@@ -130,10 +130,12 @@ fix (task-118, same PR) makes the claim smaller and checkable:
   not resolve to the feature's own setting/intent; a Command-Only/Always-On title may
   not resolve to a setting change; every multi-field phrase must resolve or be marked
   planned; and every displayed phrase must resolve.
-- **Android has no directory yet.** The directory is desktop-only. The phone's live
-  paths still say "All features and abilities (planned)"; its own Settings screens and
-  search remain the phone's way to find settings. This is a planned B-side follow-up,
-  not a hidden Android feature.
+- **Both apps have the directory now.** The desktop's Settings -> Abilities &
+  commands and the phone's Settings both draw the same generated, read-only
+  directory of all 139 features; the phone's is searchable and says where each
+  control lives, but it changes nothing and offers no fake switch. The phone's
+  own Settings screens and search remain its way to CHANGE settings; "open all
+  features and abilities" on the phone opens the directory row.
 - **Live's voice path is NOT-TESTABLE here.** The clip/answer route lives in the HUD
   (outside this repository). The repository proves the typed path and one hermetic
   rule: a card raised since Live started pauses the engine before a transcript is
