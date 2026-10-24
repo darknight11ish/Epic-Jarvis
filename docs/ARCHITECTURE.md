@@ -2113,6 +2113,19 @@ step-3 exception that a typed question may be read aloud is removed in that
 one window and nowhere else. No window may `emit` events to the
 others either (M1).
 
+**The HUD page draws only while it is being looked at** (2026-10-23, the
+idle-power review). Its Galaxy map has one drawing loop, and it runs only while
+the Brain map is the view on screen **and** the window is visible: leaving the
+map or hiding the window stops it (the loop is not re-armed), and returning
+re-measures the picture once and starts it again. A hidden window also pauses
+the page's two endless animations - the answer caret and the pressed talk
+button. The live paths are deliberately untouched: the event stream and its
+reconnect, the approval reads, speech and audio, and the face window's own
+lifecycle (the face was already unloaded when the Talk view ends). No route,
+permission, approval card or new dependency is involved; the page is still
+replaced whole by the normal shipped-file copy. The Brain window needs no such
+guard: its constellation settles once and stops.
+
 **A face never pretends Jarvis is there** (owner, 2026-09-28). When the
 link is down or stale for longer than 12 seconds - the same grace on both
 apps, long enough to cover the hourly reconnect - every face (widget,
