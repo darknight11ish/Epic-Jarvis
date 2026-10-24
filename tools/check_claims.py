@@ -61,8 +61,10 @@ THE SIX KINDS, each with a definite answer:
   * `grep:<path>:<pattern>` - this text is present. `<path>` may be a
     file or a directory (then every text file under it is read);
   * `absent:<path>:<pattern>` - this text is NOT present;
-  * `test:<suite>` - running this suite exits 0 (a bare `backend/...` name, a
-    repo-relative `*.py`, or a bare file name resolved under `backend/`);
+  * `test:<suite>` - running this suite exits 0 AND it printed no skip that is
+    about the code rather than this machine (a bare `backend/...` name, a
+    repo-relative `*.py`, or a bare file name resolved under `backend/`; the
+    skip rule is the next paragraph);
   * `number:<doc>:<path>:<value>` - the figure `<value>` is written in `<doc>`
     AND the same number appears in `<path>`, comparing digits only so
     `7,680` and `7680` and `60_000` are the same figure.
@@ -71,6 +73,28 @@ A claim that needs judgement goes in as `unverifiable` with the reason in the
 `check` column - never as a guess. A reason that begins with one of the five
 kinds is refused, because a row that names a definite check cannot be
 unverifiable.
+
+A SKIP IS NOT PROOF. `test:` used to read success from the exit code alone, and
+a suite can exit 0 having deliberately not run a check.
+`backend/test_data_backup.py` prints `skip  ...` and returns 0 when
+`refuse_write_into_a_locker` is absent from the tool, so removing that safety
+guard left claim F11 printed as built. This check therefore reads the skip
+lines a suite prints and, unless the reason is a limitation of THIS MACHINE,
+withholds proof from every row that names the suite.
+
+Why not "any skip is a failure": `backend/test_data_backup.py` prints one
+unconditionally - the fixture that needs `icacls` - so that rule would turn its
+four green rows (F06, F08, F10, F11) red on every platform, not because a claim
+stopped holding but because this machine cannot build the fixture. So the skip
+reasons that are about the machine are listed per suite in
+`ENVIRONMENT_SKIPS`, and anything else - including the missing-guard reason
+this rule exists for - is unproven. Two limits, written down rather than hoped
+away: a skip in a suite withholds proof from every row naming that suite (a row
+names the suite as its evidence, not one check inside it), and a new
+environmental skip with a new wording makes its row red until its reason is
+added to that list - loud, never silent. A suite that skips in a convention it
+never prints, and prints no summary this check can read, can still hide one;
+nothing can read what a suite does not say.
 
 WHAT COUNTS AS "THERE". Every path a row names is judged against the TRACKED
 tree - `git ls-files` - and not against the folder this happens to run in. A
@@ -129,6 +153,51 @@ MAX_BYTES = 8 * 1024 * 1024
 #: register names takes about 2 seconds; the ceiling is for a hang, not for a
 #: slow machine.
 TEST_TIMEOUT = 600
+
+#: How the shipped suites print a skip. Three shapes are real in this tree
+#: (measured 2026-10-24): `skip  <why>` (test_api_doc, test_media_index,
+#: test_fault_probes, ...), `skip  <name> - <why>` (test_data_backup) and
+#: `SKIP  <name>` followed by an indented reason (test_settings_tool). The word
+#: boundary is `backend/run_suites.py`'s own (`_LINE["skipped"]`), so a check
+#: named "skipped-this-week ..." is not read as a skip: the word has to end
+#: there or be followed by a space, a tab or a colon. Matched at column 0 on
+#: purpose - `check()`'s failure detail is indented by eight spaces, and a
+#: detail that begins with the word "skip" is not a skip marker.
+SKIP_MARKER = re.compile(r"^skip(ped)?(?=[ \t:]|$)", re.IGNORECASE)
+
+#: The skip reasons that are a limitation of THIS MACHINE, keyed by the suite's
+#: repo-relative path, so a skip carrying one of them leaves its row PROVEN.
+#: Each was read off the suite that prints it (2026-10-24) and matched
+#: case-insensitively against the skip line and any indented reason under it:
+#:
+#: * test_data_backup - "is not installed": the `cryptography` package, whose
+#:   absence the suite itself tests the fallback for; "needs icacls": the ACL
+#:   fixture cannot be built without Windows' icacls and the account's own name,
+#:   and it is printed UNCONDITIONALLY - without this entry four green rows go
+#:   red on every platform; "is not nt": a Windows-only question asked on
+#:   another OS.
+#: * test_settings_tool - "not importable in this environment": a setter's
+#:   module is not installed in this interpreter; the suite prints the count and
+#:   never counts it as a pass.
+#:
+#: Everything else - including the `refuse_write_into_a_locker` skip this rule
+#: exists for ("this build of the tool has no ...", "the guard is not in this
+#: tree") - withholds proof. A new environmental skip needs its reason added
+#: here; until it is, its row is red, which is the honest direction.
+ENVIRONMENT_SKIPS = {
+    "backend/test_data_backup.py": (
+        "is not installed", "needs icacls", "is not nt"),
+    "backend/test_settings_tool.py": ("not importable in this environment",),
+}
+
+#: The summary line a suite may print for itself - `N passed, M skipped,
+#: K failed` in any order (test_media_index prints the skipped count last).
+#: `SUMMARY_LINE` is `backend/run_suites.py`'s own shape, so a sentence that
+#: merely contains those words is not read as a suite's totals. Only used to
+#: catch a suite that says it skipped more checks than it printed a readable
+#: reason for: that row is unproven too.
+SUMMARY_LINE = re.compile(r"^\s*\d+\s+(?:passed|failed)\b", re.IGNORECASE)
+SKIP_SUMMARY = re.compile(r"\b(\d+)\s+skipped\b", re.IGNORECASE)
 
 
 def relative(path: Path) -> str:
@@ -393,8 +462,77 @@ def check_number(doc: str, path: str, value: str):
     return True, f"{value} in {doc} agrees with {digits} in {path}"
 
 
+def skip_blocks(output: str) -> list[str]:
+    """Every skip a suite printed, one string each, marker plus its reason.
+
+    `test_settings_tool` puts the reason on the next line and indents it, so
+    indented lines after a marker belong to that marker; the lowercase shapes
+    carry the reason on the same line. Matched at column 0 (see SKIP_MARKER).
+    """
+    lines = output.splitlines()
+    blocks: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if SKIP_MARKER.match(line) is None:
+            index += 1
+            continue
+        block = [line]
+        index += 1
+        while (index < len(lines) and lines[index].strip()
+               and lines[index][:1].isspace()):
+            block.append(lines[index])
+            index += 1
+        blocks.append("\n".join(block))
+    return blocks
+
+
+def reported_skips(output: str) -> int | None:
+    """The skip count in the suite's own last summary line, or None.
+
+    A suite with no summary (or an unreadable one) answers None, and the skip
+    lines it printed are then the only evidence there is. Requiring the line to
+    START like a summary keeps a sentence about skipped rows from being read as
+    a total of skipped checks.
+    """
+    found = None
+    for line in output.splitlines():
+        if SUMMARY_LINE.match(line) is None:
+            continue
+        match = SKIP_SUMMARY.search(line)
+        if match is not None:
+            found = int(match.group(1))
+    return found
+
+
+def skip_that_withholds_proof(suite: str, output: str) -> str | None:
+    """Why this suite's output leaves its row unproven, or None if it does not.
+
+    `suite` is the repo-relative path, which is what `ENVIRONMENT_SKIPS` is
+    keyed by; a suite outside the repository has no entry and is judged
+    strictly (the bite tests in `backend/test_claims.py` point this check at a
+    throwaway one). Returns the skip line to print, or a sentence about skips
+    the suite counted for itself but never itemised with a reason this check
+    can read.
+    """
+    allowed = ENVIRONMENT_SKIPS.get(suite, ())
+    blocks = skip_blocks(output)
+    for block in blocks:
+        flat = " ".join(block.lower().split())
+        if not any(reason in flat for reason in allowed):
+            return block.splitlines()[0].strip()
+    reported = reported_skips(output)
+    if reported is not None and reported > len(blocks):
+        return (f"{reported} skipped check(s) according to its own summary, and "
+                f"only {len(blocks)} printed a reason this check can read")
+    return None
+
+
 def check_test(suite: str):
-    """Run one suite. Its exit code is the answer; nothing is inferred from it."""
+    """Run one suite. Exiting 0 is necessary, never sufficient: a suite that
+    printed a skip about the code (not about this machine) did not run that
+    check, so it did not prove the row. See A SKIP IS NOT PROOF in the module
+    docstring."""
     candidates = [REPO / suite, REPO / "backend" / suite]
     if not suite.endswith(".py"):
         candidates = [REPO / "backend" / (suite + ".py")] + candidates
@@ -411,6 +549,10 @@ def check_test(suite: str):
     except OSError as err:
         return False, f"{suite} could not be run ({err})"
     if done.returncode == 0:
+        why = skip_that_withholds_proof(
+            relative(chosen), (done.stdout or "") + "\n" + (done.stderr or ""))
+        if why is not None:
+            return False, f"{suite} exited 0 but SKIPPED: {why}"
         return True, f"{suite} exits 0"
     tail = [line for line in (done.stdout or "").strip().splitlines()[-3:]
             if line.strip()]

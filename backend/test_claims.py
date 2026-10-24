@@ -25,6 +25,21 @@ broken row, never on the real one:
   * an empty register -> exit 1, because "nothing was wrong" and "nothing was
     looked at" must not print the same line.
 
+And the skip honesty added 2026-10-24, for the hole the audit filed as T-1:
+claim F11 named `test:backend/test_data_backup.py`, and that suite exits 0
+after printing `skip  ...` when `refuse_write_into_a_locker` is not in the tree,
+so deleting the safety guard still read as built. So this file now proves:
+
+  * a `built` row whose suite exits 0 AFTER SKIPPING a substantive check -> exit
+    1, and the line quoted is the skip, never "holds";
+  * the companion: a clean suite still proves its row, and the environment skips
+    this repository's own suites print (the `icacls` fixture, a missing package)
+    still do not - a rule that reddened those would red four green rows;
+  * a suite that merely COUNTS a skip in its summary, with no reason printed,
+    is not proof either;
+  * the allow-list is keyed to the suite that needs it: an `icacls` reason
+    proves a `test_data_backup` row and proves nothing for another suite's row.
+
 And on the real register, four things the checker cannot say about itself:
 
   * it exits 0 today, so the first run after this lands is green;
@@ -394,6 +409,100 @@ def t_the_five_kinds_all_answer_on_a_real_row():
         check(f"a live `{name}:` row passes", code == 0, out)
 
 
+# ---------------------------------------------------------------------------
+#   A `test:` row cannot be proven by a suite that skipped its substance
+# ---------------------------------------------------------------------------
+
+#: The skip `backend/test_data_backup.py` really prints when the NordLocker
+#: guard is absent - the line claim F11 could not hear before 2026-10-24. Kept
+#: as the suite prints it, so a reworded reason is a visible test change rather
+#: than a quiet widening of what this checker accepts.
+SKIPPED_GUARD = (
+    "skip  a NordLocker locker destination is refused - this build of the tool "
+    "has no refuse_write_into_a_locker - the guard is not in this tree, so "
+    "there is nothing to check")
+
+
+def fake_suite(body: str) -> Path:
+    """A throwaway suite in the temp folder that prints `body` and exits 0.
+
+    It sits outside the repository on purpose: the environment-skip allow-list
+    is keyed by repo-relative suite path, so this one is judged strictly and can
+    be proven only by a clean run.
+    """
+    suite = Path(tempfile.mkstemp(suffix=".py")[1])
+    suite.write_text("import sys\n" + body + "\nsys.exit(0)\n", encoding="utf-8")
+    return suite
+
+
+def t_a_skipped_substance_is_not_proof():
+    """The bite: exit 0, and the suite says out loud that it skipped the guard."""
+    suite = fake_suite(
+        f"print({SKIPPED_GUARD!r})\nprint('')\n"
+        "print('1 passed, 1 skipped, 0 failed')")
+    path = register_with(
+        f"X12\tthe backup refuses a locker\ttest:{suite}\tbuilt\tCLAUDE.md:1\n")
+    code, out = run(str(path))
+    check("a `built` row whose suite exits 0 after skipping the guard exits 1",
+          code == 1, out)
+    check("... and says the suite exited 0 but SKIPPED",
+          "exited 0 but SKIPPED" in out, out)
+    check("... and quotes the skip line, naming the absent guard",
+          "a NordLocker locker destination is refused" in out
+          and "refuse_write_into_a_locker" in out, out)
+    check("... and never prints the happy 'still holds' line",
+          "still holds" not in out, out)
+
+
+def t_a_clean_suite_still_proves_a_row():
+    """The companion: nothing skipped, the row is proven exactly as before."""
+    suite = fake_suite(
+        "print('a clean suite')\nprint('3 passed, 0 skipped, 0 failed')")
+    path = register_with(
+        f"X13\ta claim a clean suite proves\ttest:{suite}\tbuilt\tCLAUDE.md:1\n")
+    code, out = run(str(path))
+    check("a `built` row whose suite exits 0 with no skip still exits 0",
+          code == 0, out)
+    check("... and is counted as built, not withheld", "1 built" in out, out)
+
+
+def t_a_skip_count_with_no_reason_is_not_proof():
+    """A suite's own summary can out a skip the marker scan could not read."""
+    suite = fake_suite("print('1 passed, 1 skipped, 0 failed')")
+    path = register_with(
+        f"X14\ta claim a summary says was skipped\ttest:{suite}\tbuilt\t"
+        f"CLAUDE.md:1\n")
+    code, out = run(str(path))
+    check("a `built` row whose suite reports a skip it did not itemise exits 1",
+          code == 1, out)
+    check("... and says how many were reported and how many could be read",
+          "1 skipped check(s) according to its own summary" in out, out)
+
+
+def t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it():
+    """The bounded half, tested directly: the same `icacls` reason is a machine
+    limit for the suite whose fixture needs it, and no excuse for another
+    suite's row. Without the keying, a substantive skip could hide behind an
+    environment phrase in a suite nobody measured."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
+
+    icacls = ("skip  a directory whose Windows permissions really refuse a write "
+              "- making one needs icacls and this account's own name\n"
+              "1 passed, 1 skipped, 0 failed")
+    check("an `icacls` environment skip leaves its own suite's row proven",
+          check_claims.skip_that_withholds_proof(
+              "backend/test_data_backup.py", icacls) is None, icacls)
+    check("... the same line proves nothing for a suite that never needed it",
+          check_claims.skip_that_withholds_proof(
+              "backend/test_api_doc.py", icacls) is not None, icacls)
+    check("... and the missing-guard skip is never allowed, even for its own "
+          "suite",
+          check_claims.skip_that_withholds_proof(
+              "backend/test_data_backup.py",
+              SKIPPED_GUARD + "\n1 passed, 1 skipped, 0 failed") is not None)
+
+
 if __name__ == "__main__":
     for fn in (t_the_checker_exists, t_the_committed_register_is_green,
                t_list_prints_every_row_it_checked,
@@ -412,7 +521,11 @@ if __name__ == "__main__":
                t_an_unverifiable_row_with_a_reason_is_green,
                t_an_empty_register_is_not_a_pass,
                t_a_missing_register_is_not_a_pass,
-               t_the_five_kinds_all_answer_on_a_real_row):
+               t_the_five_kinds_all_answer_on_a_real_row,
+               t_a_skipped_substance_is_not_proof,
+               t_a_clean_suite_still_proves_a_row,
+               t_a_skip_count_with_no_reason_is_not_proof,
+               t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
