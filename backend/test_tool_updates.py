@@ -34,6 +34,7 @@ and GitHub fetch is a fake function this file supplies. What it proves:
 """
 from __future__ import annotations
 
+import datetime
 import json
 import shutil
 import subprocess
@@ -191,7 +192,10 @@ def t_python_group_outdated_uptodate_and_unreachable(tmp_path=None):
     def installed(name):
         return {"alpha": "1.0.0", "beta": "2.0.0"}.get(name)  # gamma not installed
 
-    g = TU._python_group(d, fetch, installed)
+    # The advisory list is a second PyPI read per OUTDATED package - injected
+    # here so this test opens no socket (2026-10-23).
+    g = TU._python_group(d, fetch, installed,
+                         advisory_fetch=lambda u: {"vulnerabilities": []})
     by_name = {it["name"]: it for it in g["items"]}
     check("alpha is outdated with the exact upgrade command",
           by_name["alpha"]["outdated"] is True
@@ -339,6 +343,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
         crates_fetch=lambda u: {"crate": {"max_stable_version": "1.0.0"}},
         github_fetch=lambda u: {"tag_name": "v0"},
         installed_version=lambda n: None,
+        advisory_fetch=lambda u: {"vulnerabilities": []},
         clock=lambda: 12345.0,
     )
     check("checked_at is the injected clock", report["checked_at"] == 12345.0)
@@ -367,6 +372,217 @@ def t_never_says_vulnerable_or_can_execute_anything():
           "subprocess" not in src and "os.system" not in src and "os.popen" not in src)
     check("the report language says plainly this never installs anything",
           "never install" in TU.DETAIL.lower() or "it never installs" in TU.CARD.lower())
+
+
+# ---------------------------------------------------------------------------
+#   4b. The card-ready evidence (2026-10-23, audit Part 4 item 1)
+# ---------------------------------------------------------------------------
+
+#: A fixed "now" for the age checks: 2026-10-23 12:00 UTC.
+CLOCK = datetime.datetime(2026, 10, 23, 12, 0,
+                          tzinfo=datetime.timezone.utc).timestamp()
+
+
+def t_pinned_line_is_the_exact_lock_line():
+    entries = {e["name"]: e for e in TU.parse_python_lock_entries(LOCK_TEXT)}
+    check("pinned_line is the exact pin, marker kept, hashes dropped",
+          entries["anyio"]["line"] == "anyio==4.15.1 ; python_full_version >= '3.11'",
+          entries["anyio"])
+    check("a plain pin's pinned_line has no marker or hash",
+          entries["beautifulsoup4"]["line"] == "beautifulsoup4==4.15.0",
+          entries["beautifulsoup4"])
+
+
+def t_card_evidence_three_day_old_release():
+    d = TMP / "evidence3"
+    d.mkdir()
+    (d / "requirements.lock").write_text("filelock==4.0.0\n", encoding="utf-8")
+
+    def pypi(url):
+        return {"info": {"version": "4.2.1"},
+                "urls": [{"upload_time_iso_8601": "2026-10-20T09:00:00.000000Z"}]}
+
+    def advisories(url):
+        # The advisory list is asked about the version CURRENTLY PINNED, not
+        # the target (2026-10-23) - an advisory fixed in the target is not a
+        # reason the pinned one needs updating.
+        check("the advisory list is asked about the pinned version, not the target",
+              "filelock/4.0.0" in url, url)
+        return {"vulnerabilities": [
+            {"id": "GHSA-abcd-efgh-ijkl"},
+            {"id": "CVE-2026-0001"},
+            {"id": "CVE-2026-0001"},
+            {"id": "CVE-2026-0002", "withdrawn": True},
+        ]}
+
+    g = TU._python_group(d, pypi, lambda n: None, clock=lambda: CLOCK,
+                         advisory_fetch=advisories)
+    item = g["items"][0]
+    check("a 3-day-old release carries the card evidence (eligible false)",
+          item["outdated"] is True and item["target"] == "4.2.1"
+          and item["pinned_line"] == "filelock==4.0.0"
+          and item["released"] == "2026-10-20" and item["age_days"] == 3
+          and item["eligible_after_7_days"] is False and item["bump"] == "minor", item)
+    check("advisory ids are parsed, deduplicated and a withdrawn one is left out",
+          item["advisories"] == ["CVE-2026-0001", "GHSA-abcd-efgh-ijkl"],
+          item["advisories"])
+    check("an outdated row keeps the keys it always had",
+          item["latest"] == "4.2.1"
+          and item["command"] == "py -3 -m pip install --upgrade filelock", item)
+
+
+def t_card_evidence_ten_day_old_release_and_unknown_date():
+    d = TMP / "evidence10"
+    d.mkdir()
+    (d / "requirements.lock").write_text("alpha==1.9.0\nbeta==2.0.0\n", encoding="utf-8")
+
+    def pypi(url):
+        if url.endswith("/alpha/json"):
+            return {"info": {"version": "2.0.0"},
+                    "urls": [{"upload_time_iso_8601": "2026-10-13T23:00:00Z"}]}
+        return {"info": {"version": "2.1.0"}}     # beta: no date at all
+
+    g = TU._python_group(d, pypi, lambda n: None, clock=lambda: CLOCK,
+                         advisory_fetch=lambda u: {"vulnerabilities": []})
+    by = {it["name"]: it for it in g["items"]}
+    alpha = by["alpha"]
+    beta = by["beta"]
+    check("a 10-day-old release is eligible after the owner's seven days",
+          alpha["released"] == "2026-10-13" and alpha["age_days"] == 10
+          and alpha["eligible_after_7_days"] is True, alpha)
+    check("a major bump is labelled major", alpha["bump"] == "major", alpha["bump"])
+    check("an empty advisory list is just 'none listed' - a plain empty list",
+          alpha["advisories"] == [])
+    check("an unknown release date gives released/age/eligibility null, never a guess",
+          beta["released"] is None and beta["age_days"] is None
+          and beta["eligible_after_7_days"] is None, beta)
+
+
+def t_bump_kinds():
+    check("patch/minor/major are labelled from the version numbers",
+          TU._bump_kind("1.2.3", "1.2.4") == "patch"
+          and TU._bump_kind("1.2.3", "1.3.0") == "minor"
+          and TU._bump_kind("1.2.3", "2.0.0") == "major", (
+              TU._bump_kind("1.2.3", "1.2.4"),
+              TU._bump_kind("1.2.3", "1.3.0"),
+              TU._bump_kind("1.2.3", "2.0.0")))
+    check("a short or unplaceable version is unknown, never guessed",
+          TU._bump_kind("1.0", "1.0.1") == "patch"
+          and TU._bump_kind("1.0.9", "1.1") == "minor"
+          and TU._bump_kind("nightly", "1.0.0") == "unknown"
+          and TU._bump_kind("1.0.0", "1.0.0") == "unknown", (
+              TU._bump_kind("1.0", "1.0.1"),
+              TU._bump_kind("1.0.9", "1.1"),
+              TU._bump_kind("nightly", "1.0.0")))
+
+
+def t_advisory_failure_is_a_note_not_a_crash():
+    d = TMP / "evidence-fail"
+    d.mkdir()
+    (d / "requirements.lock").write_text("delta==1.0.0\n", encoding="utf-8")
+
+    def pypi(url):
+        return {"info": {"version": "1.2.0"},
+                "urls": [{"upload_time_iso_8601": "2026-10-20T00:00:00Z"}]}
+
+    def no_network(url):
+        raise urllib.error.URLError("no network")
+
+    g = TU._python_group(d, pypi, lambda n: None, clock=lambda: CLOCK,
+                         advisory_fetch=no_network)
+    item = g["items"][0]
+    check("a failed advisory read does not crash the report",
+          len(g["items"]) == 1 and item["outdated"] is True, item)
+    check("... it lands as a note on that row; advisories is null, never an empty "
+          "list that would read as 'none listed'",
+          item["advisories"] is None
+          and "advisory list could not be read" in (item.get("note") or ""), item)
+    check("... the note never calls the missing list safe or otherwise reassuring",
+          "safe" not in (item.get("note") or "").lower()
+          and "vulnerab" not in (item.get("note") or "").lower(), item.get("note"))
+    check("... the rest of the row's evidence is still there",
+          item["target"] == "1.2.0" and item["released"] == "2026-10-20"
+          and item["age_days"] == 3 and item["eligible_after_7_days"] is False, item)
+
+
+def t_rust_evidence_fields():
+    d = TMP / "rust-evidence"
+    d.mkdir()
+    (d / "rust-crates.lock").write_text("""\
+[[package]]
+name = "serde"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "libc"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+""", encoding="utf-8")
+
+    def crates(url):
+        if url.endswith("/serde"):
+            return {"crate": {"max_stable_version": "1.2.0"},
+                    "versions": [{"num": "1.2.0",
+                                  "created_at": "2026-10-13T10:00:00.000Z"},
+                                 {"num": "1.0.0",
+                                  "created_at": "2025-01-01T00:00:00Z"}]}
+        return {"crate": {"max_stable_version": "0.2.0"}, "versions": []}
+
+    g = TU._rust_group(d, crates, clock=lambda: CLOCK)
+    by = {it["name"]: it for it in g["items"]}
+    serde, libc = by["serde"], by["libc"]
+    check("a Rust row carries the target, release date/age, eligibility and bump",
+          serde["target"] == "1.2.0" and serde["released"] == "2026-10-13"
+          and serde["age_days"] == 10 and serde["eligible_after_7_days"] is True
+          and serde["bump"] == "minor", serde)
+    check("Rust advisories are null with the honest note, not an invented list",
+          serde["advisories"] is None
+          and serde["note"] == "Rust crates are not checked for advisories", serde)
+    check("an up-to-date Rust row carries no new evidence keys at all",
+          "released" not in libc and "target" not in libc
+          and "advisories" not in libc, libc)
+
+
+def t_no_default_fetch_when_fakes_are_injected():
+    d = TMP / "offline"
+    d.mkdir()
+    (d / "requirements.lock").write_text("alpha==1.0.0\n", encoding="utf-8")
+    (d / "rust-crates.lock").write_text("""\
+[[package]]
+name = "serde"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+""", encoding="utf-8")
+    saved = (TU._default_pypi_fetch, TU._default_crates_fetch, TU._default_github_fetch)
+
+    def boom(url):
+        raise AssertionError("a default fetch was used - this test would touch the network")
+
+    try:
+        TU._default_pypi_fetch = boom
+        TU._default_crates_fetch = boom
+        TU._default_github_fetch = boom
+        report = TU.run_check(
+            backend_dir=d,
+            pypi_fetch=lambda u: {"info": {"version": "1.5.0"},
+                                  "urls": [{"upload_time_iso_8601":
+                                            "2026-10-20T00:00:00Z"}]},
+            crates_fetch=lambda u: {"crate": {"max_stable_version": "1.2.0"},
+                                    "versions": [{"num": "1.2.0",
+                                                  "created_at": "2026-10-20T00:00:00Z"}]},
+            github_fetch=lambda u: {"tag_name": "v0"},
+            installed_version=lambda n: None,
+            advisory_fetch=lambda u: {"vulnerabilities": []},
+            clock=lambda: CLOCK,
+        )
+        check("every fetch is the injected callable - a fake is never bypassed "
+              "for a real one", report["total_outdated"] == 2, report["total_outdated"])
+    except AssertionError as exc:
+        check("every fetch is the injected callable - a fake is never bypassed "
+              "for a real one", False, str(exc))
+    finally:
+        TU._default_pypi_fetch, TU._default_crates_fetch, TU._default_github_fetch = saved
 
 
 # ---------------------------------------------------------------------------
@@ -622,6 +838,11 @@ if __name__ == "__main__":
                t_rust_group_dedupes_by_name_and_flags_outdated, t_rust_group_missing_lock_says_so,
                t_github_group_empty_by_default_and_rate_limit_warns, t_run_check_shape_and_summary,
                t_never_says_vulnerable_or_can_execute_anything,
+               t_pinned_line_is_the_exact_lock_line,
+               t_card_evidence_three_day_old_release,
+               t_card_evidence_ten_day_old_release_and_unknown_date,
+               t_bump_kinds, t_advisory_failure_is_a_note_not_a_crash,
+               t_rust_evidence_fields, t_no_default_fetch_when_fakes_are_injected,
                t_not_approved_needs_a_card_only_a_yes_runs_it,
                t_denied_or_timed_out_leaves_it_unapproved,
                t_already_approved_never_calls_the_gate_again,
