@@ -2940,3 +2940,40 @@ are gone, and the window keeps the owner's own layouts:
 
 
 **Decided 2026-10-22, HUD H4 (the safety rail): three safety facts get a fixed home no layout can hide (owner: "fully editable" must never mean "editable into hiding a safety fact").** The HUD now carries one fixed `#hud-safety` strip, owned by the shell and OUTSIDE every editable region: it is not a card, not in `CARD_REGISTRY`, has no layout-document entry, and no preset, import, hand-edited settings file or edit-mode action can hide or move it (tests pin the absence; a hostile saved document naming such cards is dropped by the normaliser, the strip stays visible with it and with a non-default preset, and it is visible in edit mode with the line "Always visible — no layout can hide this"). It shows (a) **App lock is on** (`App lock is on. This window hides when you step away, and approvals wait until you're back.`) or **memory lists are hidden** (`Memory lists are hidden until you unlock.`), read through the ALREADY-GRANTED `get_lock_flags` (two booleans, no token, no new capability); (b) **queue-scoped rush/outside-text evidence** derived from the pending queue's `raised` object the page already polls — the words are "Something Jarvis read tried to rush you on the card that is waiting… Take your time — this can never be hidden.", and the banner disappears when the queue no longer carries such a row. It deliberately does NOT claim the persistent ten-minute rush latch is armed: that latch lives only on the owner's PC and has no read on the HUD's fixed allowlist (a backend read is an approved follow-up for a later deploy wave — H4 adds none). (c) **Catching up with your PC… Approvals wait for the link; Deny still works.** — while the link is stale the card's **Approve is disabled** with the words tied to it (`aria-describedby`) and **Deny stays enabled**, matching Rust's own `stale_answer_refusal` (only an APPROVED decision is held); an offline link shows Rust's own first sentence. The actual App-lock "locked" state still HIDES the HUD window (Rust) and there is deliberately no in-page locked overlay (it could never be seen) — a documented non-goal, not a gap. No new command, permission, capability, inline script (count stays 4), CSP change or deploy: one new external module `hud-safety.js` imported by the page's existing module block, three byte-identical HUD copies, and the strip is silent when linked (the one status row already says it). Tests: `tests/hud-safety.mjs` (words matrix, queue-scoped wording pinned, Approve-held/Deny-enabled, hostile import, no new grant, no file/blob path, un-hideable pins) plus the H4 block in `tests/hud.mjs` (catching up with a pending card, offline, App-lock and hidden-lists chips with no card raised, escaped rush quote with no DOM injection, edit mode cannot hide it, geometry at 1280×820 and 1024×768 at DPR 1 and 900×600 at DPR 1.5, with the strip click-through so the protected bar launcher, quickbar, composer, approvals buttons and the real fixed Stop everything control (#742, `#hud-stop`) are never covered or pointer-blocked, reduced motion, a real Deny click reaching `decide_approval`). Honest limits: `get_lock_flags` is polled (boot, focus, visibility, a 20 s beat) so the chip can lag by that beat; the real lock-screen experience is a field-test row (BLOCKED until driven on the PC, never a pass); the rail's visual weight is the owner's judgement.
+
+## 2026-10-23 - Q1: four approval cards wait for the owner; every other card still expires
+
+**Decided 2026-10-23, Q1 (card expiry). Written into this record on 2026-10-24, because the
+decision was carried into the code and the other docs but not into this log; the owner's
+original wording is not recoverable from the repository, so this entry records the
+decision's shape rather than pretending to quote it.** The earlier rescue work
+(`rescue/card-expiry-never-expires`, 2026-10-13) had exempted **23** gate actions from the
+expiry clock. Ruling Q1 refused that scope: a stale "yes" on a card that loosens a rule is a
+time bomb, so only the interactive ceremonies that need the owner at the PC may wait without
+a deadline.
+
+The exempt set is exactly four gate action ids, decided by the gate's own ids in
+`backend/no-expiry-cards.patch`:
+
+- `pair_device`, `unretire_shared_key` - pairing a device (its card, and the old shared
+  key's "bring back");
+- `register_approval_key` - registering a phone's approval key;
+- `restore_backup` - restoring a backup.
+
+Every other card keeps `#378`'s window - 900 seconds in the shipped configuration since
+2026-10-13, changeable in Settings - including "forget a time frame" and every switch that
+loosens a rule (web search, reading tools, notifications, learning, limits, the voice bar).
+**Waiting is still not approving:** a never-expiring card runs nothing until a person
+answers it, a denial is still a denial, and a cancelled or replaced pairing/key card is
+withdrawn and no longer answerable. There is no way for a caller to ask for "no deadline":
+`timeout_for(action)` turns `None`, `0`, a negative number, a malformed name or an unknown
+value into the ordinary timeout, and a caller's own `timeout=` can only shorten the wait.
+
+**The costs, said plainly.** A card with no clock cannot clean itself up: a pairing or
+approval-key card whose session is cancelled or replaced is taken off the list by
+`jarvis_gate.withdraw()`, and a restore card whose waiting thread died (an app restart)
+stays pending until it is denied or re-raised - the documented cost of no clock. The
+implementation and its evidence are in `backend/no-expiry-cards.patch`,
+`backend/test_gate_no_expiry.py` (170 checks), `docs/ARCHITECTURE.md` section 2,
+`backend/README.md` and `docs/JARVIS-API.md` (`expires_in`), and the rescue pull request is
+#773.
