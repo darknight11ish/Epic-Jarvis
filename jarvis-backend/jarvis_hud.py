@@ -2235,11 +2235,9 @@ STATIC_ASSETS = {
     "/animal-shared.js": ("animal-shared.js", "text/javascript; charset=utf-8"),
     "/hud-layout.js": ("hud-layout.js", "text/javascript; charset=utf-8"),
     "/hud-layout-store.js": ("hud-layout-store.js", "text/javascript; charset=utf-8"),
-    # PWA Slice 2 (the browser bridge) and Slice 3b (the home-screen manifest,
-    # the service worker and its icons) are all real files now (2026-10-23):
-    # the page links the manifest, the bridge registers the worker in a secure
-    # context, and the manifest names the icons. Every entry in this whitelist
-    # is served from beside the server - none is a planned stub.
+    # PWA Slice 2's bridge and Slice 3b's manifest, worker and icons are real
+    # files now (2026-10-23): the page links the manifest and the bridge
+    # registers the worker; every entry here is served from beside the server.
     "/hud-web-bridge.js": ("hud-web-bridge.js", "text/javascript; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
     "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
