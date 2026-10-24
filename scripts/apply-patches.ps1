@@ -1878,6 +1878,7 @@ $SHIPPED = @(
     # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
     'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)
     'jarvis_live_photo_test.py'  # the camera's photo test: run once, when the 12 GB card is in; a pass is what lets the camera switch appear on the phone
+    'jarvis_live_stream.py'      # the phone's persistent Live stream (Slice G/G2): the minimal RFC 6455 transport behind `[live] stream` (OFF by default) on the frozen /api/live/stream route; no audio is read while the switch is off
     # --- "Forget a time frame" (2026-09-28): a checked list, ONE card, 10 minutes to undo ---
     'jarvis_forget_range.py'     # forget-range.patch: GET/POST /api/memory/forget_range, /preview and /undo; jarvis_quick.py (already SHIPPED) calls it for "forget what you learned last week"
     # --- "Chat with customer support for me" (2026-09-28): Groupon first; the details card, an offer card per offer, identity checks and "are you a bot?" handed to the owner ---
