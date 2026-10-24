@@ -4,5 +4,5 @@
   "module": "jarvis_docker",
   "install": "handler",
   "replaces_patch": "docker.patch",
-  "stack_order": 129
+  "stack_order": 130
 }

@@ -4,5 +4,5 @@
   "module": "jarvis_screen_attach",
   "install": "handler",
   "replaces_patch": "screen-attach.patch",
-  "stack_order": 130
+  "stack_order": 131
 }

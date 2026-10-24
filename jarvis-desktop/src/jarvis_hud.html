@@ -639,6 +639,19 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:120ms !important;}
 }
 
+/* The window itself is hidden or minimised (P8 idle work, 2026-10-23): pause
+   the page's two infinite CSS animations - the streaming caret and the pressed
+   talk button - so nothing is composed for a window nobody can see. The map's
+   drawing loop is stopped in script on the same event. The live paths are NOT
+   touched: the stream and its reconnect, the approval reads, speech, and the
+   face iframe's own lifecycle all keep running. `animation-play-state` only
+   pauses animations, so state changes still paint normally. */
+html.hud-window-hidden *,
+html.hud-window-hidden *::before,
+html.hud-window-hidden *::after{
+  animation-play-state:paused !important;
+}
+
 /* ---- approval queue -------------------------------------------------- */
 #approvals{ display:flex; flex-direction:column; gap:10px; margin:0 0 14px; }
 .appr{
@@ -3031,7 +3044,7 @@ const galaxy = (() => {
 
     for(let i=0;i<260;i++) step(0.9);   // pre-warm off-screen
     fitCamera();
-    if(!running){ running = true; requestAnimationFrame(draw); }
+    setRunning(S.view === "brain");   // only while the map is the view on screen (P8 idle, 2026-10-23)
     buildLegend(graph);
     if(!overlayEl) overlayEl = document.getElementById("galaxy-overlay");
     syncOverlay();
@@ -3101,7 +3114,27 @@ const galaxy = (() => {
     return { x: W/2 + x*k, y: H/2 + y*k, k, depth };
   }
 
+  /** True only when the drawing loop has a reason to run: the Brain map is
+   *  the view on screen AND the window itself is visible. A hidden window, or
+   *  the Conversation view, must not keep stepping a picture nobody can see
+   *  (P8 idle work, 2026-10-23). */
+  function shouldRun(){ return !document.hidden && S.view === "brain"; }
+
+  /** Arm (start) or disarm (stop) the one drawing loop. Idempotent: the loop
+   *  only re-arms itself while shouldRun() stays true. */
+  function setRunning(on){
+    const want = !!on && shouldRun();
+    if(want === running) return;
+    running = want;
+    if(running) requestAnimationFrame(draw);
+  }
+
+  /** The view or the window's visibility changed: keep the loop in step with
+   *  what is really on screen. */
+  function syncRunning(){ setRunning(shouldRun()); }
+
   function draw(ts){
+    if(!shouldRun()){ running = false; return; }
     if(nodes.length){
       step(0.32);
       if(spin && !dragging && !S.reduced) yaw += 0.0016;
@@ -3368,7 +3401,7 @@ const galaxy = (() => {
   }
 
   return {
-    load, resize, setTrace, flyTo,
+    load, resize, setTrace, flyTo, setRunning, syncRunning,
     reset(){ clearFocus(); yaw=.5; pitch=-.25; fitCamera(); },
     search(v){ query = v; },
     toggleSpin(){ spin = !spin; return spin; },
@@ -3849,6 +3882,7 @@ function setView(v){
   $("stage-title").textContent = v === "talk" ? "Conversation" : "Brain map";
   if(v === "brain") requestAnimationFrame(() => galaxy.resize());
   reactor.show(v === "talk");
+  galaxy.syncRunning();
 }
 document.querySelectorAll(".mode").forEach(b =>
   b.addEventListener("click", () => setView(b.dataset.view)));
@@ -4741,6 +4775,7 @@ function apprCutOff(p){
 
 /* How long each card has left, repainted each second while any is shown. */
 function apprTick(){
+  if(document.hidden) return;   // the countdown is visible text; nothing to repaint unseen
   const now = Date.now();
   document.querySelectorAll("#approvals .appr[data-deadline]").forEach(el => {
     const line = el.querySelector(".left");
@@ -4795,7 +4830,19 @@ async function apprDecide(id, ok, el){
   setTimeout(() => { el.remove(); apprPoll(); }, 1200);
 }
 
-document.addEventListener("visibilitychange", () => { if(!document.hidden) apprPoll(); });
+/* The page's own visibility, for the drawing loop and the two infinite CSS
+   animations (P8 idle work, 2026-10-23). A hidden window stops the Galaxy
+   drawing loop and pauses the animations; it does NOT pause the live paths -
+   the event stream and its reconnect, the approval reads, speech, or the face
+   iframe's own lifecycle. On return the map is re-measured once (a resize while
+   hidden cannot leave stale dimensions) and the countdowns are refreshed. */
+document.documentElement.classList.toggle("hud-window-hidden", document.hidden);
+galaxy.syncRunning();
+document.addEventListener("visibilitychange", () => {
+  document.documentElement.classList.toggle("hud-window-hidden", document.hidden);
+  galaxy.syncRunning();
+  if(!document.hidden){ galaxy.resize(); apprTick(); apprPoll(); }
+});
 apprPoll();
 
 /* ---------------------------------------------------------------------- *

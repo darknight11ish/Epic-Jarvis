@@ -2570,7 +2570,7 @@ object JarvisRuntime {
     // and ui/screens/WebSearchPlate.kt. The phone chooses the provider, sets
     // the SearXNG address, turns "Ask before every web search" on or off (off
     // raises ONE approval card on the PC) and runs a test search. It never
-    // takes an Exa, Tavily or Brave key: those are typed on the PC only.
+    // takes an Exa, Tavily, Brave or DeepSeek key: those are typed on the PC only.
 
     /** `GET /api/search`. A read: never held. */
     suspend fun webSearch(): ApiResult<JsonObject> = api.webSearch()
