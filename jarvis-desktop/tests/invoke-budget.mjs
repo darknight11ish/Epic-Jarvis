@@ -57,7 +57,8 @@ await check("a small backend call gets 30 s, whether it is a read or an action",
 await check("the network gets longer, and data work gets longer still", async () => {
   assert.ok(B.budgetFor("check_tool_updates") > B.READ_BUDGET_MS,
     "a network check is bounded like a loopback read");
-  for (const cmd of ["backup_now", "restore_backup", "delete_older_backups", "set_backup_folder"]) {
+  for (const cmd of ["backup_now", "finish_phone_backup", "restore_backup",
+    "delete_older_backups", "set_backup_folder"]) {
     assert.ok(B.budgetFor(cmd, "action") >= 600_000,
       `${cmd} is bounded like a status read - it copies data or waits on a card`);
   }

@@ -3048,3 +3048,64 @@ The "one approval card per update" policy remains the chosen self-update shape
 and is still unbuilt.
 
 **Decided 2026-10-23, Galaxy Phase G0 (the owner chose A/A: three flat layouts first, the rich 3D presets later).** The Brain window's Galaxy gets **three flat layouts beside the constellation** - **Star map**, **Clean tree** and **Zen ring** - chosen from a chip row in the Galaxy bar or the **6/7/8** keys while the picture has focus; pressing the same key again returns to the constellation. The five rich presets the rework blueprint lists are shown in the same row as disabled "not built yet" chips. The layouts are a **pure, deterministic module** (`jarvis-desktop/src/galaxy-presets.js`) that only moves the nodes the existing renderer already draws: no node, link, label rule, cap, backend route, permission, approval card, dependency or PC write is added, and the choice is remembered on this device (`jarvis.galaxy.preset`, the Brain window's own local storage - no PC copy), with a corrupt value falling back to the constellation. It is the **desktop Brain window's alone**: the phone deliberately has no memory graph, and the editable HUD stage keeps its own renderer until G1 shares the layout maths - recorded in `docs/ARCHITECTURE.md` §8. Two small defects found by the follow-up audit were fixed before the pull request: the Fit button and the `0` key now use the flat layouts' wider margin, and switching away during the constellation's ~1.3 s assembly no longer saves a part-assembled picture for the return. **Also fixed in passing:** the constellation's labels were half a stage to the left of their dots (a shipped bug: `margin-left: -50%` resolved against the stage width), now `translate: -50% 0`. Honest limits: the guide drawing and the label look on the real WebView2 window/monitor are NOT-TESTABLE here (never counted as a pass); the five rich presets, the same layouts in the big HUD window, the icon packs and the phone version are later phases. Built in `brain.js`/`brain.css`/`brain.html`, `galaxy-presets.js`; proved by `jarvis-desktop/tests/galaxy-presets.mjs` plus the existing galaxy suites.
+
+## 2026-10-24 - a backup started on the phone is finished with ONE TAP on the phone
+
+The owner upgraded the 2026-10-13 rule "a phone may ask, only the PC may write",
+and replaced the morning's 2026-10-24 decision ("let the PC finish a backup the
+phone started", finished from Settings, Backups with the typed code). After the
+phone shows the recovery code and the owner ticks "I have written this code down
+somewhere safe", pressing the phone's finish button now makes the PC write the
+backup - no step on the PC. The one-time code the phone holds IS the
+authorisation; the write still physically happens on the PC's disk, by the PC's
+backend, and only the trigger comes from the paired phone. `POST
+/api/backup/commit` therefore no longer refuses a caller for not being the PC: a
+live run minted by `prepare`, its exact one-time code and the 15-minute TTL are
+what authorise a write. The PC's typed-code finish stays as the fallback for a
+run the phone left waiting, on the same route.
+
+The residual risk, named rather than hidden: the "I saved it" tick is a
+client-side promise inside the phone app, not something the PC can check. A
+modified or misused paired phone could therefore make the PC write a backup
+whose recovery code was never kept - an unopenable file - and because making a
+new backup deletes the oldest of the five kept, it also pushes the oldest one
+out. The owner accepted that on 2026-10-24 rather than leave a run the phone
+could never finish.
+
+What stays PC-only, unchanged: restoring (Windows Hello, `restore_backup`),
+choosing the backup folder (the Windows picker), listing the files on the PC's
+disk, and deleting older copies. `docs/JARVIS-API.md` §45 and
+`docs/ARCHITECTURE.md` §8 carry the rule; the phone's screen says "Nothing has
+been written yet" before the press and "Your PC wrote the backup" only after the
+PC reports a file.
+
+**Narrowed the same day on Gemini's ruling (Q-A, the asker guard).** The
+one-tap decision above left the code as the whole authorisation, so any paired
+device that learned the code could finish someone else's run. The finish is now
+BOUND: `prepare` records the caller's device identity in the live run - the
+same `handler._jarvis_device` identity `jarvis_devices` stamps on every request
+("pc", "shared", or a paired device's id), never a new header or token - and
+`commit` is accepted only from the device that minted the run or from this PC
+(the typed-code fallback). Any other paired device holding the same code gets
+403 with plain words: nothing was written, the folder is unchanged, and the run
+is NOT spent, so its real finisher can still use it; the device is checked
+before the code, so the route is no code oracle. Two limits are stated rather
+than hidden: a run minted with NO recorded identity (a backend without
+`jarvis_devices`, or a direct in-process call) cannot be bound, so possession
+of the live code still decides, exactly as before; and the legacy shared key is
+one identity (`shared`) for every holder until the first device is paired. The
+guard does not close the token-churn gap - a token holder can prepare and then
+commit as the device that minted its own run.
+
+**Also on the same ruling (Q-F).** A commit that has CLAIMED the run and then
+cannot write now always records `last_attempt.ok: false`, including the 409
+when the folder has gone - that path used to record nothing, so the phone's
+status line could still show the PREVIOUS run's success over a run that wrote
+nothing; the response shape and status are unchanged. And a partial/truncated
+`.jbak` left by a cut-short copy or a failed write is never counted as a valid
+backup (`list_backups`' own completeness rule, the same one retention uses),
+while a later successful write still produces the right, openable file.
+`backend/test_backup.py` proves the failure, the byte-for-byte unchanged
+folder, the unchanged kept count, the truncated file not counting, and the
+later success - each with the negative-control numbers recorded in the branch's
+own report.

@@ -745,11 +745,16 @@ permissions = [
   # Setting the folder reuses the Windows folder picker above and raises
   # one approval card, held on a stale link; "Back up now" and listing are
   # reads/no-card actions; restoring is one card that always needs Windows
-  # Hello, held on a stale link.
+  # Hello, held on a stale link. `finish-phone-backup` (2026-10-24) is the
+  # fallback for a backup the PHONE started and left waiting: the code that
+  # phone showed, typed here. (The phone's own finish press writes it too, on
+  # the same route.) The write stays on this PC, so it raises no card and is
+  # not held on a stale link, exactly like "Back up now".
   "allow-get-backup",
   "allow-list-backups",
   "allow-set-backup-folder",
   "allow-backup-now",
+  "allow-finish-phone-backup",
   "allow-preview-restore",
   "allow-restore-backup",
   "allow-delete-older-backups",

@@ -67,6 +67,13 @@ const LIST_PATH: &str = "/api/backup/list";
 const PREVIEW_PATH: &str = "/api/backup/restore/preview";
 const RESTORE_PATH: &str = "/api/backup/restore";
 const DELETE_OLDER_PATH: &str = "/api/backup/delete-older";
+/// The route a PHONE-started run is written with, from either side (2026-10-24,
+/// the owner's decision). The route already existed and is unchanged: since the
+/// one-tap upgrade any caller holding the run's one-time code may commit, so
+/// the phone's own finish press AND this PC's typed-code fallback both use it -
+/// and the write itself is still done here, by the backend, into this PC's
+/// folder.
+const COMMIT_PATH: &str = "/api/backup/commit";
 
 /// What a backend without `jarvis_backup.py` / `backup.patch` is told. The
 /// phone says the same about its read-only status line.
@@ -116,7 +123,8 @@ pub(crate) fn read_answer(status: u16, body: &str) -> Result<serde_json::Value, 
 /// A change's answer (setting the folder, backing up, previewing or
 /// restoring): the PC's own body on a 2xx (200 done, 202 a card is up),
 /// [`BACKUP_MISSING`] from a PC without the route, and the PC's own
-/// sentence otherwise (403 the PC only, 400 a wrong code or bad folder,
+/// sentence otherwise (traditionally 403 the PC only, 400 a wrong code or bad
+/// folder,
 /// 409 no folder set / already waiting).
 pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
     if (200..300).contains(&status) {
@@ -448,6 +456,35 @@ pub async fn backup_now(app: AppHandle) -> Result<serde_json::Value, String> {
     post(&app, NOW_PATH, serde_json::json!({}), BACKUP_TIMEOUT).await
 }
 
+/// "Write it" under "A backup was started from your phone": finishes the run
+/// the PHONE asked for, using the recovery code the phone showed (2026-10-24).
+///
+/// The body is exactly `{"code": ...}` - `request_commit` compares only the
+/// code, never the run's `id`, so the PC needs nothing from the phone but what
+/// the owner wrote down. The route is the existing `/api/backup/commit`; no
+/// route was added and the gate on it is untouched. This is the FALLBACK now:
+/// since the owner's one-tap upgrade the phone's own finish press writes the
+/// file, and this command exists for a run the phone left waiting (phone
+/// unavailable) - the same route, the same code, the same one-file guarantee.
+///
+/// **NOT held on a stale link** ([`held_on_stale`]), exactly like "Back up
+/// now": it raises no approval card, so there is no card's answer to wait for.
+/// The write is the owner's own click with the code in hand - rule 4 is about
+/// approvals, and none is raised anywhere on this path.
+#[tauri::command]
+pub async fn finish_phone_backup(
+    app: AppHandle,
+    code: String,
+) -> Result<serde_json::Value, String> {
+    post(
+        &app,
+        COMMIT_PATH,
+        serde_json::json!({ "code": code }),
+        BACKUP_TIMEOUT,
+    )
+    .await
+}
+
 /// Pick a file, type its recovery code, see counts and a date - never
 /// content. Changes nothing.
 #[tauri::command]
@@ -500,7 +537,8 @@ pub async fn delete_older_backups(app: AppHandle) -> Result<serde_json::Value, S
 mod tests {
     use super::{
         change_answer, destination_problem, drive_of, held_on_stale, inside, other_drive_note,
-        read_answer, BACKUP_MISSING, DELETE_OLDER_PATH, FOLDER_PATH, NOW_PATH, RESTORE_PATH,
+        read_answer, BACKUP_MISSING, COMMIT_PATH, DELETE_OLDER_PATH, FOLDER_PATH, NOW_PATH,
+        RESTORE_PATH,
     };
     use std::path::{Path, PathBuf};
 
@@ -550,6 +588,68 @@ mod tests {
         assert!(!held_on_stale(NOW_PATH));
         assert!(!held_on_stale(super::LIST_PATH));
         assert!(!held_on_stale(super::PREVIEW_PATH));
+        // "Write it" under the phone's run raises NO card, exactly like "Back up
+        // now", so it must not be held: being held would refuse the owner's own
+        // click on a link that is merely catching up, for a card that never was.
+        assert!(!held_on_stale(COMMIT_PATH));
+    }
+
+    /// The PC finishes a run the PHONE started (2026-10-24). The route is the
+    /// EXISTING commit route - not a new one - and the body is exactly the code
+    /// the phone showed, because the backend compares only `body["code"]` and
+    /// never the run's id.
+    #[test]
+    fn finishing_a_phone_started_backup_uses_the_existing_commit_route() {
+        assert_eq!(COMMIT_PATH, "/api/backup/commit");
+        assert_eq!(COMMIT_PATH, format!("{}/commit", super::PATH));
+        let source = include_str!("backup.rs");
+        let rest = source
+            .split("pub async fn finish_phone_backup(")
+            .nth(1)
+            .expect("finish_phone_backup is in this file");
+        let command = rest.split("#[tauri::command]").next().unwrap_or(rest);
+        assert!(
+            command.contains("COMMIT_PATH"),
+            "it posts to the commit route"
+        );
+        assert!(
+            command.contains(r#"serde_json::json!({ "code": code })"#),
+            "the body is exactly the code, and nothing else: {command}"
+        );
+    }
+
+    /// A dead run (409 `COMMIT_NO_RUN`) and a wrong code (400
+    /// `COMMIT_WRONG_CODE`) both arrive as the backend's own plain words, so the
+    /// panel cannot invent a friendlier - and false - second explanation.
+    ///
+    /// The old 403 `pc_only` sentence is deliberately NOT pinned any more
+    /// (2026-10-24, the owner's one-tap decision): any caller holding the live
+    /// run's code may commit, so there is no device refusal left in this route
+    /// to reproduce on the panel.
+    #[test]
+    fn a_refused_finish_is_the_backends_own_sentence() {
+        let gone = "That backup run has expired or was never started, so nothing was written. \
+                    Ask for a backup again from your phone.";
+        let err = change_answer(
+            409,
+            &serde_json::json!({"ok": false, "error": gone}).to_string(),
+        )
+        .unwrap_err();
+        assert_eq!(err, gone);
+        assert!(err.contains("nothing was written"), "{err}");
+
+        let wrong = "That is not the code for the backup waiting to be written, so nothing was \
+                     written and your folder is unchanged. Ask for a backup again.";
+        let err = change_answer(
+            400,
+            &serde_json::json!({"ok": false, "error": wrong}).to_string(),
+        )
+        .unwrap_err();
+        assert_eq!(err, wrong);
+        assert!(
+            err.contains("nothing was written"),
+            "the refusal says nothing was written: {err}"
+        );
     }
 
     /// The folders the two refusals below are about. What is *in* them does not

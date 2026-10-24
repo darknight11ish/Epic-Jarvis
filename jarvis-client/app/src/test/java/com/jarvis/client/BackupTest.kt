@@ -218,9 +218,15 @@ class BackupTest {
         assertNull(Backup.written(obj("""{"ok":true}""")))
         assertEquals("nothing was written",
             Backup.refusalWords(obj("""{"ok":false,"error":"nothing was written"}""")))
-        // And a refusal with no words is translated from the PC's status code.
-        assertTrue(Backup.commitRefusal(ApiError.Server(403, "")).contains("Your PC"))
+        // And a refusal with no words is translated from the PC's status code:
+        // 409 and 400 both mean the run is gone. There is deliberately no 403
+        // translation any more (2026-10-24): the commit route no longer refuses
+        // a caller for not being the PC, and a 403 that does arrive (the
+        // server's own origin or token check) carries no `ok` key, so
+        // JarvisApi turns it into BadToken before this is asked.
         assertTrue(Backup.commitRefusal(ApiError.Server(409, "")).contains("expired"))
+        assertTrue(Backup.commitRefusal(ApiError.Server(400, "")).contains("expired"))
+        assertEquals("", Backup.commitRefusal(ApiError.Server(403, "")))
         assertEquals("", Backup.commitRefusal(ApiError.BadToken))
     }
 
@@ -293,6 +299,110 @@ class BackupTest {
         assertFalse("the ask is not held, because it writes nothing",
             Regex("suspend fun prepareBackup[\\s\\S]{0,200}actionBlocker\\(\\)")
                 .containsMatchIn(runtime))
+    }
+
+    @Test
+    fun thePhoneSaysTheBackupIsWrittenOnlyAfterItLands() {
+        // 2026-10-24, the owner's upgraded decision: the phone's finish press
+        // is ONE TAP and the PC writes the file, so the label may - must - say
+        // what it does again. The A0 bug was the opposite: the dialog said
+        // "your PC wrote the backup" the moment it opened, before the press.
+        assertEquals("I have saved the code - write the backup", Backup.COMMIT_LABEL)
+        assertTrue("the label says what the press does:\n${Backup.COMMIT_LABEL}",
+            Backup.COMMIT_LABEL.contains("write the backup"))
+
+        // The honest pre-press line: nothing exists, and the press is what
+        // makes the file. It names the code as the only way in.
+        assertTrue("the pre-press line exists:\n${Backup.NOTHING_WRITTEN_YET}",
+            Backup.NOTHING_WRITTEN_YET.contains("Nothing has been written yet"))
+        assertTrue("... and it names what the press does:\n${Backup.NOTHING_WRITTEN_YET}",
+            Backup.NOTHING_WRITTEN_YET.contains("press the button"))
+        assertTrue("... and why the code comes first:\n${Backup.NOTHING_WRITTEN_YET}",
+            Backup.NOTHING_WRITTEN_YET.contains("only thing that opens"))
+        assertTrue("DONE_LEAD is still the sentence after a successful write",
+            Backup.DONE_LEAD.contains("Your PC wrote the backup"))
+
+        // The plate: DONE_LEAD sits inside `if (written)` and the pre-press
+        // line in the `else`, so the old bug cannot come back by moving one
+        // line - the dialog draws one or the other, never both.
+        val plate = code(PLATE)
+        assertTrue("the dialog is told whether a write landed",
+            plate.contains("written: Boolean"))
+        val atWritten = plate.indexOf("if (written) {")
+        val atDone = plate.indexOf("Backup.DONE_LEAD")
+        val atElse = plate.indexOf("} else {", atWritten)
+        val atNothing = plate.indexOf("Backup.NOTHING_WRITTEN_YET")
+        assertTrue("DONE_LEAD is inside the written branch:\n$atWritten / $atDone",
+            atWritten in 0 until atDone)
+        assertTrue("... and NOTHING_WRITTEN_YET is in that branch's else:\n$atElse / $atNothing",
+            atElse in 0 until atNothing)
+        assertTrue("... DONE_LEAD is BEFORE that else - in the `if (written)` branch, not " +
+            "merely later on the page:\n$atDone / $atElse", atDone in 0 until atElse)
+        val atTick = plate.indexOf("Backup.SAVED_TICK", atElse)
+        assertTrue("... and NOTHING_WRITTEN_YET is before the else branch's tick, so it is " +
+            "the OPEN-run state:\n$atNothing / $atTick",
+            atNothing in (atElse + 1) until atTick)
+        assertTrue("DONE_LEAD is drawn exactly once:\n$plate",
+            plate.split("Backup.DONE_LEAD").size == 2)
+        assertTrue("NOTHING_WRITTEN_YET is drawn exactly once:\n$plate",
+            plate.split("Backup.NOTHING_WRITTEN_YET").size == 2)
+
+        // BOTH DIRECTIONS, not just where the two sentences sit: the dialog is
+        // handed the STATE (`written = wrote`, never a literal), a new run
+        // starts with that state FALSE, and it is set TRUE in exactly one
+        // place - the Landed branch. A regression that showed the success line
+        // before the press would have to hand the dialog `true`, or set the
+        // flag when the dialog opens, and either one fails here.
+        assertTrue("the dialog is told the state, not a literal:\n$plate",
+            plate.contains("written = wrote"))
+        assertFalse("nothing hands the dialog a literal true:\n$plate",
+            plate.contains("written = true"))
+        assertTrue("a new run starts with the success flag false:\n$plate",
+            Regex("is Backup\\.Asked\\.Ready ->[\\s\\S]{0,200}wrote = false")
+                .containsMatchIn(plate))
+        val atLanded = plate.indexOf("is Backup.Committed.Landed ->")
+        val atRefused = plate.indexOf("is Backup.Committed.Refused ->")
+        val atSuccess = plate.indexOf("wrote = true")
+        assertTrue("the success flag is set inside the Landed branch:\n" +
+            "$atLanded / $atSuccess / $atRefused",
+            atLanded in 0 until atSuccess && atSuccess < atRefused)
+        assertTrue("the success flag is set in exactly one place:\n$plate",
+            Regex("wrote = true").findAll(plate).count() == 1)
+
+        // And the runtime can only produce Landed when a WRITTEN backup parsed
+        // (`ok: true` AND a file name, `Backup.written`), which is the answer
+        // to a commit that returned a file - never to a refusal. So the success
+        // line cannot be reached without 200-and-a-file, whatever the plate
+        // does.
+        val runtime = code(RUNTIME)
+        val atParsed = runtime.indexOf("val w = com.jarvis.client.net.Backup.written(r.value)")
+        val atLandedRt = runtime.indexOf("Committed.Landed(", atParsed)
+        assertTrue("the success branch needs a parsed written backup:\n$atParsed / $atLandedRt",
+            atParsed in 0 until atLandedRt
+                && runtime.substring(atParsed, atLandedRt).contains("w != null"))
+        assertTrue("... and a refusal is the other branch",
+            runtime.indexOf("Committed.Refused(", atLandedRt) > atLandedRt)
+
+        // A back press after a successful write must close the dialog, not say
+        // "Cancelled. Nothing was written" over a file that exists.
+        assertTrue("a back press after a write closes, never cancels",
+            plate.contains("if (written) onClose() else onCancel()"))
+
+        // A run left waiting is still said plainly, and never as a backup that
+        // exists - and the plate draws it from the PC's own `prepared`.
+        assertTrue(Backup.PREPARED_ELSEWHERE.contains("waiting to be finished on your PC"))
+        assertTrue(Backup.PREPARED_ELSEWHERE.contains("Nothing has been written yet"))
+        assertTrue("the waiting line is drawn", plate.contains("Backup.PREPARED_ELSEWHERE"))
+        assertTrue("... from the PC's own read", plate.contains("v?.prepared == true"))
+
+        // The old PC-only refusal is gone from the model, and so is its 403
+        // branch: nothing in this app may claim the phone cannot write.
+        val model = code(MODEL)
+        assertFalse("PC_ONLY_WRITE is gone:\n$model", model.contains("PC_ONLY_WRITE"))
+        assertFalse("no 403 is translated for commit any more:\n$model",
+            model.contains("error.code == 403"))
+        assertFalse("and the old spinner stays gone:\n$plate",
+            plate.contains("Writing it on your PC"))
     }
 
     // ------------------------------------------------------------- helpers --

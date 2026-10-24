@@ -18,7 +18,13 @@ import kotlinx.serialization.json.intOrNull
  * nothing here that could hold one. The phone asks (`prepare`), the PC mints
  * this run's one-time recovery code and writes NOTHING yet, the phone shows
  * the code and waits for the owner to say he has kept it, and only then does
- * the PC write the file (`commit`, which is refused from anywhere but the PC).
+ * the phone's finish press (`commit`) make the PC write the file. From
+ * 2026-10-24 that press is ONE TAP and is enough - no step on the PC - and the
+ * PC binds it to the phone that minted the run (or to itself, when the owner
+ * types the code there): another paired device holding the same code is
+ * refused. The write still physically happens on the PC, and the residual risk
+ * (the "I saved it" tick is a promise by this app, not by the PC) is written
+ * down in docs/ARCHITECTURE.md section 8.
  *
  * WHY IT IS TWO CALLS AND NOT ONE, which is the whole safety of the feature.
  * Every backup is locked with its OWN one-time code, the code is stored
@@ -55,7 +61,13 @@ object Backup {
     const val STATUS_PATH = "/api/backup/status"
     /** Ask for a backup. Any paired device. WRITES NOTHING. */
     const val PREPARE_PATH = "/api/backup/prepare"
-    /** Say the code is kept. THIS PC ONLY - this is the call that writes. */
+    /**
+     * Say the code is kept. THIS is the call that writes the file - on the PC.
+     * Since the owner's 2026-10-24 decision the phone's finish press may make
+     * it; the PC accepts it from the device that MINTED the run or from the PC
+     * itself, and refuses any other paired device that holds the same code.
+     * The write still happens on the PC's disk by the PC's backend.
+     */
     const val COMMIT_PATH = "/api/backup/commit"
 
     const val TITLE = "Backups"
@@ -81,7 +93,13 @@ object Backup {
             "you finish - so if you lose the code before saving it, tap Cancel and nothing " +
             "changes."
 
-    /** The button that finishes the run. Its label says what it does. */
+    /**
+     * The button that finishes the run. Its label is TRUE again since the
+     * owner's 2026-10-24 decision: pressing it makes the PC write the backup.
+     * It went through a spell of saying "Save the code, then finish this on
+     * your PC" while the backend refused the phone's commit and only the PC
+     * could write; that refusal is gone, so the button says what it does.
+     */
     const val COMMIT_LABEL = "I have saved the code - write the backup"
 
     /** Above that button, and it must be ticked: a code cannot be swept past. */
@@ -89,10 +107,37 @@ object Backup {
 
     const val CANCEL_LABEL = "Cancel - write nothing"
 
-    /** Said once a backup has landed, next to the code that opens it. */
+    /**
+     * Said once a backup has landed, next to the code that opens it. Since
+     * 2026-10-24 this is drawn ONLY after a successful commit - never when the
+     * dialog opens, because at that moment nothing has been written and the
+     * old screen claimed otherwise (the A0 bug).
+     */
     const val DONE_LEAD =
         "Your PC wrote the backup. The code above opens it and nothing else does - it is not " +
             "shown again."
+
+    /**
+     * Said while the code dialog is open and the commit has NOT succeeded
+     * (2026-10-24). The honest line to draw before the press: nothing exists
+     * yet, and the file appears only when the button below is pressed.
+     */
+    const val NOTHING_WRITTEN_YET =
+        "Nothing has been written yet. Your PC writes the backup the moment you press the button " +
+            "below - so save this code first: it is the only thing that opens the file."
+
+    /**
+     * A backup run is waiting on the PC (2026-10-24). Drawn while
+     * `GET /api/backup/status` reports `prepared` and no run is in hand on this
+     * screen - the run may even have been started on another of the owner's
+     * paired devices, since that read names no device. The write is the PC's
+     * own act, so the phone must not claim a backup exists - it says where the
+     * file appears, and that nothing has been written yet. A dead run is never
+     * drawn this way: the PC hides an expired one from that read.
+     */
+    const val PREPARED_ELSEWHERE =
+        "A backup run is waiting to be finished on your PC. " +
+            "Nothing has been written yet."
 
     /** The state could not be read at all. */
     const val MISSING = "Your PC's Jarvis cannot make backups yet - run apply-patches.ps1 on " +
@@ -230,6 +275,20 @@ object Backup {
     /** The answer to `POST /api/backup/commit`: the file that landed. */
     data class Written(val name: String, val at: Double?, val size: Long?, val folder: String?)
 
+    /**
+     * What a finish press actually did (2026-10-24). The plate must be able to
+     * tell these apart: [DONE_LEAD] may be drawn after [Landed] and NEVER
+     * otherwise, because before a successful commit the right thing to say is
+     * [NOTHING_WRITTEN_YET]. [Refused.words] is the PC's own sentence when it
+     * sent one.
+     */
+    sealed interface Committed {
+        /** The file landed; [line] is the sentence to draw. */
+        data class Landed(val line: String) : Committed
+        /** Nothing was written; [words] says why, in the PC's own words where it sent them. */
+        data class Refused(val words: String) : Committed
+    }
+
     /** What the PC answered to `prepare` - a [Prepared], or its plain refusal. */
     sealed interface Asked {
         data class Ready(val prepared: Prepared) : Asked
@@ -281,11 +340,20 @@ object Backup {
 
     /**
      * Why a commit could not be completed, when the PC did not answer with
-     * words of its own. 403 is the PC-only write ([PC_ONLY_WRITE]); 409 and 400
-     * are a run that expired or was replaced ([RUN_GONE]).
+     * words of its own. 409 and 400 are a run that expired, was replaced, or
+     * whose code did not match ([RUN_GONE]).
+     *
+     * There is deliberately NO 403 branch (2026-10-24): the commit route no
+     * longer refuses the phone that minted the run for not being the PC. A
+     * 403 that DOES arrive carries the PC's own sentence in a body with `ok`
+     * in it (the asker guard's "another device" refusal), and
+     * `JarvisApi.postExplained` hands that body back as an answer before any
+     * status-code translation - so [refusalWords] shows the PC's words. A 403
+     * with no `ok` is the server's own origin or token check and becomes
+     * [ApiError.BadToken] before this function is asked: the app's ordinary
+     * token wording is the honest thing to show for that.
      */
     fun commitRefusal(error: ApiError): String = when {
-        error is ApiError.Server && error.code == 403 -> PC_ONLY_WRITE
         error is ApiError.Server && error.code == 409 -> RUN_GONE
         error is ApiError.Server && error.code == 400 -> RUN_GONE
         else -> ""
@@ -380,8 +448,11 @@ object Backup {
 
     /**
      * `POST /api/backup/commit {"id","code"}` - say the code is kept. THIS is
-     * the call that writes the file on the PC, and the PC refuses it from any
-     * device but itself ([runNowFromThePhone] says what that means on screen).
+     * the call that writes the file on the PC. Since the owner's 2026-10-24
+     * decision the phone's finish press may make it; the PC accepts it from
+     * the device that MINTED the run or from the PC itself, and refuses any
+     * other paired device holding the same code. The write still happens on
+     * the PC's disk by the PC's backend.
      *
      * The code goes back WITHOUT its hyphens: the PC shows it in four groups of
      * five so a person can read it out, and stores the groups together
@@ -389,29 +460,25 @@ object Backup {
      * presentation and nothing else. Sending them or not is therefore the same
      * code, and the PC cleans both sides anyway.
      *
-     * The id is sent back because the PC mints one per run; it is not a secret.
+     * The id is sent back because the PC mints one per run; it is not a secret,
+     * and the PC does not compare it (the live run, the code and the caller's
+     * own identity decide).
      */
     fun commitBody(id: String, code: String): String =
         """{"id":${quote(id)},"code":${quote(code.filter { it.isLetterOrDigit() }.uppercase())}}"""
 
     /**
      * The one thing that can still go wrong after this much work, said in
-     * advance rather than discovered: the PC writes the file, and it takes the
-     * PC to do it.
+     * advance rather than discovered: the write happens on the PC, so the PC
+     * has to be reachable for the finish press to land.
      */
     const val NEEDS_THE_PC =
         "Your PC is not answering, so nothing was asked for. Nothing has changed - try again " +
             "when your PC is reachable."
 
-    /** The PC refused the commit because the caller was not the PC. */
-    const val PC_ONLY_WRITE =
-        "Your PC writes the backup, and it did not accept the write from your phone. Nothing " +
-            "was written. Ask for a backup again from the phone; if it keeps happening, make " +
-            "one at the PC - Settings, Backups."
-
     /**
-     * The run's code no longer matches the PC's (it expired, or a newer ask
-     * replaced it). Nothing was written.
+     * The run's code no longer matches the PC's (it expired, a newer ask
+     * replaced it, or it was mistyped). Nothing was written.
      */
     const val RUN_GONE =
         "That backup run had expired, so nothing was written and your folder is unchanged. " +
