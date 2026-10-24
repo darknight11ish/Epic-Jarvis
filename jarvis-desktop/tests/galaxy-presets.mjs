@@ -39,6 +39,12 @@
  *     draws its dots, the choice survives a page reload, a corrupt stored value
  *     falls back to the constellation with no page error, and with the real
  *     32-node graph every layout keeps the dots apart and the labels readable.
+ *  7. Audit follow-ups (2026-10-23, .dsh-scratch/GALAXY-G0-AUDIT): the Fit button
+ *     and the `0` key use the flat layouts' wider margin (so labels stay inside
+ *     the picture after a fit, not just after a switch); the chip row and the
+ *     stage tell a keyboard/screen-reader user that presets 1-5 are planned and
+ *     not built; and switching away during the constellation's assembly and back
+ *     leaves a live constellation, never a frozen part-assembled one.
  */
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
@@ -426,6 +432,12 @@ await check("the real window has the nine chips; the five not-built ones are dis
     assert.equal(await chip(page, p.id).isDisabled(), false, `${p.id} should be usable`);
   }
   assert.equal(await chip(page, DEFAULT_PRESET).getAttribute("aria-pressed"), "true");
+  // A keyboard/screen-reader user cannot focus the disabled planned chips, so
+  // the group and the stage must SAY the five planned presets exist (audit F2).
+  assert.match(await page.locator("#graph-presets").getAttribute("aria-label"),
+    /five planned presets that are not built yet/);
+  assert.match(await page.locator(".galaxy-stage").getAttribute("aria-label"),
+    /Presets 1 to 5 are planned and not built yet/);
   // The chip row must not make the window scroll sideways (the first version
   // did: the zen-ring evidence screenshot was cut off on the left).
   const overflow = await page.evaluate(() =>
@@ -605,6 +617,63 @@ await check("with the real 32-node graph every layout keeps the dots apart and t
     counts.labels = metrics.labels.length;
   }
   assert.equal(counts.buttons, 32);
+  assert.deepEqual(page.__errors, [], `the page logged errors: ${page.__errors.join("; ")}`);
+  await page.close();
+});
+
+await check("Fit and the 0 key keep every label inside the picture under each flat layout", async () => {
+  const page = await openBrain();
+  await gotoGalaxy(page);
+  for (const [id, key, waitSelector] of [
+    ["star-map", "6", 'circle.galaxy-guide-ring'],
+    ["clean-tree", "7", 'line.galaxy-guide-line'],
+    ["zen-ring", "8", 'circle.galaxy-guide-ring'],
+  ]) {
+    await pressKey(page, key);
+    await page.waitForFunction(
+      ({ selector }) => document.querySelectorAll(
+        `#graph-svg [data-layer="guides"] ${selector}`).length > 0,
+      { selector: waitSelector });
+    // The two general fit actions must use the wider margin a flat layout needs
+    // (audit finding F1): neither may clip the outer labels.
+    for (const action of ["0", "Fit"]) {
+      if (action === "0") await pressKey(page, "0");
+      else await page.locator("#graph-refit").click();
+      await page.waitForTimeout(150);
+      const clipped = await page.evaluate(() => {
+        const stage = document.querySelector(".galaxy-stage").getBoundingClientRect();
+        return [...document.querySelectorAll("#graph-overlay .galaxy-node-label")]
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.left < stage.left - 2 || r.right > stage.right + 2
+              || r.top < stage.top - 2 || r.bottom > stage.bottom + 2;
+          })
+          .map((el) => el.textContent);
+      });
+      assert.deepEqual(clipped, [], `${id}: ${action} clipped labels ${clipped.join(", ")}`);
+    }
+  }
+  assert.deepEqual(page.__errors, [], `the page logged errors: ${page.__errors.join("; ")}`);
+  await page.close();
+});
+
+await check("switching away during the assembly and back leaves a live constellation", async () => {
+  const page = await openBrain();
+  await page.locator("#rail-advanced-toggle").click();
+  await page.locator("#tab-galaxy").click();
+  // No wait for the dots: press 6 then 6 while the graph is still loading or
+  // assembling (~1.3 s). The return must not restore a frozen mid-assembly
+  // snapshot (audit finding F3) - the constellation has to be alive.
+  await page.locator(".galaxy-stage").focus();
+  await page.keyboard.press("6");
+  await page.keyboard.press("6");
+  await page.waitForFunction(() =>
+    document.querySelectorAll("#graph-overlay .galaxy-node-button").length > 0);
+  await page.waitForFunction(() =>
+    document.querySelectorAll('#graph-svg [data-layer="guides"]').length === 0);
+  assert.ok(await page.locator("#graph-overlay .galaxy-node-button").count() > 0,
+    "the constellation did not come back after a mid-assembly switch");
+  assert.match(await page.locator("#graph-stat").innerText(), /names/);
   assert.deepEqual(page.__errors, [], `the page logged errors: ${page.__errors.join("; ")}`);
   await page.close();
 });

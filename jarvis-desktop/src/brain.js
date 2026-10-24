@@ -13643,6 +13643,17 @@ let galaxyPreset = { id: DEFAULT_PRESET, saved: null, layout: null };
  *  (its layout is not ours to change). */
 const LABEL_FIT_PAD = 120;
 
+/** The fit margin for the view on screen.
+ *
+ *  A flat layout puts names on its outer ring/rows, so the two general "fit"
+ *  actions (the Fit button and the stage's `0` key) must keep the WIDER margin
+ *  too - after a preset switch or a window resize. The constellation keeps the
+ *  margin it has always used. (Audit finding F1 of 2026-10-23: both actions used
+ *  the constellation's 60 under a flat layout and could clip the outer labels.) */
+function presetFitPad() {
+  return galaxyPreset.id === DEFAULT_PRESET ? 60 : LABEL_FIT_PAD;
+}
+
 /** What the owner's last choice was, read from THIS DEVICE's storage.
  *
  *  A display preference only (`jarvis.galaxy.preset`, the same kind of place
@@ -13734,6 +13745,11 @@ function applyGalaxyPreset(id) {
 function applyGalaxyPresetNow(id) {
   const meta = presetMeta(id);
   if (!meta || !meta.built || id === galaxyPreset.id) return;
+  // Captured before the animation is cancelled: only a SETTLED constellation is
+  // worth remembering (audit finding F3, 2026-10-23). Saving a frame from the
+  // ~1.3 s assembly would restore a part-assembled, frozen picture on the way
+  // back; leaving nothing saved makes the return re-run `startLayout()`.
+  const midAssembly = Boolean(sim);
   if (sim) {
     cancelAnimationFrame(sim);
     sim = null;
@@ -13753,8 +13769,9 @@ function applyGalaxyPresetNow(id) {
     }
   } else {
     if (galaxyPreset.id === DEFAULT_PRESET && state.graph) {
-      galaxyPreset.saved = new Map(
-        state.graph.nodes.map((n) => [String(n.id), { x: n.x, y: n.y }]));
+      galaxyPreset.saved = midAssembly
+        ? null          // mid-assembly: nothing worth restoring (F3)
+        : new Map(state.graph.nodes.map((n) => [String(n.id), { x: n.x, y: n.y }]));
     }
     galaxyPreset = { id, saved: galaxyPreset.saved, layout: null };
     if (state.graph) {
@@ -14132,7 +14149,7 @@ stage.addEventListener("keydown", (e) => {
     "+": () => (view.scale = Math.min(4, view.scale * 1.2)),
     "=": () => (view.scale = Math.min(4, view.scale * 1.2)),
     "-": () => (view.scale = Math.max(0.08, view.scale / 1.2)),
-    "0": () => fitToContent(),
+    "0": () => fitToContent({ pad: presetFitPad() }),
     Escape: () => select(null),
   };
   const fn = keys[e.key];
@@ -14302,7 +14319,7 @@ dom.refresh.addEventListener("click", async () => {
 });
 
 dom.graphRefit.addEventListener("click", () => {
-  fitToContent();
+  fitToContent({ pad: presetFitPad() });
   draw();
 });
 

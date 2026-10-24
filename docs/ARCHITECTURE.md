@@ -3096,8 +3096,9 @@ remembered choice) are the **desktop Brain window's alone** for now: the phone
 deliberately has no memory graph (the standing rule recorded elsewhere in this
 section), and the editable HUD stage keeps its own canvas renderer until Phase
 G1 shares the same layout math with it. Nothing here reads or writes the PC: the
-layouts are pure position maths, the choice is stored **on the device**
-(`jarvis.galaxy.preset`, the same kind of place as `jarvis.theme`), and no
+layouts are pure position maths, the choice is stored on this device only, in
+the Brain window's own `localStorage` (`jarvis.galaxy.preset`); unlike the
+theme, nothing about it is persisted on the PC and no route is involved. No
 backend route or phone source names any of it - so `tools/check_parity.py` has
 nothing to classify. The five rich 3D presets the blueprint also lists are shown
 as disabled "not built yet" chips, never faked.
