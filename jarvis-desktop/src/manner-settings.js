@@ -43,6 +43,7 @@ const mn = {
   humorLabel: null,
   presetsBlock: $("mn-presets-block"),
   presetsNote: $("mn-presets-note"),
+  hearNote: $("mn-hear-note"),
   presets: $("mn-presets"),
   dialsBlock: $("mn-tune-block"),
   dials: $("mn-dials"),
@@ -259,6 +260,13 @@ function paintPersona() {
     mn.presetsNote.textContent = pc ? "" : P.UPDATE_SENTENCE;
     mn.presetsNote.hidden = pc;
   }
+  // The honest note about what "Hear Sample" can play today: the base voice.
+  // Shown even before the PC has the fields, because it describes the button,
+  // not the PC.
+  if (mn.hearNote) {
+    mn.hearNote.textContent = P.HEAR_BASE_VOICE_NOTE;
+    mn.hearNote.hidden = false;
+  }
   const activeId = persona.active;
 
   mn.presets.replaceChildren();
@@ -275,12 +283,16 @@ function paintPersona() {
     const hear = personaButton(P.HEAR_LABEL, preset.id);
     hear.classList.add("mn-hear");
     hear.dataset.hear = preset.id;
+    hear.setAttribute("aria-label", `${P.HEAR_LABEL}: ${preset.title}`);
     hear.addEventListener("click", () => hearSample(preset, hear));
     const inUse = preset.id === activeId;
     const use = personaButton(inUse ? P.IN_USE : P.USE_LABEL, preset.id);
     use.classList.add("mn-use");
     use.dataset.use = preset.id;
-    use.setAttribute("aria-pressed", inUse ? "true" : "false");
+    // One-shot action, not a toggle: no aria-pressed (the "In use" text and
+    // data-active carry the state). The name says WHICH preset it acts on.
+    use.setAttribute("aria-label",
+      `${inUse ? P.IN_USE : P.USE_LABEL}: ${preset.title}`);
     if (inUse) use.dataset.active = "true";
     use.addEventListener("click", () => usePreset(preset));
     gated(hear, pc);
@@ -339,11 +351,14 @@ function paintMine(pc) {
     const actions = node("div", "mn-mine-actions");
     const use = personaButton(person.id === persona.active ? P.IN_USE : "Use", person.id);
     use.dataset.useCustom = person.id;
-    use.setAttribute("aria-pressed", person.id === persona.active ? "true" : "false");
+    use.setAttribute("aria-label",
+      `${person.id === persona.active ? P.IN_USE : "Use"}: ${person.title}`);
     use.addEventListener("click", () => useCustom(person));
     const copy = personaButton("Duplicate", person.id);
+    copy.setAttribute("aria-label", `Duplicate: ${person.title}`);
     copy.addEventListener("click", () => duplicateCustom(person));
     const drop = personaButton("Delete", person.id);
+    drop.setAttribute("aria-label", `Delete: ${person.title}`);
     drop.addEventListener("click", () => deleteCustom(person));
     actions.append(gated(use, pc), gated(copy, pc), gated(drop, pc));
     row.append(text, actions);

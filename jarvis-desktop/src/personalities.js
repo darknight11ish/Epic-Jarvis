@@ -210,6 +210,13 @@ export const DETAIL =
   "Pick how Jarvis sounds and how it puts answers together. This changes wording and voice only - never what Jarvis does, asks or remembers.";
 export const HEAR_LABEL = "\u25b6 Hear Sample";
 export const HEAR_BUSY = "Playing the sample\u2026";
+/** Said on the page under the preset grid, so the button cannot mislead:
+ *  the sample plays the preset's BASE voice until the Kokoro/Live slice can
+ *  preview the stored blend (the blend is not yet consumed by the TTS path). */
+export const HEAR_BASE_VOICE_NOTE =
+  "Hear Sample plays each personality's base voice for now. " +
+  "The blended voice shown above is stored with the character; " +
+  "blended-voice previews arrive with the voice update.";
 export const USE_LABEL = "Use This Personality";
 export const IN_USE = "In use";
 export const CUSTOM_TITLE = "My personalities";
@@ -251,15 +258,17 @@ export function voiceBadge(preset) {
   return speedText ? `${label} \u00b7 ${speedText}` : label;
 }
 
-/** The body the PC's sample route expects for one preset's switch line. */
+/** The body the PC's sample route accepts: exactly ONE field.
+ *
+ *  `POST /api/voice/voices/sample` requires `set(body) == {"voice"}` and
+ *  answers 400 to anything else (`backend/jarvis_voices.py:926`), so sending
+ *  the character's blend/speed/text made every preset's sample fail. The
+ *  character keeps its stored blend and speed (the badge shows them, and a
+ *  later Kokoro/Live slice will preview them); they are deliberately not sent
+ *  here, and `HEAR_BASE_VOICE_NOTE` says so on the page. */
 export function sampleArgs(preset) {
   const voice = (preset && preset.voice) || {};
-  return {
-    voice: String(voice.fallback || ""),
-    blend: String(voice.blend || ""),
-    speed: Number(voice.speed) || 1,
-    text: String((preset && preset.switchAck) || voiceBadge(preset)),
-  };
+  return { voice: String(voice.fallback || "") };
 }
 
 /** True only for a value one of the four dials accepts. */
@@ -300,7 +309,24 @@ export function presetDials(id) {
   return { ...(DIAL_FALLBACKS[normalizeId(id)] || DIAL_FALLBACKS[DEFAULT_PRESET]) };
 }
 
-/** A custom personality id the page can send: short, lowercase, no spaces. */
+/** The PC's own id for a saved custom personality, kept verbatim.
+ *
+ *  A GET row may carry any id the PC itself minted - `mine-…` for a preset
+ *  saved through this page, `custom-…` when the PC had to rename a same-name
+ *  save. Rewriting those to `mine-…` made Use and Delete answer 400 ("There is
+ *  no saved personality by that name"), so a server id that matches the PC's
+ *  own rule is returned unchanged. `""` means "not one the PC would accept":
+ *  the caller then makes a page id for a NEW save, which is the only thing
+ *  `customId()` is for.
+ */
+export function serverIdOf(raw) {
+  const id = typeof raw === "string" ? raw.trim() : "";
+  return /^[a-z0-9][a-z0-9-]{2,63}$/.test(id) ? id : "";
+}
+
+/** A custom personality id the page can make for a NEW preset: short,
+ *  lowercase, no spaces. Never used to rewrite an id that came from the PC
+ *  (see serverIdOf). */
 export function customId(seed) {
   const safe = String(seed || "")
     .toLowerCase()
@@ -390,17 +416,23 @@ function readCustom(raw) {
   const v = asObject(raw);
   const name = cleanLine(v.name, LIMITS.name);
   if (!name) return null;
+  const basedOn = normalizeId(v.based_on) || DEFAULT_PRESET;
+  // The PC's custom voice comes from its base preset; a thin GET row carries
+  // no voice, so the label/sample follow the base rather than Warm's blend.
+  const baseVoice = (PRESETS.find((p) => p.id === basedOn) || PRESETS[0]).voice;
   return {
-    id: customId(v.id || name),
+    // A row that came FROM the PC keeps the PC's own id, verbatim (blocker 3,
+    // 2026-10-23): only an idea that has not been saved yet gets a `mine-` id.
+    id: serverIdOf(v.id) || customId(name),
     badge: "Mine",
     title: name,
     description: cleanLine(v.line, LIMITS.line),
     quote: cleanLine(v.example, LIMITS.line),
-    voice: readVoice(v.voice, PRESETS[0].voice),
+    voice: readVoice(v.voice, baseVoice),
     switchAck: cleanLine(v.switch_ack, LIMITS.line),
     dials: readDials(v.dials, null),
     builtin: false,
-    basedOn: normalizeId(v.based_on) || DEFAULT_PRESET,
+    basedOn,
   };
 }
 

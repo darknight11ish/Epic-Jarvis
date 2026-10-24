@@ -1353,89 +1353,34 @@ pub async fn try_voice_animal(
     .await
 }
 
-/// The optional Personality Presets half of a sample request: the blend mix,
-/// its speed and the line to say. Each is checked here for shape only; an
-/// older PC ignores fields it does not know, and the sample route then plays
-/// its own fixed line in the fallback voice (still a sound, never an error).
-#[allow(clippy::too_many_arguments)]
-fn sample_extra(
-    body: &mut serde_json::Map<String, Value>,
-    blend: Option<&str>,
-    speed: Option<f32>,
-    text: Option<&str>,
-) -> Result<(), String> {
-    if let Some(blend) = blend {
-        let mut parts = 0;
-        for part in blend.split('+') {
-            parts += 1;
-            if parts > 3 {
-                return Err("That voice blend has too many voices.".to_string());
-            }
-            let (name, weight) = part
-                .split_once(':')
-                .ok_or_else(|| "That is not a voice blend this PC offers.".to_string())?;
-            if speaker_name(name).is_none() {
-                return Err("That is not a voice blend this PC offers.".to_string());
-            }
-            let weight: f32 = weight
-                .parse()
-                .map_err(|_| "That is not a voice blend this PC offers.".to_string())?;
-            if !(0.0..=1.0).contains(&weight) {
-                return Err("That is not a voice blend this PC offers.".to_string());
-            }
-        }
-        if parts == 0 {
-            return Err("That is not a voice blend this PC offers.".to_string());
-        }
-        body.insert("blend".into(), Value::String(blend.to_string()));
-    }
-    if let Some(speed) = speed {
-        if !(0.5..=2.0).contains(&speed) {
-            return Err("That speed is not one this PC can speak at.".to_string());
-        }
-        body.insert("speed".into(), json!(speed));
-    }
-    if let Some(text) = text {
-        let clean: String = text.chars().filter(|c| !c.is_control()).take(240).collect();
-        let clean = clean.trim();
-        if !clean.is_empty() {
-            body.insert("text".into(), Value::String(clean.to_string()));
-        }
-    }
-    Ok(())
-}
-
-/// "Hear it" (2026-09-29): the PC says one fixed line (its own words, never
-/// the app's) in one built-in voice, by NAME, without changing the voice
-/// Jarvis uses - `POST /api/voice/voices/sample {"voice": "bm_george"}` - and
-/// it comes back like "Try it": `{"ok": true, "audio": "data:audio/wav;..."}`
-/// for the page to play. No card, nothing saved, not held on a stale link
-/// (it changes nothing). Never a voice you recorded: the PC only takes a
-/// name from its own list. Refused here while the talk button records or
-/// Jarvis Live has the microphone ([`HEAR_BUSY`]) - the sound would go into
-/// the question - and while App lock would ask again ([`HEAR_LOCKED`]).
-/// Settings also refuses while Jarvis is speaking or listening, from the
-/// events it hears (voice-panel.js `jarvisBusy`).
+/// "Hear it" (2026-09-29): the PC says one fixed line in one built-in voice, by
+/// NAME, without changing the voice Jarvis uses - `POST
+/// /api/voice/voices/sample {"voice": "bm_george"}` - and it comes back like
+/// "Try it": `{"ok": true, "audio": "data:audio/wav;..."}` for the page to play.
+/// No card, nothing saved, not held on a stale link (it changes nothing). Never
+/// a voice you recorded: the PC only takes a name from its own list. Refused
+/// here while the talk button records or Jarvis Live has the microphone
+/// ([`HEAR_BUSY`]) - the sound would go into the question - and while App lock
+/// would ask again ([`HEAR_LOCKED`]). Settings also refuses while Jarvis is
+/// speaking or listening, from the events it hears (voice-panel.js
+/// `jarvisBusy`).
 ///
-/// The optional `blend` / `speed` / `text` (2026-10-23, Personality Presets
-/// SLICE 2a) let one preset's "Hear Sample" say its own switch line in its
-/// own blended voice. The PC decides whether it supports them; this window
-/// only checks their shape and passes them on.
+/// The body is EXACTLY the one field the PC accepts. The Personality Presets
+/// follow-up (2026-10-23, Slice 2a) first sent the character's blend, speed and
+/// switch line too; `POST /api/voice/voices/sample` is
+/// `set(body) == {"voice"}` and answers 400 to anything else, so every preset's
+/// sample failed. Those values stay stored with the character and shown in its
+/// badge; a blended-voice preview arrives with the Kokoro/Live slice, and until
+/// then this plays the base voice (the page says so in plain words).
 #[tauri::command]
 pub async fn hear_voice_sample(
     app: AppHandle,
     capture: State<'_, VoiceCaptureState>,
     voice: String,
-    blend: Option<String>,
-    speed: Option<f32>,
-    text: Option<String>,
 ) -> Result<Value, String> {
     let voice = speaker_name(&voice)
         .ok_or_else(|| "Choose one of the listed voices.".to_string())?
         .to_string();
-    let mut body = serde_json::Map::new();
-    body.insert("voice".into(), Value::String(voice));
-    sample_extra(&mut body, blend.as_deref(), speed, text.as_deref())?;
     if crate::lock::app_locked(&app) {
         return Err(HEAR_LOCKED.to_string());
     }
@@ -1445,7 +1390,7 @@ pub async fn hear_voice_sample(
     sound_from_pc(
         &app,
         "/api/voice/voices/sample",
-        Value::Object(body),
+        json!({ "voice": voice }),
         HEAR_UPDATE,
     )
     .await
@@ -1816,41 +1761,6 @@ mod tests {
         ] {
             assert_eq!(speaker_name(bad), None, "{bad:?}");
         }
-    }
-
-    /// Personality Presets (2026-10-23): a preset's "Hear Sample" adds a
-    /// blend, a speed and its own line to the one sound request. Shapes are
-    /// checked here; the PC decides what it can do with them.
-    #[test]
-    fn a_preset_sample_keeps_its_extra_fields_and_bounds_them() {
-        let mut body = serde_json::Map::new();
-        body.insert("voice".into(), Value::String("bm_george".into()));
-        sample_extra(
-            &mut body,
-            Some("bm_george:0.65+bm_lewis:0.35"),
-            Some(1.02),
-            Some("Very good, sir."),
-        )
-        .expect("a shape the page sends");
-        assert_eq!(body["blend"], "bm_george:0.65+bm_lewis:0.35");
-        assert!(
-            (body["speed"].as_f64().unwrap() - 1.02).abs() < 1e-6,
-            "{:?}",
-            body["speed"]
-        );
-        assert_eq!(body["text"], "Very good, sir.");
-
-        let mut body = serde_json::Map::new();
-        assert!(sample_extra(&mut body, Some("not-a-voice:0.5"), None, None).is_err());
-        assert!(sample_extra(&mut body, Some("bm_george:1.5"), None, None).is_err());
-        assert!(sample_extra(&mut body, None, Some(9.0), None).is_err());
-        let long = "x".repeat(400);
-        assert!(sample_extra(&mut body, None, Some(1.0), Some(&long)).is_ok());
-        assert_eq!(body["text"].as_str().map(str::len), Some(240));
-        // Nothing extra: the older request, exactly as it was.
-        let mut body = serde_json::Map::new();
-        sample_extra(&mut body, None, None, None).expect("nothing to add");
-        assert!(body.is_empty());
     }
 
     #[test]

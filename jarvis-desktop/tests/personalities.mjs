@@ -18,8 +18,10 @@
  *   - a PC without the fields answers the local copy, marked `pc: false`;
  *   - the 240-character limit on a custom line, the 60-character name limit,
  *     a duplicate-proof id, and the explicit confirm the delete carries;
- *   - the sample request's shape (voice, blend, speed, text) and the badge's
- *     "Blend · 1.02x" words.
+ *   - the sample request carries exactly the preset's base voice and nothing
+ *     else (the PC's sample route accepts `{"voice"}` only; a blended-voice
+ *     preview is deferred to the Kokoro/Live slice), and the badge's
+ *     "Blend · 1.02x" words keep saying what the character stores.
  *
  * What it does NOT prove: how the page looks, that a real PC accepts the
  * bodies, or that a sample plays. Those need the app running.
@@ -220,16 +222,40 @@ check("the page's limits are the blueprint's 240-character lines and a 60-charac
   assert.equal(P.cleanLine("x".repeat(500)).length, 240);
 });
 
+check("a custom id that came from the PC is kept verbatim, so Use and Delete reach it", () => {
+  const got = P.readPersonalities({ available: true, custom_personalities: [
+    { id: "custom-my-mix", name: "Server Mix", base_preset: "calm_stoic" },
+  ] });
+  assert.equal(got.custom.length, 1);
+  assert.equal(got.custom[0].id, "custom-my-mix",
+    "the PC's own id must survive the read unchanged (customId used to rewrite it)");
+  assert.deepEqual(P.usePresetBody(got.custom[0]), { personality: "custom-my-mix" });
+  assert.deepEqual(P.deleteCustomBody(got.custom[0].id),
+    { custom: { op: "delete", id: "custom-my-mix", confirm: true } });
+  // The PC's own id rule, exposed so a future caller cannot guess it.
+  assert.equal(P.serverIdOf("custom-my-mix"), "custom-my-mix");
+  assert.equal(P.serverIdOf("mine-mix"), "mine-mix");
+  assert.equal(P.serverIdOf("Not A Valid Id"), "");
+  assert.equal(P.serverIdOf(""), "");
+  // A first save still gets a page-made id: nothing to keep yet.
+  assert.equal(P.customPersonality({ name: "Server Mix" }, P.PRESETS[7]).id,
+    "mine-server-mix");
+});
+
 /* ── 5. The sample request and the one-field change bodies ─────────────── */
 
-check("the sample request names the fallback voice, the blend, the speed and the line", () => {
+check("the sample request carries exactly the base voice and nothing else", () => {
   const preset = P.PRESETS[1];
-  assert.deepEqual(P.sampleArgs(preset), {
-    voice: "bm_george",
-    blend: "bm_george:0.65+bm_lewis:0.35",
-    speed: 1.02,
-    text: "Very good, sir. Classic British Butler protocols are online and at your service.",
-  });
+  const args = P.sampleArgs(preset);
+  assert.deepEqual(args, { voice: "bm_george" });
+  assert.deepEqual(Object.keys(args), ["voice"],
+    "the PC's /api/voice/voices/sample accepts set(body) == {'voice'}; any extra field is a 400");
+  // The character still STORES its blend and speed (the badge says so, and a
+  // later Kokoro/Live slice will preview them) - they are just not sent here.
+  assert.equal(preset.voice.blend, "bm_george:0.65+bm_lewis:0.35");
+  assert.equal(preset.voice.speed, 1.02);
+  assert.match(P.HEAR_BASE_VOICE_NOTE, /base voice/i);
+  assert.match(P.HEAR_BASE_VOICE_NOTE, /blended/i);
 });
 
 check("a preset switch sends the personality alone (never a whole answer)", () => {

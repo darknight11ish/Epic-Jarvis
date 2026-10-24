@@ -12,13 +12,19 @@
  * browser with a stubbed bridge and proves what a click sends:
  *
  *   - the eight cards render in the PC's order, the active one says "In use";
- *   - "Hear Sample" asks the PC for the preset's blended voice and line
- *     (`hear_voice_sample` with voice, blend, speed and text) - the page never
- *     makes a sound itself;
+ *   - "Hear Sample" asks the PC for the preset's BASE voice only
+ *     (`hear_voice_sample` with exactly `{voice}` - the PC's sample route
+ *     accepts one field; blended-voice previews are deferred to the
+ *     Kokoro/Live slice, and the page says so) - the page never makes a sound
+ *     itself;
  *   - "Use This Personality" sends the personality id alone;
+ *   - a custom preset that came from another client keeps the PC's own id
+ *     through Use and Delete (a server `custom-x` id is not rewritten);
  *   - a dial pill sends the four dials; the sync switch sends `voice_sync`;
  *   - a custom personality is saved and deleted with the explicit
  *     `confirm: true`, and the delete asks the owner first;
+ *   - per-row actions say which personality they act on, `role="list"` is not
+ *     claimed without list items, and the one-shot "Use" is not a toggle;
  *   - on a PC that does not have the personality fields yet the new controls
  *     are visible but disabled with the plain update sentence, and the older
  *     two choices still work and still send exactly `{manner}`.
@@ -67,6 +73,11 @@ function pcAnswer() {
       example: "You: hi", based_on: "calm_stoic", dials: P.defaultDials(),
       voice: { blend: "af_sky:0.65+af_heart:0.35", fallback: "af_sky", speed: 0.94,
                label: "Soft Calm Blend" },
+    }, {
+      // Saved by another client (the phone/PC mints `custom-…` on a name
+      // collision) - the desktop must not rewrite this id (review blocker 3).
+      id: "custom-x", name: "Server Mix", line: "Saved elsewhere.",
+      example: "", based_on: "warm_peer", dials: P.defaultDials(),
     }],
   };
 }
@@ -151,24 +162,25 @@ await check("the chosen personality says In use; the others offer Use", async ()
 
 /* ── 2. Hear Sample: the PC makes the sound, in the preset's voice ─────── */
 
-await check("Hear Sample asks the PC for the blended voice and switch line", async () => {
+await check("Hear Sample asks the PC for the base voice only, and says so", async () => {
   const page = await pageFor(pcAnswer());
   await page.locator('.mn-hear[data-hear="classic_butler"]').click();
   await page.waitForTimeout(300);
   const got = await page.evaluate(() => ({
     calls: window.__p.calls,
     status: document.getElementById("mn-status").textContent,
+    note: document.getElementById("mn-hear-note").textContent,
   }));
   await page.close();
   const call = got.calls.find((c) => c.cmd === "hear_voice_sample");
   assert.ok(call, "no sample request reached the PC");
-  assert.deepEqual(call.args, {
-    voice: "bm_george",
-    blend: "bm_george:0.65+bm_lewis:0.35",
-    speed: 1.02,
-    text: "Very good, sir. Classic British Butler protocols are online and at your service.",
-  });
+  // Exactly one field: the PC's route is set(body) == {"voice"} and answers a
+  // 400 to anything else (review blocker 1).
+  assert.deepEqual(call.args, { voice: "bm_george" });
+  assert.deepEqual(Object.keys(call.args), ["voice"]);
   assert.match(got.status, /Playing British Baritone Blend/);
+  assert.match(got.note, /base voice/i);
+  assert.match(got.note, /blended/i, "the deferral is said on the page, not hidden");
 });
 
 /* ── 3. Use, dials, sync: ONE field per change ─────────────────────────── */
@@ -246,6 +258,51 @@ await check("the custom row is drawn with the PC's own name and line", async () 
   await page.close();
   assert.equal(got.name, "Calmy");
   assert.equal(got.line, "Quiet and direct.");
+});
+
+await check("a custom preset saved by another client keeps the PC's own id for Use and Delete", async () => {
+  const page = await pageFor(pcAnswer());
+  const row = '#mn-mine .mn-mine-row[data-custom="custom-x"]';
+  await page.locator(`${row} .mn-btn`, { hasText: "Use" }).click();
+  await page.waitForTimeout(300);
+  const afterUse = await page.evaluate(() => window.__p.calls);
+  await page.locator(`${row} .mn-btn`, { hasText: "Delete" }).click();
+  await page.waitForTimeout(300);
+  const got = await page.evaluate(() => ({ asked: window.__p.confirmAsked,
+                                            calls: window.__p.calls }));
+  await page.close();
+  // The server's id is sent verbatim: no `mine-` prefix is invented over a row
+  // that came FROM the PC (review blocker 3).
+  assert.deepEqual(afterUse, [{ cmd: "set_manner", args: { personality: "custom-x" } }]);
+  assert.equal(got.asked, 1, "the page must ask before deleting");
+  assert.deepEqual(got.calls.at(-1), { cmd: "set_manner",
+    args: { custom: { op: "delete", id: "custom-x", confirm: true } } });
+});
+
+await check("row actions name their personality; no list role, no pressed state on Use", async () => {
+  const page = await pageFor(pcAnswer());
+  const got = await page.evaluate(() => ({
+    hear: document.querySelector('.mn-hear[data-hear="classic_butler"]').getAttribute("aria-label"),
+    use: document.querySelector('.mn-use[data-use="classic_butler"]').getAttribute("aria-label"),
+    usePressed: document.querySelector('.mn-use[data-use="classic_butler"]').hasAttribute("aria-pressed"),
+    listRole: document.getElementById("mn-presets").getAttribute("role"),
+    customLabels: [...document.querySelectorAll(
+      '#mn-mine .mn-mine-row[data-custom="mine-calmy"] .mn-btn')]
+      .map((b) => b.getAttribute("aria-label")),
+    dialPressed: document.querySelector('#mn-dials .mn-btn[aria-pressed="true"]') !== null,
+  }));
+  await page.close();
+  assert.match(got.hear, /Hear Sample.*Classic British Butler/,
+    `a screen reader must hear which preset the sample is for: ${got.hear}`);
+  assert.match(got.use, /Classic British Butler/);
+  assert.equal(got.usePressed, false,
+    "Use is a one-shot action; aria-pressed describes a toggle and belongs on the dial pills");
+  assert.equal(got.listRole, null,
+    'role="list" with no listitem children is not a list assistive tech can report');
+  assert.equal(got.customLabels.length, 3);
+  for (const label of got.customLabels) assert.match(label, /Calmy/,
+    `a custom row action must name its personality: ${label}`);
+  assert.ok(got.dialPressed, "the dial pills keep their pressed state");
 });
 
 /* ── 5. Older PC: visible, disabled, honest; the two choices still work ── */
