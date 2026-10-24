@@ -786,7 +786,10 @@ def handle_set(body) -> tuple:
                 "name": custom.get("name"),
                 "base_preset": custom.get("based_on") or custom.get("base_preset"),
                 "custom_trait": custom.get("line") or custom.get("custom_trait"),
-                "example_user": "",
+                # The panel has one "example exchange" line, and it is Jarvis's
+                # line; carry it as that half (finding A) so it reaches the
+                # persona, paired with the base preset's user half on read.
+                "example_user": custom.get("example_user") or "",
                 "example_jarvis": custom.get("example") or custom.get("example_jarvis"),
                 "dials": custom.get("dials"),
                 "voice_spec": custom.get("voice_spec"),
@@ -958,8 +961,15 @@ def _custom_spec(item: dict) -> dict:
     base = _BY_ID.get(item.get("base_preset")) or _BY_ID[_DEFAULT_PERSONALITY]
     trait = str(item.get("custom_trait") or "").strip()
     examples = [dict(e) for e in base["examples"]]
-    if str(item.get("example_user") or "").strip() and str(item.get("example_jarvis") or "").strip():
-        examples = [{"user": item["example_user"], "jarvis": item["example_jarvis"]},
+    # The owner may type only ONE half of an example exchange (the desktop
+    # panel has a single "One example exchange" field). A half that is there is
+    # used for its own side, paired with the base preset's other half - never
+    # accepted and then silently ignored (p3-seams delta review, finding A).
+    user_half = str(item.get("example_user") or "").strip()
+    jarvis_half = str(item.get("example_jarvis") or "").strip()
+    if user_half or jarvis_half:
+        examples = [{"user": user_half or examples[0]["user"],
+                     "jarvis": jarvis_half or examples[0]["jarvis"]},
                     examples[1]]
     dials = dict(base["dials"])
     saved = item.get("dials")
@@ -1402,6 +1412,46 @@ def delete_user_personality(pid, *, confirm: bool = False) -> tuple:
     return True, f"Deleted {name}."
 
 
+def _custom_row(item: dict) -> dict:
+    """The saved custom preset as the GET view reports it.
+
+    Richer than `{id, name, base_preset}` on purpose: the desktop panel's
+    Duplicate and Use buttons round-trip this row straight back into the POST
+    save shape, so it must carry the line, one example exchange and the dials
+    it will send (p3-seams delta review, finding B). The `id` is the preset's
+    real id - `mine-...` when the panel chose it, the generated `custom-...`
+    when it did not - and both use and delete accept it as-is, so the panel's
+    safe-id mapping is never rewritten behind its back."""
+    base = _BY_ID.get(item.get("base_preset")) or _BY_ID[_DEFAULT_PERSONALITY]
+    dials = dict(base["dials"])
+    saved = item.get("dials")
+    if isinstance(saved, dict):
+        for name in _DIAL_SPECS:
+            value = _dial_value(name, saved.get(name))
+            if value is not None:
+                dials[name] = value
+    user_half = str(item.get("example_user") or "").strip()
+    jarvis_half = str(item.get("example_jarvis") or "").strip()
+    example = (jarvis_half or base["examples"][0]["jarvis"])
+    speed = item.get("voice_speed")
+    if not (isinstance(speed, (int, float)) and not isinstance(speed, bool)):
+        speed = base["voice_speed"]
+    return {
+        "id": str(item["id"]),
+        "name": str(item.get("name") or item["id"]),
+        "line": str(item.get("custom_trait") or "").strip(),
+        "example": example,
+        "example_user": user_half or base["examples"][0]["user"],
+        "example_jarvis": example,
+        "dials": dials,
+        "based_on": str(item.get("base_preset") or _DEFAULT_PERSONALITY),
+        "base_preset": str(item.get("base_preset") or _DEFAULT_PERSONALITY),
+        "voice_spec": str(item.get("voice_spec") or ""),
+        "voice_speed": float(speed),
+        "builtin": False,
+    }
+
+
 def view_personalities() -> dict:
     """The personality half of GET /api/manner (the old keys stay as they are)."""
     return {
@@ -1428,14 +1478,8 @@ def view_personalities() -> dict:
         # The desktop/phone Settings UI (PR #769 and its phone twin) reads these
         # two snake_case names; the long names above stay for existing callers.
         "voice_sync": sync_voice_enabled(),
-        "user_personalities": [
-            {"id": item["id"], "name": item["name"], "base_preset": item["base_preset"]}
-            for item in user_personalities()
-        ],
-        "custom_personalities": [
-            {"id": item["id"], "name": item["name"], "base_preset": item["base_preset"]}
-            for item in user_personalities()
-        ],
+        "user_personalities": [_custom_row(item) for item in user_personalities()],
+        "custom_personalities": [_custom_row(item) for item in user_personalities()],
         "max_user_personalities": MAX_CUSTOM,
         "reflex_kinds": list(REFLEX_KINDS),
     }

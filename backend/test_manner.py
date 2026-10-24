@@ -1324,11 +1324,53 @@ def t_personality_wire_contract_769():
         check("... its line/examples/dials/base reached the engine",
               preset is not None and preset["dials"]["humor"] == 0
               and "short, steady sentences" in preset["prompt_block"], preset)
+        # --- finding B (p3-seams delta review): the panel's Duplicate and Use
+        # buttons round-trip a GET row straight back into the save POST, so the
+        # row must carry the line, one example exchange, the dials and the base
+        # preset - the old {id, name, base_preset} row made Duplicate 400.
+        row = saved[0]
+        check("the GET custom row carries line/example/dials/based_on (Duplicate can round-trip)",
+              {"line", "example", "dials", "based_on"} <= set(row)
+              and row["line"] == "short, steady sentences"
+              and row["based_on"] == "calm_stoic"
+              and row["dials"]["humor"] == 0, row)
+        duplicate = {"custom": {"op": "save", "id": "mine-and-one-copy",
+                                "name": row["name"] + " Copy",
+                                "line": row["line"], "example": row["example"],
+                                "dials": row["dials"], "based_on": row["based_on"]}}
+        code, out = M.handle_set(duplicate)
+        saved2 = M.handle_get()[1]["custom_personalities"]
+        check("GET row -> duplicate POST round-trip succeeds (200, two presets now)",
+              code == 200 and len(saved2) == 2
+              and any(r["id"] == "mine-and-one-copy" for r in saved2),
+              json.dumps(out)[:300])
+        check("... and the duplicate carries the same line, example and dials",
+              any(r["id"] == "mine-and-one-copy"
+                  and r["line"] == "short, steady sentences"
+                  and r["example"] == row["example"]
+                  and r["dials"] == row["dials"] for r in saved2), saved2)
+        check("the one example exchange is USED, not accepted and ignored",
+              "One thing at a time." in M.preset("mine-and-one")["examples"][0]["jarvis"],
+              M.preset("mine-and-one")["examples"])
+        # finding C: a non-panel id is used verbatim for use AND delete.
+        code, out = M.handle_set({"custom": {"op": "save", "id": "saved-by-ui-1",
+                                             "name": "UI Saved", "line": "steady",
+                                             "based_on": "calm_stoic"}})
+        check("a safe non-mine id from a caller is kept verbatim",
+              code == 200 and any(r["id"] == "saved-by-ui-1"
+                                  for r in M.handle_get()[1]["custom_personalities"]))
+        check("... and switching to it works by that id",
+              M.preset("saved-by-ui-1") is not None
+              and M.handle_set({"personality": "saved-by-ui-1"})[0] == 200)
+        check("... and it can be deleted by that id",
+              M.handle_set({"custom": {"op": "delete", "id": "saved-by-ui-1",
+                                       "confirm": True}})[0] == 200)
         check("#769's delete without confirm is refused (asks first)",
               M.handle_set({"custom": {"op": "delete", "id": "mine-and-one"}})[0] == 400)
         code, out = M.handle_set(_UI769_DELETE)
         check("#769's confirmed delete object is accepted",
-              code == 200 and M.handle_get()[1]["custom_personalities"] == [], json.dumps(out)[:200])
+              code == 200 and len(M.handle_get()[1]["custom_personalities"]) == 1,
+              json.dumps(out)[:200])
 
 
 def t_personality_custom_name_is_scrubbed():

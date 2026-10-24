@@ -204,11 +204,18 @@ def check_module_behaviour(module) -> None:
           and module.normalize_personality_id("plain") == "tactical_ops")
     check("an unknown personality name is refused, not guessed",
           module.normalize_personality_id("shouty") is None)
-    check("the GET view carries the personality block and the 8 presets",
-          len(module.view()["personalities"]) == 8
-          and module.view()["personality_default"] == "warm_peer"
-          and set(module.view()["dials"]) == {"humor", "brevity", "formality", "address"}
-          and module.view()["max_user_personalities"] == 20)
+    # The PC may legitimately have saved "My Personalities" presets, so the
+    # check is the EIGHT BUILT-INS, not "the list is exactly eight entries".
+    view = module.view()
+    builtins = [p for p in view["personalities"] if p.get("builtin")]
+    check("the GET view carries the personality block and the 8 built-in presets",
+          len(builtins) == 8
+          and [p["id"] for p in builtins] == PID
+          and view["personality_default"] == "warm_peer"
+          and set(view["dials"]) == {"humor", "brevity", "formality", "address"}
+          and view["max_user_personalities"] == 20
+          and view["voice_sync"] is True
+          and isinstance(view["custom_personalities"], list))
     # The four dials: every documented value validates, a bad one is refused.
     good = {"humor": [0, 1, 2, 3, "none", "subtle", "dry", "playful", "90%"],
             "brevity": ["concise", "balanced", "thorough", "short", "long"],

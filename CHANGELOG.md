@@ -1423,5 +1423,32 @@ The first numbered version. It gathers the work of the last few days.
 - Phone and desktop downloads are published only from `main` and the
   working branch; shorter, plainer release notes with a checksum.
 
+**Personality presets and tuning dials (2026-10-22, backend half)**
+
+- Jarvis can now be switched between eight personalities (Warm Collaborator,
+  Classic British Butler, Tactical Mission Control, Dry & Deadpan, Sharp Tech
+  Partner, Socratic Coach & Tutor, No-Nonsense Critic, Calm & Grounded) typed
+  or spoken - "switch personality to Classic Butler", "talk to me like TARS",
+  "call me sir", "set humor to dry" - with no approval card and no model wait,
+  answered in the active preset's own words ("Very good, sir. Timer set for 10
+  minutes."). Four dials tune humour, answer length, formality and how Jarvis
+  addresses the owner; up to 20 "My Personalities" can be saved, with their
+  words (and name) scrubbed and an instruction override refused, and a delete
+  asks first.
+- The chosen personality shapes the model's answers through a measured compact
+  persona block (<= 721 characters worst case, under the 750-character cap),
+  with a recency hint before the newest question; a crisis turn replaces the
+  whole block with calm support text, and "It's on your screen." for a
+  sensitive fact is unchanged. Kokoro voice and speed follow the preset unless
+  the owner turns voice sync off, and the quick confirmations speak in the
+  preset's voice.
+- `/api/manner` gains the personality fields (`personality`, `personalities`,
+  `dials`, `voice_sync`, `custom_personalities`) and the cardless POST forms;
+  `warm`/`plain` keep working. The desktop panel (#769) reads exactly these
+  names. **Not deployed or field-tested:** `Jarvis Live`'s turn pipeline is not
+  wired yet and the weighted Kokoro blend resolver is tested but the TTS path
+  still uses the fallback voice. Docs: `docs/JARVIS-API.md` section 27.7;
+  tests: `backend/test_manner.py`.
+
 
 
