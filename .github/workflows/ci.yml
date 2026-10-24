@@ -1465,6 +1465,16 @@ jobs:
       - name: Media sources are permitted by the app CSP
         run: python3 ../../tools/check_media_csp.py
 
+      # A pull request no longer edits CHANGELOG.md - it writes ONE fragment
+      # under changelog.d/, rolled in later on a quiet main (tools/roll_changelog.py;
+      # the rule is in changelog.d/README.md and CLAUDE.md). Every PR used to
+      # append at the same top line, so two PRs always conflicted and each
+      # conflict cost a fresh frontend run. This validates any fragment that IS
+      # present (a PR with no changelog-worthy change owes none) and the heading
+      # the roll inserts under; it never requires a roll to have happened yet.
+      - name: CHANGELOG fragments are well formed
+        run: python3 ../../tools/roll_changelog.py --check
+
       # Section 7's pre-build guards for the P-Doc, P-GH and P-Pub waves: the
       # zip/XML bomb reader, the phone-upload name sanitiser, the GitHub
       # base_tree payload guard, the junction-refusing project walk and the
