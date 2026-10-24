@@ -10,8 +10,8 @@ folder (or run `scripts\add-plugin.ps1 -Name voiceprint`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_voiceprint.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: 144, after every folder the old patch stack
-  had (its highest is `model-lanes` at 142) and after `skill-hub` at 143, so its
+- Position in the loader's order: 145, after every folder the old patch stack
+  had (its highest is `model-lanes` at 143) and after `skill-hub` at 144, so its
   four paths are checked in the order they were added rather than in the middle
   of somebody else's
 
