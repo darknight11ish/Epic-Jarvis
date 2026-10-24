@@ -501,6 +501,28 @@ def t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it():
           check_claims.skip_that_withholds_proof(
               "backend/test_data_backup.py",
               SKIPPED_GUARD + "\n1 passed, 1 skipped, 0 failed") is not None)
+    # The two reasons that only appear on a machine unlike this one: no
+    # cryptography installed, and an OS where os.name is not nt. Neither can be
+    # reached on the owner's Windows PC, so pinning the exact text here is the
+    # only thing that stops a reworded skip silently reddening the audit job.
+    crypto = ("skip  a sealed snapshot round trips - the `cryptography` package "
+              "is not installed")
+    check("... a missing package's skip is a machine limit for its own suite",
+          check_claims.skip_that_withholds_proof(
+              "backend/test_data_backup.py", crypto) is None, crypto)
+    platform = ("skip  the other-drive note - it is a Windows question; "
+                "os.name is not nt")
+    check("... a platform's skip is a machine limit for its own suite",
+          check_claims.skip_that_withholds_proof(
+              "backend/test_data_backup.py", platform) is None, platform)
+    # `test_settings_tool` prints `SKIP  <name>` and indents the reason under
+    # it, so a parser that reads only the marker line would lose the reason and
+    # red F01 wherever a setter's module is not importable.
+    settings = ("SKIP  a switch's setter imports jarvis_x\n"
+                "        not importable in this environment")
+    check("... an indented reason under a SKIP marker is read, not lost",
+          check_claims.skip_that_withholds_proof(
+              "backend/test_settings_tool.py", settings) is None, settings)
 
 
 if __name__ == "__main__":
