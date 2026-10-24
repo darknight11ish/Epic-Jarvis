@@ -188,6 +188,11 @@
           "id": "brave",
           "label": "Brave Search (needs a key and a card)",
           "detail": ""
+        },
+        {
+          "id": "deepseek",
+          "label": "DeepSeek web search (needs a key)",
+          "detail": ""
         }
       ],
       "all_none": false

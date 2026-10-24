@@ -32,7 +32,7 @@ WHAT THIS IS NOT
 
   * NOT a second key store. `put()` writes to Windows Credential Manager
     through `jarvis_token_store.WindowsStore`, the same store, the same format
-    and the same ctypes calls the pairing token and the Exa/Tavily/Brave keys
+    and the same ctypes calls the pairing token and the Exa/Tavily/Brave/DeepSeek keys
     already use. There is no new mechanism here to keep in step with the old
     one; there is one mechanism, used one level up.
   * NOT a replacement for `jarvis_scrub`. `redact()` calls it. The scrubber

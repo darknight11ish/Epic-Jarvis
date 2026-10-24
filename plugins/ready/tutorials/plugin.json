@@ -4,5 +4,5 @@
   "module": "jarvis_tutorials",
   "install": "handler",
   "replaces_patch": "tutorials.patch",
-  "stack_order": 119
+  "stack_order": 120
 }

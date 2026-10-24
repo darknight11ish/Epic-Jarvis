@@ -182,6 +182,31 @@ await check("the drawing matches the buttons: a filtered-out name has neither", 
     "the buttons and the drawn dots name different sets of nodes");
 });
 
+/* =========================================================================
+ * P8 idle (2026-10-23): the Brain window's constellation assembly is finite
+ * (320 ticks) and must leave no drawing loop behind. The Brain was already
+ * correct when this was written - this is a REGRESSION PIN, not a bug fix:
+ * it would fail if a future change adds an idle animation loop. (It therefore
+ * PASSES on the commit before the HUD fix too; its bite is shown by a
+ * mutation - an injected idle loop makes it fail, see the branch's report.)
+ * ========================================================================= */
+await check("P8 idle: the real Brain window asks for no animation frames once the picture has settled", async () => {
+  const page = await galaxy();
+  const out = await page.evaluate(async () => {
+    const orig = window.requestAnimationFrame.bind(window);
+    let frames = 0;
+    window.requestAnimationFrame = (cb) => orig((ts) => { frames++; cb(ts); });
+    // The assembly is 320 ticks at 240 Hz (~1.3 s); give it room to settle.
+    await new Promise((r) => setTimeout(r, 2600));
+    const settled = frames;
+    await new Promise((r) => setTimeout(r, 700));
+    return { settled, after: frames };
+  });
+  await page.close();
+  assert.equal(out.after, out.settled,
+    `the Brain window kept requesting animation frames while idle (${out.settled} -> ${out.after})`);
+});
+
 await browser.close();
 await close();
 console.log(fails.length

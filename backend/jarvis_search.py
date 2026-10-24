@@ -1,4 +1,4 @@
-"""jarvis_search.py - web search, with a choice of five providers.
+"""jarvis_search.py - web search, with a choice of six providers.
 
 NEW MODULE, shipped whole. jarvis_agent.py offers it to the model as the
 tool `web_search` (only when `[tools].enabled` names it), web-search.patch
@@ -7,7 +7,7 @@ and /api/search/test), and jarvis_quick.py answers "which search should I
 use?" from the words below, without the model.
 
 THE OWNER'S DECISIONS (2026-09-25, CLAUDE.md "Decided 2026-09-25")
-  - Five providers, SearXNG the default:
+  - Six providers, SearXNG the default:
       searxng     a search program on this PC, in Docker, at
                   http://127.0.0.1:8888 unless the owner points it at another
                   of their own machines (this PC, the home network,
@@ -28,7 +28,15 @@ THE OWNER'S DECISIONS (2026-09-25, CLAUDE.md "Decided 2026-09-25")
                   the owner's key (header X-Subscription-Token). Removed
                   and added back the same day (the owner, 2026-09-25): it
                   needs a payment card, which Brave charges past the free
-                  monthly credit, and its "why" line says so plainly.
+                  monthly credit, and its "why" line says so plainly;
+      deepseek    POST https://api.deepseek.com/v1/tools/search with the
+                  owner's key (Authorization: Bearer <key>; body {"query",
+                  "count", "need_content": false}). DeepSeek's own search
+                  service, added 2026-10-23 as an OPT-IN sixth provider; the
+                  request and answer shapes are from its Search API guide
+                  (api-docs.deepseek.com/guides/search). Its `ori_question`
+                  and `localization` fields are deliberately not sent: one is
+                  conversation context and the other an address.
     Whoogle is left out, and LEFT_OUT says why.
   - Each provider has a short "why use this one" line (WHY), served from the
     PC so both apps show the same words, and used for "which search should I
@@ -62,7 +70,7 @@ RULE 1 - email, files, credentials and memory stay on this PC. Two guards:
     used, the search waits for a card that shows its exact words
     (jarvis_agent.py; repeated_facts below).
 
-RULE 3 - the Exa, Tavily and Brave keys. Kept in Windows Credential Manager
+RULE 3 - the Exa, Tavily, Brave and DeepSeek keys. Kept in Windows Credential Manager
 (KEY_TARGETS, the same store and format as the pairing token -
 jarvis_token_store.WindowsStore), put there on the PC only: the desktop's
 Settings -> Web search, or `py -3 jarvis_search.py key tavily` (it asks for
@@ -77,7 +85,7 @@ variable, so it cannot reach a child program (jarvis_child_env).
 WHAT GOES OVER THE NETWORK, AND HOW
   - SearXNG: jarvis_local_http's opener - NO proxy, ever (it is on this PC
     or the owner's own network; a proxy is another machine).
-  - Exa, Tavily and Brave: https only, to a fixed address. The system proxy, if
+  - Exa, Tavily, Brave and DeepSeek: https only, to a fixed address. The system proxy, if
     the PC has one, is used as for every other https call here
     (jarvis_local_http.opener_for): a proxy sees only scrambled traffic and
     the host name, never the key or the words.
@@ -127,7 +135,7 @@ from typing import Callable, Optional
 #   The providers, and the words both apps show
 # --------------------------------------------------------------------------
 
-PROVIDERS = ("searxng", "duckduckgo", "exa", "tavily", "brave")
+PROVIDERS = ("searxng", "duckduckgo", "exa", "tavily", "brave", "deepseek")
 DEFAULT_PROVIDER = "searxng"
 DEFAULT_SEARXNG_URL = "http://127.0.0.1:8888"
 
@@ -137,7 +145,19 @@ LABEL = {
     "exa": "Exa",
     "tavily": "Tavily",
     "brave": "Brave Search",
+    "deepseek": "DeepSeek web search (needs a key)",
 }
+
+#: How a provider is named INSIDE a sentence, where its list label is too long:
+#: "DeepSeek web search (needs a key)" is the words of the choice on screen,
+#: and "DeepSeek Search" is how a sentence names it ("No DeepSeek Search key
+#: is saved on this PC"). Providers not here use their LABEL unchanged.
+NAMES = {"deepseek": "DeepSeek Search"}
+
+
+def name(provider: Optional[str]) -> str:
+    """A provider's name inside a sentence. Never quotes a key."""
+    return NAMES.get(provider or "", LABEL.get(provider or "", "no search"))
 
 #: "Why use this one" - one or two plain sentences each. Both apps show
 #: these words, read from GET /api/search; test_web_search.py checks the
@@ -167,6 +187,11 @@ WHY = {
         "(roughly 1,000 searches). Needs an account, a payment card that is charged "
         "if you go past the free credit, and a key, and Brave sees what you search, "
         "tied to your key."),
+    "deepseek": (
+        "DeepSeek's own search service: results written for AI assistants, at $0.75 "
+        "for 1,000 searches - a search that finds nothing is not charged. Needs an "
+        "account with some credit on it and a key, and DeepSeek sees what you search, "
+        "tied to your key."),
 }
 
 #: Why SearXNG is the default - for "why SearXNG?".
@@ -174,29 +199,35 @@ DEFAULT_WHY = ("SearXNG is the default because it costs nothing, needs no key or
                "account, and runs on this PC, so no single search company keeps a "
                "record of your searches.")
 
-#: Left out on purpose, with the reason - shown under the five in both apps.
+#: Left out on purpose, with the reason - shown under the six in both apps.
 LEFT_OUT = [
     {"id": "whoogle", "label": "Whoogle",
      "why": ("Not offered: its own README says it no longer returns results, since "
              "Google blocked searching without JavaScript in 2025.")},
 ]
 
-NEEDS_KEY = frozenset({"exa", "tavily", "brave"})
+NEEDS_KEY = frozenset({"exa", "tavily", "brave", "deepseek"})
 
 #: Where each provider's words go, for the card. A fixed https address for
 #: the two with keys - the key is sent there and nowhere else.
 EXA_URL = "https://api.exa.ai/search"
 TAVILY_URL = "https://api.tavily.com/search"
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
+DEEPSEEK_URL = "https://api.deepseek.com/v1/tools/search"
+#: DeepSeek's guide gives the query as 1 to 128 Unicode characters; the
+#: module's own MAX_QUERY_CHARS (300) is wider, so DeepSeek gets its own bound
+#: and a longer search is refused before anything is sent.
+DEEPSEEK_QUERY_CHARS = 128
 DDG_HOST = "html.duckduckgo.com"
 
-#: The Exa, Tavily and Brave keys, in Windows Credential Manager. The desktop
-#: writes them under the same names (jarvis-desktop/src-tauri/src/
+#: The Exa, Tavily, Brave and DeepSeek keys, in Windows Credential Manager. The
+#: desktop writes them under the same names (jarvis-desktop/src-tauri/src/
 #: token_store.rs, SEARCH_KEY_TARGETS - test_web_search.py checks the text).
 KEY_TARGETS = {
     "exa": "Jarvis Backend/Exa key",
     "tavily": "Jarvis Backend/Tavily key",
     "brave": "Jarvis Backend/Brave Search key",
+    "deepseek": "Jarvis Backend/DeepSeek Search key",
 }
 
 #: Where each key is made - for the apps and backend/README.md.
@@ -204,6 +235,7 @@ KEY_WHERE = {
     "exa": "https://dashboard.exa.ai (sign up, then API Keys)",
     "tavily": "https://app.tavily.com (sign in, then API Keys)",
     "brave": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+    "deepseek": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
 }
 
 KEY_ENTRY = ("Keys are entered on the PC only - in the desktop app's Settings, Web "
@@ -470,7 +502,7 @@ def save_key(provider: str, value: str) -> dict:
     (`py -3 jarvis_search.py key tavily`); there is NO route for it - the
     desktop writes Credential Manager itself, and the phone never sends one."""
     if provider not in KEY_TARGETS:
-        return {"ok": False, "error": "only Exa, Tavily and Brave Search use a key"}
+        return {"ok": False, "error": "only Exa, Tavily, Brave Search and DeepSeek use a key"}
     why = key_problem(value)
     if why:
         return {"ok": False, "error": why}
@@ -483,18 +515,18 @@ def save_key(provider: str, value: str) -> dict:
         return {"ok": False, "error": f"Credential Manager refused ({type(exc).__name__})"}
     if back != value.strip():
         return {"ok": False, "error": "the key read back from Credential Manager did not match"}
-    return {"ok": True, "said": f"Saved your {LABEL[provider]} key in Windows Credential "
+    return {"ok": True, "said": f"Saved your {name(provider)} key in Windows Credential "
                                 f"Manager, as \"{KEY_TARGETS[provider]}\"."}
 
 
 def forget_key(provider: str) -> dict:
     if provider not in KEY_TARGETS:
-        return {"ok": False, "error": "only Exa, Tavily and Brave Search use a key"}
+        return {"ok": False, "error": "only Exa, Tavily, Brave Search and DeepSeek use a key"}
     try:
         _store(provider).delete()
     except Exception as exc:
         return {"ok": False, "error": f"Credential Manager refused ({type(exc).__name__})"}
-    return {"ok": True, "said": f"Removed your {LABEL[provider]} key from this PC."}
+    return {"ok": True, "said": f"Removed your {name(provider)} key from this PC."}
 
 
 # --------------------------------------------------------------------------
@@ -513,7 +545,8 @@ PIP_LINE = "py -3 -m pip install ddgs"
 
 #: Which other provider to OFFER when one is down - offered, never used.
 _OFFER = {"searxng": "duckduckgo", "duckduckgo": "searxng",
-          "exa": "searxng", "tavily": "searxng", "brave": "searxng"}
+          "exa": "searxng", "tavily": "searxng", "brave": "searxng",
+          "deepseek": "searxng"}
 
 
 def offer_line(provider: Optional[str]) -> str:
@@ -529,7 +562,7 @@ def offer_line(provider: Optional[str]) -> str:
 
 
 _SAY = {"searxng": "SearXNG", "duckduckgo": "DuckDuckGo", "exa": "Exa", "tavily": "Tavily",
-        "brave": "Brave"}
+        "brave": "Brave", "deepseek": "DeepSeek Search"}
 
 
 def readiness(provider: Optional[str], s: Optional[dict] = None) -> tuple:
@@ -551,7 +584,7 @@ def readiness(provider: Optional[str], s: Optional[dict] = None) -> tuple:
         return "", ""
     if not _key(provider):
         return "key_missing", (
-            f"No {LABEL[provider]} key is saved on this PC. Add it in the desktop app's "
+            f"No {name(provider)} key is saved on this PC. Add it in the desktop app's "
             f"Settings, Web search (get one at {KEY_WHERE[provider]}).")
     return "", ""
 
@@ -628,6 +661,8 @@ def plan(query, *, s: Optional[dict] = None) -> Plan:
         host = urllib.parse.urlsplit(TAVILY_URL).netloc
     elif provider == "brave":
         host = urllib.parse.urlsplit(BRAVE_URL).netloc
+    elif provider == "deepseek":
+        host = urllib.parse.urlsplit(DEEPSEEK_URL).netloc
     p = Plan(query=q, provider=provider, label=LABEL.get(provider or "", "no search"),
              host=host, keyed=provider in NEEDS_KEY,
              searxng_url=(s.get("searxng_url") or "") if provider == "searxng" else "")
@@ -643,6 +678,11 @@ def plan(query, *, s: Optional[dict] = None) -> Plan:
         p.state, p.problem = "empty", (
             f"Those search words are longer than {MAX_QUERY_CHARS} characters. Search with "
             f"fewer, shorter words. Nothing was sent.")
+        return p
+    if provider == "deepseek" and len(q) > DEEPSEEK_QUERY_CHARS:
+        p.state, p.problem = "empty", (
+            f"DeepSeek takes search words up to {DEEPSEEK_QUERY_CHARS} characters, and those "
+            f"are longer. Search with fewer, shorter words. Nothing was sent.")
         return p
     kind = _secret_in(q)
     if kind == "unchecked":
@@ -668,7 +708,7 @@ def describe(p: Plan) -> str:
     """The card text. The search words in full - never summarised."""
     if p.problem:
         return p.problem
-    lines = [f"Search the web with {p.label} for:", "", f"    “{p.query}”", ""]
+    lines = [f"Search the web with {name(p.provider)} for:", "", f"    “{p.query}”", ""]
     if p.provider == "searxng":
         lines.append(f"What leaves this PC: these search words, and nothing else, to your "
                      f"SearXNG at {p.searxng_url}, which asks several search engines for "
@@ -677,9 +717,10 @@ def describe(p: Plan) -> str:
         lines.append(f"What leaves this PC: these search words, and nothing else, to "
                      f"DuckDuckGo ({p.host}). DuckDuckGo sees them and your internet address.")
     else:
-        lines.append(f"What leaves this PC: these search words, to {p.label} ({p.host}), "
-                     f"with your {p.label} key - so {p.label} knows the search is yours. "
-                     f"The key goes to {p.host} only.")
+        lines.append(f"What leaves this PC: these search words, to {name(p.provider)} "
+                     f"({p.host}), with your {name(p.provider)} key - so "
+                     f"{name(p.provider)} knows the search is yours. The key goes to "
+                     f"{p.host} only.")
     lines += ["", f"What comes back - up to {MAX_RESULTS} results, each a title, a link and "
                   f"a short snippet - is read as outside text, like a web page.",
               "", "If you say no: nothing is searched, and Jarvis answers from what it "
@@ -969,6 +1010,7 @@ VAULT_HANDLES = {
     "exa": ("exa", "api.exa.ai"),
     "tavily": ("tavily", "api.tavily.com"),
     "brave": ("brave", "api.search.brave.com"),
+    "deepseek": ("deepseek", "api.deepseek.com"),
 }
 
 
@@ -1169,11 +1211,11 @@ def _searxng_preflight(base: str) -> None:
 def _connection_failed(provider: str, exc: BaseException, where: str) -> SearchError:
     reason = getattr(exc, "reason", exc)
     if isinstance(reason, (TimeoutError,)) or "timed out" in str(reason).lower():
-        return SearchError("timeout", f"{LABEL[provider]} did not answer in time.")
+        return SearchError("timeout", f"{name(provider)} did not answer in time.")
     if provider == "searxng":
         return SearchError("not_running", _searxng_down_said(where))
     return SearchError("failed", (
-        f"Jarvis could not reach {LABEL[provider]} ({type(reason).__name__}). Check the "
+        f"Jarvis could not reach {name(provider)} ({type(reason).__name__}). Check the "
         f"PC's internet connection."))
 
 
@@ -1375,6 +1417,86 @@ def _brave(p: Plan) -> list:
     return normalise(web.get("results") if isinstance(web, dict) else None)
 
 
+def _deepseek(p: Plan) -> list:
+    """DeepSeek's Search API (2026-10-23, the owner's opt-in sixth provider).
+
+    The request and answer shapes are from its own guide,
+    https://api-docs.deepseek.com/guides/search - read as data, and the only
+    parts used are POST /v1/tools/search, `Authorization: Bearer <key>`, and
+    the body's `query`, `count` and `need_content`. `need_content` is false:
+    results carry a short `snippet` (for a screen) and a long `summary` (for a
+    model), and the summary is what the model gets, cut to SNIPPET_CHARS like
+    every other provider's page text. `content` stays empty and `date`,
+    `site_name`, `site_icon`, `authority` and `rerank_score` are not used. The
+    guide's optional `ori_question` and `localization` are NOT sent: one is
+    conversation context and the other an address, and neither is needed for a
+    search Jarvis was asked to make.
+
+    Billing (its guide): $0.75 per 1,000 successful searches; failed requests
+    and a search with no results are not billed. `count` does not change the
+    price.
+    """
+    if not p.query or len(p.query) > DEEPSEEK_QUERY_CHARS:
+        raise SearchError("empty", (
+            f"DeepSeek takes search words up to {DEEPSEEK_QUERY_CHARS} characters. Nothing "
+            f"was sent. Search with fewer, shorter words."))
+    key = _key("deepseek")
+    if not key:
+        raise SearchError("key_missing", readiness("deepseek")[1])
+    data = json.dumps({"query": p.query, "count": MAX_RESULTS,
+                       "need_content": False}).encode("utf-8")
+    req = urllib.request.Request(DEEPSEEK_URL, data=data, method="POST", headers={
+        "Content-Type": "application/json", "Accept": "application/json",
+        "User-Agent": "jarvis-search",
+        "Authorization": f"Bearer {_vault_handle('deepseek', key)}"})
+    try:
+        status, body = _send(req, local=False, service_host="api.deepseek.com")
+    except SearchError:
+        raise
+    except Exception as exc:
+        raise _connection_failed("deepseek", exc, DEEPSEEK_URL) from None
+    body = _clean_return(body)
+    if status in (401, 403):
+        raise SearchError("key_refused", (
+            "DeepSeek refused your key - it is wrong or has been cancelled. Check it at "
+            f"{KEY_WHERE['deepseek']} and save it again in the desktop app's Settings, "
+            "Web search."))
+    if status == 402:
+        raise SearchError("quota_used", (
+            "Your DeepSeek account is out of balance, so it will not run searches. Add "
+            "credit to your DeepSeek account at https://platform.deepseek.com, or switch "
+            "web search to another provider."))
+    if status == 429:
+        raise SearchError("rate_limited", (
+            "DeepSeek says too many searches just now. Wait a minute and try again."))
+    if status in (408, 504):
+        raise SearchError("timeout", "DeepSeek did not answer in time.")
+    if status == 400:
+        raise SearchError("failed", (
+            "DeepSeek would not accept those search words. Try different words, or fewer "
+            "of them - a failed search is not charged."))
+    if status >= 500:
+        raise SearchError("failed", (
+            "DeepSeek had a problem on its side, so the search did not finish. Wait a "
+            "minute and try again."))
+    if status != 200:
+        raise SearchError("failed", (
+            "DeepSeek answered with an error Jarvis cannot use. Wait a minute and try "
+            "again."))
+    doc = _json(body, "DeepSeek")
+    rows = doc.get("results") if isinstance(doc, dict) else None
+    # The summary first (its guide: "intended to be read by a model"), the
+    # short snippet next, and no `content` field, so `normalise` does not
+    # prefer page content this module never asked for.
+    mapped = []
+    for r in rows if isinstance(rows, list) else []:
+        if not isinstance(r, dict):
+            continue
+        text = r.get("summary") or r.get("snippet") or r.get("content") or ""
+        mapped.append({"title": r.get("title"), "url": r.get("url"), "snippet": text})
+    return normalise(mapped)
+
+
 _DDG_LOCK = threading.Lock()
 _DDG_LAST = [0.0]
 
@@ -1447,7 +1569,8 @@ def _duckduckgo(p: Plan) -> list:
 
 
 _PROVIDER_CALL = {"searxng": _searxng, "duckduckgo": _duckduckgo,
-                  "exa": _exa, "tavily": _tavily, "brave": _brave}
+                  "exa": _exa, "tavily": _tavily, "brave": _brave,
+                  "deepseek": _deepseek}
 
 
 def run(p: Plan, *, approved: bool = False) -> dict:
@@ -1575,7 +1698,7 @@ def handle_settings(body) -> tuple:
         if pid not in PROVIDERS:
             return 400, {"ok": False, "error": f"provider must be one of {', '.join(PROVIDERS)}"}
         s = _save(provider=pid)
-        said = f"Web search now uses {LABEL[pid]}."
+        said = f"Web search now uses {name(pid)}."
         state, why = readiness(pid, s)
         if state:
             said = f"{said} {why}"
@@ -1611,8 +1734,8 @@ def handle_test(body=None) -> tuple:
     if out.get("ok"):
         n = len(out.get("results") or [])
         return 200, {"ok": True, "state": "works", "provider": p.provider,
-                     "said": (f"{p.label} works: a test search for \"{TEST_QUERY}\" found "
-                              f"{n} result{'s' if n != 1 else ''}."),
+                     "said": (f"{name(p.provider)} works: a test search for \"{TEST_QUERY}\" "
+                              f"found {n} result{'s' if n != 1 else ''}."),
                      "results": n}
     return 200, {"ok": False, "state": out.get("state") or "failed", "provider": p.provider,
                  "said": out.get("error") or "It did not work.", "offer": out.get("offer", "")}
@@ -1942,13 +2065,13 @@ def explain(which: Optional[str] = None) -> str:
         if which == x["id"]:
             return f"{x['label']}: {x['why']}"
     if which in PROVIDERS:
-        out = f"{LABEL[which]}: {WHY[which]}"
+        out = f"{name(which)}: {WHY[which]}"
         if which == DEFAULT_PROVIDER:
             out += f" {DEFAULT_WHY}"
         if now == which:
             out += " It is the one Jarvis uses now."
         return out
-    lines = [f"Jarvis can search the web five ways. Now it uses "
+    lines = [f"Jarvis can search the web six ways. Now it uses "
              f"{LABEL[now] if now else 'none'}."]
     if not now and s.get("why"):
         lines[0] += f" ({s['why']})"
@@ -1980,7 +2103,8 @@ USAGE = """\
 py -3 jarvis_search.py key exa           save your Exa key (it is asked for, not shown)
 py -3 jarvis_search.py key tavily        save your Tavily key
 py -3 jarvis_search.py key brave         save your Brave Search key
-py -3 jarvis_search.py forget-key exa    remove it from this PC (also: tavily, brave)
+py -3 jarvis_search.py key deepseek      save your DeepSeek key
+py -3 jarvis_search.py forget-key exa    remove it from this PC (also: tavily, brave, deepseek)
 py -3 jarvis_search.py status            which search is chosen, and which keys are saved
 py -3 jarvis_search.py test              one test search for "wikipedia" with the chosen search
 """
@@ -1993,7 +2117,7 @@ def _main(argv, *, ask_secret=None, out=print) -> int:
     cmd = argv[0]
     if cmd in ("key", "forget-key"):
         if len(argv) != 2 or argv[1] not in KEY_TARGETS:
-            out("Say which: exa, tavily or brave.")
+            out("Say which: exa, tavily, brave or deepseek.")
             return 2
         prov = argv[1]
         if cmd == "forget-key":
@@ -2002,7 +2126,7 @@ def _main(argv, *, ask_secret=None, out=print) -> int:
             if ask_secret is None:
                 import getpass
                 ask_secret = getpass.getpass
-            value = ask_secret(f"Paste your {LABEL[prov]} key (it will not show), then "
+            value = ask_secret(f"Paste your {name(prov)} key (it will not show), then "
                                f"press Enter: ")
             r = save_key(prov, value or "")
         out(r.get("said") or f"Not saved: {r.get('error')}.")
@@ -2015,7 +2139,7 @@ def _main(argv, *, ask_secret=None, out=print) -> int:
         out(f"Ask before every web search: {'on' if s['ask_every_time'] else 'off'}")
         for prov in KEY_TARGETS:
             k = key_saved(prov)
-            out(f"{LABEL[prov]} key: "
+            out(f"{name(prov)} key: "
                 + ("saved" if k else "not saved" if k is False else "cannot be checked here"))
         return 0
     if cmd == "test":
