@@ -212,6 +212,12 @@ INTERNAL = {
     "undo": "the undo shelf's own read; the 'undo' entry names the pane",
     "watch": "the GitHub watchlist's own read; 'github-watchlist' names the feature",
     "watch_report": "the GitHub watchlist's read-only peek; 'github-watchlist' names the feature",
+    # 2026-10-23, #749: the phone's "All features and abilities" row is the
+    # directory OF this list - every ability it indexes already has its own
+    # feature row above, so a row for the index itself would list the list. It
+    # is a Settings menu id (never hideable: it is the phone's map of where each
+    # control lives), not an ability of its own.
+    "settings.all-features": "the phone directory row itself: it indexes the 139 features, and every ability it lists has its own row",
 }
 
 #: The lessons a feature may be taught by, read from the real catalogue. A

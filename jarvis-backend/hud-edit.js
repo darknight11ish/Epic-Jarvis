@@ -928,6 +928,16 @@ export function mountHudEditor(options = {}) {
     layout = globalThis.__jarvisHudLayout
       ? normalizeLayout(globalThis.__jarvisHudLayout)
       : presetLayout("cockpit");
+    // PWA slice 2: a browser has no bootstrap to push a saved document, so
+    // the editor reads THIS browser's own layout (hud-layout-store.js's
+    // browser branch: localStorage, never the host PC's store). The desktop
+    // path above is untouched: with a shell the bootstrap still pushes.
+    if (!shellPresent && globalThis.__JARVIS_WEB_MODE) {
+      try {
+        const answer = await store.loadLayout();
+        if (answer && answer.layout) layout = normalizeLayout(answer.layout);
+      } catch { /* the page keeps the Cockpit preview */ }
+    }
     wire();
     render();
     updateEditButton();

@@ -114,5 +114,6 @@ object SettingsJump {
         // jump list's own words for the same section (settings.html,
         // `#setup-questionnaire`).
         Entry("First-time setup", "setup-questionnaire"),
+        Entry("All features and abilities", "all-features"),
     )
 }

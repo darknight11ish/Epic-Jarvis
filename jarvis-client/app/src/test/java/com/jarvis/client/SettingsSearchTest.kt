@@ -183,7 +183,12 @@ class SettingsSearchTest {
         // The heading.
         assertTrue(SettingsSearch.matches("voice", "voice"))
         assertTrue(SettingsSearch.matches("web-search", "search"))
-        assertEquals(listOf("voice"), SettingsSearch.matching("voice"))
+        // ...and the directory row also answers "voice", LAST: its own words
+        // carry the switch names that have no row of their own on the phone
+        // ("voice follows the face"), which is the bridge #749 added so those
+        // names find the directory. The heading match still comes first, so
+        // this is two real matches for one typed word, not a second heading.
+        assertEquals(listOf("voice", "all-features"), SettingsSearch.matching("voice"))
         // The words of a control inside it.
         assertTrue(SettingsSearch.matches("folders", "obsidian"))
         assertEquals(listOf("folders"), SettingsSearch.matching("logseq"))
