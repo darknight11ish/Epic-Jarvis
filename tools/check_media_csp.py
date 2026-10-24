@@ -101,6 +101,13 @@ RUNTIME_SOURCES = {
     ("voice-panel.js", "playFromPc", "reply.audio"): (
         "the voice-sample reply, checked by the page for its `data:audio/` prefix",
         "src/voice_training.rs", "data:audio/wav;base64"),
+    # The personality settings page's own "Hear sample" button (the
+    # manner-settings.js file lands with that slice; the entry costs nothing
+    # before it and the Rust half is checked either way).
+    ("manner-settings.js", "hearSample", "audio"): (
+        "the `hear_voice_sample` reply (`out.audio`), built at run time in "
+        "voice_training.rs as a `data:audio/wav` URI",
+        "src/voice_training.rs", "data:audio/wav;base64"),
 }
 
 # The lifecycle types `EventSource`/`media` know about, so that "no scheme at
