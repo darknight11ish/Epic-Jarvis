@@ -655,9 +655,30 @@ Two neighbours look like this race and are **not** it, so nothing is done to the
   Hand-typing a number the generator would write is the mistake there, and the file
   it fights over is a different one.
 
-`CHANGELOG.md` is appended at the tail too, and `6fda2b29` records it merging on its
-own with both entries intact - so it is not in the list above, which is where the
-evidence is.
+`CHANGELOG.md` used to be appended at the tail too, and `6fda2b29` records it
+merging on its own with both entries intact - but **it is no longer appended by
+pull requests at all (2026-10-23).** It was the worst crossing of the set: every
+PR that had a user-visible change wrote at the same top line, so two such PRs
+always conflicted, every merge to `main` dirtied the rest, and each conflict
+cost a fresh ~71-minute `frontend` run (one night lost six of them). The rule
+now, and it is the one to follow:
 
-Four files that all grow at the tail, and one fix for a crossing, so it is written
-down **once**, here, rather than four times beside each file.
+- **A pull request writes ONE file under `changelog.d/`** - named
+  `YYYY-MM-DD-<slug>.md`, its whole content ONE markdown bullet with a bold
+  title (the same text that used to go into `CHANGELOG.md`) - and **never edits
+  `CHANGELOG.md`**. `changelog.d/README.md` says this in full.
+- **The roll is deliberate, never automatic.** On a quiet `main`, run
+  `py -3 tools/roll_changelog.py` (or `--dry-run` first); it inserts the
+  bullets newest first under *Not in a numbered version yet*, keeps every
+  existing entry, and removes the fragment files. Open ONE pull request with
+  the roll and nothing else in it - the same shape as the periodic docs size
+  refresh.
+- **`py -3 tools/roll_changelog.py --check`** validates every fragment's name
+  and shape and that the heading still exists; it deliberately does not require
+  fragments to be rolled yet. `backend/test_roll_changelog.py` proves the roll
+  (newest first, no lost bullet, idempotent, dry-run writes nothing).
+- **Do not hand-edit `CHANGELOG.md` in a feature PR** - a hand edit reintroduces
+  exactly the race this replaced.
+
+The four files above (DECISIONS, CLAIMS, the defect register's two) keep the
+append-and-keep-both rule; they are now the only ones written by hand in a PR.
