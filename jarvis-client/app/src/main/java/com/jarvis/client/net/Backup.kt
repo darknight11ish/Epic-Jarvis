@@ -19,11 +19,12 @@ import kotlinx.serialization.json.intOrNull
  * this run's one-time recovery code and writes NOTHING yet, the phone shows
  * the code and waits for the owner to say he has kept it, and only then does
  * the phone's finish press (`commit`) make the PC write the file. From
- * 2026-10-24 that press is ONE TAP and is enough - no step on the PC - because
- * the owner decided the one-time code the phone holds IS the authorisation;
- * the write still physically happens on the PC, and the residual risk (the
- * "I saved it" tick is a promise by this app, not by the PC) is written down in
- * docs/ARCHITECTURE.md section 8.
+ * 2026-10-24 that press is ONE TAP and is enough - no step on the PC - and the
+ * PC binds it to the phone that minted the run (or to itself, when the owner
+ * types the code there): another paired device holding the same code is
+ * refused. The write still physically happens on the PC, and the residual risk
+ * (the "I saved it" tick is a promise by this app, not by the PC) is written
+ * down in docs/ARCHITECTURE.md section 8.
  *
  * WHY IT IS TWO CALLS AND NOT ONE, which is the whole safety of the feature.
  * Every backup is locked with its OWN one-time code, the code is stored
@@ -62,9 +63,10 @@ object Backup {
     const val PREPARE_PATH = "/api/backup/prepare"
     /**
      * Say the code is kept. THIS is the call that writes the file - on the PC.
-     * Since the owner's 2026-10-24 decision any paired device holding this
-     * run's one-time code may make it: the code is the authorisation, and the
-     * write still happens on the PC's disk by the PC's backend.
+     * Since the owner's 2026-10-24 decision the phone's finish press may make
+     * it; the PC accepts it from the device that MINTED the run or from the PC
+     * itself, and refuses any other paired device that holds the same code.
+     * The write still happens on the PC's disk by the PC's backend.
      */
     const val COMMIT_PATH = "/api/backup/commit"
 
@@ -125,15 +127,16 @@ object Backup {
             "below - so save this code first: it is the only thing that opens the file."
 
     /**
-     * A run started HERE is still waiting on the PC (2026-10-24). Drawn while
+     * A backup run is waiting on the PC (2026-10-24). Drawn while
      * `GET /api/backup/status` reports `prepared` and no run is in hand on this
-     * screen: the write is the PC's own act, so the phone must not claim a
-     * backup exists - it says where the file appears, and that nothing has
-     * been written yet. A dead run is never drawn this way: the PC hides an
-     * expired one from that read.
+     * screen - the run may even have been started on another of the owner's
+     * paired devices, since that read names no device. The write is the PC's
+     * own act, so the phone must not claim a backup exists - it says where the
+     * file appears, and that nothing has been written yet. A dead run is never
+     * drawn this way: the PC hides an expired one from that read.
      */
     const val PREPARED_ELSEWHERE =
-        "A backup started here is waiting to be finished on your PC. " +
+        "A backup run is waiting to be finished on your PC. " +
             "Nothing has been written yet."
 
     /** The state could not be read at all. */
@@ -340,12 +343,15 @@ object Backup {
      * words of its own. 409 and 400 are a run that expired, was replaced, or
      * whose code did not match ([RUN_GONE]).
      *
-     * There is deliberately NO 403 branch any more (2026-10-24): the commit
-     * route no longer refuses a caller for not being the PC, so no 403 with
-     * `pc_only` can reach here. A 403 that does arrive (the server's own
-     * origin or token check) carries no `ok` key, and `JarvisApi.postExplained`
-     * turns it into [ApiError.BadToken] before this function is asked - the
-     * app's ordinary token wording is the honest thing to show for that.
+     * There is deliberately NO 403 branch (2026-10-24): the commit route no
+     * longer refuses the phone that minted the run for not being the PC. A
+     * 403 that DOES arrive carries the PC's own sentence in a body with `ok`
+     * in it (the asker guard's "another device" refusal), and
+     * `JarvisApi.postExplained` hands that body back as an answer before any
+     * status-code translation - so [refusalWords] shows the PC's words. A 403
+     * with no `ok` is the server's own origin or token check and becomes
+     * [ApiError.BadToken] before this function is asked: the app's ordinary
+     * token wording is the honest thing to show for that.
      */
     fun commitRefusal(error: ApiError): String = when {
         error is ApiError.Server && error.code == 409 -> RUN_GONE
@@ -443,9 +449,10 @@ object Backup {
     /**
      * `POST /api/backup/commit {"id","code"}` - say the code is kept. THIS is
      * the call that writes the file on the PC. Since the owner's 2026-10-24
-     * decision any paired device holding this run's code may make it - the
-     * code is the authorisation - and the write still happens on the PC's
-     * disk by the PC's backend.
+     * decision the phone's finish press may make it; the PC accepts it from
+     * the device that MINTED the run or from the PC itself, and refuses any
+     * other paired device holding the same code. The write still happens on
+     * the PC's disk by the PC's backend.
      *
      * The code goes back WITHOUT its hyphens: the PC shows it in four groups of
      * five so a person can read it out, and stores the groups together
@@ -454,7 +461,8 @@ object Backup {
      * code, and the PC cleans both sides anyway.
      *
      * The id is sent back because the PC mints one per run; it is not a secret,
-     * and the PC does not compare it (only the code and the live run matter).
+     * and the PC does not compare it (the live run, the code and the caller's
+     * own identity decide).
      */
     fun commitBody(id: String, code: String): String =
         """{"id":${quote(id)},"code":${quote(code.filter { it.isLetterOrDigit() }.uppercase())}}"""

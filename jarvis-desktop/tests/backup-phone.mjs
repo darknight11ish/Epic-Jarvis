@@ -20,10 +20,14 @@
  *   is already gone - the exact failure the two-call design prevents;
  * - "Write it" sends `{code}` to the EXISTING `POST /api/backup/commit` - no
  *   new route - and a refusal is the backend's own sentence, verbatim;
- * - CONTROL: no approval card, nothing automatic, and the backend no longer
- *   refuses a caller for not being the PC - the phone's tap writes now, so
- *   that refusal had to go; the live run, its exact code and the TTL are what
- *   still authorise a write, and the phone says so on its own screen.
+ * - CONTROL: no approval card, nothing automatic; the backend no longer refuses
+ *   the PHONE THAT MINTED THE RUN for not being the PC - but it DOES refuse
+ *   ANOTHER paired device that holds the same code (403, nothing written, the
+ *   run not spent), because `prepare` records the asking device's identity.
+ *   A run minted with no recorded identity (a backend without jarvis_devices,
+ *   or an in-process call) still falls back to possession of the code; the
+ *   live run, its exact code, the TTL and that identity are what authorise a
+ *   write, and the phone says so on its own screen.
  *
  *     node tests/backup-phone.mjs
  */
@@ -256,7 +260,7 @@ await check("a refusal is the BACKEND'S sentence, verbatim - never a friendlier 
 
 /* ── the wire: the EXISTING route, no new one, and no card ──────────────── */
 
-await check("CONTROL: the route is the existing commit, raises no card, and no longer refuses a phone", async () => {
+await check("CONTROL: the route is the existing commit, raises no card, and binds the finish to the minting phone", async () => {
   const rs = read("src-tauri/src/backup.rs");
   assert.match(rs, /const COMMIT_PATH: &str = "\/api\/backup\/commit";/);
   assert.match(rs, /held_on_stale\(path: &str\) -> bool \{\s*path == FOLDER_PATH \|\| path == RESTORE_PATH \|\| path == DELETE_OLDER_PATH\s*\}/,
@@ -269,15 +273,30 @@ await check("CONTROL: the route is the existing commit, raises no card, and no l
   // A long budget: this copies every database the owner has, like Back up now.
   assert.match(read("src/invoke-budget.js"), /"finish_phone_backup",/);
   // 2026-10-24, the owner's one-tap decision: the paired phone holding the
-  // run's code may write, so the backend must NOT refuse a caller for not
-  // being the PC any more. The old sentence is gone, not reworded.
+  // run's code may write, so the backend must NOT refuse the minting phone for
+  // not being the PC any more. The old sentence is gone, not reworded.
   const py = readRepo("backend/jarvis_backup.py");
   assert.ok(!py.includes("COMMIT_PC_ONLY"),
     "the PC-only refusal is gone, not reworded");
   const commit = (py.split("def request_commit")[1] || "").split("\ndef ")[0];
   assert.ok(commit.length > 500, "the commit function was found");
   assert.ok(!/if not is_here:\s*\n\s*return 403/.test(commit),
-    "request_commit has no device refusal left");
+    "request_commit has no PC-only refusal of the minting phone");
+  // ... but ANOTHER paired device holding the same code IS refused, and the
+  // guard uses the SAME identity the devices module already stamps on a
+  // request - never a new header or token.
+  assert.match(py, /getattr\(self, "_jarvis_device", None\)/,
+    "the handler's own device identity reaches the route");
+  assert.match(commit, /device=None/,
+    "commit takes the caller's device identity");
+  assert.match(commit,
+    /refused_here = bool\(asker\) and not is_here and device != asker/,
+    "the asker guard binds the finish to the minting device or to this PC");
+  assert.match(commit, /COMMIT_OTHER_DEVICE/,
+    "another device gets an honest sentence");
+  assert.match(py, /asker=device/, "prepare records the minting identity in the run");
+  assert.ok(commit.indexOf("refused_here") < commit.indexOf("COMMIT_WRONG_CODE"),
+    "the device is checked before the code, so the route is no code oracle");
   // What DOES authorise it is still all there: the live run and its code.
   assert.match(commit, /if not row or _is_expired\(row\):[\s\S]{0,200}COMMIT_NO_RUN/);
   assert.match(commit, /want != _clean_code\(row\["code"\]\)[\s\S]{0,400}COMMIT_WRONG_CODE/);
@@ -298,11 +317,45 @@ await check("CONTROL: the phone says the write happens on the press, and never b
   const plate = joined(readRepo(
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BackupPlate.kt"));
   // DONE_LEAD only after a commit came back saying a file landed; the old bug
-  // was drawing it the moment the dialog opened.
-  assert.match(plate, /if \(written\) \{[\s\S]{0,400}Backup\.DONE_LEAD/,
-    "DONE_LEAD is drawn only in the written branch");
-  assert.match(plate, /\} else \{[\s\S]{0,600}Backup\.NOTHING_WRITTEN_YET/,
-    "before the press the screen says nothing has been written");
+  // was drawing it the moment the dialog opened. BOTH directions are pinned
+  // here, not just "DONE_LEAD appears after `if (written) {`": it must come
+  // BEFORE the else, and NOTHING_WRITTEN_YET must be inside that else, before
+  // the tick - so a plate that showed the success line in the open-run state
+  // fails.
+  const atWritten = plate.indexOf("if (written) {");
+  const atElse = plate.indexOf("} else {", atWritten);
+  // Searched from the branch markers: the KDoc above also names these
+  // constants, and a check that matched the comment would prove nothing.
+  const atDone = plate.indexOf("Backup.DONE_LEAD", atWritten);
+  const atNothing = plate.indexOf("Backup.NOTHING_WRITTEN_YET", atElse);
+  assert.ok(atWritten >= 0 && atDone > atWritten && atDone < atElse,
+    `DONE_LEAD is only in the written branch: ${atWritten}/${atDone}/${atElse}`);
+  assert.ok(atElse > atDone && atNothing > atElse,
+    `before the press the screen says nothing has been written: ${atElse}/${atNothing}`);
+  // ... and the flag itself: handed the state, never a literal, false when the
+  // run opens, set true in exactly one place (the Landed branch).
+  assert.ok(plate.includes("written = wrote"),
+    "the dialog is handed the state, not a literal true");
+  assert.ok(!plate.includes("written = true"),
+    "nothing hands the dialog a literal true");
+  const atLanded = plate.indexOf("is Backup.Committed.Landed ->");
+  const atRefused = plate.indexOf("is Backup.Committed.Refused ->");
+  const atSuccess = plate.indexOf("wrote = true");
+  assert.ok(atLanded >= 0 && atSuccess > atLanded && atSuccess < atRefused,
+    `the success flag is set only in the Landed branch: ${atLanded}/${atSuccess}/${atRefused}`);
+  assert.equal((plate.match(/wrote = true/g) || []).length, 1,
+    "the success flag is set in exactly one place");
+  assert.match(plate, /is Backup\.Asked\.Ready ->[\s\S]{0,200}wrote = false/,
+    "a new run starts with the success flag false");
+  // And the runtime can only produce Landed from a parsed WRITTEN backup
+  // (`ok: true` and a file name), never from a refusal.
+  const runtime = joined(readRepo(
+    "jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt"));
+  const atParsed = runtime.indexOf("val w = com.jarvis.client.net.Backup.written(r.value)");
+  const atLandedRt = runtime.indexOf("Committed.Landed(", atParsed);
+  assert.ok(atParsed >= 0 && atLandedRt > atParsed
+      && runtime.slice(atParsed, atLandedRt).includes("w != null"),
+    "Landed needs a parsed written backup (ok + name), never a refusal");
   assert.match(plate, /Backup\.PREPARED_ELSEWHERE/,
     "a run left waiting is still said plainly");
 });

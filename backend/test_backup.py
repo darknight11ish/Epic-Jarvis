@@ -2017,8 +2017,12 @@ def t_delete_older_backups_is_one_card_this_pc_only():
 # told why there could not be one. This is it built for real (2026-10-13):
 # `GET /api/backup/status` (read-only, any paired device), `POST
 # /api/backup/prepare` (any paired device: mint this run's one-time recovery
-# code, write NOTHING) and `POST /api/backup/commit` (THIS PC ONLY: write the
-# file that code belongs to, when the owner says he has kept it).
+# code, write NOTHING) and `POST /api/backup/commit` (the device that MINTED
+# the run, or this PC: write the file that code belongs to, when the owner says
+# he has kept it). Since 2026-10-24 the phone's finish press is what makes the
+# PC write, and Gemini's Q-A asker guard binds that press to the device that
+# minted the run or to the PC - another paired device holding the same code is
+# refused 403 and writes nothing (section 8a below).
 #
 # THE ONE OUTCOME THESE HOLD AGAINST. A new backup deletes the oldest of KEEP,
 # so a run whose code never reached the owner would not just add a file nobody
@@ -2229,21 +2233,34 @@ def t_the_code_must_come_back_before_anything_is_written():
 # to ONE TAP FROM THE PHONE: after the phone shows the recovery code and the
 # owner ticks "I have written this code down somewhere safe", pressing the
 # phone's finish button must make the PC write the file - no step on the PC.
-# The one-time code the phone holds IS the authorisation; the write still
-# physically happens on this PC's disk, by this PC's backend.
+# The write still physically happens on this PC's disk, by this PC's backend.
+#
+# THE ASKER GUARD, added the same day on Gemini's ruling (Q-A). The code alone
+# is not the whole authorisation: `prepare` records WHO minted the run (the
+# `_jarvis_device` identity `jarvis_devices` stamps on a request - "pc",
+# "shared", or a paired device's id), and `commit` is accepted ONLY from that
+# device or from this PC. Another paired device holding the same code is 403,
+# writes nothing, and does not spend the run. A run minted with NO identity
+# recorded cannot be bound, so possession of the code still decides - said in
+# `t_a_run_minted_without_a_device_identity_is_decided_by_its_code` and in
+# `request_commit`'s own docstring.
 #
 # These tests hold both halves of that decision: a caller that is not this PC
-# (peer 100.64.0.5, local 127.0.0.1 - what a phone on the owner's mesh network
+# (peer 100.64.0.5, local 100.64.0.9 - what a phone on the owner's mesh network
 # looks like) with the live code gets 200 and exactly one file that the code
 # opens; a wrong or missing code from it is 400 and spends nothing; no run or an
 # expired one is 409 and writes nothing; two concurrent presses from it write
-# ONE file; and the PC's own fallback (`finish_phone_backup`, the code typed
-# into Settings) still finishes a run the phone left waiting.
+# ONE file; the PC's own fallback (`finish_phone_backup`, the code typed into
+# Settings) still finishes a run the phone left waiting; and the two guard
+# tests below hold the allowed and refused directions.
 #
-# NEGATIVE CONTROL, run when this change was made: with the old
-# `if not is_here: return 403, {"ok": False, "error": COMMIT_PC_ONLY, "pc_only":
-# True}` line put back at the top of `request_commit`, the phone tests below
-# fail (403 where they demand 200) - and those are the only new failures.
+# NEGATIVE CONTROLS, measured when each change was made (numbers in the
+# branch's report):
+#   * 2026-10-24 one-tap: with the old `if not is_here: return 403, ...` line
+#     put back at the top of `request_commit`, the phone tests below fail (403
+#     where they demand 200) - and those are the only new failures.
+#   * Q-A guard: with the `refused_here` check removed, the third-caller test
+#     fails (200 where it demands 403, plus a file the folder must not gain).
 
 
 def t_the_pc_can_see_a_run_its_phone_started():
@@ -2317,8 +2334,13 @@ def t_a_paired_phone_holding_the_code_writes_the_backup_the_code_opens():
     (`peer` 100.64.0.5, `local` 127.0.0.1) - holding the live run's one-time
     code gets 200, and the PC writes exactly ONE file into its folder, which
     that same code opens. This is what replaced the 2026-10-13 "only the PC may
-    write" rule: the code is the authorisation, and the write still happens
-    here, on this PC's disk, by this PC's backend."""
+    write" rule, and the write still happens here, on this PC's disk, by this
+    PC's backend.
+
+    No `device` is passed anywhere in this test, so the run is UNBOUND and this
+    is the documented fallback (possession of the code decides). The guard's
+    own bound cases - the minting device allowed, another device refused - are
+    the two tests below."""
     conf, backups = fresh_conf()
     B._save_settings({"folder": str(backups)})
     make_memory_db(conf)
@@ -2347,6 +2369,171 @@ def t_a_paired_phone_holding_the_code_writes_the_backup_the_code_opens():
           and B.handle_post(B.COMMIT_ROUTE,
                             {"id": live["id"], "code": live["recovery_code"]},
                             **phone)[0] == 409)
+
+
+def t_the_finish_is_bound_to_the_phone_that_minted_the_run():
+    """Q-A ASKER GUARD, the two ALLOWED directions (Gemini's ruling, 2026-10-24).
+
+    `prepare` records who minted the run - the same `_jarvis_device` identity
+    `jarvis_devices` stamps on every request: "pc", "shared", or a paired
+    device's id - and `commit` is accepted from that device (the phone's
+    one-tap finish) or from this PC (the owner typing the code, the
+    `finish_phone_backup` fallback). Each writes exactly one file, opened by
+    the code the run minted.
+
+    What no read may ever carry is the identity itself (or the code, or the
+    run id): both `GET /api/backup` from this PC and the phone's
+    `GET /api/backup/status` still expose ONLY `{at, expires_at}`."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    B.backup_now(str(backups))                     # one real backup already there
+    before = _names(backups)
+    # peer/local are what a phone on the owner's mesh looks like. `device` is
+    # the id jarvis_devices would have checked and stamped on that request.
+    minting = {"peer": "100.64.0.5", "local": "100.64.0.9", "device": "d1a2b3c4"}
+
+    # (a) THE MINTING PHONE finishes its own run.
+    live = B.handle_post(B.PREPARE_ROUTE, {}, **minting)[1]
+    check("prepare records the minting device's identity in the run",
+          B._P_STATE["pending"].get("asker") == "d1a2b3c4", B._P_STATE["pending"])
+    whole = json.dumps(live)
+    check("... and neither the answer nor a read carries it anywhere",
+          "asker" not in whole and "d1a2b3c4" not in whole, live)
+    seen = B.handle_get(B.PATH, peer="127.0.0.1", local="127.0.0.1")[1]
+    check("... the PC's own read still has only the two times",
+          set(seen["prepared"]) == {"at", "expires_at"}
+          and "d1a2b3c4" not in json.dumps(seen), seen.get("prepared"))
+    st = B.status_view()
+    check("... and so does the phone's status read",
+          set(st["prepared"]) == {"at", "expires_at"}
+          and "d1a2b3c4" not in json.dumps(st), st.get("prepared"))
+    c, out = B.handle_post(B.COMMIT_ROUTE,
+                           {"id": live["id"], "code": live["recovery_code"]}, **minting)
+    check("the minting phone finishes its own run: 200 and one file",
+          c == 200 and out.get("ok") is True, (c, out))
+    new = _names(backups) - before
+    check("... exactly ONE new file, and the code it was minted with opens it",
+          len(new) == 1 and B.decrypt_blob(
+              (backups / out["name"]).read_bytes(), live["recovery_code"]) is not None,
+          sorted(new))
+    check("... and the kept count moved by one", B.status_view()["kept"] == 2,
+          B.status_view()["kept"])
+
+    # (a2) UNCHANGED: a wrong code from the MINTING device is still 400, writes
+    # nothing and leaves the run open for a corrected typo - the guard did not
+    # turn a code mistake into a device refusal.
+    before = _names(backups)
+    live = B.handle_post(B.PREPARE_ROUTE, {}, **minting)[1]
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"code": "WRONG-CODE-23456"}, **minting)
+    check("the minting device with a WRONG code: 400, nothing written, run still open",
+          c == 400 and out.get("error") == B.COMMIT_WRONG_CODE
+          and _names(backups) == before
+          and B._P_STATE["pending"].get("id") == live["id"], (c, out))
+
+    # (b) THIS PC finishes the phone's run - the typed-code fallback, with no
+    # device identity of its own to present.
+    before = _names(backups)
+    live = B.handle_post(B.PREPARE_ROUTE, {}, **minting)[1]
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"code": live["recovery_code"]},
+                           peer="127.0.0.1", local="127.0.0.1")
+    check("this PC finishes the phone's run with the typed code: 200",
+          c == 200 and out.get("ok") is True, (c, out))
+    check("... and exactly one file landed, opened by that code",
+          len(_names(backups) - before) == 1
+          and B.decrypt_blob((backups / out["name"]).read_bytes(),
+                             live["recovery_code"]) is not None, sorted(_names(backups)))
+    check("... and the run is over afterwards", not B._P_STATE["pending"])
+
+
+def t_another_paired_device_holding_the_code_is_refused_and_writes_nothing():
+    """Q-A ASKER GUARD, the REFUSED direction (Gemini's ruling, 2026-10-24).
+
+    The phone that minted the run and a THIRD caller (another paired device on
+    the same mesh, neither the minting phone nor this PC) that holds or has
+    learned the SAME live code. The third caller is answered 403 in plain
+    words, writes NOTHING, leaves the folder byte-for-byte unchanged - and does
+    NOT spend the run, so the minting phone can still finish it afterwards.
+
+    NEGATIVE CONTROL, measured when the guard was added: with the `refused_here`
+    check removed from `request_commit` this test fails at the first 403 check
+    (200 where it demands 403) and the folder gained a file. The exact numbers
+    are in the branch's report."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    B.backup_now(str(backups))
+    before = _folder_bytes(backups)
+    minting = {"peer": "100.64.0.5", "local": "100.64.0.9", "device": "d1a2b3c4"}
+    other = {"peer": "100.64.0.6", "local": "100.64.0.9", "device": "d9e8f7a6"}
+
+    live = B.handle_post(B.PREPARE_ROUTE, {}, **minting)[1]
+    code = live["recovery_code"]
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": live["id"], "code": code}, **other)
+    check("a THIRD caller holding the CORRECT code: 403", c == 403, (c, out))
+    said = out.get("error") or ""
+    check("... in plain words: nothing was written, and where to finish it",
+          "nothing was written" in said
+          and "phone that started it" in said and "PC" in said, out)
+    check("... flagged as the device refusal, not a run or a code problem",
+          out.get("other_device") is True and out.get("ok") is False, out)
+    check("... NOTHING was written: the folder is byte-for-byte as it was",
+          _folder_bytes(backups) == before and len(_names(backups)) == 1,
+          sorted(_names(backups)))
+    check("... and the run is NOT spent: it is still waiting",
+          B._P_STATE["pending"].get("id") == live["id"], B._P_STATE["pending"])
+
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": live["id"], "code": code}, **minting)
+    check("... so the minting phone finishes it afterwards: 200 and one file",
+          c == 200 and out.get("ok") is True and len(_names(backups)) == 2, (c, out))
+    check("... and the folder's own count agrees (two complete backups)",
+          B.status_view()["kept"] == 2, B.status_view()["kept"])
+
+    # The device is checked BEFORE the code, so a device that may not finish a
+    # run cannot use 400-vs-403 as an oracle for its guesses.
+    live = B.handle_post(B.PREPARE_ROUTE, {}, **minting)[1]
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"code": "WRONG-CODE-23456"}, **other)
+    check("... and a WRONG code from that device is the device refusal (403), never a "
+          "400 that would confirm a guess",
+          c == 403 and out.get("error") == B.COMMIT_OTHER_DEVICE, (c, out))
+    check("... with the run still open for its real finisher",
+          B._P_STATE["pending"].get("id") == live["id"], B._P_STATE["pending"])
+
+    # An EXPIRED run is 409 whatever device asks: the live check comes first.
+    live = B.handle_post(B.PREPARE_ROUTE, {}, **minting)[1]
+    B._P_STATE["pending"]["expires_at"] = time.time() - 1
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"code": live["recovery_code"]}, **other)
+    check("an EXPIRED bound run: 409 for any device, and it is dropped",
+          c == 409 and out.get("error") == B.COMMIT_NO_RUN
+          and not B._P_STATE["pending"], (c, out))
+
+
+def t_a_run_minted_without_a_device_identity_is_decided_by_its_code():
+    """THE FALLBACK the Q-A guard keeps, said plainly (2026-10-24).
+
+    A run whose asker identity was not recorded cannot be bound to anybody.
+    That is what `prepare` mints when it is given no `device`: a direct
+    in-process call (every fixture in this suite mints its run this way), or a
+    backend with no `jarvis_devices` module, where the token wrapper that sets
+    `handler._jarvis_device` never ran. Possession of the live code still
+    decides for such a run - anything stricter would break those runs and
+    fixtures, and on a real PC `jarvis_devices` IS installed, so a phone-minted
+    run does carry its id.
+
+    This is a limit, not a hole this test hides: without the devices module the
+    shared token makes every device indistinguishable anyway."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    live = B.handle_post(B.PREPARE_ROUTE, {}, peer="100.64.0.5", local="100.64.0.9")[1]
+    check("a run minted without a device identity records no asker",
+          B._P_STATE["pending"].get("asker") is None, B._P_STATE["pending"])
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"code": live["recovery_code"]},
+                           peer="100.64.0.6", local="100.64.0.9", device="d9e8f7a6")
+    check("... so any caller holding the live code can still finish it (the documented "
+          "fallback)", c == 200 and out.get("ok") is True, (c, out))
+    check("... and one real file is written", B.status_view()["kept"] == 1,
+          B.status_view()["kept"])
 
 
 def t_a_phone_with_no_live_run_is_refused_and_writes_nothing():
@@ -2514,6 +2701,123 @@ def t_a_backup_that_failed_is_never_reported_as_a_success():
           (st["last_backup_at"], out["at"]))
 
 
+def t_a_commit_with_nowhere_to_write_is_recorded_as_a_failed_attempt():
+    """Q-F DETAIL 2, the NO_FOLDER path (2026-10-24 hardening).
+
+    The run is live and the code is right, but the folder has gone since
+    `prepare` minted the run. `request_commit` used to return the 409 having
+    recorded NOTHING, so `status_view()["last_attempt"]` could still show the
+    PREVIOUS run's success while this one wrote nothing - a green line over a
+    run that could not write. It now records the failure with the module's own
+    outcome record (`_record_backup_outcome`); the answer's shape and status
+    are unchanged (409 + `NO_FOLDER`), and nothing is written.
+
+    NEGATIVE CONTROL, measured when this was added: with the
+    `_record_backup_outcome(False, error=NO_FOLDER)` line removed this test
+    fails on `last_attempt.ok is True` (the earlier success was still shown).
+    The exact numbers are in the branch's report."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    # The PC's own route, not bare backup_now: it is the route that records
+    # `last_attempt` in the first place, which is the line this test is about.
+    B.request_backup_now({}, here=True)           # a REAL success, so the old state is True
+    check("the last attempt is a success before the failing run",
+          B.status_view()["last_attempt"]["ok"] is True, B.status_view()["last_attempt"])
+    live = B.request_prepare({}, peer="100.64.0.7")[1]
+    B._save_settings({"folder": ""})              # the folder goes away before the press
+    before = _folder_bytes(backups)
+
+    c, out = B.request_commit({"code": live["recovery_code"]}, peer="100.64.0.7",
+                              local="100.64.0.1")
+    check("no folder at commit: the same 409 and the same sentence as before",
+          c == 409 and out == {"ok": False, "error": B.NO_FOLDER}, (c, out))
+    st = B.status_view()
+    check("... and the failed attempt IS recorded (last_attempt.ok False)",
+          st["last_attempt"] is not None and st["last_attempt"]["ok"] is False, st)
+    check("... with the module's own sentence, not an empty one",
+          st["last_attempt"]["error"] == B.NO_FOLDER, st["last_attempt"])
+    # `st["kept"]` is 0 because there is no folder any more; the FILES in it are
+    # the evidence this test needs, so count them by the module's own rule.
+    kept_on_disk = len([r for r in B.list_backups(backups) if r["complete"]])
+    check("... nothing was written and the kept count on disk is unchanged",
+          _folder_bytes(backups) == before and kept_on_disk == 1,
+          (kept_on_disk, sorted(_names(backups))))
+    check("... and the run is dropped, so its code cannot be replayed later",
+          not B._P_STATE["pending"])
+
+
+def t_a_failed_write_under_the_lock_leaves_no_partial_backup():
+    """Q-F DETAIL 2, the write that cannot happen (2026-10-24 hardening).
+
+    (a) An I/O failure raised by the write records `last_attempt.ok: false`
+        (the module's own outcome record), leaves the folder byte-for-byte
+        unchanged and does not touch the kept count - the run was CLAIMED
+        under `_P_LOCK` already, so nothing can quietly retry it.
+    (b) A partial/truncated `.jbak` file - what a cut-short copy or a failed
+        write leaves - is NOT counted as a valid backup: `list_backups`' own
+        completeness rule calls it incomplete, `status_view` does not report it
+        as the newest, retention does not count or delete it, and the kept count
+        does not move.
+    (c) A later successful write still produces the right file: complete by
+        `check_file`, opened by the code that made it, and counted."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    first = B.backup_now(str(backups))
+    before = _folder_bytes(backups)
+    kept_before = B.status_view()["kept"]
+    check("one real backup is there before the failing run", kept_before == 1,
+          sorted(_names(backups)))
+
+    # (a) a write that fails outright: no file at all
+    live = B.request_prepare({}, peer="100.64.0.7")[1]
+
+    def failing(folder, code):
+        raise OSError("no space left on device")
+    c, out = B.request_commit({"code": live["recovery_code"]}, here=True, run=failing)
+    st = B.status_view()
+    check("an I/O failure: 500 and no file",
+          c == 500 and _folder_bytes(backups) == before, (c, out))
+    check("... the failed attempt is recorded (last_attempt.ok False), with a sentence",
+          st["last_attempt"] is not None and st["last_attempt"]["ok"] is False
+          and "could not write the backup" in st["last_attempt"]["error"], st["last_attempt"])
+    check("... the folder is byte-for-byte unchanged and the kept count did not move",
+          _folder_bytes(backups) == before and st["kept"] == kept_before == 1,
+          (st["kept"], sorted(_names(backups))))
+    check("... and the failed run is dropped, so its code cannot be replayed",
+          not B._P_STATE["pending"])
+
+    # (b) a cut-short copy left beside the real backup is never a backup
+    partial = backups / ("jarvis-backup-20260101-000000" + B.FILE_SUFFIX)
+    partial.write_bytes(B.MAGIC + b"\x00" * 8)      # far below MIN_FILE_BYTES
+    rows = {r["name"]: r for r in B.list_backups(backups)}
+    st = B.status_view()
+    check("a truncated file is listed but NOT complete - the module's own rule",
+          rows[partial.name]["complete"] is False
+          and rows[first["name"]]["complete"] is True, rows)
+    check("... so it is not counted among the kept, and the real one is still newest",
+          st["kept"] == 1 and st["last_backup_name"] == first["name"]
+          and st["verify"]["ok"] is True, st)
+    check("... and retention has not touched it, because it is not counted",
+          partial.exists() and partial.stat().st_size == len(B.MAGIC) + 8)
+
+    # (c) a later successful write still lands, complete and openable
+    live = B.request_prepare({}, peer="100.64.0.7")[1]
+    c, out = B.request_commit({"code": live["recovery_code"]}, here=True)
+    st = B.status_view()
+    check("a later successful write still produces the right file",
+          c == 200 and B.check_file(backups / out["name"])["ok"] is True
+          and B.check_file(backups / out["name"])["why"] == "complete", (c, out))
+    check("... which its own code opens",
+          B.decrypt_blob((backups / out["name"]).read_bytes(), out["recovery_code"])
+          is not None)
+    check("... the kept count is 2 (the truncated one still not counted), and the last "
+          "attempt is a success again",
+          st["kept"] == 2 and st["last_attempt"]["ok"] is True
+          and st["last_backup_name"] == out["name"], st)
+
+
 def t_the_phone_cannot_ask_for_a_backup_with_nowhere_to_put_it():
     conf, backups = fresh_conf()
     make_memory_db(conf)
@@ -2674,6 +2978,19 @@ def t_the_patch():
                 check("with the server's own origin and token checks",
                       "origin_ok=_origin_ok" in after[i:i + 200]
                       and "token_ok=_token_ok" in after[i:i + 200])
+                # The Q-A asker guard reads `handler._jarvis_device`, which only
+                # exists when jarvis_devices' wrapped token check ran first on
+                # this request. devices.patch is applied AFTER backup.patch in
+                # the list, but its block sits EARLIER in jarvis_hud.py - and
+                # that position is what executes first. Pin it in the REAL
+                # stack, so a reordering cannot silently turn every run into the
+                # unbound fallback while the guard's own tests stay green.
+                full, _log = _stack.stand_in("jarvis_hud.py", order)
+                dev_at = full.find("jarvis_devices.wrap_token_ok(_token_ok)")
+                bak_at = full.find("jarvis_backup.install(Handler")
+                check("the devices token wrapper is installed BEFORE backup's routes, so the "
+                      "asker guard sees the request's own device identity",
+                      -1 < dev_at < bak_at, (dev_at, bak_at))
             else:
                 check("restore_backup is in _NO_RULE_FROM_DENIAL (one decision, not a "
                       "standing wish)", '"restore_backup",  # jarvis_backup.py' in after)

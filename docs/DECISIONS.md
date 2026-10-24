@@ -3078,3 +3078,34 @@ disk, and deleting older copies. `docs/JARVIS-API.md` §45 and
 `docs/ARCHITECTURE.md` §8 carry the rule; the phone's screen says "Nothing has
 been written yet" before the press and "Your PC wrote the backup" only after the
 PC reports a file.
+
+**Narrowed the same day on Gemini's ruling (Q-A, the asker guard).** The
+one-tap decision above left the code as the whole authorisation, so any paired
+device that learned the code could finish someone else's run. The finish is now
+BOUND: `prepare` records the caller's device identity in the live run - the
+same `handler._jarvis_device` identity `jarvis_devices` stamps on every request
+("pc", "shared", or a paired device's id), never a new header or token - and
+`commit` is accepted only from the device that minted the run or from this PC
+(the typed-code fallback). Any other paired device holding the same code gets
+403 with plain words: nothing was written, the folder is unchanged, and the run
+is NOT spent, so its real finisher can still use it; the device is checked
+before the code, so the route is no code oracle. Two limits are stated rather
+than hidden: a run minted with NO recorded identity (a backend without
+`jarvis_devices`, or a direct in-process call) cannot be bound, so possession
+of the live code still decides, exactly as before; and the legacy shared key is
+one identity (`shared`) for every holder until the first device is paired. The
+guard does not close the token-churn gap - a token holder can prepare and then
+commit as the device that minted its own run.
+
+**Also on the same ruling (Q-F).** A commit that has CLAIMED the run and then
+cannot write now always records `last_attempt.ok: false`, including the 409
+when the folder has gone - that path used to record nothing, so the phone's
+status line could still show the PREVIOUS run's success over a run that wrote
+nothing; the response shape and status are unchanged. And a partial/truncated
+`.jbak` left by a cut-short copy or a failed write is never counted as a valid
+backup (`list_backups`' own completeness rule, the same one retention uses),
+while a later successful write still produces the right, openable file.
+`backend/test_backup.py` proves the failure, the byte-for-byte unchanged
+folder, the unchanged kept count, the truncated file not counting, and the
+later success - each with the negative-control numbers recorded in the branch's
+own report.

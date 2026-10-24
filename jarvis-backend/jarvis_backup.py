@@ -32,16 +32,21 @@ the folder holds; `PREPARE_ROUTE` (any paired device) mints this run's one-time
 recovery code and writes NOTHING; `COMMIT_ROUTE` writes the file when the
 owner says he has kept the code - with that same code, so the code he kept is
 the code that opens it. The owner upgraded this on 2026-10-24: the phone's
-finish tap now makes the PC write the file (one tap, no step on the PC), so
-`COMMIT_ROUTE` may be called by ANY paired device that holds the run's code.
-The write is still done by this PC's backend, into this PC's folder - only the
-trigger comes from the phone. That deliberately relaxes the 2026-10-13 rule
-"a phone may ask, only the PC may write"; the code itself is the
-authorisation, and the residual risk is named at COMMIT_ROUTE's own comment
-and in docs/DECISIONS.md (2026-10-24). See PREPARE_ROUTE's own comment for why
-it is two calls rather than one: an unfinished run must leave the folder
-exactly as it was, because a new backup DELETES the oldest of the KEEP, and a
-file nobody can open is worse than no new file at all.
+finish tap now makes the PC write the file (one tap, no step on the PC).
+`COMMIT_ROUTE` is then bound to the caller that MINTED the run (the identity
+`prepare` recorded) or to this PC (the typed-code fallback) - NOT to any other
+paired device that merely learned or holds the same code; that guard, its
+fallback for a run minted without an identity, and what it does not claim are
+at COMMIT_ROUTE's own comment. The write is still done by this PC's backend,
+into this PC's folder - only the trigger comes from the phone. That
+deliberately relaxes the 2026-10-13 rule "a phone may ask, only the PC may
+write"; the code AND the caller it was minted to are the authorisation, and the
+residual risk is named at COMMIT_ROUTE's own comment and in docs/DECISIONS.md
+(2026-10-24). See
+PREPARE_ROUTE's own comment for why it is two calls rather than one: an
+unfinished run must leave the folder exactly as it was, because a new backup
+DELETES the oldest of the KEEP, and a file nobody can open is worse than no
+new file at all.
 
 THE OWNER'S DECISION (CLAUDE.md, 2026-09-27, answering
 docs/OWNER-QUESTIONS-2026-09-27.md): "one locked backup file into a folder
@@ -416,8 +421,8 @@ SAFETY_UNVERIFIED = "safety_unverified"
 #:     folder, and neither has a code in it (`_load_settings` keeps "folder"
 #:     and nothing else; `_audit` refuses to record one).
 #:
-#:   * `PREPARE_ROUTE` (POST, any paired device) and `COMMIT_ROUTE` (POST, any
-#:     paired device that holds this run's code): the phone asks, and the PC
+#:   * `PREPARE_ROUTE` (POST, any paired device) and `COMMIT_ROUTE` (POST, the
+#:     device that MINTED the run, or this PC): the phone asks, and the PC
 #:     writes. This pair replaces the old plain "no, a phone may never ask"
 #:     with a rule that cannot lose a backup - see "WHY THE PHONE'S RUN IS TWO
 #:     CALLS" below.
@@ -447,22 +452,50 @@ SAFETY_UNVERIFIED = "safety_unverified"
 #: in so many words: a code that is not kept is a backup that can never be
 #: opened, and Jarvis cannot recover it.
 #:
-#: WHO MAY CALL `commit` (changed 2026-10-24, the owner's decision). ANY caller
-#: holding this live run's one-time code may make it: the paired phone that
-#: was shown the code, or this PC typing the same code (`finish_phone_backup`).
-#: The code IS the authorisation. That deliberately relaxes the 2026-10-13 rule
-#: "a phone may ask, only the PC may write": the write still physically happens
-#: here, by this backend, into this PC's folder - only the trigger comes from
-#: the phone. WHAT MAKES IT SAFE, and what it does NOT claim:
+#: WHO MAY CALL `commit` (changed 2026-10-24, the owner's decision; narrowed
+#: the same day by Gemini's Q-A asker guard). TWO callers may finish a run:
+#:   * THE DEVICE THAT MINTED IT - `prepare` records the caller's device
+#:     identity in the pending run (`asker`, set from `handler._jarvis_device`,
+#:     the same identity `jarvis_devices` stamps on every request and
+#:     `jarvis_chatbot_limits` reads: "pc", "shared", or a paired device's id
+#:     such as "d1a2b3c4"), and a commit whose identity matches is the phone's
+#:     one-tap finish; or
+#:   * THIS PC - the owner typing the same code (`finish_phone_backup`), the
+#:     documented fallback for a run the phone left waiting.
+#: ANY OTHER paired device that merely learned or holds the code is refused 403
+#: (`COMMIT_OTHER_DEVICE`) BEFORE the code is compared, writes NOTHING, and
+#: does not spend the run - the minting phone can still finish it afterwards.
+#: The code alone is no longer the whole authorisation: it is the code AND the
+#: caller it was minted to. That still relaxes the 2026-10-13 rule "a phone may
+#: ask, only the PC may write" - the write still physically happens here, by
+#: this backend, into this PC's folder, and only the trigger comes from the
+#: phone. WHAT MAKES IT SAFE, and what it does NOT claim:
 #:   * nothing is written without a LIVE run minted by `prepare` and the exact
 #:     one-time code it minted, returned before PENDING_TTL_S runs out - so a
 #:     code cannot be guessed, and a used or expired one can write nothing. It
 #:     does NOT stop a caller that holds the pairing token: `prepare` hands such a
-#:     caller a fresh code, so it can churn the kept backups. That was already
-#:     the recorded gap (`docs/JARVIS-API.md` section 45.6), and the one-tap
-#:     change makes it direct rather than theoretical. What it still cannot do
-#:     is read a backup, or open one: the file is encrypted and the code that
-#:     was used is never returned again.
+#:     caller a fresh code, and the same caller may then commit as the device
+#:     that minted it, so it can churn the kept backups. That was already the
+#:     recorded gap (`docs/JARVIS-API.md` section 45.6), and the one-tap change
+#:     makes it direct rather than theoretical; the asker guard does not close
+#:     it, it stops a DIFFERENT device finishing a run it did not mint. What it
+#:     still cannot do is read a backup, or open one: the file is encrypted and
+#:     the code that was used is never returned again.
+#:   * THE FALLBACK, said plainly because it is a real limit of the guard: a run
+#:     whose asker identity was NOT recorded cannot be bound to anybody. That is
+#:     every run minted when `prepare` got no device identity to record - a
+#:     direct in-process call (the unit tests), or a backend where
+#:     `jarvis_devices` is not installed, so the token wrapper that stamps
+#:     `handler._jarvis_device` never ran. Possession of the live code still
+#:     decides for such a run, exactly as it did before this guard; without the
+#:     devices module the shared token makes every device indistinguishable
+#:     anyway. Said in the tests by name
+#:     (`t_a_run_minted_without_a_device_identity_is_decided_by_its_code`).
+#:   * THE LEGACY SHARED KEY cannot be told apart per device: before the first
+#:     device is paired its identity is "shared" for every holder, so a run it
+#:     minted can be committed by any other holder of that key. Once any device
+#:     has a key of its own, `jarvis_devices.wrap_token_ok` refuses the shared
+#:     key from another device, so this is the bootstrap case only.
 #:   * the run is CLAIMED under `_P_LOCK` before the write, so a second press
 #:     (either app, or both at once) is refused `COMMIT_NO_RUN` and exactly one
 #:     file is written.
@@ -774,11 +807,20 @@ COMMIT_NO_RUN = ("That backup run has expired or was never started, so nothing w
                  "Ask for a backup again from your phone.")
 COMMIT_WRONG_CODE = ("That is not the code for the backup waiting to be written, so nothing "
                      "was written and your folder is unchanged. Ask for a backup again.")
-#: There is deliberately NO "a phone may not commit" sentence any more (removed
-#: 2026-10-24, the owner's one-tap decision): `COMMIT_ROUTE` does not refuse a
-#: caller for not being this PC. The code is the authorisation, and the refusals
-#: that remain are the ones above - a run that is gone (409) and a code that
-#: does not match (400) - each of which says nothing was written.
+#: Said to a paired device that is NOT the one that minted this live run (and is
+#: not this PC) - even when it presents the exact code (Gemini's Q-A asker
+#: guard, 2026-10-24). Plain words: what happened, that nothing changed, and
+#: where the run CAN be finished. Deliberately does NOT name the minting
+#: device's id or name: a caller that was refused is told what to do, not who
+#: to go and ask.
+COMMIT_OTHER_DEVICE = (
+    "That backup was started on another device, so nothing was written and your folder is "
+    "unchanged. Finish it on the phone that started it, or on your PC (Settings, Backups).")
+#: The phone-run refusals, and the ONE deliberate change from the first
+#: one-tap decision (2026-10-24): there is still no "a phone may not commit"
+#: sentence - the phone that minted the run may - but another device holding
+#: the code is refused above. The live run, the exact code and the TTL decide
+#: WHETHER anything is written; the asker identity decides WHO may make it.
 #: `verify.why` values, in the phone's own words. Each says what was ACTUALLY
 #: checked: the file's own bytes, never that it can be opened.
 CHECK_WORDS = {
@@ -1812,10 +1854,14 @@ def request_list(*, peer=None, local=None, here: Optional[bool] = None) -> tuple
 # ---------------------------------------------------------------------------
 
 _P_LOCK = threading.Lock()
-#: ONE run at a time: {"id", "code", "at", "expires_at"}. `code` is held here
-#: for at most PENDING_TTL_S and is never written to disk, logged or audited -
-#: `_audit` refuses to carry one. Cleared by a commit, by the next prepare, and
-#: by a failed code check on an expired run.
+#: ONE run at a time: {"id", "code", "asker", "at", "expires_at"}. `code` is
+#: held here for at most PENDING_TTL_S and is never written to disk, logged or
+#: audited - `_audit` refuses to carry one. `asker` is the device identity the
+#: minting caller presented ("pc", "shared", or a paired device's id - see
+#: `request_commit`'s Q-A guard), and it is used for ONE decision: who may
+#: finish this run. It is never written anywhere and never carried by a read.
+#: Cleared by a commit, by the next prepare, and by a failed code check on an
+#: expired run.
 _P_STATE: dict = {"pending": {}}
 
 
@@ -1836,9 +1882,12 @@ def _pending_for_reader() -> Optional[dict]:
 
     Both reads that may say a run is waiting ask here - `view(here=True)` on
     the PC and `status_view()` on the phone - so neither can drift into showing
-    a run that has already expired, and neither can ever carry the run's `code`
-    or its `id`: this function builds a NEW dict with those two fields and
-    nothing else, rather than handing out a copy of the stored row.
+    a run that has already expired, and neither can ever carry the run's `code`,
+    its `id` or its `asker` identity: this function builds a NEW dict with those
+    two fields and nothing else, rather than handing out a copy of the stored
+    row. That last omission is deliberate (2026-10-24, the Q-A guard): the
+    identity that decides who may finish a run is server-side state, not
+    something a read hands to a phone.
 
     A read does not clear an expired row (`_clear_pending` from a read would be
     a write); the commit path already drops it when it refuses (`COMMIT_NO_RUN`),
@@ -1850,14 +1899,23 @@ def _pending_for_reader() -> Optional[dict]:
     return {"at": row.get("at"), "expires_at": row.get("expires_at")}
 
 
-def request_prepare(body=None, *, peer=None, local=None, here: Optional[bool] = None) -> tuple:
+def request_prepare(body=None, *, peer=None, local=None, here: Optional[bool] = None,
+                    device=None) -> tuple:
     """POST /api/backup/prepare {} - the phone asks for a backup.
 
     Answers 200 with the recovery code, which the caller must show the owner
     and send back to `COMMIT_ROUTE` before ANYTHING is written. This PC only
     is not required (the phone is the point); the folder is, because a code
     minted with nowhere to write is a code the owner would be told to keep for
-    nothing."""
+    nothing.
+
+    `device` is WHO is asking, in the same identity the rest of the backend
+    uses (`handler._jarvis_device`, stamped by `jarvis_devices`' token check:
+    "pc", "shared", or a paired device's id). It is recorded in the pending run
+    and nothing else - `request_commit` compares it there. When it is None
+    (no `jarvis_devices` on this PC, or a direct in-process call) the run is
+    UNBOUND and the code alone decides who finishes it, exactly as before the
+    guard: see `request_commit`'s comment for why that fallback has to stay."""
     st = _load_settings()
     if not st["folder"]:
         return 409, {"ok": False, "error": NO_FOLDER}
@@ -1866,7 +1924,8 @@ def request_prepare(body=None, *, peer=None, local=None, here: Optional[bool] = 
     pid = uuid.uuid4().hex
     with _P_LOCK:
         _P_STATE["pending"].clear()          # one run at a time; the older code is dropped
-        _P_STATE["pending"].update(id=pid, code=code, at=now, expires_at=now + PENDING_TTL_S)
+        _P_STATE["pending"].update(id=pid, code=code, asker=device, at=now,
+                                   expires_at=now + PENDING_TTL_S)
     return 200, {"ok": True, "pending": True, "id": pid, "recovery_code": code,
                  "at": now, "expires_at": now + PENDING_TTL_S,
                  "folder": _folder_name(st["folder"]), "keep": KEEP,
@@ -1874,20 +1933,42 @@ def request_prepare(body=None, *, peer=None, local=None, here: Optional[bool] = 
 
 
 def request_commit(body=None, *, peer=None, local=None, here: Optional[bool] = None,
-                   run: Optional[Callable[[str, str], dict]] = None) -> tuple:
+                   device=None, run: Optional[Callable[[str, str], dict]] = None) -> tuple:
     """POST /api/backup/commit {"id","code"} - the owner says the code is kept.
 
-    ANY caller holding this run's one-time code may make this call: the paired
-    phone that was shown the code, or this PC typing the same code
-    (`finish_phone_backup`). That is the owner's decision of 2026-10-24 - one
-    tap on the phone makes the PC write the file - and it is safe for exactly
-    three reasons, each of which this function enforces rather than assumes:
-    the run must be LIVE (minted by `prepare`, inside PENDING_TTL_S), the code
-    must be the exact one that run minted, and the run is CLAIMED under
-    `_P_LOCK` before anything is written, so a second press writes nothing.
+    THREE facts authorise a write, and this function enforces each rather than
+    assumes it: the run is LIVE (minted by `prepare`, inside PENDING_TTL_S),
+    this caller is ALLOWED to finish it, and the code is the exact one that run
+    minted. The run is CLAIMED under `_P_LOCK` before anything is written, so a
+    second press - from either app, or the phone and the PC at once - writes
+    nothing.
+
+    WHO IS ALLOWED (2026-10-24, Gemini's Q-A asker guard). `prepare` records
+    the minting caller's `device` identity; this call is accepted from
+      (a) THIS PC - `is_here`, the existing `_from_this_pc` test, which is how
+          `finish_phone_backup` types the code in on the PC; or
+      (b) THE DEVICE THAT MINTED THE RUN - `device` equal to the recorded
+          `asker`, which is the phone's own one-tap finish.
+    ANY OTHER paired device holding the code is answered 403
+    (`COMMIT_OTHER_DEVICE`), BEFORE the code is compared (so the route is not a
+    code oracle for a device that may not use it anyway), writes NOTHING, and
+    does not spend the run - the minting phone or the PC can still finish it.
+
+    THE FALLBACK THAT MUST STAY, said plainly: a run whose `asker` was never
+    recorded cannot be bound to anybody. That is a run minted when `prepare`
+    had no device identity to record - a direct in-process call (every existing
+    test fixture, and the honest reason those fixtures do not change), or a
+    backend without `jarvis_devices`, where the token wrapper that stamps
+    `handler._jarvis_device` never ran. For such a run possession of the live
+    code still decides, exactly as it did before this guard. Anything stricter
+    would break every legitimate run minted before this guard existed (they are
+    15 minutes long) and every fixture that calls `prepare` without a device;
+    what makes that safe to keep is that on a real PC `jarvis_devices` IS
+    installed, so the run a phone mints carries its id.
+
     The write itself is still done HERE, by this PC's backend, into this PC's
     folder - a phone has no view of that disk and no way to write to it. The
-    one-time code is the authorisation, not the device. The residual risk - the
+    code and the caller together are the authorisation. The residual risk - the
     "I saved it" tick is a client-side promise, so a modified phone could write
     a backup whose code nobody kept and push the oldest kept one out - is the
     owner's, accepted on 2026-10-24 (COMMIT_ROUTE's comment; DECISIONS.md).
@@ -1899,11 +1980,12 @@ def request_commit(body=None, *, peer=None, local=None, here: Optional[bool] = N
     what lands. Returns the same shape the PC's own "Back up now" does, plus
     the file's byte size, which is what the phone shows him next to the code."""
     run = run or (lambda folder, code: backup_now(folder, code=code))
-    # `peer`, `local` and `here` are accepted for the same shape every other
-    # route on this module has, and deliberately ignored: the caller's device
-    # no longer decides anything here (2026-10-24). The body is read only for
-    # the code, and the id `prepare` minted is not compared - so the PC's
-    # fallback needs nothing from the phone but the code the owner wrote down.
+    # `peer`, `local` and `here` are read for ONE thing now: is this caller
+    # this PC? (`is_here` below - the fallback, `finish_phone_backup`.) The
+    # body is read only for the code, and the id `prepare` minted is not
+    # compared - so the PC's fallback needs nothing from the phone but the code
+    # the owner wrote down.
+    is_here = bool(here) if here is not None else _from_this_pc(peer, local)
     want = body.get("code") if isinstance(body, dict) else None
     # Cleaned the way the owner would type it (`_clean_code`: uppercased, and
     # hyphens and spaces dropped), because the phone shows him the code in four
@@ -1916,22 +1998,43 @@ def request_commit(body=None, *, peer=None, local=None, here: Optional[bool] = N
         if not row or _is_expired(row):
             _P_STATE["pending"].clear()
             return 409, {"ok": False, "error": COMMIT_NO_RUN}
-        if not want or want != _clean_code(row["code"]):
+        # THE ASKER GUARD (Gemini Q-A, 2026-10-24). A run minted with a device
+        # identity may be finished ONLY by that device or by this PC. Checked
+        # before the code so a device that may not finish the run learns
+        # nothing from the route about whether a guess was right, and the run
+        # is left untouched for its real finisher.
+        asker = row.get("asker")
+        refused_here = bool(asker) and not is_here and device != asker
+        if not refused_here and (not want or want != _clean_code(row["code"])):
             # The run stays open, so a mistyped code can be corrected. Nothing
             # is written either way - that is the guarantee, not the message.
             return 400, {"ok": False, "error": COMMIT_WRONG_CODE}
-        # CLAIMED, under the lock, BEFORE anything is written (2026-10-24).
-        # The write below runs outside this lock, so clearing the run only at
-        # the end let two windows both pass the checks above and both write a
-        # file with the same code - and the second one's `_retain` could then
-        # push an older backup out of the five kept. Popping the run here means
-        # the second caller finds none and is refused `COMMIT_NO_RUN`, which is
-        # what a press after a success already gets. Every failure path below
-        # clears the run again, which is now a no-op: the invariant stays "no
-        # successful or failed commit leaves a live run behind".
-        _P_STATE["pending"].clear()
+        if not refused_here:
+            # CLAIMED, under the lock, BEFORE anything is written (2026-10-24).
+            # The write below runs outside this lock, so clearing the run only at
+            # the end let two windows both pass the checks above and both write a
+            # file with the same code - and the second one's `_retain` could then
+            # push an older backup out of the five kept. Popping the run here
+            # means the second caller finds none and is refused `COMMIT_NO_RUN`,
+            # which is what a press after a success already gets. Every failure
+            # path below clears the run again, which is now a no-op: the
+            # invariant stays "no successful or failed commit leaves a live run
+            # behind".
+            _P_STATE["pending"].clear()
+    if refused_here:
+        # Audited WITHOUT the code and WITHOUT the asker id: a refusal has to be
+        # visible in a security trail, and neither is that trail's business.
+        _audit("backup.commit_refused", {"ok": False, "why": "other_device"})
+        return 403, {"ok": False, "error": COMMIT_OTHER_DEVICE, "other_device": True}
     st = _load_settings()
     if not st["folder"]:
+        # Q-F detail 2 (2026-10-24 hardening): the run was CLAIMED above and the
+        # write cannot happen, so record the failed attempt with the module's
+        # own outcome record - the same honesty the OSError and refusal paths
+        # below keep. It used to return here having recorded nothing, so the
+        # phone's `last_attempt` could still show the PREVIOUS run's success.
+        # The response shape and status are unchanged (409 + NO_FOLDER).
+        _record_backup_outcome(False, error=NO_FOLDER)
         _clear_pending()
         return 409, {"ok": False, "error": NO_FOLDER}
     try:
@@ -3347,16 +3450,23 @@ def handle_get(route: str, *, peer=None, local=None) -> tuple:
     return 404, {"ok": False, "error": "not found"}
 
 
-def handle_post(route: str, body, *, peer=None, local=None) -> tuple:
+def handle_post(route: str, body, *, peer=None, local=None, device=None) -> tuple:
+    """`device` is who the request's own key said it was - "pc", "shared", or a
+    paired device's id - read by `do_POST` out of `handler._jarvis_device`
+    (stamped by `jarvis_devices.wrap_token_ok`). The SAME identity
+    `jarvis_chatbot_limits` uses; no new header and no new token. It is passed
+    to the two phone-run routes only: `prepare` records it in the run and
+    `commit` compares it (the Q-A asker guard). Every other route here ignores
+    it, exactly as before."""
     here = _from_this_pc(peer, local)
     if route == FOLDER_ROUTE:
         return request_set_folder(body, peer=peer, local=local, here=here)
     if route == NOW_ROUTE:
         return request_backup_now(body, peer=peer, local=local, here=here)
     if route == PREPARE_ROUTE:
-        return request_prepare(body, peer=peer, local=local, here=here)
+        return request_prepare(body, peer=peer, local=local, here=here, device=device)
     if route == COMMIT_ROUTE:
-        return request_commit(body, peer=peer, local=local, here=here)
+        return request_commit(body, peer=peer, local=local, here=here, device=device)
     if route == PREVIEW_ROUTE:
         return preview_restore(body, peer=peer, local=local, here=here)
     if route == RESTORE_ROUTE:
@@ -3421,7 +3531,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             return self._send(400, {"ok": False, "error": "bad JSON"})
         peer, local = _peer_local(self)
         try:
-            code, out = handle_post(route, body, peer=peer, local=local)
+            code, out = handle_post(route, body, peer=peer, local=local,
+                                    device=getattr(self, "_jarvis_device", None))
         except Exception as exc:
             code, out = 503, {"ok": False, "error": type(exc).__name__}
         return self._send(code, out)

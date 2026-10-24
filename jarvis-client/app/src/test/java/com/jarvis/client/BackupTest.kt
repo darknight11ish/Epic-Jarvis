@@ -336,10 +336,53 @@ class BackupTest {
             atWritten in 0 until atDone)
         assertTrue("... and NOTHING_WRITTEN_YET is in that branch's else:\n$atElse / $atNothing",
             atElse in 0 until atNothing)
+        assertTrue("... DONE_LEAD is BEFORE that else - in the `if (written)` branch, not " +
+            "merely later on the page:\n$atDone / $atElse", atDone in 0 until atElse)
+        val atTick = plate.indexOf("Backup.SAVED_TICK", atElse)
+        assertTrue("... and NOTHING_WRITTEN_YET is before the else branch's tick, so it is " +
+            "the OPEN-run state:\n$atNothing / $atTick",
+            atNothing in (atElse + 1) until atTick)
         assertTrue("DONE_LEAD is drawn exactly once:\n$plate",
             plate.split("Backup.DONE_LEAD").size == 2)
         assertTrue("NOTHING_WRITTEN_YET is drawn exactly once:\n$plate",
             plate.split("Backup.NOTHING_WRITTEN_YET").size == 2)
+
+        // BOTH DIRECTIONS, not just where the two sentences sit: the dialog is
+        // handed the STATE (`written = wrote`, never a literal), a new run
+        // starts with that state FALSE, and it is set TRUE in exactly one
+        // place - the Landed branch. A regression that showed the success line
+        // before the press would have to hand the dialog `true`, or set the
+        // flag when the dialog opens, and either one fails here.
+        assertTrue("the dialog is told the state, not a literal:\n$plate",
+            plate.contains("written = wrote"))
+        assertFalse("nothing hands the dialog a literal true:\n$plate",
+            plate.contains("written = true"))
+        assertTrue("a new run starts with the success flag false:\n$plate",
+            Regex("is Backup\\.Asked\\.Ready ->[\\s\\S]{0,200}wrote = false")
+                .containsMatchIn(plate))
+        val atLanded = plate.indexOf("is Backup.Committed.Landed ->")
+        val atRefused = plate.indexOf("is Backup.Committed.Refused ->")
+        val atSuccess = plate.indexOf("wrote = true")
+        assertTrue("the success flag is set inside the Landed branch:\n" +
+            "$atLanded / $atSuccess / $atRefused",
+            atLanded in 0 until atSuccess && atSuccess < atRefused)
+        assertTrue("the success flag is set in exactly one place:\n$plate",
+            Regex("wrote = true").findAll(plate).count() == 1)
+
+        // And the runtime can only produce Landed when a WRITTEN backup parsed
+        // (`ok: true` AND a file name, `Backup.written`), which is the answer
+        // to a commit that returned a file - never to a refusal. So the success
+        // line cannot be reached without 200-and-a-file, whatever the plate
+        // does.
+        val runtime = code(RUNTIME)
+        val atParsed = runtime.indexOf("val w = com.jarvis.client.net.Backup.written(r.value)")
+        val atLandedRt = runtime.indexOf("Committed.Landed(", atParsed)
+        assertTrue("the success branch needs a parsed written backup:\n$atParsed / $atLandedRt",
+            atParsed in 0 until atLandedRt
+                && runtime.substring(atParsed, atLandedRt).contains("w != null"))
+        assertTrue("... and a refusal is the other branch",
+            runtime.indexOf("Committed.Refused(", atLandedRt) > atLandedRt)
+
         // A back press after a successful write must close the dialog, not say
         // "Cancelled. Nothing was written" over a file that exists.
         assertTrue("a back press after a write closes, never cancels",
