@@ -2941,4 +2941,110 @@ are gone, and the window keeps the owner's own layouts:
 
 **Decided 2026-10-22, HUD H4 (the safety rail): three safety facts get a fixed home no layout can hide (owner: "fully editable" must never mean "editable into hiding a safety fact").** The HUD now carries one fixed `#hud-safety` strip, owned by the shell and OUTSIDE every editable region: it is not a card, not in `CARD_REGISTRY`, has no layout-document entry, and no preset, import, hand-edited settings file or edit-mode action can hide or move it (tests pin the absence; a hostile saved document naming such cards is dropped by the normaliser, the strip stays visible with it and with a non-default preset, and it is visible in edit mode with the line "Always visible — no layout can hide this"). It shows (a) **App lock is on** (`App lock is on. This window hides when you step away, and approvals wait until you're back.`) or **memory lists are hidden** (`Memory lists are hidden until you unlock.`), read through the ALREADY-GRANTED `get_lock_flags` (two booleans, no token, no new capability); (b) **queue-scoped rush/outside-text evidence** derived from the pending queue's `raised` object the page already polls — the words are "Something Jarvis read tried to rush you on the card that is waiting… Take your time — this can never be hidden.", and the banner disappears when the queue no longer carries such a row. It deliberately does NOT claim the persistent ten-minute rush latch is armed: that latch lives only on the owner's PC and has no read on the HUD's fixed allowlist (a backend read is an approved follow-up for a later deploy wave — H4 adds none). (c) **Catching up with your PC… Approvals wait for the link; Deny still works.** — while the link is stale the card's **Approve is disabled** with the words tied to it (`aria-describedby`) and **Deny stays enabled**, matching Rust's own `stale_answer_refusal` (only an APPROVED decision is held); an offline link shows Rust's own first sentence. The actual App-lock "locked" state still HIDES the HUD window (Rust) and there is deliberately no in-page locked overlay (it could never be seen) — a documented non-goal, not a gap. No new command, permission, capability, inline script (count stays 4), CSP change or deploy: one new external module `hud-safety.js` imported by the page's existing module block, three byte-identical HUD copies, and the strip is silent when linked (the one status row already says it). Tests: `tests/hud-safety.mjs` (words matrix, queue-scoped wording pinned, Approve-held/Deny-enabled, hostile import, no new grant, no file/blob path, un-hideable pins) plus the H4 block in `tests/hud.mjs` (catching up with a pending card, offline, App-lock and hidden-lists chips with no card raised, escaped rush quote with no DOM injection, edit mode cannot hide it, geometry at 1280×820 and 1024×768 at DPR 1 and 900×600 at DPR 1.5, with the strip click-through so the protected bar launcher, quickbar, composer, approvals buttons and the real fixed Stop everything control (#742, `#hud-stop`) are never covered or pointer-blocked, reduced motion, a real Deny click reaching `decide_approval`). Honest limits: `get_lock_flags` is polled (boot, focus, visibility, a 20 s beat) so the chip can lag by that beat; the real lock-screen experience is a field-test row (BLOCKED until driven on the PC, never a pass); the rail's visual weight is the owner's judgement.
 
+## 2026-10-23 - Q1: four approval cards wait for the owner; every other card still expires
+
+**Decided 2026-10-23, Q1 (card expiry). Written into this record on 2026-10-24, because the
+decision was carried into the code and the other docs but not into this log; the owner's
+original wording is not recoverable from the repository, so this entry records the
+decision's shape rather than pretending to quote it.** The earlier rescue work
+(`rescue/card-expiry-never-expires`, 2026-10-13) had exempted **23** gate actions from the
+expiry clock. Ruling Q1 refused that scope: a stale "yes" on a card that loosens a rule is a
+time bomb, so only the interactive ceremonies that need the owner at the PC may wait without
+a deadline.
+
+The exempt set is exactly four gate action ids, decided by the gate's own ids in
+`backend/no-expiry-cards.patch`:
+
+- `pair_device`, `unretire_shared_key` - pairing a device (its card, and the old shared
+  key's "bring back");
+- `register_approval_key` - registering a phone's approval key;
+- `restore_backup` - restoring a backup.
+
+Every other card keeps `#378`'s window - 900 seconds in the shipped configuration since
+2026-10-13, changeable in Settings - including "forget a time frame" and every switch that
+loosens a rule (web search, reading tools, notifications, learning, limits, the voice bar).
+**Waiting is still not approving:** a never-expiring card runs nothing until a person
+answers it, a denial is still a denial, and a cancelled or replaced pairing/key card is
+withdrawn and no longer answerable. There is no way for a caller to ask for "no deadline":
+`timeout_for(action)` turns `None`, `0`, a negative number, a malformed name or an unknown
+value into the ordinary timeout, and a caller's own `timeout=` can only shorten the wait.
+
+**The costs, said plainly.** A card with no clock cannot clean itself up: a pairing or
+approval-key card whose session is cancelled or replaced is taken off the list by
+`jarvis_gate.withdraw()`, and a restore card whose waiting thread died (an app restart)
+stays pending until it is denied or re-raised - the documented cost of no clock. The
+implementation and its evidence are in `backend/no-expiry-cards.patch`,
+`backend/test_gate_no_expiry.py` (170 checks), `docs/ARCHITECTURE.md` section 2,
+`backend/README.md` and `docs/JARVIS-API.md` (`expires_in`), and the rescue pull request is
+#773.
+
+## 2026-10-23 - the phone's Galaxy stays a read-only list and gains an "at a glance" band
+
+Offered three choices, the owner picked the light one: the phone keeps the
+read-only `PeopleAndThingsSection` list (the signed 2026-10-21 ruling's "zero
+canvas" stands) and gains ONE read-only band above it - the number of names and
+facts, then the eight names that share facts with the most others, as plain
+labels that announce as text and never as buttons. A still picture and the
+animated 8 presets were NOT chosen; the animated presets would also need a new
+decision and desktop engines that do not exist yet. Slice 1 is planned in
+`.dsh-scratch/ANDROID-GALAXY-PHONE-PLAN-2026-10-23.md`; it reads nothing new
+(the two reads the plate already makes) and writes nothing.
+
+## 2026-10-23 - the desktop Galaxy is rebuilt as a faithful 3D port with a bundled library
+
+The owner chose the full 3D port of the v2.6 prototype for the desktop Brain
+window, and later for the editable HUD: a pinned, MIT-licensed three.js and
+OrbitControls vendored into the app (no CDN at runtime), every visible name kept
+as real HTML text over the drawing, a visible SVG fallback when WebGL is
+missing, the existing pause-when-hidden rule (#777), and no "simulate" control
+for any security state - the Sentinel view reads real local/approval/taint state
+only. The phone stays excluded. The three simple layouts (Star map, Clean tree,
+Zen ring) landing in SVG as #775 stay as the fallback. The plan is in
+`.dsh-scratch/GALAXY-WEBGL-PORT-PLAN-2026-10-23.md`; the GPU frame rate and how
+it feels on the owner's screen are his field test, not a claim here.
+
+## 2026-10-23 - DeepSeek search is tried for real by the owner, once
+
+The owner will save the DeepSeek Search key in Windows Credential Manager
+(`Jarvis Backend/DeepSeek Search key`) and run one real web search with the
+provider switched on, then say what happened. Until that call is observed, the
+DeepSeek network paths stay NOT-TESTABLE - never a pass. No key is ever placed in
+the repository, a log or an agent workspace.
+
+## 2026-10-23 - the new-PC setup script is fixed by rewriting the 13 stale patches
+
+The owner chose the deep fix over a docs stop-gap: `scripts/apply-patches.ps1`
+must succeed on a fresh `jarvis-backend` copy, which means rewriting the 13
+genuinely stale patches (the G8 bisect: 15 patches already present in the base,
+7 sequence casualties, 13 genuine drift). The success test is a real run on a
+fresh base with both Windows PowerShell 5.1 and pwsh 7, exit 0, and the docs
+updated to the proven command. Until then the documented new-PC step still
+exits 1 and that is recorded as a blocker, not worked around.
+
+## 2026-10-23 - the Python lock recipe is fixed before the filelock advisory is bumped
+
+The documented recipe cannot regenerate `requirements.lock`, so `filelock==4.0.0`'s
+three advisories (GHSA-v4x8-3wr5-3wq8, GHSA-9vhv-jxww-xfm5, GHSA-567q-5qvw-pf92)
+cannot be cleared honestly. The recipe is fixed first; only then is the bump to
+4.2.1 made through it. This is also why a new Python dependency (like a WebSocket
+library) could not be added for the phone Live stream.
+
+## 2026-10-23 - the phone live-stream transport is the hand-rolled minimal WebSocket
+
+The owner approved the transport design for Slice G/G2: a minimal RFC 6455
+WebSocket implemented with the standard library (no new dependency), with token
+and origin checked BEFORE the upgrade, 2,048-byte binary frames (one 64 ms frame
+at 16 kHz mono), the design's refusal paths, and one whole turn over the
+persistent stream. It lands as its own pull request after the cascade; the switch
+`[live] stream` ships OFF, and the phone Live 16 kHz stream still answers `501`
+on the backend until the phone half is wired and measured.
+
+## 2026-10-23 - dependency policy: Tauri 2.12.5 and the six GitHub Actions majors move now
+
+The safe patch updates already landed as #778. The owner approved the next step:
+Tauri 2.12.5 plus the six GitHub Actions major bumps, as their own pull request
+on fresh `main`; Android library bumps and the search-engine image tag stay held.
+The "one approval card per update" policy remains the chosen self-update shape
+and is still unbuilt.
+
 **Decided 2026-10-23, Galaxy Phase G0 (the owner chose A/A: three flat layouts first, the rich 3D presets later).** The Brain window's Galaxy gets **three flat layouts beside the constellation** - **Star map**, **Clean tree** and **Zen ring** - chosen from a chip row in the Galaxy bar or the **6/7/8** keys while the picture has focus; pressing the same key again returns to the constellation. The five rich presets the rework blueprint lists are shown in the same row as disabled "not built yet" chips. The layouts are a **pure, deterministic module** (`jarvis-desktop/src/galaxy-presets.js`) that only moves the nodes the existing renderer already draws: no node, link, label rule, cap, backend route, permission, approval card, dependency or PC write is added, and the choice is remembered on this device (`jarvis.galaxy.preset`, the Brain window's own local storage - no PC copy), with a corrupt value falling back to the constellation. It is the **desktop Brain window's alone**: the phone deliberately has no memory graph, and the editable HUD stage keeps its own renderer until G1 shares the layout maths - recorded in `docs/ARCHITECTURE.md` §8. Two small defects found by the follow-up audit were fixed before the pull request: the Fit button and the `0` key now use the flat layouts' wider margin, and switching away during the constellation's ~1.3 s assembly no longer saves a part-assembled picture for the return. **Also fixed in passing:** the constellation's labels were half a stage to the left of their dots (a shipped bug: `margin-left: -50%` resolved against the stage width), now `translate: -50% 0`. Honest limits: the guide drawing and the label look on the real WebView2 window/monitor are NOT-TESTABLE here (never counted as a pass); the five rich presets, the same layouts in the big HUD window, the icon packs and the phone version are later phases. Built in `brain.js`/`brain.css`/`brain.html`, `galaxy-presets.js`; proved by `jarvis-desktop/tests/galaxy-presets.mjs` plus the existing galaxy suites.
