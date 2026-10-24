@@ -6326,7 +6326,7 @@ phone, settings for a PC feature live on the phone's Brain screen. `ported` in
 `tests/fixtures/web-search-cases.json` / `contract/web-search-cases.json`,
 written by `tools/gen_web_search_cases.py` from the real code.
 
-### 23.1 The five providers
+### 23.1 The six providers
 
 | id | label | where the words go | needs |
 |---|---|---|---|
@@ -6335,6 +6335,7 @@ written by `tools/gen_web_search_cases.py` from the real code.
 | `exa` | Exa | `POST https://api.exa.ai/search`, `x-api-key: <key>`, body `{"query", "numResults": 5, "contents": {"highlights": true}}` (address, header and field names read from the official exa-py 2.22.2 source); the snippet is the page's highlighted passages joined, else the start of its text - page content, so outside text, cut to 300 characters like every snippet | a key (free, no payment card) |
 | `tavily` | Tavily | `POST https://api.tavily.com/search`, `Authorization: Bearer <key>` | a key (free, no payment card) |
 | `brave` | Brave Search | `GET https://api.search.brave.com/res/v1/web/search?q=...&count=5`, `X-Subscription-Token: <key>` | a key, and an account with a payment card - **charged past the free monthly credit** |
+| `deepseek` (opt-in, added 2026-10-23) | DeepSeek web search (needs a key) | `POST https://api.deepseek.com/v1/tools/search`, `Authorization: Bearer <key>`, body `{"query", "count": 5, "need_content": false}`; the result's `summary` (written for a model) becomes the snippet, `snippet` is the fallback, and `date` may be null; `content`, `date`, `site_name`, `site_icon`, `authority` and `rerank_score` are not used | a key; the account's balance is charged **$0.75 per 1,000 successful searches** (a failed search or one that finds nothing is not billed) |
 
 Whoogle is left out, and `left_out` says why (both apps show it): "Not
 offered: its own README says it no longer returns results, since Google
@@ -6343,6 +6344,17 @@ blocked searching without JavaScript in 2025."
 Brave was removed and added back on the same day (the owner, 2026-09-25):
 it stays, fifth, and its "why use this one" line says plainly that it can
 cost money: "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
+
+DeepSeek is **opt-in and sixth** (added 2026-10-23; nothing about the default
+or the other five changes, and SearXNG is still the default): its own Search
+API, read from its guide at
+`https://api-docs.deepseek.com/guides/search`. Only `query`, `count` and
+`need_content` are sent: the guide's optional `ori_question` (conversation
+context) and `localization` (an address) are deliberately never sent. Its
+query is 1 to 128 characters - narrower than this module's 300 - so a longer
+search is refused in `plan()` before any card or socket. Its rate limit is
+100 searches a second per account; past it DeepSeek answers 429, which Jarvis
+says in words and never retries silently.
 
 Each provider's **"why use this one"** line (`why`) comes from the PC and both
 apps show it word for word; each app also carries a copy, used only when an
@@ -6373,7 +6385,7 @@ Every route needs the pairing token and passes the origin check.
 |---|---|---|---|
 | `GET /api/search` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_search.py` | A read. |
 | `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}`, `{"enabled": bool}` (the on/off switch, 23.6) | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card, `stop_asking_before_every_web_search`) and for `enabled: true` after it was switched off (ONE card, `web_search_enable`); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
-| `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit, or a little of Exa's free credit. Held on a stale link in both apps. |
+| `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit, a little of Exa's free credit, or one billed DeepSeek search ($0.75 per 1,000). Held on a stale link in both apps. |
 
 The view:
 
@@ -6481,13 +6493,15 @@ the rest of the conversation counts as having read outside text.
 
 ### 23.4 The keys (rule 3)
 
-The Exa, Tavily and Brave keys live in **Windows Credential Manager** on the
-PC, as `Jarvis Backend/Exa key`, `Jarvis Backend/Tavily key` and
-`Jarvis Backend/Brave Search key` (UTF-8,
+The Exa, Tavily, Brave and DeepSeek keys live in **Windows Credential Manager**
+on the PC, as `Jarvis Backend/Exa key`, `Jarvis Backend/Tavily key`,
+`Jarvis Backend/Brave Search key` and `Jarvis Backend/DeepSeek Search key`
+(UTF-8,
 the same format as the pairing token). They are entered **on the PC only**:
 the desktop's Settings, Web search (`save_search_key` / `forget_search_key`,
 written by Rust straight into Credential Manager - never sent over HTTP), or
-`py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) in the backend folder (it asks for the
+`py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`,
+`key deepseek`) in the backend folder (it asks for the
 key without showing it). **The phone has no way to enter one** (ARCHITECTURE
 section 8). A key is read fresh for each search, registered with the log
 scrubber (`jarvis_scrub.register_secret`), sent only to its own service's
@@ -6498,11 +6512,13 @@ says only `key_saved: true|false`.
 ### 23.5 Known gaps, said plainly
 
 - **Brave can cost money, and Jarvis cannot stop it.** Past the free monthly credit Brave charges the card and answers as usual - it does not refuse - so nothing Jarvis sees tells a free search from a paid one. There is no guard against that in Jarvis. The only limit is the one you set in Brave's own dashboard (a spending limit, if Brave offers one for your plan - not checked here). Brave's 402 and 429 answers are said in words (402: "your free credit for this month is used up, or your payment card was not accepted"), but by the time Brave is billing, it no longer sends them for going over the credit.
-- **Nothing here has reached a real SearXNG, DuckDuckGo, Exa, Tavily or
-  Brave.** Every test uses local stand-in servers and a stand-in `ddgs`.
+- **Nothing here has reached a real SearXNG, DuckDuckGo, Exa, Tavily,
+  Brave or DeepSeek.** Every test uses local stand-in servers and a stand-in
+  `ddgs`.
   The error codes for "credits used up" (Tavily 432/433; Exa 402, and 429
   read as "too many searches, or the credit is used up"; Brave 402/429, and
-  401/403/422 for a refused key) are not seen: Tavily's and Brave's from
+  401/403/422 for a refused key; DeepSeek 401/402/408/429/5xx from its own
+  error table) are not seen: Tavily's and Brave's from
   their documentation as understood, Exa's assumed - exa-py only raises on any
   status of 400 or more, so it says nothing about which means what. Exa's
   free credit ($10 a month, roughly 1,400 searches, no payment card) and
@@ -9391,7 +9407,7 @@ HTTP; an address is not a secret, so it takes §23's SearXNG-address shape - a
 backend route over a plain JSON file - and it is in section 116.
 
 **The mechanism** is `backend/jarvis_token_store.resolve_secret(env_name,
-target)` - the general form of §23.4's Exa/Tavily/Brave key pattern, added
+target)` - the general form of §23.4's Exa/Tavily/Brave/DeepSeek key pattern, added
 to the same module that already keeps the pairing token in Credential
 Manager (`jarvis_token_store.WindowsStore`, parametrized by `target` rather
 than hard-coded to the pairing token's own name). For each of the four:
@@ -9557,7 +9573,7 @@ One `.jbak` file: a zip archive, encrypted, holding -
   points at `apply-patches.ps1` for getting later updates back.
 
 **Never backed up**, on purpose (rule 3): the pairing token and every API
-key (Exa, Tavily, Brave, GitHub, ...) - all of them live in Windows
+key (Exa, Tavily, Brave, DeepSeek, GitHub, ...) - all of them live in Windows
 Credential Manager under their own target names, never in a settings
 file, and this module reads exactly two Credential Manager entries, the
 chat-history key and the review decks' key. Also never: model files (large; Ollama keeps its own
@@ -21609,7 +21625,7 @@ from the blind-credential-handle idea generally.
 
 **Where the value lives.** Windows Credential Manager, through
 `jarvis_token_store.WindowsStore` - the same store, the same generic-credential
-format and the same three ctypes calls the pairing token and the Exa/Tavily/Brave
+format and the same three ctypes calls the pairing token and the Exa/Tavily/Brave/DeepSeek
 keys already use, one entry per name under `Jarvis Backend/vault/<name>`. This
 section adds no second mechanism to keep in step with the old one. **Values are
 never written to any file**: `<config folder>/vault.json` holds the names, the
@@ -21649,7 +21665,7 @@ rather than of every caller remembering it: with no host given, a bound handle
 does not resolve at all.
 
 **The one real use, and why that one.** `jarvis_search.py` builds the credential
-header for the Exa, Tavily and Brave keys from the provider's own handle, and
+header for the Exa, Tavily, Brave and DeepSeek keys from the provider's own handle, and
 `_send()` substitutes it. Those three keys are the right first call site because
 each goes to exactly ONE host that is fixed in code (`api.exa.ai`,
 `api.tavily.com`, `api.search.brave.com`) - so the host binding can be enforced

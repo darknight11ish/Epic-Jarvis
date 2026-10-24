@@ -2792,13 +2792,14 @@ def _briefing(s: str, now: float) -> Optional[Intent]:
     return None
 
 
-#: The five providers, and Whoogle (left out - asked about, it gets its
+#: The six providers, and Whoogle (left out - asked about, it gets its
 #: reason), by the words the owner may use for them.
 _PROVIDER_WORDS = (("searxng", r"searx(?:ng)?"),
                    ("duckduckgo", r"duck\s*duck\s*go|ddg"),
                    ("exa", r"exa(?:\s+ai)?"),
                    ("tavily", r"tavily"),
                    ("brave", r"brave(?:\s+search)?"),
+                   ("deepseek", r"deep\s*seek"),
                    ("whoogle", r"whoogle"))
 _PROV = "|".join(f"(?P<{pid}>{rx})" for pid, rx in _PROVIDER_WORDS)
 _WS = r"(?:web\s+)?search(?:es|ing)?(?:\s+(?:engine|provider|service))?"
@@ -2829,6 +2830,11 @@ def _web_search(s: str) -> Optional[Intent]:
         # "what is brave" is not about search unless it says so.
         if (which == "brave" and not m.group("verb").startswith("why")
                 and m.group("brave") == "brave" and not m.group("tail")):
+            return None
+        # "what is deepseek" / "why deepseek" is about the AI model or the
+        # company, not the search service. Only "... for web search" answers
+        # here; everything else goes to the model.
+        if which == "deepseek" and not m.group("tail"):
             return None
         return Intent("search_explain", {"which": which})
     m = (re.fullmatch(r"(?:use|switch\s+to|change\s+to)\s+(?:" + _PROV + r")\s+(?:for|as)\s+"

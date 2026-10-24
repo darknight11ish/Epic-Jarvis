@@ -11,9 +11,10 @@ import kotlinx.serialization.json.contentOrNull
  * Web search (the owner's decisions of 2026-09-25; docs/JARVIS-API.md
  * section 23; backend `jarvis_search.py`, `web-search.patch`).
  *
- * Five providers, SearXNG the default (a search program on the PC, in
- * Docker), then DuckDuckGo (the ddgs package), Exa, Tavily and Brave Search
- * (Brave can cost money past its free credit); Whoogle is left out, with its
+ * Six providers, SearXNG the default (a search program on the PC, in
+ * Docker), then DuckDuckGo (the ddgs package), Exa, Tavily, Brave Search and
+ * DeepSeek (Brave can cost money past its free credit, and DeepSeek charges
+ * $0.75 per 1,000 searches); Whoogle is left out, with its
  * reason. Each
  * has a short "why use this one" line: the PC sends them with every
  * `GET /api/search`, and Mind shows the PC's words. The copies below are the
@@ -24,7 +25,8 @@ import kotlinx.serialization.json.contentOrNull
  * "Ask before every web search" on (at once) or off (ONE approval card on
  * the PC), and run a test search - each ONE change, held on a stale link.
  *
- * What the phone does NOT do: take an Exa, Tavily or Brave key. There is no box for
+ * What the phone does NOT do: take an Exa, Tavily, Brave or DeepSeek key.
+ * There is no box for
  * one and no route for one. Sending a key over the link to the PC would send
  * it somewhere other than its one service (CLAUDE.md rule 3); keys are typed
  * on the PC ([KEY_ENTRY]). The phone shows only whether one is saved.
@@ -37,8 +39,8 @@ object WebSearch {
     const val SETTINGS_PATH = "/api/search/settings"
     const val TEST_PATH = "/api/search/test"
 
-    val PROVIDERS = listOf("searxng", "duckduckgo", "exa", "tavily", "brave")
-    val KEYED = setOf("exa", "tavily", "brave")
+    val PROVIDERS = listOf("searxng", "duckduckgo", "exa", "tavily", "brave", "deepseek")
+    val KEYED = setOf("exa", "tavily", "brave", "deepseek")
     const val DEFAULT_ADDRESS = "http://127.0.0.1:8888"
 
     val WHY: Map<String, String> = mapOf(
@@ -52,6 +54,8 @@ object WebSearch {
             "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key.",
         "brave" to
             "Brave's own independent index, with about \$5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key.",
+        "deepseek" to
+            "DeepSeek's own search service: results written for AI assistants, at \$0.75 for 1,000 searches - a search that finds nothing is not charged. Needs an account with some credit on it and a key, and DeepSeek sees what you search, tied to your key.",
     )
     val LABEL: Map<String, String> = mapOf(
         "searxng" to "SearXNG (on this PC)",
@@ -59,6 +63,7 @@ object WebSearch {
         "exa" to "Exa",
         "tavily" to "Tavily",
         "brave" to "Brave Search",
+        "deepseek" to "DeepSeek web search (needs a key)",
     )
     const val WHOOGLE_WHY =
         "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
@@ -76,6 +81,7 @@ object WebSearch {
         "exa" to "https://dashboard.exa.ai (sign up, then API Keys)",
         "tavily" to "https://app.tavily.com (sign in, then API Keys)",
         "brave" to "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+        "deepseek" to "https://platform.deepseek.com/api_keys (sign in, then API keys)",
     )
 
     // The desktop's words (web-search.js), for the parts of the screen.
@@ -99,7 +105,8 @@ object WebSearch {
     const val TEST_BUSY = "Searching…"
     const val TEST_NOTE =
         "Sends one search for the word \"wikipedia\" through the search you chose, and says what " +
-            "happened. It is a real search: on Tavily it uses one credit."
+            "happened. It is a real search: on Tavily it uses one credit, and on DeepSeek it " +
+            "costs less than a penny."
     const val READY = "Ready."
     const val CHOSEN = "In use."
     const val WAITING_CARD = "Waiting for your approval card."
