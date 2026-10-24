@@ -23,9 +23,11 @@
  *   `WDA_EXCLUDEFROMCAPTURE`, never `set_content_protected` (which on Windows
  *   rebuilds the window - that closed Settings the moment a pairing succeeded,
  *   the owner's report of 2026-10-07), and never a second copy of it;
- * - the pairing panel's own capture guard (devices.rs) defers to the lock
- *   while the lock is on, so its "off" cannot clear a block the lock still
- *   wants;
+ * - a pairing code is one of the rule's own reasons, checked BEFORE the
+ *   owner-is-here answer, and `devices.rs` only records it through
+ *   `set_pairing_code_shown` - it no longer sets the attribute itself, which
+ *   let an unlock sweep clear a code that was still live
+ *   (BUG-AUDIT-2026-10-24 RUST-1);
  * - the two status badges - "Jarvis is watching", the Live badge - are NOT
  *   excluded: their whole job is to be seen, and a capture that missed them
  *   would hide the notice instead of the secret.
@@ -120,18 +122,20 @@ await check("both settings block a capture, and each one alone does", async () =
 await check("a locked app blocks, an unlocked one does not", async () => {
   // The two cases the owner asked for, stated as the Rust states them. The
   // real proof that the setting reaches a window is the two checks below; this
-  // is the rule those are wired to.
+  // is the rule those are wired to. The rule is `capture_blocked_from`, pure,
+  // and `capture_blocked` is that same rule with the live state read into it.
   const rule = fnBody(CODE, "pub fn capture_blocked");
   assert.match(rule, /app_locked\(app\)/, "the lock's own state is not consulted");
   assert.match(rule, /private_hidden\(app\)/, "hidden memory lists are not consulted");
+  const from = fnBody(CODE, "fn capture_blocked_from");
   assert.match(
-    rule,
+    from,
     /blocks_capture\(owner_here\)/,
     "the rule in lock/rules.rs is not the one being used",
   );
   assert.match(
-    CODE,
-    /let owner_here = !app_locked\(app\)/,
+    from,
+    /let owner_here = !app_locked/,
     "the owner's presence is not taken from the lock that already decides it",
   );
 });
@@ -236,21 +240,45 @@ await check("the Win32 call is the direct one, and there is only one of it", asy
   );
 });
 
-await check("the pairing panel's own guard cannot clear the lock's block", async () => {
+await check("a pairing code is a reason in the lock's rule, not a second writer", async () => {
   // devices.rs hides the settings window while a pairing code is on screen and
   // puts it back when the panel closes. That "back" runs after a pairing ends,
-  // which can be long after the owner walked away - so it must do nothing at
-  // all while the lock is on.
-  const guard = fnBody(DEVICES_CODE, "fn guard_capture");
-  assert.match(
-    guard,
-    /capture_blocked\(app\)/,
-    "the pairing guard no longer asks the lock before clearing",
+  // which can be long after the owner walked away - and the sweep that unlocks
+  // ran the other way, clearing the guard while the code was still live
+  // (BUG-AUDIT-2026-10-24 RUST-1). So the code is one of the rule's own
+  // reasons now, and the panel only records it.
+  const rule = fnBody(CODE, "pub fn capture_blocked");
+  assert.match(rule, /pairing_code_shown\(\)/, "the pairing code is not part of the rule");
+  assert.match(rule, /capture_blocked_from\(/, "the rule is not the one shared pure helper");
+  const from = fnBody(CODE, "fn capture_blocked_from");
+  assert.match(from, /pairing_shown/, "the pairing code is not an input of the rule");
+  // Checked FIRST: a code on screen must never be capturable, even while the
+  // owner is at the PC - which is exactly where the code is read from.
+  const shown = from.indexOf("if pairing_shown");
+  const owner = from.indexOf("let owner_here");
+  assert.ok(
+    shown > 0 && owner > shown,
+    "the pairing code is checked after the owner-is-here answer",
   );
-  const ask = guard.indexOf("capture_blocked(app)");
-  const apply = guard.indexOf("set_affinity");
-  assert.ok(ask > 0 && apply > ask, "the guard clears the block before asking the lock");
-  assert.match(guard, /return;/, "the guard does not stop while the lock owns the window");
+  // The panel records the decision and asks for the sweep; it never writes the
+  // attribute itself, which is what made two writers that could disagree.
+  const start = fnBody(DEVICES_CODE, "pub async fn pair_start");
+  assert.match(start, /set_pairing_code_shown\(true\)/, "starting a pairing never turns the guard on");
+  assert.ok(
+    start.indexOf("lock::sweep(&app)") > start.indexOf("set_pairing_code_shown(true)"),
+    "the flag is set but nothing applies it to the windows",
+  );
+  for (const name of ["pair_session", "pair_cancel"]) {
+    assert.match(
+      fnBody(DEVICES_CODE, `pub async fn ${name}`),
+      /set_pairing_code_shown\(false\)/,
+      `${name} never turns the guard off`,
+    );
+  }
+  assert.ok(
+    !/set_affinity\s*\(/.test(DEVICES_CODE),
+    "devices.rs applies the capture attribute itself again - the second writer is back",
+  );
 });
 
 /* ── the honest limits, written down where the code is ─────────────────── */

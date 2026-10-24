@@ -311,34 +311,91 @@ pub const SNAPSHOT_LABELS: [&str; 9] = [
     crate::windows::ONBOARDING_LABEL,
 ];
 
+/// Whether a pairing code (or the pairing panel's four words) is on screen.
+///
+/// The pairing panel used to set the window attribute itself, which made two
+/// features write the same attribute without knowing about each other: an
+/// unlock [`sweep`] cleared it on every window, and the pairing code - still
+/// valid for up to 600 s - became capturable (BUG-AUDIT-2026-10-24 RUST-1).
+/// The pairing code is a reason inside [`capture_blocked`] now, so [`sweep`]
+/// is the only writer again and one rule decides every window.
+static PAIRING_CODE_SHOWN: AtomicBool = AtomicBool::new(false);
+
+/// True while a pairing code or the pairing panel's four words are on screen.
+pub fn pairing_code_shown() -> bool {
+    PAIRING_CODE_SHOWN.load(Ordering::SeqCst)
+}
+
+/// Records that a pairing code is on screen (`on`) or has gone away.
+///
+/// This records the decision only: the caller follows it with [`sweep`], which
+/// is what makes the windows match. `devices.rs` sets it before a code reaches
+/// the page, and clears it once the session is inactive or cancelled.
+pub fn set_pairing_code_shown(on: bool) {
+    PAIRING_CODE_SHOWN.store(on, Ordering::SeqCst);
+}
+
 /// True when a screen capture of Jarvis's windows must not show their content.
 ///
-/// The decision, pure, so its cases are testable without a window: App lock on
-/// and the lock would ask for Windows Hello now, or the Brain's private lists
+/// The rule, in one place: a pairing code is on screen, or App lock is on and
+/// the lock would ask for Windows Hello now, or the Brain's private lists are
 /// hidden and that show has ended. The settings decide whether the block is
 /// allowed at all; the state decides whether it is on. Unlocked, the owner is
 /// looking at those windows, so there is nothing to keep from a capture they
-/// asked for themselves.
+/// asked for themselves - the pairing code, which is a secret meant for
+/// someone else's screen, is the one exception, and it is in
+/// [`capture_blocked_from`] below.
 ///
 /// Deliberately not `current(app).app_lock` alone, which is the phone's shape:
 /// the phone must set `FLAG_SECURE` from the setting because Android gives it
 /// no "the owner has gone" moment it could react to. Here there is one, and
 /// `app_locked` is already it - the same test that ends a Live session and
 /// tells talk-to-type to stop listening. One notion of "locked", not a second.
+///
+/// This is the one rule [`sweep`] asks about every window - the pairing panel's
+/// capture guard (`devices.rs`) is one of its reasons now, not a second writer
+/// of the same attribute.
 pub fn capture_blocked(app: &AppHandle) -> bool {
-    let owner_here = !app_locked(app);
+    capture_blocked_from(
+        app_locked(app),
+        &current(app),
+        private_hidden(app),
+        pairing_code_shown(),
+    )
+}
+
+/// The decision inside [`capture_blocked`], pure so every case is testable
+/// without a window or an app.
+///
+/// The pairing code is checked BEFORE the owner-is-here answer, and that is
+/// the whole point: a code is shown so a phone can type it, so a screenshot of
+/// it is the attack, and the owner standing in front of the screen does not
+/// make it safe to capture. Every other reason to block still yields to the
+/// owner being there.
+fn capture_blocked_from(
+    app_locked: bool,
+    security: &Security,
+    private_hidden: bool,
+    pairing_shown: bool,
+) -> bool {
+    if pairing_shown {
+        return true;
+    }
+    let owner_here = !app_locked;
     if owner_here {
         // The owner is looking at their own screen. Nothing to keep from them.
         return false;
     }
-    current(app).blocks_capture(owner_here) || private_hidden(app)
+    security.blocks_capture(owner_here) || private_hidden
 }
 
 /// Hides `window` from screen capture (`excluded`), or puts it back.
 ///
-/// The one Win32 call, shared with `devices.rs`, which needs the same thing
-/// while a pairing code is on screen. The window must belong to this process
-/// and be top level - both true of every window Tauri gives us here.
+/// The one Win32 call. Nothing outside this module makes it: [`sweep`] is what
+/// decides and applies the attribute for every window, so the App lock and the
+/// pairing panel's capture guard (`devices.rs`) cannot fight over it. The
+/// window must belong to this process and be top level - both true of every
+/// window Tauri gives us here.
 ///
 /// A refusal is logged once and otherwise ignored: the owner decided the lock
 /// is worth having, and an older Windows that cannot exclude a window must not
@@ -436,8 +493,10 @@ fn to_set(
 ///
 /// Called when the lock turns on (the watch, [`spawn_watch`]), when it turns
 /// off (the owner passing Windows Hello, [`start_unlock`]), when the security
-/// settings change, and once as a window is created - a window built while the
-/// lock is on must not sit unprotected until the next tick.
+/// settings change, once as a window is created - a window built while the
+/// lock is on must not sit unprotected until the next tick - and when a
+/// pairing code appears or goes away (`devices.rs`), which is the only thing
+/// that puts the attribute on the Settings window for a pairing session.
 pub fn sweep(app: &AppHandle) {
     let excluded = capture_blocked(app);
     let mut swept = SWEPT.lock().unwrap_or_else(|p| p.into_inner());
@@ -1118,12 +1177,78 @@ mod capture_tests {
         .blocks_capture(!after_the_lock_would_ask)
     }
 
+    /// The four facts `capture_blocked` hands the shipped rule, with the
+    /// pairing code made explicit. `block` above cannot reach that case: the
+    /// pairing code is the one reason to block with no setting behind it.
+    fn rule(
+        app_lock: bool,
+        hide_lists: bool,
+        after_the_lock_would_ask: bool,
+        pairing: bool,
+    ) -> bool {
+        capture_blocked_from(
+            after_the_lock_would_ask,
+            &Security {
+                app_lock,
+                private_answers: hide_lists,
+                ..Security::default()
+            },
+            false,
+            pairing,
+        )
+    }
+
     #[test]
     fn nothing_is_blocked_with_both_settings_off() {
         // CONTROL. Without this one, a build that blocked every capture for
         // its whole life would pass every case below.
         assert!(!block(false, false, false));
         assert!(!block(false, false, true));
+    }
+
+    #[test]
+    fn a_pairing_code_is_never_capturable_even_while_the_owner_is_here() {
+        // THE BUG (BUG-AUDIT-2026-10-24 RUST-1). The code is on screen for a
+        // phone to type, so a capture that reaches it is the attack - and that
+        // is just as true with the owner sitting at the PC, which is where the
+        // code is read from. The pairing panel used to write the window
+        // attribute itself, so the unlock sweep cleared it for every window
+        // and the code stayed capturable for the rest of its 600 s session.
+        assert!(
+            rule(false, false, false, true),
+            "an unlocked app let a pairing code be captured"
+        );
+        assert!(
+            rule(true, false, false, true),
+            "the owner being here let a pairing code be captured"
+        );
+        // While a code is shown, the lock's own case cannot turn this into a
+        // no: the stricter of the two answers is the one that must win.
+        assert!(rule(true, true, true, true));
+    }
+
+    #[test]
+    fn without_a_pairing_code_the_rule_is_the_lock_rule() {
+        // The pairing guard is an addition to the rule, never a replacement:
+        // every case the lock decides on its own must answer exactly as before.
+        for app_lock in [false, true] {
+            for hide_lists in [false, true] {
+                for after in [false, true] {
+                    assert_eq!(
+                        rule(app_lock, hide_lists, after, false),
+                        block(app_lock, hide_lists, after),
+                        "the lock's own answer changed for app_lock={app_lock}, \
+                         hide_lists={hide_lists}, after={after}"
+                    );
+                }
+            }
+        }
+        // Including the Brain's "Show" having ended (`private_hidden`), the
+        // one input no case above reaches through the settings: it blocks only
+        // while the owner is away, exactly as it did before this change.
+        let settings = Security::default();
+        assert!(capture_blocked_from(true, &settings, true, false));
+        assert!(!capture_blocked_from(false, &settings, true, false));
     }
 
     #[test]
@@ -1158,14 +1283,32 @@ mod capture_tests {
     #[test]
     fn the_live_rule_is_the_one_these_cases_check() {
         // The cases above are only worth anything if the shipped rule takes
-        // the same three inputs. Pinned as source, because this crate has no
+        // the same four inputs. Pinned as source, because this crate has no
         // headless way to build a Tauri app and call the real one.
         let src = include_str!("lock.rs");
         let rule = &src[src.find("pub fn capture_blocked").expect("the rule")..];
         let rule = &rule[..rule.find("\n}\n").expect("its end")];
         assert!(
-            rule.contains("app_locked(app)") && rule.contains("private_hidden(app)"),
-            "capture_blocked no longer asks the two things these cases are about:\n{rule}"
+            rule.contains("app_locked(app)")
+                && rule.contains("private_hidden(app)")
+                && rule.contains("pairing_code_shown()")
+                && rule.contains("capture_blocked_from("),
+            "capture_blocked no longer asks the things these cases are about:\n{rule}"
+        );
+        // And the pairing code's answer must come BEFORE the owner-is-here one
+        // inside the helper: with the owner present the rule would otherwise
+        // answer "no" for a code that must never be captured.
+        let helper = &src[src.find("fn capture_blocked_from(").expect("the helper")..];
+        let helper = &helper[..helper.find("\n}\n").expect("its end")];
+        let shown = helper
+            .find("if pairing_shown")
+            .expect("the pairing code's case");
+        let owner = helper
+            .find("let owner_here")
+            .expect("the owner-is-here case");
+        assert!(
+            shown < owner,
+            "the pairing code is checked after the owner-is-here answer:\n{helper}"
         );
     }
 
@@ -1207,6 +1350,68 @@ mod capture_tests {
         assert_eq!(on.len(), 2, "the lock did not set the windows");
         let off = to_set(false, Some(true), &mut reached, &present);
         assert_eq!(off, present, "the unlock did not clear the block");
+        // Settings is the window this answer was wrong about (BUG-AUDIT
+        // 2026-10-24 RUST-1): the pairing panel's code used to be guarded by a
+        // second writer, so an unlock sweep cleared it while the code was still
+        // live. The sweep is the only writer now, and Settings is one of the
+        // windows it re-sets on the true-to-false flip - named here so a future
+        // change that excludes it is caught rather than assumed.
+        let mut settings_reached = HashSet::new();
+        assert_eq!(
+            to_set(
+                false,
+                Some(true),
+                &mut settings_reached,
+                &[crate::windows::SETTINGS_LABEL]
+            ),
+            vec![crate::windows::SETTINGS_LABEL],
+            "the pairing panel's window was not put back when the answer went off"
+        );
+    }
+
+    #[test]
+    fn an_unlock_does_not_clear_a_live_pairing_codes_guard() {
+        // The bug itself (BUG-AUDIT-2026-10-24 RUST-1), as the sweep sees it:
+        // the unlock tick asks the rule while a pairing code is still on
+        // screen, and the answer must still be ON - so the tick that turns the
+        // lock's block off leaves the code's guard alone. The panel used to
+        // hold that guard in a writer the sweep knew nothing about, so this
+        // tick cleared it and nothing re-armed it.
+        let (mut reached, present) = two();
+        // App lock on, so the locked answer is the one that excludes them.
+        let settings = Security {
+            app_lock: true,
+            ..Security::default()
+        };
+        let locked = capture_blocked_from(true, &settings, false, false);
+        assert!(locked, "the lock no longer blocks a capture");
+        assert_eq!(to_set(locked, None, &mut reached, &present), present);
+        // The owner comes back - Windows Hello passed - with the code still up.
+        let unlocked = capture_blocked_from(false, &settings, false, true);
+        assert!(unlocked, "an unlock made a live pairing code capturable");
+        assert!(
+            to_set(unlocked, Some(locked), &mut reached, &present).is_empty(),
+            "the unlock tick changed the capture state while a code was on screen"
+        );
+        // CONTROL: the same unlock with no code on screen does clear the block,
+        // so the pass above is the code and not the sweep having stopped.
+        let mut fresh = HashSet::new();
+        to_set(
+            capture_blocked_from(true, &settings, false, false),
+            None,
+            &mut fresh,
+            &present,
+        );
+        assert_eq!(
+            to_set(
+                capture_blocked_from(false, &settings, false, false),
+                Some(true),
+                &mut fresh,
+                &present
+            ),
+            present,
+            "an unlock with no pairing code no longer clears the lock's block"
+        );
     }
 
     #[test]
