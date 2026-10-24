@@ -804,9 +804,9 @@
     "group": "Notes and files",
     "title": "Web search",
     "what": "Jarvis looks something up on the web.",
-    "where": "Just ask. The provider is chosen in Settings, Web search - SearXNG by default, then DuckDuckGo, Exa, Tavily and Brave.",
+    "where": "Just ask. The provider is chosen in Settings, Web search - SearXNG by default, then DuckDuckGo, Exa, Tavily, Brave and DeepSeek.",
     "asks": "A search straight from your own question goes without asking. After outside text, or when the search words would repeat something private, one card shows the exact words. A setting makes it ask every time.",
-    "limit": "If the chosen provider is down, Jarvis says so and offers to switch - it never silently uses another. Brave can cost money past its monthly credit.",
+    "limit": "If the chosen provider is down, Jarvis says so and offers to switch - it never silently uses another. Brave can cost money past its monthly credit, and DeepSeek charges $0.75 for 1,000 searches from the account's balance.",
     "surface": "both",
     "covers": [
       "settings.web-search"

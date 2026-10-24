@@ -3575,6 +3575,18 @@ def plain_voice_now(text: str = "") -> bool:
         return False
 
 
+def _personality_voice() -> "dict | None":
+    """The chosen personality's spoken voice recipe, or None.
+
+    None means "leave the PC's own voice exactly as it was": no personality has
+    been chosen, or the owner turned the voice-lock switch on. Never raises."""
+    try:
+        import jarvis_manner
+        return jarvis_manner.voice_for_speech()
+    except Exception:
+        return None
+
+
 def tts_voice(voices_module=None, *, plain: bool = False) -> tuple:
     """(Kokoro voice number, speed, pitch rise) for the built-in voice, read
     ONCE - so one sentence never mixes two faces' settings if the face
@@ -3582,6 +3594,26 @@ def tts_voice(voices_module=None, *, plain: bool = False) -> tuple:
     plain_voice_now): the face left out - the owner's own built-in choice
     and speaking speed (jarvis_voices.speaker/speed), no pitch rise. Never
     raises."""
+    # A chosen personality's voice, when the owner kept voice sync on: the
+    # preset's fallback voice (the voice in the pack that stands in for its
+    # blend) at the preset's speed. A PC with no chosen personality takes the
+    # old path below untouched, and a crisis answer always keeps the plain
+    # voice - a difficult moment is never read out in character.
+    if not plain:
+        spec = _personality_voice()
+        if spec:
+            try:
+                import jarvis_kokoro
+                paths = _sherpa_tts_paths()
+                kind = jarvis_kokoro.table_kind_of_file(paths["voices"])
+                sid = jarvis_kokoro.sid_of(kind, spec.get("fallback"))
+                if sid is not None:
+                    speed = float(spec.get("speed") or 1.0)
+                    if not 0.5 <= speed <= 2.0:
+                        speed = 1.0
+                    return int(sid), speed, 0.0
+            except Exception:
+                pass
     V = _voices_mod(voices_module)
     if plain:
         if V is not None and hasattr(V, "speaker") and hasattr(V, "speed"):
@@ -3857,6 +3889,28 @@ REFLEX_TEXTS = (
 #: memory cannot grow without bound.
 REFLEX_MAX = 24
 
+
+def reflex_texts() -> tuple:
+    """The fixed confirmations that may be kept: the quick list above, plus the
+    chosen personality's FIXED reflex acks (ones with no number or name in
+    them), so an in-character "Reminder saved, sir." is instant too.
+
+    Never private text: every extra string is a literal from the shipped
+    personality contract, and the numbers-style ones (a timer's duration, a
+    walk's count) are deliberately left out because their text changes."""
+    texts = list(REFLEX_TEXTS)
+    try:
+        import jarvis_manner
+        if jarvis_manner.personality_chosen():
+            preset = jarvis_manner.current_preset()
+            for kind in ("reminder_saved", "done", "stopped", "muted"):
+                text = str((preset.get("reflex_acks") or {}).get(kind) or "").strip()
+                if text and "{" not in text and text not in texts:
+                    texts.append(text)
+    except Exception:
+        pass
+    return tuple(texts)
+
 _REFLEX: "dict[tuple, tuple]" = {}       # (voice key, text) -> (samples, rate, mouth payload)
 _REFLEX_ORDER: list = []                 # the same keys, oldest used first
 _REFLEX_LOCK = threading.Lock()
@@ -3892,16 +3946,28 @@ def _reflex_key(voices_module, voice_now, *, plain: bool) -> Optional[tuple]:
                 sizes.append(os.path.getsize(paths[name]))
             except Exception:
                 sizes.append(-1)
+        # The chosen personality's voice recipe is part of the key too: a
+        # switch that keeps the same fallback voice but a different blend or
+        # speed must never reuse the old sound.
+        persona, spec = "", ""
+        try:
+            import jarvis_manner
+            chosen = jarvis_manner.voice_for_speech()
+            if chosen:
+                persona = str(chosen.get("personality") or "")
+                spec = str(chosen.get("voice") or "")
+        except Exception:
+            persona, spec = "", ""
         return (active, engine, int(sid), round(float(speed), 4),
-                round(float(semis), 4), bool(plain), tuple(sizes))
+                round(float(semis), 4), bool(plain), persona, spec, tuple(sizes))
     except Exception:
         return None
 
 
 def _reflex_lookup(text, voices_module, voice_now, *, plain: bool) -> Optional[tuple]:
     """(samples, rate, mouth payload) kept for this exact confirmation in this
-    voice, or None. Only a REFLEX_TEXTS string is ever looked up."""
-    if text not in REFLEX_TEXTS:
+    voice, or None. Only a reflex_texts() string is ever looked up."""
+    if text not in reflex_texts():
         return None
     key = _reflex_key(voices_module, voice_now, plain=plain)
     if key is None:
@@ -3923,7 +3989,7 @@ def _reflex_lookup(text, voices_module, voice_now, *, plain: bool) -> Optional[t
 def _reflex_remember(text, voices_module, voice_now, audio, mouth, *, plain: bool) -> None:
     """Keep the sound just made for one confirmation in this voice. Called only
     from the built-in Kokoro path, with the result it really made."""
-    if audio is None or text not in REFLEX_TEXTS or audio[0] is None:
+    if audio is None or text not in reflex_texts() or audio[0] is None:
         return
     try:
         if len(audio[0]) == 0:
@@ -3962,14 +4028,14 @@ def _reflex_ready(voices_module, voice_now, *, plain: bool = False) -> int:
     if key is None:
         return 0
     with _REFLEX_LOCK:
-        return sum(1 for t in REFLEX_TEXTS if (key, t) in _REFLEX)
+        return sum(1 for t in reflex_texts() if (key, t) in _REFLEX)
 
 
 def reflex_status() -> dict:
     """Numbers only, in memory: what the reflex cache holds right now. Never
     the text of anything (it only ever holds the fixed list above anyway)."""
     with _REFLEX_LOCK:
-        return {"texts": len(REFLEX_TEXTS), "max": REFLEX_MAX,
+        return {"texts": len(reflex_texts()), "max": REFLEX_MAX,
                 "entries": len(_REFLEX), "voices": len({k for k, _t in _REFLEX}),
                 "hits": _REFLEX_STATS["hits"], "misses": _REFLEX_STATS["misses"],
                 "warm": {"key": _REFLEX_WARM["key"], "busy": bool(_REFLEX_WARM["busy"])}}
@@ -4016,7 +4082,7 @@ def reflex_warm(*, wait: bool = True, spawn: Optional[Callable] = None) -> dict:
             return {"ok": False, "ready": 0, "made": 0,
                     "why": "the voice settings could not be read"}
         made = 0
-        for text in REFLEX_TEXTS:
+        for text in reflex_texts():
             with _REFLEX_LOCK:
                 if (key, text) in _REFLEX:
                     continue
@@ -4077,8 +4143,8 @@ def _reflex_warm_soon(voices_module=None) -> None:
         with _REFLEX_LOCK:
             if _REFLEX_WARM["busy"]:
                 return
-            done = sum(1 for t in REFLEX_TEXTS if (key, t) in _REFLEX)
-            if _REFLEX_WARM["key"] == key and done == len(REFLEX_TEXTS):
+            done = sum(1 for t in reflex_texts() if (key, t) in _REFLEX)
+            if _REFLEX_WARM["key"] == key and done == len(reflex_texts()):
                 return
             _REFLEX_WARM.update(key=key, busy=True)
         reflex_warm(wait=False)

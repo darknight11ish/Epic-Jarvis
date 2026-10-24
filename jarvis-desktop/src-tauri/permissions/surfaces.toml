@@ -619,10 +619,11 @@ permissions = [
   # drives are, what is using the graphics card, how hot it is, when it last
   # restarted - read-only, it changes nothing.
   "allow-get-pc-help",
-  # "Web search": the five providers with their "why" lines, and ONE change
+  # "Web search": the six providers with their "why" lines, and ONE change
   # at a time - the provider, the SearXNG address, "Ask before every web
   # search" (off raises an approval card on the PC). Changes and the test
-  # search are held while the event stream is stale. The Exa, Tavily and Brave
+  # search are held while the event stream is stale. The Exa, Tavily, Brave and
+  # DeepSeek
   # keys are written straight into Credential Manager on this PC by
   # save_search_key: never sent to the backend or the phone, never read
   # back to a page. Settings window only - rule 3.

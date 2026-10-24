@@ -2,18 +2,18 @@
  * Web search (the owner's decisions of 2026-09-25; JARVIS-API.md section 23;
  * backend jarvis_search.py) - the words, and how to read what the PC sends.
  *
- * Five providers, SearXNG the default (a search program on this PC, in
- * Docker), then DuckDuckGo (the ddgs package), Exa, Tavily and Brave Search
- * (keys; Brave can cost money past its free credit). Whoogle is left out,
- * with its reason.
+ * Six providers, SearXNG the default (a search program on this PC, in
+ * Docker), then DuckDuckGo (the ddgs package), Exa, Tavily, Brave Search and
+ * DeepSeek (keys; Brave can cost money past its free credit, and DeepSeek
+ * charges $0.75 per 1,000 searches). Whoogle is left out, with its reason.
  * Each has a short "why use this one" line. The PC sends those lines with
  * every GET /api/search, and Settings shows the PC's words; the copies below
  * are the same words (backend/test_web_search.py checks them against the PC's
  * and the phone's net/WebSearch.kt), used only when an answer lacks them.
  *
  * Used by Settings, "Web search" (web-search-settings.js; src-tauri/src/
- * web_search.rs). The Exa, Tavily and Brave keys are typed here only - never on
- * the phone - and go straight into Credential Manager on this PC.
+ * web_search.rs). The Exa, Tavily, Brave and DeepSeek keys are typed here only
+ * - never on the phone - and go straight into Credential Manager on this PC.
  *
  * @module web-search
  */
@@ -29,6 +29,8 @@ export const WHY = Object.freeze({
     "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key.",
   brave:
     "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key.",
+  deepseek:
+    "DeepSeek's own search service: results written for AI assistants, at $0.75 for 1,000 searches - a search that finds nothing is not charged. Needs an account with some credit on it and a key, and DeepSeek sees what you search, tied to your key.",
 });
 export const LABEL = Object.freeze({
   searxng: "SearXNG (on this PC)",
@@ -36,6 +38,7 @@ export const LABEL = Object.freeze({
   exa: "Exa",
   tavily: "Tavily",
   brave: "Brave Search",
+  deepseek: "DeepSeek web search (needs a key)",
 });
 export const WHOOGLE_WHY =
   "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025.";
@@ -55,10 +58,11 @@ export const KEY_WHERE = Object.freeze({
   exa: "https://dashboard.exa.ai (sign up, then API Keys)",
   tavily: "https://app.tavily.com (sign in, then API Keys)",
   brave: "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+  deepseek: "https://platform.deepseek.com/api_keys (sign in, then API keys)",
 });
 
-export const PROVIDERS = Object.freeze(["searxng", "duckduckgo", "exa", "tavily", "brave"]);
-export const KEYED = Object.freeze(["exa", "tavily", "brave"]);
+export const PROVIDERS = Object.freeze(["searxng", "duckduckgo", "exa", "tavily", "brave", "deepseek"]);
+export const KEYED = Object.freeze(["exa", "tavily", "brave", "deepseek"]);
 export const DEFAULT_ADDRESS = "http://127.0.0.1:8888";
 
 export const TITLE = "Web search";
@@ -83,7 +87,8 @@ export const TEST_LABEL = "Test search";
 export const TEST_BUSY = "Searching…";
 export const TEST_NOTE =
   "Sends one search for the word \"wikipedia\" through the search you chose, and says what " +
-  "happened. It is a real search: on Tavily it uses one credit.";
+  "happened. It is a real search: on Tavily it uses one credit, and on DeepSeek it " +
+  "costs less than a penny.";
 export const READY = "Ready.";
 export const CHOSEN = "In use.";
 

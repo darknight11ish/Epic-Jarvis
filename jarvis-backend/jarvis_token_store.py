@@ -68,7 +68,7 @@ plain-text Windows user environment variable, which is the problem):
   - the private calendar link (`jarvis_calendar.py`'s `ICS_URL_ENV`);
   - the Home Assistant long-lived token (`jarvis_home.py`'s `TOKEN_ENV`).
 Each keeps its OWN Credential Manager entry (`WindowsStore(target)`, exactly
-like `KEY_TARGETS` already does for the Exa/Tavily/Brave keys in
+like `KEY_TARGETS` already does for the Exa/Tavily/Brave/DeepSeek keys in
 `jarvis_search.py`), entered on the PC only, in the desktop's Settings
 ("Accounts"), and the matching environment variable - if the owner already
 has one set - still wins, unchanged, so nothing already working breaks.
@@ -235,8 +235,8 @@ def resolve_secret(env_name: str, target: str, *, environ=None, store=None) -> s
     `resolve()` above, for the IMAP password, the private calendar link and
     the Home Assistant token (ease-of-use audit row 15, "Security G3"). Every
     caller passes its OWN `target`, so one Credential Manager entry per
-    secret, the same way `jarvis_search.KEY_TARGETS` files the Exa, Tavily
-    and Brave keys each under their own name.
+    secret, the same way `jarvis_search.KEY_TARGETS` files the Exa, Tavily,
+    Brave and DeepSeek keys each under their own name.
 
     UNLIKE `resolve()`: there is no old plain-text FILE to move in here -
     these four secrets were never written to one, only ever typed into a
