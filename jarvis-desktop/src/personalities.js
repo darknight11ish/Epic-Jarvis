@@ -1,11 +1,11 @@
 /**
- * The eight built-in Personality Presets and the four tuning dials, as the
+ * The nine built-in Personality Presets and the four tuning dials, as the
  * desktop Settings page draws them ("How Jarvis talks").
  *
  * WHY THIS FILE EXISTS (2026-10-23, Personality Presets SLICE 2a). The PC's
  * own `contract/personalities.json` and `jarvis_manner.py` are the owners of
  * what each preset MEANS (prompt, reflex phrases, voice blend). This module is
- * only the page's copy for when the PC is older: it holds the same eight ids,
+ * only the page's copy for when the PC is older: it holds the same nine ids,
  * titles and voice pairings as the blueprint's section 2, so Settings can draw
  * the whole grid before the backend half has landed, and `readPersonalities`
  * ALWAYS prefers the PC's answer once the PC sends one. The local copy is
@@ -28,7 +28,8 @@ export const DEFAULT_PRESET = "warm_peer";
 export const LEGACY = Object.freeze({ warm: "warm_peer", plain: "tactical_ops" });
 
 /**
- * The eight built-in presets, in the PC's own order (blueprint section 2).
+ * The nine built-in presets, in the PC's own order (blueprint section 2, with
+ * the Patient Advocate appended as the ninth on 2026-10-24).
  * `voice.blend` is the 256-dim style mix the PC uses; `voice.fallback` is the
  * one Kokoro voice it can fall back to; `voice.label` is what the page shows.
  */
@@ -145,9 +146,23 @@ export const PRESETS = Object.freeze([
     }),
     switchAck: "Switched to Calm & Grounded. No rush - take your time.",
   }),
+  Object.freeze({
+    id: "advocate",
+    badge: "9",
+    title: "Patient Advocate",
+    description: "In your corner for doctor visits, labs, medicines and insurance letters.",
+    quote: "Let's take them one line at a time.",
+    voice: Object.freeze({
+      blend: "af_heart:0.65+af_bella:0.35",
+      fallback: "af_heart",
+      speed: 0.94,
+      label: "Patient Advocate Blend",
+    }),
+    switchAck: "Switched to Patient Advocate. I'm in your corner - we'll go through it one line at a time.",
+  }),
 ]);
 
-/** The eight ids, in the same order. */
+/** The nine ids, in the same order. */
 export const PRESET_IDS = Object.freeze(PRESETS.map((p) => p.id));
 
 /**
@@ -302,6 +317,7 @@ const DIAL_FALLBACKS = Object.freeze({
   socratic_mentor: Object.freeze({ humor: 1, brevity: "thorough", formality: "warm_peer", address: "first_name" }),
   devils_advocate: Object.freeze({ humor: 0, brevity: "balanced", formality: "tactical", address: "none" }),
   calm_stoic: Object.freeze({ humor: 0, brevity: "concise", formality: "warm_peer", address: "first_name" }),
+  advocate: Object.freeze({ humor: 1, brevity: "thorough", formality: "warm_peer", address: "first_name" }),
 });
 
 /** The blueprint's default dials for a preset id (local copy; the PC owns the truth). */

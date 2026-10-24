@@ -7063,10 +7063,12 @@ reads the file, changes only the key(s) sent, and writes it back).
 
 ### 27.7 Personality presets and tuning dials (added 2026-10-23)
 
-The owner's decision of 2026-10-22: Jarvis can slip into one of **eight
+The owner's decision of 2026-10-22: Jarvis can slip into one of **nine
 personalities** - `warm_peer` (Warm Collaborator, the default), `classic_butler`,
 `tactical_ops`, `dry_wit`, `friday_partner`, `socratic_mentor`,
-`devils_advocate`, `calm_stoic` - with **four tuning dials** (`humor` 0-3,
+`devils_advocate`, `calm_stoic`, and `advocate` (Patient Advocate, added
+2026-10-24: plain-English medical and billing words, three questions for the
+care team, and never a diagnosis) - with **four tuning dials** (`humor` 0-3,
 `brevity` concise/balanced/thorough, `formality` casual/warm_peer/formal_butler/
 tactical, `address` first_name/sir/ma'am/boss/captain/none), plus up to **20
 "My Personalities"** presets. It is wording and voice only, exactly like manner:
@@ -7079,7 +7081,7 @@ anywhere, and the legacy words `warm` and `plain` still work (they map to
 | Field | Shape |
 |---|---|
 | `personality` | the active preset id (`"classic_butler"`) |
-| `personalities` | the eight built-ins + saved ones: `{"id", "title", "description", "switch_ack", "greeting_subtitle", "quote", "voice_blend", "voice_speed", "voice": {"blend", "fallback", "speed"}, "dials": {"humor", "brevity", "formality", "address"}, "builtin"}` |
+| `personalities` | the nine built-ins + saved ones: `{"id", "title", "description", "switch_ack", "greeting_subtitle", "quote", "voice_blend", "voice_speed", "voice": {"blend", "fallback", "speed"}, "dials": {"humor", "brevity", "formality", "address"}, "builtin"}` |
 | `dials` | the active preset's four dials with any saved overrides applied |
 | `voice_sync` | bool - whether switching a personality also switches the spoken voice (default true) |
 | `custom_personalities` | saved presets, in the full shape a Duplicate needs: `{"id", "name", "line", "example", "example_user", "example_jarvis", "dials", "based_on", "voice_spec", "voice_speed"}`. The `id` is whatever the panel/caller chose (`mine-...`) or a generated `custom-...`; use and delete accept it as-is. |

@@ -6,12 +6,12 @@
  *     node tests/personality-settings.mjs
  *
  * WHY THIS EXISTS (2026-10-23, Personality Presets SLICE 2a). The page now
- * draws the eight preset cards, the four tuning dials, the voice-sync switch
+ * draws the nine preset cards, the four tuning dials, the voice-sync switch
  * and "My personalities". The data mapping is held pure by
  * tests/personalities.mjs; THIS file drives the real page in a headless
  * browser with a stubbed bridge and proves what a click sends:
  *
- *   - the eight cards render in the PC's order, the active one says "In use";
+ *   - the nine cards render in the PC's order, the active one says "In use";
  *   - "Hear Sample" asks the PC for the preset's BASE voice only
  *     (`hear_voice_sample` with exactly `{voice}` - the PC's sample route
  *     accepts one field; blended-voice previews are deferred to the
@@ -128,9 +128,9 @@ async function pageFor(payload) {
   return page;
 }
 
-/* ── 1. The eight cards, the active one, the voice badge ───────────────── */
+/* ── 1. The nine cards, the active one, the voice badge ────────────────── */
 
-await check("the eight preset cards render in order, with the PC's words", async () => {
+await check("the nine preset cards render in order, with the PC's words", async () => {
   const page = await pageFor(pcAnswer());
   const got = await page.evaluate(() => [...document.querySelectorAll("#mn-presets .mn-preset")]
     .map((box) => ({

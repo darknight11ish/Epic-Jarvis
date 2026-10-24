@@ -5,13 +5,13 @@
  *
  *     node tests/personalities.mjs
  *
- * WHY THIS EXISTS (2026-10-23, Personality Presets SLICE 2a). The eight
+ * WHY THIS EXISTS (2026-10-23, Personality Presets SLICE 2a). The nine
  * built-in presets, the four tuning dials, the "My personalities" limits and
  * the bodies sent to the PC's `/api/manner` live in src/personalities.js.
  * This file holds that module to the blueprint's own table (section 2) and to
  * the page's rules:
  *
- *   - the eight ids, in order, and each one's paired voice and speed;
+ *   - the nine ids, in order, and each one's paired voice and speed;
  *   - the four dials' accepted values, and nothing else;
  *   - the PC's answer WINS when it carries the fields (and only then is the
  *     page allowed to switch anything);
@@ -41,14 +41,15 @@ const check = (name, fn) => {
   }
 };
 
-/* ── 1. The eight built-in presets (blueprint section 2, in order) ─────── */
+/* ── 1. The nine built-in presets (blueprint section 2, in order) ──────── */
 
-check("the eight preset ids are the blueprint's, in its order", () => {
+check("the nine preset ids are the blueprint's, in its order", () => {
   assert.deepEqual([...P.PRESET_IDS], [
     "warm_peer", "classic_butler", "tactical_ops", "dry_wit",
     "friday_partner", "socratic_mentor", "devils_advocate", "calm_stoic",
+    "advocate",
   ]);
-  assert.equal(P.PRESETS.length, 8);
+  assert.equal(P.PRESETS.length, 9);
 });
 
 check("every preset has a title, one-line description, sample line and switch line", () => {
@@ -87,6 +88,16 @@ check("the blueprint's own pairings survive (spot checks)", () => {
   assert.equal(by("calm_stoic").voice.speed, 0.94);
   assert.equal(by("tactical_ops").voice.speed, 1.1);
   assert.equal(by("dry_wit").voice.blend, "bm_lewis:0.70+am_adam:0.30");
+  // The Patient Advocate (2026-10-24): af_heart blended 65/35 with af_bella at
+  // 0.94x, the pairing the blueprint asks for.
+  assert.equal(by("advocate").title, "Patient Advocate");
+  assert.equal(by("advocate").badge, "9");
+  assert.equal(by("advocate").voice.blend, "af_heart:0.65+af_bella:0.35");
+  assert.equal(by("advocate").voice.fallback, "af_heart");
+  assert.equal(by("advocate").voice.speed, 0.94);
+  assert.equal(P.voiceBadge(by("advocate")), "Patient Advocate Blend \u00b7 0.94x");
+  assert.deepEqual(P.presetDials("advocate"),
+    { humor: 1, brevity: "thorough", formality: "warm_peer", address: "first_name" });
 });
 
 check("the page never invents a blank voice badge", () => {
@@ -163,7 +174,7 @@ check("a PC without the fields answers the local copy, marked pc: false", () => 
   const got = P.readPersonalities({ available: true, manner: "warm",
                                     choices: [{ id: "warm" }, { id: "plain" }] });
   assert.equal(got.pc, false);
-  assert.equal(got.presets.length, 8);
+  assert.equal(got.presets.length, 9);
   assert.equal(got.active, "", "an old answer does not name a preset");
   assert.deepEqual(got.dials, P.defaultDials());
   assert.equal(got.custom.length, 0);
@@ -174,7 +185,7 @@ check("no answer at all is never drawn as a preset choice", () => {
   for (const raw of [null, undefined, {}, { available: false, why: "old" }]) {
     const got = P.readPersonalities(raw);
     assert.equal(got.pc, false);
-    assert.equal(got.presets.length, 8);
+    assert.equal(got.presets.length, 9);
     if (raw && raw.available === false) assert.equal(got.available, false);
   }
 });
