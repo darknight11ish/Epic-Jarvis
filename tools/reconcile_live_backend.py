@@ -13,10 +13,22 @@ WHY THIS EXISTS
 
 WHAT IT DOES, IN ORDER (see --help and the summary it prints)
 
-    1. SHIPPED SYNC. Reads the authoritative `$SHIPPED` list out of
-       `scripts/apply-patches.ps1` (the same extraction the deploy used), flattens
+    0. REF GUARD. Refuses (exit 2) when the working tree's HEAD is not the commit
+       `--ref` names, and prints both SHAs and the fix. Every module's bytes AND
+       the `$SHIPPED`/`$PATCHES` lists come from `--ref`, but the ready plug-ins
+       and `scripts/add-plugin.ps1` still come from the checkout, so running from
+       another commit would deploy half of one tree and half of another. A dry run
+       from a stale checkout once planned 251 shipped files while `origin/main`
+       carried 253, silently hid the two modules #790 had added, and still printed
+       `RESULT: PASS` (TOOL-1, 2026-10-24). `--allow-worktree-mismatch` is the
+       explicit override for tests and exotic checkouts.
+
+    1. SHIPPED SYNC. Reads the authoritative `$SHIPPED` and `$PATCHES` lists out of
+       `scripts/apply-patches.ps1` **at `--ref`**
+       (`git show <ref>:scripts/apply-patches.ps1`), never the working tree's copy,
+       so a stale checkout cannot plan from its old list. Then flattens
        `rebuilt/<name>` to the live base name, compares each file with
-       `origin/main:backend/<path>` BY BYTES, and copies only changed or missing files.
+       `<ref>:backend/<path>` BY BYTES, and copies only changed or missing files.
        Every file it overwrites is first copied into
        `<live>/_jarvis-deploy-backup-tool-<stamp>/`. It writes the repository's bytes
        exactly, so LF stays LF and no line-ending rewriting happens.
@@ -102,10 +114,16 @@ USAGE
     py -3 tools/reconcile_live_backend.py --backend-path "<live backend>" --apply
     py -3 tools/reconcile_live_backend.py --backend-path ... --apply --skip-plugins
 
+    Run it from a worktree checked out at `--ref` (the default `origin/main`). If
+    HEAD is another commit it refuses and says so; `--allow-worktree-mismatch`
+    overrides that for tests and exotic checkouts, and `--ref <commit>` chooses a
+    different commit to deploy.
+
 EXIT CODES
     0 success (dry run planned cleanly, or apply + all probes PASS)
     1 a plugin add or a route probe failed
-    2 refused before writing (bad arguments, unknown HUD delta, missing anchor, rehearsal)
+    2 refused before writing (bad arguments, working tree not at --ref, unknown HUD
+      delta, missing anchor, rehearsal)
 """
 from __future__ import annotations
 
@@ -570,6 +588,10 @@ _GENERIC_PROBES = frozenset({
 #: A file that must never be sourced from the base folder (stale snapshot).
 _NEVER_FROM_BASE = ("jarvis-backend/",)
 
+#: The script whose $SHIPPED / $PATCHES lists are the deploy's own contract. A
+#: deploy reads it from --ref (see `read_patch_lists`), never from the working tree.
+PATCH_SCRIPT = "scripts/apply-patches.ps1"
+
 BACKUP_PREFIX = "_jarvis-deploy-backup-tool-"
 JOURNAL_NAME = "_journal.json"
 
@@ -648,11 +670,28 @@ def parse_powershell_list(text: str, variable: str) -> list:
     return out
 
 
-def read_patch_lists(repo: Path) -> tuple:
-    script = Path(repo) / "scripts" / "apply-patches.ps1"
-    if not script.is_file():
-        raise Refused(f"no scripts/apply-patches.ps1 under {repo}")
-    text = script.read_text(encoding="utf-8")
+def read_patch_lists(repo: Path, ref: Optional[str] = None,
+                     show: Optional[Callable] = None) -> tuple:
+    """The authoritative ($SHIPPED, $PATCHES) lists, from `ref` when one is given.
+
+    The deploy takes every module's BYTES from `git show <ref>:backend/...`, so the
+    list that says WHICH modules to ship must come from the same commit. Reading the
+    working tree's copy instead is TOOL-1 (2026-10-24): a stale checkout planned 251
+    files while the ref carried 253, printed "to add: none" for the two modules the
+    ref had just added, and still finished PASS.
+
+    `ref=None` reads the working tree's `scripts/apply-patches.ps1`. That is the
+    test / no-git path; `run_deploy` always passes its `--ref`, so a deploy never
+    takes it. `show` is the same `(repo, ref, repo_path)` seam `plan_shipped` uses,
+    so a fixture with no git object store can supply the ref's script bytes."""
+    if not ref:
+        script = Path(repo) / PATCH_SCRIPT
+        if not script.is_file():
+            raise Refused(f"no {PATCH_SCRIPT} under {repo}")
+        text = script.read_text(encoding="utf-8")
+    else:
+        raw = (show or git_show_path)(Path(repo), ref, PATCH_SCRIPT)
+        text = raw.decode("utf-8", "replace")
     return parse_powershell_list(text, "SHIPPED"), parse_powershell_list(text, "PATCHES")
 
 
@@ -684,9 +723,13 @@ def flatten_shipped(entries: Iterable[str]) -> list:
 #   Git and the shipped-byte comparison
 # ---------------------------------------------------------------------------
 
-def git_show(repo: Path, ref: str, repo_path: str) -> bytes:
-    """`git show <ref>:backend/<repo_path>` as bytes - the exact blob, no checkout."""
-    full = f"{ref}:backend/{repo_path}"
+def git_show_path(repo: Path, ref: str, path: str) -> bytes:
+    """`git show <ref>:<path>` as bytes - the exact blob, no checkout.
+
+    `path` is relative to the repository root, unlike `git_show` which is the
+    backend-blob shorthand. This is how the deploy reads its own contract
+    (`scripts/apply-patches.ps1`) from the commit it is deploying."""
+    full = f"{ref}:{path}"
     try:
         proc = subprocess.run(["git", "-C", str(repo), "show", full],
                               capture_output=True, timeout=120)
@@ -696,6 +739,61 @@ def git_show(repo: Path, ref: str, repo_path: str) -> bytes:
         msg = (proc.stderr or b"").decode("utf-8", "replace").strip()
         raise Refused(f"git show {full} failed: {msg or 'no such blob'}")
     return proc.stdout
+
+
+def git_show(repo: Path, ref: str, repo_path: str) -> bytes:
+    """`git show <ref>:backend/<repo_path>` as bytes - the exact blob, no checkout."""
+    return git_show_path(repo, ref, f"backend/{repo_path}")
+
+
+def git_rev_parse(repo: Path, revision: str) -> str:
+    """The full commit SHA `revision` names, or a Refused carrying git's own reason."""
+    try:
+        proc = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", revision],
+                              capture_output=True, timeout=60)
+    except Exception as exc:                                  # noqa: BLE001
+        raise Refused(f"could not run git rev-parse {revision} "
+                      f"({type(exc).__name__})") from exc
+    if proc.returncode != 0:
+        msg = (proc.stderr or b"").decode("utf-8", "replace").strip()
+        raise Refused(f"git rev-parse {revision} failed: {msg or 'no such revision'}")
+    return proc.stdout.decode("ascii", "replace").strip()
+
+
+def worktree_and_ref_shas(repo: Path, ref: str) -> tuple:
+    """(HEAD's commit, the commit `ref` names) - the two SHAs the ref guard compares."""
+    head_sha = git_rev_parse(repo, "HEAD")
+    try:
+        ref_sha = git_rev_parse(repo, f"{ref}^{{commit}}")
+    except Refused as exc:
+        raise Refused(
+            f"{exc}. This checkout is at {head_sha}; fetch {ref} (git fetch origin) or "
+            f"pass --ref <commit> to deploy a commit this checkout already knows") from exc
+    return head_sha, ref_sha
+
+
+def check_worktree_at_ref(repo: Path, ref: str,
+                          resolve: Optional[Callable] = None) -> None:
+    """Raise Refused unless the working tree's HEAD is the commit `ref` names.
+
+    The deploy takes every module's bytes AND its `$SHIPPED`/`$PATCHES` list from
+    `ref`; the ready plug-ins and `scripts/add-plugin.ps1` still come from the
+    checkout, so a checkout at another commit deploys half of one tree and half of
+    another. The stale-checkout dry run that hid #790's two new modules is the
+    measured case (TOOL-1, 2026-10-24). `resolve` is the test seam: it returns the
+    `(head_sha, ref_sha)` pair, so a temporary fixture repository needs no real git
+    object store."""
+    head_sha, ref_sha = (resolve or worktree_and_ref_shas)(Path(repo), ref)
+    if head_sha == ref_sha:
+        return
+    raise Refused(
+        f"the working tree is at HEAD {head_sha} but --ref {ref} is {ref_sha}. "
+        f"This tool deploys the files at --ref, so it will not run from a different "
+        f"commit: the modules and their file list would come from {ref_sha}, while the "
+        f"ready plug-ins and every other working-tree read come from {head_sha}. "
+        f"Check {ref} out in this worktree (git checkout {ref}), or run the tool from a "
+        f"worktree already at {ref}; pass --allow-worktree-mismatch only when you really "
+        f"mean to use this checkout.")
 
 
 def plan_shipped(repo: Path, ref: str, live: Path, shipped: list,
@@ -1496,7 +1594,9 @@ def _summ(out, label, items, limit=12):
 
 def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origin/main",
                skip_plugins: bool = False, base_url: str = "",
+               allow_worktree_mismatch: bool = False,
                show: Optional[Callable] = None, out: Optional[Callable] = None,
+               resolve_shas: Optional[Callable] = None,
                probe_client: Optional[Callable] = None,
                token_reader: Optional[Callable] = None,
                plugin_runner: Optional[Callable] = None,
@@ -1517,8 +1617,26 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     if apply and not (repo / ".git").exists() and not (repo / ".git").is_file():
         raise Refused(f"{repo} is not a git repository")
 
-    # 1. Plan the shipped sync.
-    shipped, patches = read_patch_lists(repo)
+    # 0. The checkout must be the tree being deployed (TOOL-1's other half). The
+    #    lists come from --ref now, but the ready plug-ins and add-plugin.ps1 still
+    #    come from HEAD, so a checkout at another commit is refused rather than
+    #    deploying half of one tree and half of another.
+    if allow_worktree_mismatch:
+        out("  NOTE: --allow-worktree-mismatch is set; HEAD is not checked against "
+            "--ref.")
+    elif ref:
+        try:
+            check_worktree_at_ref(repo, ref, resolve=resolve_shas)
+        except Refused as exc:
+            out(f"REFUSED: {exc}")
+            return 2
+
+    # 1. Plan the shipped sync. The lists come from the ref, like every module's bytes.
+    try:
+        shipped, patches = read_patch_lists(repo, ref, show=show)
+    except Refused as exc:
+        out(f"REFUSED: {exc}")
+        return 2
     plan = Plan()
     try:
         plan.shipped = plan_shipped(repo, ref, live, shipped, show=show)
@@ -1698,6 +1816,9 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="explicit dry run (the default)")
     parser.add_argument("--skip-plugins", action="store_true",
                         help="do not add ready plug-ins")
+    parser.add_argument("--allow-worktree-mismatch", action="store_true",
+                        help="run even when HEAD is not the commit --ref names "
+                             "(tests and exotic checkouts; the default refuses)")
     parser.add_argument("--base-url", default="",
                         help="live server base URL for the probes (default: from HUD_PORT)")
     parser.add_argument("--rollback", default="",
@@ -1713,7 +1834,8 @@ def main(argv: Optional[list] = None) -> int:
     try:
         return run_deploy(repo, Path(ns.backend_path).expanduser(), apply=bool(ns.apply),
                           ref=ns.ref, skip_plugins=bool(ns.skip_plugins),
-                          base_url=ns.base_url)
+                          base_url=ns.base_url,
+                          allow_worktree_mismatch=bool(ns.allow_worktree_mismatch))
     except Refused as exc:
         print(f"REFUSED: {exc}")
         return 2
