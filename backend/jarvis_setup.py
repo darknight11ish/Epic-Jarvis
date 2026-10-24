@@ -372,6 +372,8 @@ QUESTIONS: tuple = (
              "changes": ({"kind": "provider", "to": "tavily"},)},
             {"id": "brave", "label": "Brave Search (needs a key and a card)",
              "changes": ({"kind": "provider", "to": "brave"},)},
+            {"id": "deepseek", "label": "DeepSeek web search (needs a key)",
+             "changes": ({"kind": "provider", "to": "deepseek"},)},
         ),
     },
     {
@@ -710,6 +712,7 @@ PROVIDER_LABELS = {
     "exa": "Exa",
     "tavily": "Tavily",
     "brave": "Brave Search",
+    "deepseek": "DeepSeek web search",
 }
 CARD_MODE_LABELS = {"start_short": "Start short, with \"Explain more\"",
                     "always_full": "Always show the whole card"}

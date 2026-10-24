@@ -4,5 +4,5 @@
   "module": "jarvis_documents",
   "install": "handler",
   "replaces_patch": "documents.patch",
-  "stack_order": 67
+  "stack_order": 68
 }

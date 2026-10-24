@@ -613,6 +613,65 @@ def default_tts_dir() -> str:
     return os.path.join(base, "voice-models", "tts")
 
 
+def parse_voice_spec(voice_spec) -> list:
+    """[(voice id, weight), ...] from "bm_george:0.65+bm_lewis:0.35".
+
+    A bare name ("af_heart") is one part with weight 1.0; a part with no weight
+    ("af_heart+af_bella") is weight 1.0 each. An unreadable weight is dropped,
+    never guessed, and a non-positive weight is dropped too. Pure stdlib, never
+    raises, so a saved custom preset cannot break the voice path."""
+    spec = str(voice_spec or "").strip()
+    parts = []
+    for item in spec.split("+"):
+        vid, _, w_str = item.partition(":")
+        vid = vid.strip()
+        if not vid:
+            continue
+        try:
+            w = float(w_str.strip()) if w_str.strip() else 1.0
+        except ValueError:
+            continue
+        if w > 0.0:
+            parts.append((vid, w))
+    return parts
+
+
+def resolve_voice_style_vector(voices_archive, voice_spec, fallback: str = "af_heart"):
+    """The style-vector table for a voice spec: one voice's table, or the
+    weighted sum of two or three voices' tables with weights normalised to 1.0
+    (`w1*v1 + w2*v2`, the way kokoro-onnx's own README blends voices).
+
+    `voices_archive` is name -> table (anything that supports * and +: a numpy
+    array, or a plain sequence of numbers). Returns the fallback voice's table
+    when the spec names no usable voice, and None when not even the fallback is
+    there. float32 when the archive hands back arrays that can cast; otherwise
+    a list of floats. Pure stdlib, never raises."""
+    spec = str(voice_spec or "").strip()
+    if "+" not in spec and ":" not in spec:
+        if spec in voices_archive:
+            return voices_archive[spec]
+        return voices_archive.get(fallback)
+    parts = []
+    total_w = 0.0
+    for vid, w in parse_voice_spec(spec):
+        if vid in voices_archive:
+            parts.append((voices_archive[vid], w))
+            total_w += w
+    if not parts or total_w <= 0.0:
+        return voices_archive.get(fallback)
+    blended = None
+    for vec, w in parts:
+        share = w / total_w
+        try:
+            scaled = vec * share
+        except TypeError:
+            scaled = [float(x) * share for x in vec]
+        blended = scaled if blended is None else blended + scaled
+    if hasattr(blended, "astype"):
+        return blended.astype("float32")
+    return [float(x) for x in blended]
+
+
 def build_blends(pack_dir: Optional[str] = None) -> tuple:
     """Makes BLEND_FILE beside the pack's voices.bin from that voices.bin:
     (True | False, one plain sentence saying what happened). Never opens the

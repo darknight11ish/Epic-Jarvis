@@ -387,18 +387,244 @@
     "why": "Neutral and businesslike: just the answer, with no small talk."
    }
   ],
+  "custom_personalities": [],
   "default": "warm",
   "detail": "Changes only how Jarvis words its answers. It never changes what Jarvis does, what it asks you, or what it remembers.",
+  "dial_choices": {
+   "address": [
+    "first_name",
+    "sir",
+    "ma'am",
+    "boss",
+    "captain",
+    "none"
+   ],
+   "brevity": [
+    "concise",
+    "balanced",
+    "thorough"
+   ],
+   "formality": [
+    "casual",
+    "warm_peer",
+    "formal_butler",
+    "tactical"
+   ],
+   "humor": {
+    "0": "none",
+    "1": "subtle",
+    "2": "dry",
+    "3": "playful"
+   }
+  },
+  "dials": {
+   "address": "first_name",
+   "brevity": "balanced",
+   "formality": "warm_peer",
+   "humor": 1
+  },
   "humor": false,
   "humor_default": false,
   "humor_detail": "Occasional light humour in answers, when it fits. Off by default. Never as part of an approval, an error message, or a serious or sensitive topic.",
   "humor_title": "Humour",
+  "max_user_personalities": 20,
+  "personalities": [
+   {
+    "builtin": true,
+    "description": "Friendly and on your side, like a good colleague who is already up to speed.",
+    "dials": {
+     "address": "first_name",
+     "brevity": "balanced",
+     "formality": "warm_peer",
+     "humor": 1
+    },
+    "greeting_subtitle": "Warm and ready",
+    "id": "warm_peer",
+    "quote": "Two visits; latest May 12. Open it?",
+    "switch_ack": "Switched to Warm Collaborator - I'm right here with you.",
+    "title": "Warm Collaborator",
+    "voice": {
+     "blend": "af_heart:0.75+af_bella:0.25",
+     "fallback": "af_heart",
+     "speed": 1.0
+    },
+    "voice_blend": "af_heart:0.75+af_bella:0.25",
+    "voice_speed": 1.0
+   },
+   {
+    "builtin": true,
+    "description": "Measured and unfailingly proper, with a dry nod and impeccable timing.",
+    "dials": {
+     "address": "sir",
+     "brevity": "balanced",
+     "formality": "formal_butler",
+     "humor": 2
+    },
+    "greeting_subtitle": "Classic and proper",
+    "id": "classic_butler",
+    "quote": "Very good, sir. Held until four.",
+    "switch_ack": "Very good, sir. Classic British Butler protocols are online and at your service.",
+    "title": "Classic British Butler",
+    "voice": {
+     "blend": "bm_george:0.65+bm_lewis:0.35",
+     "fallback": "bm_george",
+     "speed": 1.02
+    },
+    "voice_blend": "bm_george:0.65+bm_lewis:0.35",
+    "voice_speed": 1.02
+   },
+   {
+    "builtin": true,
+    "description": "Calm, clipped flight-director voice: state, action, done.",
+    "dials": {
+     "address": "none",
+     "brevity": "concise",
+     "formality": "tactical",
+     "humor": 0
+    },
+    "greeting_subtitle": "Direct and ready",
+    "id": "tactical_ops",
+    "quote": "Build green. Staging up. Awaiting approval.",
+    "switch_ack": "Copy. Tactical Mission Control active. Standing by for tasking.",
+    "title": "Tactical Mission Control",
+    "voice": {
+     "blend": "am_adam:0.60+bm_george:0.40",
+     "fallback": "am_michael",
+     "speed": 1.1
+    },
+    "voice_blend": "am_adam:0.60+bm_george:0.40",
+    "voice_speed": 1.1
+   },
+   {
+    "builtin": true,
+    "description": "Wry, deadpan delivery with sharp timing and very little mercy.",
+    "dials": {
+     "address": "first_name",
+     "brevity": "concise",
+     "formality": "casual",
+     "humor": 3
+    },
+    "greeting_subtitle": "Dry and deadpan",
+    "id": "dry_wit",
+    "quote": "Already restored. Bold strategy.",
+    "switch_ack": "Dry & Deadpan mode engaged. Humor setting at 90 percent - try to keep up.",
+    "title": "Dry & Deadpan",
+    "voice": {
+     "blend": "bm_lewis:0.70+am_adam:0.30",
+     "fallback": "bm_lewis",
+     "speed": 1.05
+    },
+    "voice_blend": "bm_lewis:0.70+am_adam:0.30",
+    "voice_speed": 1.05
+   },
+   {
+    "builtin": true,
+    "description": "A sharp engineering co-pilot: fast, technical, and already deep in the problem.",
+    "dials": {
+     "address": "boss",
+     "brevity": "concise",
+     "formality": "casual",
+     "humor": 1
+    },
+    "greeting_subtitle": "Sharp and ready",
+    "id": "friday_partner",
+    "quote": "Image rebuild; cache missed on Rust.",
+    "switch_ack": "On it, boss. Sharp Tech Partner mode locked in - what are we building?",
+    "title": "Sharp Tech Partner",
+    "voice": {
+     "blend": "bf_isabella:0.60+af_sarah:0.40",
+     "fallback": "bf_isabella",
+     "speed": 1.06
+    },
+    "voice_blend": "bf_isabella:0.60+af_sarah:0.40",
+    "voice_speed": 1.06
+   },
+   {
+    "builtin": true,
+    "description": "Teaches by asking, builds from first principles, and never just gives the answer away.",
+    "dials": {
+     "address": "first_name",
+     "brevity": "thorough",
+     "formality": "warm_peer",
+     "humor": 1
+    },
+    "greeting_subtitle": "Ready to think it through",
+    "id": "socratic_mentor",
+    "quote": "Mirror facing a mirror? Start there.",
+    "switch_ack": "Switched to Socratic Coach. Let's think through things from first principles together.",
+    "title": "Socratic Coach & Tutor",
+    "voice": {
+     "blend": "bm_fable:0.70+bm_george:0.30",
+     "fallback": "bm_fable",
+     "speed": 0.98
+    },
+    "voice_blend": "bm_fable:0.70+bm_george:0.30",
+    "voice_speed": 0.98
+   },
+   {
+    "builtin": true,
+    "description": "Red-team honesty: finds the weak point in the plan and says it plainly.",
+    "dials": {
+     "address": "none",
+     "brevity": "balanced",
+     "formality": "tactical",
+     "humor": 0
+    },
+    "greeting_subtitle": "Honest and sharp",
+    "id": "devils_advocate",
+    "quote": "Weak point: nobody fixes it over the weekend.",
+    "switch_ack": "No-Nonsense Critic active. Bring me your plan and I'll show you where it breaks.",
+    "title": "No-Nonsense Critic",
+    "voice": {
+     "blend": "am_onyx:0.65+bm_george:0.35",
+     "fallback": "am_onyx",
+     "speed": 1.04
+    },
+    "voice_blend": "am_onyx:0.65+bm_george:0.35",
+    "voice_speed": 1.04
+   },
+   {
+    "builtin": true,
+    "description": "Low-noise and steady: quiet words, no pressure, clear help.",
+    "dials": {
+     "address": "first_name",
+     "brevity": "concise",
+     "formality": "warm_peer",
+     "humor": 0
+    },
+    "greeting_subtitle": "Quiet and steady",
+    "id": "calm_stoic",
+    "quote": "One thing at a time; I'll hold the list.",
+    "switch_ack": "Switched to Calm & Grounded. No rush - take your time.",
+    "title": "Calm & Grounded",
+    "voice": {
+     "blend": "af_sky:0.65+af_heart:0.35",
+     "fallback": "af_sky",
+     "speed": 0.94
+    },
+    "voice_blend": "af_sky:0.65+af_heart:0.35",
+    "voice_speed": 0.94
+   }
+  ],
+  "personality": "warm_peer",
+  "personality_default": "warm_peer",
+  "reflex_kinds": [
+   "timer_set",
+   "reminder_saved",
+   "done",
+   "stopped",
+   "muted",
+   "walk_queued"
+  ],
   "said": {
    "plain": "Jarvis will now answer plainly.",
    "warm": "Jarvis will now answer warmly and briefly."
   },
   "spoken": "Spoken answers stay short and easy to listen to either way.",
-  "title": "How Jarvis talks"
+  "sync_voice_with_personality": true,
+  "title": "How Jarvis talks",
+  "user_personalities": [],
+  "voice_sync": true
  },
  "scrub": [
   {

@@ -1,4 +1,4 @@
-"""test_web_search.py - web search with a choice of five providers.
+"""test_web_search.py - web search with a choice of six providers.
 
     python3 backend/test_web_search.py
 
@@ -6,9 +6,9 @@ The owner's decisions of 2026-09-25 (CLAUDE.md, "Web search with a choice of
 providers" and "When a search asks first"; docs/JARVIS-API.md section
 23). What it proves, with local stand-in servers on 127.0.0.1 only - nothing
 here reaches the internet, and nothing reaches a real SearXNG, DuckDuckGo,
-Exa, Tavily or Brave:
+Exa, Tavily, Brave or DeepSeek:
 
-  - the five "why use this one" lines: said plainly (JSON off by default,
+  - the six "why use this one" lines: said plainly (JSON off by default,
     Docker, the internet address still seen, never "anonymous"), Whoogle
     left out with its reason, and the SAME words in the desktop's and the
     phone's copies;
@@ -23,6 +23,12 @@ Exa, Tavily or Brave:
     only, never after a redirect, never into a plan, a card, an error, an
     answer or the log (the scrubber hides it by value); no key, a refused
     key, credits used up and rate limits each said plainly;
+  - DeepSeek (added 2026-10-23, opt-in): its POST body and Bearer key reach
+    api.deepseek.com only; the answer's summary/snippet become the result,
+    a null date is harmless, an empty `results` list is a normal "found
+    nothing", a 401/402/429/408/5xx each gets its own plain words, its 128
+    character query bound refuses before any socket, and no key is a
+    readable refusal with no socket;
   - the keys: Credential Manager names match the desktop's, no route takes a
     key, and the owner's command line never echoes one;
   - DuckDuckGo: ddgs with backend="duckduckgo" ONLY; a ddgs without that
@@ -109,6 +115,7 @@ def skip(why):
 FAKE_TAVILY = "tv" + "ly-" + "fake" + "0123456789ab"
 FAKE_EXA = "exa" + "-fake-" + "0123456789abcdef"
 FAKE_BRAVE = "BS" + "Afake" + "0123456789abcdef"
+FAKE_DEEPSEEK = "ds" + "-fake-" + "0123456789abcdef"
 FAKE_AWS = "AK" + "IA" + "Q" * 16
 
 
@@ -236,8 +243,8 @@ def _sentences(text):
 
 
 def t_the_why_lines():
-    check("five providers, SearXNG the default",
-          WS.PROVIDERS == ("searxng", "duckduckgo", "exa", "tavily", "brave")
+    check("six providers, SearXNG the default",
+          WS.PROVIDERS == ("searxng", "duckduckgo", "exa", "tavily", "brave", "deepseek")
           and WS.DEFAULT_PROVIDER == "searxng" and WS.DEFAULT_SEARXNG_URL == "http://127.0.0.1:8888")
     for pid in WS.PROVIDERS:
         line = WS.WHY[pid]
@@ -262,6 +269,15 @@ def t_the_why_lines():
     check("Brave: about $5 a month, and says plainly that a card is charged past it",
           "$5" in b and "payment card that is charged" in b and "key" in b
           and "sees what you search" in b, b)
+    d = WS.WHY["deepseek"]
+    check("DeepSeek: $0.75 for 1,000 searches, empty searches not charged, a key",
+          "$0.75" in d and "1,000" in d and "not charged" in d and "key" in d
+          and "sees what you search" in d, d)
+    check("DeepSeek is opt-in, needs a key, and its label says so",
+          "deepseek" in WS.NEEDS_KEY and WS.LABEL["deepseek"] ==
+          "DeepSeek web search (needs a key)"
+          and WS.KEY_TARGETS["deepseek"] == "Jarvis Backend/DeepSeek Search key"
+          and WS.KEY_WHERE["deepseek"].startswith("https://platform.deepseek.com/api_keys"))
     w = WS.LEFT_OUT[0]
     check("Whoogle is left out, and says why (Google, 2025)",
           w["id"] == "whoogle" and "2025" in w["why"] and "JavaScript" in w["why"])
@@ -291,9 +307,9 @@ def t_both_apps_say_the_same_words():
         check(f"the desktop's web-search.js has the PC's {name} word for word", js in desk, text)
         check(f"the phone's WebSearch.kt has the PC's {name} word for word", kt in phone, text)
     for name, body in (("desktop", desk), ("phone", phone)):
-        check(f"the {name} offers the five in the PC's order",
-              re.search(r'"searxng",\s*"duckduckgo",\s*"exa",\s*"tavily",\s*"brave"\s*[\])]',
-                        body) is not None)
+        check(f"the {name} offers the six in the PC's order",
+              re.search(r'"searxng",\s*"duckduckgo",\s*"exa",\s*"tavily",\s*"brave",'
+                        r'\s*"deepseek"\s*[\])]', body) is not None)
 
 
 # --------------------------------------------------------------------------
@@ -591,14 +607,17 @@ def t_the_searxng_address_is_the_owners_own():
 
 
 # --------------------------------------------------------------------------
-#   4. Exa, Tavily and Brave: the keys
+#   4. The keyed providers: Exa, Tavily, Brave and DeepSeek
 # --------------------------------------------------------------------------
 
 def _with_cloud(provider, routes, fn):
     srv = StandIn(routes)
-    attr = {"tavily": "TAVILY_URL", "exa": "EXA_URL", "brave": "BRAVE_URL"}[provider]
+    attr = {"tavily": "TAVILY_URL", "exa": "EXA_URL", "brave": "BRAVE_URL",
+            "deepseek": "DEEPSEEK_URL"}[provider]
+    suffix = {"brave": "/res/v1/web/search", "deepseek": "/v1/tools/search"}.get(
+        provider, "/search")
     saved = getattr(WS, attr)
-    setattr(WS, attr, srv.url + ("/res/v1/web/search" if provider == "brave" else "/search"))
+    setattr(WS, attr, srv.url + suffix)
     try:
         return fn(srv)
     finally:
@@ -776,6 +795,131 @@ def t_brave_key_goes_only_to_brave():
     check("py -3 jarvis_search.py key brave saves it, and never prints it",
           rc == 0 and FakeStore.DATA.get(WS.KEY_TARGETS["brave"]) == FAKE_BRAVE
           and FAKE_BRAVE not in "\n".join(said), said)
+
+
+def t_deepseek_parser_errors_and_no_key():
+    # 1. No key: a readable refusal, before any socket.
+    reset(provider="deepseek")
+    FakeStore.DATA.clear()
+    with NoSockets() as ns:
+        p = WS.plan("walking boots")
+        card = WS.describe(p)
+        out = WS.run(p, approved=True)
+    check("DeepSeek, no key: refused before any socket, and says where to add one",
+          p.state == "key_missing" and "No DeepSeek Search key" in p.problem
+          and "Settings, Web search" in p.problem and not ns.tried, p.problem)
+    check("... the refusal is readable, not a crash, and run() sends nothing",
+          out["ok"] is False and out["state"] == "key_missing"
+          and "Traceback" not in json.dumps(out), out)
+    check("... the refusal names the service and where a key is made, never a key",
+          "DeepSeek Search" in card and "platform.deepseek.com/api_keys" in card, card)
+
+    # 2. A recorded answer: two results, one with an RFC3339 date and one null.
+    FakeStore.DATA[WS.KEY_TARGETS["deepseek"]] = FAKE_DEEPSEEK
+    deepseek_body = json.dumps({"results": [
+        {"rerank_score": 2.4, "title": "DS <b>one</b>", "url": "https://ds.example/1",
+         "snippet": "short one", "summary": "long summary one", "content": "",
+         "site_name": "Example", "site_icon": None,
+         "date": "2026-06-01T00:00:00+00:00", "authority": 3},
+        {"rerank_score": 1.1, "title": None, "url": "https://ds.example/2",
+         "snippet": "short two", "summary": "", "content": "",
+         "site_name": None, "site_icon": None, "date": None, "authority": -1},
+        {"title": "bad", "url": "javascript:alert(1)", "date": None},
+    ]}).encode()
+
+    def go(srv):
+        p = WS.plan("walking boots")
+        return p, WS.describe(p), WS.run(p, approved=True), srv.seen
+    p, card, out, seen = _with_cloud(
+        "deepseek", {"/v1/tools/search": (200, {}, deepseek_body)}, go)
+    r = out.get("results") or []
+    check("DeepSeek answers: tag cleaned, the summary is the snippet, the link kept",
+          out.get("ok") and r and r[0] == {"title": "DS one", "url": "https://ds.example/1",
+                                          "snippet": "long summary one"}, r[:1])
+    check("... a null title falls back to the link, and a null date is harmless",
+          len(r) == 2 and r[1] == {"title": "https://ds.example/2",
+                                   "url": "https://ds.example/2", "snippet": "short two"}, r)
+    check("... the javascript: link is dropped", all(x["url"].startswith("https://") for x in r))
+    req = seen[0] if seen else {}
+    sent = json.loads(req.get("body") or b"{}")
+    check("DeepSeek: a POST to /v1/tools/search with query, count 5, no content",
+          req.get("method") == "POST" and req["headers"].get("authorization")
+          == f"Bearer {FAKE_DEEPSEEK}" and sent == {"query": "walking boots", "count": 5,
+                                                    "need_content": False}, (req, sent))
+    check("... and not as any other key header", "x-api-key" not in req.get("headers", {})
+          and "x-subscription-token" not in req.get("headers", {}))
+    check("the key is in no plan, card or answer",
+          FAKE_DEEPSEEK not in json.dumps([p.as_dict(), card, out]))
+    check("the card says a key goes, to that address only",
+          "with your DeepSeek Search key" in card and "goes to" in card, card)
+
+    # 3. An empty `results` list is a normal search that found nothing.
+    out = _with_cloud("deepseek", {"/v1/tools/search": (200, {}, b'{"results": []}')},
+                      lambda srv: WS.run(WS.plan("zzqqxx"), approved=True))
+    check("DeepSeek: an empty results list is a normal 'found nothing', not an error",
+          out.get("ok") is True and out.get("results") == []
+          and "found nothing" in out.get("note", ""), out)
+
+    # 4. Every documented error code, in plain words, with no key in the answer.
+    for status, state, words in (
+            (401, "key_refused", "refused your key"),
+            (402, "quota_used", "out of balance"),
+            (429, "rate_limited", "too many searches"),
+            (408, "timeout", "did not answer in time"),
+            (504, "timeout", "did not answer in time"),
+            (500, "failed", "problem on its side"),
+            (400, "failed", "would not accept those search words")):
+        out = _with_cloud("deepseek", {"/v1/tools/search": (status, {}, b'{"error": "x"}')},
+                          lambda srv: WS.run(WS.plan("x"), approved=True))
+        check(f"DeepSeek {status} -> {state}, said plainly, no key in it",
+              out["state"] == state and words in out["error"]
+              and FAKE_DEEPSEEK not in json.dumps(out), out)
+    out = _with_cloud("deepseek", {"/v1/tools/search": (402, {}, b"{}")},
+                      lambda srv: WS.run(WS.plan("x"), approved=True))
+    check("... 402 offers no silent retry and says where to add credit",
+          "platform.deepseek.com" in out["error"] and out["ok"] is False, out)
+
+    # 5. A redirect never carries the key.
+    target = StandIn({"*": (200, {}, deepseek_body)})
+    out = _with_cloud("deepseek",
+                      {"/v1/tools/search": (307, {"Location": target.url + "/steal"}, b"")},
+                      lambda srv: WS.run(WS.plan("x"), approved=True))
+    check("DeepSeek: a redirect is refused; the key never reaches another address",
+          out["ok"] is False and not target.seen, target.seen)
+    target.close()
+    # 6. An oversized answer is refused.
+    big = b'{"results": [' + b" " * (WS.MAX_BODY + 10) + b"]}"
+    out = _with_cloud("deepseek", {"/v1/tools/search": (200, {}, big)},
+                      lambda srv: WS.run(WS.plan("x"), approved=True))
+    check("DeepSeek: an answer over the size cap is refused", out["ok"] is False, out)
+
+    # 7. The query bound (its guide: 1 to 128 characters) refuses before sending.
+    FakeStore.DATA.clear()
+    with NoSockets() as ns:
+        p = WS.plan("x" * (WS.DEEPSEEK_QUERY_CHARS + 1))
+    check("DeepSeek: over 128 characters is refused before any socket",
+          p.state == "empty" and "128" in p.problem and not ns.tried, p.problem)
+    with NoSockets() as ns:
+        p = WS.plan("x" * WS.DEEPSEEK_QUERY_CHARS)
+    check("... exactly 128 is not refused for its length", "128 characters" not in p.problem)
+    direct = WS.Plan(query="x" * (WS.DEEPSEEK_QUERY_CHARS + 1), provider="deepseek",
+                     label="DeepSeek", host="api.deepseek.com", keyed=True)
+    try:
+        WS._deepseek(direct)
+        refused = False
+    except WS.SearchError as exc:
+        refused = exc.state == "empty" and "128" in exc.said
+    check("... and the provider itself refuses one built by hand", refused)
+    check("the real address is DeepSeek's own, over https",
+          WS.DEEPSEEK_URL == "https://api.deepseek.com/v1/tools/search")
+    WS._key("deepseek")
+    check("the log scrubber hides the DeepSeek key by value",
+          FAKE_DEEPSEEK not in jarvis_scrub.scrub_text(f"sending {FAKE_DEEPSEEK} now"))
+    reset(provider="deepseek")
+    check("a saved \"deepseek\" is simply DeepSeek, and still the sixth",
+          WS.settings()["provider"] == "deepseek" and WS.settings()["why"] == ""
+          and WS.PROVIDERS.index("deepseek") == len(WS.PROVIDERS) - 1)
+    FakeStore.DATA.clear()
 
 
 def t_the_keys_stay_on_the_pc():
@@ -1414,16 +1558,19 @@ def t_which_search_without_the_model():
     for said, which in (("Which search should I use?", None), ("why SearXNG?", "searxng"),
                         ("what about Tavily for web search", "tavily"), ("why exa", "exa"),
                         ("why brave", "brave"), ("why whoogle", "whoogle"),
-                        ("why not whoogle", "whoogle"), ("what search engine are you using", None)):
+                        ("why not whoogle", "whoogle"),
+                        ("what about DeepSeek for web search", "deepseek"),
+                        ("why deepseek for web search", "deepseek"),
+                        ("what search engine are you using", None)):
         i = Q.match(said)
         check(f"{said!r} is answered without the model", i is not None
               and i.name == "search_explain" and i.f.get("which") == which, i and i.f)
     for said in ("search for walking boots", "what is brave", "why is the sky blue",
-                 "use your judgement"):
+                 "use your judgement", "what is deepseek", "why deepseek"):
         check(f"{said!r} goes to the model", Q.match(said) is None or
               not Q.match(said).name.startswith("search_"))
     r = Q.answer("which search should I use", sched=_Sched())
-    check("the answer is the PC's own words, all five and Whoogle",
+    check("the answer is the PC's own words, all six and Whoogle",
           all(WS.WHY[p] in r.reply for p in WS.PROVIDERS)
           and all(x["why"] in r.reply for x in WS.LEFT_OUT))
     FakeStore.DATA.clear()
@@ -1441,6 +1588,10 @@ def t_which_search_without_the_model():
     r = Q.answer("use exa for web search", sched=_Sched())
     check("\"use Exa for web search\" switches, and says the key is missing",
           WS.settings()["provider"] == "exa" and "No Exa key" in r.reply, r.reply)
+    r = Q.answer("use deepseek for web search", sched=_Sched())
+    check("\"use DeepSeek for web search\" switches, and says the key is missing",
+          WS.settings()["provider"] == "deepseek"
+          and "No DeepSeek Search key" in r.reply, r.reply)
     r = Q.answer("why searxng", sched=_Sched())
     check("\"why SearXNG?\" says why it is the default", WS.DEFAULT_WHY in r.reply)
     with NoSockets() as ns:
@@ -1516,7 +1667,7 @@ def t_the_patch():
     exec(compile("def f(self, path, _origin_ok, _token_ok):\n" + get_blk, "<GET>", "exec"), ns)
     h = _Handler()
     ns["f"](h, "/api/search", lambda s: True, lambda s: True)
-    check("GET runs and answers the five providers and Whoogle",
+    check("GET runs and answers the six providers and Whoogle",
           h.sent[0] == 200 and [p["id"] for p in h.sent[1]["providers"]] == list(WS.PROVIDERS)
           and h.sent[1]["left_out"][0]["id"] == "whoogle", h.sent)
     ns["f"](h, "/api/search", lambda s: True, lambda s: False)
@@ -1569,6 +1720,7 @@ if __name__ == "__main__":
                t_searxng_answering_with_nothing_is_never_a_silent_empty_answer,
                t_the_searxng_address_is_the_owners_own, t_tavily_key_goes_only_to_tavily,
                t_exa_key_goes_only_to_exa, t_brave_key_goes_only_to_brave,
+               t_deepseek_parser_errors_and_no_key,
                t_the_keys_stay_on_the_pc,
                t_duckduckgo_only_and_paced, t_settings_and_the_card_to_ask_less,
                t_test_search_reports_plainly, t_no_card_for_the_owners_own_question,

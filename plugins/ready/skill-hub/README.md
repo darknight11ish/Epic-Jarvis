@@ -11,12 +11,12 @@ folder (or run `scripts\add-plugin.ps1 -Name skill-hub`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_skill_hub.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: **143**, the first free slot after every
+- Position in the loader's order: **144**, the first free slot after every
   folder the old patch stack had (`model-lanes` is the highest of those, at
-  142), so its four routes are checked after that stack rather than in the
-  middle of somebody else's. 144 is `voiceprint` and 145 is `receipts`, so 143
+  143), so its four routes are checked after that stack rather than in the
+  middle of somebody else's. 145 is `voiceprint` and 146 is `receipts`, so 144
   is the free slot that collides with neither. `backend/test_receipts.py` asks
-  only that a no-patch folder sorts AFTER every catalogued one, which 143 does.
+  only that a no-patch folder sorts AFTER every catalogued one, which 144 does.
 
 The module itself is one of the ones this repository ships
 (`backend/jarvis_skill_hub.py`), copied into the backend by
