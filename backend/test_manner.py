@@ -920,7 +920,7 @@ def t_both_apps_read_the_current_contract():
 
 
 # --------------------------------------------------------------------------
-#   Personality presets (2026-10-22): the owner's eight characters
+#   Personality presets (2026-10-22): the owner's nine characters
 # --------------------------------------------------------------------------
 #
 # The nine mutation bite-proofs the blueprint asks for, split across this file
@@ -961,7 +961,7 @@ def t_personality_budget_is_really_kept_and_a_break_is_reported():
     real = json.loads((REPO / "contract" / "personalities.json").read_text(encoding="utf-8"))
     worst = max(len(M._compose(p, p["dials"], spoken)) for p in M._BUILTIN
                 for spoken in (False, True))
-    check("all 8 assembled persona prompts fit the 750-char / ~180-token budget",
+    check("all 9 assembled persona prompts fit the 750-char / ~180-token budget",
           worst <= M.PROMPT_CHAR_CAP, f"worst {worst}")
     broken = json.loads(json.dumps(real))
     broken["personalities"][0]["prompt_block"] = "x" * 751
@@ -1074,7 +1074,7 @@ def t_personality_crisis_override_strips_persona_text():
             spoken = M.prompt_block(spoken_live=True)
             check(f"{pid}: spoken-live adds the 1-3 sentence cadence constraint",
                   M._SAFETY["spoken_live_note"] in spoken and len(spoken) <= M.PROMPT_CHAR_CAP)
-        check("the same calm block comes back for all 8 personalities",
+        check("the same calm block comes back for all 9 personalities",
               len(set(texts)) == 1)
         check("the crisis block has no critic or wit instruction in it",
               not any(w in texts[0].lower() for w in
@@ -1147,8 +1147,8 @@ def t_personality_custom_presets_are_scrubbed_and_dial_copy_safe():
 def t_personality_views_carry_the_owner_surface():
     with Folder():
         v = M.handle_get()[1]
-        check("GET /api/manner carries all 8 presets with their ack and voice",
-              len(v["personalities"]) == 8
+        check("GET /api/manner carries all 9 presets with their ack and voice",
+              len(v["personalities"]) == 9
               and all(p["switch_ack"] and p["voice_blend"] and p["greeting_subtitle"]
                       for p in v["personalities"]))
         check("the view carries the four dials and the voice-sync switch",
@@ -1255,7 +1255,7 @@ def t_personality_quick_switching_bite3():
                 Q.run(intent, None, time.time())
                 check(f"dial persisted: {text!r}", M.dials()[name] == value, M.dials())
         query_intent = Q.match("what personality are you using?")
-        check("a question asks and lists the eight personalities",
+        check("a question asks and lists the nine personalities",
               query_intent is not None
               and Q.run(query_intent, None, time.time()).reply.count(";") >= 6)
         check("the old humour on/off sentence still belongs to its own switch",
@@ -1300,7 +1300,7 @@ def t_personality_wire_contract_769():
         for field in ("personalities", "personality", "dials", "voice_sync",
                       "custom_personalities"):
             check(f"#769 reads GET field {field!r}", field in view, sorted(view))
-        check("the GET personality ids are the eight contract ids",
+        check("the GET personality ids are the nine contract ids",
               [p["id"] for p in view["personalities"]] == [p["id"] for p in M._BUILTIN],
               [p["id"] for p in view["personalities"]])
         check("each preset carries the fields the panel draws",

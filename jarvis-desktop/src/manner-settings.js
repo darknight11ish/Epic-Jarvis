@@ -222,9 +222,9 @@ onLink(() => voiceprint?.syncLive());
 
 
 /* ── Personality presets, the four dials, and "My personalities" ──────────
-   2026-10-23 (Personality Presets, SLICE 2a). The eight built-in presets,
+   2026-10-23 (Personality Presets, SLICE 2a). The nine built-in presets,
    their paired voice, the four tuning dials and the owner's own saved mixes.
-   The words and the eight presets' data are personalities.js's; this half is
+   The words and the nine presets' data are personalities.js's; this half is
    only the page. The PC's own answer is preferred whenever it carries the
    fields; on a PC whose backend does not have them yet the new controls stay
    visible but disabled, with the plain "run apply-patches.ps1" sentence, and

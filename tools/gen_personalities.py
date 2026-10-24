@@ -1,6 +1,6 @@
 """tools/gen_personalities.py - write the personality data the engine ships with.
 
-`contract/personalities.json` is the source of truth (the 8 presets, the dials,
+`contract/personalities.json` is the source of truth (the 9 presets, the dials,
 the safety sentences). The Python backend on the owner's PC does NOT receive
 `contract/` - only the `backend/` modules are shipped - so `jarvis_manner.py`
 carries a GENERATED copy of that contract, between two markers:
@@ -87,8 +87,8 @@ def contract_problems(data: dict) -> list:
     presets = data.get("personalities")
     if not isinstance(presets, list):
         return bad + ["personalities is not a list"]
-    if len(presets) != 8:
-        bad.append(f"expected 8 built-in presets, found {len(presets)}")
+    if len(presets) != 9:
+        bad.append(f"expected 9 built-in presets, found {len(presets)}")
     ids, aliases = [], []
     for row in presets:
         if not isinstance(row, dict):
