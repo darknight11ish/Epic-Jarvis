@@ -2158,56 +2158,50 @@ def t_the_code_must_come_back_before_anything_is_written():
     code, prep = B.request_prepare({}, peer="100.64.0.7")
     before = _folder_bytes(backups)
 
-    # 1. A caller that is not this PC cannot write, however good its code.
-    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": prep["id"], "code": prep["recovery_code"]},
-                           peer="100.64.0.7", local="100.64.0.1")
-    check("the phone ASKS; the write itself is refused from anywhere but the PC",
-          c == 403 and out["pc_only"] is True, out)
-    check("... in words that say what happened and what to do instead",
-          "nothing was written" in out["error"] and "your PC" in out["error"], out)
-    check("... and NOTHING was written for it", _folder_bytes(backups) == before,
-          sorted(_names(backups)))
-
-    # 2. A wrong code writes nothing, and the run stays open so a typo can be fixed.
+    # 1. A caller that is not this PC is no longer refused for its DEVICE: the
+    #    one-time code IS the authorisation (2026-10-24). What still stops a
+    #    phone is a code that is not this run's - and that must write nothing
+    #    and leave the run open, so the owner can try the right one.
     c, out = B.handle_post(B.COMMIT_ROUTE, {"id": prep["id"], "code": "WRONG-CODE-23456"},
-                           peer="127.0.0.1", local="127.0.0.1")
-    check("a wrong code: refused, and nothing written",
-          c == 400 and _folder_bytes(backups) == before, (c, out))
-    check("... and the run is still open, so a mistyped code is not a lost backup",
+                           peer="100.64.0.7", local="100.64.0.1")
+    check("a phone with the WRONG code: refused, and nothing written",
+          c == 400 and out["error"] == B.COMMIT_WRONG_CODE
+          and _folder_bytes(backups) == before, (c, out))
+    check("... and the run stays open: a phone's failed press does not spend it",
           B._P_STATE["pending"].get("id") == prep["id"], B._P_STATE)
 
-    # 3. A missing code, too.
-    c, out = B.handle_post(B.COMMIT_ROUTE, {}, peer="127.0.0.1", local="127.0.0.1")
-    check("no code at all: refused, nothing written",
-          c == 400 and _folder_bytes(backups) == before, (c, out))
+    # 2. A missing code, too - and it does not spend the run either.
+    c, out = B.handle_post(B.COMMIT_ROUTE, {}, peer="100.64.0.7", local="100.64.0.1")
+    check("a phone with no code at all: refused, nothing written, and the run still open",
+          c == 400 and _folder_bytes(backups) == before
+          and B._P_STATE["pending"].get("id") == prep["id"], (c, out))
 
-    # 4. No run at all (a fresh backend, or one already used): nothing written.
+    # 3. No run at all (a fresh backend, or one already used): nothing written.
     B._P_STATE["pending"].clear()
     c, out = B.handle_post(B.COMMIT_ROUTE, {"id": "x", "code": prep["recovery_code"]},
-                           peer="127.0.0.1", local="127.0.0.1")
+                           peer="100.64.0.7", local="100.64.0.1")
     check("a run that was never started: refused, nothing written",
           c == 409 and _folder_bytes(backups) == before, (c, out))
     check("... in words a person can act on", "Ask for a backup again" in out["error"], out)
 
-    # 5. An EXPIRED run: refused and dropped, so a screen left open for an hour
+    # 4. An EXPIRED run: refused and dropped, so a screen left open for an hour
     #    cannot write a file whose code nobody is looking at any more.
     B.request_prepare({}, peer="100.64.0.7")
     B._P_STATE["pending"]["expires_at"] = time.time() - 1
     live = B._P_STATE["pending"]["code"]
     c, out = B.handle_post(B.COMMIT_ROUTE, {"id": "x", "code": live},
-                           peer="127.0.0.1", local="127.0.0.1")
+                           peer="100.64.0.7", local="100.64.0.1")
     check("an expired run: refused, nothing written, and the run is dropped",
           c == 409 and not B._P_STATE["pending"] and _folder_bytes(backups) == before,
           (c, out, B._P_STATE))
 
-    # 6. The real thing: the code comes back and the file lands - with THAT
-    #    code, so the code the owner kept is the code that opens it.
+    # 5. The real thing from the PHONE: the code comes back and the file lands -
+    #    with THAT code, so the code the owner kept is the code that opens it.
     B.request_prepare({}, peer="100.64.0.7")
     live, pid = B._P_STATE["pending"]["code"], B._P_STATE["pending"]["id"]
     c, out = B.handle_post(B.COMMIT_ROUTE, {"id": pid, "code": live.replace("-", "")},
-                           peer="127.0.0.1", local="127.0.0.1")
-    check("the code typed back WITHOUT its hyphens still matches - the phone draws it in "
-          "four groups of five and either shape is the same code",
+                           peer="100.64.0.7", local="100.64.0.1")
+    check("the phone's own finish press writes the file: 200, one tap, no step on the PC",
           c == 200 and out["ok"], (c, out))
     check("... and what comes back is the four-groups-of-five form, which is what he "
           "writes down", out["recovery_code"] == live, (out.get("recovery_code"), live))
@@ -2227,15 +2221,29 @@ def t_the_code_must_come_back_before_anything_is_written():
 
 
 # ---------------------------------------------------------------------------
-#   The PC FINISHES a run the phone started (2026-10-24, the owner's decision)
+#   The PHONE'S finish tap writes the backup (2026-10-24, the owner's decision)
 # ---------------------------------------------------------------------------
-# The phone may ASK; the write is PC-only by design. Until now the phone showed
-# a recovery code and its finish call was always refused 403 `pc_only`, so a
-# phone-started backup was never written - and the PC had no way to write it
-# either, because `GET /api/backup` did not say a run was waiting. These four
-# hold the new path: the PC's own read carries the waiting run, the PC's own
-# commit writes it with the code the phone showed, a dead run is never shown as
-# waiting, and two presses cannot write two files.
+# The owner's first decision (2026-10-24) was "let the PC finish a backup the
+# phone started": the phone could only ask, and Settings, Backups on the PC
+# finished a waiting run with the code typed there. He upgraded it the same day
+# to ONE TAP FROM THE PHONE: after the phone shows the recovery code and the
+# owner ticks "I have written this code down somewhere safe", pressing the
+# phone's finish button must make the PC write the file - no step on the PC.
+# The one-time code the phone holds IS the authorisation; the write still
+# physically happens on this PC's disk, by this PC's backend.
+#
+# These tests hold both halves of that decision: a caller that is not this PC
+# (peer 100.64.0.5, local 127.0.0.1 - what a phone on the owner's mesh network
+# looks like) with the live code gets 200 and exactly one file that the code
+# opens; a wrong or missing code from it is 400 and spends nothing; no run or an
+# expired one is 409 and writes nothing; two concurrent presses from it write
+# ONE file; and the PC's own fallback (`finish_phone_backup`, the code typed
+# into Settings) still finishes a run the phone left waiting.
+#
+# NEGATIVE CONTROL, run when this change was made: with the old
+# `if not is_here: return 403, {"ok": False, "error": COMMIT_PC_ONLY, "pc_only":
+# True}` line put back at the top of `request_commit`, the phone tests below
+# fail (403 where they demand 200) - and those are the only new failures.
 
 
 def t_the_pc_can_see_a_run_its_phone_started():
@@ -2302,6 +2310,73 @@ def t_the_pc_finishes_the_backup_the_phone_started():
           ["prepared"] is None)
 
 
+def t_a_paired_phone_holding_the_code_writes_the_backup_the_code_opens():
+    """THE ONE-TAP DECISION, proved at the route (2026-10-24).
+
+    A caller that is NOT this PC - the paired phone on the owner's mesh network
+    (`peer` 100.64.0.5, `local` 127.0.0.1) - holding the live run's one-time
+    code gets 200, and the PC writes exactly ONE file into its folder, which
+    that same code opens. This is what replaced the 2026-10-13 "only the PC may
+    write" rule: the code is the authorisation, and the write still happens
+    here, on this PC's disk, by this PC's backend."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    B.backup_now(str(backups))                  # one real backup already there
+    before = _names(backups)
+    phone = {"peer": "100.64.0.5", "local": "127.0.0.1"}
+
+    live = B.handle_post(B.PREPARE_ROUTE, {}, **phone)[1]
+    check("the phone asks first, and the ask writes nothing",
+          bool(live["recovery_code"]) and _names(backups) == before, live)
+    c, out = B.handle_post(B.COMMIT_ROUTE,
+                           {"id": live["id"], "code": live["recovery_code"]}, **phone)
+    check("a phone holding the code gets 200, and the PC writes the file",
+          c == 200 and out.get("ok") is True, (c, out))
+    new = _names(backups) - before
+    check("... exactly ONE new file, in the PC's folder, and nothing else moved",
+          len(new) == 1 and len(_names(backups)) == len(before) + 1, sorted(new))
+    check("... and the code the PHONE holds really does open it",
+          B.decrypt_blob((backups / out["name"]).read_bytes(), live["recovery_code"])
+          is not None)
+    check("... the folder's own read counts it, so the phone's next screen is true",
+          B.status_view()["kept"] == 2 == len(_names(backups))
+          and B.status_view()["verify"]["ok"] is True, B.status_view())
+    check("... and the run is finished: the same code cannot write a second file",
+          not B._P_STATE["pending"]
+          and B.handle_post(B.COMMIT_ROUTE,
+                            {"id": live["id"], "code": live["recovery_code"]},
+                            **phone)[0] == 409)
+
+
+def t_a_phone_with_no_live_run_is_refused_and_writes_nothing():
+    """The other half of the one-tap rule: the authorisation is a LIVE code.
+
+    A phone with no run, or one whose 15 minutes are up, is refused 409 and
+    writes nothing - so the change did not turn the route into an unconditional
+    write. The expired run is dropped on the refusal, so it cannot come back."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    B.backup_now(str(backups))
+    before = _folder_bytes(backups)
+    phone = {"peer": "100.64.0.5", "local": "127.0.0.1"}
+    B._P_STATE["pending"].clear()
+
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": "x", "code": "2"}, **phone)
+    check("a phone with no run at all: 409 and nothing written",
+          c == 409 and out["error"] == B.COMMIT_NO_RUN
+          and _folder_bytes(backups) == before, (c, out))
+
+    live = B.handle_post(B.PREPARE_ROUTE, {}, **phone)[1]
+    B._P_STATE["pending"]["expires_at"] = time.time() - 1
+    c, out = B.handle_post(B.COMMIT_ROUTE,
+                           {"id": live["id"], "code": live["recovery_code"]}, **phone)
+    check("a phone with an EXPIRED run: 409, nothing written, and the run dropped",
+          c == 409 and not B._P_STATE["pending"]
+          and _folder_bytes(backups) == before, (c, out, B._P_STATE))
+
+
 def t_a_dead_run_is_never_shown_as_waiting():
     conf, backups = fresh_conf()
     B._save_settings({"folder": str(backups)})
@@ -2332,19 +2407,21 @@ def t_a_dead_run_is_never_shown_as_waiting():
 
 
 def t_two_presses_cannot_write_two_files():
-    """The race the 2026-10-24 change closes.
+    """The race the 2026-10-24 change closes, proved from the PHONE.
 
     `request_commit` used to check the code, release `_P_LOCK`, WRITE outside
     it, and clear the run only afterwards. Two windows (or a double press on
     one) could both pass the check before either cleared it: two files with the
     same code, and the second one's `_retain` could push an older backup out of
-    the five kept. The run is now claimed under the lock before the write."""
+    the five kept. The run is now claimed under the lock before the write, so
+    the second press is refused `COMMIT_NO_RUN` - and that holds for a caller
+    that is not this PC too, now that a phone may commit."""
     conf, backups = fresh_conf()
     B._save_settings({"folder": str(backups)})
     make_memory_db(conf)
     B.backup_now(str(backups))                 # one real backup already in the folder
     before = _names(backups)
-    live = B.request_prepare({}, peer="100.64.0.7", local="100.64.0.1")[1]
+    live = B.request_prepare({}, peer="100.64.0.5", local="127.0.0.1")[1]
     code = live["recovery_code"]
 
     inside, release, got = threading.Event(), threading.Event(), threading.Lock()
@@ -2358,7 +2435,7 @@ def t_two_presses_cannot_write_two_files():
         return B.backup_now(folder, code=keep_code)
 
     def press():
-        c, out = B.request_commit({"code": code}, peer="127.0.0.1", local="127.0.0.1",
+        c, out = B.request_commit({"code": code}, peer="100.64.0.5", local="127.0.0.1",
                                   run=slow_run)
         with got:
             results.append((c, out))
@@ -2463,10 +2540,11 @@ def t_the_phones_run_needs_no_approval_card_and_says_why_in_code():
         direction of the same feature and IS a card, because it replaces
         everything Jarvis knows; backup-now is the PC's own button's twin.
       * it is NOT in jarvis_owner_check.PC_ONLY_ACTIONS for the CARD's sake -
-        the PC-only rule here is about WHO MAY WRITE the file, not about a
-        person answering anything. What the reader must not conclude is that
-        this is an ungated write:
-      * the WRITE is refused from any device but the PC, and it is held on a
+        the PC-only rule here was about WHO MAY WRITE the file, not about a
+        person answering anything, and since 2026-10-24 even that has moved:
+        the phone's own finish tap may write it. What the reader must not
+        conclude is that this is an ungated write:
+      * the WRITE needs the live run's one-time code, and it is held on a
         stale link (`JarvisRuntime.commitBackup`, rule 4).
     """
     conf, backups = fresh_conf()
@@ -2475,8 +2553,8 @@ def t_the_phones_run_needs_no_approval_card_and_says_why_in_code():
     check("backup-now (this PC's own route) is NOT a PC-only-ACTION: no Windows Hello, "
           "no card, because it only adds a copy",
           "backup_now" not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
-    check("the phone's commit is not one either - it is refused to other DEVICES, which "
-          "is a different rule and needs nobody to answer anything",
+    check("the phone's commit is not one either - no person answers anything for it, "
+          "because the live run's one-time code is the authorisation",
           "commit_backup" not in OC.PC_ONLY_ACTIONS
           and "backup_commit" not in OC.PC_ONLY_ACTIONS
           and "backup_commit_phone" not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
@@ -2491,7 +2569,9 @@ def t_the_phones_run_needs_no_approval_card_and_says_why_in_code():
     try:
         B.request_prepare({}, peer="100.64.0.7")
         live = B._P_STATE["pending"]["code"]
-        B.request_commit({"id": "x", "code": live}, here=True)
+        # The PHONE presses finish: since 2026-10-24 that is the write, and it
+        # still asks nobody for a card.
+        B.request_commit({"id": "x", "code": live}, peer="100.64.0.7", local="100.64.0.1")
     finally:
         B._gate = real_gate
     check("neither the ask nor the write asks the gate for anything at all", asked == [], asked)

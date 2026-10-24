@@ -2762,11 +2762,19 @@ object JarvisRuntime {
      * that writes into a folder on the PC, and rule 4 holds every action of
      * that shape.
      *
-     * @return the PC's sentence - what landed, or why nothing did. Never an
-     *   empty string on a failure.
+     * Since the owner's 2026-10-24 one-tap decision this is what the phone's
+     * own finish button does, and the result is [Backup.Committed] rather than
+     * a string so the screen can tell a file that LANDED from a press that
+     * wrote nothing - and draw "your PC wrote the backup" only for the first.
+     *
+     * @return [com.jarvis.client.net.Backup.Committed.Landed] with the sentence
+     *   to draw, or [com.jarvis.client.net.Backup.Committed.Refused] with the
+     *   PC's own words (this app's fallback only when the PC sent none). Never
+     *   an empty sentence on a failure.
      */
-    suspend fun commitBackup(id: String, code: String): String {
-        actionBlocker()?.let { return it }
+    suspend fun commitBackup(id: String, code: String):
+        com.jarvis.client.net.Backup.Committed {
+        actionBlocker()?.let { return com.jarvis.client.net.Backup.Committed.Refused(it) }
         return when (val r = api.backupCommit(id, code)) {
             is ApiResult.Ok -> {
                 val w = com.jarvis.client.net.Backup.written(r.value)
@@ -2776,17 +2784,20 @@ object JarvisRuntime {
                         _backupTick.update { n -> n + 1 }
                         val size = w.size?.let { " (${humanSize(it)})" }.orEmpty()
                         val where = w.folder?.let { " in $it" }.orEmpty()
-                        "Your PC wrote ${w.name}$size$where."
+                        com.jarvis.client.net.Backup.Committed.Landed(
+                            "Your PC wrote ${w.name}$size$where.")
                     }
                     // `ok: false` with a sentence - the PC's own words.
-                    said != null -> said
-                    else -> com.jarvis.client.net.Backup.RUN_GONE
+                    said != null -> com.jarvis.client.net.Backup.Committed.Refused(said)
+                    else -> com.jarvis.client.net.Backup.Committed.Refused(
+                        com.jarvis.client.net.Backup.RUN_GONE)
                 }
             }
             is ApiResult.Failed ->
-                com.jarvis.client.net.Backup.describeRefusal(r.error).ifBlank {
-                    describe(r.error)
-                }
+                com.jarvis.client.net.Backup.Committed.Refused(
+                    com.jarvis.client.net.Backup.describeRefusal(r.error).ifBlank {
+                        describe(r.error)
+                    })
         }
     }
 

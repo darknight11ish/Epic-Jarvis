@@ -1,14 +1,16 @@
 /**
- * "A backup was started from your phone" - the PC finishing a run the PHONE
- * started (the owner's decision of 2026-10-24).
+ * "A backup was started from your phone" - the PC's fallback for finishing a
+ * run the PHONE started (the owner's decision of 2026-10-24).
  *
- * THE BUG THIS EXISTS FOR. The phone could always ASK for a backup, and its
- * finish call was always refused 403 `pc_only` - correctly, because the write
- * is the PC's. But nothing on the PC could finish the run either: the phone
- * showed a recovery code for a file that was never written, and its dialog
- * said "Your PC wrote the backup" before anything had been written. The owner
- * chose to let the PC finish it (`docs/AUTHENTICATION`-free, plain: the write
- * stays PC-only, the PC just gets a button).
+ * THE STORY IN ONE PARAGRAPH. The phone could always ASK for a backup, and its
+ * finish call used to be refused 403 `pc_only`, because the write is the PC's.
+ * The owner's first decision was to let the PC finish the run from Settings,
+ * Backups ("Write it", the code typed in). He then upgraded it the same day to
+ * ONE TAP from the phone: after the tick, the phone's own finish press makes
+ * the PC write, and the one-time code the phone holds IS the authorisation.
+ * This page's block is therefore the FALLBACK - for a run the phone left
+ * waiting (phone unavailable) - and it uses the same route, the same code and
+ * the same one-file guarantee.
  *
  * WHAT MUST HOLD:
  * - the block appears ONLY while `GET /api/backup` reports a run live
@@ -18,8 +20,10 @@
  *   is already gone - the exact failure the two-call design prevents;
  * - "Write it" sends `{code}` to the EXISTING `POST /api/backup/commit` - no
  *   new route - and a refusal is the backend's own sentence, verbatim;
- * - CONTROL: no approval card, nothing automatic, and the phone's own commit
- *   is still refused - the PC-only gate is the feature, not the bug.
+ * - CONTROL: no approval card, nothing automatic, and the backend no longer
+ *   refuses a caller for not being the PC - the phone's tap writes now, so
+ *   that refusal had to go; the live run, its exact code and the TTL are what
+ *   still authorise a write, and the phone says so on its own screen.
  *
  *     node tests/backup-phone.mjs
  */
@@ -252,7 +256,7 @@ await check("a refusal is the BACKEND'S sentence, verbatim - never a friendlier 
 
 /* ── the wire: the EXISTING route, no new one, and no card ──────────────── */
 
-await check("CONTROL: the route is the existing PC-only commit, and it raises no card", async () => {
+await check("CONTROL: the route is the existing commit, raises no card, and no longer refuses a phone", async () => {
   const rs = read("src-tauri/src/backup.rs");
   assert.match(rs, /const COMMIT_PATH: &str = "\/api\/backup\/commit";/);
   assert.match(rs, /held_on_stale\(path: &str\) -> bool \{\s*path == FOLDER_PATH \|\| path == RESTORE_PATH \|\| path == DELETE_OLDER_PATH\s*\}/,
@@ -264,38 +268,43 @@ await check("CONTROL: the route is the existing PC-only commit, and it raises no
   assert.ok(lib.includes("backup::finish_phone_backup"), "the command is registered");
   // A long budget: this copies every database the owner has, like Back up now.
   assert.match(read("src/invoke-budget.js"), /"finish_phone_backup",/);
-  // The phone's own commit is still refused; that refusal is the feature.
+  // 2026-10-24, the owner's one-tap decision: the paired phone holding the
+  // run's code may write, so the backend must NOT refuse a caller for not
+  // being the PC any more. The old sentence is gone, not reworded.
   const py = readRepo("backend/jarvis_backup.py");
-  assert.match(py, /if not is_here:\s*\n\s*return 403, \{"ok": False, "error": COMMIT_PC_ONLY, "pc_only": True\}/);
-  // And the sentence it carries no longer promises a write the phone's tap
-  // cannot make - it says where to finish the run instead.
-  const refusal = (py.match(/COMMIT_PC_ONLY = \(([\s\S]*?)\)\n/) || [])[1] || "";
-  assert.ok(refusal.includes("Settings, Backups, and finish the run there"),
-    `the refusal says where to finish it: ${refusal}`);
-  assert.ok(!refusal.includes("when you tap"),
-    `the old promise is gone from the refusal itself: ${refusal}`);
-  assert.ok(refusal.includes("nothing was written") && refusal.includes("your PC"),
-    "the words the backend's own tests pin are still there");
+  assert.ok(!py.includes("COMMIT_PC_ONLY"),
+    "the PC-only refusal is gone, not reworded");
+  const commit = (py.split("def request_commit")[1] || "").split("\ndef ")[0];
+  assert.ok(commit.length > 500, "the commit function was found");
+  assert.ok(!/if not is_here:\s*\n\s*return 403/.test(commit),
+    "request_commit has no device refusal left");
+  // What DOES authorise it is still all there: the live run and its code.
+  assert.match(commit, /if not row or _is_expired\(row\):[\s\S]{0,200}COMMIT_NO_RUN/);
+  assert.match(commit, /want != _clean_code\(row\["code"\]\)[\s\S]{0,400}COMMIT_WRONG_CODE/);
+  assert.match(commit, /CLAIMED, under the lock, BEFORE anything is written/);
 });
 
-await check("CONTROL: the phone stopped claiming a backup exists, and points at the PC", async () => {
+await check("CONTROL: the phone says the write happens on the press, and never before it", async () => {
   // Adjacent Kotlin string literals joined, so a sentence split across source
   // lines can be searched for as the owner reads it on screen.
   const joined = (text) => text.replace(/"\s*\+\s*\n\s*"/g, "");
   const kt = joined(readRepo(
     "jarvis-client/app/src/main/java/com/jarvis/client/net/Backup.kt"));
-  assert.ok(!kt.includes("I have saved the code - write the backup"),
-    "the label promised a write the phone cannot make");
-  assert.match(kt, /const val COMMIT_LABEL = "Save the code, then finish this on your PC"/);
-  assert.match(kt, /const val PC_ONLY_WRITE =[\s\S]{0,700}Nothing has been written yet/);
-  assert.match(kt, /PC_ONLY_WRITE =[\s\S]{0,900}Settings, Backups/);
-  assert.ok(!/Ask for a backup again from the phone; if it keeps happening/.test(kt),
-    "the refusal no longer tells him to ask again - that never worked");
-  // "Your PC" is pinned by BackupTest.kt:222 and stays the opening words.
-  assert.match(kt, /const val PC_ONLY_WRITE =\s*\n\s*"Your PC/);
-  const plate = readRepo(
-    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BackupPlate.kt");
-  assert.match(plate, /Backup\.PREPARED_ELSEWHERE/);
+  assert.ok(kt.includes("I have saved the code - write the backup"),
+    "the label says what the press does - it is true again");
+  assert.ok(!kt.includes("PC_ONLY_WRITE"),
+    "the old PC-only refusal is gone from the phone");
+  assert.match(kt, /const val NOTHING_WRITTEN_YET =[\s\S]{0,400}Nothing has been written yet/);
+  const plate = joined(readRepo(
+    "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BackupPlate.kt"));
+  // DONE_LEAD only after a commit came back saying a file landed; the old bug
+  // was drawing it the moment the dialog opened.
+  assert.match(plate, /if \(written\) \{[\s\S]{0,400}Backup\.DONE_LEAD/,
+    "DONE_LEAD is drawn only in the written branch");
+  assert.match(plate, /\} else \{[\s\S]{0,600}Backup\.NOTHING_WRITTEN_YET/,
+    "before the press the screen says nothing has been written");
+  assert.match(plate, /Backup\.PREPARED_ELSEWHERE/,
+    "a run left waiting is still said plainly");
 });
 
 await browser.close(); close();
@@ -312,5 +321,5 @@ if (fails.length) {
   console.log(`\n${fails.length} failed: ${fails.join(", ")}`);
   process.exit(1);
 }
-console.log("\nThe PC finishes a backup the phone started: shown only while live, " +
-  "typed code, the existing commit, and the backend's own words back");
+console.log("\nThe PC's typed-code finish stays as the fallback for a phone-started run, " +
+  "on the existing commit: one tap on the phone writes, and this page can too");

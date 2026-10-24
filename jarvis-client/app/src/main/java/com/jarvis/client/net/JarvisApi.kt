@@ -2146,8 +2146,10 @@ class JarvisApi(
 
     /**
      * `POST /api/backup/commit {"id","code"}` - say the code is kept. THIS is
-     * the call that writes the file, on the PC; the PC refuses it from any
-     * device but itself. See [Backup.commitBody].
+     * the call that writes the file, on the PC. Since the owner's 2026-10-24
+     * one-tap decision any paired device holding this run's one-time code may
+     * make it: the code is the authorisation, and the write still happens on
+     * the PC's disk by the PC's backend. See [Backup.commitBody].
      */
     suspend fun backupCommit(id: String, code: String): ApiResult<JsonObject> =
         postExplained(Backup.COMMIT_PATH, Backup.commitBody(id, code))

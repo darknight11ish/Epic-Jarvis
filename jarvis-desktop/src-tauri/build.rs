@@ -425,10 +425,12 @@ fn main() {
             // the Windows folder picker above (one approval card, held on
             // a stale link); "Back up now" and listing need no card;
             // restoring is one card that always needs Windows Hello, held
-            // on a stale link. `finish_phone_backup` (2026-10-24) finishes a
-            // backup the PHONE started, with the code that phone showed - the
-            // write stays the PC's own act, so it raises no card and is not
-            // held on a stale link, like "Back up now". Settings window only.
+            // on a stale link. `finish_phone_backup` (2026-10-24) is the
+            // fallback for a backup the PHONE started and left waiting: the
+            // code that phone showed, typed here. (The phone's own finish
+            // press writes it too, on the same route.) The write stays on this
+            // PC, so it raises no card and is not held on a stale link, like
+            // "Back up now". Settings window only.
             "get_backup",
             "list_backups",
             "set_backup_folder",

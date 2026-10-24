@@ -2636,10 +2636,10 @@
            backend jarvis_backup.py). Setting the folder reuses the Windows
            folder picker "Folders Jarvis may look in" uses; "Back up now"
            has no card; restore is one card that always needs Windows
-           Hello. The phone shows the folder's state, and may ASK for a
-           backup - the write stays the PC's, so a run started there is
-           finished here, under "A backup was started from your phone"
-           (2026-10-24: the owner's decision). -->
+           Hello. The phone shows the folder's state and may ASK for a
+           backup; since 2026-10-24 its own finish tap writes the file (the
+           code it holds is the authorisation, the write happens here), and
+           the block below is the FALLBACK for a run the phone left waiting. -->
       <section class="card" id="backup">
         <h2>Backups</h2>
         <p class="note" id="bk-detail"></p>
@@ -2656,15 +2656,17 @@
           </div>
           <p class="note" id="bk-last"></p>
 
-          <!-- A backup the PHONE started, waiting for the PC to write it
+          <!-- A backup the PHONE started and left waiting, finished here
                (2026-10-24, the owner's decision: "let the PC finish a backup
-               the phone started"). Shown ONLY while the backend reports a run
-               live - GET /api/backup's `prepared`, which carries the two times
-               and never a code or a run id - and the code typed here is the
-               one the phone showed. The write is the owner's own click with
-               that code in his hand: no approval card, and nothing automatic
-               (rule 4 is about approvals, and none is raised on this path -
-               the same shape as "Back up now").
+               the phone started", then upgraded to one tap on the phone - so
+               this block is the FALLBACK for a run the phone cannot finish).
+               Shown ONLY while the backend reports a run live - GET
+               /api/backup's `prepared`, which carries the two times and never
+               a code or a run id - and the code typed here is the one the
+               phone showed. The write is the owner's own click with that code
+               in his hand: no approval card, and nothing automatic (rule 4 is
+               about approvals, and none is raised on this path - the same
+               shape as "Back up now").
 
                Deliberately NOT class="card": settings-search.js's `cards()`
                is `main .card`, and its `apply()` sets `card.hidden = false` on

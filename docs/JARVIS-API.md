@@ -9627,7 +9627,7 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
 | `GET /api/backup/status` | **What the FOLDER holds** (2026-10-14), for the phone. Read-only, **any paired device** - not PC-only. Returns `{"available", "folder", "keep", "kept", "last_backup_at", "last_backup_name", "verify", "last_attempt", "prepared"}`. `folder` is the folder's **LAST segment only** ("Jarvis Backups"), never the whole path: a full path names the owner's Windows account, which is what §8 already keeps off a phone for the memory store's own path. `keep` is `KEEP` (5); `kept` counts the files that are COMPLETE (the same rule retention uses). `last_backup_at` is read from the newest kept file's own name, so it is TRUE after the backend restarts - the older `last_backup_at` on `GET /api/backup` is the PC's memory only and answered null with four backups sitting in the folder. `verify` is `{"ok", "why", "words", "proves_open", "limit"}` for that newest file: `why` is `complete`/`missing`/`too_small`/`not_a_backup`/`unreadable`/`no_folder`/`empty`, checked against the file's own bytes (magic, header shape, minimum length). **`proves_open` is always false and is sent so a client never has to assume it**: only the recovery code opens a backup and codes are only typed on the PC. `last_attempt` is the last run THIS backend made, in memory - `{"ok", "at", "error"}` - and is where a **failure** is visible, so a failed backup is never read as a success. Carries no recovery code and never can. |
 | `POST /api/backup/prepare` `{}` | **The phone asks for a backup** (2026-10-14). **Any paired device.** Mints this run's one-time recovery code and **WRITES NOTHING AT ALL** - the folder is byte-for-byte unchanged. 200 `{"ok", "pending", "id", "recovery_code", "at", "expires_at", "folder", "keep", "message"}`. **409** with no folder set (`NO_FOLDER`), because a code minted with nowhere to write is a code the owner would be told to keep for nothing. The code is held in the PC's memory only, for `PENDING_TTL_S` (15 minutes), and is never written to a file, a log or the audit trail. A second ask replaces the first. |
-| `POST /api/backup/commit` `{"id", "code"}` | **The owner says he has kept the code, and the PC writes the file** (2026-10-14). **THIS PC ONLY** - the write into the PC's folder is the PC's own action, so a caller that is not the PC is refused **before the body is read**: **403** `{"ok": false, "pc_only": true, "error": "The backup is written on your PC, so nothing was written from here. ..."}`. The code must be the one `prepare` minted and must still be inside `PENDING_TTL_S`; the comparison is cleaned the way the owner would type it (uppercase, hyphens and spaces dropped), so the four-groups-of-five form and the bare 20 characters are the same code. A **wrong or missing** code: **400**, the run stays open so a typo can be corrected, **nothing written**. An **expired or never-started** run: **409**, the run is dropped, **nothing written**. On success: 200 `{"ok", "name", "at", "counts", "size", "folder", "keep", "recovery_code", "message"}`, the file being made with **that same code** (`backup_now(code=...)`) - so the code the owner kept is the code that opens what landed. Any failure (a full disk, a refusal by the module) records `last_attempt.ok: false` and writes nothing. **From 2026-10-24 this is also how the PC FINISHES a run the phone started** (the owner's decision: the phone may ask, the write is PC-only): the code the phone showed is typed into Settings, Backups ("A backup was started from your phone", the desktop's `finish_phone_backup`), whose body is exactly `{"code": ...}` - the `id` is never compared, so the PC needs nothing from the phone but the code. The run is CLAIMED under the module's lock BEFORE the file is written: two presses therefore write ONE file (the second is the 409 above), where before both could pass the check and write two files with the same code, the second one's retention pass pushing an older, still-openable backup out of the five kept. The 403 to a phone is unchanged and untouched - that refusal is the feature. |
+| `POST /api/backup/commit` `{"id", "code"}` | **The owner says he has kept the code, and the PC writes the file** (2026-10-14; **rule changed 2026-10-24**). **ANY caller holding this run's one-time code may make it**: the paired phone that was shown the code (its finish press, ONE TAP after the tick, with no step on the PC) or this PC typing the same code (`finish_phone_backup`, the fallback for a run left waiting). **The one-time code IS the authorisation**; the write still happens on the PC's disk, by the PC's backend, into the folder the owner chose on the PC. **There is no device refusal any more** - the old **403** `{"ok": false, "pc_only": true, "error": "The backup is written on your PC, ..."}` is GONE, because it made a phone-started run a code with no file behind it. The code must be the one `prepare` minted and must still be inside `PENDING_TTL_S`; the comparison is cleaned the way the owner would type it (uppercase, hyphens and spaces dropped), so the four-groups-of-five form and the bare 20 characters are the same code. A **wrong or missing** code: **400**, the run stays open so a typo can be corrected, **nothing written**. An **expired or never-started** run: **409**, the run is dropped, **nothing written**. On success: 200 `{"ok", "name", "at", "counts", "size", "folder", "keep", "recovery_code", "message"}`, the file being made with **that same code** (`backup_now(code=...)`) - so the code the owner kept is the code that opens what landed. Any failure (a full disk, a refusal by the module) records `last_attempt.ok: false` and writes nothing. The run is **CLAIMED under the module's lock BEFORE the file is written**: two presses - from one app or from both, or the phone and the PC's fallback at once - write ONE file (the second is the 409 above), where before both could pass the check and write two files with the same code, the second one's retention pass pushing an older, still-openable backup out of the five kept. The `id` is sent but **never compared**, so the PC's fallback needs nothing from the phone but the code the owner wrote down. **The phone's half** (§45.5): after `prepare` showed the code and the owner ticked "I have written this code down somewhere safe", its finish button is this call; the screen says "Nothing has been written yet" until the answer says a file landed, and only then "Your PC wrote the backup". **Residual risk, accepted by the owner on 2026-10-24:** the tick is a client-side promise inside the phone app, not a check by the PC, so a modified or misused paired phone could commit without the code ever being kept - which writes a backup nobody can open and pushes the oldest of the five kept out. **What stays PC-only:** choosing the folder, restoring, listing files and deleting older copies (§45.5; `tools/check_parity.py` has this route as `ported`). |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
 | `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
 | `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. **Since 2026-10-20 (ruling 8.1, §45.4b): the safety backup must be VERIFIED ON DISK before one live file is touched** - present, not empty, its own `JBAK1` shape, the size that was written, it opens with its code, and its manifest reads back; anything else refuses the restore with nothing changed, `reason: "safety_unverified"` in `last_restore` and in the audit's `backup.restore.card`, and the plain sentence "the safety backup could not be made first, so nothing was restored". The outcome's `restored` block names the EXACT files put back (`databases`, `settings_files`, `notes_files`, `voice_files`, `source_files`, `framework_toml`, `keys`), not just counts. |
@@ -9797,11 +9797,20 @@ folder's last segment, how many are kept of how many the PC keeps, and the
 PC's own sentence for what its check of the newest file found - plus that
 check's limit, said rather than assumed, and the last attempt's failure when
 there was one. It **asks for a backup** in two steps: `POST
-/api/backup/prepare` puts the run's one-time recovery code on screen, and
-`POST /api/backup/commit` - which the PC only accepts from itself - writes the
-file once the owner has ticked that he saved the code. Choosing a folder,
-restoring, listing files and deleting older copies are the PC's alone: the
-folder picker is Windows', and restoring needs Windows Hello there.
+/api/backup/prepare` puts the run's one-time recovery code on screen, and -
+once the owner has ticked "I have written this code down somewhere safe" -
+its finish button sends `POST /api/backup/commit`, which **makes the PC write
+the file**: one tap, no step on the PC (2026-10-24, the owner's upgraded
+decision; the code the phone holds is the authorisation, and the write still
+happens on the PC's disk, by the PC's backend). The screen says "Nothing has
+been written yet" while the run is open, and "Your PC wrote the backup" ONLY
+after the answer reports a file - a code shown but never committed writes
+nothing at all. `GET /api/backup` from this PC also carries `prepared` while a
+run waits, so the desktop can offer `finish_phone_backup` as the **fallback**
+if the phone is unavailable: the same route, the same code, the same
+one-file guarantee. Choosing a folder, restoring, listing files and deleting
+older copies are the PC's alone: the folder picker is Windows', and restoring
+needs Windows Hello there.
 **2026-10-20 (ruling 8.1, §45.4b):** the phone's `GET /api/backup` answer also
 carries the persisted `last_restore` summary - outcome, plain message, the
 safety backup's name, time and size, and the exact restored filenames - WITHOUT the
@@ -9820,10 +9829,11 @@ words when it is not allowed yet. The desktop's hidden Backup page no longer
 makes the "first read" that consumes the code (`backup-settings.js`'s
 `onQueue` reload is `document.hidden`-guarded, like the visibility handler), so
 the code is shown on the screen the owner is looking at.
-`tools/check_parity.py`: `/api/backup` is `ported` (both read it, at
-different depths); `/api/backup/status`, `/api/backup/prepare` and
-`/api/backup/commit` are `phone-only`; every other backup route is
-`deliberate` (`docs/ARCHITECTURE.md` section 8).
+`tools/check_parity.py`: `/api/backup` and `/api/backup/commit` are `ported`
+(both apps read the first, at different depths, and since 2026-10-24 both apps
+call the second - the phone's finish press, the desktop's fallback);
+`/api/backup/status` and `/api/backup/prepare` are `phone-only`; every other
+backup route is `deliberate` (`docs/ARCHITECTURE.md` section 8).
 
 **The phone's "Back up now", and why it is two calls (settled 2026-10-14).**
 The owner asked for this button on 2026-10-10; the answer then was that the
@@ -9871,17 +9881,28 @@ limit beside the pass. To prove a backup opens, open it on the PC with its code
 ### 45.6 Known gaps, said plainly
 
 - **A paired device can churn the kept backups** (2026-10-14, found in this
-  feature's own audit). `POST /api/backup/prepare` is open to any paired
-  device, which is what lets the phone ask at all, and `commit` runs on the PC
-  - so a caller holding the token can ask, then immediately commit, again and
-  again. Each round makes a real backup and deletes the oldest of the 5 kept:
+  feature's own audit; sharpened 2026-10-24 by the one-tap decision).
+  `POST /api/backup/prepare` is open to any paired device, which is what lets
+  the phone ask at all, and since 2026-10-24 `POST /api/backup/commit` is open
+  to any caller holding the run's one-time code - which `prepare` returns to
+  the same caller - so a token holder can ask, read the code out of the
+  answer, then immediately commit, again and again. Each round makes a real
+  backup and deletes the oldest of the 5 kept:
   the owner can push his own older backups out by accident, and someone
   holding the token could push them out on purpose. **What it cannot do is
-  read anything**: the code goes only to the phone that asked, the file is
+  read anything**: the code goes only to the caller that asked, the file is
   encrypted, and no route returns a code that has already been used. So this
   is a way to lose OLD copies, never a way to open one. No rate limit is built
   - one that bit would be a new way for the owner to be told "no" by his own
   PC - and this is written here rather than left to be discovered.
+- **The "I saved it" tick is a phone-side promise** (2026-10-24, accepted by
+  the owner with the one-tap decision). The PC cannot check that the owner
+  really wrote the code down; it only knows the phone said so and sent the
+  code back. A modified or misused paired phone can therefore make the PC
+  write a backup whose code was never kept - an unopenable file that pushes
+  the oldest of the five kept out. Said plainly in
+  `docs/ARCHITECTURE.md` section 8 and in `docs/DECISIONS.md`; the owner
+  accepted it because the alternative was a run the phone could never finish.
 - **Restoring while Jarvis is running can fail** if another part of the
   backend holds the database file open in a way Windows will not let this
   request replace; the restore fails cleanly (the safety backup already

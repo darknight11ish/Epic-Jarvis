@@ -29,12 +29,19 @@ THE PHONE'S HALF (2026-10-13, the owner asked for a "Back up now" button on
 the phone on 2026-10-10 and was told why not - this is the answer built for
 real). Three routes: `STATUS_ROUTE` (read-only, any paired device) says what
 the folder holds; `PREPARE_ROUTE` (any paired device) mints this run's one-time
-recovery code and writes NOTHING; `COMMIT_ROUTE` (this PC only) writes the file
-when the owner says he has kept the code - with that same code, so the code he
-kept is the code that opens it. See PREPARE_ROUTE's own comment for why it is
-two calls rather than one: an unfinished run must leave the folder exactly as
-it was, because a new backup DELETES the oldest of the KEEP, and a file nobody
-can open is worse than no new file at all.
+recovery code and writes NOTHING; `COMMIT_ROUTE` writes the file when the
+owner says he has kept the code - with that same code, so the code he kept is
+the code that opens it. The owner upgraded this on 2026-10-24: the phone's
+finish tap now makes the PC write the file (one tap, no step on the PC), so
+`COMMIT_ROUTE` may be called by ANY paired device that holds the run's code.
+The write is still done by this PC's backend, into this PC's folder - only the
+trigger comes from the phone. That deliberately relaxes the 2026-10-13 rule
+"a phone may ask, only the PC may write"; the code itself is the
+authorisation, and the residual risk is named at COMMIT_ROUTE's own comment
+and in docs/DECISIONS.md (2026-10-24). See PREPARE_ROUTE's own comment for why
+it is two calls rather than one: an unfinished run must leave the folder
+exactly as it was, because a new backup DELETES the oldest of the KEEP, and a
+file nobody can open is worse than no new file at all.
 
 THE OWNER'S DECISION (CLAUDE.md, 2026-09-27, answering
 docs/OWNER-QUESTIONS-2026-09-27.md): "one locked backup file into a folder
@@ -409,10 +416,11 @@ SAFETY_UNVERIFIED = "safety_unverified"
 #:     folder, and neither has a code in it (`_load_settings` keeps "folder"
 #:     and nothing else; `_audit` refuses to record one).
 #:
-#:   * `PREPARE_ROUTE` (POST, any paired device) and `COMMIT_ROUTE` (POST,
-#:     THIS PC ONLY): the phone asks, the PC writes. This pair replaces the
-#:     old plain "no, a phone may never ask" with a rule that cannot lose a
-#:     backup - see "WHY THE PHONE'S RUN IS TWO CALLS" below.
+#:   * `PREPARE_ROUTE` (POST, any paired device) and `COMMIT_ROUTE` (POST, any
+#:     paired device that holds this run's code): the phone asks, and the PC
+#:     writes. This pair replaces the old plain "no, a phone may never ask"
+#:     with a rule that cannot lose a backup - see "WHY THE PHONE'S RUN IS TWO
+#:     CALLS" below.
 #:
 #: WHY THE PHONE'S RUN IS TWO CALLS, AND WHY THAT IS THE WHOLE SAFETY OF IT.
 #: Each backup file is locked with its OWN one-time recovery code and the code
@@ -439,13 +447,34 @@ SAFETY_UNVERIFIED = "safety_unverified"
 #: in so many words: a code that is not kept is a backup that can never be
 #: opened, and Jarvis cannot recover it.
 #:
-#: `commit` is THIS PC ONLY (`_from_this_pc`): the phone asks, and the PC -
-#: the machine that holds the folder - is what writes into it. That keeps the
-#: standing rule that a phone never writes to the PC's disk by itself, and it
-#: is what makes a stolen token useless here: a thief can ask all day and
-#: nothing is ever written, because the write is refused from anywhere but the
-#: PC. The PC's own "Back up now" (`NOW_ROUTE`) is untouched: still one call,
-#: still no card, still this PC only.
+#: WHO MAY CALL `commit` (changed 2026-10-24, the owner's decision). ANY caller
+#: holding this live run's one-time code may make it: the paired phone that
+#: was shown the code, or this PC typing the same code (`finish_phone_backup`).
+#: The code IS the authorisation. That deliberately relaxes the 2026-10-13 rule
+#: "a phone may ask, only the PC may write": the write still physically happens
+#: here, by this backend, into this PC's folder - only the trigger comes from
+#: the phone. WHAT MAKES IT SAFE, and what it does NOT claim:
+#:   * nothing is written without a LIVE run minted by `prepare` and the exact
+#:     one-time code it minted, returned before PENDING_TTL_S runs out - so a
+#:     code cannot be guessed, and a used or expired one can write nothing. It
+#:     does NOT stop a caller that holds the pairing token: `prepare` hands such a
+#:     caller a fresh code, so it can churn the kept backups. That was already
+#:     the recorded gap (`docs/JARVIS-API.md` section 45.6), and the one-tap
+#:     change makes it direct rather than theoretical. What it still cannot do
+#:     is read a backup, or open one: the file is encrypted and the code that
+#:     was used is never returned again.
+#:   * the run is CLAIMED under `_P_LOCK` before the write, so a second press
+#:     (either app, or both at once) is refused `COMMIT_NO_RUN` and exactly one
+#:     file is written.
+#:   * THE RESIDUAL RISK, named rather than hidden: the "I have written this
+#:     code down" tick is a CLIENT-SIDE promise inside the phone app. A
+#:     modified or misused paired phone can tick it without the owner having
+#:     kept anything, and then commit - the PC writes a backup whose code
+#:     nobody kept, and because making a new backup deletes the oldest of the
+#:     KEEP, the oldest of the five kept is pushed out. The owner accepted this
+#:     on 2026-10-24 (`docs/DECISIONS.md`, `docs/ARCHITECTURE.md` section 8).
+#: The PC's own "Back up now" (`NOW_ROUTE`) is untouched: still one call, still
+#: no card, still this PC only.
 STATUS_ROUTE = "/api/backup/status"
 PREPARE_ROUTE = "/api/backup/prepare"
 COMMIT_ROUTE = "/api/backup/commit"
@@ -745,18 +774,11 @@ COMMIT_NO_RUN = ("That backup run has expired or was never started, so nothing w
                  "Ask for a backup again from your phone.")
 COMMIT_WRONG_CODE = ("That is not the code for the backup waiting to be written, so nothing "
                      "was written and your folder is unchanged. Ask for a backup again.")
-#: A caller that is not this PC asking to COMMIT. `PC_ONLY` (the backups panel)
-#: is not this: it reads as advice to go and set backups up. This says what
-#: actually happened to the ask - and, since 2026-10-24, what to do next: the
-#: phone's tap does NOT write anything, because the write is the PC's own act.
-#: It used to say "your PC writes the file when you tap that you have saved it",
-#: which promised a write the phone's tap can never make; the PC finishes the
-#: run instead (`view(here=True)["prepared"]`, `finish_phone_backup`).
-COMMIT_PC_ONLY = ("The backup is written on your PC, so nothing was written from here. The "
-                  "code your phone showed is the only thing that opens it: open Jarvis on "
-                  "your PC, then Settings, Backups, and finish the run there - it asks for "
-                  "that code. If you cannot reach your phone, make one at the PC - Settings, "
-                  "Backups, \"Back up now\".")
+#: There is deliberately NO "a phone may not commit" sentence any more (removed
+#: 2026-10-24, the owner's one-tap decision): `COMMIT_ROUTE` does not refuse a
+#: caller for not being this PC. The code is the authorisation, and the refusals
+#: that remain are the ones above - a run that is gone (409) and a code that
+#: does not match (400) - each of which says nothing was written.
 #: `verify.why` values, in the phone's own words. Each says what was ACTUALLY
 #: checked: the file's own bytes, never that it can be opened.
 CHECK_WORDS = {
@@ -1855,22 +1877,33 @@ def request_commit(body=None, *, peer=None, local=None, here: Optional[bool] = N
                    run: Optional[Callable[[str, str], dict]] = None) -> tuple:
     """POST /api/backup/commit {"id","code"} - the owner says the code is kept.
 
-    THIS PC ONLY. This is the call that writes the file, and a phone never
-    writes to the PC's disk by itself: the write is what the PC does. A caller
-    that is not this PC is refused BEFORE the body is read, in
-    `COMMIT_PC_ONLY`, and nothing is ever written for it.
+    ANY caller holding this run's one-time code may make this call: the paired
+    phone that was shown the code, or this PC typing the same code
+    (`finish_phone_backup`). That is the owner's decision of 2026-10-24 - one
+    tap on the phone makes the PC write the file - and it is safe for exactly
+    three reasons, each of which this function enforces rather than assumes:
+    the run must be LIVE (minted by `prepare`, inside PENDING_TTL_S), the code
+    must be the exact one that run minted, and the run is CLAIMED under
+    `_P_LOCK` before anything is written, so a second press writes nothing.
+    The write itself is still done HERE, by this PC's backend, into this PC's
+    folder - a phone has no view of that disk and no way to write to it. The
+    one-time code is the authorisation, not the device. The residual risk - the
+    "I saved it" tick is a client-side promise, so a modified phone could write
+    a backup whose code nobody kept and push the oldest kept one out - is the
+    owner's, accepted on 2026-10-24 (COMMIT_ROUTE's comment; DECISIONS.md).
 
-    The code must be the one `prepare` minted and must still be inside
-    PENDING_TTL_S. A wrong or missing code, and an expired or never-started
-    run, both write NOTHING - the whole point of the two calls. The file is
-    made with that same code (`backup_now(code=...)`), so the code the owner
-    kept is the code that opens what lands. Returns the same shape the PC's own
-    "Back up now" does, plus the file's byte size, which is what the phone
-    shows him next to the code."""
+    A wrong or missing code, and an expired or never-started run, both write
+    NOTHING and leave the folder byte-for-byte as it was - the whole point of
+    the two calls. The file is made with that same code
+    (`backup_now(code=...)`), so the code the owner kept is the code that opens
+    what lands. Returns the same shape the PC's own "Back up now" does, plus
+    the file's byte size, which is what the phone shows him next to the code."""
     run = run or (lambda folder, code: backup_now(folder, code=code))
-    is_here = bool(here) if here is not None else _from_this_pc(peer, local)
-    if not is_here:
-        return 403, {"ok": False, "error": COMMIT_PC_ONLY, "pc_only": True}
+    # `peer`, `local` and `here` are accepted for the same shape every other
+    # route on this module has, and deliberately ignored: the caller's device
+    # no longer decides anything here (2026-10-24). The body is read only for
+    # the code, and the id `prepare` minted is not compared - so the PC's
+    # fallback needs nothing from the phone but the code the owner wrote down.
     want = body.get("code") if isinstance(body, dict) else None
     # Cleaned the way the owner would type it (`_clean_code`: uppercased, and
     # hyphens and spaces dropped), because the phone shows him the code in four
@@ -1919,7 +1952,7 @@ def request_commit(body=None, *, peer=None, local=None, here: Optional[bool] = N
         except OSError:                        # pragma: no cover - a write we just made
             size = 0
     _record_backup_outcome(True, name=out["name"], at=out["at"], counts=out["counts"])
-    _audit("backup.made", {"ok": True, "from": "phone"})
+    _audit("backup.made", {"ok": True, "from": "commit"})
     _clear_pending()
     return 200, {"ok": True, "name": out["name"], "at": out["at"], "counts": out["counts"],
                  "size": size, "folder": _folder_name(st["folder"]), "keep": KEEP,

@@ -14,9 +14,11 @@
  *  - backup_now: no card - the folder was already approved. Returns a
  *    fresh recovery code, shown here ONCE and never asked for again.
  *  - finish_phone_backup(code): "Write it" under the block a PHONE-started
- *    run puts here (2026-10-24). The route is the existing PC-only
- *    commit - no new route - and no card, for the same reason as
- *    "Back up now": the write is the owner's own click, code in hand.
+ *    run puts here (2026-10-24). This is the FALLBACK: the phone's own
+ *    finish press writes the file now, and this exists for a run the phone
+ *    left waiting. Same existing commit route, no new route, and no card for
+ *    the same reason as "Back up now": the write is the owner's own click,
+ *    code in hand.
  *  - list_backups: the files in the folder, newest first. A read.
  *  - preview_restore(name, code): decrypts to show counts and a date -
  *    never content. Changes nothing.
@@ -65,8 +67,8 @@ const WHICH_BACKUP = (at) => "This code opens only the backup made " +
 const NO_FOLDER_WHY = "Choose a folder before backing up.";
 /** The block a run the PHONE started puts here (2026-10-24). The deadline is
  * the backend's own `expires_at`, so the owner knows how long the code has;
- * and it says plainly that NOTHING has been written yet, because that is the
- * one thing the dialog on the phone used to get wrong. */
+ * and it says plainly that NOTHING has been written yet - the same line the
+ * phone draws before its own finish press, so the two screens agree. */
 const PHONE_WAITING = (until) => "It waits until " + (until || "it expires") +
   ". Nothing has been written yet - the file appears when you press Write it. " +
   "The code your phone showed is the only thing that opens it.";
@@ -364,11 +366,13 @@ async function backupNow() {
 
 /** "Write it": finishes the run the PHONE started, with the code it showed.
  *
- * The route is the existing PC-only commit - no new route was added and the
- * gate on it is untouched - and no approval card is raised: rule 4 governs
- * approvals, and the write is the owner's own click with the code in his hand,
- * exactly like "Back up now". Not held on a stale link either, for the same
- * reason (`backup.rs`'s `held_on_stale`).
+ * The FALLBACK for a run left waiting (phone unavailable): since the owner's
+ * one-tap decision the phone's own finish press normally writes the file.
+ * The route is the existing commit - no new route was added and the gate on it
+ * is untouched - and no approval card is raised: rule 4 governs approvals, and
+ * the write is the owner's own click with the code in his hand, exactly like
+ * "Back up now". Not held on a stale link either, for the same reason
+ * (`backup.rs`'s `held_on_stale`).
  *
  * A wrong code is refused 400 and the run STAYS OPEN, so a typo is fixable; a
  * dead run is refused 409 with the backend's own sentence, and the block

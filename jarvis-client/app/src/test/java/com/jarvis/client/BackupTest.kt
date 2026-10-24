@@ -218,9 +218,15 @@ class BackupTest {
         assertNull(Backup.written(obj("""{"ok":true}""")))
         assertEquals("nothing was written",
             Backup.refusalWords(obj("""{"ok":false,"error":"nothing was written"}""")))
-        // And a refusal with no words is translated from the PC's status code.
-        assertTrue(Backup.commitRefusal(ApiError.Server(403, "")).contains("Your PC"))
+        // And a refusal with no words is translated from the PC's status code:
+        // 409 and 400 both mean the run is gone. There is deliberately no 403
+        // translation any more (2026-10-24): the commit route no longer refuses
+        // a caller for not being the PC, and a 403 that does arrive (the
+        // server's own origin or token check) carries no `ok` key, so
+        // JarvisApi turns it into BadToken before this is asked.
         assertTrue(Backup.commitRefusal(ApiError.Server(409, "")).contains("expired"))
+        assertTrue(Backup.commitRefusal(ApiError.Server(400, "")).contains("expired"))
+        assertEquals("", Backup.commitRefusal(ApiError.Server(403, "")))
         assertEquals("", Backup.commitRefusal(ApiError.BadToken))
     }
 
@@ -296,43 +302,64 @@ class BackupTest {
     }
 
     @Test
-    fun thePhoneSaysTheBackupIsFinishedOnThePc() {
-        // 2026-10-24, the owner's decision: the phone may ASK, and the PC
-        // FINISHES it. The phone's own finish call is still refused 403
-        // `pc_only` - that refusal is the feature - so the words may no longer
-        // promise a write here, nor tell him to ask again from the phone,
-        // which is the same refusal over again.
-        assertTrue("the label says where the write happens:\n${Backup.COMMIT_LABEL}",
-            Backup.COMMIT_LABEL.contains("PC"))
-        assertFalse("the label must not promise a write the phone cannot make",
-            Backup.COMMIT_LABEL.contains("write the backup", ignoreCase = true))
+    fun thePhoneSaysTheBackupIsWrittenOnlyAfterItLands() {
+        // 2026-10-24, the owner's upgraded decision: the phone's finish press
+        // is ONE TAP and the PC writes the file, so the label may - must - say
+        // what it does again. The A0 bug was the opposite: the dialog said
+        // "your PC wrote the backup" the moment it opened, before the press.
+        assertEquals("I have saved the code - write the backup", Backup.COMMIT_LABEL)
+        assertTrue("the label says what the press does:\n${Backup.COMMIT_LABEL}",
+            Backup.COMMIT_LABEL.contains("write the backup"))
 
-        val refusal = Backup.commitRefusal(ApiError.Server(403, ""))
-        assertTrue("it says where to finish the run:\n$refusal",
-            refusal.contains("Settings, Backups"))
-        assertTrue("and that nothing has been written yet:\n$refusal",
-            refusal.contains("Nothing has been written yet"))
-        assertFalse("asking again from the phone is what was always refused:\n$refusal",
-            refusal.contains("Ask for a backup again from the phone"))
-        assertTrue("and it opens with \"Your PC\", the words pinned above too:\n$refusal",
-            refusal.startsWith("Your PC"))
+        // The honest pre-press line: nothing exists, and the press is what
+        // makes the file. It names the code as the only way in.
+        assertTrue("the pre-press line exists:\n${Backup.NOTHING_WRITTEN_YET}",
+            Backup.NOTHING_WRITTEN_YET.contains("Nothing has been written yet"))
+        assertTrue("... and it names what the press does:\n${Backup.NOTHING_WRITTEN_YET}",
+            Backup.NOTHING_WRITTEN_YET.contains("press the button"))
+        assertTrue("... and why the code comes first:\n${Backup.NOTHING_WRITTEN_YET}",
+            Backup.NOTHING_WRITTEN_YET.contains("only thing that opens"))
+        assertTrue("DONE_LEAD is still the sentence after a successful write",
+            Backup.DONE_LEAD.contains("Your PC wrote the backup"))
 
-        // A run left waiting on the PC is said plainly, and never as a backup
-        // that exists.
+        // The plate: DONE_LEAD sits inside `if (written)` and the pre-press
+        // line in the `else`, so the old bug cannot come back by moving one
+        // line - the dialog draws one or the other, never both.
+        val plate = code(PLATE)
+        assertTrue("the dialog is told whether a write landed",
+            plate.contains("written: Boolean"))
+        val atWritten = plate.indexOf("if (written) {")
+        val atDone = plate.indexOf("Backup.DONE_LEAD")
+        val atElse = plate.indexOf("} else {", atWritten)
+        val atNothing = plate.indexOf("Backup.NOTHING_WRITTEN_YET")
+        assertTrue("DONE_LEAD is inside the written branch:\n$atWritten / $atDone",
+            atWritten in 0 until atDone)
+        assertTrue("... and NOTHING_WRITTEN_YET is in that branch's else:\n$atElse / $atNothing",
+            atElse in 0 until atNothing)
+        assertTrue("DONE_LEAD is drawn exactly once:\n$plate",
+            plate.split("Backup.DONE_LEAD").size == 2)
+        assertTrue("NOTHING_WRITTEN_YET is drawn exactly once:\n$plate",
+            plate.split("Backup.NOTHING_WRITTEN_YET").size == 2)
+        // A back press after a successful write must close the dialog, not say
+        // "Cancelled. Nothing was written" over a file that exists.
+        assertTrue("a back press after a write closes, never cancels",
+            plate.contains("if (written) onClose() else onCancel()"))
+
+        // A run left waiting is still said plainly, and never as a backup that
+        // exists - and the plate draws it from the PC's own `prepared`.
         assertTrue(Backup.PREPARED_ELSEWHERE.contains("waiting to be finished on your PC"))
         assertTrue(Backup.PREPARED_ELSEWHERE.contains("Nothing has been written yet"))
-
-        // The plate draws it from the PC's own `prepared`, and only while no
-        // run is in hand on this screen.
-        val plate = code(PLATE)
         assertTrue("the waiting line is drawn", plate.contains("Backup.PREPARED_ELSEWHERE"))
         assertTrue("... from the PC's own read", plate.contains("v?.prepared == true"))
-        assertFalse("the old spinner claimed the PC was writing it:\n$plate",
+
+        // The old PC-only refusal is gone from the model, and so is its 403
+        // branch: nothing in this app may claim the phone cannot write.
+        val model = code(MODEL)
+        assertFalse("PC_ONLY_WRITE is gone:\n$model", model.contains("PC_ONLY_WRITE"))
+        assertFalse("no 403 is translated for commit any more:\n$model",
+            model.contains("error.code == 403"))
+        assertFalse("and the old spinner stays gone:\n$plate",
             plate.contains("Writing it on your PC"))
-        assertFalse("and no other words claim a write either:\n$plate",
-            plate.contains("write the backup"))
-        // The label itself is the model's, and its words are its own.
-        assertTrue(plate.contains("Backup.COMMIT_LABEL"))
     }
 
     // ------------------------------------------------------------- helpers --

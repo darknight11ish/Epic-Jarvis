@@ -65,11 +65,14 @@ import kotlinx.coroutines.launch
  * a backup (`prepare`), which mints this run's one-time recovery code and
  * writes NOTHING. The code is then shown full-screen, in four groups of five,
  * and the run CANNOT be ended until the owner ticks that he has saved it.
- * Ending it is a request the PC REFUSES from here - the write is the PC's own
- * act, and from 2026-10-24 the PC finishes the run itself (Settings, Backups,
- * "A backup was started from your phone"), typing the same code. So this
- * screen never says a backup was written; a refusal says where to finish it,
- * and [Backup.PREPARED_ELSEWHERE] covers a run left waiting.
+ * Pressing the finish button makes the PC write the file - the owner's
+ * one-tap decision of 2026-10-24; the code the phone holds is the
+ * authorisation, and the write still happens on the PC's disk. The screen says
+ * "Your PC wrote the backup" only after the PC answered that a file landed
+ * ([Backup.Committed.Landed]); before the press it says nothing has been
+ * written yet ([Backup.NOTHING_WRITTEN_YET]), and [Backup.PREPARED_ELSEWHERE]
+ * covers a run left waiting (the PC can still finish it from Settings,
+ * Backups, typing the same code).
  *
  * WHY THE CODE IS DRAWN THIS LOUDLY. A backup is locked with its own code, the
  * code is stored nowhere, and a new backup deletes the oldest of five. So a run
@@ -100,6 +103,10 @@ internal fun BackupSection(canAct: Boolean) {
     var readError by remember { mutableStateOf<String?>(null) }
     var asking by remember { mutableStateOf(false) }
     var writing by remember { mutableStateOf(false) }
+    // True ONLY after a commit came back saying a file landed (2026-10-24).
+    // This is what gates "Your PC wrote the backup": the dialog used to draw
+    // that sentence the moment it opened, before anything had been written.
+    var wrote by remember { mutableStateOf(false) }
     // The run in hand: the code the PC minted and the id it goes back with.
     // Held HERE and nowhere else - never a store, never a log.
     var run by remember { mutableStateOf<Backup.Prepared?>(null) }
@@ -217,7 +224,10 @@ internal fun BackupSection(canAct: Boolean) {
                         scope.launch {
                             try {
                                 when (val a = JarvisRuntime.prepareBackup()) {
-                                    is Backup.Asked.Ready -> run = a.prepared
+                                    is Backup.Asked.Ready -> {
+                                        run = a.prepared
+                                        wrote = false
+                                    }
                                     is Backup.Asked.Refused -> said = a.words
                                 }
                             } finally {
@@ -269,19 +279,38 @@ internal fun BackupSection(canAct: Boolean) {
             prepared = prepared,
             canAct = canAct && !writing,
             writing = writing,
+            written = wrote,
             onFinish = {
                 if (!writing) {
                     writing = true
                     said = null
                     scope.launch {
                         try {
-                            val words = JarvisRuntime.commitBackup(prepared.id, prepared.code)
-                            said = words
-                            // A code with no file behind it is a code shown for
-                            // nothing; keep the screen open so the words can be
-                            // read, and let the next read say what landed.
-                            run = null
-                            reads += 1
+                            when (val done = JarvisRuntime.commitBackup(
+                                prepared.id, prepared.code,
+                            )) {
+                                is Backup.Committed.Landed -> {
+                                    // The file is on the PC. ONLY now may the
+                                    // screen say so, and the dialog keeps the
+                                    // code on screen beside that sentence.
+                                    said = done.line
+                                    wrote = true
+                                    // The run is over on the PC, so stop
+                                    // offering to finish it while the next
+                                    // read is still in flight.
+                                    status = status?.copy(prepared = false)
+                                    reads += 1
+                                }
+                                is Backup.Committed.Refused -> {
+                                    // Nothing was written. Show the PC's own
+                                    // words on the plate and let the next read
+                                    // say whether a run is left waiting.
+                                    said = done.words
+                                    run = null
+                                    wrote = false
+                                    reads += 1
+                                }
+                            }
                         } finally {
                             writing = false
                         }
@@ -292,8 +321,15 @@ internal fun BackupSection(canAct: Boolean) {
                 // Nothing was written; there is nothing to undo. The PC drops
                 // the run on its own when the next ask arrives or it expires.
                 run = null
+                wrote = false
                 said = "Cancelled. Nothing was written to your PC, and your backups are " +
                     "exactly as they were."
+            },
+            onClose = {
+                // The backup is written. The code has been read and kept; it is
+                // dropped here, which is what "shown once" means.
+                run = null
+                wrote = false
             },
         )
     }
@@ -303,21 +339,33 @@ internal fun BackupSection(canAct: Boolean) {
  * The recovery code, in the owner's face: four groups of five, selectable so it
  * can be copied, with the warning above it and a tick that must be set before
  * the write can happen. Dismissing it writes nothing.
+ *
+ * TWO STATES, and the difference is the A0 bug (2026-10-24). [written] is false
+ * while the run is open: the screen says NOTHING has been written yet
+ * ([Backup.NOTHING_WRITTEN_YET]) and offering to finish is right. [written] is
+ * true only once a commit came back saying a file landed: the tick and the
+ * button are gone and [Backup.DONE_LEAD] is drawn under the code, because that
+ * sentence ("Your PC wrote the backup. The code above opens it") is only true
+ * then. The old screen drew it the moment the dialog opened.
  */
 @Composable
 private fun RecoveryCodeDialog(
     prepared: Backup.Prepared,
     canAct: Boolean,
     writing: Boolean,
+    written: Boolean,
     onFinish: () -> Unit,
     onCancel: () -> Unit,
+    onClose: () -> Unit,
 ) {
     val chrome = LocalChrome.current
     var saved by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
     Dialog(
-        onDismissRequest = { if (!writing) onCancel() },
+        // A back press after a successful write closes the dialog; before it,
+        // it cancels the run without writing anything.
+        onDismissRequest = { if (!writing) { if (written) onClose() else onCancel() } },
         // Not dismissible by a stray tap outside: the whole point of this
         // screen is that the code is read before anything is written.
         properties = DialogProperties(dismissOnClickOutside = false),
@@ -363,54 +411,75 @@ private fun RecoveryCodeDialog(
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textMid,
                 )
-                Gap(12)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .toggleable(value = saved, enabled = canAct && !writing,
-                            onValueChange = { saved = it }),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start,
-                ) {
-                    Checkbox(checked = saved, onCheckedChange = null, enabled = canAct && !writing)
-                    Gap(4)
+                if (written) {
+                    // ONLY after a successful commit. The code above is still
+                    // on screen, so "the code above opens it" is true.
+                    Gap(12)
                     Text(
-                        Backup.SAVED_TICK,
+                        Backup.DONE_LEAD,
                         style = MaterialTheme.typography.bodySmall,
                         color = chrome.textHi,
                     )
-                }
-                Gap(10)
-                Primary(
-                    text = if (writing) "Asking your PC to finish it…" else Backup.COMMIT_LABEL,
-                    modifier = Modifier.fillMaxWidth(),
-                    // The tick is the gate: without it there is no way to write
-                    // a file whose code has not been read.
-                    enabled = saved && canAct && !writing,
-                    busy = writing,
-                    onClick = onFinish,
-                )
-                Gap(6)
-                Quiet(
-                    Backup.CANCEL_LABEL,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !writing,
-                    onClick = onCancel,
-                )
-                Gap(6)
-                if (!canAct) {
-                    Text(
-                        ScreenPlateText.WAITING_LINK,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = chrome.textLo,
+                    Gap(10)
+                    Quiet(
+                        "Done",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onClose,
                     )
+                } else {
+                    // The run is open and NOTHING exists yet. This line is the
+                    // fix for the screen that used to claim a backup before the
+                    // press.
+                    Gap(12)
+                    Text(
+                        Backup.NOTHING_WRITTEN_YET,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.warnInk,
+                    )
+                    Gap(12)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(value = saved, enabled = canAct && !writing,
+                                onValueChange = { saved = it }),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Start,
+                    ) {
+                        Checkbox(checked = saved, onCheckedChange = null,
+                            enabled = canAct && !writing)
+                        Gap(4)
+                        Text(
+                            Backup.SAVED_TICK,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textHi,
+                        )
+                    }
+                    Gap(10)
+                    Primary(
+                        text = if (writing) "Asking your PC to finish it…" else Backup.COMMIT_LABEL,
+                        modifier = Modifier.fillMaxWidth(),
+                        // The tick is the gate: without it there is no way to
+                        // write a file whose code has not been read.
+                        enabled = saved && canAct && !writing,
+                        busy = writing,
+                        onClick = onFinish,
+                    )
+                    Gap(6)
+                    Quiet(
+                        Backup.CANCEL_LABEL,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !writing,
+                        onClick = onCancel,
+                    )
+                    Gap(6)
+                    if (!canAct) {
+                        Text(
+                            ScreenPlateText.WAITING_LINK,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                    }
                 }
-                Gap(6)
-                Text(
-                    Backup.DONE_LEAD,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = chrome.textLo,
-                )
             }
         }
     }
