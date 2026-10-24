@@ -8,7 +8,7 @@ the IMAP username and password (jarvis_email.py), the private calendar link
 WHAT THIS PROVES
   - jarvis_token_store.resolve_secret(), the generalized mechanism every one
     of the four calls into (the same shape jarvis_search.py's KEY_TARGETS
-    already uses for the Exa/Tavily/Brave keys, factored so a secret that
+    already uses for the Exa/Tavily/Brave/DeepSeek keys, factored so a secret that
     has always lived in an environment variable - not a file - can also come
     from Credential Manager without a bespoke copy per secret):
       * the environment variable wins when the owner set one, unchanged -

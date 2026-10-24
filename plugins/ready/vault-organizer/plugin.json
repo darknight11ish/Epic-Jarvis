@@ -3,5 +3,5 @@
   "summary": "plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice.",
   "module": "jarvis_vault_organizer",
   "install": "handler",
-  "stack_order": 153
+  "stack_order": 154
 }
