@@ -693,33 +693,31 @@ await check("CONTROL: the window is hidden from capture BEFORE the code is hande
   // closes"). It must NOT go through Tauri's `set_content_protected`: on Windows
   // that reaches `SetWindowDisplayAffinity`, which tao applies by RECREATING the
   // window, and that is what closed Settings the moment pairing succeeded (the
-  // owner's report, 2026-10-07). devices.rs calls the Win32 function directly,
-  // which sets an attribute on the window this app already owns and rebuilds
-  // nothing.
+  // owner's report, 2026-10-07). The Win32 call sets an attribute on the window
+  // this app already owns and rebuilds nothing.
+  //
+  // Nor is it a second writer of that attribute any more. The same attribute
+  // keeps every window out of a capture while App lock is on (2026-10-11), and
+  // the unlock sweep cleared it for every window - so a pairing code that was
+  // still live became capturable (BUG-AUDIT-2026-10-24 RUST-1). A pairing code
+  // is a reason inside `lock::capture_blocked` now, and `lock::sweep` is the
+  // only thing that touches the attribute.
   const start = fnBody(RUST, "pair_start");
-  const guard = start.indexOf("guard_capture(&app, true)");
+  const flag = start.indexOf("set_pairing_code_shown(true)");
   const answer = start.indexOf('"code": started.code');
-  assert.ok(guard > 0 && answer > guard, "guard_capture(true) must come before the answer");
-  assert.match(fnBody(RUST, "pair_cancel"), /guard_capture\(&app, false\)/);
-  assert.match(fnBody(RUST, "pair_session"), /guard_capture\(&app, false\)/);
-  // The guard itself: it must defer to the lock's own rule and go through the
-  // ONE shared Win32 helper. Since 2026-10-11 that call lives in
-  // `lock::set_affinity`, because the same attribute keeps every window out of
-  // a capture while App lock is on (the owner's decision;
-  // `tests/lock-capture.mjs` holds that half). `devices.rs` must NOT keep a
-  // second copy - two copies are two things to keep in step, and this one's
-  // "off" would clear a block the lock still wanted. The guard's own body is
-  // taken by plain search, because `fnBody` above only finds `pub async fn`.
+  assert.ok(flag > 0 && answer > flag,
+    "the capture guard must be on before the code is handed over");
+  assert.ok(start.indexOf("lock::sweep(&app)") > flag,
+    "the flag is set but nothing applies it to the window");
+  assert.match(fnBody(RUST, "pair_cancel"), /set_pairing_code_shown\(false\)/);
+  assert.match(fnBody(RUST, "pair_session"), /set_pairing_code_shown\(false\)/);
+  // The second writer must not come back. The brackets are the call's own, so
+  // a comment that names it while explaining where it went cannot satisfy or
+  // break these.
+  assert.ok(!/set_affinity\s*\(/.test(RUST),
+    "devices.rs writes the capture attribute itself again - the second writer is back");
+  assert.ok(!/fn guard_capture\s*\(/.test(RUST), "the second writer's helper is back");
   assert.match(read("src-tauri/src/lock.rs"), /SetWindowDisplayAffinity/);
-  const gAt = RUST.indexOf("fn guard_capture(");
-  assert.ok(gAt >= 0, "guard_capture must still exist");
-  const guardBody = RUST.slice(gAt, gAt + 400);
-  assert.match(guardBody, /crate::lock::capture_blocked/,
-    "the guard must defer to the lock's own rule");
-  assert.match(guardBody, /crate::lock::set_affinity/,
-    "the guard no longer goes through the one Win32 call");
-  // The call's own bracket, so the comment above - which NAMES the function to
-  // explain where it went - is not mistaken for a second copy of it.
   assert.ok(!/SetWindowDisplayAffinity\s*\(/.test(RUST),
     "a second copy of the Win32 capture call came back to devices.rs");
   // ...and never the call that rebuilt - and so closed - the window. The
@@ -736,6 +734,14 @@ await check("CONTROL: the window is hidden from capture BEFORE the code is hande
   // Still true, and now the only mechanism: the answer carries the drawn
   // picture, never the text the QR was drawn from.
   assert.match(start, /"qr_svg": picture/);
+  // The lock's half, here as one shape: the pairing code's answer comes BEFORE
+  // "the owner is here", or a code would be capturable while the owner sits at
+  // the PC. `tests/lock-capture.mjs` checks the rule's own cases.
+  assert.match(
+    read("src-tauri/src/lock.rs"),
+    /fn capture_blocked_from[\s\S]*?if pairing_shown[\s\S]*?let owner_here/,
+    "the lock's rule does not block a pairing code before the owner-is-here answer",
+  );
 });
 
 await check("CONTROL: only a loosening waits for a live link", async () => {
