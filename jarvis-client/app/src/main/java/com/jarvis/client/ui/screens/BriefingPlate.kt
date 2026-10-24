@@ -131,7 +131,20 @@ internal fun BriefingSection(
         scope.launch {
             try {
                 when (val r = JarvisRuntime.briefingNow()) {
-                    is ApiResult.Ok -> Briefing.parse(r.value)?.let { view = it }
+                    // `/api/briefing/now` answers with the briefing ONLY: no
+                    // `setups`, no `sources`, no `senders`. Parsed whole, the
+                    // plate then drew "No briefing is set up." and the false
+                    // "this PC does not have the senders setting yet" advice for
+                    // a briefing that is scheduled - so keep what this plate
+                    // already read, exactly as `whatDidIMiss` does below (the
+                    // 2026-10-24 round-2 audit, M3).
+                    is ApiResult.Ok -> Briefing.parse(r.value)?.let { v ->
+                        view = v.copy(
+                            setups = view?.setups ?: v.setups,
+                            sources = view?.sources ?: v.sources,
+                            senders = view?.senders ?: v.senders,
+                        )
+                    }
                     is ApiResult.Failed -> said = "Couldn't put one together: " + JarvisRuntime.noticeFor(r.error)
                 }
             } finally {
