@@ -50,6 +50,20 @@ import {
   paintConstellation,
   shapeFor,
 } from "./galaxy-constellation.js";
+// The flat layout presets and their switcher decisions (Phase G0 of the Galaxy
+// rework, 2026-10-23). The module is pure: it returns positions and words, and
+// nothing it does reads the page or the clock.
+import {
+  DEFAULT_PRESET,
+  PRESET_MENU,
+  PRESET_STORAGE_KEY,
+  layoutFor,
+  layoutIsUsable,
+  presetMeta,
+  presetStatus,
+  storedPreset,
+  switchRequest,
+} from "./galaxy-presets.js";
 const menuManager = createMenuManager();
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
@@ -695,6 +709,8 @@ const dom = {
   galaxyFactsFoot: $("galaxy-facts-foot"),
   graphRefit: $("graph-refit"),
   legend: $("legend"),
+  galaxyPresets: $("graph-presets"),
+  galaxyPresetStatus: $("graph-preset-status"),
   inspector: $("inspector"),
   inspectorClose: $("inspector-close"),
   nodeKind: $("node-kind"),
@@ -12826,12 +12842,26 @@ function renderGraph() {
   // A search typed before this read finds its matches in the new picture.
   galaxyFind.hits = [];
   if (dom.graphSearch.value.trim()) findInGalaxy({ keepAt: true });
-  if (settled) {
+  if (placeActivePresetSafely()) {
+    // A flat layout stays chosen across a refresh: the new node list is placed
+    // by the same pure layout, never dropped back into the physics assembly.
+    if (settled) fitCanvas();
+    // A wider margin than the constellation uses: a flat layout puts names on
+    // its outer ring/rows, and their labels must not be clipped by the stage.
+    fitToContent({ pad: LABEL_FIT_PAD });
+    draw();
+  } else if (settled) {
     fitCanvas();
     draw();
   } else {
     startLayout();
   }
+}
+
+/** One typed key on the focused stage: a layout preset, or null. */
+function presetRequestFor(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  return switchRequest(event.key, galaxyPreset.id);
 }
 
 function countGroups(nodes) {
@@ -13084,7 +13114,7 @@ function fitCanvas() {
   draw();
 }
 
-function fitToContent({ ease = 1 } = {}) {
+function fitToContent({ ease = 1, pad = 60 } = {}) {
   const g = state.graph;
   if (!g || !g.nodes.length) return;
   const shown = g.nodes.filter(visible);
@@ -13097,7 +13127,6 @@ function fitToContent({ ease = 1 } = {}) {
     maxY = Math.max(maxY, n.y);
   }
   const rect = stageRect();
-  const pad = 60;
   const sx = (rect.width - pad * 2) / Math.max(1, maxX - minX);
   const sy = (rect.height - pad * 2) / Math.max(1, maxY - minY);
   const scale = Math.max(0.12, Math.min(2.4, Math.min(sx, sy)));
@@ -13273,6 +13302,7 @@ function drawConstellation() {
   const theme = dom.root.getAttribute("data-theme") ?? "";
   if (constellation && token === constellationToken && theme === constellationTheme) {
     paintConstellation({ svg: dom.galaxySvg, overlay: dom.galaxyOverlay }, constellationModel, constellation);
+    paintGalaxyGuides();
     return true;
   }
   constellationToken = token;
@@ -13283,6 +13313,7 @@ function drawConstellation() {
     document
   );
   wireConstellation();
+  paintGalaxyGuides({ rebuild: true });
   return true;
 }
 
@@ -13583,6 +13614,304 @@ function select(node) {
   draw();
 }
 
+/* ==========================================================================
+   Layout presets (Phase G0 of the Galaxy rework, 2026-10-23)
+
+   The Galaxy keeps the constellation that ships today as its DEFAULT view. This
+   section only adds three FLAT layouts beside it - star map, clean tree and zen
+   ring - from the pure `galaxy-presets.js` module, plus the chips in the Galaxy
+   bar and the 6/7/8 hotkeys.
+
+   The rules this section keeps:
+   - the default view is untouched: it is still the same physics constellation
+     (`startLayout`/`step`), still cached by signature, and switching back
+     restores the positions the owner was looking at (only a refresh or a first
+     visit rebuilds them);
+   - a flat layout only MOVES the nodes the existing renderer already draws. It
+     adds no node, no link, no label rule and no cap - `rank`, `group`, `weight`
+     and the 240-node bound all stay exactly what `galaxy-view.js` decided;
+   - it is a local display choice: no route, no server write, no dependency, no
+     3D, no remote asset;
+   - the five rich presets are shown disabled as "not built yet" (blueprint
+     phase G4), never silently missing and never pretending to exist.
+   ========================================================================== */
+
+let galaxyPreset = { id: DEFAULT_PRESET, saved: null, layout: null };
+
+/** Screen pixels of margin a flat layout's fit keeps, so the labels on the outer
+ *  ring/rows are never clipped by the stage. The constellation keeps its own 60
+ *  (its layout is not ours to change). */
+const LABEL_FIT_PAD = 120;
+
+/** The fit margin for the view on screen.
+ *
+ *  A flat layout puts names on its outer ring/rows, so the two general "fit"
+ *  actions (the Fit button and the stage's `0` key) must keep the WIDER margin
+ *  too - after a preset switch or a window resize. The constellation keeps the
+ *  margin it has always used. (Audit finding F1 of 2026-10-23: both actions used
+ *  the constellation's 60 under a flat layout and could clip the outer labels.) */
+function presetFitPad() {
+  return galaxyPreset.id === DEFAULT_PRESET ? 60 : LABEL_FIT_PAD;
+}
+
+/** What the owner's last choice was, read from THIS DEVICE's storage.
+ *
+ *  A display preference only (`jarvis.galaxy.preset`, the same kind of place
+ *  the theme lives in): it is never sent to the PC, and `storedPreset()` in the
+ *  pure module never trusts it - a corrupt or stale value can only fall back to
+ *  the constellation. Storage can throw (private mode, a locked-down webview);
+ *  that is not an error the owner needs to see, just no memory. */
+function readPresetStorage() {
+  try {
+    return localStorage.getItem(PRESET_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Remember (or forget, for the default view) the owner's choice on this
+ *  device. A store that refuses does not stop the switcher working. */
+function rememberPreset(id) {
+  try {
+    if (id === DEFAULT_PRESET) localStorage.removeItem(PRESET_STORAGE_KEY);
+    else localStorage.setItem(PRESET_STORAGE_KEY, id);
+  } catch {
+    /* the picture still switches; only the memory of it is lost */
+  }
+}
+
+/** Put the current graph's nodes where a flat layout says, and remember the
+ *  layout for the guide drawing.
+ *
+ *  Throws when the layout does not fit the nodes it was given - the caller
+ *  turns that into the constellation, never into a broken picture. */
+function placeGalaxyLayout(id) {
+  const g = state.graph;
+  const nodes = g ? g.nodes : [];
+  const layout = layoutFor(id, nodes);
+  if (!layoutIsUsable(layout, nodes)) {
+    throw new Error(`the ${id} layout did not fit this picture`);
+  }
+  galaxyPreset.layout = layout;
+  if (!g) return layout;
+  const byId = new Map(layout.nodes.map((p) => [String(p.id), p]));
+  for (const n of g.nodes) {
+    const p = byId.get(String(n.id));
+    if (p) { n.x = p.x; n.y = p.y; }
+  }
+  // A new token is the constellation's own signal to rebuild: a preset change
+  // moves every dot at once, so repainting in place would leave the old
+  // buttons where they were.
+  g.layoutToken = `${++layoutCount}:${g.signature}:${id}`;
+  return layout;
+}
+
+/** Put the saved constellation positions back. False when there is nothing to
+ *  restore (a first visit, or a node set that changed while a preset was on). */
+function restoreConstellationPositions() {
+  const g = state.graph;
+  if (!g || !galaxyPreset.saved) return false;
+  let restored = 0;
+  for (const n of g.nodes) {
+    const p = galaxyPreset.saved.get(String(n.id));
+    if (p) { n.x = p.x; n.y = p.y; restored++; }
+  }
+  galaxyPreset.saved = null;
+  if (restored !== g.nodes.length) return false;
+  g.layoutToken = `${++layoutCount}:${g.signature}:${DEFAULT_PRESET}`;
+  return true;
+}
+
+/** The safe fallback: whatever went wrong with a flat layout, the owner gets
+ *  the view that ships today, the menu agrees, and the status line says so. */
+function fallBackToConstellation() {
+  galaxyPreset = { id: DEFAULT_PRESET, saved: null, layout: null };
+  rememberPreset(DEFAULT_PRESET);
+  syncPresetMenu();
+  setPresetStatus("That layout could not be drawn, so the constellation is showing.");
+  if (state.graph) startLayout();
+}
+
+/** Switch the picture to one built preset (or back to the constellation).
+ *  Never throws: a failure falls back to the constellation. */
+function applyGalaxyPreset(id) {
+  try {
+    applyGalaxyPresetNow(id);
+  } catch {
+    fallBackToConstellation();
+  }
+}
+
+function applyGalaxyPresetNow(id) {
+  const meta = presetMeta(id);
+  if (!meta || !meta.built || id === galaxyPreset.id) return;
+  // Captured before the animation is cancelled: only a SETTLED constellation is
+  // worth remembering (audit finding F3, 2026-10-23). Saving a frame from the
+  // ~1.3 s assembly would restore a part-assembled, frozen picture on the way
+  // back; leaving nothing saved makes the return re-run `startLayout()`.
+  const midAssembly = Boolean(sim);
+  if (sim) {
+    cancelAnimationFrame(sim);
+    sim = null;
+  }
+  if (id === DEFAULT_PRESET) {
+    const restored = restoreConstellationPositions();
+    galaxyPreset = { id: DEFAULT_PRESET, saved: null, layout: null };
+    if (state.graph) {
+      if (restored) {
+        fitToContent();
+        draw();
+      } else {
+        // No positions were saved (the first visit, or the names changed): the
+        // default view lays itself out the way it always has.
+        startLayout();
+      }
+    }
+  } else {
+    if (galaxyPreset.id === DEFAULT_PRESET && state.graph) {
+      galaxyPreset.saved = midAssembly
+        ? null          // mid-assembly: nothing worth restoring (F3)
+        : new Map(state.graph.nodes.map((n) => [String(n.id), { x: n.x, y: n.y }]));
+    }
+    galaxyPreset = { id, saved: galaxyPreset.saved, layout: null };
+    if (state.graph) {
+      placeGalaxyLayout(id);
+      fitToContent({ pad: LABEL_FIT_PAD });
+      draw();
+    }
+  }
+  rememberPreset(id);
+  syncPresetMenu();
+  setPresetStatus(presetStatus(id));
+}
+
+/** Place the active flat layout on the current node set, safely. Used by
+ *  renderGraph on every (re)draw, so a refresh while a preset is on keeps the
+ *  layout - and a layout that no longer fits turns back into the constellation
+ *  instead of an empty or broken picture. */
+function placeActivePresetSafely() {
+  if (galaxyPreset.id === DEFAULT_PRESET) return false;
+  try {
+    placeGalaxyLayout(galaxyPreset.id);
+    return true;
+  } catch {
+    galaxyPreset = { id: DEFAULT_PRESET, saved: null, layout: null };
+    rememberPreset(DEFAULT_PRESET);
+    syncPresetMenu();
+    setPresetStatus("That layout could not be drawn, so the constellation is showing.");
+    return false;
+  }
+}
+
+/** The chips in the Galaxy bar. Built once from the module's own menu. */
+function buildPresetMenu() {
+  const host = dom.galaxyPresets;
+  if (!host) return;
+  host.replaceChildren();
+  for (const meta of PRESET_MENU) {
+    const chip = el("button", "preset-chip");
+    chip.type = "button";
+    chip.setAttribute("data-preset", meta.id);
+    if (meta.key) chip.append(el("span", "preset-key", meta.key));
+    chip.append(el("span", "preset-label", meta.label));
+    if (!meta.built) {
+      chip.disabled = true;
+      chip.title = `${meta.label} is not built yet - it is planned for a later phase of the Galaxy rework.`;
+      chip.append(el("span", "preset-hint", "not built yet"));
+    } else {
+      chip.setAttribute("aria-pressed", "false");
+      chip.title = meta.id === DEFAULT_PRESET
+        ? "The current constellation (default). Press 6, 7 or 8 for a flat layout."
+        : `${meta.hint}. Press ${meta.key}; press it again for the constellation.`;
+      chip.addEventListener("click", () => applyGalaxyPreset(meta.id));
+    }
+    host.append(chip);
+  }
+  // The owner's last choice comes back on the next launch (a display choice on
+  // this device only). A stored value that is not one of the three built
+  // layouts reads as the constellation - never as a broken page.
+  const stored = storedPreset(readPresetStorage());
+  if (stored !== DEFAULT_PRESET) {
+    galaxyPreset = { id: stored, saved: null, layout: null };
+  }
+  syncPresetMenu();
+  setPresetStatus(presetStatus(galaxyPreset.id));
+}
+
+function syncPresetMenu() {
+  if (!dom.galaxyPresets) return;
+  // A flat layout is a stationary diagram: the fact-sharing links belong to the
+  // physics constellation and would cross every ring and row (see brain.css).
+  dom.galaxyStage?.classList.toggle("is-flat-layout",
+    galaxyPreset.id !== DEFAULT_PRESET);
+  for (const chip of dom.galaxyPresets.querySelectorAll("button[data-preset]")) {
+    if (chip.disabled) continue;
+    chip.setAttribute("aria-pressed",
+      String(chip.getAttribute("data-preset") === galaxyPreset.id));
+  }
+}
+
+function setPresetStatus(text) {
+  if (dom.galaxyPresetStatus) dom.galaxyPresetStatus.textContent = String(text || "");
+}
+
+/** What a keyboard request from the stage does (the decision is in the module). */
+function handlePresetRequest(request) {
+  if (request.action === "apply") applyGalaxyPreset(request.id);
+  else setPresetStatus(presetStatus(request.id));
+}
+
+const GALAXY_SVG_NS = "http://www.w3.org/2000/svg";
+
+/** Draw (or move, or remove) the flat layout's faint guides in the picture.
+ *
+ *  The guides are world coordinates, so one transform on their layer keeps
+ *  them exactly under the dots through every pan and zoom; the shapes are only
+ *  rebuilt when the preset itself changes. */
+function paintGalaxyGuides({ rebuild = false } = {}) {
+  const svg = dom.galaxySvg;
+  if (!svg) return;
+  const guides = galaxyPreset.id !== DEFAULT_PRESET
+    ? galaxyPreset.layout?.guides
+    : null;
+  let layer = svg.querySelector('[data-layer="guides"]');
+  if (!guides) {
+    if (layer) layer.remove();
+    return;
+  }
+  if (!layer) {
+    layer = document.createElementNS(GALAXY_SVG_NS, "g");
+    layer.setAttribute("class", "galaxy-layer galaxy-guides");
+    layer.setAttribute("data-layer", "guides");
+    // First child: the map is under the links and the dots.
+    svg.insertBefore(layer, svg.firstChild);
+    rebuild = true;
+  }
+  layer.setAttribute("transform", `translate(${view.x} ${view.y}) scale(${view.scale})`);
+  if (!rebuild && layer.getAttribute("data-preset") === galaxyPreset.id) return;
+  layer.setAttribute("data-preset", galaxyPreset.id);
+  layer.replaceChildren();
+  const shape = (tag, attrs, cls) => {
+    const node = document.createElementNS(GALAXY_SVG_NS, tag);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+    node.setAttribute("class", cls);
+    layer.append(node);
+  };
+  for (const circle of guides.circles ?? []) {
+    shape("circle", { cx: 0, cy: 0, r: circle.r },
+      `galaxy-guide-ring${circle.kind === "halo" ? " is-halo" : ""}`);
+  }
+  for (const line of guides.lines ?? []) {
+    shape("line", { x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2 },
+      "galaxy-guide-line");
+  }
+  for (const path of guides.paths ?? []) {
+    shape("path", { d: path.d }, "galaxy-guide-chord");
+  }
+}
+
+buildPresetMenu();
+
 /** "About <name>", from the Galaxy: the Memory tab, opened at that name. */
 async function openAboutFromGalaxy(entityId) {
   await showView("memory");
@@ -13805,6 +14134,12 @@ stage.addEventListener(
 // mouse. Reaching a NAME without one is the buttons' job now - Tab steps
 // between them - and the search field still jumps straight to one by name.
 stage.addEventListener("keydown", (e) => {
+  const request = presetRequestFor(e);
+  if (request) {
+    e.preventDefault();
+    handlePresetRequest(request);
+    return;
+  }
   const stepPx = e.shiftKey ? 120 : 40;
   const keys = {
     ArrowLeft: () => (view.x += stepPx),
@@ -13814,7 +14149,7 @@ stage.addEventListener("keydown", (e) => {
     "+": () => (view.scale = Math.min(4, view.scale * 1.2)),
     "=": () => (view.scale = Math.min(4, view.scale * 1.2)),
     "-": () => (view.scale = Math.max(0.08, view.scale / 1.2)),
-    "0": () => fitToContent(),
+    "0": () => fitToContent({ pad: presetFitPad() }),
     Escape: () => select(null),
   };
   const fn = keys[e.key];
@@ -13984,7 +14319,7 @@ dom.refresh.addEventListener("click", async () => {
 });
 
 dom.graphRefit.addEventListener("click", () => {
-  fitToContent();
+  fitToContent({ pad: presetFitPad() });
   draw();
 });
 
