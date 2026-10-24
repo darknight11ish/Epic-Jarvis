@@ -407,7 +407,29 @@ RATCHET = {
     #: `by_patch`. It is an added hunk, not drift, and the same change raised
     #: `tools/check_patch_original_text.py`'s pin to 9 hunks / 99 lines.
     #: A ratchet: it may still only go down.
-    "jarvis_gate.py": 32,
+    #: RAISED 2026-10-23, 32 -> 40, for `no-expiry-cards.patch` (the narrowed
+    #: rescue #4: only pairing, an approval key and a restore may never
+    #: expire). All EIGHT hunks are honest rather than drift - the patch is in
+    #: `by_patch` at 8, and the walk reads exactly 32 without it (measured both
+    #: ways with `materialised("jarvis_gate.py", patches)`).
+    #:
+    #: They are honest because every one anchors on the OWNER's own text, which
+    #: this walk does not hold: the module docstring's "nobody answers before
+    #: the timeout" paragraph, the APPROVAL_TIMEOUT block where the allow-list
+    #: and `timeout_for` are defined, the stale-row sweep inside `_init()`
+    #: (touched by no patch at all), `check()`'s deadline line and its wait
+    #: loop, `pending()`'s `expires_in` block, and the insertion of
+    #: `withdraw()` before `history()`. Not fixable by re-anchoring: there is no
+    #: earlier patch to anchor to, and the alternative - editing the owner's
+    #: gate by hand - is the thing these patches exist to avoid.
+    #:
+    #: The three jarvis_owner_check.py/devices.py halves cost this walk
+    #: nothing that shows here: both files are shipped whole, never patched, so
+    #: they are not targets this walk builds. The pin may come back down the
+    #: day the walk seeds a target from `jarvis-backend/`, which is the base
+    #: these patches are published against and the text every one of the eight
+    #: pre-images is actually taken from.
+    "jarvis_gate.py": 40,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,

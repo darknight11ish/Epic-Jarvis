@@ -4,5 +4,5 @@
   "module": "jarvis_quiz",
   "install": "handler",
   "replaces_patch": "quiz.patch",
-  "stack_order": 107
+  "stack_order": 108
 }

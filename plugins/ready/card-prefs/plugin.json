@@ -4,5 +4,5 @@
   "module": "jarvis_card_summary",
   "install": "handler",
   "replaces_patch": "card-prefs.patch",
-  "stack_order": 138
+  "stack_order": 139
 }

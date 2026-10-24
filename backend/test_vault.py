@@ -1028,13 +1028,15 @@ def t_the_web_search_key_is_a_handle_and_reaches_only_its_own_service():
 
 
 def t_every_keyed_provider_is_wired():
-    """All three, named, with the host each key belongs to - read from the
+    """All four, named, with the host each key belongs to - read from the
     source, so a provider added later cannot quietly skip the vault."""
     import jarvis_search as WS
     src = (HERE / "jarvis_search.py").read_text(encoding="utf-8")
     check("the module names a vault handle for each keyed provider",
-          set(WS.VAULT_HANDLES) == {"exa", "tavily", "brave"}, str(sorted(WS.VAULT_HANDLES)))
-    urls = {"exa": WS.EXA_URL, "tavily": WS.TAVILY_URL, "brave": WS.BRAVE_URL}
+          set(WS.VAULT_HANDLES) == {"exa", "tavily", "brave", "deepseek"},
+          str(sorted(WS.VAULT_HANDLES)))
+    urls = {"exa": WS.EXA_URL, "tavily": WS.TAVILY_URL, "brave": WS.BRAVE_URL,
+            "deepseek": WS.DEEPSEEK_URL}
     for pid, (name, host) in WS.VAULT_HANDLES.items():
         check(f"{pid}: the handle is the provider's own name", name == pid, f"{name} {host}")
         check(f"{pid}: ... bound to that service's own host, and to no other",
