@@ -464,19 +464,22 @@ def main(argv=None):
             c.need(status in {"enforced", "planned"} or status == "pc-only",
                    "%s: Switchable/Adjustable with status %r" % (fid, status))
         if isinstance(path, str) and "All features and abilities" in path:
-            # #748 shipped the DESKTOP directory, so the desktop half is live;
-            # only the PHONE half still points at a screen that does not exist
-            # yet and must keep the honest " (planned)" marker. Two contract
-            # shapes are in use: "desktop Settings: ...; phone: ..." and the
-            # older "desktop / phone".
+            # Both halves are live now: #748 shipped the DESKTOP directory and
+            # #749 ships the PHONE one. While a half did not exist its path had
+            # to carry the honest " (planned)" marker (this rule required it
+            # for the phone half until 2026-10-23). Neither half may carry it
+            # any more: a live path that still says planned names a screen the
+            # owner can open anyway, which is the dishonest direction.
             if "; phone:" in path:
                 phone_half = path.split("; phone:", 1)[1]
             elif " / " in path:
                 phone_half = path.split(" / ", 1)[1]
             else:
                 phone_half = path
-            c.need("All features and abilities" not in phone_half or " (planned)" in phone_half,
-                   "%s: the phone half still points at the not-yet-built directory and must say (planned)" % fid)
+            c.need("(planned)" not in path,
+                   "%s: the directory is live on both apps now (#748 desktop, "
+                   "#749 phone), so its path must not say ' (planned)' - phone "
+                   "half was %r" % (fid, phone_half))
         if label in {approved[3], approved[4]}:
             c.need(isinstance(phrase, str) and phrase.strip(), "%s: no example phrase" % fid)
             c.need(isinstance(path, str) and path.strip(), "%s: no screen path" % fid)

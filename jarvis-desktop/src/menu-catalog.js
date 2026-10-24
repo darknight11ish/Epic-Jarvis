@@ -245,6 +245,28 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.all-features",
+    "title": "All features and abilities",
+    "about": "Every ability Jarvis has, in the PC's own words, and where to change it.",
+    "apps": [
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "row",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "Never hideable: it is the phone's map of where every feature and setting lives, so hiding it would strand the way to find the rest.",
+    "names": [
+      "all features and abilities",
+      "all features",
+      "abilities and commands",
+      "the feature directory"
+    ]
+  },
+  {
     "id": "settings.devices",
     "title": "Devices",
     "about": "Every paired device with its own key.",
@@ -2719,6 +2741,7 @@ export const NEVER_HIDE = [
   "settings.connection",
   "settings.first-run",
   "settings.setup-questionnaire",
+  "settings.all-features",
   "settings.devices",
   "settings.animal-options",
   "settings.security",
@@ -2754,11 +2777,14 @@ export const NEVER_HIDE = [
 ];
 export const ALIASES = {
   "a new conversation starts after": "settings.idle-new",
+  "abilities and commands": "settings.all-features",
   "about": "settings.about",
   "about jarvis": "settings.about",
   "account secrets": "settings.account-secrets",
   "accounts": "settings.account-secrets",
   "activity": "brain.work.activity",
+  "all features": "settings.all-features",
+  "all features and abilities": "settings.all-features",
   "always keep in mind": "brain.memory.profile",
   "animal options": "settings.animal-options",
   "animal settings": "settings.animal-options",
@@ -2831,6 +2857,7 @@ export const ALIASES = {
   "explain more button": "settings.approval-cards",
   "faces": "settings.appearance-card",
   "faq": "brain.tab.tutorials",
+  "feature directory": "settings.all-features",
   "finance": "group.finance",
   "finances": "group.finance",
   "findings": "brain.now.findings",

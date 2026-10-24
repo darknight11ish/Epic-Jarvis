@@ -176,15 +176,19 @@ await check("the filter narrows the list and clearing it restores every row", as
   await page.close();
 });
 
-await check("the live desktop screen name is real; only the phone stays planned", async () => {
-  // R1: this PR ships the desktop screen, so the contract's desktop "(planned)"
-  // marker must NOT reach the page. The phone directory is Session B's work, so
-  // the phone half may keep the contract's planned wording.
-  const planned = FIXTURE.rows.filter((r) => /\(planned\)/.test(r.where_desktop));
-  assert.deepEqual(planned.map((r) => r.id), [],
+await check("both live screen names are real: the directory ships on both apps", async () => {
+  // R1: #748 shipped the desktop directory and #749 ships the phone one, so the
+  // contract's "(planned)" marker must reach NEITHER half any more. A re-added
+  // marker names a screen that exists; check_feature_controls.py refuses it on
+  // the contract side, and this holds the generated page copy to the same rule.
+  const plannedDesktop = FIXTURE.rows.filter((r) => /\(planned\)/.test(r.where_desktop));
+  const plannedPhone = FIXTURE.rows.filter((r) => /\(planned\)/.test(r.where_phone));
+  assert.deepEqual(plannedDesktop.map((r) => r.id), [],
     "a live desktop screen path still says (planned)");
-  assert.ok(FIXTURE.rows.some((r) => /\(planned\)/.test(r.where_phone)),
-    "the phone half should still say (planned) until Session B ships it");
+  assert.deepEqual(plannedPhone.map((r) => r.id), [],
+    "the phone directory ships now (#749), so no phone path may say (planned)");
+  assert.ok(FIXTURE.rows.filter((r) => r.where_phone === "All features and abilities").length > 100,
+    "the phone half of the directory rows is not the live directory name");
   const page = await open();
   const title = await page.evaluate(
     () => (document.getElementById("fd-title") || {}).textContent || "");

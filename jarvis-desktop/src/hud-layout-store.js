@@ -39,6 +39,34 @@ import {
 export const LEGACY_KEY = "jarvis.hud.layout";
 
 /**
+ * PWA slice 2 (2026-10-23): the per-DEVICE layout of a browser-served HUD.
+ *
+ * A plain browser has no Tauri command and therefore no desktop settings
+ * store; each browser keeps its OWN layout document under this key, which is
+ * a different store from the host PC's `jarvis-desktop.json`. The desktop
+ * shell never reaches the branch that reads or writes it, so this can never
+ * overwrite the PC's layout - and a browser can never read the PC's.
+ */
+export const WEB_KEY = "jarvis.web.hud_layout.v1";
+
+/** True in a browser page served by the backend with hud-web-bridge.js. */
+function browserWebMode() {
+  return Boolean(globalThis.__JARVIS_WEB_MODE);
+}
+
+/** This browser's saved layout document, or null. Never touches the host. */
+function readWebDocument(storage) {
+  try {
+    const raw = storage ? storage.getItem(WEB_KEY) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The first-paint preview mirror (H3, 2026-10-22). The layout document in the
  * shell store is the ONLY truth; this localStorage key exists so the next HUD
  * window can paint the right shell/density before the async store read lands.
@@ -104,6 +132,18 @@ export async function loadLayout(storage = globalThis.localStorage) {
     }
   };
   if (!invoke) {
+    // PWA slice 2: a browser keeps its OWN layout (the host PC's store is
+    // unreachable from here by design - there is no Tauri command). A saved
+    // document wins; the retired three-way value is only a first-run seed.
+    if (browserWebMode()) {
+      const saved = readWebDocument(storage);
+      if (saved) {
+        return { layout: normalizeLayout(saved), saved: true,
+                 source: "browser", migrated: false };
+      }
+      return { layout: migrateLegacyLayout(legacy()), saved: false,
+               source: "browser-first-run", migrated: false };
+    }
     return {
       layout: migrateLegacyLayout(legacy()),
       saved: false,
@@ -140,6 +180,18 @@ export async function saveLayout(layout, storage = globalThis.localStorage) {
   const clean = normalizeLayout(layout);
   const invoke = shellInvoke();
   if (!invoke) {
+    // PWA slice 2: this browser's own layout, in this browser's storage. The
+    // document is normalized by the same function the desktop store uses, so
+    // the protected cards and the closed-world shape are identical here.
+    if (browserWebMode()) {
+      try {
+        if (storage) storage.setItem(WEB_KEY, JSON.stringify(clean));
+        return { layout: clean, saved: true, source: "browser" };
+      } catch (e) {
+        return { layout: clean, saved: false, source: "browser",
+          error: "This browser refused to store the layout." };
+      }
+    }
     return { layout: clean, saved: false, source: "browser",
       error: "Saved on this PC only when the desktop app is running." };
   }

@@ -171,6 +171,23 @@ MENUS: tuple = (
        hide=False, collapse=False,
        why="Never hideable on either app: it is a start-here setup card. The phone's row is the read-only plan; the changes are applied on the PC.",
        names=("first time setup", "the setup questionnaire", "the setup questions")),
+    # "All features and abilities" (2026-10-22, #749): the phone's read-only,
+    # searchable directory of all 139 features. PHONE only: the desktop's own
+    # card has no `<section class="card" id>` (it is a generated index, not a
+    # settings section), so there is no desktop menu id to give; the desktop
+    # page shows it unconditionally. NEVER hideable, for the same reason the
+    # safety rows are: it is the phone's built-in map of where every feature and
+    # setting lives, so hiding it would strand the way to find the rest (the
+    # screen keeps its Settings search too, but the map is the guarantee). Row
+    # kind with no fold: it is a list, not a card body to collapse into a
+    # heading. "feature list" has no menu-id feature row to cover it, and that
+    # is the truthful shape: the directory is navigation, not an ability.
+    _m("settings.all-features", "All features and abilities",
+       "Every ability Jarvis has, in the PC's own words, and where to change it.",
+       (PHONE,), kind="row", collapse=False, hide=False,
+       why="Never hideable: it is the phone's map of where every feature and setting lives, so hiding it would strand the way to find the rest.",
+       names=("all features and abilities", "all features", "abilities and commands",
+              "the feature directory")),
     _m("settings.devices", "Devices", "Every paired device with its own key.",
        hide=False, kind="card", names=("devices", "paired devices"),
        why="Removing a lost phone must stay reachable."),
