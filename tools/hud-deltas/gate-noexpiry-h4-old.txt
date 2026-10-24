@@ -1,0 +1,7 @@
+    _push(_note["title"],
+          _note["body"] + f"\n(id {rid}) - open Jarvis to decide")
+
+    deadline = time.time() + (APPROVAL_TIMEOUT if timeout is None else timeout)
+    # One connection for the whole wait rather than one per poll.
+    watch = None
+    try:

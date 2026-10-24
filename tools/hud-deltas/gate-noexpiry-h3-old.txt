@@ -1,0 +1,9 @@
+            # A process that died mid-wait leaves its row 'pending' forever,
+            # and the HUD keeps offering it. Anything older than the timeout
+            # plus a grace period cannot still have a waiter.
+            c.execute("UPDATE approvals SET state='expired', decided=? "
+                      "WHERE state='pending' AND created < ?",
+                      (time.time(), time.time() - APPROVAL_TIMEOUT - 60))
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS taint (
+                    key   TEXT PRIMARY KEY,

@@ -1,0 +1,22 @@
+        d["replaces_heading"] = _kinds.get("heading", "")
+        d["replaces_note"] = _kinds.get("note", "")
+        # approval-expiry.patch: how many seconds this card has left before
+        # check() stops waiting and refuses it. check() waits this action's own
+        # timeout from just after the row is written, so `created` plus that is
+        # the deadline. Sent as seconds LEFT, not a clock time, so a phone
+        # whose clock disagrees with this PC still counts down correctly. A row
+        # whose `created` is not a number gets no field, and the clients then
+        # show no countdown rather than a wrong one - and so does a card whose
+        # action never expires (APPROVAL_NEVER_EXPIRES, timeout_for returning
+        # None), which is a card that waits for the owner rather than one that
+        # runs out. The field is left OFF, never 0: 0 means "expired now" to
+        # both apps, and they would refuse a card that is still answerable.
+        try:
+            left = timeout_for(d.get("action"))
+            if left is not None:
+                d["expires_in"] = max(0, int(float(d.get("created"))
+                                             + float(left)
+                                             - time.time()))
+        except (TypeError, ValueError):
+            pass
+        # Why this is being asked about at all, when the table said otherwise.

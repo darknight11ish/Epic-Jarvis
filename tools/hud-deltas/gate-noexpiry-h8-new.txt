@@ -1,0 +1,35 @@
+            ("approved" if approved else "denied", time.time(),
+             str(by or "hud")[:64], request_id))
+        return cur.rowcount > 0
+
+
+def withdraw(request_id: str, why: str = "") -> bool:
+    """Take a card off the list because the work it asked about is gone.
+
+    Not a decision - nobody said yes or no - so the row is recorded exactly as
+    a lapse is (state 'expired', and the waiter it wakes reports timed_out,
+    "nobody answered"), never as a denial: a denial is an answer, it proposes
+    a memory rule, and inventing one would be putting words in the owner's
+    mouth. What this adds is the one thing a card with NO deadline cannot do
+    for itself: with no clock to run out, a pairing or approval-key card whose
+    session was cancelled or replaced would sit in the list for ever,
+    answerable but never answerable-to-anything.
+
+    The waiting thread polls the row, so the UPDATE below ends its wait on the
+    next tick, exactly as a lapse does. Returns False for an unknown id or one
+    already decided, so a cancel after the fact changes nothing. Called
+    through getattr by jarvis_devices.py, so a backend without this patch
+    keeps working exactly as it did.
+    """
+    _init()
+    with closing(_connect()) as c:
+        cur = c.execute("UPDATE approvals SET state='expired', decided=?"
+                        " WHERE id=? AND state='pending'",
+                        (time.time(), request_id))
+        gone = cur.rowcount > 0
+    if gone:
+        _audit("gate.withdrawn", {"id": request_id, "why": why})
+    return gone
+
+
+def history(limit: int = 50) -> list[dict]:

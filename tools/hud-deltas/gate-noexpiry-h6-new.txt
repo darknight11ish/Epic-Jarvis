@@ -1,0 +1,11 @@
+                    pass
+                watch = None
+                continue
+            if row is not None and row["state"] not in ("pending", "approved", "denied"):
+                # Withdrawn, or swept by another process's start-up: the card
+                # is not waiting any more, so neither is this. Without this
+                # line a card with no deadline would keep polling a row that
+                # exists and can never change again.
+                break
+            if row is None:
+                break

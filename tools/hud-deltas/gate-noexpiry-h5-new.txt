@@ -1,0 +1,10 @@
+            watch = _connect()
+        except Exception:
+            watch = None
+        # None is the no-deadline case, and it must not be read as "already
+        # past" (`time.time() < None` raises in Python 3): with no deadline
+        # the wait ends when the row does - answered, withdrawn, or replaced.
+        while deadline is None or time.time() < deadline:
+            time.sleep(POLL_SECONDS)
+            try:
+                if watch is None:
