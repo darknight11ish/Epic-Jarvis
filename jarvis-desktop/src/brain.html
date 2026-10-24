@@ -225,6 +225,18 @@
                    aria-describedby="graph-find" />
             <span class="stat graph-find" id="graph-find" role="status" aria-live="polite"></span>
             <div class="legend" id="legend" role="group" aria-label="Filter by kind"></div>
+            <!-- The layout presets (Phase G0 of the Galaxy rework, 2026-10-23):
+                 the current constellation, the three flat layouts that are
+                 built (hotkeys 6, 7 and 8), and the five rich presets the
+                 blueprint lists - shown DISABLED as "not built yet" rather than
+                 hidden, so the menu never pretends they exist. Every button is
+                 a real control; brain.js builds them from galaxy-presets.js's
+                 PRESET_MENU, and the status line below is the live region that
+                 says what changed (role=status). -->
+            <div class="galaxy-presets" id="graph-presets" role="group"
+                 aria-label="Galaxy layout: the constellation, three flat layouts (keys 6, 7 and 8), and five planned presets that are not built yet (keys 1 to 5 say so)"></div>
+            <span class="stat galaxy-preset-status" id="graph-preset-status"
+                  role="status" aria-live="polite"></span>
             <div class="galaxy-actions">
               <span class="stat mono" id="graph-stat">—</span>
               <button class="btn ghost small" type="button" id="graph-refit">Fit</button>
@@ -232,7 +244,7 @@
           </div>
 
           <div class="galaxy-stage" tabindex="0"
-               aria-label="The people and things Jarvis knows about. Arrow keys pan, plus and minus zoom, 0 fits. Every name is a button: Tab moves between them, Enter opens one, and the search field finds one by name.">
+               aria-label="The people and things Jarvis knows about. Arrow keys pan, plus and minus zoom, 0 fits. Press 6, 7 or 8 for a flat layout; press the same key again for the constellation. Presets 1 to 5 are planned and not built yet. Every name is a button: Tab moves between them, Enter opens one, and the search field finds one by name.">
             <!-- The constellation: an SVG picture with ONE REAL BUTTON per name
                  laid over it (galaxy-constellation.js). It replaced the canvas
                  below on 2026-10-09, because the project's rule is "nothing
