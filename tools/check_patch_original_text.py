@@ -87,7 +87,10 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all twelve, with their positions, instead of pretending they are not there. The
+all thirteen - those twelve, plus `no-expiry-cards.patch` at position 36, added
+2026-10-23 (rescue #4: only pairing a device, an approval key and a restore may
+have no deadline, so all eight of its hunks read the owner's own gate text) -
+with their positions, instead of pretending they are not there. The
 position-29 rule is kept as a REPORTED fact, not a gate.
 
 THE PIN
