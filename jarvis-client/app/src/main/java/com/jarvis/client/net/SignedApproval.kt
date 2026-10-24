@@ -171,17 +171,29 @@ object SignedApproval {
     const val REFUSAL_NO_SIGNATURE = "no_signature"
     const val REFUSAL_BAD_SIGNATURE = "bad_signature"
 
-    /** The refusal word in a 403's body, when it is one of the three this feature explains. */
+    /**
+     * The 403 that says the card may only be approved on the PC itself
+     * (`{"owner_check":"pc_only"}`, `jarvis_owner_check.PC_ONLY_ACTIONS`).
+     *
+     * Not a signature refusal and NOT a refused key: the phone used to show
+     * "your pairing key was refused" for it and open the pairing screen, over a
+     * key that was perfectly good (the full audit's C2, 2026-10-24).
+     */
+    const val REFUSAL_PC_ONLY = "pc_only"
+
+    /** The refusal word in a 403's body, when it is one this feature explains. */
     fun refusalIn(bodyText: String?): String? {
         val obj = runCatching { JarvisJson.parseToJsonElement(bodyText.orEmpty()) as? JsonObject }.getOrNull()
         val word = (obj?.get("owner_check") as? JsonPrimitive)?.takeIf { it.isString }?.content
         return word?.takeIf {
-            it == REFUSAL_NO_APPROVAL_KEY || it == REFUSAL_NO_SIGNATURE || it == REFUSAL_BAD_SIGNATURE
+            it == REFUSAL_PC_ONLY || it == REFUSAL_NO_APPROVAL_KEY ||
+                it == REFUSAL_NO_SIGNATURE || it == REFUSAL_BAD_SIGNATURE
         }
     }
 
-    /** The sentence for a refusal word, or null for none of the three. */
+    /** The sentence for a refusal word, or null for none of these. */
     fun refusalWords(word: String?): String? = when (word) {
+        REFUSAL_PC_ONLY -> AsksFirst.APPROVE_ON_PC
         REFUSAL_NO_APPROVAL_KEY -> OFFER_WORDS
         REFUSAL_NO_SIGNATURE -> NOT_ACCEPTED
         REFUSAL_BAD_SIGNATURE -> OFFER_BAD_WORDS
