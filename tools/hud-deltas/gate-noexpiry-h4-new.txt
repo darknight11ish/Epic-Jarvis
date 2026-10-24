@@ -1,0 +1,13 @@
+    _push(_note["title"],
+          _note["body"] + f"\n(id {rid}) - open Jarvis to decide")
+
+    # How long this card waits. `timeout` is the caller deciding for itself
+    # (the suites do); otherwise the action decides, and None means the owner
+    # has as long as they need - see APPROVAL_NEVER_EXPIRES. A deadline of a
+    # day would still be a deadline, and it would refuse the pairing card of
+    # somebody who came back tomorrow.
+    waited = timeout_for(action) if timeout is None else timeout
+    deadline = None if waited is None else time.time() + waited
+    # One connection for the whole wait rather than one per poll.
+    watch = None
+    try:

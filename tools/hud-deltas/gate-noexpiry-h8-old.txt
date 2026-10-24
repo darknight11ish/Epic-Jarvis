@@ -1,0 +1,6 @@
+            ("approved" if approved else "denied", time.time(),
+             str(by or "hud")[:64], request_id))
+        return cur.rowcount > 0
+
+
+def history(limit: int = 50) -> list[dict]:

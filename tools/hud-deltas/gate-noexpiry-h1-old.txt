@@ -1,0 +1,6 @@
+  - the database cannot be opened at all         -> denied
+That last one matters. A gate that opens when it breaks is not a gate, so if
+this module cannot do its job it refuses rather than waving things through.
+"""
+
+from __future__ import annotations

@@ -1,0 +1,7 @@
+            watch = _connect()
+        except Exception:
+            watch = None
+        while time.time() < deadline:
+            time.sleep(POLL_SECONDS)
+            try:
+                if watch is None:

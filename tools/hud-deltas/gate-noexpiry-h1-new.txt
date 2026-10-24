@@ -1,0 +1,13 @@
+  - the database cannot be opened at all         -> denied
+That last one matters. A gate that opens when it breaks is not a gate, so if
+this module cannot do its job it refuses rather than waving things through.
+
+The timeout is per action, and four deliberate cards have NONE - see
+APPROVAL_NEVER_EXPIRES. Waiting is not approving: such a card still runs
+nothing until a person answers it, it is still answerable only while it is
+the live card, and a denial is still a denial. What changes is only that
+silence stops being an answer, and only for the three interactive ceremonies
+the owner approved on 2026-10-23 - every routine card keeps its window.
+"""
+
+from __future__ import annotations

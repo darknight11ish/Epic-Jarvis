@@ -239,6 +239,36 @@ GATE_FINAL_HELPERS_NEW_FILE = "gate-final-helpers-new.txt"
 GATE_FINAL_PENDING_OLD_FILE = "gate-final-pending-old.txt"
 GATE_FINAL_PENDING_NEW_FILE = "gate-final-pending-new.txt"
 
+#: no-expiry-cards.patch (PR #773, the owner's 2026-10-23 card-expiry ruling)
+#: edits `jarvis_gate.py` in EIGHT disjoint regions - its own module docstring,
+#: the APPROVAL_NEVER_EXPIRES set and its timeout_for() helper, and five call
+#: sites - so it cannot be carried by one anchor insert. DELTA_TABLE lists it as
+#: an ordered set of OLD-block -> NEW-block pairs (the "regions" branch of
+#: `plan_deltas`). The block bytes are the patch's own post-image bytes; hunk 2's
+#: context was adapted to THIS PC, whose `approval_timeout_seconds` default is
+#: still 180 while the patch was cut against a tree that says 900 - the region
+#: changes that context line not at all. Each region's probe appears only in the
+#: post-image, so a second deploy skips it instead of replacing twice.
+NOEXPIRY_REGIONS = (
+    {"file": "gate-noexpiry-h1-new.txt", "replace_file": "gate-noexpiry-h1-old.txt",
+     "probes": ("silence stops being an answer",)},
+    {"file": "gate-noexpiry-h2-new.txt", "replace_file": "gate-noexpiry-h2-old.txt",
+     "probes": ("APPROVAL_NEVER_EXPIRES = frozenset({",
+                "def timeout_for(action: Any) -> Optional[float]:")},
+    {"file": "gate-noexpiry-h3-new.txt", "replace_file": "gate-noexpiry-h3-old.txt",
+     "probes": ("sweeping it on age would expire by the back door",)},
+    {"file": "gate-noexpiry-h4-new.txt", "replace_file": "gate-noexpiry-h4-old.txt",
+     "probes": ("the action decides, and None means the owner",)},
+    {"file": "gate-noexpiry-h5-new.txt", "replace_file": "gate-noexpiry-h5-old.txt",
+     "probes": ("while deadline is None or time.time() < deadline:",)},
+    {"file": "gate-noexpiry-h6-new.txt", "replace_file": "gate-noexpiry-h6-old.txt",
+     "probes": ("would keep polling a row that",)},
+    {"file": "gate-noexpiry-h7-new.txt", "replace_file": "gate-noexpiry-h7-old.txt",
+     "probes": ("Sent as seconds LEFT, not a clock time, so a phone",)},
+    {"file": "gate-noexpiry-h8-new.txt", "replace_file": "gate-noexpiry-h8-old.txt",
+     "probes": ("the waiter it wakes reports timed_out",)},
+)
+
 #: PWA Slice 3a (2026-10-23): the browser's own files. The page at "/" was the
 #: only file the server could answer, so every stylesheet, font and module the
 #: page loads was a 404 in a normal browser - a half-dressed HUD whose shell
@@ -446,6 +476,19 @@ DELTA_TABLE = {
                        'd["replaces_note"] = _kinds.get("note", "")'),
             "file": GATE_FINAL_PENDING_NEW_FILE,
             "replace_file": GATE_FINAL_PENDING_OLD_FILE,
+        },
+    },
+    # The owner's 2026-10-23 card-expiry ruling (PR #773): the only patch since
+    # 2026-10-21 that touches `jarvis_gate.py`, and it touches it in eight
+    # disjoint places - which a single anchor insert cannot express. It is
+    # carried as eight literal region pairs (NOEXPIRY_REGIONS). The top-level
+    # probes are one post-image line from every region: all eight present means
+    # the whole patch is in, and a half-applied live gate is refused on the
+    # region whose OLD block no longer appears exactly once - never guessed.
+    "no-expiry-cards.patch": {
+        "jarvis_gate.py": {
+            "probes": tuple(r["probes"][0] for r in NOEXPIRY_REGIONS),
+            "regions": NOEXPIRY_REGIONS,
         },
     },
     # PWA Slice 3a (2026-10-23): the browser's own files, as TWO literal
@@ -830,6 +873,54 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
                 deltas.append(DeltaAction(patch, target, "already"))
                 continue
             entry = (table.get(patch) or {}).get(target) or {}
+            regions = entry.get("regions") or ()
+            if regions:
+                # A patch that changes SEVERAL disjoint regions of one file - the
+                # 2026-10-23 card-expiry ruling's own docstring, the never-expires
+                # set and its helper, and five call sites - cannot be carried by one
+                # anchor insert: one block at one anchor would put unrelated code in
+                # the wrong place. It is carried instead as an ordered list of region
+                # pairs: each OLD block must appear in the file exactly once and is
+                # replaced by that region's NEW block. A region whose own probes are
+                # already there is skipped, so a second deploy is clean; any other
+                # shape refuses the whole file rather than guessing.
+                region_error = ""
+                changed = False
+                for region in regions:
+                    try:
+                        new_lines = _delta_lines(str(region.get("file") or ""))
+                        old_lines = (_delta_lines(str(region.get("replace_file") or ""))
+                                     if region.get("replace_file") else ())
+                        r_probes = tuple(str(p) for p in (region.get("probes") or ()))
+                    except Exception as exc:                      # noqa: BLE001
+                        region_error = (f"{patch} -> {target}: a region's block file "
+                                        f"could not be read ({type(exc).__name__})")
+                        break
+                    if r_probes and all(p in text for p in r_probes):
+                        continue
+                    if not old_lines:
+                        region_error = (f"{patch} -> {target}: a region has no old "
+                                        f"block; only replace-shaped regions are "
+                                        f"supported here")
+                        break
+                    old = "\n".join(old_lines)
+                    count = text.count(old)
+                    if count != 1:
+                        region_error = (
+                            f"{patch} -> {target}: one region's old block appears "
+                            f"{count} time(s) in the live file; expected exactly 1. "
+                            f"Refusing rather than guessing.")
+                        break
+                    text = text.replace(old, "\n".join(new_lines), 1)
+                    changed = True
+                if region_error:
+                    refusals.append(region_error)
+                    continue
+                if changed and text != (staged.get(target) or live_text[target]):
+                    staged[target] = text
+                    deltas.append(DeltaAction(patch, target, "insert", (),
+                                              f"{len(regions)} region(s)"))
+                continue
             anchor = entry.get("anchor") or ""
             if not anchor:
                 refusals.append(
@@ -1460,7 +1551,11 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     out("")
     out(f"HUD DELTAS ({len(deltas)} patch/file delta(s) checked):")
     out(f"  already present: {len(already)}")
-    _summ(out, "to insert", [f"{d.patch} -> {d.file} ({len(d.lines)} lines)" for d in inserts])
+    _summ(out, "to insert",
+          [f"{d.patch} -> {d.file} "
+           f"({len(d.lines)} lines)" if d.lines else
+           f"{d.patch} -> {d.file} ({d.anchor or 'one block'})"
+           for d in inserts])
     blocked = blocked_delta_lines()
     if blocked:
         out("")
