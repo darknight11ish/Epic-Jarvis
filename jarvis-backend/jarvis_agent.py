@@ -7955,30 +7955,55 @@ def _manner_now(conversation_id: Optional[str] = None) -> Optional[str]:
         return None
 
 
-def manner_message(manner: Optional[str]) -> Optional[dict]:
-    """The system message for `manner` ("warm" / "plain"), or None."""
+def manner_message(manner: Optional[str], *, crisis: bool = False) -> Optional[dict]:
+    """The system message for the active way of talking, or None.
+
+    A CHOSEN PERSONALITY (2026-10-22) sends its whole compact persona block -
+    the style, the dials, the two cadence exemplars - and, when this turn is a
+    crisis turn, the calm support block INSTEAD of every persona line (the
+    hard safety override; nobody can configure it away). A PC that never chose
+    a preset keeps the old one-line manner note exactly as before."""
     if manner is None:
         return None
     try:
         import jarvis_manner
+        if jarvis_manner.personality_chosen():
+            return {"role": "system",
+                    "content": jarvis_manner.prompt_block(crisis_active=crisis)}
         return {"role": "system", "content": jarvis_manner.note(manner)}
     except Exception:
         return None
 
 
-def with_manner_note(msgs: list, manner: Optional[str]) -> list:
-    """A new list: `msgs` with the manner line just before the newest user
-    message - never first (see with_spoken_note, whose placing this is).
-    `msgs` itself is not changed; no manner, or no user message, returns a
-    plain copy."""
-    note = manner_message(manner)
+def with_manner_note(msgs: list, manner: Optional[str], *,
+                     crisis: bool = False) -> list:
+    """A new list: `msgs` with the way-of-talking note(s) just before the
+    newest user message - never first (see with_spoken_note, whose placing
+    this is). `msgs` itself is not changed; no manner, or no user message,
+    returns a plain copy.
+
+    A chosen personality inserts its persona block AND, immediately after it
+    (nearest the question), the one-line post_history_hint, so a long chat or
+    a long Live session cannot drift out of character. A crisis turn inserts
+    the calm support block instead of the persona (manner_message does that).
+    A PC with no chosen personality gets exactly the old single note."""
+    note = manner_message(manner, crisis=crisis)
     users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
     if note is None or not users:
         return list(msgs)
+    insert = [note]
+    try:
+        import jarvis_manner
+        if jarvis_manner.personality_chosen() and not crisis:
+            hint = jarvis_manner.post_history_hint()
+            if hint:
+                insert.append({"role": "system", "content": hint})
+    except Exception:
+        pass
     at = users[-1]
     if at == 0:
-        return [{"role": "system", "content": LANE_SYSTEM}, note] + list(msgs)
-    return list(msgs[:at]) + [note] + list(msgs[at:])
+        return [{"role": "system", "content": LANE_SYSTEM}] + insert + list(msgs)
+    return list(msgs[:at]) + insert + list(msgs[at:])
 
 
 # --------------------------------------------------------------------------
@@ -8455,7 +8480,7 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     out = tidy_assistant_whitespace(msgs)
     # The owner's manner (warm or plain): wording only, never first, and
     # before the spoken note so that one is nearer the question.
-    out = with_manner_note(out, manner)
+    out = with_manner_note(out, manner, crisis=crisis)
     if focus:
         # I144: additive on top of manner, never instead of it - nearer
         # the question than manner, further than spoken/cut-off/crisis.

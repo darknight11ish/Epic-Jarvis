@@ -10327,6 +10327,13 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "multi-field control: typed path still being wired; setter proof pending"
+    },
+    {
+      "kind": "choice-setting",
+      "id": "personality",
+      "status": "planned",
+      "owner": "voiceprint-wiring",
+      "reason": "named choice setting newly wired; setter test/proof still pending"
     }
   ],
   "settings_only": [
@@ -10442,20 +10449,11 @@
       ],
       "phrases": [
         {
-          "text": "set the manner to formal",
+          "text": "from now on be more plain",
           "accepted": [
-            "formal"
+            "plain"
           ],
-          "resolved": false,
-          "planned": true
-        },
-        {
-          "text": "be more formal",
-          "accepted": [
-            "formal"
-          ],
-          "resolved": false,
-          "planned": true
+          "resolved": true
         }
       ],
       "accepted_values": [
@@ -10478,8 +10476,7 @@
       "reason": "typed phrase(s) exist but no test proves the value reaches jarvis_settings_registry.set_manner yet",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "unresolved_phrases": [
-        "set the manner to formal",
-        "be more formal"
+        "set the manner to formal"
       ]
     },
     {
@@ -11340,6 +11337,103 @@
       "desktop_found": true,
       "phone_found": false,
       "handler": "jarvis_settings_registry.set_focus_preset",
+      "status": "planned",
+      "owner": "voiceprint-wiring",
+      "reason": "named choice setting newly wired; setter test/proof still pending"
+    },
+    {
+      "key": "personality",
+      "names": [
+        "the personality",
+        "the persona",
+        "jarvis's personality",
+        "the character",
+        "which personality"
+      ],
+      "section": "manner",
+      "options": {
+        "warm_peer": "warm_peer",
+        "Warm Collaborator": "warm_peer",
+        "warm": "warm_peer",
+        "warm collaborator": "warm_peer",
+        "warm peer": "warm_peer",
+        "default": "warm_peer",
+        "normal": "warm_peer",
+        "friendly": "warm_peer",
+        "standard": "warm_peer",
+        "classic_butler": "classic_butler",
+        "Classic British Butler": "classic_butler",
+        "classic butler": "classic_butler",
+        "butler": "classic_butler",
+        "british butler": "classic_butler",
+        "paul bettany": "classic_butler",
+        "classic jarvis": "classic_butler",
+        "iron man": "classic_butler",
+        "alfred": "classic_butler",
+        "proper": "classic_butler",
+        "tactical_ops": "tactical_ops",
+        "Tactical Mission Control": "tactical_ops",
+        "tactical": "tactical_ops",
+        "tactical ops": "tactical_ops",
+        "mission control": "tactical_ops",
+        "plain": "tactical_ops",
+        "direct": "tactical_ops",
+        "military": "tactical_ops",
+        "flight director": "tactical_ops",
+        "brief": "tactical_ops",
+        "dry_wit": "dry_wit",
+        "Dry & Deadpan": "dry_wit",
+        "dry wit": "dry_wit",
+        "dry and deadpan": "dry_wit",
+        "deadpan": "dry_wit",
+        "sarcastic": "dry_wit",
+        "witty": "dry_wit",
+        "tars": "dry_wit",
+        "snarky": "dry_wit",
+        "humorous": "dry_wit",
+        "friday_partner": "friday_partner",
+        "Sharp Tech Partner": "friday_partner",
+        "friday": "friday_partner",
+        "tech partner": "friday_partner",
+        "sharp tech partner": "friday_partner",
+        "friday mode": "friday_partner",
+        "engineering partner": "friday_partner",
+        "co-pilot": "friday_partner",
+        "copilot": "friday_partner",
+        "socratic_mentor": "socratic_mentor",
+        "Socratic Coach & Tutor": "socratic_mentor",
+        "socratic": "socratic_mentor",
+        "socratic coach": "socratic_mentor",
+        "socratic tutor": "socratic_mentor",
+        "tutor": "socratic_mentor",
+        "mentor": "socratic_mentor",
+        "coach": "socratic_mentor",
+        "teacher": "socratic_mentor",
+        "feynman": "socratic_mentor",
+        "devils_advocate": "devils_advocate",
+        "No-Nonsense Critic": "devils_advocate",
+        "critic": "devils_advocate",
+        "no-nonsense critic": "devils_advocate",
+        "devil's advocate": "devils_advocate",
+        "devils advocate": "devils_advocate",
+        "red team": "devils_advocate",
+        "skeptic": "devils_advocate",
+        "challenger": "devils_advocate",
+        "calm_stoic": "calm_stoic",
+        "Calm & Grounded": "calm_stoic",
+        "calm": "calm_stoic",
+        "calm and grounded": "calm_stoic",
+        "stoic": "calm_stoic",
+        "calm stoic": "calm_stoic",
+        "quiet": "calm_stoic",
+        "gentle": "calm_stoic",
+        "low noise": "calm_stoic",
+        "zen": "calm_stoic",
+        "late night": "calm_stoic"
+      },
+      "desktop_found": true,
+      "phone_found": true,
+      "handler": "jarvis_settings_registry.set_personality",
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "named choice setting newly wired; setter test/proof still pending"
