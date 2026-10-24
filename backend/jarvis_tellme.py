@@ -319,7 +319,8 @@ PAGE_MAX_URL = 500
 
 #: "Tell me when a search shows something new" (2026-09-28). Once a day by
 #: default: a search leaves this PC for a search service (Brave's can cost
-#: money past its free credit), and "something new" on the web is rarely
+#: money past its free credit, and DeepSeek bills $0.75 per 1,000 searches),
+#: and "something new" on the web is rarely
 #: worth knowing within the hour. Every 6 hours at the most often, once a
 #: week at the least.
 SEARCH_MINUTES = 6 * 60
@@ -330,7 +331,7 @@ SEARCH_MAX_WORDS = 200
 #: Fingerprints of result addresses remembered, at most (newest first).
 SEARCH_KEEP = 200
 #: jarvis_search.PROVIDERS, written out so check_watch needs no import.
-SEARCH_PROVIDERS = ("searxng", "duckduckgo", "exa", "tavily", "brave")
+SEARCH_PROVIDERS = ("searxng", "duckduckgo", "exa", "tavily", "brave", "deepseek")
 
 #: "Tell me when the price on <url> drops below X" (2026-09-28): a page watch
 #: that reads one number. Hourly by default; the page's own floor and ceiling.
@@ -1050,7 +1051,7 @@ def _search_card_lines(w: dict, every: str) -> list:
         import jarvis_search as WS
         s = WS.settings()
         provider = s.get("provider")
-        label = WS.LABEL.get(provider or "", "no search")
+        label = WS.name(provider or "")
         p = WS.plan(w["words"], s=s)
         if provider == "searxng":
             where = (f"your SearXNG at {p.searxng_url or WS.DEFAULT_SEARXNG_URL}, which asks "
@@ -1064,6 +1065,10 @@ def _search_card_lines(w: dict, every: str) -> list:
             if provider == "brave":
                 where += (". Brave charges your payment card past its free monthly credit, "
                           "so this watch can cost money")
+            elif provider == "deepseek":
+                where += (". DeepSeek charges $0.75 for 1,000 searches, so a watch that "
+                          "runs often costs money - a search that finds nothing is not "
+                          "charged")
         else:
             where = label
     except Exception:

@@ -1128,6 +1128,42 @@ def set_web_search_provider(provider: str, *, peer=None, local=None) -> Outcome:
     return Outcome(True, WS.use(provider))
 
 
+def set_personality(personality: str, *, peer=None, local=None) -> Outcome:
+    """One of the eight personality presets (jarvis_manner.py, 2026-10-22).
+
+    Cardless by design, like the manner: it changes how Jarvis words things,
+    never what it does, asks, approves or remembers. An unknown name is refused
+    with the real ones, never guessed."""
+    try:
+        import jarvis_manner as MN
+    except Exception:
+        return _missing("\"the personality\"")
+    ok, said = MN.set_personality(personality)
+    if not ok:
+        return Outcome(False, said)
+    return Outcome(True, said)
+
+
+def _personality_choices() -> dict:
+    """Every spoken/typed name that really switches a preset -> its id.
+
+    Read FRESH from jarvis_manner (the same callable shape the voices row
+    uses), so a built-in renamed in the contract, or a saved "My Personalities"
+    preset, appears here without a second hand-typed list."""
+    try:
+        import jarvis_manner as MN
+        out = {}
+        for preset in MN.all_personalities():
+            for word in [preset["id"], preset.get("title") or ""] + list(
+                    preset.get("aliases") or []):
+                word = str(word or "").strip()
+                if word:
+                    out[word] = preset["id"]
+        return out
+    except Exception:
+        return {"warm": "warm_peer", "plain": "tactical_ops"}
+
+
 def set_manner(manner: str, *, peer=None, local=None) -> Outcome:
     try:
         import jarvis_manner as MN
@@ -2429,6 +2465,12 @@ CHOICE_SETTINGS: tuple = (
          "the voice jarvis speaks with", "the voice"),
         "voices", _voice_speaker_choices, set_voice_speaker,
         "which built-in voice Jarvis speaks with"),
+    ChoiceSetting(
+        "personality",
+        ("the personality", "the persona", "jarvis's personality",
+         "the character", "which personality"),
+        "manner", _personality_choices, set_personality,
+        "which of the eight personalities Jarvis speaks in (no card)"),
     ChoiceSetting(
         "focus_preset",
         ("the focus preset", "jarvis's preset", "the model preset",

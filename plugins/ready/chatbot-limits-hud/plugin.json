@@ -4,5 +4,5 @@
   "module": "jarvis_chatbot_limits",
   "install": "handler",
   "replaces_patch": "chatbot-limits-hud.patch",
-  "stack_order": 117
+  "stack_order": 118
 }

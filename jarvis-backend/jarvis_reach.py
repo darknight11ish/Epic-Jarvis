@@ -682,7 +682,8 @@ def _search_where(provider: Optional[str], url: str) -> str:
     try:
         import jarvis_search as WS
         hosts = {"duckduckgo": WS.DDG_HOST, "exa": host_of(WS.EXA_URL),
-                 "tavily": host_of(WS.TAVILY_URL), "brave": host_of(WS.BRAVE_URL)}
+                 "tavily": host_of(WS.TAVILY_URL), "brave": host_of(WS.BRAVE_URL),
+                 "deepseek": host_of(WS.DEEPSEEK_URL)}
     except Exception:
         hosts = {}
     if provider == "searxng":
@@ -714,7 +715,7 @@ def _web_search(ctx: Ctx) -> dict:
         return _row("web_search", name, "blocked", "", ASK_NA,
                     "Its settings file is damaged, so Jarvis searches nothing until it is "
                     "fixed in Settings, Web search.")
-    label = WS.LABEL.get(provider, provider)
+    label = WS.name(provider)
     key = ""
     if provider in WS.NEEDS_KEY:
         saved = (ctx.key_saved or WS.key_saved)(provider)

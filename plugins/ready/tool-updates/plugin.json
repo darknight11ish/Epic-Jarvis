@@ -4,5 +4,5 @@
   "module": "jarvis_tool_updates",
   "install": "handler",
   "replaces_patch": "tool-updates.patch",
-  "stack_order": 79
+  "stack_order": 80
 }

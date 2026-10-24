@@ -232,7 +232,7 @@ object SettingsSearch {
         ),
         Row(
             key = "web-search", title = "Web search",
-            label = "Search providers; SearXNG; DuckDuckGo; Exa; Tavily; Brave; API keys",
+            label = "Search providers; SearXNG; DuckDuckGo; Exa; Tavily; Brave; DeepSeek; API keys",
             quotes = listOf("Web search"),
             source = JUMP + listOf(PLATES + "WebSearchPlate.kt"),
         ),

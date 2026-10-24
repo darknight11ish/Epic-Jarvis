@@ -5,7 +5,7 @@
  *
  * What must hold:
  * - the "why use this one" lines are the PC's own words, word for word, and
- *   Settings shows all four, which one is in use, what stands in the way of
+ *   Settings shows all six, which one is in use, what stands in the way of
  *   each, and Whoogle's reason for being left out;
  * - ONE change per tap: choosing a provider sends that provider only;
  *   turning "Ask before every web search" off asks the PC (a card there)
@@ -54,7 +54,7 @@ const FAKE = "tv" + "ly-" + "page" + "0123456789";
 
 /* ── The words ────────────────────────────────────────────────────────── */
 
-await check("the four lines, the labels and Whoogle's reason are the PC's own words", async () => {
+await check("the six lines, the labels and Whoogle's reason are the PC's own words", async () => {
   assert.deepEqual([...PROVIDERS], CASES.providers);
   for (const p of PROVIDERS) {
     assert.equal(WHY[p], CASES.why[p], p);
@@ -170,7 +170,7 @@ async function settings(scenario, data = {}) {
 
 const PLAIN = { view: C.default, test: C.test_not_running.body };
 
-await check("Settings: five providers with the PC's lines, which is in use, Whoogle left out", async () => {
+await check("Settings: six providers with the PC's lines, which is in use, Whoogle left out", async () => {
   const page = await settings(PLAIN);
   const text = await page.locator("#web-search").innerText();
   const checked = await page.locator("#ws-providers input:checked").getAttribute("value");
@@ -179,7 +179,7 @@ await check("Settings: five providers with the PC's lines, which is in use, Whoo
   await page.close();
   for (const p of PROVIDERS) assert.ok(text.includes(CASES.why[p]), `missing the ${p} line`);
   assert.ok(text.includes(CASES.left_out[0].why), "Whoogle's reason");
-  assert.deepEqual(choices, ["searxng", "duckduckgo", "exa", "tavily", "brave"]);
+  assert.deepEqual(choices, ["searxng", "duckduckgo", "exa", "tavily", "brave", "deepseek"]);
   assert.match(text, /SearXNG is the default because/);
   assert.match(text, /Search with/i, "the choice lost its label");
   assert.match(text, /In use\. Ready\./);
@@ -282,7 +282,7 @@ await check("Settings: on a stale link every change and the test are greyed; the
   const test = await page.locator("#ws-test").isDisabled();
   const key = await page.locator('#ws-keys [data-key="tavily"] button', { hasText: "Save key" }).isDisabled();
   await page.close();
-  assert.ok(radios.length === 5 && radios.every(Boolean));
+  assert.ok(radios.length === 6 && radios.every(Boolean));
   assert.equal(ask, true);
   assert.equal(onOff, true, "the on/off switch is greyed on a stale link");
   assert.match(onOffTitle, /Waiting for the link/, "greyed with the reason, not silently");
