@@ -58,6 +58,12 @@ object PhotoReminder {
     const val PASSED = "That time has already passed - change the date or time."
     const val ADD_LABEL = "Add a Jarvis reminder"
     const val CLOSE_LABEL = "Close"
+
+    /** On a proposal that has already been added; the same words on the PC. */
+    const val ADDED = "(added)"
+
+    /** One proposal's words with the added flag on the end. */
+    fun addedWords(label: String): String = "$label $ADDED"
     const val READING = "Reading the words in the picture on your PC…"
     const val WORDS_READ = "Words read from the picture"
     const val WHAT_LABEL = "What"
@@ -146,6 +152,30 @@ object PhotoReminder {
         return listOfNotNull(NO_TIME.takeIf { !f.timeFound }, PASSED.takeIf { f.passed })
             .joinToString(" ").ifEmpty { null }
     }
+
+    /** One proposal as the dialog draws it: its [label], and whether it was added. */
+    data class Proposal(val found: Found, val label: String, val added: Boolean)
+
+    /** The words on one proposal's button: the date and time, then the title if it has one. */
+    fun label(f: Found): String =
+        (f.whenWords.ifEmpty { "${f.date} ${f.time}" }) +
+            (if (f.title.isNotEmpty()) " - ${f.title}" else "")
+
+    /**
+     * What identifies one proposal: the date and the time the PC found it at.
+     * The PC offers a given date and time once (`jarvis_photo_remind.py` drops
+     * a repeat), so this pair is what says "the boxes hold this proposal".
+     */
+    fun key(date: String, time: String): String = "${date.trim()} ${hhmm(time)}"
+
+    /**
+     * EVERY proposal the PC offered, with the added ones marked - never only
+     * the first. One tap sets one reminder, so the other dates on the same
+     * picture stay here to be added too (2026-10-16; before this, one add
+     * replaced the whole proposal with the PC's sentence and took the rest).
+     */
+    fun proposals(scan: Scan, added: Set<String>): List<Proposal> =
+        scan.found.map { f -> Proposal(f, label(f), key(f.date, f.time) in added) }
 
     /** What is wrong with the owner's boxes, or null when they can be sent. */
     fun problem(what: String, date: String, time: String): String? = when {
