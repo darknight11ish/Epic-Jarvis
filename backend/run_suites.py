@@ -332,6 +332,15 @@ _UNITTEST_SKIPPED = re.compile(r"skipped=(\d+)")
 #: its last four lines - see `_last_summary_line`.
 _SUMMARY_LINE = re.compile(r"^\s*\d+\s+(?:passed|failed)\b")
 
+#: The line a Python traceback ENDS on, matched at column 0 where Python writes
+#: it: `PermissionError: [WinError 5] Access is denied: ...`,
+#: `jarvis_backup.RestoreError: could not replace a file (PermissionError)`.
+#: The `Traceback (most recent call last):` header says only that something
+#: went wrong. Until 2026-10-25 that header was the whole of what a failed
+#: suite echoed - the reason itself is on stderr, one of these lines, and it
+#: was dropped, so a red CI run named the suite and never the cause.
+_EXC_LINE = re.compile(r"^[A-Za-z_][\w.]*(?:Error|Exception|Interrupt|Exit)\b.*$")
+
 
 def _last_summary_line(out: str) -> str:
     """The last line of `out` that carries a suite's own summary, or "".
@@ -788,7 +797,8 @@ def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
                     "and no summary - so nothing here proves that any check ran. A "
                     "check that cannot fail, one level up.")
     echo += ["      " + l for l in out.splitlines()
-             if l.startswith("FAIL") or "Traceback" in l or "failed:" in l]
+             if l.startswith("FAIL") or "Traceback" in l or "failed:" in l
+             or _EXC_LINE.match(l)]
     # One GitHub annotation is built from this line, and a spawn failure
     # carries the operating system's whole sentence. Capped so the suite's
     # name and its exit code are never pushed out of the annotation; the full

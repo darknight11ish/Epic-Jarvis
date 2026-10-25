@@ -199,6 +199,14 @@ ENVIRONMENT_SKIPS = {
 SUMMARY_LINE = re.compile(r"^\s*\d+\s+(?:passed|failed)\b", re.IGNORECASE)
 SKIP_SUMMARY = re.compile(r"\b(\d+)\s+skipped\b", re.IGNORECASE)
 
+#: The line a Python traceback ENDS on, at column 0 where Python writes it -
+#: `PermissionError: [WinError 5] Access is denied: ...`,
+#: `jarvis_backup.RestoreError: could not replace a file (PermissionError)`.
+#: See `exception_lines`: this is the half of a failure that a check reading
+#: only `stdout` never saw.
+TRACEBACK_EXCEPTION = re.compile(
+    r"^[A-Za-z_][\w.]*(?:Error|Exception|Interrupt|Exit)\b.*$")
+
 
 def relative(path: Path) -> str:
     try:
@@ -528,6 +536,23 @@ def skip_that_withholds_proof(suite: str, output: str) -> str | None:
     return None
 
 
+def exception_lines(text: str, limit: int = 2) -> list[str]:
+    """The line(s) a Python traceback ENDS on, from a suite's stderr.
+
+    `PermissionError: [WinError 5] Access is denied: '...'`,
+    `jarvis_backup.RestoreError: could not replace a file (PermissionError)`.
+    Python writes these to STDERR, and this check used to read `stdout` only, so
+    a failed suite was reported as `exited 1: Traceback (most recent call last):`
+    - the header, never the reason (2026-10-25). Matched at column 0, where
+    Python writes them; `limit` keeps the detail one readable line.
+    """
+    found: list[str] = []
+    for line in (text or "").splitlines():
+        if TRACEBACK_EXCEPTION.match(line) and line.strip() not in found:
+            found.append(line.strip())
+    return found[-limit:]
+
+
 def check_test(suite: str):
     """Run one suite. Exiting 0 is necessary, never sufficient: a suite that
     printed a skip about the code (not about this machine) did not run that
@@ -556,6 +581,11 @@ def check_test(suite: str):
         return True, f"{suite} exits 0"
     tail = [line for line in (done.stdout or "").strip().splitlines()[-3:]
             if line.strip()]
+    # And the reason itself, which is on stderr - `stdout` alone reports a
+    # failure as `Traceback (most recent call last):` and nothing else.
+    for line in exception_lines(done.stderr):
+        if line not in [t.strip() for t in tail]:
+            tail.append(line)
     return False, (f"{suite} exited {done.returncode}"
                    + (f": {' | '.join(tail)}" if tail else ""))
 
