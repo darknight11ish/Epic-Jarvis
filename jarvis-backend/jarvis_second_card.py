@@ -919,11 +919,178 @@ def _cards(fresh: bool = False) -> list:
         return []
 
 
+#: The two CARD roles in the owner's own words (architect ruling Q5,
+#: 2026-10-25). "Second card" stays the name of the FEATURE lane and of the
+#: route (/api/second-card) - these two labels are about the CARDS, so the
+#: app can say which card it means without the docs and the app disagreeing.
+#: Owner decision 2026-10-24 (MEMORY m-0095) is the reason this exists: after
+#: a reboot the app called the monitor card "second" and the everyday card
+#: "primary", which is the same two cards in the other order.
+CHAT_ROLE = "Chat card"
+SPARE_ROLE = "Spare card"
+
+#: Below this much free memory the chat card is KEPT HEADLESS: moving a
+#: monitor onto it would push the chat model off the card and slow every
+#: answer (architect ruling Q8, 2026-10-25). Measured on the owner's PC:
+#: 1,477 MiB free after the 21:14 reboot, and 83-211 MiB with the everyday
+#: model at its full 196,608-token context. So the advice to plug the
+#: monitors into the chat card is never given below this figure - and when
+#: Jarvis cannot read the free memory at all, it is not given either
+#: (measured or silent, CLAUDE.md).
+MONITOR_MOVE_FREE_MB = 2500
+
+
+def _short_name(name) -> str:
+    """The card's name without the maker's prefix: the owner reads "RTX 2060",
+    not "NVIDIA GeForce RTX 2060" (ruling Q5's own words)."""
+    out = str(name or "").strip()
+    for pre in ("NVIDIA GeForce ", "NVIDIA ", "GeForce "):
+        if out.startswith(pre):
+            out = out[len(pre):].strip()
+            break
+    return out or "a graphics card"
+
+
+def _card_value(card, key, default=None):
+    """One field from a card, whether it is a `jarvis_compute` Device (an
+    attribute) or one of this module's own plain dict rows."""
+    if card is None:
+        return default
+    if isinstance(card, dict):
+        got = card.get(key, default)
+    else:
+        got = getattr(card, key, default)
+    return default if got is None else got
+
+
+def _role_label(role: str, card) -> str:
+    """The owner's words for a card's job: "Chat card (RTX 2060 12 GB)" or
+    "Spare card (RTX 2080 SUPER 8 GB)" - the ruling's own two strings, built
+    from what nvidia-smi reports for THAT card, never from a fixed name, so a
+    different PC gets its own card in the brackets."""
+    total = _card_value(card, "total_mb")
+    gb = f" {_gb(total)}" if isinstance(total, int) and total > 0 else ""
+    return f"{role} ({_short_name(_card_value(card, 'name'))}{gb})"
+
+
+def _approved_spare(cards: list):
+    """The card the owner's own approved master switch was turned on for, or
+    None.
+
+    THE ROLE PIN (architect ruling Q5.2, 2026-10-25). Once the owner approves
+    the master switch, the card id saved with it IS the spare card for as long
+    as nvidia-smi still sees that id. A transient state after a reboot -
+    Ollama has no model loaded yet, so nothing can be READ, and the roles used
+    to be re-picked from the monitor rule - must never reassign the roles and
+    invalidate a switch that is still correct in the owner's terms. That is
+    exactly what happened at 21:14 on 2026-10-24.
+
+    None in every case where the answer would be a guess: no switch saved, a
+    switch saved before the card id was kept, the card is not in this PC any
+    more (REMOVED or REPLACED - re-approval must still happen then), or the
+    card that id names is no longer able to be the spare card.
+    """
+    try:
+        sw = _read_switches()
+    except Exception:
+        return None
+    want = str(sw.get("master_card") or "").strip().lower()
+    if not want:
+        return None
+    hit = next((c for c in cards
+                if (getattr(c, "uuid", "") or "").lower() == want), None)
+    if hit is None or _not_capable(hit) is not None:
+        return None
+    return hit
+
+
+#: The opening words of `_primary`'s first three rules - a READING of the
+#: machine, or the owner's own written choice - as opposed to rule 4, the last
+#: resort. Matched on the sentence `_primary` already returns rather than on a
+#: second copy of the rules, because that sentence is what the owner is shown
+#: and what the roles below are explained with.
+_EVIDENCE_PREFIXES = ("[compute] primary_gpu names", "you pinned this card",
+                      "Jarvis read the model")
+
+
+def _rule_is_evidence(rule: str) -> bool:
+    """Did `_primary` answer from a reading or from the owner's own choice
+    (rules 1-3), rather than from the last-resort fallback (rule 4)?
+
+    Used for one decision only: when the fallback has picked the card the
+    owner approved for the SPARE lane, the approval wins, because a guess must
+    never outrank a stored approval. A reading or the owner's chat-card pin
+    does outrank it - and then the honest sentence in `_master_stale_why` says
+    the switch is for a card that is not the spare one any more.
+    """
+    return str(rule or "").startswith(_EVIDENCE_PREFIXES)
+
+
+def _chat_card_by_size(cards: list) -> tuple:
+    """(the card everyday chat is kept on, the sentence saying why) when the
+    cards' own memory answers it - else (None, "").
+
+    WRITTEN, REVIEWED, AND NOT WIRED IN (2026-10-25), deliberately. Architect
+    ruling Q5.2's second point asks for this: with nothing loaded in Ollama
+    and no card pinned, the chat card is the capable card with the most
+    memory. It is here, and `_primary` does not call it, because it changes
+    which card the extra features run on for every PC whose spare card is
+    bigger than its chat card - the owner's own upgrade path, and exactly what
+    test_second_card.py's t_bigger_cards_by_band pins ("a 16/24/32 GB card
+    added as the spare"). MEASURED before wiring it in: 94 of that suite's 612
+    checks fail, and none of them by wording alone (a test-side traceback at
+    the first one, then the model/context numbers of the whole feature lane).
+
+    The defect the owner hit on 2026-10-24 is fixed by `_approved_spare` on its
+    own - the stored card id decides the roles - and that moves nothing for
+    anyone who has not approved a card yet. Wiring this in is the owner's
+    decision, with the suite updated to match it.
+    """
+    capable = [c for c in cards if _not_capable(c) is None]
+    if len(capable) < 2:
+        return None, ""
+    top = max(int(getattr(c, "total_mb", 0) or 0) for c in capable)
+    biggest = [c for c in capable if int(getattr(c, "total_mb", 0) or 0) == top]
+    if len(biggest) != 1 or top <= 0:
+        return None, ""
+    card = biggest[0]
+    why = (f"nothing is loaded in Ollama right now to read, so this is the card with the "
+           f"most memory ({top:,} MiB) - where the everyday model is kept - and it is not "
+           f"picked by its slot number")
+    return card, why
+
+
+def _monitor_move_words(chat_card) -> str:
+    """What to say about moving the monitors ONTO the chat card, as a clause
+    that starts with "; " - or "" when there is nothing honest to say.
+
+    Architect ruling Q8 (2026-10-25): never suggest it when the chat card has
+    less than `MONITOR_MOVE_FREE_MB` free, because the desktop and the panels
+    would push the chat model off the card. The old sentence ("plug the
+    monitors into the main card and it may fit") is what the owner read on
+    2026-10-24 while his chat card had 1,477 MiB free.
+    """
+    free = _card_value(chat_card, "free_mb")
+    if not isinstance(free, int):
+        return ""
+    if free < MONITOR_MOVE_FREE_MB:
+        return (f"; for the same reason the {_role_label(CHAT_ROLE, chat_card)} is kept "
+                f"headless: it had only {free:,} MiB free when this was read, so moving a "
+                f"monitor onto it would push the chat model off the card and slow every answer")
+    return (f"; moving the monitors onto the {_role_label(CHAT_ROLE, chat_card)} may leave "
+            f"room on this card, if you would rather do that")
+
+
 def _primary(cards: list) -> tuple:
     """(the card Jarvis treats as the everyday chat card, the sentence saying
     which rule chose it).
 
     FOUR RULES, in this order, and the sentence says which one was used:
+
+    (A FIFTH rule - the cards' own memory, `_chat_card_by_size` - is written
+    and deliberately NOT called: see that function's docstring for the
+    measurement that kept it out, and ruling Q5.2's point 2 for why it was
+    asked for. The stored approval below is what the 2026-10-24 defect needed.)
 
     1. `[compute] primary_gpu` in the owner's toml - his own hand-set
        override. Read first wherever it is set, and nothing here writes it
@@ -2090,6 +2257,37 @@ def _detect(fresh: bool) -> dict:
     seen = where_chat_runs({"cards": det_rows})
     seen_card = (seen.get("card") or {}).get("uuid") or ""
     pinned_here = bool(seen.get("pinned"))
+    # THE OWNER'S OWN APPROVAL DECIDES THE ROLES (architect ruling Q5.2,
+    # 2026-10-25). Once the master switch has been approved, the card id saved
+    # with it IS the spare card for as long as nvidia-smi still sees that card.
+    # This is what the 21:14 reboot of 2026-10-24 broke: before Ollama had
+    # loaded the chat model, the last-resort rule below picked the monitor card
+    # as the everyday card, which was the very card the owner had approved for
+    # the spare lane - so the switch looked stale and the learner stopped.
+    #
+    # Read once, BEFORE the roles are built, and it can only move the roles for
+    # a card id the owner himself approved. Nothing here guesses, and a card
+    # that is gone (removed or replaced) still demands re-approval, because
+    # `_approved_spare` answers None then.
+    approved = _approved_spare(cards)
+    if approved is not None and approved is prim and not _rule_is_evidence(rule):
+        # The last-resort rule picked the approved SPARE card and nothing was
+        # read or chosen to say otherwise: it is not the chat card. The chat
+        # card is the best of the cards that are left, by the same fallback
+        # rule, so the plan still has one card to be about.
+        others = [c for c in cards if c is not approved]
+        alt = None
+        if others:
+            try:
+                alt = compute.primary(others)[0] if compute is not None else None
+            except Exception:
+                alt = None
+            if alt is None:
+                alt = min(others, key=lambda d: d.index)
+        if alt is not None:
+            prim = alt
+            rule = (f"the card you turned the main switch on for ({approved.name}) is the spare "
+                    f"card, so everyday chat is planned on this one")
     # Is the card `_primary` chose for PLANNING the card the model was
     # OBSERVED on? `_primary` says which rule it used, in its own sentence,
     # so the test is on the rule and not only on the card: a card named by
@@ -2118,6 +2316,20 @@ def _detect(fresh: bool) -> dict:
     # only what is kept internally for a card beyond the first two.
     lanes = sorted(candidates, key=lambda d: (-d.total_mb, d.index))
     second = lanes[0] if lanes else None
+    # THE OWNER'S OWN APPROVAL PINS THE SPARE CARD (architect ruling Q5.2,
+    # 2026-10-25): while nvidia-smi still sees the card id saved with the
+    # master switch, it IS the spare card, whatever the sort above would say.
+    # A card that is gone answers None in `_approved_spare`, so a removed or
+    # replaced card still demands re-approval; and a card the owner has since
+    # pinned as the chat card (or one the model is really on) still wins, in
+    # which case the honest sentence in `_master_stale_why` says the switch is
+    # for a card that is not the spare one.
+    pinned_spare = None
+    if approved is not None and approved is not prim and approved is not second:
+        second = approved
+        lanes = [approved] + [c for c in lanes if c is not approved]
+    if approved is not None and approved is second:
+        pinned_spare = approved
     other_name = second.name if second is not None else "the second card"
     # The owner's own pin, when he has one (see `_primary`'s own rules).
     pinned_id = str(seen.get("pinned") or "")
@@ -2177,9 +2389,17 @@ def _detect(fresh: bool) -> dict:
                    "have restarted since you set the pin")
         elif c is second:
             role, why = "second", "the second-card features would run here"
+            if pinned_spare is not None and c is pinned_spare:
+                # The owner approved the main switch for this very card: say
+                # so, because that is the reason the role did not move even
+                # though a rule could have picked the other card today.
+                why += " (the card you turned the main switch on for, so it stays the spare card)"
             if c.display_active:
-                why += (" (a monitor is plugged into it, which uses some of its memory; "
-                        f"plug the monitors into the {other_name})")
+                # The estimate is unchanged; only the "move the cables" advice
+                # is gated now (ruling Q8, 2026-10-25): below 2,500 MiB free
+                # on the chat card, plugging a monitor into it is bad advice.
+                why += (" (a monitor is plugged into it, which uses some of its memory"
+                        f"{_monitor_move_words(prim)})")
         elif c in candidates:
             if c.total_mb < second.total_mb:
                 role, why = "unused", f"capable, but the {second.name} has more memory"
@@ -2203,18 +2423,18 @@ def _detect(fresh: bool) -> dict:
         s = _card_summary(second)
         if _is_small(second.total_mb):
             ok = [_BY_ID[f]["name"] for f in FEATURE_IDS
-                  if _small_card_refusal(f, second) is None]
+                  if _small_card_refusal(f, second, prim) is None]
             no = [_BY_ID[f]["name"] for f in FEATURE_IDS
-                  if _small_card_refusal(f, second) is not None]
-            why = (f"the {second.name} ({_gb(second.total_mb)}) can take some of the "
+                  if _small_card_refusal(f, second, prim) is not None]
+            why = (f"the {_role_label(SPARE_ROLE, second)} can take some of the "
                    f"extra-card features ({', '.join(ok) or 'none right now'}), which keeps "
-                   f"that work off the {prim.name}; it holds no more than the {prim.name}, so "
-                   f"{', '.join(no) or 'nothing else'} stay"
-                   f"{'s' if len(no) == 1 else ''} off; everyday chat stays on the "
-                   f"{prim.name}")
+                   f"that work off the {_role_label(CHAT_ROLE, prim)}; it holds no more than "
+                   f"the {_role_label(CHAT_ROLE, prim)}, so {', '.join(no) or 'nothing else'} "
+                   f"stay{'s' if len(no) == 1 else ''} off; everyday chat stays on the "
+                   f"{_role_label(CHAT_ROLE, prim)}")
         else:
-            why = (f"the {second.name} ({_gb(second.total_mb)}) can take the second-card "
-                   f"features; everyday chat stays on the {prim.name}")
+            why = (f"the {_role_label(SPARE_ROLE, second)} can take the second-card "
+                   f"features; everyday chat stays on the {_role_label(CHAT_ROLE, prim)}")
         return {"capable": True, "why": why, "primary": p, "second": s, "cards": rows,
                 "_second": second, "_lanes": lanes, "_third": third}
     if prim is not None and prim.total_mb >= 15360:
@@ -2327,6 +2547,24 @@ def _shows_monitor(card) -> bool:
     return bool(getattr(card, "display_active", False))
 
 
+def _chat_row(det: dict):
+    """The CHAT card's own row from a detect() answer - the one with its free
+    memory on it - or None.
+
+    `det["primary"]` is a three-key summary (uuid, index, name) with no memory
+    in it, and the monitor-cable advice needs the chat card's FREE memory
+    (ruling Q8, 2026-10-25). The rows in `det["cards"]` carry it, so this is
+    the same reading the rest of the answer is built from, not a second one.
+    """
+    want = str((det.get("primary") or {}).get("uuid") or "").strip().lower()
+    if not want:
+        return None
+    for row in det.get("cards") or []:
+        if str(row.get("uuid") or "").strip().lower() == want:
+            return row
+    return None
+
+
 def _room_gib(total_mb: int, monitor: bool) -> float:
     """What is left of a card for a model, in GiB, after the desktop's share
     and the owner's empty gap (the small-card plan's comment above)."""
@@ -2362,11 +2600,15 @@ def _small_vision_plan(total_mb: int, monitor: bool) -> tuple:
     return None, None, None
 
 
-def _small_card_refusal(feature: str, card) -> Optional[str]:
+def _small_card_refusal(feature: str, card, chat=None) -> Optional[str]:
     """Why `feature` cannot run on this card, in words - or None when it can.
     None for every card of 10 GiB and up (the full plan runs everything, as
     before this was written), so nothing about a 10/11/12 GB card moves. For an
-    8 GB card: the arithmetic in the small-card plan's comment above."""
+    8 GB card: the arithmetic in the small-card plan's comment above.
+
+    `chat` is the everyday chat card, used for ONE thing: the advice about
+    moving the monitors onto it (ruling Q8, 2026-10-25). Left out, or its free
+    memory unreadable, no such advice is given at all."""
     if card is None or not _is_small(card.total_mb):
         return None
     name = getattr(card, "name", "this card")
@@ -2390,7 +2632,7 @@ def _small_card_refusal(feature: str, card) -> Optional[str]:
                     f"{room:.1f} GB to spare after the desktop"
                     f"{' and the monitor plugged into it' if mon else ''}"
                     f" and a safety gap"
-                    + ("; plug the monitors into the main card and it may fit" if mon else ""))
+                    + (_monitor_move_words(chat) if mon else ""))
         return None
     # learning, wiki: the 8B model at the largest context that fits.
     model, _, _ = _small_8b_plan(card.total_mb, mon)
@@ -2413,7 +2655,7 @@ def _unsupported(feature: str, det: dict, card=None) -> Optional[str]:
     target = card if card is not None else (det.get("_prim_card") if det.get("_main") else det.get("_second"))
     if target is None or det.get("_main"):
         return None
-    return _small_card_refusal(feature, target)
+    return _small_card_refusal(feature, target, _chat_row(det))
 
 
 def _long_context_plan(total_mb: int, monitor: bool = False) -> tuple:
@@ -3070,12 +3312,18 @@ def _master_active_now(sw: dict, det: dict) -> bool:
 
 def _master_stale_why(sw: dict, det: dict) -> str:
     """In words, why the master switch is not being acted on when saved on,
-    or "" when active or off."""
+    or "" when active or off.
+
+    The wording is unchanged in what it PROMISES (the owner's choice is kept,
+    and nothing runs until he approves the card that is here now) and now
+    names the card by its role as well, so "this graphics card" can never read
+    as the card he approved (ruling Q5, 2026-10-25)."""
     if not sw.get("master") or not det.get("capable") or _master_active_now(sw, det):
         return ""
-    target = (det.get("second") or {}).get("name") or "this graphics card"
+    target = det.get("second") or {}
+    label = _role_label(SPARE_ROLE, target) if target.get("name") else "this graphics card"
     return (f"The main switch was turned on for a different graphics card. "
-            f"Your choice is kept, but nothing runs on the {target} until you approve "
+            f"Your choice is kept, but nothing runs on the {label} until you approve "
             f"turning it on for this card.")
 
 
@@ -3942,9 +4190,10 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
                f"'ollama pull {model}' in a terminal) and it starts working.")
     elif main:
         why = (f"Working: {model} in your everyday copy of Ollama, beside chat on the "
-               f"{det['second']['name']}, with room for {ctx:,} tokens of conversation.")
+               f"{_role_label(CHAT_ROLE, det['second'])}, with room for {ctx:,} tokens of "
+               f"conversation.")
     else:
-        why = (f"Working: {model} on the {det['second']['name']}, with room for "
+        why = (f"Working: {model} on the {_role_label(SPARE_ROLE, det['second'])}, with room for "
                f"{ctx:,} tokens of conversation.")
     return {"id": fid, "name": f["name"], "what": _what(f, det), "enabled": enabled,
             "active": active, "available": available, "needs": list(f["needs"]),
@@ -4407,7 +4656,17 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
     sw = sw if sw is not None else _read_switches()
     s = det.get("second") or det.get("primary") or {}
     p = det.get("primary") or {}
-    card = f"the {s['name']} ({_gb(s['total_mb'])})"
+    # The owner's own words for which card this is about (ruling Q5,
+    # 2026-10-25): "Spare card (RTX 2080 SUPER 8 GB)", built from the exact
+    # name and memory the driver reports, so the card he is approving is never
+    # in doubt.
+    spare_label = f"{_role_label(SPARE_ROLE, s)}" if s.get("name") else "the spare card"
+    # `det["primary"]` is a three-key summary with no memory in it, so the chat
+    # label is built from the card's own row (the same reading, not a second
+    # one): a label missing its "8 GB" would be a worse name than the one it
+    # replaced.
+    chat_src = _chat_row(det) or p
+    chat_label = f"{_role_label(CHAT_ROLE, chat_src)}" if p.get("name") else "the chat card"
     lane = (f"Jarvis uses only that card and listens on {HOST}:{_port()} — "
             f"this PC only, not your network or the internet.")
     if det.get("_main"):
@@ -4430,7 +4689,7 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
     else:
         lane += " Nothing leaves this PC."
     lane += _shares_with_big_model()
-    head = "Let Jarvis use the second graphics card?"
+    head = "Let Jarvis use the spare graphics card?"
     if det.get("_main"):
         if det.get("_plan"):
             head = (f"Let Jarvis run extra models beside chat on the {s['name']}, as the setup you "
@@ -4451,14 +4710,14 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
                    f"its own switch and its own card. Once one of them is on, {lane}")
         return (
             f"{head}\n\n"
-            f"Which card: {card}.\n\n"
+            f"Which card: {spare_label}.\n\n"
             f"{yes}\n\n"
             "If you did not just ask for this, say no.\n\n"
             f"If you say no: nothing changes. Everything keeps running on the "
-            f"{p.get('name', 'main card')}.")
+            f"{chat_label}.")
     f = _BY_ID[feature]
     if _model_free(feature):
-        return _describe_model_free(f, det, card, p)
+        return _describe_model_free(f, det, spare_label, p)
     model, ctx, gib = _feature_model(feature, det)
     mem = (f"about {gib:.1f} GB of the card's {_gb(s['total_mb'])}"
            + (" (an estimate: the picture model's size was not checked)"
@@ -4483,16 +4742,16 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
                  f"before, so {'it starts' if one else 'they start'} working again too, "
                  f"at once.")
     where = ("beside chat, on the same card" if det.get("_main")
-             else "on the second graphics card")
+             else f"on the {spare_label}")
     return (
         f"Turn on \"{f['name']}\" {where}?\n\n"
         f"What it does: {_what(f, det)}\n\n"
-        f"Which card: {card}.\n"
+        f"Which card: {spare_label}.\n"
         f"Which model: {model}, with room for {ctx:,} tokens - {mem}.\n\n"
         f"{lane}{inst}\n\n"
         "If you did not just ask for this, say no.\n\n"
         "If you say no: nothing changes. This keeps working the way it does today, on "
-        f"the {p.get('name', 'main card')}.")
+        f"the {chat_label}.")
 
 
 def _describe_model_free(f: dict, det: dict, card: str, primary: dict) -> str:
