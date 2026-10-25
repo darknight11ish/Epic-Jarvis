@@ -280,7 +280,7 @@ def t_what_it_saves():
     print(f"      (info) every tool but browser_control: {full} tokens; short list: {short} "
           f"(saves {full - short}, {round(100 * (full - short) / full)}%)")
     check("the short list is well under half of the full one", short * 2 < full)
-    check("the short list stays small (pinned: at most 1,450 tokens)", short <= 1450,
+    check("the short list stays small (pinned: at most 1,550 tokens)", short <= 1550,
           str(short))
     # Pinned 300 -> 325 on 2026-10-05, and here is exactly why, because a pin
     # is a decision: `read_web_page` (jarvis_readpage.py, JARVIS-API section
@@ -300,6 +300,19 @@ def t_what_it_saves():
     # more_tools +20 (321 -> 341) and the short list +20 (1421 -> 1441, still
     # inside that one's 1,450). This is the note
     # test_agent_retirement_wiring.py's own 325 pin points at.
+    # Pinned 1450 -> 1550 on 2026-10-25, by the same rule and written down for
+    # the same reason: `memory_search` gained a "Use when / Do NOT use when"
+    # pair (D7, the live campaign of 2026-10-25 - the tool was never called in
+    # that campaign's 24 model-tools turns, and the answers it cost were a
+    # calculation "worked out" from nowhere and a question about the owner's
+    # dog answered from a web search that found nothing). Measured with this
+    # module's own estimate_tokens rule on this tree: the pair takes
+    # `memory_search` from 100 to 168 and the short list from 1443 (the tree it
+    # was branched from) to 1511, so the old 1450 had 7 tokens of room - not
+    # enough to add a cue at all. 1550 leaves 39 tokens spare rather than 7.
+    # `test_tool_text.py` raised its own MEASURED_BUDGET 2600 -> 2700 for the
+    # same pair in the same change; its note carries the campaign evidence.
+    # The cost is paid only with `[tools] short_list = true`, which ships OFF.
     check("more_tools itself stays small (at most 345 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
           <= 345)
