@@ -897,6 +897,28 @@ await check("CONTROL: the sharpness check still holds when the first frames come
     `shader renders ${got.gpupx}px into a ${got.css}px box at ${got.dpr}x`);
 });
 
+await check("display mode marks the document, which is how the HUD knows the real face arrived", async () => {
+  // 2026-10-25: a plain browser's HUD asks the web server for this page and
+  // uses this class as its success test - the orb stays up for anything that
+  // is not the real page (a 404 body, an error page, about:blank), and this
+  // marker is what tells the two apart. `bootDisplay` adds it before the
+  // frame's load event, which is exactly when the HUD looks.
+  const page = await browser.newPage({ viewport: { width: 420, height: 420 } });
+  await page.goto(`${base}/faces.html?mode=display&feed=parent`, { waitUntil: "commit" });
+  await page.waitForFunction(
+    () => document.documentElement.classList.contains("display-mode"),
+    null, { timeout: 30000 });
+  const state = await page.evaluate(() => ({
+    marked: document.documentElement.classList.contains("display-mode"),
+    face: document.documentElement.dataset.hudFace || "",
+    canvas: Boolean(document.getElementById("display-canvas")),
+  }));
+  await page.close();
+  assert.equal(state.marked, true, "display mode did not mark the document");
+  assert.equal(state.face, "ready", "display mode did not finish booting");
+  assert.equal(state.canvas, true, "display mode did not build the face canvas");
+});
+
 await check("the Widget's face slows to 10 redraws a second under reduced motion", async () => {
   // The editor paces itself to CALM_HZ when the OS asks for less motion;
   // display mode (the Widget's face, and the HUD's) used to run at the
