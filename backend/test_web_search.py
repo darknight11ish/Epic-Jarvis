@@ -1055,7 +1055,16 @@ def t_settings_and_the_card_to_ask_less():
     check("... and changing another setting does not quietly pick a provider",
           WS.settings()["provider"] is None and WS.plan("x").state == "settings_damaged",
           WS.settings())
-    code, out = WS.handle_settings({"provider": "duckduckgo"})
+    # D8 (2026-10-25): choosing a provider now TESTS it first and keeps the
+    # old one if the test fails - so this check stubs the test as working.
+    # `t_choosing_a_provider_tests_it_first` below proves the refusing half.
+    real_test = WS.live_test
+    WS.live_test = lambda provider, *, s=None: {"ok": True, "results": 5,
+                                                "provider": provider, "tested": True}
+    try:
+        code, out = WS.handle_settings({"provider": "duckduckgo"})
+    finally:
+        WS.live_test = real_test
     check("... choosing one rewrites it", code == 200 and WS.settings()["provider"] == "duckduckgo"
           and WS.settings()["why"] == "")
     reset()
@@ -1594,11 +1603,27 @@ def t_which_search_without_the_model():
           and "No DeepSeek Search key" in r.reply, r.reply)
     r = Q.answer("why searxng", sched=_Sched())
     check("\"why SearXNG?\" says why it is the default", WS.DEFAULT_WHY in r.reply)
-    with NoSockets() as ns:
+    # D8 (2026-10-25): choosing a provider now TESTS it first, so this one
+    # really does send one search for the fixed test word - the switch's own
+    # words are what is under test here, so the test result is stubbed as
+    # working. t_choosing_a_provider_tests_it_first_and_keeps_the_old_one
+    # proves the refusing half; the no-socket guarantee is kept where it can
+    # be, and checked just below with a key that is missing.
+    real_test = WS.live_test
+    WS.live_test = lambda provider, *, s=None: {"ok": True, "results": 5,
+                                                "provider": provider, "tested": True}
+    try:
         r = Q.answer("use duckduckgo for web search", sched=_Sched())
-    check("\"use DuckDuckGo for web search\" switches at once, and searches nothing",
-          WS.settings()["provider"] == "duckduckgo" and not ns.tried and "DuckDuckGo" in r.reply,
-          r.reply)
+    finally:
+        WS.live_test = real_test
+    check("\"use DuckDuckGo for web search\" switches, and says so",
+          WS.settings()["provider"] == "duckduckgo" and "DuckDuckGo" in r.reply, r.reply)
+    FakeStore.DATA.clear()
+    with NoSockets() as ns:
+        r = Q.answer("use exa for web search", sched=_Sched())
+    check("a provider whose key is missing is not tested, so nothing is sent",
+          WS.settings()["provider"] == "exa" and not ns.tried and "No Exa key" in r.reply,
+          (r.reply, ns.tried))
     body = {"messages": [{"role": "user", "content": "use brave for web search",
                           "provenance": "pasted"}]}
     check("only the owner's own words switch it (a pasted one goes to the model)",
@@ -1712,6 +1737,100 @@ def t_both_apps_read_the_current_contract():
           "(python3 tools/gen_web_search_cases.py)", r.returncode == 0, r.stdout + r.stderr)
 
 
+# --------------------------------------------------------------------------
+#   6b. D8 - the picture says what the last LIVE test said, and a switch is
+#       tested before it is made (the live campaign of 2026-10-25)
+# --------------------------------------------------------------------------
+
+def _ddg_row():
+    return next(p for p in WS.view()["providers"] if p["id"] == "duckduckgo")
+
+
+def t_the_picture_says_what_the_last_live_test_said():
+    reset()
+    saved = WS._ddgs_installed
+    WS._ddgs_installed = lambda: True
+    try:
+        row = _ddg_row()
+        check("DuckDuckGo installed but never tested is NOT ready (D8: it used to be)",
+              row["ready"] is False and row["state"] == "untested"
+              and "not tested" in row["said"] and row["at_risk"] is True, row)
+        check("...and readiness() itself is unchanged, so a search is never blocked by it",
+              WS.readiness("duckduckgo") == ("", ""), WS.readiness("duckduckgo"))
+        WS.record_test("duckduckgo", False, "no_results")
+        row = _ddg_row()
+        check("after a live test that found nothing, the picture says so, and when",
+              row["ready"] is False and row["state"] == "at_risk"
+              and "did not work" in row["said"] and "no results" in row["said"]
+              and row["last_test"]["ok"] is False and row["last_test"]["when"], row)
+        check("...and it offers the one that works, from the module's own words",
+              "SearXNG" in row["said"], row["said"])
+        WS.record_test("duckduckgo", True, "works", 5)
+        row = _ddg_row()
+        check("after a live test that worked, it is ready again",
+              row["ready"] is True and row["state"] == "" and row["at_risk"] is False
+              and row["last_test"]["ok"] is True and row["last_test"]["results"] == 5, row)
+    finally:
+        WS._ddgs_installed = saved
+    check("a provider's own readiness still wins (Exa with no key is not 'ready')",
+          next(p for p in WS.view()["providers"] if p["id"] == "exa")["state"] == "key_missing")
+    check("SearXNG is still the default", WS.DEFAULT_PROVIDER == "searxng"
+          and WS.view()["default"] == "searxng")
+    rec = WS.last_test("duckduckgo")
+    check("the record holds a result and a time - never search words, never a key",
+          set(rec) == {"ok", "state", "results", "at"}, rec)
+    check("it is kept on disk beside the settings, so a restart does not forget it",
+          json.loads(WS.last_test_path().read_text(encoding="utf-8"))["duckduckgo"]["ok"] is True)
+    WS.forget_last_tests()
+    check("...and it can be dropped", WS.last_test("duckduckgo") is None)
+
+
+def t_choosing_a_provider_tests_it_first_and_keeps_the_old_one():
+    reset()
+    real = WS.live_test
+    saved = WS._ddgs_installed
+    calls = []
+
+    def failing(provider, *, s=None):
+        calls.append(provider)
+        return {"ok": False, "state": "no_results",
+                "error": "DuckDuckGo sent back no results.",
+                "offer": 'Switch web search to SearXNG (on this PC)? Say "use SearXNG for web '
+                         'search".', "tested": True}
+
+    def working(provider, *, s=None):
+        calls.append(provider)
+        return {"ok": True, "state": "works", "results": 5, "provider": provider,
+                "tested": True}
+    WS._ddgs_installed = lambda: True
+    try:
+        WS.live_test = failing
+        code, out = WS.handle_settings({"provider": "duckduckgo"})
+        check("a switch whose test fails keeps the old provider",
+              code == 200 and out["ok"] is False and WS.settings()["provider"] == "searxng"
+              and calls == ["duckduckgo"], (code, out, WS.settings()))
+        check("...and says why, and that nothing changed",
+              "no results" in out["said"] and "still uses SearXNG" in out["said"], out.get("said"))
+        check("...and offers the one that works", "SearXNG" in out.get("offer", ""), out)
+        calls.clear()
+        WS.live_test = working
+        code, out = WS.handle_settings({"provider": "duckduckgo"})
+        check("a switch whose test works goes through, tested first",
+              code == 200 and out["ok"] is True and WS.settings()["provider"] == "duckduckgo"
+              and calls == ["duckduckgo"], (code, out, calls))
+        calls.clear()
+        code, out = WS.handle_settings({"provider": "duckduckgo"})
+        check("choosing the one already in use tests nothing", calls == [], calls)
+        FakeStore.DATA.clear()
+        code, out = WS.handle_settings({"provider": "exa"})
+        check("a missing key is not a test: it is chosen, and says what is missing",
+              code == 200 and WS.settings()["provider"] == "exa" and "No Exa key" in out["said"],
+              out.get("said"))
+    finally:
+        WS.live_test = real
+        WS._ddgs_installed = saved
+
+
 if __name__ == "__main__":
     for fn in (t_the_why_lines, t_both_apps_say_the_same_words,
                t_plan_opens_no_socket_and_refuses_a_secret,
@@ -1723,6 +1842,8 @@ if __name__ == "__main__":
                t_deepseek_parser_errors_and_no_key,
                t_the_keys_stay_on_the_pc,
                t_duckduckgo_only_and_paced, t_settings_and_the_card_to_ask_less,
+               t_the_picture_says_what_the_last_live_test_said,
+               t_choosing_a_provider_tests_it_first_and_keeps_the_old_one,
                t_test_search_reports_plainly, t_no_card_for_the_owners_own_question,
                t_a_card_when_private_things_could_slip_in, t_only_a_person_s_yes_runs_it,
                t_refusals_that_never_ask, t_recalled_memory_is_read_off_the_facts_block,
