@@ -777,36 +777,254 @@ def t_the_free_answer_is_allowed_to_have_no_body_at_all():
           str((out, seen)))
 
 
+class _Clock:
+    """A clock the test moves, so a ten-minute wait costs a few hundred steps.
+
+    The WAIT is what this test is about - the route must give a real draw the
+    time it needs and stop at the wait it says it uses - so the clock is moved
+    forward instead of the test sleeping, and the REAL ``ComfyUI.draw`` and
+    ``free_models`` run against a stand-in for the drawing program.
+    """
+
+    def __init__(self):
+        self.now = 0.0
+        self.slept = 0.0
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += float(seconds)
+        self.slept += float(seconds)
+
+
+class _Answer:
+    """The context manager ``urllib.request.urlopen`` hands back."""
+
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self.body
+
+
+def draw_on_a_clock(runtime, *, finish_at=None):
+    """Run the REAL ``ComfyUI.draw`` on a clock this test owns.
+
+    ``finish_at`` is the fake second at which the stand-in program reports the
+    picture done; ``None`` means the job never finishes at all. Answers
+    ``(clock, piece, raised)``: the clock, the Piece the real draw built, and
+    the exception it raised instead, whichever happened.
+    """
+    clock = _Clock()
+    real_time, real_urlopen = P.time, P.urllib.request.urlopen
+
+    def json_call(path, payload=None, *, method=None, timeout=None,
+                  allow_empty=False):
+        if path == "/prompt":
+            return {"prompt_id": "p1"}
+        if finish_at is not None and clock.now >= finish_at:
+            return {"p1": {"outputs": {"9": {"images": [{"filename": "a.png"}]}}}}
+        return {}
+
+    runtime._json = json_call
+    # The graph is not what is under test here (other tests cover it); the wait
+    # around it is. A one-line stand-in keeps the two apart.
+    runtime._workflow = lambda prompt, settings: (
+        {}, {"steps": 1, "width": 64, "height": 64, "guidance": 1.0})
+    P.time = clock
+    P.urllib.request.urlopen = lambda url, timeout=None: _Answer(PNG)
+    try:
+        return clock, runtime.draw("a red panda", settings={}), None
+    except Exception as exc:
+        return clock, None, exc
+    finally:
+        P.time, P.urllib.request.urlopen = real_time, real_urlopen
+
+
 def t_the_route_waits_long_enough_for_a_real_draw():
-    """Source pins for the three defects found on 2026-10-25."""
-    src = (HERE / "jarvis_pictures.py").read_text(encoding="utf-8")
+    """The three defects found on 2026-10-25, measured at the seams that run.
+
+    Every check calls the real function with the drawing program stood in for
+    and asserts on what it RECEIVED - none of it reads the module's source
+    text, so a rename or a rewrite that keeps the behaviour keeps this green,
+    and a change that breaks the behaviour turns it red.
+
+    The measured case behind the wait: a real Chroma1-HD picture on this PC
+    took a median of 274.4 s, and the old cap was
+    ``max(60, self.timeout * 12)`` = 120 s - it refused the very draw the
+    feature exists for.
+    """
     check("the wait covers a real measured draw (>= 600 s)",
           P.DRAW_WAIT_S >= 600.0, str(P.DRAW_WAIT_S))
-    check("... the old max(60, timeout * 12) cap is gone",
-          "max(60.0, self.timeout * 12)" not in src, "old cap still in source")
-    check("... and the wait uses DRAW_WAIT_S",
-          "max(DRAW_WAIT_S, self.timeout * 12)" in src,
-          "the wait is not the measured one")
-    check("ComfyUI is asked to free its models (its own /free)",
-          '"/free"' in src and "def free_models" in src, "no /free call")
+
+    # 1. The OLD cap is gone: a draw still running after 200 s is waited for.
+    #    120 s was the old ceiling, so 200 s is past it by a wide margin.
+    clock, piece, raised = draw_on_a_clock(P.ComfyUI("http://127.0.0.1:8188"),
+                                           finish_at=200.0)
+    check("a draw still running after 200 s is waited for, not given up on "
+          "(the old 120 s cap is gone)",
+          piece is not None and piece.png == PNG and clock.slept >= 200.0,
+          str((clock.slept, raised)))
+
+    # 2. The wait IS max(DRAW_WAIT_S, self.timeout * 12), measured twice: the
+    #    module's own constant for a default adapter, and the adapter's own
+    #    12x timeout when THAT is the longer of the two.
+    gave_up, _, stopped = draw_on_a_clock(P.ComfyUI("http://127.0.0.1:8188"),
+                                          finish_at=None)
+    check("... and a job that never finishes ends at DRAW_WAIT_S, not for ever",
+          isinstance(stopped, P.DrawingFailed)
+          and P.DRAW_WAIT_S <= gave_up.slept <= P.DRAW_WAIT_S + 2.0,
+          str((gave_up.slept, stopped)))
+    slow, _, _ = draw_on_a_clock(P.ComfyUI("http://127.0.0.1:8188", timeout=100.0),
+                                 finish_at=None)
+    check("... and a slower adapter gets its own 12x timeout when that is longer",
+          slow.slept > P.DRAW_WAIT_S
+          and 1200.0 <= slow.slept <= 1202.0, str(slow.slept))
+
+    # 3. ComfyUI is asked to let go of its models on its OWN route, with the
+    #    release payload, and the empty answer that route sends is accepted
+    #    rather than parsed as JSON.
+    rt = P.ComfyUI("http://127.0.0.1:8188")
+    asked = []
+    readings = [{"devices": [{"torch_vram_total": 3 * 1024 ** 3}]},
+                {"devices": [{"torch_vram_total": 0}]}]
+
+    def spy(path, payload=None, *, method=None, timeout=None,
+            allow_empty=False):
+        asked.append({"path": path, "payload": payload,
+                      "empty_ok": allow_empty, "timeout": timeout})
+        if path == "/free":
+            return {}
+        return readings.pop(0) if readings else {
+            "devices": [{"torch_vram_total": 0}]}
+
+    rt._json = spy
+    real_time = P.time
+    P.time = _Clock()
+    try:
+        freed = rt.free_models()
+    finally:
+        P.time = real_time
+    check("ComfyUI is asked to free its models on its own /free, with the "
+          "release payload",
+          bool(asked) and asked[0]["path"] == "/free"
+          and asked[0]["payload"] == {"unload_models": True,
+                                      "free_memory": True}, str(asked[:1]))
     check("... and its empty answer is accepted, not parsed as JSON",
-          "allow_empty=True" in src, "the empty-body answer would fail again")
-    check("... and the card is really free before the chat comes back",
-          "FREE_WAIT_S" in src and '"/system_stats"' in src
-          and "torch_vram_total" in src, "no release wait")
-    check("the warm-back runs in a finally, never only on success",
-          "finally:" in src and "back = step_back(plan)" in src,
-          "no finally restore")
-    check("the make route no longer refuses a phone's confirm",
-          "pc_only=pc_only)" not in src and "PC_ONLY_SWAP_WORDS" not in src,
-          "the old phone refusal is still wired")
-    check("... while changing the folder or program is still the PC's alone",
-          "if not pc_only:" in src, "the settings PC-only check is gone")
-    check("... and only one picture can be drawn at a time",
-          "_DRAW_IN_FLIGHT" in src and "STILL_DRAWING_WORDS" in src,
-          "no one-draw-at-a-time guard")
-    check("the two-request consent key is the one the apps may pin",
-          '"free_card"' in src and '"needs"' in src, "no consent key")
+          bool(asked) and asked[0]["empty_ok"] is True
+          and all(not a["empty_ok"] for a in asked[1:]), str(asked))
+    check("... and it is given FREE_WAIT_S to let go",
+          bool(asked) and asked[0]["timeout"] == P.FREE_WAIT_S, str(asked[:1]))
+    check("... and the card is read from its own /system_stats until it is "
+          "really free",
+          freed.get("ok") is True and freed.get("held_bytes") == 0
+          and len(asked) >= 2 and asked[1]["path"] == "/system_stats"
+          and len([a for a in asked if a["path"] == "/system_stats"]) >= 2,
+          str((freed, asked)))
+
+    # 4. The warm-back runs in a FINALLY, never only on success: a draw that
+    #    CRASHES (a real bug, not a DrawingFailed) still brings the chat back,
+    #    and the answer carries the times step_back itself returned.
+    class Crash(StubRuntime):
+        def draw(self, prompt, *, seed=None, settings=None):
+            raise RuntimeError("a crash the route did not expect")
+
+    folder = tmpdir()
+    events = []
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    use_plan(SWAP_PLAN)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 1.0,
+                                 "words": "The chat stepped aside."}
+
+    def back(plan):
+        events.append("back")
+        return {"ok": True, "did": True, "seconds": 9.0,
+                "words": "The chat was back after 9.0 seconds."}
+
+    P.step_back = back
+    P.record_measurement = lambda plan, piece: None
+    try:
+        code, out = make(settings_for(folder), json.dumps(
+            {"prompt": "a red panda", "free_card": True}).encode(),
+            runtime=Crash("x"))
+    finally:
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+    check("the warm-back runs in a finally: a draw that CRASHES still brings "
+          "the chat back", events == ["back"] and code == 502,
+          str((code, events)))
+    check("... and the answer carries the times step_back itself returned",
+          out.get("card", {}).get("chat_back_seconds") == 9.0
+          and out.get("card", {}).get("chat_back") is True,
+          str(out.get("card")))
+
+    # 5. The make route no longer refuses a phone's confirm - it draws. The
+    #    SETTINGS route is still this PC's alone, because where pictures are
+    #    kept and which program draws them is this PC's own configuration.
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    use_plan(SWAP_PLAN)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 1.0,
+                                 "words": "The chat stepped aside."}
+    P.step_back = lambda plan: {"ok": True, "did": True, "seconds": 2.0,
+                                "words": "The chat was back."}
+    P.record_measurement = lambda plan, piece: None
+    phone_stub = StubRuntime("x")
+    try:
+        code, out = P.handle_post(
+            "/api/pictures", {"prompt": "a cat", "free_card": True},
+            settings=settings_for(tmpdir()), runtime=phone_stub, pc_only=False)
+    finally:
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+    check("the make route no longer refuses a phone's confirm: it draws",
+          code == 200 and out.get("ok") is True and not out.get("pc_only")
+          and bool(phone_stub.asked), str(out)[:200])
+    refused = []
+    for change in ({"action": "folder", "folder": str(tmpdir("phone-folder"))},
+                   {"action": "runtime", "runtime": "sd_cpp"}):
+        code, out = P.handle_post("/api/pictures/settings", change,
+                                  settings=settings_for(tmpdir()), pc_only=False)
+        refused.append((code, out.get("pc_only")))
+    check("... while changing the folder or the program is still the PC's alone",
+          refused == [(403, True), (403, True)], str(refused))
+
+    # 6. One picture at a time, guarded by the module's OWN lock: take it and
+    #    the second request is a sentence, and nothing is drawn.
+    held = P._DRAW_IN_FLIGHT.acquire(blocking=False)
+    try:
+        code, out = make(settings_for(tmpdir()),
+                         json.dumps({"prompt": "a cat"}).encode(),
+                         runtime=StubRuntime("x"))
+    finally:
+        # `locked()` rather than the flag alone: a module that releases a lock
+        # it never took must be REPORTED as a failed check, not crash the suite
+        # with a traceback and hide the checks after this one.
+        if held and P._DRAW_IN_FLIGHT.locked():
+            P._DRAW_IN_FLIGHT.release()
+    check("... and only one picture can be drawn at a time: the module's own "
+          "lock refuses the second with its own sentence",
+          held and code == 409 and out.get("needs") == "drawing"
+          and out.get("error") == P.STILL_DRAWING_WORDS, str(out)[:200])
+
+    # 7. The two-request consent key the apps may pin: needs=free_card, and a
+    #    confirm instruction that carries it.
+    use_plan(SWAP_PLAN)
+    try:
+        code, out = make(settings_for(tmpdir()), json.dumps(
+            {"prompt": "a cat"}).encode(), runtime=StubRuntime("x"))
+    finally:
+        reset_plan()
+    check("the two-request consent key the apps may pin is needs=free_card and "
+          "confirm={free_card: true}",
+          code == 409 and out.get("needs") == "free_card"
+          and out.get("confirm") == {"free_card": True}, str(out)[:200])
 
 
 # ---------------------------------------------------------------------------
