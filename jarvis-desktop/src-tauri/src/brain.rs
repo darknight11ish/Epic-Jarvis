@@ -83,6 +83,16 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 /// keeps `WRITE_TIMEOUT`.
 const REPEAT_EDIT_TIMEOUT: Duration = Duration::from_secs(1_200);
 
+/// ONE drawing (the owner's Image mode, 2026-10-24). A real local draw on this
+/// PC was measured at **274 s**: the picture program loads its model onto the
+/// 12 GB card and draws, and after the owner says yes the everyday chat is
+/// stepped aside and loaded back too. `WRITE_TIMEOUT` would give up on a
+/// picture that is still coming, so this is the one budget the make call uses;
+/// every other pictures command keeps `WRITE_TIMEOUT`. The same ceiling as
+/// `REPEAT_EDIT_TIMEOUT`, and for the same shape of reason - something on the
+/// far side is allowed to take minutes, not seconds.
+const PICTURE_TIMEOUT: Duration = Duration::from_secs(1_200);
+
 // ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------

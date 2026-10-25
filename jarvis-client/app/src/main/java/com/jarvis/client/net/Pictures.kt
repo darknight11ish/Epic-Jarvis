@@ -1,9 +1,11 @@
 package com.jarvis.client.net
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -39,6 +41,17 @@ import java.util.Locale
  * owner typed — the same shape as a timer or a note. Drawing one is still
  * held on a stale link (rule 4), because it does write something.
  *
+ * **THE CARD SWAP IS TWO REQUESTS, AND THE FIRST ONE DRAWS NOTHING** (added
+ * 2026-10-25). The 12 GB card holds the everyday chat and a draw needs it, so
+ * the first `POST` answers `409 needs: "free_card"` with the PC's own sentence
+ * and minutes. The owner's tap sends the same body plus `free_card: true` -
+ * ONE long request ([CONFIRM_TIMEOUT_S]) that steps the chat aside, draws,
+ * releases the drawing model and loads the chat back. EITHER app may confirm
+ * it: the owner's decision of 2026-10-24, in their own words *"i would like to
+ * be able to approve this from my phone as well"*. A PC that is still on the
+ * older rule answers the phone's confirm with `403 pc_only`; that is shown as
+ * it is ([PicturesAnswer.OldPc]), never as a bad token and never retried.
+ *
  * **THE PHONE CANNOT CHANGE THE SWITCH, THE PROGRAM OR THE FOLDER.** Those
  * are the PC's own business and the backend refuses them from anywhere else
  * (`pc_only`). This file has no field for them at all, so there is nothing to
@@ -63,6 +76,48 @@ object Pictures {
 
     /** The PC's own cap on a prompt; the phone refuses above it rather than sending. */
     const val MAX_PROMPT = 2000
+
+    /**
+     * The phone's own name for this feature, in the owner's words ("image
+     * mode"): a small heading on the one screen that has it, so the owner can
+     * find it by the name they use. NOT a switch and not a second entry - the
+     * switch is the PC's (`settings.pictures`, PC-only on purpose) and the
+     * gallery is already `brain.projects.pictures` in both apps. Added
+     * 2026-10-25 because the owner asked for the image mode to be easy to find
+     * on the phone.
+     */
+    const val IMAGE_MODE = "Image mode"
+
+    /**
+     * How long a picture request may say NOTHING before the phone gives up:
+     * 1,200 s. It is ONE long request - the PC sets the everyday chat aside,
+     * draws, makes the drawing program release its models and loads the chat
+     * back, and answers only at the end. Measured on this PC: **500.1 s** wall
+     * clock for the phone path (draw 382.0 s) and 405.8 s for the desktop's;
+     * the PC's own bound is `DRAW_WAIT_S` (600) + `FREE_WAIT_S` (180) + the
+     * warm-back, about 14 minutes, so 1,200 s is that bound plus a margin. A
+     * READ timeout measures silence, not the whole call, so a draw that is
+     * quietly working is never cut off - and it is never re-sent: see
+     * [TIMED_OUT_MAKE].
+     *
+     * BOTH make requests use it, not only the confirming one. The first
+     * request is not always the quick 409 question: when the everyday chat is
+     * NOT holding the card, the PC draws inside that first request (its
+     * `handshake_plan` answers needs=False), and a measured draw is 381-383 s
+     * on this PC - so the first request needs the same long budget.
+     */
+    const val CONFIRM_TIMEOUT_S = 1_200L
+
+    /**
+     * The phone's ONE added line when an OLDER PC answers a confirm with `403
+     * pc_only` (the rule before the owner's 2026-10-24 decision). The PC's own
+     * sentence is shown first, word for word; this says why it refused and
+     * what to do. Never a code, never a retry.
+     */
+    const val OLD_PC_WORDS =
+        "This PC's Jarvis is older than this phone and needs the newer Jarvis before the " +
+            "phone can set the chat aside. Update Jarvis on the PC by running " +
+            "apply-patches.ps1 there, then ask again."
 
     /**
      * The screens' own words, both apps, word for word. Every OTHER sentence
@@ -91,6 +146,16 @@ object Pictures {
         "show" to "Show",
         "show_title" to "Lift Hide memory lists for this screen",
         "still_hidden" to "Still hidden - turn off App lock, or turn off Hide memory lists, to see your pictures.",
+        // The PC's 409 question and the owner's two answers to it (2026-10-25).
+        // "(about N minutes)" is added from the PC's own estimate, never guessed.
+        "set_aside" to "Set the chat aside and draw",
+        "set_aside_no" to "Not now",
+        "set_aside_stopped" to "Nothing was drawn - your everyday chat stays where it is.",
+        // The one long confirm request timed out on THIS phone. Never a claim
+        // about the PC's state: it may well be drawing.
+        "timed_out" to ("This phone stopped waiting for your PC before the answer came. " +
+            "Your PC may still be drawing the picture and putting your chat back, so it " +
+            "was not sent again - if it finished, the picture will appear below."),
     )
 
     /** One picture as the PC describes it. Nothing here is worked out on the phone. */
@@ -167,24 +232,137 @@ object Pictures {
         body?.get("id")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 
     /**
-     * The PC's own sentence for a picture it just drew - "Drawn in 41.2
-     * seconds and saved as 2026-10-11-140509-a-red-panda.png." Shown word for
-     * word; nothing on the phone rebuilds it.
+     * The PC's own words for a picture it just drew, word for word and never
+     * rebuilt here: "Drawn in 41.2 seconds and saved as
+     * 2026-10-11-140509-a-red-panda.png." and, when the chat had to step
+     * aside, the swap's own sentence after it - "Your everyday chat stepped
+     * aside for 2.5 seconds and is back on the card after another 9.0
+     * seconds." Both are the PC's; joining them with one space keeps every
+     * word of both, which is the whole rule on this screen.
      */
-    fun madeWords(body: JsonObject?): String =
-        body?.get("words")?.jsonPrimitive?.contentOrNull.orEmpty()
+    fun madeWords(body: JsonObject?): String {
+        val drawn = body?.get("words")?.jsonPrimitive?.contentOrNull.orEmpty()
+        return listOf(drawn, cardWords(body)).filter { it.isNotBlank() }.joinToString(" ")
+    }
+
+    /** One field of the swap's own record (`card`), or null when it is absent. */
+    private fun cardField(body: JsonObject?, key: String): JsonPrimitive? = runCatching {
+        body?.get("card")?.jsonObject?.get(key)?.jsonPrimitive
+    }.getOrNull()
+
+    /** The swap's sentence ("Your everyday chat stepped aside ..."), or "". */
+    fun cardWords(body: JsonObject?): String = cardField(body, "words")?.contentOrNull.orEmpty()
+
+    /** How long the everyday chat was set aside, as the PC measured it, or null. */
+    fun cardAwaySeconds(body: JsonObject?): Double? =
+        cardField(body, "chat_away_seconds")?.doubleOrNull
+
+    /** How long the everyday chat took to come back, as the PC measured it, or null. */
+    fun cardBackSeconds(body: JsonObject?): Double? =
+        cardField(body, "chat_back_seconds")?.doubleOrNull
+
+    /**
+     * Reads ONE answer to `POST /api/pictures`, whole. Every sentence here is
+     * the PC's own, taken from the answer as sent; nothing is rebuilt.
+     */
+    fun readMake(status: Int, body: JsonObject?): PicturesAnswer {
+        if (status in 200..299) {
+            return PicturesAnswer.Made(body ?: JsonObject(emptyMap()))
+        }
+        if (status == 404 || status == 501) return PicturesAnswer.Missing
+        val said = refusal(body)
+        val needs = body?.get("needs")?.jsonPrimitive?.contentOrNull
+        return when {
+            status == 409 && needs == "free_card" ->
+                PicturesAnswer.NeedsConfirm(said, minutesOf(body))
+            status == 409 && needs == "drawing" -> PicturesAnswer.StillDrawing(said)
+            status == 403 && isPcOnly(body) -> PicturesAnswer.OldPc(said)
+            else -> PicturesAnswer.Refused(said)
+        }
+    }
+
+    /**
+     * True only for the PC saying "on this PC only" - here, an older PC
+     * refusing a phone's confirm. A cross-origin 403 says no such thing.
+     */
+    fun isPcOnly(body: JsonObject?): Boolean =
+        body?.get("pc_only")?.jsonPrimitive?.booleanOrNull == true
+
+    /** The PC's own minutes from a 409 `estimate`, or null when it sent none. */
+    fun minutesOf(body: JsonObject?): Int? = runCatching {
+        body?.get("estimate")?.jsonObject?.get("minutes")?.jsonPrimitive?.intOrNull
+    }.getOrNull()?.takeIf { it >= 1 }
+
+    /**
+     * The confirm button's label: "Set the chat aside and draw (about 6
+     * minutes)", from the PC's estimate. With no estimate it is the plain
+     * label - never "about 0".
+     */
+    fun confirmLabel(minutes: Int?): String {
+        val base = WORDS.getValue("set_aside")
+        if (minutes == null || minutes < 1) return base
+        val unit = if (minutes == 1) "minute" else "minutes"
+        return "$base (about $minutes $unit)"
+    }
+
+    /**
+     * The waiting sentence while the confirm runs, in the desktop's own words:
+     * "Drawing - this takes about 6 minutes. Your everyday chat will come back
+     * when it is done." With no estimate, "a few minutes".
+     */
+    fun confirmingWords(minutes: Int?): String {
+        val stretch = if (minutes != null && minutes >= 1) {
+            val unit = if (minutes == 1) "minute" else "minutes"
+            "about $minutes $unit"
+        } else {
+            "a few minutes"
+        }
+        return "Drawing - this takes $stretch. Your everyday chat will come back when it is done."
+    }
+
+    /** True when a failed request was the phone giving up waiting, not the PC answering. */
+    fun gaveUpWaiting(network: String): Boolean = network == "read_timeout"
+
+    /**
+     * What the plate shows when the ONE long confirm request timed out. It
+     * offers no confirm again ([PicturesMake.needsConfirm] is false): sending
+     * the same body twice would answer `409 needs: "drawing"` while the first
+     * draw carries on, which is exactly the confusion this avoids.
+     */
+    val TIMED_OUT_MAKE = PicturesMake(
+        ok = false,
+        said = WORDS.getValue("timed_out"),
+        id = null,
+        timedOut = true,
+    )
 
     /**
      * The body of `POST /api/pictures`. The prompt is trimmed, and a prompt of
      * spaces is refused here rather than sent: the PC would refuse it too, and
      * a round trip to be told "say what the picture should show" is one more
      * thing between the owner and their picture.
+     *
+     * [freeCard] is the owner's OWN confirmation of the PC's 409 question
+     * (`readMake`), and it is false on the first request, always. The only
+     * caller that passes true is the confirm button's own handler
+     * ([confirmBody]); nothing sends it on the owner's behalf.
      */
-    fun makeBody(prompt: String): String? {
+    fun makeBody(prompt: String, freeCard: Boolean = false): String? {
         val text = prompt.trim()
         if (text.isEmpty() || text.length > MAX_PROMPT) return null
-        return buildJsonObject { put("prompt", text) }.toString()
+        return buildJsonObject {
+            put("prompt", text)
+            if (freeCard) put("free_card", true)
+        }.toString()
     }
+
+    /**
+     * The SAME words plus `free_card: true` - the one second request, sent
+     * only after the owner taps the PC's 409 question. The PC then sets the
+     * everyday chat aside, draws, releases the drawing model and loads the chat
+     * back; that is one long request ([CONFIRM_TIMEOUT_S]).
+     */
+    fun confirmBody(prompt: String): String? = makeBody(prompt, freeCard = true)
 
     /**
      * The path for one picture's bytes, or null when the id is not one the PC
@@ -318,8 +496,78 @@ object Pictures {
 typealias PicturesReply = Pictures.Reply
 
 /**
- * What drawing one picture came back as, for the plate: whether it worked,
- * the sentence to show (the PC's own when it sent one) and the new picture's
- * id so the gallery can be read back.
+ * What the PC said to one draw, read before any screen decides anything
+ * (added 2026-10-25, and rewritten for the FINAL contract the same day).
+ * Five answers, and they are not the same thing:
+ *
+ *  - [Made] - drawn and kept.
+ *  - [NeedsConfirm] - **409 `needs: "free_card"`**: NOTHING WAS DRAWN. The
+ *    12 GB card holds the everyday chat, so the PC is asking whether it may
+ *    set the chat aside, draw, and load the chat back. The answer carries
+ *    the PC's own sentence and its measured minutes; only the owner's tap
+ *    sends the SAME body plus `free_card: true` ([Pictures.confirmBody]).
+ *  - [StillDrawing] - **409 `needs: "drawing"`**: a draw is already
+ *    running. Its one sentence is shown as sent and NOTHING is retried;
+ *    the first draw and its warm-back carry on.
+ *  - [OldPc] - **403 `pc_only`**: a PC still running the rule before the
+ *    owner's 2026-10-24 decision, which refused a phone's confirm. Show its
+ *    sentence, then [Pictures.OLD_PC_WORDS]; never a bad pairing token and
+ *    never a retry.
+ *  - [Refused] - any other answered refusal, in the PC's own sentence.
+ *  - [Missing] - 404/501: this PC's Jarvis has no pictures route at all.
+ *
+ * A PLAIN "no" is [Refused]: nothing set up, the drawing program not running
+ * or the switch off keep their own status and sentence. A 403 that is not
+ * `pc_only` (a cross-origin refusal) is not [OldPc] either - the caller keeps
+ * its existing "bad token" reading for that one.
  */
-data class PicturesMake(val ok: Boolean, val said: String, val id: String?)
+sealed interface PicturesAnswer {
+    /** Drawn and kept. Its fields are read by [Pictures.madeWords] and [Pictures.madeId]. */
+    data class Made(val body: JsonObject) : PicturesAnswer
+
+    /** The PC's 409 question: show [said] and the minutes, wait for the owner's tap. */
+    data class NeedsConfirm(val said: String, val minutes: Int?) : PicturesAnswer
+
+    /** A draw is already running: [said] is the PC's own "wait for that one". */
+    data class StillDrawing(val said: String) : PicturesAnswer
+
+    /** An older PC refused a phone's confirm: [said], then [Pictures.OLD_PC_WORDS]. */
+    data class OldPc(val said: String) : PicturesAnswer
+
+    /** Any other answered refusal, in the PC's own sentence. */
+    data class Refused(val said: String) : PicturesAnswer
+
+    /** No pictures route on this PC at all. */
+    data object Missing : PicturesAnswer
+}
+
+/**
+ * What drawing one picture came back as, for the plate: whether it worked,
+ * the sentence to show (the PC's own words, never rebuilt here) and the new
+ * picture's id so the gallery can be read back.
+ *
+ * The four outcomes are separate flags rather than one nullable field, so a
+ * screen cannot confuse "the PC asked a question" with "an older PC refused"
+ * or "this phone gave up waiting":
+ *
+ *  - [needsConfirm] - the 409 question, waiting for the owner's tap. It is the
+ *    ONLY thing that offers the button which sends `free_card: true`.
+ *  - [oldPc] - a 403 `pc_only` from a PC still on the old rule. Show [said],
+ *    then [Pictures.OLD_PC_WORDS]; no retry.
+ *  - [timedOut] - the confirm's read timed out. The PC may still be drawing;
+ *    nothing is re-sent, and no confirm is offered again.
+ *  - all false with `ok = false` - an ordinary refusal, in [said] as sent.
+ */
+data class PicturesMake(
+    val ok: Boolean,
+    val said: String,
+    val id: String?,
+    /** 409 `needs: "free_card"`: the owner has to tap the confirm button. */
+    val needsConfirm: Boolean = false,
+    /** The PC's own estimate of how long the chat stays away, when it sent one. */
+    val minutes: Int? = null,
+    /** 403 `pc_only`: an older PC; [said] plus [Pictures.OLD_PC_WORDS]. */
+    val oldPc: Boolean = false,
+    /** The confirm's read timed out on this phone: never re-sent. */
+    val timedOut: Boolean = false,
+)

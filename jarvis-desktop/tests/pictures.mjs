@@ -32,7 +32,15 @@
  *  7. a picture's id is a bare file stem, so no page can ask the PC for
  *     another path;
  *  8. the phone's half is the app's own file, and it has no field for the
- *     switch, the program or the folder.
+ *     switch, the program or the folder;
+ *  9. a drawing is allowed to take minutes on this PC: the make call gets its
+ *     own 1,200 s budget (a real draw was measured at 274 s) and every other
+ *     pictures write keeps the 20 s one;
+ * 10. THE TWO-STEP CONFIRM: when the everyday chat is holding the 12 GB card
+ *     the PC answers 409 `needs: "free_card"` and NOTHING IS DRAWN - the page
+ *     asks with a confirm button and never retries on its own, the confirm is
+ *     the one place `free_card: true` is sent, the wait says how many minutes,
+ *     and success reads the gallery back and shows the PC's sentence once.
  *
  * The first parts are pure node. `node tests/pictures.mjs`.
  */
@@ -416,6 +424,346 @@ check(
 check(
   "... and says the switch starts off",
   /default OFF|OFF by default|starts `false`|starts off/i.test(section),
+);
+
+console.log("\n--- 10. a drawing takes minutes, and the chat moves only when asked ---");
+
+const BRAIN_RUST = join(ROOT, "jarvis-desktop", "src-tauri", "src", "brain.rs");
+const brain = readFileSync(BRAIN_RUST, "utf8");
+// The module's own code, without its `#[cfg(test)]` block: the Rust tests
+// below build their literals in pieces, and a scan that read them would find
+// itself instead of the code that runs.
+const rustModule = bare(rust).split("#[cfg(test)]")[0];
+
+/** ONE Rust command, from `pub async fn name` to its own closing brace. */
+function rustFn(name) {
+  const at = rustModule.indexOf(`pub async fn ${name}(`);
+  if (at < 0) return "";
+  return (rustModule.slice(at).match(/^[\s\S]*?\n\}/) || [""])[0];
+}
+
+/** ONE JS function, by brace matching, so a check cannot read a neighbour. */
+function jsFn(name) {
+  const at = panelCode.indexOf(`function ${name}(`);
+  if (at < 0) return "";
+  const open = panelCode.indexOf("{", at);
+  let depth = 0;
+  for (let i = open; i >= 0 && i < panelCode.length; i += 1) {
+    if (panelCode[i] === "{") depth += 1;
+    else if (panelCode[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return panelCode.slice(at, i + 1);
+    }
+  }
+  return "";
+}
+
+// (i) THE BUG THIS FIXES: 20 s would time out every real drawing. A draw was
+// measured at 274 s on this PC, so the make call has a budget of its own.
+check(
+  "brain.rs gives a drawing its own long budget, in the shape the other one uses",
+  /const PICTURE_TIMEOUT: Duration = Duration::from_secs\(1_200\);/.test(brain)
+    && /const REPEAT_EDIT_TIMEOUT: Duration = Duration::from_secs\(1_200\);/.test(brain),
+  "PICTURE_TIMEOUT next to REPEAT_EDIT_TIMEOUT",
+);
+const makeRust = rustFn("brain_pictures_make");
+check(
+  "(i) the make call uses it - 274 s measured, and 20 s would time out mid-draw",
+  makeRust.includes("commands::jarvis_client(Some(PICTURE_TIMEOUT))")
+    && !makeRust.includes("WRITE_TIMEOUT"),
+  makeRust.match(/jarvis_client\([^)]*\)/) ? makeRust.match(/jarvis_client\([^)]*\)/)[0] : "no client",
+);
+check(
+  "... and every other pictures write keeps the 20 s budget",
+  (rustModule.match(/Some\(WRITE_TIMEOUT\)/g) || []).length === 1
+    && rustFn("brain_pictures_settings").includes("Some(WRITE_TIMEOUT)"),
+  "one WRITE_TIMEOUT left: the settings change",
+);
+check(
+  "... and free_card is added to the body only when the page asks for it",
+  makeRust.includes("free_card: Option<bool>")
+    && /if free_card == Some\(true\) \{\s*\n\s*body\["free_card"\] = serde_json::json!\(true\);/
+      .test(rustModule),
+  "prompt_body(prompt, free_card)",
+);
+check(
+  "... and a drawn picture is read by its STRING name, not the gallery's array",
+  /if \(200\.\.300\)\.contains\(&status\) \{\s*\n\s*return parsed\(body\)[\s\S]{0,320}x\.is_string\(\)/
+    .test(rustModule)
+    && !/pictures_answer\(status, &text, "name"\)/.test(rustModule),
+  "make_answer",
+);
+
+// (ii) THE TWO-STEP CONFIRM: nothing is retried silently.
+const makeJs = jsFn("makePicture");
+const answerJs = jsFn("handleMakeAnswer");
+const askJs = jsFn("askToSetAside");
+const retryJs = jsFn("setChatAsideAndDraw");
+const blockJs = jsFn("pendingBlock");
+const cancelJs = jsFn("cancelPending");
+
+check(
+  "(ii) the first request carries the prompt alone - no free_card anywhere in it",
+  makeJs.includes('invoke("brain_pictures_make", { prompt: text })')
+    && !makeJs.includes("freeCard")
+    && (makeJs.match(/invoke\("brain_pictures_make"/g) || []).length === 1,
+  "makePicture sends once",
+);
+check(
+  "(ii) a 409 free_card becomes a QUESTION, and this function sends nothing",
+  answerJs.includes('if (out.needs === "free_card")')
+    && answerJs.includes("askToSetAside(out, prompt)")
+    && !answerJs.includes("invoke("),
+  "handleMakeAnswer",
+);
+check(
+  "... and the question is drawn with a confirm and a cancel, and no request of its own",
+  askJs.length > 0
+    && !askJs.includes("invoke(")
+    && blockJs.includes("button(setAsideLabel(state.pending.seconds), setChatAsideAndDraw")
+    && blockJs.includes("button(WORDS.set_aside_no, cancelPending"),
+  "pendingBlock",
+);
+check(
+  "... and both answers are real <button>s, so the keyboard reaches them",
+  blockJs.includes("button(")
+    && panelCode.includes('const b = el("button", "btn small", label);')
+    && panelCode.includes('b.type = "button";'),
+  "no clickable div",
+);
+check(
+  "(ii) the confirm click is the ONE place free_card: true is sent",
+  retryJs.includes("freeCard: true")
+    && (panelCode.match(/freeCard/g) || []).length === 1
+    && (retryJs.match(/invoke\("brain_pictures_make"/g) || []).length === 1,
+  "setChatAsideAndDraw",
+);
+check(
+  "... and the argument key is camelCase, which is how a command takes it",
+  !/free_card\s*:/.test(panelCode) && retryJs.includes("freeCard: true"),
+  "freeCard, not free_card",
+);
+check(
+  "... and nothing anywhere arms a retry on its own",
+  !panelCode.includes("setTimeout") && !panelCode.includes("setInterval"),
+);
+check(
+  "... and Not now sends nothing, and says nothing was drawn",
+  cancelJs.includes("state.pending = null")
+    && cancelJs.includes("WORDS.set_aside_stopped")
+    && !cancelJs.includes("invoke(")
+    && panel.includes("Nothing was drawn - your everyday chat stays where it is."),
+  "cancelPending",
+);
+
+// (iii) THE WAITING STATE, AND WHAT SUCCESS SHOWS.
+check(
+  "(iii) while it runs the page says so, with the minutes the PC estimated",
+  retryJs.includes("say(drawingWords(pending.seconds))")
+    && panelCode.includes("Your everyday chat will come back when it is done.")
+    && panelCode.includes("estimate.chat_away_seconds")
+    && retryJs.includes("state.making = true"),
+  "drawingWords",
+);
+check(
+  "... and the confirm's own label carries the estimate, never a guess",
+  panelCode.includes("Set the chat aside and draw")
+    && /about \$\{minutes\} \$\{minutes === 1 \? "minute" : "minutes"\}/.test(panelCode),
+  "setAsideLabel",
+);
+check(
+  "... and Make stays greyed for the whole draw, even if the link changes",
+  /if \(state\.making\) \{\s*\n\s*make\.dataset\.busy = "true";/.test(panelCode)
+    && panelCode.includes('make.textContent = "Drawing…"'),
+  "busy + disabled",
+);
+check(
+  "(iii) success refreshes the gallery and shows the PC's sentence once, not twice",
+  retryJs.includes("finally")
+    && retryJs.includes("await refreshPictures()")
+    && answerJs.includes("out.words")
+    && !answerJs.includes('say(said.join(" "))')
+    && answerJs.includes("say(said)"),
+  "out.words only, after a re-read",
+);
+check(
+  "(iii) the status line is the panel's own #pictures-said, not a new one",
+  panelCode.includes('document.getElementById("pictures-said")')
+    && panelCode.includes("announce(state.said, \"polite\")"),
+  "say()",
+);
+check(
+  "... and a 409 for ANY other need is its own sentence, with no confirm",
+  /if \(out\.needs\) \{[\s\S]{0,220}say\(out\.error \|\| ""\)/.test(answerJs)
+    && answerJs.indexOf('out.needs === "free_card"') < answerJs.indexOf("if (out.needs) {"),
+  "card_none",
+);
+check(
+  "... and the whole question block is drawn only where the ask box is",
+  /if \(d\.enabled && state\.pending\) card\.append\(pendingBlock\(\)\)/.test(panelCode),
+  "paint",
+);
+
+console.log("\n--- 11. the handshake, RUN with a stubbed bridge ---");
+
+// The pins above read the page. This runs it. The handshake is plain functions
+// of (state, answer) - no browser, no webview - so the module is evaluated with
+// its one import stubbed, a bridge that records every call, and no DOM at all
+// (`say()` still keeps the same state `#pictures-said` would show). A silent
+// retry would appear here as a SECOND `brain_pictures_make` call, which is
+// exactly what this section is for. The repo has this shape elsewhere
+// (`approvals-contract.mjs`, `flashgov.mjs` both lift a page's functions and
+// run them); nothing new is installed for it.
+const STUB = [
+  "const announce = (text) => { globalThis.__picturesAnnounced.push(text); };",
+  'const currentLink = () => ({ stale: false });',
+  'const linkWords = () => "the link is stale";',
+  "const onLink = () => {};",
+].join("\n");
+const runnable = bare(panel)
+  .replace(/^import[^\n]*\n/m, `${STUB}\n`)
+  .replace(/^export /gm, "");
+check(
+  "(setup) the panel is runnable: its one import is stubbed and its exports stripped",
+  runnable.includes("const onLink = () => {};") && !/^\s*(import|export) /m.test(runnable),
+  "pictures-panel.js's module shape changed; update this section",
+);
+
+globalThis.__picturesAnnounced = [];
+const calls = [];
+let answer = null;
+globalThis.__TAURI__ = {
+  core: {
+    invoke: async (command, args = {}) => {
+      calls.push({ command, args });
+      if (command === "brain_pictures_make") return answer;
+      if (command === "brain_pictures") {
+        return { ok: true, available: true, enabled: true, pictures: [] };
+      }
+      return null;
+    },
+  },
+};
+globalThis.document = {
+  getElementById: () => null,
+  createElement: () => ({
+    append() {}, setAttribute() {}, addEventListener() {}, replaceWith() {}, style: {},
+  }),
+};
+const page = new Function(
+  `${runnable}\nreturn { makePicture, setChatAsideAndDraw, cancelPending, state };`,
+)();
+const makeCalls = () => calls.filter((c) => c.command === "brain_pictures_make");
+
+// A 409 free_card is a QUESTION: one call went out, and nothing else does.
+calls.length = 0;
+answer = {
+  ok: false,
+  available: true,
+  needs: "free_card",
+  error: "Your everyday chat is using the 12 GB card.",
+  option: "A",
+  estimate: { draw_seconds: 274, chat_away_seconds: 300 },
+};
+await page.makePicture("a red panda");
+check(
+  "(ii) RUN: a 409 free_card sends exactly ONE make call - no silent retry",
+  makeCalls().length === 1,
+  `${makeCalls().length} make call(s)`,
+);
+check(
+  "(ii) RUN: ... and the first call carries the prompt alone",
+  !("freeCard" in calls[0].args),
+  JSON.stringify(calls[0].args),
+);
+check(
+  "(ii) RUN: ... and the PC's sentence becomes a pending question, with its estimate",
+  page.state.pending !== null
+    && page.state.pending.prompt === "a red panda"
+    && page.state.pending.seconds === 300,
+  JSON.stringify(page.state.pending),
+);
+check(
+  "(ii) RUN: ... and the sentence is announced rather than swallowed",
+  globalThis.__picturesAnnounced.includes("Your everyday chat is using the 12 GB card."),
+);
+
+// The confirm click is the only thing that retries, and the wait says so.
+// The body below is the REAL body a handshake answers with
+// (backend/jarvis_pictures.py: `words` is the "drawn in ..." sentence with the
+// swap sentence appended, and `card.words` is that same swap sentence again).
+// The old fixture invented a `words` WITHOUT the swap, which hid a real bug:
+// the page joined `words` + `card.words` and printed the swap twice every draw.
+calls.length = 0;
+const swapSentence =
+  "Your everyday chat stepped aside for 300.0 seconds and is back on the card after 41.0 seconds.";
+const drawnWords =
+  "Drawn in 274.0 seconds and saved as 2026-10-24-101010-a-red-panda.png.";
+answer = {
+  ok: true,
+  available: true,
+  name: "2026-10-24-101010-a-red-panda.png",
+  words: `${drawnWords} ${swapSentence}`,
+  card: {
+    option: "A",
+    chat_away_seconds: 300,
+    chat_back_seconds: 41,
+    words: swapSentence,
+  },
+};
+const click = page.setChatAsideAndDraw();
+check(
+  "(iii) RUN: while it draws, the page says how long and that the chat comes back",
+  page.state.said
+    === "Drawing - this takes about 5 minutes. Your everyday chat will come back when it is done.",
+  page.state.said,
+);
+check(
+  "(iii) RUN: ... and the question is gone while it waits",
+  page.state.pending === null,
+);
+await click;
+check(
+  "(ii) RUN: the confirm click sends ONE retry, with freeCard: true",
+  makeCalls().length === 1 && makeCalls()[0].args.freeCard === true,
+  JSON.stringify(makeCalls().map((c) => c.args)),
+);
+check(
+  "(iii) RUN: ... then the gallery is read back from the PC",
+  calls.some((c) => c.command === "brain_pictures"),
+  JSON.stringify(calls.map((c) => c.command)),
+);
+check(
+  "(iii) RUN: ... and the PC's whole sentence is shown ONCE - the swap sentence is never doubled",
+  page.state.said === `${drawnWords} ${swapSentence}`
+    && page.state.said.split(swapSentence).length === 2,
+  page.state.said,
+);
+
+// card_none is a sentence, not a question.
+calls.length = 0;
+answer = {
+  ok: false,
+  needs: "card_none",
+  error: "None of the three ways of making pictures is switched on.",
+};
+await page.makePicture("a red panda");
+check(
+  "(iii) RUN: a card_none 409 is its own sentence, with no question offered",
+  page.state.pending === null
+    && page.state.said === "None of the three ways of making pictures is switched on.",
+  `${page.state.said} | pending=${JSON.stringify(page.state.pending)}`,
+);
+
+// Not now sends nothing at all.
+page.state.pending = { prompt: "a red panda", error: "", option: "A", seconds: 300 };
+calls.length = 0;
+page.cancelPending();
+check(
+  "(ii) RUN: Not now sends nothing, and says nothing was drawn",
+  calls.length === 0
+    && page.state.said === "Nothing was drawn - your everyday chat stays where it is.",
+  `${calls.length} call(s), said=${page.state.said}`,
 );
 
 console.log(`\n${passed} passed, ${failed.length} failed`);
