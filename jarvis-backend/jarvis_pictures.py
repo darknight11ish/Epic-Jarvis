@@ -1191,12 +1191,14 @@ def handshake_plan(cards_module=None) -> dict:
         if not resident:
             return base
         measured = values.get("measured")
-        draw_seconds = 275.0
+        # Measured on this PC: four real 1152x1152 Chroma1-HD draws took
+        # 383.6, 379.0, 381.0 and 382.0 s, so 380.0 is the honest estimate.
+        draw_seconds = 380.0
         if isinstance(measured, dict):
             try:
                 draw_seconds = max(1.0, float(measured.get("draw_seconds")))
             except (TypeError, ValueError):
-                draw_seconds = 275.0
+                draw_seconds = 380.0
         minutes = max(1, int(round((draw_seconds + 60.0) / 60.0)))
         words = (FREE_CARD_WORDS + " This takes about {0} minutes, and the chat "
                  "comes back on its own afterwards.").format(minutes)

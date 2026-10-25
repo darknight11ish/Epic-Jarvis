@@ -355,10 +355,10 @@ SWAP_PLAN = {
     "words": ("Drawing needs the 12 GB card, and your everyday chat is using "
               "it. If you agree, Jarvis sets the everyday chat aside for a few "
               "minutes, draws the picture, then loads the chat back the way it "
-              "was. This takes about 6 minutes, and the chat comes back on its "
+              "was. This takes about 7 minutes, and the chat comes back on its "
               "own afterwards."),
-    "estimate": {"draw_seconds": 275.0, "chat_away_seconds": 335.0,
-                 "minutes": 6},
+    "estimate": {"draw_seconds": 380.0, "chat_away_seconds": 440.0,
+                 "minutes": 7},
     "values": {"option": "A"},
 }
 
@@ -378,8 +378,9 @@ def t_the_plan_finds_the_three_ways_and_the_price():
     check("... and says it comes back on its own",
           "comes back on its own" in plan["words"], plan["words"])
     check("... with an estimate in minutes and seconds",
-          plan["estimate"].get("draw_seconds") == 275.0
-          and plan["estimate"].get("minutes", 0) >= 1, str(plan["estimate"]))
+          plan["estimate"].get("draw_seconds") == 380.0
+          and plan["estimate"].get("chat_away_seconds") == 440.0
+          and plan["estimate"].get("minutes") == 7, str(plan["estimate"]))
     plan = _REAL_HANDSHAKE_PLAN(cards_module=FakeCards(
         "A", measured={"draw_seconds": 100.0}))
     check("a recorded real draw sets the estimate", plan["estimate"]["draw_seconds"] == 100.0,
@@ -418,7 +419,7 @@ def t_the_first_request_asks_before_anything_moves():
     check("... with needs=free_card", out.get("needs") == "free_card",
           str(out)[:200])
     check("... naming way A and the estimate",
-          out.get("option") == "A" and out.get("estimate", {}).get("minutes") == 6,
+          out.get("option") == "A" and out.get("estimate", {}).get("minutes") == 7,
           str(out)[:200])
     check("... and the plain sentence saying what will pause",
           "everyday chat" in (out.get("error") or ""), str(out)[:300])

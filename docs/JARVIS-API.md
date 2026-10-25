@@ -21079,14 +21079,14 @@ the first one:
 The 409 is the price, said before anything is unloaded:
 
     {"ok": false, "available": true, "needs": "free_card", "option": "A",
-     "estimate": {"draw_seconds": 275.0, "chat_away_seconds": 335.0,
-                  "minutes": 6},
+     "estimate": {"draw_seconds": 380.0, "chat_away_seconds": 440.0,
+                  "minutes": 7},
      "confirm": {"free_card": true},
      "error": "Drawing needs the 12 GB card, and your everyday chat is using
                it. If you agree, Jarvis sets the everyday chat aside for a few
                minutes, draws the picture, then loads the chat back the way it
                was - the conversation and its settings are kept. Nothing else
-               changes. This takes about 6 minutes, and the chat comes back on
+               changes. This takes about 7 minutes, and the chat comes back on
                its own afterwards."}
 
 The confirmed request does, in this order: the everyday chat lane is unloaded
