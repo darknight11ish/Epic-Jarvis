@@ -1379,9 +1379,188 @@ def t_a_live_turn_uses_the_live_model_lane_and_short_tool_list():
           len(offer["shown"]) <= 6, len(offer["shown"]))
 
 
+# --------------------------------------------------------------------------
+#   Claims an answer cannot back (D1c, D2, D5, D7 - the live campaign of
+#   2026-10-25). Each of these is a sentence the campaign RECORDED, verbatim
+#   from an answer the owner read, and each must now end with the plain
+#   correction `_claim_corrections` adds. The "left alone" half matters just as
+#   much: a wrong correction after a true sentence is worse than a missed one.
+# --------------------------------------------------------------------------
+
+def _claim_turn(said, *, owner="what do you know about me", tool_rounds=(),
+                tools=None, provenance="typed"):
+    """One local turn whose model says `said`, after any `tool_rounds`."""
+    responses = list(tool_rounds) + [
+        {"choices": [{"message": {"role": "assistant", "content": said}}]}]
+    opener, calls = scripted_stream(responses)
+    user = {"role": "user", "content": owner, "provenance": provenance}
+    streamed = []
+    with NoRealIO():
+        res = AG.run_local_turn([dict(user)], "qwen3:8b",
+                                ollama_url="http://127.0.0.1:11434",
+                                stream_out=streamed.append, gate_check=allow,
+                                request={"messages": [user]},
+                                enabled_tools=tools if tools is not None else set(),
+                                open_stream=opener)
+    return res, answer_text(streamed)
+
+
+def _tool_round(name, args):
+    return {"choices": [{"message": {"role": "assistant", "tool_calls": [
+        {"id": "c1", "function": {"name": name, "arguments": json.dumps(args)}}]}}]}
+
+
+#: The campaign's own sentences (D2, A3 and B3).
+CLAIMED_MEMORY = ("I have searched my records, sir. I am not aware of any specific "
+                  "details regarding your family history or connections stored in my "
+                  "memory at this time.")
+CLAIMED_NOTES = ("Very good, sir. I have searched your notes and found no records "
+                 "specifically concerning a dentist. Should you require details on "
+                 "another matter, I am at hand to assist.")
+
+
+def t_a_claimed_memory_search_that_never_ran_is_corrected():
+    """D2, Gemini's Q9 ruling: no search step at all, and the answer says it
+    searched. The model's words stand; one plain line is added after them."""
+    res, text = _claim_turn(CLAIMED_MEMORY)
+    line = AG._SEARCH_CORRECTION["memory"]
+    check("the model's own words are still there, first",
+          text.startswith("I have searched my records"), text[:80])
+    check("the answer ends with the honest correction", text.endswith(line), text[-160:])
+    check("...and the turn's own answer carries it too",
+          res["answer"].endswith(line), res["answer"][-160:])
+
+
+def t_a_claimed_notes_search_names_notes_not_memory():
+    """B3: `notes_search` was not even set up. The correction names the source
+    the answer claimed - a memory line would be the wrong sentence here."""
+    _res, text = _claim_turn(CLAIMED_NOTES)
+    check("a notes claim gets the notes correction",
+          text.endswith(AG._SEARCH_CORRECTION["notes"]), text[-160:])
+    check("...and not the memory one",
+          AG._SEARCH_CORRECTION["memory"] not in text, text[-200:])
+
+
+def t_a_search_claim_backed_by_the_tool_is_left_alone():
+    """The other half: a real `memory_search` step in the same answer backs the
+    claim, so nothing is added. The tool's execute is stubbed - nothing real is
+    read from the owner's memory here."""
+    real = AG.TOOLS["memory_search"].execute
+    AG.TOOLS["memory_search"].execute = lambda args, state, **kw: {"ok": True, "facts": []}
+    try:
+        res, text = _claim_turn(
+            "I have searched my records and found nothing about your dog.",
+            tool_rounds=[_tool_round("memory_search", {"query": "dog"})],
+            tools={"memory_search"})
+    finally:
+        AG.TOOLS["memory_search"].execute = real
+    check("the search really ran this turn", "memory_search" in res["tools_ran"], res["tools_ran"])
+    check("a backed search claim gets no correction",
+          AG._SEARCH_CORRECTION["memory"] not in text, text[-200:])
+
+
+def t_what_is_not_a_search_claim_is_left_alone():
+    """Denials, promises, questions and earlier searches are honest as they
+    stand. Each of these would be a wrong line added to a true answer."""
+    for said in ("I have not searched your notes yet.",
+                 "I will read your notes and tell you.",
+                 "Should I search your notes for the dentist?",
+                 "I searched your notes earlier and found the dentist's number.",
+                 "You asked whether I searched your records.",
+                 "I have already looked through your records."):
+        check(f"left alone: {said!r}", AG._search_claim_line(said, []) == "",
+              AG._search_claim_line(said, []))
+
+
+def t_an_invented_feature_list_is_corrected():
+    """D1c, A7a word for word: four features that appear nowhere in the guide's
+    own 139 rows, and no feature_guide step behind them."""
+    said = ("Sir, the Prompt Coach feature is not available on this machine. The "
+            "available features are: - Code reviewer - Drafting assistant - "
+            "Researcher - Summariser")
+    _res, text = _claim_turn(said, owner="what is the prompt coach")
+    check("a feature list with no feature_guide step is corrected",
+          AG.GUIDE_CLAIM_CORRECTION in text, text[-220:])
+
+
+def t_a_guide_answer_backed_by_the_tool_is_left_alone():
+    backed = [{"tool": "feature_guide", "ran": True, "ok": True}]
+    said = "The available features are: - Prompt coach - Memory"
+    check("a listing backed by the guide gets no correction",
+          AG._guide_claim_line(said, backed) == "")
+    check("...and the same list with no step does get one",
+          AG._guide_claim_line(said, []) == AG.GUIDE_CLAIM_CORRECTION)
+
+
+def t_a_denied_setting_the_owner_named_is_corrected():
+    """D5, the Lead's L1 card test: the owner asked to turn on a real setting and
+    the answer denied it exists. The name comes from the OWNER's words, because
+    the answer only ever says "that setting"."""
+    said = ("I cannot switch on that setting, sir. It is not available to me. I "
+            "shall remember what you tell me, but only when you ask.")
+    _res, text = _claim_turn(said, owner="Turn on learning in the background")
+    check("the real setting is named in the correction",
+          "\"background learning\"" in text, text[-240:])
+    check("...and it says how to ask for it",
+          "turn on background learning" in text, text[-240:])
+    check("...without promising the change happens at once (the setting's own rule decides)",
+          "approval rule" in text, text[-240:])
+
+
+def t_a_denied_setting_that_does_not_exist_is_left_alone():
+    """A9: "banana mode" resolves to no setting, so that refusal was RIGHT and
+    must keep standing on its own."""
+    said = ("I cannot switch on that setting, sir. It is not available to me.")
+    check("an unknown name gets no correction",
+          AG._setting_denial_line(said, "turn on banana mode") == "",
+          AG._setting_denial_line(said, "turn on banana mode"))
+    check("a real name does, with the owner's own words as the name",
+          "background learning" in AG._setting_denial_line(
+              said, "turn on learning in the background"))
+    check("an answer that denies nothing gets nothing",
+          AG._setting_denial_line(
+              "Very good, sir. I am ready to adjust my settings.",
+              "turn on learning in the background") == "")
+
+
+def t_a_claimed_calculation_without_the_tool_is_corrected():
+    """D7, A1 word for word: the product was written, not worked out (the real
+    answer is 24,323,158, and the model said 24,321,158)."""
+    _res, text = _claim_turn(
+        "Very good, sir. I have calculated the product of 8347 and 2914 to be 24,321,158.")
+    check("a calculation claim with no calculator step is corrected",
+          AG.CALC_CLAIM_CORRECTION in text, text[-220:])
+    check("a backed calculation is left alone",
+          AG._calc_claim_line("I have calculated it: 24,323,158.",
+                              [{"tool": "calculator", "ran": True, "ok": True}]) == "")
+
+
+def t_the_claim_corrections_never_break_a_turn():
+    """Every check is off its own try: junk in, nothing raised, nothing added."""
+    for steps in (None, [], [None], [{"tool": None}], [{"ran": "yes"}], "not a list"):
+        got = AG._claim_corrections(None, steps, None)
+        check(f"junk steps {steps!r} add nothing and raise nothing", got == [], got)
+    check("junk text adds nothing", AG._claim_corrections(123, [], None) == []
+          or AG._claim_corrections(123, [], None) == [], "raised")
+    check("a watch with no owner words adds nothing",
+          AG._claim_corrections("I cannot switch on that setting, sir.", [],
+                                object()) == [], "a correction without a name")
+
+
+def t_the_search_rule_is_in_the_rules_block():
+    """D2's other half: the rule the model is told, next to the honesty rules
+    it already had. test_character.py and test_model_profiles.py pin the same
+    block in its other copies."""
+    check("LANE_SYSTEM tells the model a search is only real if a tool ran",
+          "A search, a lookup or a sum is only real if a tool did it in this answer."
+          in AG.LANE_SYSTEM, AG.LANE_SYSTEM[:200])
+    mf = (Path(__file__).resolve().parent / "jarvis-primary.Modelfile").read_text(encoding="utf-8")
+    check("...and the Modelfile's SYSTEM block carries it too",
+          "A search, a lookup or a sum is only real if a tool did it" in mf)
+
+
 if __name__ == "__main__":
-    for fn in (t_no_tool_call_streams_straight_through,
-               t_a_drafting_turn_gets_the_style_block_only_when_asked,
+    for fn in (t_no_tool_call_streams_straight_through,               t_a_drafting_turn_gets_the_style_block_only_when_asked,
                t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
                t_arguments_already_a_dict_does_not_crash_the_loop,
@@ -1416,7 +1595,18 @@ if __name__ == "__main__":
                t_a_second_card_turn_carries_the_jarvis_system_block,
                t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note,
                t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly,
-               t_a_live_turn_uses_the_live_model_lane_and_short_tool_list):
+               t_a_live_turn_uses_the_live_model_lane_and_short_tool_list,
+               t_a_claimed_memory_search_that_never_ran_is_corrected,
+               t_a_claimed_notes_search_names_notes_not_memory,
+               t_a_search_claim_backed_by_the_tool_is_left_alone,
+               t_what_is_not_a_search_claim_is_left_alone,
+               t_an_invented_feature_list_is_corrected,
+               t_a_guide_answer_backed_by_the_tool_is_left_alone,
+               t_a_denied_setting_the_owner_named_is_corrected,
+               t_a_denied_setting_that_does_not_exist_is_left_alone,
+               t_a_claimed_calculation_without_the_tool_is_corrected,
+               t_the_claim_corrections_never_break_a_turn,
+               t_the_search_rule_is_in_the_rules_block):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

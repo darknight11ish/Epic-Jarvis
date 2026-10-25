@@ -39,7 +39,18 @@ MEASURED = ("calculator", "memory_search", "file_read", "shell_exec", "control_c
             "control_phone", "browser_control", "github_search", "calendar_read",
             "email_check", "notes_search", "home_read", "home_control",
             "append_logseq_journal", "append_obsidian_daily", "create_joplin_note")
-MEASURED_BUDGET = 2600
+#: RAISED 2600 -> 2700 on 2026-10-25, and this is the decision the note above
+#: asks for. `memory_search` gained a "Use when / Do NOT use when" pair (D7,
+#: architect ruling Q9, the live campaign of 2026-10-25): the tool was never
+#: called once in that campaign's 24 model-tools turns, and two of its failures
+#: (a calculation "worked out" from nowhere, and a question about the owner's
+#: dog answered from a web search that found nothing) are what that cost. The
+#: pair took `memory_search` from 127 to 195 tokens and the sixteen from 2597
+#: to 2665, so the old number had 3 tokens of room - not enough to add a cue
+#: at all. 2700 leaves 35 tokens spare rather than the 3 the old one had.
+#: Nothing else in this list grew; if anything does, this number is the thing
+#: to look at first.
+MEASURED_BUDGET = 2700
 PER_TOOL = 300
 #: browser_control drives a page with seven kinds of step; its parameters
 #: alone are most of this.
@@ -102,6 +113,27 @@ def t_a_use_that_line_only_names_a_tool_the_turn_has():
           "notes_search" in AG.TOOLS["memory_search"].schema()["function"]["description"])
 
 
+def t_both_tools_the_model_never_picked_carry_the_two_cues():
+    """D7, the architect's Q9 ruling: `memory_search` and `feature_guide` were
+    never selected in the live campaign's 24 model-tools turns, so each carries
+    a "Use when / Do NOT use when" pair in those words. `change_setting` gained
+    the same pair plus one worked example (D5) - a description that reads as a
+    note about the feature is what the 2026-10-13 field test measured falling
+    from 18/21 calls to none."""
+    for name in ("memory_search", "feature_guide", "change_setting"):
+        text = AG.TOOLS[name].description
+        check(f"{name} says 'Use when'", "Use when" in text, text[:160])
+        check(f"{name} says 'Do NOT use'", "Do NOT use" in text, text[:160])
+    check("change_setting's text names settings explicitly",
+          "SETTINGS" in AG.TOOLS["change_setting"].description)
+    check("change_setting carries one worked example with both arguments",
+          "\"setting\"" in AG.TOOLS["change_setting"].description
+          and "\"value\"" in AG.TOOLS["change_setting"].description,
+          AG.TOOLS["change_setting"].description[-200:])
+    check("change_setting never promises a setting is unavailable without a call",
+          "unavailable before calling this" in AG.TOOLS["change_setting"].description)
+
+
 def t_the_model_is_sent_only_lines_for_tools_it_has():
     for enabled, want in (({"calendar_read"}, False), ({"calendar_read", "email_check"}, True)):
         opener, bodies = scripted_stream([{"choices": [{"message": {
@@ -141,6 +173,7 @@ if __name__ == "__main__":
     for fn in (t_the_measured_tools_stay_inside_their_budget, t_no_tool_is_long,
                t_each_confusable_pair_is_told_apart_both_ways,
                t_a_use_that_line_only_names_a_tool_the_turn_has,
+               t_both_tools_the_model_never_picked_carry_the_two_cues,
                t_the_model_is_sent_only_lines_for_tools_it_has,
                t_the_tool_test_still_reads_the_live_list):
         print(f"\n--- {fn.__name__} ---")
