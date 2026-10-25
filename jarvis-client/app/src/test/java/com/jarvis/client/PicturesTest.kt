@@ -32,6 +32,10 @@ import org.junit.Test
  *  - a real answer reads back: the folder, the size, the switch, and every
  *    picture's own prompt, seed and when it was made;
  *  - the PC's own sentences are shown word for word, never rebuilt here;
+ *  - the PC's "the everyday chat has to be set aside first" answer (403
+ *    `pc_only` to a phone, 409 to the PC) is read as that answer - never as a
+ *    bad token, and never as an ordinary refusal - and the phone never sends
+ *    the PC's `free_card` consent;
  *  - a PC without the route draws nothing at all (not "no pictures yet");
  *  - a HIDDEN answer is read as hidden, and holds no prompt at all;
  *  - the phone cannot change the switch, the program or the folder: it has no
@@ -144,6 +148,84 @@ class PicturesTest {
         // A refusal with no sentence at all still says something true.
         assertEquals(Pictures.WORDS.getValue("unreadable"), Pictures.refusal(obj("ok" to false)))
         assertEquals(Pictures.WORDS.getValue("unreadable"), Pictures.refusal(null))
+    }
+
+    // ── the card has to be freed, and only the PC can do it (2026-10-25) ──
+
+    @Test
+    fun aDrawThatNeedsTheEverydayChatSetAsideIsReadAsThePcsOwnAnswer() {
+        // What a PHONE gets (backend `make_answer`: 403 pc_only): the PC's own
+        // sentence, no estimate, and nothing that says the phone could do it.
+        val phoneWords = "Making a picture now means setting this PC's everyday chat aside " +
+            "for a few minutes. That can only be started on the PC itself."
+        val phone = obj(
+            "ok" to false, "pc_only" to true, "needs" to "free_card",
+            "error" to phoneWords,
+        )
+        val free = Pictures.freeCard(403, phone)
+        assertNotNull(free)
+        val phoneCard = free!!
+        assertEquals(phoneWords, phoneCard.said)
+        assertNull(phoneCard.minutes)
+
+        // What the PC itself gets first: 409, with its own price in minutes.
+        val pcWords = "Drawing needs the 12 GB card, and your everyday chat is using it. " +
+            "If you agree, Jarvis sets the everyday chat aside for a few minutes, draws " +
+            "the picture, then loads the chat back the way it was - the conversation and " +
+            "its settings are kept. Nothing else changes. This takes about 6 minutes, and " +
+            "the chat comes back on its own afterwards."
+        val pc = obj(
+            "ok" to false, "available" to true, "needs" to "free_card", "option" to "A",
+            "estimate" to obj("draw_seconds" to 275, "chat_away_seconds" to 335, "minutes" to 6),
+            "confirm" to obj("free_card" to true),
+            "error" to pcWords,
+        )
+        val asked = Pictures.freeCard(409, pc)
+        assertNotNull(asked)
+        val askedCard = asked!!
+        assertEquals(pcWords, askedCard.said)
+        assertEquals(6, askedCard.minutes)
+    }
+
+    @Test
+    fun anOrdinaryNoIsNotTheCardAnswer() {
+        // Nothing set up / the switch off / the drawing program not running:
+        // their own status and sentence, and the ordinary failure path shows
+        // them rather than pretending the step belongs somewhere else.
+        assertNull(Pictures.freeCard(
+            503,
+            obj("ok" to false, "available" to false,
+                "error" to "Jarvis has no picture-making program set up yet."),
+        ))
+        assertNull(Pictures.freeCard(
+            503,
+            obj("ok" to false, "available" to true, "off" to true,
+                "error" to "Jarvis is set to not make pictures."),
+        ))
+        // A 403 that is not pc_only is a cross-origin refusal, not this answer.
+        assertNull(Pictures.freeCard(403, obj("ok" to false, "error" to "cross-origin request refused")))
+        // A 409 with another reason, or with no answer at all.
+        assertNull(Pictures.freeCard(409, obj("ok" to false, "error" to "something else")))
+        assertNull(Pictures.freeCard(409, null))
+        // A 503 that NAMES free_card because setting the chat aside FAILED is a
+        // real failure with its own sentence, not "go and do it on the PC".
+        assertNull(Pictures.freeCard(
+            503,
+            obj("ok" to false, "available" to true, "needs" to "free_card",
+                "error" to "The everyday chat could not be set aside, so nothing was drawn."),
+        ))
+    }
+
+    @Test
+    fun thePhoneNeverSendsThePcsConsentToFreeTheCard() {
+        val body = Pictures.makeBody("a red panda in a library")
+        assertNotNull(body)
+        assertFalse("the phone must never confirm the swap", body!!.contains("free_card"))
+        // The one line the screen adds under the PC's sentence says the step is
+        // the PC's, and that the picture still turns up on the phone after.
+        assertTrue(Pictures.NEEDS_PC_WORDS.contains("PC"))
+        assertTrue(Pictures.NEEDS_PC_WORDS.contains("phone cannot"))
+        assertTrue(Pictures.NEEDS_PC_WORDS.contains("appear here"))
     }
 
     @Test

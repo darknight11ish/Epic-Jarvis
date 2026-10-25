@@ -67,6 +67,14 @@ import kotlinx.coroutines.withContext
  * It is still held on a stale link (rule 4), because it does write a file, and
  * the buttons grey out with the rest of the app while the link is stale.
  *
+ * WHEN THE CARD IS BUSY (added 2026-10-25). With the everyday chat on the
+ * 12 GB card, one picture means the chat is set aside, drawn, and loaded back -
+ * and only the PC can start that. The PC says so in its own sentence; this
+ * plate shows that sentence word for word, adds the one line saying where the
+ * step belongs ([Pictures.NEEDS_PC_WORDS]), and keeps the owner's typed words
+ * in the box. There is no control here that could carry the step out from the
+ * phone: the PC refuses it (`403 pc_only`) and the phone never asks.
+ *
  * HIDDEN WITH THE PRIVATE THINGS. The prompts are the owner's own words, so
  * this whole section hides under "Hide memory lists and chat history" — added
  * to that rule rather than beside it. [hidden] is that switch: while it is on
@@ -84,6 +92,8 @@ internal fun PicturesSection(
     var reply by remember { mutableStateOf<Pictures.Reply?>(null) }
     var error by remember { mutableStateOf("") }
     var said by remember { mutableStateOf("") }
+    /** The PC said the everyday chat has to be set aside first - a step the PC alone can start. */
+    var needsPc by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf(false) }
     var prompt by remember { mutableStateOf("") }
     /** id -> the decoded picture, so a scroll back does not re-fetch. */
@@ -109,6 +119,7 @@ internal fun PicturesSection(
             reply = null
             error = ""
             said = ""
+            needsPc = false
             loaded.clear()
         } else {
             load()
@@ -162,9 +173,11 @@ internal fun PicturesSection(
                 ) {
                     asking = true
                     said = ""
+                    needsPc = false
                     scope.launch {
                         val out = JarvisRuntime.makePicture(prompt)
                         said = out.said
+                        needsPc = out.needsPc
                         asking = false
                         loaded.clear()
                         load()
@@ -199,15 +212,20 @@ internal fun PicturesSection(
                                         }
                                         if (bitmap != null) loaded[shot.id] = bitmap
                                     }
-                                    is ApiResult.Failed -> said = JarvisRuntime.describe(got.error)
+                                    is ApiResult.Failed -> {
+                                        said = JarvisRuntime.describe(got.error)
+                                        needsPc = false
+                                    }
                                 }
                             }
                         },
                         onAnother = {
                             said = ""
+                            needsPc = false
                             scope.launch {
                                 val out = JarvisRuntime.makePicture(shot.prompt)
                                 said = out.said
+                                needsPc = out.needsPc
                                 loaded.clear()
                                 load()
                             }
@@ -219,13 +237,17 @@ internal fun PicturesSection(
                                         val wrote = withContext(Dispatchers.IO) {
                                             saveToPhone(context, shot, got.value)
                                         }
+                                        needsPc = false
                                         said = if (wrote) {
                                             Pictures.WORDS.getValue("saved_phone")
                                         } else {
                                             "Your phone would not let Jarvis save that picture."
                                         }
                                     }
-                                    is ApiResult.Failed -> said = JarvisRuntime.describe(got.error)
+                                    is ApiResult.Failed -> {
+                                        said = JarvisRuntime.describe(got.error)
+                                        needsPc = false
+                                    }
                                 }
                             }
                         },
@@ -240,6 +262,14 @@ internal fun PicturesSection(
             if (said.isNotBlank()) {
                 Gap(6)
                 Text(said, style = MaterialTheme.typography.bodyMedium)
+                if (needsPc) {
+                    // The PC's sentence says the everyday chat has to be set
+                    // aside; this one line says where that step belongs and
+                    // where the picture will turn up. Nothing here offers to do
+                    // it from the phone - the PC refuses that (403 pc_only).
+                    Gap(4)
+                    Text(Pictures.NEEDS_PC_WORDS, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

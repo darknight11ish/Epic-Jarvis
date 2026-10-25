@@ -8796,6 +8796,13 @@ object JarvisRuntime {
      * nothing to ask "another" of). The PC's own sentence comes back as sent:
      * a plain "start it on this PC", "nothing is set up yet" or "the switch is
      * off" - never a code, never a blank.
+     *
+     * THE CARD HANDSHAKE (2026-10-25). When the everyday chat is holding the
+     * 12 GB card, the PC answers a phone with `403 pc_only` and a sentence
+     * saying the chat has to be set aside first - which only the PC can start.
+     * That comes back as [com.jarvis.client.net.PicturesMake.needsPc], with the
+     * PC's sentence and its own minutes when it sent them; the plate shows the
+     * sentence word for word and never offers to do the step from here.
      */
     suspend fun makePicture(prompt: String): com.jarvis.client.net.PicturesMake {
         val body = com.jarvis.client.net.Pictures.makeBody(prompt)
@@ -8809,15 +8816,20 @@ object JarvisRuntime {
         }
         actionBlocker()?.let { return com.jarvis.client.net.PicturesMake(false, it, null) }
         return when (val r = api.makePicture(body)) {
-            is ApiResult.Ok -> {
-                // The PC's own sentence ("Drawn in 41.2 seconds and saved as
-                // ..."), shown word for word. Read as a plain string, never
-                // rebuilt here.
-                val words = com.jarvis.client.net.Pictures.madeWords(r.value)
-                com.jarvis.client.net.PicturesMake(
-                    true, words.ifBlank { "Drawn and kept on your PC." },
-                    com.jarvis.client.net.Pictures.madeId(r.value),
+            is ApiResult.Ok -> when (val answer = r.value) {
+                is com.jarvis.client.net.PicturesAnswer.NeedsPc -> com.jarvis.client.net.PicturesMake(
+                    false, answer.said, null, needsPc = true, minutes = answer.minutes,
                 )
+                is com.jarvis.client.net.PicturesAnswer.Made -> {
+                    // The PC's own sentence ("Drawn in 41.2 seconds and saved as
+                    // ..."), shown word for word. Read as a plain string, never
+                    // rebuilt here.
+                    val words = com.jarvis.client.net.Pictures.madeWords(answer.body)
+                    com.jarvis.client.net.PicturesMake(
+                        true, words.ifBlank { "Drawn and kept on your PC." },
+                        com.jarvis.client.net.Pictures.madeId(answer.body),
+                    )
+                }
             }
             is ApiResult.Failed -> com.jarvis.client.net.PicturesMake(
                 false, describe(r.error), null,

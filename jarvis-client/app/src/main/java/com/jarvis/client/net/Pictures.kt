@@ -65,6 +65,17 @@ object Pictures {
     const val MAX_PROMPT = 2000
 
     /**
+     * The ONE line the phone adds under the PC's own sentence when a draw means
+     * setting this PC's everyday chat aside first (added 2026-10-25). It is the
+     * PHONE'S alone: the PC can do that step and shows its own button, while a
+     * phone cannot - the PC answers it with `403 pc_only` - so this line says
+     * where the step belongs, and that the picture still turns up here after.
+     */
+    const val NEEDS_PC_WORDS =
+        "This step has to be done on the PC - the phone cannot set the everyday chat " +
+            "aside. Draw it there and it will appear here."
+
+    /**
      * The screens' own words, both apps, word for word. Every OTHER sentence
      * on this screen comes from the PC — the folder, the sizes, the two
      * programs to install and the reason a drawing failed are all its words.
@@ -173,6 +184,47 @@ object Pictures {
      */
     fun madeWords(body: JsonObject?): String =
         body?.get("words")?.jsonPrimitive?.contentOrNull.orEmpty()
+
+    /**
+     * A draw the PC will not start from this phone (added 2026-10-25): the
+     * 12 GB card holds the everyday chat, so one picture means the chat is set
+     * aside, the picture drawn, and the chat loaded back. That is this PC's own
+     * act - `backend/jarvis_pictures.py`'s `make_answer` answers a phone with
+     * **403** `pc_only`, and answers the PC itself with **409**
+     * `needs: "free_card"` until it sends `free_card: true` again.
+     *
+     * Both answers carry the PC's own plain sentence, which is shown word for
+     * word; [minutes] is its own estimate when it sent one, else null. **The
+     * phone never sends `free_card`** - [makeBody] has no field for it, and this
+     * is the answer proving why: setting the chat aside is not the phone's to do.
+     *
+     * A PLAIN "no" is NOT this answer: nothing set up, the drawing program not
+     * running or the switch off keep their own status and sentence, and a 403
+     * that is not `pc_only` (a cross-origin refusal) is not this either.
+     */
+    data class FreeCard(
+        /** The PC's own sentence, word for word. */
+        val said: String,
+        /** The PC's own estimate of how long the chat stays away, or null. */
+        val minutes: Int?,
+    )
+
+    /**
+     * Reads the PC's "the card has to be freed first" answer, or null when this
+     * is an ordinary refusal and the caller should show that instead.
+     */
+    fun freeCard(status: Int, body: JsonObject?): FreeCard? {
+        if (body == null) return null
+        if (status != 409 && status != 403) return null
+        if (body["needs"]?.jsonPrimitive?.contentOrNull != "free_card") return null
+        // 403 is this answer only when the PC says `pc_only: true`; a
+        // cross-origin refusal wears the same status and is a different thing.
+        if (status == 403 && body["pc_only"]?.jsonPrimitive?.booleanOrNull != true) return null
+        val minutes = runCatching {
+            body["estimate"]?.jsonObject?.get("minutes")?.jsonPrimitive?.intOrNull
+        }.getOrNull()
+        return FreeCard(refusal(body), minutes)
+    }
 
     /**
      * The body of `POST /api/pictures`. The prompt is trimmed, and a prompt of
@@ -318,8 +370,40 @@ object Pictures {
 typealias PicturesReply = Pictures.Reply
 
 /**
+ * The whole answer to `POST /api/pictures`, read before a screen decides what
+ * to show. Added 2026-10-25 with the card handshake: a draw that needs this
+ * PC's everyday chat set aside is not a failure of the phone's, and it is not
+ * the same thing as a refusal - the PC said, in its own words, what has to
+ * happen and where.
+ */
+sealed interface PicturesAnswer {
+
+    /** Drawn and kept. Its fields are read by [Pictures.madeWords] and [Pictures.madeId]. */
+    data class Made(val body: JsonObject) : PicturesAnswer
+
+    /**
+     * Not drawn from here: this PC's everyday chat holds the card and has to be
+     * set aside, which only the PC itself can start.
+     */
+    data class NeedsPc(val said: String, val minutes: Int?) : PicturesAnswer
+}
+
+/**
  * What drawing one picture came back as, for the plate: whether it worked,
  * the sentence to show (the PC's own when it sent one) and the new picture's
  * id so the gallery can be read back.
+ *
+ * [needsPc] is the 2026-10-25 case: the PC answered "the everyday chat has to
+ * be set aside first, and only from the PC". The plate then shows [said] word
+ * for word plus [Pictures.NEEDS_PC_WORDS], keeps the owner's typed prompt, and
+ * offers nothing that could carry that step out from the phone.
  */
-data class PicturesMake(val ok: Boolean, val said: String, val id: String?)
+data class PicturesMake(
+    val ok: Boolean,
+    val said: String,
+    val id: String?,
+    /** True when the draw has to be started on the PC, not from this phone. */
+    val needsPc: Boolean = false,
+    /** The PC's own estimate of how long the chat stays away, when it sent one. */
+    val minutes: Int? = null,
+)

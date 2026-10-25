@@ -1575,26 +1575,35 @@ class JarvisApi(
      * the owner typed. No card. A refusal comes back as its own status and
      * sentence - "nothing is set up yet", "start it on this PC" or "the switch
      * is off" - and the caller shows that sentence as sent.
+     *
+     * TWO ANSWERS ARE NOT REFUSALS (added 2026-10-25, the card handshake): the
+     * PC answers **403 `pc_only`** to a phone whose draw would need the everyday
+     * chat set aside first (and **409 `needs: "free_card"`** to the PC itself).
+     * Both carry the PC's own plain sentence, and the phone must show it rather
+     * than call it a bad token or a failure - so this one call keeps its 403 and
+     * hands the answer up whole. See [Pictures.freeCard].
      */
-    suspend fun makePicture(body: String): ApiResult<JsonObject> =
-        picturesCall("/api/pictures", body).let { result ->
-            when (result) {
-                is ApiResult.Ok -> {
-                    val obj = result.value.second
-                    if (result.value.first >= 400 || obj?.get("ok")?.jsonPrimitive?.booleanOrNull == false) {
-                        ApiResult.Failed(ApiError.Server(result.value.first, Pictures.refusal(obj)))
-                    } else {
-                        ApiResult.Ok(obj ?: JsonObject(emptyMap()))
-                    }
+    suspend fun makePicture(body: String): ApiResult<PicturesAnswer> =
+        when (val result = picturesCall(Pictures.PATH, body)) {
+            is ApiResult.Ok -> {
+                val (status, obj) = result.value
+                val free = Pictures.freeCard(status, obj)
+                when {
+                    free != null -> ApiResult.Ok(PicturesAnswer.NeedsPc(free.said, free.minutes))
+                    status >= 400 || obj?.get("ok")?.jsonPrimitive?.booleanOrNull == false ->
+                        ApiResult.Failed(ApiError.Server(status, Pictures.refusal(obj)))
+                    else -> ApiResult.Ok(PicturesAnswer.Made(obj ?: JsonObject(emptyMap())))
                 }
-                is ApiResult.Failed -> result
             }
+            is ApiResult.Failed -> result
         }
 
     /**
      * The one shape all three picture calls share. `(status, body)` comes back
      * whole, because a 404 that means "this PC has no pictures route" and a 503
-     * carrying the PC's own plain sentence must read differently.
+     * carrying the PC's own plain sentence must read differently - and because a
+     * 403 that carries `pc_only` is the PC saying "on the PC only" (the same
+     * reading [projectsCall] gives it), not a bad pairing token.
      */
     private suspend fun picturesCall(
         path: String,
@@ -1616,7 +1625,8 @@ class JarvisApi(
             call.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
-                if (resp.code == 401 || resp.code == 403) {
+                val pcOnly = (obj?.get("pc_only") as? JsonPrimitive)?.booleanOrNull == true
+                if (resp.code == 401 || (resp.code == 403 && !pcOnly)) {
                     ApiResult.Failed(ApiError.BadToken)
                 } else {
                     ApiResult.Ok(resp.code to obj)
