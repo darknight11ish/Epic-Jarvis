@@ -48,6 +48,10 @@ def check(name, cond, detail=""):
 #: The three original paragraphs (before the character block), unchanged
 #: since before this block existed - test_agent.py's own text, kept here so
 #: a future edit to LANE_SYSTEM cannot silently drop one.
+#: A fourth paragraph joined them on 2026-10-25 (D2, the live campaign's
+#: "I have searched my records" with no search run): a search, a lookup or a
+#: sum is only real if a tool did it. It is a RULE, so it belongs with these
+#: rather than in the character block, which is about who Jarvis is.
 ORIGINAL_RULES = (
     "You are Jarvis, a private assistant running entirely on this machine.\n\n"
     "Say what is a guess and what is verified. If you are not sure, say you are not sure - "
@@ -55,6 +59,9 @@ ORIGINAL_RULES = (
     "Never claim an action was taken that was not. You do not send email, edit files, or run "
     "commands yourself; you propose them and a person approves each one. If you have proposed "
     "something, say that you have proposed it, not that it is done.\n\n"
+    "A search, a lookup or a sum is only real if a tool did it in this answer. Without a tool, "
+    "do not say you searched, checked, looked up or calculated anything - say you are answering "
+    "from what you already know.\n\n"
     "Anything recalled about the owner is private and stays on this machine. Do not repeat it "
     "back unless it is relevant to what was asked.\n")
 

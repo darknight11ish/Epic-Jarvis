@@ -1934,15 +1934,15 @@ def _settings_tool_text() -> str:
     still the door that answers every wording without the model, and the
     "nothing was actually done" line is still the backstop. See `SETTINGS_TOOL`
     above."""
-    head = ("Call this tool when the owner asks you to change one of Jarvis's own "
-            "settings, in any words - do not ask first, just call it. Examples: "
-            "\"turn on humour\", \"switch the prompt coach off\", \"enable web "
-            "search\", \"turn on quiet hours\". \"setting\" is the setting in "
-            "their words, e.g. \"humour\"; \"value\" is on or off. ")
-    tail = ("Its own result says what happened: a change that loosens a rule or "
-            "reads more waits for one approval card, a cosmetic one changes at "
-            "once. Repeat that result - never say a setting changed when it did "
-            "not.")
+    head = ("Change one of Jarvis's own SETTINGS when the owner asks, in any words - "
+            "do not ask first, just call it. Use when: they say turn on or off, "
+            "enable, disable, start or stop something Jarvis does. Do NOT use it "
+            "for questions about a setting. Example: \"turn on learning in the "
+            "background\" -> {\"setting\":\"background learning\",\"value\":"
+            "\"on\"}. ")
+    tail = ("Its result says what happened: a loosening change waits for one card, a "
+            "cosmetic one applies at once. Never say a setting changed when it did "
+            "not, or that it is unavailable before calling this.")
     return head + tail
 
 
@@ -2003,14 +2003,31 @@ def _feature_guide_tool_text() -> str:
     300 tokens. It says WHEN to call and, more importantly, what not to do:
     the failure this replaces is the model answering from general knowledge
     and inventing a feature, so "never invent" is the instruction, not a note.
+
+    USE WHEN / DO NOT USE WHEN (D7, the live campaign of 2026-10-25). The
+    ruling asked for the two cues in those words, because "call it when ..."
+    alone was not enough to make the model pick it: `feature_guide` was never
+    called in the 24 model-tools turns of that campaign, and the answer to
+    "what is the prompt coach" named four features that appear nowhere in the
+    guide. `use_case()` in jarvis_feature_guide is still the door that answers
+    without a model at all; this text is what the model reads when it decides.
+
+    THE ARGUMENT MAY BE LEFT OUT (D1a). The tool's own description says an
+    empty `feature` lists the groups, but the schema used to demand a
+    non-blank one, so the one listing call the tool documents was REFUSED
+    before it ran (`_missing()` at the required check) - four times in one
+    turn, on the owner's PC. The fix is in the schema below: `feature` is no
+    longer required, the tool body already defaults to "" (`_run_feature_guide`
+    reads `or ""`), and this text now says so in the same words the schema
+    uses, so schema and behaviour cannot contradict each other again.
     """
-    return ("Answer a question about one of Jarvis's own features - what it is, "
-            "where to switch it on, whether it asks first, its honest limit, "
-            "which apps have it, and whether its switch is on now - from exact "
-            "data, never general knowledge. Call it when the owner asks what a "
-            "feature is or does, where it lives, how to turn it on or off, or "
-            "whether it is on; \"feature\" may be a group name, or empty to "
-            "list the groups. If it answers that the feature is not in the "
+    return ("Answer questions about one of Jarvis's own features from this "
+            "tool's exact facts, never general knowledge. Use when: the owner "
+            "asks what a feature is or does, where to switch it on, whether it "
+            "asks first, its limit, which apps have it, or whether it is on "
+            "now. Do NOT use it for anything that is not a Jarvis feature. "
+            "Leave \"feature\" out (or empty) to list the groups; otherwise it "
+            "is a feature's or a group's name. If a feature is not in the "
             "list, say so and offer the groups; never invent one. Reword the "
             "facts freely but add none. It only reads: nothing changes and no "
             "approval is needed.")
@@ -2080,7 +2097,20 @@ TOOLS: dict = {
             "expression": {"type": "string"}}, "required": ["expression"]},
         _plain_prepare("Evaluate"), lambda args, state, **_: _run_calculator(args)),
     "memory_search": Tool(
-        "memory_search", "Search the facts Jarvis has learned about the owner.",
+        "memory_search",
+        # USE WHEN / DO NOT USE WHEN (D7, the live campaign of 2026-10-25): this
+        # tool was never called in the campaign's 24 model-tools turns. A1 and A4
+        # are what that cost - a calculation "worked out" by the model, and a
+        # question about the owner's dog answered from a web search that found
+        # nothing. The two cues are the shape the ruling asked for; the
+        # "never claim a search that did not run" half is a RULE in LANE_SYSTEM
+        # and a post-answer correction (`_search_claim_line`), because a tool
+        # text can only help while the model is choosing, and the failure this
+        # fixes is in the answer after it chose.
+        "Search the facts Jarvis has learned about the owner. Use when: the owner "
+        "asks what you remember or know about them - a fact, a preference, "
+        "something they told you, or whether they mentioned it. Do NOT use it for "
+        "their notes, their files or the public web.",
         {"type": "object", "properties": {
             "query": {"type": "string"},
             "k": {"type": "integer", "description": "how many facts, default 5"}},
@@ -2584,13 +2614,25 @@ TOOLS: dict = {
     # FEATURE_GUIDE_TOOL above). Decided under the gate's own `skill_list`
     # action ("listing what Jarvis can do", tier "auto"): the arguments are one
     # feature name, so no new action, tier or patch is invented.
+    #
+    # `feature` IS DELIBERATELY NOT REQUIRED (D1a, the live campaign of
+    # 2026-10-25). The property is documented as "\"\" to list the groups",
+    # and the tool body has always defaulted to "" (`_run_feature_guide`
+    # reads `or ""`), but while the field was `required` the blank argument
+    # was refused by `check_call` via `_missing()` BEFORE the tool ran - the
+    # one documented listing call could not be made, and the model retried it
+    # four times in one turn (calls/200145-probe-feature-guide-2.json). The
+    # schema now says what the tool does: leave it out, or send "". Dropping
+    # the key is the honest fix rather than special-casing "" inside
+    # `_missing()`, which is shared by every tool's `required` check and would
+    # hide a genuinely empty required argument everywhere else.
     FEATURE_GUIDE_TOOL: Tool(
         FEATURE_GUIDE_TOOL, _feature_guide_tool_text(),
         {"type": "object", "properties": {
             "feature": {"type": "string",
                         "description": "the feature the owner named, in their own "
-                                       "words; a group name, or \"\" to list the groups"}},
-         "required": ["feature"]},
+                                       "words; a group name, or \"\" (or left out) "
+                                       "to list the groups"}}},
         _plain_prepare("Explain feature"),
         lambda args, state, **_: _run_feature_guide(args),
         gate_lookup_name=lambda args: "skill_list"),
@@ -7209,6 +7251,8 @@ Say what is a guess and what is verified. If you are not sure, say you are not s
 
 Never claim an action was taken that was not. You do not send email, edit files, or run commands yourself; you propose them and a person approves each one. If you have proposed something, say that you have proposed it, not that it is done.
 
+A search, a lookup or a sum is only real if a tool did it in this answer. Without a tool, do not say you searched, checked, looked up or calculated anything - say you are answering from what you already know.
+
 Anything recalled about the owner is private and stays on this machine. Do not repeat it back unless it is relevant to what was asked.
 
 Who you are: Jarvis, the owner's own assistant, living on their PC. Calm, capable and on their side.
@@ -9788,6 +9832,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         correction = _schedule_refusal_line("".join(model_words), steps)
         if correction:
             tell_owner(correction)
+        # Four more claims an answer cannot back (D1c, D2, D5, D7; the live
+        # campaign of 2026-10-25): a search, the feature guide's contents, a
+        # calculation, or a setting the owner named being "not available". Same
+        # shape as the two lines above - the model's own words stand, and the
+        # truth is said after them. See `_claim_corrections` for what each one
+        # answers and why it is a correction rather than a rewrite.
+        for claim_line in _claim_corrections("".join(model_words), steps, watch):
+            tell_owner(claim_line)
         if watch.crisis:
             # W1 (or the short repeat line), after the model's own answer -
             # never counted as a tool call, never asked for, always said.
@@ -9971,6 +10023,250 @@ def _schedule_refusal_line(text: str, steps: list) -> str:
         return jarvis_claims.schedule_correction(text, steps)
     except Exception:
         return ""
+
+
+# --------------------------------------------------------------------------
+#   Claims an answer cannot back: a search, the feature guide's contents, a
+#   calculation, or a setting that "is not available" (D1c, D2, D5, D7 - the
+#   live campaign of 2026-10-25)
+# --------------------------------------------------------------------------
+#
+#   WHY HERE, AND WHY A CORRECTION RATHER THAN A REWRITE. The same shape as
+#   `_nothing_done_line` and `_schedule_refusal_line` above, and for the same
+#   reason: the model's own words are streamed as they arrive and are never
+#   quietly rewound. One plain line is added after them, in the stream like any
+#   other, so both apps show it and a voice turn says it. The owner sees what
+#   the model said and then what is true - which is the whole point of the
+#   honesty rules in LANE_SYSTEM; those rules are instructions to a 9B model,
+#   and this is the code that does not depend on the model's mood.
+#
+#   WHAT EACH ONE ANSWERS, from the campaign's own evidence:
+#     * D2 - "I have searched my records, sir" and "I have searched your notes
+#       and found no records" with NO search step in the turn at all (A3, B3;
+#       `notes_read` was not even set up). A claim about a source is backed only
+#       by a tool OF THAT SOURCE that really ran - a web search never backs "I
+#       searched your notes".
+#     * D1c - "The available features are: - Code reviewer - Drafting assistant
+#       - Researcher - Summariser" with no feature_guide step. None of those four
+#       names appears anywhere in the guide's own 139 rows.
+#     * D5 - "I cannot switch on that setting, sir. It is not available to me."
+#       when the owner's own words name a setting the settings registry really
+#       has. A9's "banana mode" resolves to nothing, and is left alone: the
+#       refusal was right.
+#     * D7 - "I have calculated the product of 8347 and 2914 to be 24,321,158"
+#       with no calculator step (the real product is 24,323,158): the number was
+#       written, not worked out.
+#
+#   EVERY check is a plain pattern over the model's own words plus this turn's
+#   `steps` - what the tools really returned, never what the model says ran.
+#   Each function is wrapped by the caller, and a missing registry module adds
+#   nothing: none of these may ever be the reason a good answer fails.
+
+#: What a search claim needs before it counts as one: a first-person subject and
+#: a past-tense search verb, with at most three words between them ("I have
+#: already looked ..."). The subject is what keeps an INSTRUCTION ("say 'search
+#: your notes'"), a QUESTION ("should I search your notes?") and a promise ("I
+#: will search your notes") out of it: none of those has the shape "I have
+#: searched ...".
+_SEARCH_CLAIM = re.compile(
+    r"\b(?P<who>i(?:'ve|\s+have|\s+just|\s+already|\s+also|\s+did)?|we(?:'ve|\s+have)?)\s+"
+    r"(?P<before>(?:\w+\s+){0,3}?)"
+    r"(?P<verb>searched|looked|checked|went\s+through|reviewed|scanned|dug|read)\b"
+    r"(?P<after>[^.!?\n]{0,80})", re.I)
+#: Words that turn the head of a sentence ("I ... searched") into something that
+#: is NOT a claim: a denial, a promise, a question or a condition. Read over the
+#: subject, the words between it and the verb, and the verb - never over the
+#: whole sentence, because "I searched your notes and will call you" is still a
+#: claim, and "and found no records" is the honest result of one.
+_NOT_A_CLAIM_HEAD = re.compile(
+    r"\b(?:not|never|n't|cannot|unable|without|will|shall|going|want|wants|let|"
+    r"can|may|might|should|would|could|if|whether|didn'?t|don'?t|asked)\b", re.I)
+#: Words just BEFORE the subject that make it a reported question rather than a
+#: claim ("You asked whether I searched your records"). Read over the 30
+#: characters before the subject, anchored at its end.
+_NOT_A_CLAIM_LEAD = re.compile(
+    r"\b(?:whether|if|asked|ask|did|do|does|should|shall|will|would|could|when)\b"
+    r"[^.!?\n]{0,25}$", re.I)
+#: A claim about something done BEFORE this answer ("I searched your notes
+#: earlier"), which is honest as it stands and must never be corrected - a wrong
+#: correction after a true sentence is worse than a missed one, the same rule
+#: jarvis_claims.claims_done follows.
+_EARLIER_SEARCH = re.compile(
+    r"\b(?:earlier|already|before|yesterday|last\s+(?:time|night|week)|this\s+morning|"
+    r"previously)\b", re.I)
+#: Each source an answer can claim to have searched, the words that name it, and
+#: the tools whose step backs it. `notes` accepts `my_files` too: a note inside a
+#: listed folder really is the owner's own writing read from this PC.
+_SEARCH_SOURCES = (
+    ("memory", re.compile(r"\b(?:my|your|the)\s+(?:memory|records?|saved\s+facts?|"
+                          r"stored\s+facts?|memory\s+store)\b", re.I),
+     ("memory_search",)),
+    ("notes", re.compile(r"\b(?:my|your|the)\s+(?:notes?|vault|journal)\b", re.I),
+     ("notes_search", "my_files")),
+    ("web", re.compile(r"\b(?:the\s+)?(?:web|internet|online)\b", re.I),
+     ("web_search",)),
+)
+#: The correction, per source. It says what did not happen and never claims what
+#: is switched off (this turn does not know which reading tools are on), and it
+#: names the words that make the search real next time.
+_SEARCH_CORRECTION = {
+    "memory": ("(Correction - I did not look anything up in your memory in this answer: "
+               "no memory search ran. That came from this conversation, not from your "
+               "saved facts. Say \"search your memory for ...\" and I will.)"),
+    "notes": ("(Correction - I did not search your notes in this answer: no notes "
+              "search ran. Say \"search my notes for ...\" and I will.)"),
+    "web": ("(Correction - I did not search the web in this answer: no web search "
+            "ran.)"),
+}
+
+#: An answer that prints the feature guide's contents. Deliberately about the
+#: SHAPE of a listing or a citation, not about every sentence that mentions a
+#: feature: "I do not have a feature called that" is a fair answer on its own,
+#: and only a listing or a claim to be reading the guide can be checked here.
+_GUIDE_CLAIM = re.compile(
+    r"\b(?:the\s+)?(?:available|current|existing)\s+features?\s+(?:are|include)\b"
+    r"|\bhere\s+(?:are|is)\s+(?:the\s+)?(?:list\s+of\s+)?(?:available\s+)?features?\b"
+    r"|\bfeatures?\s+(?:available\s+)?(?:in|on)\s+jarvis\s+(?:are|include)\b"
+    r"|\b(?:the\s+)?feature\s+(?:guide|list)\s+(?:says|lists|shows|has|contains)\b"
+    r"|\baccording\s+to\s+(?:the\s+|your\s+)?feature\s+(?:guide|list)\b", re.I)
+GUIDE_CLAIM_CORRECTION = (
+    "(Correction - that feature list did not come from Jarvis's own feature guide: no "
+    "feature lookup ran in this answer. Ask \"what features do you have\" and I will "
+    "read the real list.)")
+
+#: An answer that says it worked something out. The calculator and the sandbox
+#: script are what really work a number out; the model writing one is a guess.
+_CALC_CLAIM = re.compile(
+    r"\b(?:i(?:'ve|\s+have|\s+just|\s+also)?|we(?:'ve|\s+have)?)\s+"
+    r"(?:calculated|computed|worked\s+out|added\s+up|multiplied|divided|summed)\b", re.I)
+_CALC_BACKING = ("calculator", SANDBOX_TOOL)
+CALC_CLAIM_CORRECTION = (
+    "(Correction - that figure was not worked out by the calculator: no calculation "
+    "tool ran in this answer. Ask me to calculate it and I will use the calculator.)")
+
+#: An answer that tells the owner a setting is not available when it is one the
+#: settings registry really has. Only ever consulted together with the owner's
+#: OWN newest words, because that is what names the setting: the model's answer
+#: says "that setting" and never the name.
+_SETTING_DENIAL = re.compile(
+    r"\b(?:is|are)\s+not\s+(?:available|something\s+i\s+can|a\s+setting)\b"
+    r"|\b(?:isn'?t|aren'?t)\s+available\b"
+    r"|\bnot\s+available\s+(?:to\s+me|in\s+jarvis|here|on\s+this\s+machine)\b"
+    r"|\b(?:cannot|can'?t|can\s+not|am\s+unable\s+to|do\s+not\s+have)\b"
+    r"[^.!?\n]{0,60}?\b(?:switch|change|turn|adjust|toggle|enable|disable)\b"
+    r"[^.!?\n]{0,40}?\b(?:that|this|the|any)\s+setting\b"
+    r"|\b(?:there\s+is|there'?s)\s+no\s+(?:such\s+)?setting\b"
+    r"|\bthat\s+setting\s+(?:does\s+not|doesn'?t)\s+exist\b", re.I)
+
+
+def _ran_any(steps, names) -> bool:
+    """True when any of `names` really ran in this answer. `ran`, not `ok`: a
+    search that returned nothing was still a search, and saying so is honest."""
+    for s in steps or ():
+        if isinstance(s, dict) and s.get("ran") is True and s.get("tool") in names:
+            return True
+    return False
+
+
+def _search_claim_line(text: str, steps: list) -> str:
+    """The correction for a search the answer says it ran and did not, or "".
+
+    D2. Read per source, because the sources are separate: a `web_search` step
+    never backs "I searched your notes". One line, naming the first source the
+    answer claimed and nothing backed - a second line would repeat the point.
+    """
+    for m in _SEARCH_CLAIM.finditer(text or ""):
+        head = f"{m.group('who')} {m.group('before')}{m.group('verb')}"
+        lead = (text or "")[max(0, m.start() - 30):m.start()]
+        if (_NOT_A_CLAIM_HEAD.search(head) or _NOT_A_CLAIM_LEAD.search(lead)
+                or _EARLIER_SEARCH.search(m.group(0))):
+            continue
+        said = m.group("after")
+        for label, words, backing in _SEARCH_SOURCES:
+            if words.search(said) and not _ran_any(steps, backing):
+                return _SEARCH_CORRECTION[label]
+    return ""
+
+
+def _guide_claim_line(text: str, steps: list) -> str:
+    """The correction for an answer that asserts the feature guide's contents
+    with no feature_guide step behind it, or "". D1c."""
+    if _GUIDE_CLAIM.search(text or "") and not _ran_any(steps, (FEATURE_GUIDE_TOOL,)):
+        return GUIDE_CLAIM_CORRECTION
+    return ""
+
+
+def _calc_claim_line(text: str, steps: list) -> str:
+    """The correction for "I have calculated ..." with no calculation tool in
+    this answer, or "". D7."""
+    if _CALC_CLAIM.search(text or "") and not _ran_any(steps, _CALC_BACKING):
+        return CALC_CLAIM_CORRECTION
+    return ""
+
+
+def _setting_denial_line(text: str, owner_words: str) -> str:
+    """The correction for "that setting is not available" when the owner's own
+    words name a setting the settings tool can really change, or "". D5.
+
+    The name is resolved with `jarvis_settings_registry.find_bool_setting_words`
+    - the SAME resolver `_settings_call` uses, so a name that resolves here is
+    one the tool would accept, and the correction's promise ("say turn it on and
+    I will") is one this code can keep. Anything that resolves to nothing ("banana
+    mode") or to more than one setting is left alone: that refusal was right. A
+    missing registry adds nothing.
+    """
+    if not _SETTING_DENIAL.search(text or ""):
+        return ""
+    asked = str(owner_words or "").strip()
+    if not asked:
+        return ""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return ""
+    try:
+        setting = R.find_bool_setting_words(asked)
+    except Exception:
+        return ""
+    if setting is None:
+        return ""
+    name = str((getattr(setting, "names", None) or [""])[0] or getattr(setting, "key", ""))
+    if not name:
+        return ""
+    # WHAT THIS PROMISES, and why it is worded this way. It says the name is real
+    # and that asking goes through that setting's own rule - never "it will be
+    # changed", because the rule may be an approval card, and a loosening one is
+    # PC-only, so a request from the phone genuinely cannot complete there. The
+    # one thing the answer got wrong is that the setting is missing; only that is
+    # corrected.
+    return (f"(Correction - \"{name}\" is one of Jarvis's own settings and is not "
+            f"missing: ask me to \"turn on {name}\" or \"turn it off\", and it goes "
+            f"through that setting's own approval rule.)")
+
+
+def _claim_corrections(text: str, steps: list, watch) -> list:
+    """Every plain correction line this answer needs, in the order they are said.
+
+    The four checks above, each off its own `try`: a broken pattern or a missing
+    module must cost the owner nothing but that one line (see the section note).
+    `watch` is only read for the owner's own newest words, which the setting
+    check needs. Never raises.
+    """
+    out: list = []
+    for fn in (_search_claim_line, _guide_claim_line, _calc_claim_line):
+        try:
+            line = fn(text, steps)
+        except Exception:
+            line = ""
+        if line:
+            out.append(line)
+    try:
+        line = _setting_denial_line(text, getattr(watch, "newest_own_words", "") or "")
+    except Exception:
+        line = ""
+    if line:
+        out.append(line)
+    return out
 
 
 def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
