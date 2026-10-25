@@ -13,10 +13,18 @@ two occasions when it was broken: a stack frame read as a cause and relayed as
 the source file."* An origin story is exactly the place where a project invents
 its own mythology, so this one is built the other way round: the record first.
 
-**How to read the citations.** `path:line` means a line in a file on this
-branch. `DECISIONS.md` means `docs/DECISIONS.md`, the dated record of the
-owner's own decisions from 2026-09-24 to 2026-10-13 — quoted here exactly as it
-stands, never reworded. Commit hashes are real and can be read with
+**How to read the citations.** `path:line` means a line in a file, and this page
+was written from `origin/main` at `1e7d5c2a` (2026-10-14) — the newest commit it
+read — with a few figures refreshed by later edits. The repository has moved on
+since: `README.md` has been cut from 849 lines to 283, `docs/ARCHITECTURE.md` has
+grown by about 1,000 lines, and `docs/DECISIONS.md` now has entries through
+2026-10-25. So read a `path:line` as a place in the tree the sentence was written
+from, not as a line in today's file, and the same for the counts and the sizes in
+§10: they were measured for this page, not today — the quotation is the check.
+§6 is the section re-measured since, at the commit it names. `DECISIONS.md` means
+`docs/DECISIONS.md`, the dated record of the owner's own decisions from
+2026-09-24 to 2026-10-13 at the time this page was written — quoted here exactly
+as it stood, never reworded. Commit hashes are real and can be read with
 `git show <hash>`.
 
 **Where this page came from.** It was written by reading the record, not by
