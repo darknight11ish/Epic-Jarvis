@@ -534,22 +534,22 @@ measured 4,598 ms against 9 ms, `docs/DEFECT-REGISTER.md:107`). And 7 of the 158
 
 ## 6. Where it is now
 
-Everything below was measured on this branch by running the command shown. The
-counts are honest counts, not estimates, and they change — re-run the command
-rather than trusting the number.
+Everything below was measured on `main` at `8104e6d01` on 2026-10-25 by
+running the command shown. The counts are honest counts for that commit, not
+estimates, and they change — re-run the command rather than trusting the number.
 
 | What | Number | How it was counted |
 |---|---|---|
-| Commits | **3,115** (738 of them merges) | `git rev-list --count HEAD`; `git rev-list --merges --count HEAD` |
+| Commits | **3,713** (845 of them merges) | `git rev-list --count HEAD`; `git rev-list --merges --count HEAD` |
 | First commit | **2026-09-12**, `e7c466a4` "Initial commit" | `git log --reverse` |
 | Last *numbered* release | **0.2.0** | `VERSION`; `CHANGELOG.md:10` ("the last *numbered* release"; newer work sits above it under "Not in a numbered version yet") |
-| Features both apps show | **129**, in 9 groups | `features/features.json`, checked by `tools/check_feature_list.py` |
-| Backend patches | **145** | `Get-ChildItem backend/*.patch` |
-| Backend test suites | **315** | `Get-ChildItem backend/test_*.py` |
-| Desktop test suites | **184** `.mjs` files | `Get-ChildItem jarvis-desktop/tests/*.mjs` |
-| Phone test files | **218** `*Test.kt` | `Get-ChildItem jarvis-client -Recurse -Filter *Test.kt` |
-| Documents | **379** markdown files, about 9.3 MB | `Get-ChildItem docs -Recurse -Filter *.md`; the page's own figures are checked by `tools/check_docs_map.py` |
-| Checkers named `check_*` | **26** | `Get-ChildItem tools/check_*.py` |
+| Features in the list | **139**, in 9 groups: 110 on both apps, 21 on the desktop only, 8 on the phone only | `features/features.json`, checked by `tools/check_feature_list.py` |
+| Backend patches | **154** | `Get-ChildItem backend/*.patch` |
+| Backend test suites | **428** | `Get-ChildItem backend/test_*.py` |
+| Desktop test suites | **226** `.mjs` files | `Get-ChildItem jarvis-desktop/tests/*.mjs` |
+| Phone test files | **247** `*Test.kt` | `Get-ChildItem jarvis-client -Recurse -Filter *Test.kt` |
+| Documents | **403** markdown files, about 10.5 MB | `Get-ChildItem docs -Recurse -Filter *.md`; `docs/README.md` carries the live copy, and `tools/check_docs_map.py` checks it |
+| Checkers named `check_*` | **39** | `Get-ChildItem tools/check_*.py` |
 | Claims about itself, each with a machine check | **158 rows**, 143 built / 7 open / 8 unverifiable | `python -B tools/check_claims.py` |
 | Defect register | **14 rows**, 13 closed / 1 open | `docs/defect-register.tsv` |
 | Launch videos kept | **6** numbered versions, v1–v6, never replaced | `videos/README.md`; the owner's rule of 2026-09-24 (`CLAUDE.md`) |
@@ -563,14 +563,14 @@ rather than trusting the number.
 (`CLAUDE.md`, final section, which records a direct push refused with *"6 of 6
 required status checks are expected."*).
 
-**The checkers, run for this page.** All five exit 0 on this branch, with
+**The checkers, run for this page.** All five exit 0 on `main` at `8104e6d01`, with
 `JARVIS_BACKEND` cleared:
 
-- `python -B tools/check_docs_map.py` — `docs map OK: 379 documents, 9,292,745 bytes, and README.md agrees`
-- `python -B tools/check_feature_list.py` — `129 entries in 9 groups; 122 of 139 route sections and menu ids covered` / `5 passed, 0 failed`
-- `python -B tools/check_claims.py` — `158 claim(s) checked ..., 143 built, 7 still open, 8 unverifiable`
-- `python -B tools/check_vacuous_checks.py` — `320 suite file(s) read, 21735 check() call(s) looked at: no check is a fake skip`
-- `python -B tools/check_parity.py` — `No undecided drift.` (with three `planned` warnings, which it prints rather than hides)
+- `python -B tools/check_docs_map.py` — `docs map OK: 403 documents, 10,477,392 bytes, and README.md agrees`
+- `python -B tools/check_feature_list.py` — `139 entries in 9 groups; 128 of 145 route sections and menu ids covered, 18 named in INTERNAL` / `8 passed, 0 failed`
+- `python -B tools/check_claims.py` — `158 claim(s) checked against the code: 143 built, 7 still open, 8 unverifiable (the reason is in each row).`
+- `python -B tools/check_vacuous_checks.py` — `433 suite file(s) read, 31510 check() call(s) looked at: no check is a fake skip, none has a string or defaulted condition.`
+- `python -B tools/check_parity.py` — `No undecided drift.` (with two `planned` warnings, which it prints rather than hides)
 
 **The hardware, as measured.** `docs/MEASURED-2026-10-05-owner-pc.md:3-6` calls
 itself *"**The first real measurement this project has ever taken on its own
