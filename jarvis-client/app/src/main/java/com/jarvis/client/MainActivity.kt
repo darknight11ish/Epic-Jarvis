@@ -762,7 +762,12 @@ class MainActivity : FragmentActivity() {
         }
         if (intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
-            if (!text.isNullOrEmpty()) sharedText.value = text
+            // `fresh` matters here too: a rotation rebuilds the activity from
+            // the SAME launch intent, so without it the shared text is re-applied
+            // and joined onto the held chip a second time (it doubles, and posts
+            // twice). The Live alias above already honoured it (the 2026-10-24
+            // round-2 audit, M2).
+            if (fresh && !text.isNullOrEmpty()) sharedText.value = text
             return
         }
         // One photo. Its words, if the other app sent some, become the
@@ -770,6 +775,9 @@ class MainActivity : FragmentActivity() {
         // offered (see the LaunchedEffect on sharedPicture in App()).
         if (!ChatPicture.isSharedImage(intent.type)) return
         val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) ?: return
+        // Same reason as the text branch: a rotation must not re-attach a photo
+        // the owner already sent or removed (M2).
+        if (!fresh) return
         intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { sharedText.value = it }
         sharedPicture.value = uri
@@ -1166,6 +1174,11 @@ class MainActivity : FragmentActivity() {
         // And while "Solve it here" shows a picture of the PC's browser
         // window (it is never saved, so it must not be screenshotted either).
         val handoffShown = nav.current == Screen.HANDOFF
+        // The exit fade: `AnimatedContent` keeps DRAWING the outgoing screen for
+        // this long after `nav.current` has already changed (ui/Nav.kt), so the
+        // capture flag must outlast it - see below (the 2026-10-24 round-2
+        // audit, L2).
+        val exitFadeMs = LocalMotion.current.enterMs
         // And while an approval card shows the picture of a web form Jarvis
         // filled in (FormReview; the card raises this before it asks for it).
         val formPictureShown = com.jarvis.client.net.FormReview.shown.collectAsState().value > 0
@@ -1176,10 +1189,19 @@ class MainActivity : FragmentActivity() {
                 handoffShown = handoffShown,
                 formPictureShown = formPictureShown,
             )
-            setRecentsScreenshotEnabled(!secure)
             if (secure) {
+                // Set at once: nothing private waits for a fade to be protected.
+                setRecentsScreenshotEnabled(false)
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             } else {
+                // CLEARED LATE, and that is the fix. Leaving "Solve it here"
+                // flips `nav.current` the moment Back is pressed, but the old
+                // screen (holding a frame of the PC's browser) is still drawn
+                // through the exit fade. Clearing with it left that frame
+                // capturable for ~200 ms; a new secure value cancels this
+                // effect, so waiting here cannot leave the window unprotected.
+                delay(exitFadeMs.toLong() + 20L)
+                setRecentsScreenshotEnabled(true)
                 window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             }
         }

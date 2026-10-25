@@ -2381,8 +2381,14 @@ object JarvisRuntime {
      * tool call. The screen must never report the job as paused or resumed on
      * a click - only when a later read says so.
      */
-    suspend fun taskAct(id: String, act: String): ApiResult<JsonObject> =
-        api.taskAct(id, act)
+    suspend fun taskAct(id: String, act: String): ApiResult<JsonObject> {
+        // Rule 4 is about actions: resume/retry put work back in the PC's queue
+        // and cancel ends it. The screens grey these buttons, but a disabled
+        // button is a courtesy, not a gate - the same reason [cancelJob] holds
+        // it. (The 2026-10-24 round-2 audit, M6.)
+        actionBlocker()?.let { return ApiResult.Failed(ApiError.Unreachable(it)) }
+        return api.taskAct(id, act)
+    }
 
     /**
      * Answers a question a job stopped on. **Approves nothing**: the answer
@@ -2390,8 +2396,11 @@ object JarvisRuntime {
      * own approval card when its turn comes. A blank answer is refused before
      * anything is sent.
      */
-    suspend fun taskAnswer(id: String, answer: String): ApiResult<JsonObject> =
-        api.taskAnswer(id, answer)
+    suspend fun taskAnswer(id: String, answer: String): ApiResult<JsonObject> {
+        // An answer moves the job on - an action, so the same rule-4 gate.
+        actionBlocker()?.let { return ApiResult.Failed(ApiError.Unreachable(it)) }
+        return api.taskAnswer(id, answer)
+    }
 
     // -------------------------------------------------------- tutorials ----
 
@@ -8505,6 +8514,12 @@ object JarvisRuntime {
         scheduleAct(id, "delete").also { _briefingTick.update { n -> n + 1 } }
 
     private fun onBriefingReady(id: String, eventId: String? = null) {
+        // Written at once, like the other three posters in this file (a fired
+        // timer, a match, a ring): if the process is killed before the two
+        // seconds' coalescing gap closes, a restart must not replay this event
+        // and alert the briefing a second time. This was the one poster without
+        // it (the 2026-10-24 round-2 audit, L3).
+        flushResumePoint()
         val context = appContext ?: return
         val arrived = System.currentTimeMillis()
         scope.launch {
