@@ -89,16 +89,22 @@ object Pictures {
     const val IMAGE_MODE = "Image mode"
 
     /**
-     * How long the CONFIRMING request may say NOTHING before the phone gives
-     * up: 1,200 s. It is ONE long request - the PC sets the everyday chat
-     * aside, draws, makes the drawing program release its models and loads the
-     * chat back, and answers only at the end. Measured on this PC: **500.1 s**
-     * wall clock for the phone path (draw 382.0 s) and 405.8 s for the
-     * desktop's; the PC's own bound is `DRAW_WAIT_S` (600) + `FREE_WAIT_S`
-     * (180) + the warm-back, about 14 minutes, so 1,200 s is that bound plus a
-     * margin. A READ timeout measures silence, not the whole call, so a draw
-     * that is quietly working is never cut off - and it is never re-sent: see
+     * How long a picture request may say NOTHING before the phone gives up:
+     * 1,200 s. It is ONE long request - the PC sets the everyday chat aside,
+     * draws, makes the drawing program release its models and loads the chat
+     * back, and answers only at the end. Measured on this PC: **500.1 s** wall
+     * clock for the phone path (draw 382.0 s) and 405.8 s for the desktop's;
+     * the PC's own bound is `DRAW_WAIT_S` (600) + `FREE_WAIT_S` (180) + the
+     * warm-back, about 14 minutes, so 1,200 s is that bound plus a margin. A
+     * READ timeout measures silence, not the whole call, so a draw that is
+     * quietly working is never cut off - and it is never re-sent: see
      * [TIMED_OUT_MAKE].
+     *
+     * BOTH make requests use it, not only the confirming one. The first
+     * request is not always the quick 409 question: when the everyday chat is
+     * NOT holding the card, the PC draws inside that first request (its
+     * `handshake_plan` answers needs=False), and a measured draw is 381-383 s
+     * on this PC - so the first request needs the same long budget.
      */
     const val CONFIRM_TIMEOUT_S = 1_200L
 

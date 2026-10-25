@@ -295,21 +295,6 @@ class JarvisApi(
         .build()
 
     /**
-     * For the calls that make the PC's own graphics card work: drawing a
-     * picture (JARVIS-API section 129) shares the 12 GB card with the everyday
-     * model, so it can take minutes, not seconds. The PC waits for the drawing
-     * program itself and answers only when it is done, so a short budget here
-     * would cut off a picture that was about to arrive. Five minutes is the
-     * same patience the PC's own route has, and the phone says "Drawing…" the
-     * whole time rather than appearing to have hung.
-     */
-    private val writeCall: OkHttpClient = client.newBuilder()
-        .readTimeout(300, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .callTimeout(300, TimeUnit.SECONDS)
-        .build()
-
-    /**
      * The preset apply POST waits for the owner's ONE approval card. The
      * backend's default approval timeout is 900 s, so the call must outlast it
      * by a comfortable margin: 1,200 s, not the 20 s [shortCall] gives every
@@ -335,12 +320,24 @@ class JarvisApi(
     private val cardCall: OkHttpClient = client.newBuilder()
         .readTimeout(1_200, TimeUnit.SECONDS)
         .callTimeout(1_200, TimeUnit.SECONDS)
+        .build()
 
-     * The ONE long request that confirms the picture swap
-     * ([Pictures.CONFIRM_TIMEOUT_S], docs/JARVIS-API.md 129.4b): the PC sets
-     * the everyday chat aside, draws, makes the drawing program let go of its
-     * models and loads the chat back, and answers only when all of that is
-     * done. Measured on this PC: 500.1 s wall clock for the phone path.
+    /**
+     * The ONE long request that makes a picture, used for BOTH requests the
+     * phone sends ([Pictures.CONFIRM_TIMEOUT_S], docs/JARVIS-API.md 129.4b).
+     *
+     * The CONFIRM waits for the whole swap: the PC sets the everyday chat
+     * aside, draws, makes the drawing program let go of its models and loads
+     * the chat back, and answers only when all of that is done. Measured on
+     * this PC: 500.1 s wall clock for the phone path.
+     *
+     * The FIRST request needs the same long budget, because it is not always
+     * the quick 409 question. When the everyday chat is NOT holding the card
+     * (the chat is unloaded, or the PC is on way C), the PC draws inside that
+     * first request - `jarvis_pictures.py`'s `handshake_plan` answers needs=False
+     * and `_draw_now` draws, measured at 381-383 s on this PC. The old 300 s
+     * write client cut that at five minutes, so the PC finished the picture and
+     * the phone had already thrown the answer away.
      *
      * A READ timeout, not a call timeout, is the right clock here: it measures
      * SILENCE and restarts on every byte, so the PC thinking for minutes is
@@ -348,7 +345,7 @@ class JarvisApi(
      * request a second time and a real draw plus its warm-back can take
      * fourteen minutes on the PC's own bound.
      */
-    private val confirmCall: OkHttpClient = client.newBuilder()
+    private val makeCall: OkHttpClient = client.newBuilder()
         .readTimeout(Pictures.CONFIRM_TIMEOUT_S, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
@@ -1595,9 +1592,10 @@ class JarvisApi(
      * TWO REQUESTS WHEN THE CARD HAS TO BE FREED (the final contract, added
      * 2026-10-25). The FIRST request answers **409 `needs: "free_card"`** and
      * moves nothing: the PC is asking whether it may set the everyday chat
-     * aside. [confirming] is true only for the owner's own tap, which sends the
-     * same words plus `free_card: true` - and that one is ONE LONG request, so
-     * it runs on [confirmCall] with the 1,200 s read timeout.
+     * aside. The owner's own tap sends the same words plus `free_card: true`
+     * ([Pictures.confirmBody]); no other request can carry that key. BOTH
+     * requests run on [makeCall]: the first one is the draw itself whenever
+     * the everyday chat is not holding the card.
      *
      * The answer is read by [Pictures.readMake] and handed up whole, because a
      * 409 question, a 409 "still drawing", a 403 `pc_only` from an older PC
@@ -1605,11 +1603,8 @@ class JarvisApi(
      * none of them is a bad pairing token. A 401 always is, and a 403 that is
      * NOT `pc_only` (a cross-origin refusal) keeps its old reading.
      */
-    suspend fun makePicture(
-        body: String,
-        confirming: Boolean = false,
-    ): ApiResult<PicturesAnswer> =
-        when (val result = picturesCall(Pictures.PATH, body, longWait = confirming)) {
+    suspend fun makePicture(body: String): ApiResult<PicturesAnswer> =
+        when (val result = picturesCall(Pictures.PATH, body)) {
             is ApiResult.Ok -> ApiResult.Ok(Pictures.readMake(result.value.first, result.value.second))
             is ApiResult.Failed -> result
         }
@@ -1621,13 +1616,13 @@ class JarvisApi(
      * 403 that carries `pc_only` is the PC saying "on the PC only" (the same
      * reading [projectsCall] gives it), not a bad pairing token.
      *
-     * [longWait] is true for the confirming draw only: nothing else on these
-     * routes takes minutes before its first byte.
+     * A GET keeps the short budget. Every POST is a draw (or the 409 question
+     * before one), so it runs on [makeCall]: the first request is the whole
+     * draw whenever the everyday chat is not holding the card.
      */
     private suspend fun picturesCall(
         path: String,
         json: String?,
-        longWait: Boolean = false,
     ): ApiResult<Pair<Int, JsonObject?>> = withContext(Dispatchers.IO) {
         val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
         val builder = Request.Builder().url(target)
@@ -1638,14 +1633,11 @@ class JarvisApi(
         }
         val req = builder.authed().build()
         runCatching {
-            // A read is quick; a draw's FIRST request is quick too (it answers
-            // 409 at once when the card is busy). Only the owner's confirm waits
-            // for the whole swap, and it gets its own long client.
-            val call = when {
-                json == null -> shortCall
-                longWait -> confirmCall
-                else -> writeCall
-            }
+            // A GET is quick. EVERY POST is a draw - either the confirm that
+            // waits for the whole swap, or the first request, which draws when
+            // the everyday chat is not holding the card - so both get the long
+            // client (about 380 s for a real draw on this PC).
+            val call = if (json == null) shortCall else makeCall
             call.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()

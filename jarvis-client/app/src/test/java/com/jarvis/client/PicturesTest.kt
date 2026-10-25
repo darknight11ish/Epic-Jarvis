@@ -272,10 +272,12 @@ class PicturesTest {
                 "the confirm's client must use the shared constant",
                 api.contains("readTimeout(Pictures.CONFIRM_TIMEOUT_S, TimeUnit.SECONDS)"),
             )
-            assertTrue("the confirm runs on its own long client", api.contains("longWait -> confirmCall"))
-            // The first request keeps the ordinary budget and can never wait
-            // twenty minutes for something that answered 409 at once.
-            assertTrue(api.contains("else -> writeCall"))
+            // EVERY make request runs on that long client, the first one too:
+            // when the everyday chat is not holding the card the PC draws
+            // inside request 1 (measured 381-383 s), and the old 300 s write
+            // client cut that off at five minutes.
+            assertTrue("every make request runs on the long client", api.contains("else makeCall"))
+            assertFalse("no make request keeps the old 300 s bound", api.contains("else -> writeCall"))
         }
         val plate = plate()
         if (plate != null) {
@@ -302,6 +304,30 @@ class PicturesTest {
             assertTrue(plate.contains("Pictures.confirmingWords(minutes)"))
             assertTrue(plate.contains("if (confirming)"))
         }
+    }
+
+    @Test
+    fun theFirstMakeRequestAlsoGetsTheLongBudgetBecauseItCanBeTheDraw() {
+        // The PC does not always answer 409 first: `handshake_plan` answers
+        // needs=False whenever the everyday chat is NOT holding the card (the
+        // chat is unloaded, or the PC is on way C), and `_draw_now` then draws
+        // inside the FIRST request. A measured draw is 381-383 s, past the old
+        // 300 s bound, so the first request runs on the long client too.
+        val api = api() ?: return
+        val call = blockAfter(api, "private suspend fun picturesCall") ?: return
+        assertTrue(
+            "every POST picture call runs on the long client",
+            call.contains("else makeCall"),
+        )
+        assertFalse("the old 300 s write client must not make a picture", call.contains("writeCall"))
+        val long = api.substringAfter("private val makeCall").substringBefore(".build()")
+        assertTrue(
+            "the long client uses the shared 1,200 s constant",
+            long.contains("readTimeout(Pictures.CONFIRM_TIMEOUT_S, TimeUnit.SECONDS)"),
+        )
+        // A read timeout measures silence; a whole-call bound would cut a real
+        // draw off, so this client sets none.
+        assertFalse("no whole-call bound on a make", long.contains("callTimeout"))
     }
 
     @Test

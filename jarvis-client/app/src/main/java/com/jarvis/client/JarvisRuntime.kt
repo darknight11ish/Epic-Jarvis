@@ -8806,8 +8806,9 @@ object JarvisRuntime {
      * one long request (the PC's measured 500.1 s on this machine), and the
      * only place anything is confirmed.
      *
-     * [confirm] true is set ONLY by that tap. It runs on the API's long-timeout
-     * client, and its timeout is NOT retried: the PC may still be drawing the
+     * [confirm] true is set ONLY by that tap. Both requests run on the API's
+     * long client (the first one draws when the everyday chat is not holding
+     * the card), and a timeout is NOT retried: the PC may still be drawing the
      * picture ([com.jarvis.client.net.Pictures.TIMED_OUT_MAKE]). A second
      * draw's answer (`409 needs: "drawing"`) is that sentence, as sent, and no
      * retry either. An older PC's `403 pc_only` is shown as
@@ -8827,7 +8828,7 @@ object JarvisRuntime {
             )
         }
         actionBlocker()?.let { return com.jarvis.client.net.PicturesMake(false, it, null) }
-        return when (val r = api.makePicture(body, confirming = confirm)) {
+        return when (val r = api.makePicture(body)) {
             is ApiResult.Ok -> when (val answer = r.value) {
                 is com.jarvis.client.net.PicturesAnswer.NeedsConfirm ->
                     com.jarvis.client.net.PicturesMake(
