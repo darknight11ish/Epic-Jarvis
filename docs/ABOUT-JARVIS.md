@@ -243,8 +243,8 @@ of them are named `check_*.py` under `tools/` (`Get-ChildItem tools/check_*.py`
 The checkers that gate changes include:
 
 - `tools/check_claims.py` — *"one row per thing this project says about itself,
-  with a check a machine runs"* (`docs/CLAIMS.tsv`, 155 rows). On the tree this
-  page was written from it reports **155 claims: 140 built, 7 still open, 8 unverifiable** — *"and every `open` one is still a real gap."*
+  with a check a machine runs"* (`docs/CLAIMS.tsv`, 156 rows). On the tree this
+  page was written from it reports **156 claims: 141 built, 7 still open, 8 unverifiable** — *"and every `open` one is still a real gap."*
 - `tools/check_parity.py` — did a feature land in both apps, or is one side
   deliberately left out?
 - `tools/check_feature_list.py` — is `features/features.json` (the "Everything
@@ -520,7 +520,7 @@ goes with it.
 
 The register is not a museum: on the tree this page was written from,
 `docs/defect-register.tsv` holds **14 rows, 13 closed and 1 open** — DEF-002 (a
-measured 4,598 ms against 9 ms, `docs/DEFECT-REGISTER.md:107`). And 7 of the 155 claims in `docs/CLAIMS.tsv` are still marked open.
+measured 4,598 ms against 9 ms, `docs/DEFECT-REGISTER.md:107`). And 7 of the 156 claims in `docs/CLAIMS.tsv` are still marked open.
 
 ---
 
@@ -542,7 +542,7 @@ rather than trusting the number.
 | Phone test files | **218** `*Test.kt` | `Get-ChildItem jarvis-client -Recurse -Filter *Test.kt` |
 | Documents | **379** markdown files, about 9.3 MB | `Get-ChildItem docs -Recurse -Filter *.md`; the page's own figures are checked by `tools/check_docs_map.py` |
 | Checkers named `check_*` | **26** | `Get-ChildItem tools/check_*.py` |
-| Claims about itself, each with a machine check | **155 rows**, 140 built / 7 open / 8 unverifiable | `python -B tools/check_claims.py` |
+| Claims about itself, each with a machine check | **156 rows**, 141 built / 7 open / 8 unverifiable | `python -B tools/check_claims.py` |
 | Defect register | **14 rows**, 13 closed / 1 open | `docs/defect-register.tsv` |
 | Launch videos kept | **6** numbered versions, v1–v6, never replaced | `videos/README.md`; the owner's rule of 2026-09-24 (`CLAUDE.md`) |
 
@@ -560,7 +560,7 @@ required status checks are expected."*).
 
 - `python -B tools/check_docs_map.py` — `docs map OK: 379 documents, 9,292,745 bytes, and README.md agrees`
 - `python -B tools/check_feature_list.py` — `129 entries in 9 groups; 122 of 139 route sections and menu ids covered` / `5 passed, 0 failed`
-- `python -B tools/check_claims.py` — `155 claim(s) checked ..., 140 built, 7 still open, 8 unverifiable`
+- `python -B tools/check_claims.py` — `156 claim(s) checked ..., 141 built, 7 still open, 8 unverifiable`
 - `python -B tools/check_vacuous_checks.py` — `320 suite file(s) read, 21735 check() call(s) looked at: no check is a fake skip`
 - `python -B tools/check_parity.py` — `No undecided drift.` (with three `planned` warnings, which it prints rather than hides)
 
@@ -730,7 +730,7 @@ and it is the part the project already has machinery for:
    check a machine runs"*, and `tools/check_claims.py` *"says so when a gap
    closes ... so the row cannot outlive the build the way CLAUDE.md's 'not yet
    built' queue outlived tap-to-talk."* The countable statements in §6 of this
-   page are the obvious first rows. **Honest caution:** 8 of the 155 rows are `unverifiable` and say why, so a claim in the chapter that no machine can
+   page are the obvious first rows. **Honest caution:** 8 of the 156 rows are `unverifiable` and say why, so a claim in the chapter that no machine can
    check should be written as a quotation with a date on it, not as a fact.
 3. **The numbers are re-measured, never remembered.** §6's table names the
    command for every figure, and `tools/check_docs_map.py` already re-measures
