@@ -59,8 +59,14 @@ the ROUTE, and only in two honest steps:
      chat lane is WARMED BACK. The answer reports both wall-clock times.
 
   * It NEVER happens silently, and it never happens without that second
-    request. A phone cannot start it: freeing this PC's everyday model is the
-    PC's own act (:func:`make_answer` gets ``pc_only`` from the caller).
+    request. EITHER app may send it: since the owner's 2026-10-24 request
+    ("i would like to be able to approve this from my phone as well") a paired
+    phone's ``free_card: true`` is consent exactly as the desktop's is - the
+    swap is local and reversible and the chat reloads on its own. What stays
+    PC-only is changing where pictures are kept and which program draws them
+    (:func:`settings_answer`).
+  * ONE PICTURE AT A TIME: a second request that arrives while a draw is in
+    flight is refused in one plain sentence and starts no second draw.
   * It NEVER leaves the chat unloaded: the warm-back runs in a ``finally``, so
     a failed or refused draw still puts the everyday model back and says so.
   * It does not start, stop or reconfigure the drawing program - that stays the
@@ -152,6 +158,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -219,12 +226,20 @@ OPTION_B_WORDS = (
     "pictures on the 8 GB card)."
 )
 
-#: The one sentence a refused phone draw gets when the card would have to be
-#: freed: the chat is this PC's own model, so letting it go is the PC's act.
-PC_ONLY_SWAP_WORDS = (
-    "Making a picture now means setting this PC's everyday chat aside for a "
-    "few minutes. That can only be started on the PC itself."
+#: The one sentence a SECOND picture request gets while a draw is still
+#: running (added 2026-10-25, with the phone confirm). It reuses the draw's own
+#: "still being drawn" plainness, and the refused request moves nothing: no
+#: second draw, no second swap, no unload.
+STILL_DRAWING_WORDS = (
+    "Jarvis is still drawing the last picture. Wait for that one to finish, "
+    "then ask again."
 )
+
+#: One picture at a time. ``make_answer`` takes this before anything moves and
+#: lets it go in a ``finally``. A phone may now confirm a swap, so a double-tap
+#: is a real second request: it must answer a sentence, not start a second draw
+#: beside the first on a card that has no room for two.
+_DRAW_IN_FLIGHT = threading.Lock()
 
 #: How many words of the prompt go into the file name.
 SLUG_WORDS = 6
@@ -1322,7 +1337,7 @@ def _card_block(plan: dict, aside: dict, back: dict, freed=None) -> dict:
     }
 
 
-def make_answer(body, settings: dict, *, runtime=None, now=None, pc_only=True,
+def make_answer(body, settings: dict, *, runtime=None, now=None,
                 plan=None) -> tuple:
     """``POST /api/pictures`` - draw one picture and keep it.
 
@@ -1334,8 +1349,17 @@ def make_answer(body, settings: dict, *, runtime=None, now=None, pc_only=True,
     the same request sent again with ``"free_card": true`` is the owner's
     consent, and this function then sets the everyday chat aside, draws, frees
     the picture model and warms the chat back - with the seconds reported.
-    ``pc_only`` is the caller's own "is this the PC?" check: a phone may ask
-    for a picture, but freeing this PC's everyday model is the PC's own act.
+
+    WHICH APP MAY CONSENT (owner decision 2026-10-24): either one. The owner
+    asked in their own words to approve it from their phone too, and the swap is
+    local and reversible - the chat reloads on its own, nothing is deleted - so
+    a paired phone's ``free_card: true`` is the same deliberate request as the
+    desktop's. What stays PC-only is changing the folder or the drawing program
+    (:func:`settings_answer`), not this in-and-out swap.
+
+    ONE PICTURE AT A TIME. A second request that arrives while a draw is in
+    flight answers **409** with ``needs: "drawing"`` and one plain sentence; it
+    starts no second draw and moves nothing (``_DRAW_IN_FLIGHT``).
     """
     settings = dict(settings or {})
     body = body if isinstance(body, dict) else {}
@@ -1399,9 +1423,27 @@ def make_answer(body, settings: dict, *, runtime=None, now=None, pc_only=True,
                      "runtime": settings.get("runtime"),
                      "error": not_running(settings.get("runtime"))}
 
-    # THE SWAP (2026-10-25). Planned only after the drawing program is known
-    # to be answering: pausing the owner's chat and THEN failing because the
-    # program is not running would cost them the pause for nothing.
+    if not _DRAW_IN_FLIGHT.acquire(blocking=False):
+        return 409, {"ok": False, "available": True, "needs": "drawing",
+                     "error": STILL_DRAWING_WORDS}
+    try:
+        return _draw_now(body, settings, adapter, prompt, draw, plan=plan,
+                         now=now)
+    finally:
+        _DRAW_IN_FLIGHT.release()
+
+
+def _draw_now(body, settings, adapter, prompt, draw, *, plan=None, now=None):
+    """The part that really moves the card: swap, draw, release, warm-back.
+
+    Split out of :func:`make_answer` so the one-draw-at-a-time lock has exactly
+    one span to cover: :func:`make_answer` takes it, calls this, and lets it go
+    in a ``finally`` whatever this returns or raises.
+
+    The swap is planned only after the drawing program is known to be
+    answering: pausing the owner's chat and THEN failing because the program is
+    not running would cost them the pause for nothing.
+    """
     plan = handshake_plan() if plan is None else plan
     needs_swap = bool(plan.get("needs"))
     if needs_swap and not plan.get("supported"):
@@ -1409,9 +1451,6 @@ def make_answer(body, settings: dict, *, runtime=None, now=None, pc_only=True,
                      "needs": "option_unsupported",
                      "option": plan.get("option"),
                      "error": plan.get("words") or OPTION_B_WORDS}
-    if needs_swap and not pc_only:
-        return 403, {"ok": False, "pc_only": True, "needs": "free_card",
-                     "error": PC_ONLY_SWAP_WORDS}
     if needs_swap and not body.get("free_card"):
         return 409, {"ok": False, "available": True, "needs": "free_card",
                      "option": plan.get("option"),
@@ -1627,8 +1666,13 @@ def handle_post(route: str, body, *, settings=None, runtime=None, now=None,
                                        "which program draws them, can only be "
                                        "done on this PC.")}
             return settings_answer(body, settings=settings)
-        return make_answer(body, st, runtime=runtime, now=now,
-                           pc_only=pc_only)
+        # The make route is open to either app now (owner decision 2026-10-24):
+        # the swap is local and reversible and the chat reloads on its own, so
+        # the phone's deliberate `free_card: true` is consent too. One draw at a
+        # time is `make_answer`'s own lock; only the settings route above stays
+        # PC-only, because where pictures are kept and what draws them is this
+        # PC's own configuration.
+        return make_answer(body, st, runtime=runtime, now=now)
     except Exception as exc:
         return 503, {"ok": False, "available": False,
                      "error": "The pictures could not be used ({0}).".format(

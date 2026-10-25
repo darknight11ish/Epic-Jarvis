@@ -549,25 +549,117 @@ def t_way_b_is_a_plain_sentence_not_a_broken_draw():
     check("... and nothing was drawn", stub.asked == [], str(stub.asked))
 
 
-def t_a_phone_cannot_free_the_pcs_everyday_chat():
+def t_the_phone_may_confirm_the_swap_too():
+    """Owner decision 2026-10-24: "i would like to be able to approve this from
+    my phone as well". The phone's `free_card: true` is the same deliberate
+    consent the desktop's is: the swap is local and reversible, the chat reloads
+    on its own and nothing is deleted. The first request still asks first."""
     folder = tmpdir()
     stub = StubRuntime("x")
     use_plan(SWAP_PLAN)
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 2.0,
+                                 "words": "The chat stepped aside."}
+    P.step_back = lambda plan: {"ok": True, "did": True, "seconds": 8.0,
+                                "words": "The chat was back after 8.0 seconds."}
+    P.record_measurement = lambda plan, piece: None
     try:
+        # The phone's FIRST request: the same question, and nothing moves.
         code, out = P.handle_post(
+            "/api/pictures", {"prompt": "a cat"},
+            settings=settings_for(folder), runtime=stub, pc_only=False)
+        check("a phone's first request is the same 409 question",
+              code == 409 and out.get("needs") == "free_card", str(out)[:300])
+        check("... and it unloaded and drew nothing",
+              stub.asked == [] and stub.freed is False, str(stub.asked))
+        # The phone's CONFIRM: the whole swap and the draw, as on the desktop.
+        code2, out2 = P.handle_post(
             "/api/pictures", {"prompt": "a cat", "free_card": True},
             settings=settings_for(folder), runtime=stub, pc_only=False)
     finally:
+        P.step_aside, P.step_back, P.record_measurement = saved
         reset_plan()
-    check("a phone cannot start the swap", code == 403
-          and out.get("pc_only") is True, str(out)[:200])
-    check("... and nothing was drawn", stub.asked == [], str(stub.asked))
+    check("a phone may confirm the swap and gets the normal success shape",
+          code2 == 200 and out2.get("ok") is True
+          and bool(out2.get("name")) and bool(out2.get("path")), str(out2)[:300])
+    check("... the draw really ran, with the chat set aside and back",
+          bool(stub.asked) and stub.freed is True
+          and out2.get("card", {}).get("chat_back") is True,
+          str(out2.get("card")))
+    check("... and the answer carries the same card times as the desktop's",
+          out2.get("card", {}).get("chat_away_seconds") == 2.0
+          and out2.get("card", {}).get("chat_back_seconds") == 8.0,
+          str(out2.get("card")))
+    check("... but where pictures are kept stays the PC's own business",
+          P.handle_post("/api/pictures/settings",
+                        {"action": "enabled", "on": True},
+                        settings=settings_for(folder), pc_only=False)[0] == 403)
+
+
+def t_a_second_confirm_while_a_draw_is_running_is_one_sentence():
+    """One picture at a time. The owner may now confirm from a phone, so a
+    double-tap is a real second request; it must answer one plain sentence and
+    start no second draw beside the first on a card that fits only one."""
+    import threading
+    folder = tmpdir()
+    started, release = threading.Event(), threading.Event()
+
+    class SlowStub(StubRuntime):
+        def draw(self, prompt, *, seed=None, settings=None):
+            started.set()
+            release.wait(20)
+            return super().draw(prompt, seed=seed, settings=settings)
+
+    stub = SlowStub("x")
+    use_plan(SWAP_PLAN)
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 1.0,
+                                 "words": "The chat stepped aside."}
+    P.step_back = lambda plan: {"ok": True, "did": True, "seconds": 1.0,
+                                "words": "The chat was back."}
+    P.record_measurement = lambda plan, piece: None
+    first = {}
+
+    def confirm():
+        first["result"] = P.handle_post(
+            "/api/pictures", {"prompt": "a cat", "free_card": True},
+            settings=settings_for(folder), runtime=stub)
+
+    thread = threading.Thread(target=confirm)
+    try:
+        thread.start()
+        if not started.wait(20):
+            raise RuntimeError("the first draw never started")
+        code, out = P.handle_post(
+            "/api/pictures", {"prompt": "another cat", "free_card": True},
+            settings=settings_for(folder), runtime=stub)
+    finally:
+        release.set()
+        thread.join(20)
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+    check("a confirm while a draw is running is refused, not queued as a "
+          "second draw", code == 409 and out.get("needs") == "drawing",
+          str(out)[:300])
+    check("... with one plain sentence saying it is still drawing",
+          "still drawing" in (out.get("error") or ""), str(out)[:300])
+    check("... and only ONE picture was drawn by the two requests",
+          len(stub.asked) == 1, str(stub.asked))
+    check("... the first request still finished normally",
+          first.get("result", (0, {}))[0] == 200,
+          str(first.get("result"))[:200])
+    code3, out3 = P.handle_post(
+        "/api/pictures", {"prompt": "after"}, settings=settings_for(folder),
+        runtime=stub)
+    check("... and the lock is free again for the next picture",
+          code3 == 200 and out3.get("ok") is True, str(out3)[:200])
 
 
 def t_the_picture_model_is_given_time_to_let_go_of_the_card():
-    """The first real draw's lesson (2026-10-24): /free can take longer than a
-    normal 30 s call, and the chat must not be warmed back onto a card the
-    picture model is still holding (it came back 1.36 GB spilled)."""
+    """The first real draw's lesson (2026-10-24): the warm-back must not start
+    while the picture model is still releasing the card - it came back 1.36 GB
+    spilled. (Measured 2026-10-25: `/free` answers 200 with a body of 0 bytes,
+    which the old client parsed as JSON and gave up on in 0.0 s.)"""
     rt = P.ComfyUI("http://127.0.0.1:8188")
     calls = []
 
@@ -704,9 +796,14 @@ def t_the_route_waits_long_enough_for_a_real_draw():
     check("the warm-back runs in a finally, never only on success",
           "finally:" in src and "back = step_back(plan)" in src,
           "no finally restore")
-    check("the installer hands the PC check to the make route",
-          "make_answer(body, st, runtime=runtime, now=now," in src
-          and "pc_only=pc_only)" in src, "pc_only not passed")
+    check("the make route no longer refuses a phone's confirm",
+          "pc_only=pc_only)" not in src and "PC_ONLY_SWAP_WORDS" not in src,
+          "the old phone refusal is still wired")
+    check("... while changing the folder or program is still the PC's alone",
+          "if not pc_only:" in src, "the settings PC-only check is gone")
+    check("... and only one picture can be drawn at a time",
+          "_DRAW_IN_FLIGHT" in src and "STILL_DRAWING_WORDS" in src,
+          "no one-draw-at-a-time guard")
     check("the two-request consent key is the one the apps may pin",
           '"free_card"' in src and '"needs"' in src, "no consent key")
 
@@ -1410,7 +1507,8 @@ def main() -> int:
                t_a_draw_that_fails_still_brings_the_everyday_chat_back,
                t_a_failed_set_aside_draws_nothing_and_says_so,
                t_way_b_is_a_plain_sentence_not_a_broken_draw,
-               t_a_phone_cannot_free_the_pcs_everyday_chat,
+               t_the_phone_may_confirm_the_swap_too,
+               t_a_second_confirm_while_a_draw_is_running_is_one_sentence,
                t_the_picture_model_is_given_time_to_let_go_of_the_card,
                t_the_free_answer_is_allowed_to_have_no_body_at_all,
                t_the_route_waits_long_enough_for_a_real_draw,
