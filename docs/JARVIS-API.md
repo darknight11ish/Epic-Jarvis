@@ -912,6 +912,14 @@ the PC, no app change needed:
   and before the crisis help line, which stays last. No new field in the
   stream; no app change needed. Questions, "if ..." sentences, things done
   earlier and remembering do not count as claims.
+- **A claim no tool backed gets one plain correction line** (2026-10-25, the
+  live campaign, `backend/jarvis_agent.py` `_claim_corrections`). A turn may
+  also carry a **correction** after the model's words and before the finish
+  chunk: one plain sentence appended when the answer claims a web search, a
+  notes/memory search, a calculation, the feature guide's list or a setting
+  that is not available, and no matching tool ran in that turn. It is an
+  ordinary `content` delta - no new field, no app change. Denials, questions,
+  claims about earlier turns and claims a tool did back are never corrected.
 - **Big tool results are shortened, not dropped** (2026-09-28). A result
   over 8,000 characters keeps its JSON shape and its outside-text label,
   with each long text cut to its first and last 1,500 characters around a
@@ -2148,6 +2156,11 @@ graphics card" (`get_second_card` / `set_second_card` in `commands.rs`,
 granted to the settings window only), and `vision.rs`, which reads it before
 deciding whether pictures can be sent. `tools/check_parity.py` records
 `/api/second-card` as `ported`.
+
+Since 2026-10-25 the two cards are named by their job in words, not by
+arrival order, in both apps: **"Chat card (RTX 2060 12 GB)"** and **"Spare
+card (RTX 2080 SUPER 8 GB)"**. The route name `/api/second-card` is
+unchanged.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
@@ -6396,7 +6409,7 @@ Every route needs the pairing token and passes the origin check.
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/search` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_search.py` | A read. |
-| `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}`, `{"enabled": bool}` (the on/off switch, 23.6) | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card, `stop_asking_before_every_web_search`) and for `enabled: true` after it was switched off (ONE card, `web_search_enable`); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
+| `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}`, `{"enabled": bool}` (the on/off switch, 23.6) | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card, `stop_asking_before_every_web_search`) and for `enabled: true` after it was switched off (ONE card, `web_search_enable`); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. `{"provider": id}` is tested first with one real search for `wikipedia`, and on failure nothing changes: 200 `{"ok": false, "state", "said", "offer", ...view}` with `provider` still the old one. Only a provider that could work at all is tested - a missing key is not a test. |
 | `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit, a little of Exa's free credit, or one billed DeepSeek search ($0.75 per 1,000). Held on a stale link in both apps. |
 
 The view:
@@ -6419,6 +6432,12 @@ The view:
 `settings_damaged`, `empty` - for an icon; the apps show `said`. `ready` is
 worked out without a socket, so SearXNG shows ready until a search or a test
 finds it is not running.
+
+`ready` is `not state`, and `state` now comes from `display_readiness()` -
+the old `readiness()` plus the provider's LAST LIVE TEST. A DuckDuckGo never
+tested reads `"untested"`, and any provider whose last test failed reads
+`"at_risk"`, with `said` naming the result and when it ran. `readiness()`
+itself (no socket) is unchanged, so an old failed test never blocks a search.
 
 Settings live in `<config folder>/web-search.json` (no key, no search words).
 No file: SearXNG on this PC, not asking every time. A damaged file fails

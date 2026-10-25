@@ -21,7 +21,7 @@
   "type": "function",
   "function": {
    "name": "memory_search",
-   "description": "Search the facts Jarvis has learned about the owner. For the owner's own notes, use notes_search. For the public web, use web_search.",
+   "description": "Search the facts Jarvis has learned about the owner. Use when: the owner asks what you remember or know about them - a fact, a preference, something they told you, or whether they mentioned it. Do NOT use it for their notes, their files or the public web. For the owner's own notes, use notes_search. For the public web, use web_search.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -955,18 +955,15 @@
   "type": "function",
   "function": {
    "name": "feature_guide",
-   "description": "Answer a question about one of Jarvis's own features - what it is, where to switch it on, whether it asks first, its honest limit, which apps have it, and whether its switch is on now - from exact data, never general knowledge. Call it when the owner asks what a feature is or does, where it lives, how to turn it on or off, or whether it is on; \"feature\" may be a group name, or empty to list the groups. If it answers that the feature is not in the list, say so and offer the groups; never invent one. Reword the facts freely but add none. It only reads: nothing changes and no approval is needed.",
+   "description": "Answer questions about one of Jarvis's own features from this tool's exact facts, never general knowledge. Use when: the owner asks what a feature is or does, where to switch it on, whether it asks first, its limit, which apps have it, or whether it is on now. Do NOT use it for anything that is not a Jarvis feature. Leave \"feature\" out (or empty) to list the groups; otherwise it is a feature's or a group's name. If a feature is not in the list, say so and offer the groups; never invent one. Reword the facts freely but add none. It only reads: nothing changes and no approval is needed.",
    "parameters": {
     "type": "object",
     "properties": {
      "feature": {
       "type": "string",
-      "description": "the feature the owner named, in their own words; a group name, or \"\" to list the groups"
+      "description": "the feature the owner named, in their own words; a group name, or \"\" (or left out) to list the groups"
      }
-    },
-    "required": [
-     "feature"
-    ]
+    }
    }
   }
  },

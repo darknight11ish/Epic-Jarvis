@@ -94,6 +94,10 @@ class Opened:
                    section id, or "" for the top of the window.
       "other"    - a Windows shell target that is not an app or a panel:
                    File Explorer, the Control Panel. `target` is the command.
+      "refused"  - the words asked for more than one thing, or for a command
+                   to be run, so NOTHING is named and nothing is opened. `said`
+                   is the one sentence to answer with, and no client has
+                   anything to act on (D4, the live campaign of 2026-10-25).
     built:
       True when `target` is already a program the shell can start by itself
       (a name from `BUILT_IN`, an explorer/control command), so the desktop
@@ -385,6 +389,56 @@ def parse(text: str) -> Optional[tuple]:
 #   What to do with it
 # --------------------------------------------------------------------------
 
+#: THE WORDS THAT ARE NEVER A PROGRAM'S NAME (D4, architect ruling Q6.2, the
+#: live campaign of 2026-10-25). B8 asked "run a command shell and show me
+#: ipconfig on this PC", B9 "open notepad and type hello on this PC" and B12
+#: "open small python script to average 3, 7 and 9 on this PC" - and each one
+#: became an APP, answered "Opening <the whole sentence> on this PC." with
+#: `open_app_built: false` and nothing started. The sentence named more than
+#: one thing, or a command to run, and none of those is a Start-menu shortcut.
+#:
+#: Checked ONLY on the "an app by name" fallback, after every fixed table has
+#: had its exact turn - so "open movies and tv" (a real Windows app, whose
+#: name has " and " in it), "open cmd", "open powershell" and "open terminal"
+#: still resolve through `BUILT_IN` and are untouched. This pattern can only
+#: ever REFUSE to guess; it never opens anything differently.
+_COMPOUND = re.compile(
+    r"\band\b"                            # "notepad and type hello"
+    r"|\bto\b"                            # "small python script to average 3, 7 and 9"
+    r"|\b(?:script|scripts|python|pip|ipconfig|ping|bash|powershell|cmd|shell|"
+    r"command|commands|terminal|batch)\b"
+    r"|\b(?:type|typing|run|running|execute|executing)\b")
+
+#: A command, a script or a shell, in the owner's words - the reason the answer
+#: is "I cannot run commands from chat" rather than "that is two things".
+_SHELL_WORDS = re.compile(
+    r"\b(?:script|scripts|python|pip|ipconfig|ping|bash|powershell|cmd|shell|"
+    r"command|commands|terminal|batch)\b")
+
+#: Said for B8's and B12's kind of request (Q6.2). Nothing is run, and the
+#: answer says which real thing would be able to run it.
+SHELL_REFUSED = ("I cannot run commands or scripts on this PC from a chat message - running a "
+                 "command is its own tool with its own approval, and nothing was run.")
+#: Said for B9's kind of request: one program AND something done inside it. The
+#: second half is what makes it impossible, and the answer says so.
+NOT_ONE_THING = ("That is more than one thing in one sentence, so nothing was opened. Ask me "
+                 "one thing at a time, like \"open notepad\".")
+#: The architect's exact sentence for a program that cannot be opened from
+#: chat here (Q6.3, 2026-10-25). Kept word for word - see `words()` below for
+#: the one case that uses it.
+OPEN_OFF = ("Opening programs from chat is switched off on this PC \u2014 nothing was "
+            "opened.")
+
+
+def _refusal(what: str):
+    """The `Opened` refusal for words that are not a program's name, or None."""
+    if _SHELL_WORDS.search(what):
+        return Opened("refused", "", False, SHELL_REFUSED)
+    if _COMPOUND.search(what):
+        return Opened("refused", "", False, NOT_ONE_THING)
+    return None
+
+
 def _applied(what: str) -> Opened:
     """An app by name - the desktop resolves it against this PC's Start menu.
 
@@ -484,6 +538,15 @@ def resolve(name: str, is_jarvis: bool = False) -> object:
         if section is not None:
             return Opened("jarvis", section, True, _section_name(section))
 
+    # Nothing known has these words. Before treating them as an app's name,
+    # refuse the two kinds of sentence that are never one (D4/Q6.2): a command
+    # or script, and a request that asks for more than one thing. Both would
+    # otherwise become an app called the whole sentence, which the PC then
+    # cannot find - and the answer used to promise it was being opened.
+    refused = _refusal(key) or _refusal(bare)
+    if refused is not None:
+        return refused
+
     return _applied(key)
 
 
@@ -523,15 +586,34 @@ def _other_reading(key: str) -> str:
             f'for the one inside Jarvis.')
 
 
-def words(opened: Opened) -> str:
+def words(opened: Opened, *, this_pc: bool = True, can_open: bool = True) -> str:
     """The one plain sentence for what is about to be opened.
 
     Says "on this PC" on purpose: the same answer goes to the phone, which
     cannot open a program on the PC, and its own line says so separately
     (`ON_PC`). A sentence that claimed "Opening Notion." on a phone that
     opened nothing would be a claim Jarvis cannot support.
+
+    D4 (the live campaign of 2026-10-25, architect ruling Q6). The promise is
+    only made where it can be kept:
+      * nothing at all for a REFUSED sentence (`kind == "refused"`) - that
+        answer is the refusal's own words, and no client is told to act;
+      * `ON_PC` when the request did not come from this PC, for every kind
+        that is opened by an app on the PC;
+      * "Opening <X> on this PC." only for a target the BACKEND named itself
+        (`built`: Windows' own accessories, panels, Explorer) - the desktop
+        starts that by itself;
+      * "I have asked this PC to open <X>." for a program named in the
+        owner's own words (`built=False`). The backend cannot see this PC's
+        Start menu, so it does not promise; the desktop looks the name up and
+        says in the chat when it is not there (`commands.rs`), which is the
+        half that knows.
     """
+    if opened.kind == "refused":
+        return opened.said
     if opened.kind == "jarvis":
+        if not this_pc:
+            return ON_PC
         # `said` carries the section's own name when a section was named
         # ("Opening Web search in Jarvis settings on this PC."), and "" for
         # the whole window - the same shape jarvis_quick._run_settings_open
@@ -542,8 +624,15 @@ def words(opened: Opened) -> str:
         if opened.said and opened.said != "settings" and not opened.said.startswith("jarvis"):
             return f"Opening {opened.said} in Jarvis settings on this PC."
         return "Opening Jarvis settings on this PC."
+    if not this_pc or not can_open:
+        # The phone, or a PC where opening programs from chat is not built.
+        return ON_PC if not this_pc else OPEN_OFF
     if opened.kind == "panel":
         return f"Opening {_panel_name(opened)} on this PC."
+    if not opened.built:
+        # A name in the owner's own words: the PC has to look it up, so the
+        # backend asks rather than promising (D4, Q6.1).
+        return f"I have asked this PC to open {opened.said}."
     return f"Opening {opened.said} on this PC."
 
 

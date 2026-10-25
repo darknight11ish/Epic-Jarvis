@@ -225,9 +225,9 @@ def t_primary_rule():
 def t_capable_and_not():
     cases = [
         ("one_card", False, "only one graphics card found"),
-        ("2080s_2060", True, "RTX 2060 (12 GB) can take"),
-        ("2060_first", True, "RTX 2060 (12 GB) can take"),
-        ("2080s_2080ti", True, "2080 Ti (11 GB) can take"),
+        ("2080s_2060", True, "Spare card (RTX 2060 12 GB) can take"),
+        ("2060_first", True, "Spare card (RTX 2060 12 GB) can take"),
+        ("2080s_2080ti", True, "Spare card (RTX 2080 Ti 11 GB) can take"),
         ("2080s_p100", False, "P100-PCIE-16GB is older than Turing"),
         ("2080s_1080", False, "GTX 1080 is older than Turing"),
         ("2080s_2060_6gb", False, "6 GB, which is not enough"),
@@ -2457,9 +2457,11 @@ def t_8gb_card_with_a_monitor():
         det = SC.detect(fresh=True)
         check("a monitor on the 8 GB card: learning drops to 8,192 tokens (5.90)",
               SC._feature_model("learning", det) == ("qwen3:8b", 8192, 5.90))
-        check("and Pictures is refused, in words that say plug the monitors into the main card",
+        check("and Pictures is refused, and the advice about the cables is the GATED one "
+              "(ruling Q8: the chat card, not a fixed 'main card')",
               SC._feature_model("vision", det) == (None, None, None)
-              and "plug the monitors into the main card" in SC._unsupported("vision", det),
+              and "moving the monitors onto the Chat card" in SC._unsupported("vision", det)
+              and "plug the monitors into the main card" not in SC._unsupported("vision", det),
               SC._unsupported("vision", det))
         w.switches(master=True, learning=True)
         SC.status()
@@ -2476,7 +2478,8 @@ def t_bigger_cards_by_band():
         with G.World(smi(PRIM, (name, mib, uid))) as w:
             det = SC.detect(fresh=True)
             check(f"{mib} MiB reads as {gb} and is capable",
-                  det["capable"] is True and f"({gb})" in det["why"], det["why"])
+                  det["capable"] is True
+                  and f"Spare card ({name} {gb})" in det["why"], det["why"])
             check(f"{mib} MiB: the full plan, unchanged - qwen3:8b at 32K, 7.69 GiB",
                   SC._feature_model("long_context", det) == ("qwen3:8b", 32768, 7.69)
                   and SC._feature_model("browser_control", det) == ("qwen3:8b", 32768, 7.69))
@@ -2733,7 +2736,8 @@ def t_study_and_referee_rows():
         r = _row(st, "study")
         check("study ON: the second Ollama starts (it has a model to serve) and the row is working",
               len(w.started) == 1 and r["available"] is True
-              and r["why"].startswith("Working: qwen3:8b on the NVIDIA GeForce RTX 2060"), r["why"])
+              and r["why"].startswith("Working: qwen3:8b on the Spare card (RTX 2060 12 GB)"),
+              r["why"])
     with G.World(G.SMI["2080s_2060"], installed=("qwen3:14b",)) as w:
         w.switches(master=True, study=True)
         r = _row(SC.status(), "study")
@@ -2761,7 +2765,7 @@ def t_study_and_referee_cards():
               code == 200 and len(seen) == 1 and seen[0][0] == "second_card_enable", seen)
         d, text = seen[0][1], seen[0][2]
         check("the study card names the card, the model, the quiz and that nothing leaves",
-              "Turn on \"Study helper\" on the second graphics card?" in text
+              "Turn on \"Study helper\" on the Spare card (RTX 2060 12 GB)?" in text
               and "RTX 2060" in text and "qwen3:8b" in text and "Quiz questions are written" in text
               and "Nothing leaves this PC" in text and "If you say no" in text
               and d["model"] == "qwen3:8b" and d["feature"] == "study"
@@ -3085,6 +3089,238 @@ def t_master_card_identity():
         check("after approval, master_card is updated",
               SC._read_switches()["master_card"] == U_8B)
         check("master active again", SC.status()["active"] is True)
+
+
+# ------------------------------------------------ the post-reboot role pin --
+#
+# THE OWNER'S OWN DEFECT, 2026-10-24 21:14 (architect ruling Q5.2, and the
+# plan document's section 3b). The PC was restarted, Ollama had no model
+# loaded yet, and the app reported "The main switch was turned on for a
+# different graphics card" - the same two cards, with the roles re-picked from
+# the "a monitor is plugged into it" rule, which named the very card the owner
+# had approved the master switch for. The learner therefore stopped.
+#
+# These cases replay it end to end, from nvidia-smi's real CSV and Ollama's
+# own answers (the model loaded, then the same PC with nothing loaded):
+#
+#   (a) before the reboot the model is READ on the 2060, so the spare card is
+#       the 2080 SUPER - and that is the card the switch was approved for;
+#   (b) after the reboot, with NOTHING loaded, the spare card must still be
+#       the 2080 SUPER, the switch must still be active, and no sentence may
+#       say "different graphics card" - the defect itself;
+#   (c) the same, with nvidia-smi numbering the two cards the other way round,
+#       so nothing depends on the slot;
+#   (d) a card that is really GONE (removed or replaced) must still ask again -
+#       the fix must never keep a switch valid for a card that is not there;
+#   (e) a model READ on the approved card itself must still ask again, because
+#       a reading outranks a guess even when the guess is the owner's own
+#       earlier approval.
+#
+# WHAT THIS CANNOT PROVE: that a real reboot behaves like this. Only a reboot
+# of the owner's PC can show that - these are fixtures of the two states the
+# reboot moves between, not a reboot.
+
+#: nvidia-smi's process list with the everyday model on the 2060 (its real
+#: "10,585 MiB" reading, plan document section 3).
+APPS_ON_2060 = f"4242, ollama.exe, {G.U_2060}, 10585\n"
+#: Ollama's own /api/ps answer: the everyday model loaded, all of it on a card.
+PS_LOADED = [{"name": "qwen3.5:9b", "size": 11_000_000_000, "size_vram": 11_000_000_000,
+              "context_length": 196608, "expires_at": "2026-10-25T00:00:00Z"}]
+
+
+def t_the_role_pin_survives_a_reboot():
+    # (a) before the reboot: the model is read on the 2060
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b",),
+                 ps=PS_LOADED, apps=APPS_ON_2060) as w:
+        w.switches(master=True, master_card=G.U_2080S, learning=True)
+        st = SC.status()
+        check("before the reboot: the model is read on the 2060, so the spare card is the "
+              "2080 SUPER - the card the switch was approved for",
+              st["detected"]["primary"]["uuid"] == G.U_2060
+              and st["detected"]["second"]["uuid"] == G.U_2080S, st["detected"])
+        check("before the reboot: the switch is active and learning is working",
+              st["active"] is True
+              and next(r for r in st["features"] if r["id"] == "learning")["active"] is True)
+    # (b) after the reboot: the same two cards, NOTHING loaded yet - the defect
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b",)) as w:
+        w.switches(master=True, master_card=G.U_2080S, learning=True)
+        st = SC.status()
+        det = st["detected"]
+        check("after the reboot, with nothing loaded: the approved card is STILL the spare card",
+              det["second"]["uuid"] == G.U_2080S, det["second"])
+        check("... and the chat card is the other one, the 2060",
+              det["primary"]["uuid"] == G.U_2060, det["primary"])
+        check("... so the switch is still active: no re-approval after a normal reboot",
+              st["active"] is True)
+        said = " ".join([str(st["lane"].get("why") or ""),
+                         SC._idle_why(SC._read_switches(), det)]
+                        + [r["why"] for r in st["features"]])
+        check("... and nothing anywhere says 'different graphics card'",
+              "different graphics card" not in said, said)
+        learning = next(r for r in st["features"] if r["id"] == "learning")
+        check("... and learning is working again, on the card it was approved for",
+              learning["active"] is True and learning["available"] is True, learning)
+    # (c) the same PC, numbered the other way round: the roles do not depend on
+    # nvidia-smi's slot (the plan document's "never by positional array index")
+    with G.World(G.SMI["2060_first"], installed=("qwen3:8b",)) as w:
+        w.switches(master=True, master_card=G.U_2080S, learning=True)
+        st = SC.status()
+        check("the same reboot with the cards numbered the other way round: the same roles, "
+              "the same switch",
+              st["detected"]["second"]["uuid"] == G.U_2080S
+              and st["detected"]["primary"]["uuid"] == G.U_2060
+              and st["active"] is True, st["detected"])
+    # (d) the approved card itself is really gone: re-approval, in the honest words
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b",)) as w:
+        w.switches(master=True, master_card=G.U_2080S, learning=True)
+        SC.detect(fresh=True)
+        # The 2080 SUPER the owner approved the switch for is out of the PC -
+        # taken out, or replaced - and a 2080 Ti is in its place.
+        w.smi = smi(("NVIDIA GeForce RTX 2060", 12288, G.U_2060, True),
+                    ("NVIDIA GeForce RTX 2080 Ti", 11264, U_2080TI_2))
+        SC._reset_for_tests()
+        CP._cache.update(at=-1e9, cards=None, fields="")
+        st = SC.status()
+        why = SC._idle_why(SC._read_switches(), SC.detect(fresh=True))
+        check("the approved card really gone (removed or replaced): a new approval is needed",
+              st["active"] is False
+              and G.U_2080S not in [c["uuid"] for c in st["detected"]["cards"]],
+              st["detected"])
+        check("... and says so in the same honest words, keeping the owner's choice",
+              "different graphics card" in why and "Your choice is kept" in why, why)
+        learning = next(r for r in st["features"] if r["id"] == "learning")
+        check("... and the feature row says the choice is kept, and is not active",
+              learning["enabled"] is True and learning["active"] is False
+              and "different graphics card" in learning["why"], learning)
+    # (e) the model READ on the approved card: the reading wins, so it asks
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b",),
+                 ps=PS_LOADED, apps=f"4242, ollama.exe, {G.U_2080S}, 9100\n") as w:
+        w.switches(master=True, master_card=G.U_2080S, learning=True)
+        st = SC.status()
+        check("the model read on the approved card itself: the switch asks again, because a "
+              "reading outranks the earlier approval",
+              st["active"] is False and st["detected"]["primary"]["uuid"] == G.U_2080S,
+              st["detected"])
+
+
+def t_the_size_rule_is_not_wired_in():
+    """Architect ruling Q5.2's second point - "the chat card is the card with
+    the most memory when nothing is loaded" - is WRITTEN and DELIBERATELY NOT
+    CALLED (2026-10-25). This checks both halves, so wiring it in can never
+    happen by accident and the day it is wired in, this test is the one that
+    says so.
+
+    WHY IT IS OUT: it changes which card the extra features run on for every
+    PC whose spare card is bigger than its chat card - the owner's own upgrade
+    path, and what t_bigger_cards_by_band pins. Measured before wiring it in:
+    94 of this suite's 612 checks failed, none of them by wording alone.
+    """
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b",)) as w:
+        det = SC.detect(fresh=True)
+        check("with nothing loaded and no approval, the roles are still the old fallback's "
+              "(the monitor card is the chat card) - the size rule is not wired in",
+              det["primary"]["uuid"] == G.U_2080S and det["second"]["uuid"] == G.U_2060,
+              det)
+        check("the size rule, if it were wired in, would answer the 2060 (12,288 MiB) ...",
+              getattr(SC._chat_card_by_size(SC._cards(False))[0], "uuid", None) == G.U_2060,
+              SC._chat_card_by_size(SC._cards(False)))
+        check("... and it is not what `_primary` answers",
+              SC._primary(SC._cards(False))[0].uuid != G.U_2060, SC._primary(SC._cards(False)))
+    # A tie in memory answers nothing at all - never a guess, which is the one
+    # property the size rule must keep whenever it is wired in.
+    with G.World(smi(PRIM, ("NVIDIA GeForce RTX 2060 SUPER", 8192, U_8A))) as w:
+        check("two equally sized cards: the size rule refuses to choose",
+              SC._chat_card_by_size(SC._cards(False)) == (None, ""),
+              SC._chat_card_by_size(SC._cards(False)))
+
+
+def t_the_two_card_names():
+    # The ruling's own two strings. WHICH card gets which label is the role
+    # rule's business (and with nothing pinned or loaded this PC's fallback
+    # puts chat on the monitor card, the 2080 SUPER); what is checked here is
+    # that the label names the card the app is really talking about, in the
+    # owner's words, everywhere he reads it.
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        det = SC.detect(fresh=True)
+        chat, spare = "Chat card (RTX 2080 SUPER 8 GB)", "Spare card (RTX 2060 12 GB)"
+        roles = {c["role"]: c for c in det["cards"]}
+        check("the plan sentence names both cards by their job, in the owner's words",
+              chat in det["why"] and spare in det["why"], det["why"])
+        check("each card's own row is the card the labels name",
+              roles["primary"]["name"].endswith("RTX 2080 SUPER")
+              and roles["second"]["name"].endswith("RTX 2060"))
+        text = SC.describe_on("master", det)
+        check("the approval card says which card, by its job",
+              spare in text and chat in text, text)
+        check("... and still says plainly that refusing changes nothing",
+              "If you say no: nothing changes." in text, text)
+        w.switches(master=True, master_card=G.U_2060, learning=True)
+        row = next(r for r in SC.status()["features"] if r["id"] == "learning")
+        check("a working feature's row names the spare card by its job",
+              row["why"].startswith(f"Working: qwen3:8b on the {spare}"), row["why"])
+    # ... and the same words follow the roles when the owner's approval moves
+    # them: this is the card the labels exist for (ruling Q5).
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b",)) as w:
+        w.switches(master=True, master_card=G.U_2080S)
+        det = SC.detect(fresh=True)
+        check("when the approved card is the 2080 SUPER, it is the one called Spare card",
+              "Spare card (RTX 2080 SUPER 8 GB)" in det["why"]
+              and det["second"]["uuid"] == G.U_2080S
+              and det["primary"]["uuid"] == G.U_2060, det["why"])
+
+
+def t_the_monitor_cable_advice():
+    # Plenty free on the chat card: a soft suggestion is allowed.
+    with G.World(smi(PRIM, ("NVIDIA GeForce RTX 2060 SUPER", 8192, U_8A, True)),
+                 installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        det = SC.detect(fresh=True)
+        words = SC._unsupported("vision", det)
+        check("with room on the chat card, Pictures may suggest moving the monitors to it",
+              words is not None and "moving the monitors onto the Chat card" in words, words)
+    # The owner's own reading (1,477 MiB free after the 21:14 reboot, and
+    # 83-211 MiB at the full 196,608-token context): the advice must NOT be to
+    # plug the monitors into it, and the chat card is said to be kept headless.
+    tight = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 1477, 7.5, Enabled, "
+             f"00000000:0a:00.0\n"
+             f"1, {U_8A}, NVIDIA GeForce RTX 2060 SUPER, 8192, 7600, 7.5, Enabled, "
+             f"00000000:0b:00.0\n")
+    with G.World(tight, installed=("qwen3:8b", "qwen2.5vl:7b")):
+        det = SC.detect(fresh=True)
+        words = SC._unsupported("vision", det) or ""
+        check("under 2,500 MiB free: never suggest moving a monitor onto the chat card",
+              "moving the monitors onto" not in words
+              and "plug the monitors into the main card" not in words, words)
+        check("... and say plainly that the chat card is kept headless",
+              "kept headless" in words and "1,477 MiB free" in words, words)
+        row = next(c for c in det["cards"] if c["role"] == "second")
+        check("the spare card's own row says the same thing, not the old cable advice",
+              "plug the monitors into the" not in row["why"]
+              and "kept headless" in row["why"], row["why"])
+
+
+def t_the_cuda_device_join():
+    # Q5.3 of the ruling asked for a GPU-uuid join in /api/compute and
+    # /api/hardware. WHERE THOSE LIVE, checked rather than assumed:
+    #   * the route bodies are in jarvis_hud.py, which this repository ships as
+    #     PATCHES, not as a module - so no hunk is added here (a patch on the
+    #     HUD is the Lead's call, and the exact hunk is in the branch report);
+    #   * /api/compute's own answer comes from jarvis_compute.plan(), a module
+    #     this repository does ship, and its `text_on` is the index of the card
+    #     it named, never a CUDA ordinal: with CUDA_DEVICE_ORDER=FASTEST_FIRST
+    #     a `cuda:N` from Ollama is NOT nvidia-smi's N, and joining the two by
+    #     number would be the bug the ruling describes. Pinned below.
+    devs = CP.parse_smi(G.SMI["2060_first"])
+    with mock.patch.object(CP, "devices", return_value=devs), \
+            mock.patch.object(CP, "_cfg", lambda k, d=None: d):
+        p = CP.plan("qwen3:8b")
+    check("plan()'s text_on is nvidia-smi's own index of the card it names, not a CUDA ordinal",
+          p.text_on == f"cuda:{p.devices[0]['index']}", (p.text_on, p.devices[0]["index"]))
+    # /api/hardware's uuid-first join is proved BEHAVIOURALLY elsewhere:
+    # backend/test_hardware.py's t_two_identical_cards_pair_by_uuid_and_the_monitor_lands_right
+    # drives two identical 2080 Supers through the real detect() and fails if
+    # the uuid pass is removed (its own docstring records that measurement).
+    # A source-text pin here would go red on a rename and stay green on a
+    # broken join, so this note replaces it rather than repeating it.
 
 
 if __name__ == "__main__":
