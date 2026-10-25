@@ -211,14 +211,29 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   padding:7px 9px; border:1px solid var(--line); border-radius:3px;
   background:var(--plate-2); font-family:var(--f-mono); font-size:11px;
   color:var(--dim); text-align:left; transition:border-color .15s, color .15s;
+  max-width:100%;
 }
 .preset:hover{border-color:var(--line-hot); color:var(--text);}
 .preset[aria-pressed="true"]{
   border-color:var(--ice); color:var(--ice);
   background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
 }
-.preset .preset-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.preset .preset-model{font-size:9px; color:var(--dim); flex-shrink:0;}
+/* P0.8 (2026-10-25, the HUD screen walk): the MODEL name gives way, not the
+ * preset's name. The 60-character model string used to be unshrinkable and
+ * without ellipsis, so it kept its 324px and squeezed "General Uncensored" to
+ * 0px (and "Coding" to 5px), while the button itself grew to 272px inside a
+ * 220px rail and painted its right half over the stage. Now the name keeps its
+ * width, the model is the part that ellipsises, and a preset button can never
+ * be wider than the rail it sits in. */
+.preset .preset-name{
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  flex-shrink:0; min-width:0; max-width:100%;
+}
+.preset .preset-model{
+  font-size:9px; color:var(--dim);
+  flex:0 1 auto; min-width:0; max-width:100%;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
 .preset[aria-pressed="true"] .preset-model{color:var(--ice);}
 .preset-cloud{
   display:flex; align-items:center; justify-content:center; gap:6px;
