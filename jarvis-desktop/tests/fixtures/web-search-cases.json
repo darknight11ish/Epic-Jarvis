@@ -24,10 +24,12 @@
    "provider": "brave",
    "providers": [
     {
+     "at_risk": false,
      "id": "searxng",
      "key_saved": null,
      "key_where": "",
      "label": "SearXNG (on this PC)",
+     "last_test": null,
      "needs_docker": true,
      "needs_key": false,
      "ready": true,
@@ -36,10 +38,12 @@
      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
     },
     {
+     "at_risk": false,
      "id": "duckduckgo",
      "key_saved": null,
      "key_where": "",
      "label": "DuckDuckGo",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": false,
      "ready": false,
@@ -48,10 +52,12 @@
      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
     },
     {
+     "at_risk": false,
      "id": "exa",
      "key_saved": false,
      "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
      "label": "Exa",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -60,10 +66,12 @@
      "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "tavily",
      "key_saved": false,
      "key_where": "https://app.tavily.com (sign in, then API Keys)",
      "label": "Tavily",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -72,10 +80,12 @@
      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "brave",
      "key_saved": false,
      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
      "label": "Brave Search",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -84,10 +94,12 @@
      "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "deepseek",
      "key_saved": false,
      "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
      "label": "DeepSeek web search (needs a key)",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -126,10 +138,12 @@
    "provider": null,
    "providers": [
     {
+     "at_risk": false,
      "id": "searxng",
      "key_saved": null,
      "key_where": "",
      "label": "SearXNG (on this PC)",
+     "last_test": null,
      "needs_docker": true,
      "needs_key": false,
      "ready": true,
@@ -138,10 +152,12 @@
      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
     },
     {
+     "at_risk": false,
      "id": "duckduckgo",
      "key_saved": null,
      "key_where": "",
      "label": "DuckDuckGo",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": false,
      "ready": false,
@@ -150,10 +166,12 @@
      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
     },
     {
+     "at_risk": false,
      "id": "exa",
      "key_saved": false,
      "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
      "label": "Exa",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -162,10 +180,12 @@
      "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "tavily",
      "key_saved": false,
      "key_where": "https://app.tavily.com (sign in, then API Keys)",
      "label": "Tavily",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -174,10 +194,12 @@
      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "brave",
      "key_saved": false,
      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
      "label": "Brave Search",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -186,10 +208,12 @@
      "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "deepseek",
      "key_saved": false,
      "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
      "label": "DeepSeek web search (needs a key)",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -228,10 +252,12 @@
    "provider": "searxng",
    "providers": [
     {
+     "at_risk": false,
      "id": "searxng",
      "key_saved": null,
      "key_where": "",
      "label": "SearXNG (on this PC)",
+     "last_test": null,
      "needs_docker": true,
      "needs_key": false,
      "ready": true,
@@ -240,10 +266,12 @@
      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
     },
     {
+     "at_risk": false,
      "id": "duckduckgo",
      "key_saved": null,
      "key_where": "",
      "label": "DuckDuckGo",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": false,
      "ready": false,
@@ -252,10 +280,12 @@
      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
     },
     {
+     "at_risk": false,
      "id": "exa",
      "key_saved": false,
      "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
      "label": "Exa",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -264,10 +294,12 @@
      "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "tavily",
      "key_saved": false,
      "key_where": "https://app.tavily.com (sign in, then API Keys)",
      "label": "Tavily",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -276,10 +308,12 @@
      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "brave",
      "key_saved": false,
      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
      "label": "Brave Search",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -288,10 +322,12 @@
      "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "deepseek",
      "key_saved": false,
      "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
      "label": "DeepSeek web search (needs a key)",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -330,10 +366,12 @@
    "provider": "duckduckgo",
    "providers": [
     {
+     "at_risk": false,
      "id": "searxng",
      "key_saved": null,
      "key_where": "",
      "label": "SearXNG (on this PC)",
+     "last_test": null,
      "needs_docker": true,
      "needs_key": false,
      "ready": true,
@@ -342,10 +380,12 @@
      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
     },
     {
+     "at_risk": false,
      "id": "duckduckgo",
      "key_saved": null,
      "key_where": "",
      "label": "DuckDuckGo",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": false,
      "ready": false,
@@ -354,10 +394,12 @@
      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
     },
     {
+     "at_risk": false,
      "id": "exa",
      "key_saved": false,
      "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
      "label": "Exa",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -366,10 +408,12 @@
      "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "tavily",
      "key_saved": false,
      "key_where": "https://app.tavily.com (sign in, then API Keys)",
      "label": "Tavily",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -378,10 +422,12 @@
      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "brave",
      "key_saved": false,
      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
      "label": "Brave Search",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -390,10 +436,12 @@
      "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "deepseek",
      "key_saved": false,
      "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
      "label": "DeepSeek web search (needs a key)",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -432,10 +480,12 @@
    "provider": "exa",
    "providers": [
     {
+     "at_risk": false,
      "id": "searxng",
      "key_saved": null,
      "key_where": "",
      "label": "SearXNG (on this PC)",
+     "last_test": null,
      "needs_docker": true,
      "needs_key": false,
      "ready": true,
@@ -444,10 +494,12 @@
      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
     },
     {
+     "at_risk": false,
      "id": "duckduckgo",
      "key_saved": null,
      "key_where": "",
      "label": "DuckDuckGo",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": false,
      "ready": false,
@@ -456,10 +508,12 @@
      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
     },
     {
+     "at_risk": false,
      "id": "exa",
      "key_saved": false,
      "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
      "label": "Exa",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -468,10 +522,12 @@
      "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "tavily",
      "key_saved": false,
      "key_where": "https://app.tavily.com (sign in, then API Keys)",
      "label": "Tavily",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -480,10 +536,12 @@
      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "brave",
      "key_saved": false,
      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
      "label": "Brave Search",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -492,10 +550,12 @@
      "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "deepseek",
      "key_saved": false,
      "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
      "label": "DeepSeek web search (needs a key)",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -536,10 +596,12 @@
     "provider": "searxng",
     "providers": [
      {
+      "at_risk": false,
       "id": "searxng",
       "key_saved": null,
       "key_where": "",
       "label": "SearXNG (on this PC)",
+      "last_test": null,
       "needs_docker": true,
       "needs_key": false,
       "ready": true,
@@ -548,10 +610,12 @@
       "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
      },
      {
+      "at_risk": false,
       "id": "duckduckgo",
       "key_saved": null,
       "key_where": "",
       "label": "DuckDuckGo",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": false,
       "ready": false,
@@ -560,10 +624,12 @@
       "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
      },
      {
+      "at_risk": false,
       "id": "exa",
       "key_saved": false,
       "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
       "label": "Exa",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -572,10 +638,12 @@
       "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "tavily",
       "key_saved": false,
       "key_where": "https://app.tavily.com (sign in, then API Keys)",
       "label": "Tavily",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -584,10 +652,12 @@
       "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "brave",
       "key_saved": false,
       "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
       "label": "Brave Search",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -596,10 +666,12 @@
       "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "deepseek",
       "key_saved": false,
       "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
       "label": "DeepSeek web search (needs a key)",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -651,10 +723,12 @@
     "provider": "searxng",
     "providers": [
      {
+      "at_risk": false,
       "id": "searxng",
       "key_saved": null,
       "key_where": "",
       "label": "SearXNG (on this PC)",
+      "last_test": null,
       "needs_docker": true,
       "needs_key": false,
       "ready": true,
@@ -663,10 +737,12 @@
       "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
      },
      {
+      "at_risk": false,
       "id": "duckduckgo",
       "key_saved": null,
       "key_where": "",
       "label": "DuckDuckGo",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": false,
       "ready": false,
@@ -675,10 +751,12 @@
       "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
      },
      {
+      "at_risk": false,
       "id": "exa",
       "key_saved": false,
       "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
       "label": "Exa",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -687,10 +765,12 @@
       "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "tavily",
       "key_saved": false,
       "key_where": "https://app.tavily.com (sign in, then API Keys)",
       "label": "Tavily",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -699,10 +779,12 @@
       "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "brave",
       "key_saved": false,
       "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
       "label": "Brave Search",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -711,10 +793,12 @@
       "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "deepseek",
       "key_saved": false,
       "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
       "label": "DeepSeek web search (needs a key)",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -765,10 +849,12 @@
     "provider": "searxng",
     "providers": [
      {
+      "at_risk": false,
       "id": "searxng",
       "key_saved": null,
       "key_where": "",
       "label": "SearXNG (on this PC)",
+      "last_test": null,
       "needs_docker": true,
       "needs_key": false,
       "ready": true,
@@ -777,10 +863,12 @@
       "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
      },
      {
+      "at_risk": false,
       "id": "duckduckgo",
       "key_saved": null,
       "key_where": "",
       "label": "DuckDuckGo",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": false,
       "ready": false,
@@ -789,10 +877,12 @@
       "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
      },
      {
+      "at_risk": false,
       "id": "exa",
       "key_saved": false,
       "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
       "label": "Exa",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -801,10 +891,12 @@
       "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "tavily",
       "key_saved": false,
       "key_where": "https://app.tavily.com (sign in, then API Keys)",
       "label": "Tavily",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -813,10 +905,12 @@
       "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "brave",
       "key_saved": false,
       "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
       "label": "Brave Search",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -825,10 +919,12 @@
       "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "deepseek",
       "key_saved": false,
       "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
       "label": "DeepSeek web search (needs a key)",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -880,10 +976,12 @@
     "provider": "duckduckgo",
     "providers": [
      {
+      "at_risk": false,
       "id": "searxng",
       "key_saved": null,
       "key_where": "",
       "label": "SearXNG (on this PC)",
+      "last_test": null,
       "needs_docker": true,
       "needs_key": false,
       "ready": true,
@@ -892,10 +990,12 @@
       "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
      },
      {
+      "at_risk": false,
       "id": "duckduckgo",
       "key_saved": null,
       "key_where": "",
       "label": "DuckDuckGo",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": false,
       "ready": false,
@@ -904,10 +1004,12 @@
       "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
      },
      {
+      "at_risk": false,
       "id": "exa",
       "key_saved": false,
       "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
       "label": "Exa",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -916,10 +1018,12 @@
       "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "tavily",
       "key_saved": false,
       "key_where": "https://app.tavily.com (sign in, then API Keys)",
       "label": "Tavily",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -928,10 +1032,12 @@
       "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "brave",
       "key_saved": false,
       "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
       "label": "Brave Search",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -940,10 +1046,12 @@
       "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
      },
      {
+      "at_risk": false,
       "id": "deepseek",
       "key_saved": false,
       "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
       "label": "DeepSeek web search (needs a key)",
+      "last_test": null,
       "needs_docker": false,
       "needs_key": true,
       "ready": false,
@@ -985,10 +1093,12 @@
    "provider": "searxng",
    "providers": [
     {
+     "at_risk": false,
      "id": "searxng",
      "key_saved": null,
      "key_where": "",
      "label": "SearXNG (on this PC)",
+     "last_test": null,
      "needs_docker": true,
      "needs_key": false,
      "ready": true,
@@ -997,10 +1107,12 @@
      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
     },
     {
+     "at_risk": false,
      "id": "duckduckgo",
      "key_saved": null,
      "key_where": "",
      "label": "DuckDuckGo",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": false,
      "ready": false,
@@ -1009,10 +1121,12 @@
      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
     },
     {
+     "at_risk": false,
      "id": "exa",
      "key_saved": false,
      "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
      "label": "Exa",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1021,10 +1135,12 @@
      "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "tavily",
      "key_saved": false,
      "key_where": "https://app.tavily.com (sign in, then API Keys)",
      "label": "Tavily",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1033,10 +1149,12 @@
      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "brave",
      "key_saved": false,
      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
      "label": "Brave Search",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1045,10 +1163,12 @@
      "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "deepseek",
      "key_saved": false,
      "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
      "label": "DeepSeek web search (needs a key)",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1087,10 +1207,12 @@
    "provider": "searxng",
    "providers": [
     {
+     "at_risk": false,
      "id": "searxng",
      "key_saved": null,
      "key_where": "",
      "label": "SearXNG (on this PC)",
+     "last_test": null,
      "needs_docker": true,
      "needs_key": false,
      "ready": true,
@@ -1099,10 +1221,12 @@
      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
     },
     {
+     "at_risk": false,
      "id": "duckduckgo",
      "key_saved": null,
      "key_where": "",
      "label": "DuckDuckGo",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": false,
      "ready": false,
@@ -1111,10 +1235,12 @@
      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
     },
     {
+     "at_risk": false,
      "id": "exa",
      "key_saved": false,
      "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
      "label": "Exa",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1123,10 +1249,12 @@
      "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "tavily",
      "key_saved": false,
      "key_where": "https://app.tavily.com (sign in, then API Keys)",
      "label": "Tavily",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1135,10 +1263,12 @@
      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "brave",
      "key_saved": false,
      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
      "label": "Brave Search",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1147,10 +1277,12 @@
      "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "deepseek",
      "key_saved": false,
      "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
      "label": "DeepSeek web search (needs a key)",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1189,10 +1321,12 @@
    "provider": "tavily",
    "providers": [
     {
+     "at_risk": false,
      "id": "searxng",
      "key_saved": null,
      "key_where": "",
      "label": "SearXNG (on this PC)",
+     "last_test": null,
      "needs_docker": true,
      "needs_key": false,
      "ready": true,
@@ -1201,10 +1335,12 @@
      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
     },
     {
+     "at_risk": false,
      "id": "duckduckgo",
      "key_saved": null,
      "key_where": "",
      "label": "DuckDuckGo",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": false,
      "ready": false,
@@ -1213,10 +1349,12 @@
      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
     },
     {
+     "at_risk": false,
      "id": "exa",
      "key_saved": false,
      "key_where": "https://dashboard.exa.ai (sign up, then API Keys)",
      "label": "Exa",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1225,10 +1363,12 @@
      "why": "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "tavily",
      "key_saved": true,
      "key_where": "https://app.tavily.com (sign in, then API Keys)",
      "label": "Tavily",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": true,
@@ -1237,10 +1377,12 @@
      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "brave",
      "key_saved": false,
      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
      "label": "Brave Search",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
@@ -1249,10 +1391,12 @@
      "why": "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
     },
     {
+     "at_risk": false,
      "id": "deepseek",
      "key_saved": false,
      "key_where": "https://platform.deepseek.com/api_keys (sign in, then API keys)",
      "label": "DeepSeek web search (needs a key)",
+     "last_test": null,
      "needs_docker": false,
      "needs_key": true,
      "ready": false,
