@@ -17,6 +17,26 @@
  * gallery below it: each picture with the words that made it, its seed, and
  * when it was made, plus Make another (which asks for the same words again).
  *
+ * TWO STEPS WHEN THE CHAT IS HOLDING THE CARD (Image mode, 2026-10-24)
+ * A drawing needs the 12 GB card, and the everyday chat is usually sitting on
+ * it. So the first request carries the prompt alone. If the PC answers **409**
+ * with `needs: "free_card"`, NOTHING WAS DRAWN: this page puts the PC's own
+ * sentence on screen with one confirm button ("Set the chat aside and draw
+ * (about 5 minutes)") and a Not now, and stops there. Only that click sends the
+ * retry, with `free_card: true`; the PC steps the chat aside, draws, and loads
+ * the chat back. Nothing is retried on its own - moving the chat out from under
+ * the owner is their decision, not this page's.
+ *
+ * While the handshake runs the page says so and for how long, because a draw
+ * takes MINUTES, not seconds (one measured on this PC at 274 s), and the Make
+ * button stays greyed for the whole of it. A 409 with `needs: "card_none"` is
+ * not a question at all - no way of making pictures is switched on - so its
+ * `error` sentence is the whole answer. When a drawing does come back, the
+ * gallery is read again from the PC and the PC's own success sentence is shown
+ * ONCE: the backend already appends "stepped aside ... and is back" to `words`,
+ * and `card.words` repeats that same sentence, so adding both would print it
+ * twice. `card.words` is only the fallback for a PC whose `words` is empty.
+ *
  * NO APPROVAL CARD, and this comment is where that is written down on this
  * side: a picture is a new file in a folder on THIS PC, drawn by a program on
  * THIS PC, from words the owner typed. It opens no way out of the PC, changes
@@ -84,6 +104,12 @@ export const WORDS = {
   hidden_short: "Turn off Hide memory lists to see your pictures.",
   missing: "Your PC's Jarvis does not have pictures yet — run apply-patches.ps1 on the PC.",
   under_link: "A picture is never sent anywhere by Jarvis. It stays in the folder above.",
+  // The PC's own 409 question, and the owner's two answers to it. The button's
+  // "(about N minutes)" is added from the PC's estimate; nothing here guesses
+  // one.
+  set_aside: "Set the chat aside and draw",
+  set_aside_no: "Not now",
+  set_aside_stopped: "Nothing was drawn - your everyday chat stays where it is.",
 };
 
 const state = {
@@ -95,6 +121,12 @@ const state = {
   /** The prompt currently in the box. */
   prompt: "",
   making: false,
+  /**
+   * The PC's 409 question, waiting for the owner's yes or no:
+   * `{ prompt, error, option, seconds }`, or null. It is NOT a retry that has
+   * been queued - nothing is sent again until the confirm button is clicked.
+   */
+  pending: null,
   reading: false,
   again: false,
   visible: true,
@@ -189,19 +221,15 @@ export async function refreshPictures() {
 async function makePicture(prompt) {
   const text = String(prompt || "").trim();
   if (!text) return;
+  // A new request replaces any earlier question: only the newest prompt is
+  // worth an answer, and the old one was never sent.
+  state.pending = null;
   state.making = true;
   paint();
   say("");
   try {
     const out = await invoke("brain_pictures_make", { prompt: text });
-    if (unavailable(out)) {
-      say(WORDS.missing);
-    } else {
-      say((out && out.words) || "");
-      // The new picture's bytes are not in hand yet; drop the cache so the
-      // next paint fetches them, and read the folder back from the PC.
-      state.loaded.clear();
-    }
+    handleMakeAnswer(out, text);
   } catch (error) {
     // The PC's own sentence, as sent - "start it on this PC", "switched off",
     // "no program set up yet" and so on.
@@ -210,6 +238,157 @@ async function makePicture(prompt) {
     state.making = false;
     await refreshPictures();
   }
+}
+
+/** A whole number of seconds the PC sent, or 0 - never NaN in a sentence. */
+function secondsOf(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** The minutes a sentence may say "about": at least one, never "about 0". */
+function minutesOf(seconds) {
+  const n = secondsOf(seconds);
+  return n ? Math.max(1, Math.round(n / 60)) : 0;
+}
+
+function stretchWords(seconds) {
+  const minutes = minutesOf(seconds);
+  if (!minutes) return "a few minutes";
+  return `about ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+}
+
+/** The working state for a drawing: minutes, and where the chat went. */
+function drawingWords(seconds) {
+  return `Drawing - this takes ${stretchWords(seconds)}. ` +
+    "Your everyday chat will come back when it is done.";
+}
+
+/** "Set the chat aside and draw (about 5 minutes)", from the PC's estimate. */
+function setAsideLabel(seconds) {
+  const minutes = minutesOf(seconds);
+  if (!minutes) return WORDS.set_aside;
+  return `${WORDS.set_aside} (about ${minutes} ${minutes === 1 ? "minute" : "minutes"})`;
+}
+
+/**
+ * What the PC said to a drawing request. THREE ANSWERS, and they are not the
+ * same thing:
+ *
+ *   * `needs: "free_card"` - NOTHING WAS DRAWN. The everyday chat is using the
+ *     12 GB card and the PC is asking whether it may step the chat aside. The
+ *     question is drawn, the owner answers it, and only then is anything sent
+ *     again.
+ *   * `needs: "card_none"` - no way of making pictures is switched on. The
+ *     PC's own `error` sentence is the whole answer; there is nothing to
+ *     confirm, so no button is drawn.
+ *   * anything else - the PC's own `words`. After a handshake that sentence
+ *     already ends with "stepped aside ... and is back" (the backend appends
+ *     it), and `card.words` is that same sentence again - it is a fallback for
+ *     a PC that answers without `words`, never something added on top.
+ */
+function handleMakeAnswer(out, prompt) {
+  if (unavailable(out)) {
+    say(WORDS.missing);
+    return;
+  }
+  if (out.needs === "free_card") {
+    askToSetAside(out, prompt);
+    return;
+  }
+  if (out.needs) {
+    // Any other need is a sentence, not a yes/no this page can offer.
+    say(out.error || "");
+    return;
+  }
+  if (out.ok === false) {
+    say(out.error || "");
+    return;
+  }
+  // ONE sentence, not two: the PC's `words` already carries the swap sentence
+  // when the card was stepped aside, and `card.words` is that same sentence
+  // again, so joining them printed the swap twice on every confirmed draw.
+  // `card.words` is only reached when a PC answers without `words` at all.
+  const made = String((out && out.words) || "");
+  const cardWords = out && out.card ? String(out.card.words || "") : "";
+  const said = made || cardWords;
+  say(said);
+  // The new picture's bytes are not in hand yet; drop the cache so the next
+  // paint fetches them (the gallery itself is read back by the caller).
+  state.loaded.clear();
+}
+
+/** The PC's 409, kept whole: this is a question, so it is drawn as one. */
+function askToSetAside(out, prompt) {
+  const estimate = (out && out.estimate) || {};
+  state.pending = {
+    prompt,
+    error: String((out && out.error) || ""),
+    option: String((out && out.option) || ""),
+    seconds: secondsOf(estimate.chat_away_seconds) || secondsOf(estimate.draw_seconds),
+  };
+  say("");
+  // The sentence is drawn in the question block; say it out loud as well, so
+  // the owner knows a drawing stopped to ask them something.
+  if (state.pending.error) announce(state.pending.error, "polite");
+}
+
+/** The owner said yes: the ONE place `free_card: true` is ever sent. */
+async function setChatAsideAndDraw() {
+  const pending = state.pending;
+  if (!pending || state.making) return;
+  // The question is answered, so it goes before the wait starts: what stays on
+  // screen is the honest picture of what is happening.
+  state.pending = null;
+  state.making = true;
+  say(drawingWords(pending.seconds));
+  paint();
+  try {
+    const out = await invoke("brain_pictures_make", {
+      prompt: pending.prompt,
+      // Tauri's command arguments are camelCase by default, so this is the
+      // Rust side's `free_card`. It is never sent on the first try.
+      freeCard: true,
+    });
+    // The same question can come back (the chat grabbed the card again between
+    // the yes and the draw). Ask again - never loop on its own.
+    handleMakeAnswer(out, pending.prompt);
+  } catch (error) {
+    say(errorText(error));
+  } finally {
+    state.making = false;
+    // Read the folder back from the PC: a picture that was drawn is on disk.
+    await refreshPictures();
+  }
+}
+
+/** The owner said no: nothing was sent, and nothing was drawn. */
+function cancelPending() {
+  if (!state.pending) return;
+  state.pending = null;
+  say(WORDS.set_aside_stopped);
+  paint();
+}
+
+/** The PC's own question, with the owner's two answers under it. */
+function pendingBlock() {
+  const block = el("div", "pg-block pg-pictures-free-card");
+  block.dataset.kind = "free-card";
+  if (state.pending.error) block.append(el("p", "note", state.pending.error));
+  const row = el("div", "row");
+  row.append(
+    button(setAsideLabel(state.pending.seconds), setChatAsideAndDraw, {
+      title: "Step the everyday chat aside, draw the picture, and put the chat back",
+      isLive: true,
+      fkey: "pictures-set-aside",
+    }),
+    button(WORDS.set_aside_no, cancelPending, {
+      title: "Leave the everyday chat where it is; nothing is drawn",
+      fkey: "pictures-set-aside-no",
+    }),
+  );
+  block.append(row);
+  return block;
 }
 
 /** Fetches ONE picture's bytes, once, and hands back a data URL. */
@@ -274,8 +453,11 @@ function askBlock(d, canAct) {
     fkey: "make",
   });
   // `syncLive` above already greyed it when the link is stale; this adds the
-  // one thing it cannot know - a drawing is already running.
+  // one thing it cannot know - a drawing is already running. `busy` is set as
+  // well as `disabled`, because a link change repaints every live control and
+  // syncLive would otherwise hand the button back mid-draw.
   if (state.making) {
+    make.dataset.busy = "true";
     make.disabled = true;
     make.textContent = "Drawing…";
   }
@@ -424,6 +606,10 @@ function paint() {
     card.append(line);
   }
   if (d.enabled) card.append(askBlock(d, canAct));
+  // The PC's own "may I set the chat aside?" question, above the gallery. It
+  // is only ever drawn from a 409, and it holds no retry of its own: the
+  // confirm button is the only thing that sends one.
+  if (d.enabled && state.pending) card.append(pendingBlock());
   card.append(settingsBlock(d));
   if (d.enabled) card.append(gallery(d, canAct));
 
