@@ -21089,8 +21089,13 @@ The 409 is the price, said before anything is unloaded:
 The confirmed request does, in this order: the everyday chat lane is unloaded
 (`keep_alive: 0` - Ollama's own "unload now"; the lane's settings are not
 changed), the picture is drawn, ComfyUI is asked to release its models (its own
-`POST /free`), and the everyday chat is warmed back. The 200 carries the normal
-body plus the swap's own record:
+`POST /free`) **and is waited for until its own `/system_stats` shows the models
+gone**, and the everyday chat is warmed back. The waiting is not politeness: the
+first real draw (2026-10-24) showed that releasing ~10.9 GB under WDDM takes
+longer than an ordinary 30 s call, and warming the chat back before that left it
+1.36 GB spilled into system RAM. `FREE_WAIT_S = 180` bounds the wait; a program
+that never lets go is one plain sentence (`models_freed: false`) and the chat is
+still warmed back. The 200 carries the normal body plus the swap's own record:
 
     "card": {"option": "A", "did": true, "chat_away_seconds": 2.5,
              "chat_back_seconds": 9.0, "chat_back": true,
@@ -21119,6 +21124,12 @@ Rules that are part of the feature, not implementation detail:
   pretending.
 - **It still starts nothing.** Starting ComfyUI remains the owner's own
   program, as 129.4 says; this section only unloads and warms the chat.
+- **The chat comes back onto a card that is really free.** The `/free` request
+  gets `FREE_WAIT_S` (180 s) and is followed by a `/system_stats` poll until
+  ComfyUI holds no more than 1 GiB (`FREE_FLOOR_BYTES`), so the warm-back starts
+  from a freed card. If the program never lets go, the answer says so
+  (`models_freed: false`, with the GB still held) and the chat is still brought
+  back, possibly partly spilled.
 - **The wait is ten minutes, not two.** `DRAW_WAIT_S = 600` in
   `jarvis_pictures.py`: the measured 274.4 s draw plus a cold load, and still
   a finite wait - a wedged job ends in a sentence, never in a hung route.
@@ -21218,13 +21229,21 @@ the draw with nothing written; a phone cannot start the swap; and source pins
 hold the ten-minute wait, the `/free` call, the `finally` warm-back and the
 `pc_only` hand-off to the route.
 
+**Measured on this PC's real card (2026-10-24, native proof of this very code):**
+one Chroma1-HD picture was drawn through the route with the everyday chat on the
+card first - the 409 question, the swap, the draw and the warm-back all real.
+Wall clock 420.8 s, draw 383.6 s, 1152x1152 at 26 steps, guidance 3.8; the PNG
+was 2,008,307 bytes with its sidecar; the chat stepped aside in 6.4 s and was
+back on the card after another 30.9 s. The draw's own peak stayed on the 12 GB
+card. The proof is what showed the `/free` release wait above was needed.
+
 **What is honestly NOT proved by that suite:** that ComfyUI draws a real
 picture here (that needs the real card and program - a stub proves the code
 path, never the picture), that the warm-back really reloads the owner's model
-in a measured number of seconds, and the desktop panel's confirm flow. Those
-are measured on the owner's PC and written down in
-`docs/PICTURE-CARD-MEASUREMENTS-2026-10-11.md` and the runbook; the suite's own
-docstring says so out loud.
+in a measured number of seconds, and the desktop panel's confirm flow. The first
+two are now measured on this PC (the paragraph above); the panel's flow is
+tested as pure logic (`jarvis-desktop/tests/pictures.mjs`) and its real-window
+look is not reviewed. The suite's own docstring says all of this out loud.
 
 Desktop: the Rust reading functions are plain functions of `(status, body)` and
 are tested without a Tauri app or a network

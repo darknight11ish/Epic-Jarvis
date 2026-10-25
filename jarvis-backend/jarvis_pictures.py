@@ -189,6 +189,15 @@ MIN_SIDE = 64
 #: job ends in a sentence, never in a hung route.
 DRAW_WAIT_S = 600.0
 
+#: How long ComfyUI may take to LET GO of its models after ``POST /free``, and
+#: how little it must still hold before the everyday chat is warmed back. The
+#: first real draw (2026-10-24) showed why a normal 30 s call is not enough:
+#: releasing ~10.9 GB took over half a minute, the warm-back began early, and
+#: the chat came back with 1.36 GB spilled into system RAM. Waiting here is
+#: what makes the chat come back whole.
+FREE_WAIT_S = 180.0
+FREE_FLOOR_BYTES = 1024 ** 3
+
 #: The price of the swap, said BEFORE it happens (added 2026-10-25). The owner
 #: sees this in the 409 answer and has to send the draw again with
 #: `free_card: true` before one byte of the chat leaves the card.
@@ -733,24 +742,48 @@ class ComfyUI(LocalRuntime):
                      seconds=time.time() - started)
 
     def free_models(self) -> dict:
-        """Ask ComfyUI to let go of the models it loaded (its own ``/free``).
+        """Ask ComfyUI to let go of the models it loaded, and WAIT until it does.
 
         Added 2026-10-25 for the swap: after a draw the everyday chat has to
         come back to the same card, and it cannot while the picture model still
         holds 8.5 GiB of it. ``/free`` is ComfyUI's own route for exactly this
         - the program keeps running, its loaded models are released, and the
-        next draw loads them again. Never raises: a failure here becomes a
-        sentence, because the chat's warm-back must still be attempted.
+        next draw loads them again.
+
+        Why it WAITS (measured on the first real draw, 2026-10-24): releasing
+        ~10.9 GB under WDDM took longer than a normal call's 30 s, so the old
+        version returned "done" while the card was still full and the chat
+        reloaded with 1.36 GB spilled into system RAM. This polls ComfyUI's own
+        ``/system_stats`` until it holds no more than ``FREE_FLOOR_BYTES``, so
+        the warm-back that follows starts from a card that is really free.
+        Never raises: a failure becomes a sentence, because the chat's warm-back
+        must still be attempted.
         """
         try:
             self._json("/free", {"unload_models": True, "free_memory": True},
-                       timeout=30.0)
-            return {"ok": True,
-                    "words": "The drawing program let go of its models."}
+                       timeout=FREE_WAIT_S)
         except Exception as exc:
             return {"ok": False,
                     "words": "The drawing program did not let go of its models "
                              "({0}).".format(type(exc).__name__)}
+        deadline = time.time() + FREE_WAIT_S
+        held = None
+        while time.time() < deadline:
+            try:
+                stats = self._json("/system_stats", timeout=10.0)
+                devices = stats.get("devices") or []
+                held = sum(int(d.get("torch_vram_total") or 0) for d in devices
+                           if isinstance(d, dict))
+            except Exception:
+                held = None
+            if held is not None and held <= FREE_FLOOR_BYTES:
+                return {"ok": True, "held_bytes": held,
+                        "words": "The drawing program let go of its models."}
+            time.sleep(1.0)
+        return {"ok": False, "held_bytes": held,
+                "words": ("The drawing program still holds {0:.1f} GB after "
+                          "being asked to let go.")
+                         .format((held or 0) / float(1024 ** 3))}
 
 
 class StableDiffusionCpp(LocalRuntime):

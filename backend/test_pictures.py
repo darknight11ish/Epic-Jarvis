@@ -564,6 +564,55 @@ def t_a_phone_cannot_free_the_pcs_everyday_chat():
     check("... and nothing was drawn", stub.asked == [], str(stub.asked))
 
 
+def t_the_picture_model_is_given_time_to_let_go_of_the_card():
+    """The first real draw's lesson (2026-10-24): /free can take longer than a
+    normal 30 s call, and the chat must not be warmed back onto a card the
+    picture model is still holding (it came back 1.36 GB spilled)."""
+    rt = P.ComfyUI("http://127.0.0.1:8188")
+    calls = []
+
+    def fake(path, payload=None, *, timeout=None):
+        calls.append(path)
+        if path == "/free":
+            return {}
+        held = 10 * 1024 ** 3 if calls.count("/system_stats") < 2 else 0
+        return {"devices": [{"torch_vram_total": held}]}
+
+    rt._json = fake
+    out = rt.free_models()
+    check("free_models waits until the card is really free",
+          out.get("ok") is True and out.get("held_bytes") == 0, str(out))
+    check("... it asked /free first, then polled /system_stats",
+          calls[:3] == ["/free", "/system_stats", "/system_stats"], str(calls))
+    # A program that never lets go is a sentence, not a hang: shorten the wait.
+    saved = P.FREE_WAIT_S
+    P.FREE_WAIT_S = 0.2
+    try:
+        rt2 = P.ComfyUI("http://127.0.0.1:8188")
+        rt2._json = lambda path, payload=None, *, timeout=None: (
+            {} if path == "/free" else
+            {"devices": [{"torch_vram_total": 9 * 1024 ** 3}]})
+        bad = rt2.free_models()
+    finally:
+        P.FREE_WAIT_S = saved
+    check("... and a program that never lets go is one plain sentence",
+          bad.get("ok") is False and "still holds" in (bad.get("words") or ""),
+          str(bad))
+    # The /free call itself must be allowed the long wait it needs.
+    rt3 = P.ComfyUI("http://127.0.0.1:8188")
+    seen = {}
+
+    def fake3(path, payload=None, *, timeout=None):
+        seen[path] = timeout
+        return {} if path == "/free" else {"devices": [{"torch_vram_total": 0}]}
+
+    rt3._json = fake3
+    rt3.free_models()
+    check("... and /free itself is given the long time it needs",
+          seen.get("/free") is not None and seen.get("/free") >= 120.0,
+          str(seen))
+
+
 def t_the_route_waits_long_enough_for_a_real_draw():
     """Source pins for the three defects found on 2026-10-25."""
     src = (HERE / "jarvis_pictures.py").read_text(encoding="utf-8")
@@ -576,6 +625,9 @@ def t_the_route_waits_long_enough_for_a_real_draw():
           "the wait is not the measured one")
     check("ComfyUI is asked to free its models (its own /free)",
           '"/free"' in src and "def free_models" in src, "no /free call")
+    check("... and the card is really free before the chat comes back",
+          "FREE_WAIT_S" in src and '"/system_stats"' in src
+          and "torch_vram_total" in src, "no release wait")
     check("the warm-back runs in a finally, never only on success",
           "finally:" in src and "back = step_back(plan)" in src,
           "no finally restore")
@@ -1286,6 +1338,7 @@ def main() -> int:
                t_a_failed_set_aside_draws_nothing_and_says_so,
                t_way_b_is_a_plain_sentence_not_a_broken_draw,
                t_a_phone_cannot_free_the_pcs_everyday_chat,
+               t_the_picture_model_is_given_time_to_let_go_of_the_card,
                t_the_route_waits_long_enough_for_a_real_draw,
                t_the_storage_round_trip_keeps_the_record,
                t_the_file_name_is_the_date_the_time_and_a_slug,
