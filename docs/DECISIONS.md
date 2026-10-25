@@ -3485,3 +3485,39 @@ calls, holds no lock while it waits and loads no model.
   * **Not deployed by this record.** The live install still answers
     `/faces.html` with the old 404 and still shows the orb until the page, the
     whitelist and the sixteen files are deployed together with the owner's go.
+
+## 2026-10-25 — The browser HUD's face is live on the owner's install
+
+  * **What was done.** The owner was shown one multiple-choice question and
+    answered "Merge it, then deploy to live Jarvis." PR #819 merged as
+    `8104e6d01f4e035f882e59f1e6b25834fecfdd3c`, and the deploy followed the
+    same day: the page, the sixteen face files and the sixteen
+    `STATIC_ASSETS` keys went onto the live folder, the backend was asked to
+    stop with `POST /api/shutdown` (200, `model unloaded, server stopping`),
+    and the app's own supervisor restarted it (pid 41216 -> 38456, 7.9 s after
+    the port was released).
+  * **What was measured, after the restart, on the live install.** `GET /`
+    serves the merged page byte for byte (314,681 B, sha256 `2d0e6b7f...`);
+    all sixteen `/faces.html`-closure paths answer 200 with the merged bytes
+    and their declared types, while two of them with no token answer 401 and an
+    unlisted path 404 (the whitelist did not become a directory). In a real
+    headless Chromium the page asks for
+    `/faces.html?mode=display&feed=parent` once, gets 200, and the real
+    renderer draws (440 px canvas; 844 lit pixels in a 96x96 sample), with no
+    console errors, no page errors and no failed requests. The same harness
+    measured the opposite before the deploy: zero face requests, orb on, frame
+    hidden - a before/after on his own server, not between branches.
+  * **What this supersedes.** The page-half entry above ends "Not deployed by
+    this record", and `docs/ARCHITECTURE.md` §8 said "Nothing here is deployed
+    yet": both understate the live install now, and §8 is corrected to the
+    measured state in the same change as this entry. The orb remains what a
+    browser lands on whenever the real page is not the document that loaded.
+  * **The one side effect, said plainly.** The app's supervisor saw the
+    deliberate restart as a crash, logged `backend crash: the backend exited and
+    nothing answers`, and recorded one crash note (the file was already at its
+    ten-note cap, so the oldest note was pushed out by the app's own rule). That
+    note is this deploy, not a real crash.
+  * **Rollback.** The live folder's 337 root files were copied before the
+    deploy, and the two replaced files have `*.before-browser-face-2026-10-25`
+    copies; restoring them removes the sixteen new files (only while their
+    sha256 still matches what was deployed) and needs one backend restart.
