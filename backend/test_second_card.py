@@ -3315,14 +3315,12 @@ def t_the_cuda_device_join():
         p = CP.plan("qwen3:8b")
     check("plan()'s text_on is nvidia-smi's own index of the card it names, not a CUDA ordinal",
           p.text_on == f"cuda:{p.devices[0]['index']}", (p.text_on, p.devices[0]["index"]))
-    # /api/hardware's join is in jarvis_hardware.py, which IS a module here,
-    # and it already joins by GPU uuid first (then the PCI bus address) - the
-    # integer index is never the key. This pins that, so a future "fix" cannot
-    # quietly turn it back into an index join.
-    src = (HERE / "jarvis_hardware.py").read_text(encoding="utf-8")
-    joined = src[src.find("def smi_for"):src.find("def reg_for")]
-    check("/api/hardware joins Ollama's devices to nvidia-smi by GPU uuid first, then PCI address",
-          "s.uuid.lower() == dev[\"uuid\"].lower()" in joined and "_pci_key(" in joined, joined[:400])
+    # /api/hardware's uuid-first join is proved BEHAVIOURALLY elsewhere:
+    # backend/test_hardware.py's t_two_identical_cards_pair_by_uuid_and_the_monitor_lands_right
+    # drives two identical 2080 Supers through the real detect() and fails if
+    # the uuid pass is removed (its own docstring records that measurement).
+    # A source-text pin here would go red on a rename and stay green on a
+    # broken join, so this note replaces it rather than repeating it.
 
 
 if __name__ == "__main__":
