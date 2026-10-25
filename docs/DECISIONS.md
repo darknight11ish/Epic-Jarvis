@@ -3288,3 +3288,76 @@ NOT-TESTABLE - and NOT-TESTABLE is never a pass.
     scheduled, and there is still no route or app surface. The endpoint's
     stability over time is NOT-MEASURED; the suite makes no live request.
 
+## 2026-10-25 - the fast lane may only promise what this PC can do, and a claim no tool backed gets one plain correction
+
+The owner's live campaign of 2026-10-24/25 found chat making claims the
+machine could not keep: `"Opening <whole sentence>."` for a shell command or
+a two-part ask; `"what time is it?"` answered by the model 9.5 hours wrong
+after 82 seconds; a real setting (`"turn on learning in the background"`)
+denied; `"cancel that"` silently doing nothing after a read-only turn;
+DuckDuckGo reported ready only because `ddgs` imports. The fixes live in the
+fast path that already owns those words (`jarvis_quick.py`, `jarvis_open.py`,
+`jarvis_search.py`), so no model choice is involved, and the rule they follow
+is one sentence: **a fast answer may only promise what this PC can do.** Two
+decisions follow from it:
+
+- **`open_app_built=False` does not mean "opening is off".** It means the
+  backend did not name the program from its own fixed tables; the desktop
+  resolves the name against this PC's Start menu and opens it
+  (`jarvis-desktop/src-tauri/src/open_app.rs`), and says in the chat when it
+  is not there. The architect relied on the opposite reading when it approved
+  the sentence "Opening programs from chat is switched off on this PC —
+  nothing was opened." for that case (ruling Q6). That sentence would be false
+  for `open notion`, so the shipped wording is **"I have asked this PC to open
+  notion."** on this PC; the ruling's exact sentence is kept in
+  `jarvis_open.OPEN_OFF` and is used only when opening really is off
+  (`can_open=False`, which no caller passes today). This correction is
+  recorded for Gemini to review.
+- **An answer may not claim a search, a calculation, a feature list or a
+  missing setting that no tool backed.** When the words do claim one and no
+  matching tool ran in the turn, one plain correction sentence follows the
+  answer (`_claim_corrections()` in `jarvis_agent.py`); corrections are
+  additive lines before the finish chunk - never a rewrite of the answer - so
+  the app shows the model's words and then the correction, and denials,
+  questions, "earlier" claims and honestly backed claims are left alone. The
+  same day's ruling Q9 approved this shape (deterministic pre-routers plus a
+  post-turn search-claim guard).
+
+The fast lane's honest refusal for shell commands and two-part sentences is
+`SHELL_REFUSED` / `NOT_ONE_THING` in `jarvis_open.py`; a refused sentence
+carries no `open_app` route field, so no client is told to act. Search
+readiness now means "the provider's last live test worked" (`at_risk` /
+`untested` / last test recorded, and choosing a provider tests it before
+switching), not "the library imports".
+
+## 2026-10-25 - the two graphics cards are named by their job, and the approved card keeps its role across a reboot
+
+After the 21:14 reboot the app called the monitor card the everyday card, so
+a valid stored switch looked like it had been approved for a different card
+and demanded re-approval. The fix keys on the **approved card's UUID**: when
+the stored `master_card` UUID is physically present, that card is the spare
+card, regardless of which model happens to be loaded or which `nvidia-smi`
+row is first (`jarvis_second_card.py`, `_approved_spare()`). The other card is
+the chat card. When no card has been approved yet, the old detection still
+runs; a deterministic total-VRAM fallback exists (`_chat_card_by_size`) but is
+deliberately **not wired**, because it only affects the not-yet-approved state
+and wiring it changed 94 of 612 checks when tried - the owner's call. Roles
+are named by their job in both apps, not by arrival order, because the
+numbers read backwards ("the second card" is the 12 GB RTX 2060): the
+everyday card is the **"Chat card (RTX 2060 12 GB)"** and the free card is the
+**"Spare card (RTX 2080 SUPER 8 GB)"**; the route name `/api/second-card` is
+unchanged. The existing availability sentence about moving the monitor cables
+now only appears when the chat card has more than 2,500 MiB free, because
+moving the monitors adds roughly 1-2 GB of desktop overhead (ruling Q8). The
+background learner stays **off** until the owner deliberately turns it on
+again after this fix (owner decision 2026-10-24); it was found on in the live
+backend at 23:50 PT and turned off the same night.
+
+## 2026-10-25 - live preload warms the prompt prefix too
+
+`warm_prefix()` already existed on main but the preload path never called it,
+so the first real answer still paid ~10.5 s reading the rules and tool list
+out of nothing. The call site is now in the preload
+(`backend/jarvis_agent.py`); it calls the same helper the waking path already
+calls, holds no lock while it waits and loads no model.
+
