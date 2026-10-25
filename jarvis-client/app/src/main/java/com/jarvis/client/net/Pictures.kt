@@ -229,6 +229,27 @@ object Pictures {
                 available = true,
             )
         }
+        // A body that SAYS the read itself failed is not a missing feature. The
+        // PC's own handler answers a failed gallery read with 503
+        // `{"ok":false,"available":false,"error":"The pictures could not be
+        // read (…)."}` and no `pictures` key (backend/jarvis_pictures.py). That
+        // used to fall through to `Reply.MISSING`, so the plate told the owner
+        // to run apply-patches.ps1 for a folder/permission fault - advice that
+        // cannot fix it, and it threw the PC's sentence away (the 2026-10-24
+        // round-2 audit, M7). Carry the sentence on the plate's ordinary
+        // "words" line and keep the feature marked available.
+        val serverWords = body["error"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val readFailed = serverWords.isNotBlank() && body["pictures"] == null &&
+            (body["ok"]?.jsonPrimitive?.booleanOrNull == false ||
+                body["available"]?.jsonPrimitive?.booleanOrNull == false)
+        if (readFailed) {
+            return Reply(
+                ok = false, enabled = false, hidden = false,
+                hiddenWords = "", folder = "", count = 0, sizeWords = "",
+                words = serverWords, keep = "", programs = emptyList(),
+                shots = emptyList(), available = true,
+            )
+        }
         val shots = (body["pictures"]?.jsonArray ?: return Reply.MISSING).mapNotNull { element ->
             val one = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
             val id = one["id"]?.jsonPrimitive?.contentOrNull.orEmpty()

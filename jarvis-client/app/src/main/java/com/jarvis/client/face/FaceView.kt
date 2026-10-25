@@ -939,15 +939,14 @@ private fun GLFaceSurface(
         // wash a quarter wider than the kit's; narrowing it only ever takes
         // light away.
         if (face.id == "tokamak" && glowNow > 0f) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(hot.copy(alpha = 0.13f * glowNow), hot.copy(alpha = 0f)),
-                    center = Offset(cx, cy),
-                    radius = radius * 2f,
-                ),
-                radius = radius * 2f,
-                center = Offset(cx, cy),
-            )
+            // The brush is built once per (colour, glow, radius) change, not
+            // once per frame: a fresh colour list, a RadialGradient ramp and a
+            // ShaderBrush every active frame is the cost this file already
+            // removed for the canvas glow at :208-217 (the 2026-10-24 round-2
+            // audit, L7).
+            translate(cx, cy) {
+                drawCircle(brush = tokamakWashBrush(hot, glowNow, radius), radius = radius * 2f, center = Offset.Zero)
+            }
         }
 
         when (f.overlay) {
@@ -1899,6 +1898,73 @@ private fun dimmed(c: Color, dim: Float, bg: Color): Color = mix(bg, c, dim)
  *   thumbnail, which has no business holding its own 100 KB bitmap).
  * @param glowScale 0..1, already clamped by the caller - see FaceView's `glow`.
  */
+/** Faces whose draw threw on this device; the default face is drawn instead. */
+private val failedFaces = java.util.Collections.synchronizedSet(java.util.HashSet<String>())
+
+/**
+ * Draws one face, catching the throw a rejected AGSL compile (or a driver
+ * refusing a construct) makes inside the draw phase.
+ *
+ * Returns false when this face failed, and remembers it - the caller then draws
+ * [Faces.default] in its place. `RuntimeShader` is built by a lazy on the draw
+ * path, and a throw there leaves the frame and kills the process; because the
+ * chosen face is persisted, that used to mean every launch died on the same face.
+ * The rule is the one `gl/TokamakRenderer.kt:248-254` records for the mesh faces:
+ * a face that will not compile should cost that face, not the app. (The
+ * 2026-10-24 round-2 audit, M9.)
+ */
+private fun DrawScope.drawOneFace(
+    face: Face,
+    f: FaceFrame,
+    cx: Float,
+    cy: Float,
+    r: Float,
+    hot: Color,
+    cool: Color,
+    background: Color,
+): Boolean {
+    if (failedFaces.contains(face.id)) return false
+    return try {
+        if (face is CritterFace) {
+            // An animal is dimmed as a whole picture (DimRule): its fur keeps
+            // its own colours, so dimming only the two state colours left a
+            // standby panda as bright as an idle one. It gets the UNdimmed orb
+            // and rim colours for the same reason - the picture's dim covers
+            // them, and dimming them first as well would be dim squared.
+            face.drawDimmed(
+                this, cx, cy, r,
+                lift(f.swatch.a, Spec.SPEECH_BRIGHTNESS * f.speechPush), f.swatch.b, f,
+                background,
+            )
+        } else {
+            face.draw(this, cx, cy, r, hot, cool, f)
+        }
+        true
+    } catch (t: RuntimeException) {
+        failedFaces.add(face.id)
+        android.util.Log.w("JarvisFace", "A face would not draw on this device; using the default face", t)
+        false
+    }
+}
+
+/** The last Tokamak wash brush, and the inputs it was built for (L7). */
+private var washBrush: Brush? = null
+private var washKey: String? = null
+
+/** Tokamak's post-glow wash, rebuilt only when its colour, glow or radius changes. */
+private fun tokamakWashBrush(hot: Color, glow: Float, radius: Float): Brush {
+    val key = "${hot.value}|$glow|$radius"
+    washBrush?.let { if (washKey == key) return it }
+    val made = Brush.radialGradient(
+        colors = listOf(hot.copy(alpha = 0.13f * glow), hot.copy(alpha = 0f)),
+        center = Offset.Zero,
+        radius = radius * 2f,
+    )
+    washBrush = made
+    washKey = key
+    return made
+}
+
 private fun DrawScope.drawFace(
     f: FaceFrame,
     face: Face,
@@ -1968,20 +2034,17 @@ private fun DrawScope.drawFace(
             )
         }
 
-        if (face is CritterFace) {
-            // An animal is dimmed as a whole picture (DimRule): its fur keeps
-            // its own colours, so dimming only the two state colours left a
-            // standby panda as bright as an idle one. It gets the UNdimmed
-            // orb and rim colours for the same reason - the picture's dim
-            // covers them, and dimming them first as well would be dim
-            // squared (banked at 0.2, not 0.45).
-            face.drawDimmed(
-                this, cx, cy, radius * push,
-                lift(f.swatch.a, Spec.SPEECH_BRIGHTNESS * f.speechPush), f.swatch.b, f,
-                background,
-            )
-        } else {
-            face.draw(this, cx, cy, radius * push, lifted, cool, f)
+        // One face's draw, guarded. A face whose AGSL will not compile (or a
+        // driver that rejects a construct) throws HERE, inside the draw phase,
+        // because its `RuntimeShader` is built by a lazy on this path. The
+        // chosen face is persisted, so a throw used to kill every launch on the
+        // same face - the brick `gl/TokamakRenderer.kt:248-254` records and
+        // fixes for the mesh faces. Catch it, remember the face, and draw the
+        // default face instead for the rest of the process (the 2026-10-24
+        // round-2 audit, M9).
+        val drew = drawOneFace(face, f, cx, cy, radius * push, lifted, cool, background)
+        if (!drew && face.id != Faces.default.id) {
+            drawOneFace(Faces.default, f, cx, cy, radius * push, lifted, cool, background)
         }
 
         when (f.overlay) {

@@ -62,8 +62,15 @@ internal fun SandboxSection(canAct: Boolean = false) {
     // and the line says what the card really did (denied, timed out, approved).
     // This plate cannot watch change_own_config in the approval queue: that
     // action is shared by many settings, so the PC's own `waiting` is the fact.
+    //
+    // The effect is keyed on `waiting` only to START the loop. It must not be
+    // keyed on it for the loop itself: a re-read that still says "waiting"
+    // leaves the key unchanged, so the single-shot version ran exactly once and
+    // the plate kept the pre-decision panel for ever (the 2026-10-24 round-2
+    // audit, M10). `while` keeps reading; the keyed restart only happens when
+    // the plate's own composition changes.
     LaunchedEffect(panel?.waiting) {
-        if (panel?.waiting == true) {
+        while (panel?.waiting == true) {
             delay(3000)
             reads += 1
         }

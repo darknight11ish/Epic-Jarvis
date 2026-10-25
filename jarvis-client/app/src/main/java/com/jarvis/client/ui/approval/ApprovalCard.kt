@@ -354,7 +354,14 @@ fun ApprovalCard(
     // The owner's switch comes first: off, the gesture is not there at all.
     val swipeOn = item.swipeable && swipeAllowed
     val swipeModifier = if ((canDecide || canDeny) && swipeOn && !decided) {
-        Modifier.pointerInput(item.id) {
+        // Keyed on every gate the drag-end lambda reads, not just the card id:
+        // `pointerInput` keeps the values from the composition that created it,
+        // so keying on the id alone froze `canApprove` at its creation value -
+        // a heavy card's swipe could never approve after its 2 s gate opened,
+        // and a stale-link swipe still tried the approve path (the 2026-10-24
+        // round-2 audit, M11). A key change restarts the gesture, which is
+        // right: the gates moved, so the gesture's answer must too.
+        Modifier.pointerInput(item.id, canApprove, canDeny, replace) {
             detectHorizontalDragGestures(
                 onDragEnd = {
                     scope.launch {
