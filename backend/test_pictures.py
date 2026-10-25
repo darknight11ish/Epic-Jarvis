@@ -571,7 +571,7 @@ def t_the_picture_model_is_given_time_to_let_go_of_the_card():
     rt = P.ComfyUI("http://127.0.0.1:8188")
     calls = []
 
-    def fake(path, payload=None, *, timeout=None):
+    def fake(path, payload=None, *, timeout=None, **kw):
         calls.append(path)
         if path == "/free":
             return {}
@@ -589,7 +589,7 @@ def t_the_picture_model_is_given_time_to_let_go_of_the_card():
     P.FREE_WAIT_S = 0.2
     try:
         rt2 = P.ComfyUI("http://127.0.0.1:8188")
-        rt2._json = lambda path, payload=None, *, timeout=None: (
+        rt2._json = lambda path, payload=None, *, timeout=None, **kw: (
             {} if path == "/free" else
             {"devices": [{"torch_vram_total": 9 * 1024 ** 3}]})
         bad = rt2.free_models()
@@ -602,7 +602,7 @@ def t_the_picture_model_is_given_time_to_let_go_of_the_card():
     rt3 = P.ComfyUI("http://127.0.0.1:8188")
     seen = {}
 
-    def fake3(path, payload=None, *, timeout=None):
+    def fake3(path, payload=None, *, timeout=None, **kw):
         seen[path] = timeout
         return {} if path == "/free" else {"devices": [{"torch_vram_total": 0}]}
 
@@ -611,6 +611,77 @@ def t_the_picture_model_is_given_time_to_let_go_of_the_card():
     check("... and /free itself is given the long time it needs",
           seen.get("/free") is not None and seen.get("/free") >= 120.0,
           str(seen))
+
+
+def t_the_free_answer_is_allowed_to_have_no_body_at_all():
+    """The MEASURED cause of the first real draw's 1.36 GB spill (2026-10-25).
+
+    ComfyUI's own ``POST /free`` answers HTTP 200 with a body of 0 bytes - the
+    call is the answer. The old client parsed that empty body as JSON, raised,
+    and ``free_models`` gave up in 0.0 s, so the chat was warmed back onto a
+    card the picture models were still releasing. The empty answer must be a
+    success, and only for the route that is known to answer this way."""
+    class Answer:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self.body
+
+    urlopen0 = P.urllib.request.urlopen
+    try:
+        P.urllib.request.urlopen = lambda req, timeout=None: Answer(b"")
+        rt = P.ComfyUI("http://127.0.0.1:8188")
+        got = rt._json("/free", {"unload_models": True}, timeout=5.0,
+                       allow_empty=True)
+        check("an empty 200 is an answer when the route is known to send none",
+              got == {}, str(got))
+        raised = None
+        try:
+            rt._json("/prompt", {"prompt": {}}, timeout=5.0)
+        except Exception as exc:
+            raised = exc
+        check("... and any other route still treats an empty answer as an error",
+              isinstance(raised, P.DrawingFailed), repr(raised))
+        P.urllib.request.urlopen = (
+            lambda req, timeout=None: Answer(b'{"devices": []}'))
+        check("... a real JSON answer is still parsed",
+              rt._json("/system_stats", timeout=5.0) == {"devices": []})
+
+        def refuse(req, timeout=None):
+            raise P.urllib.error.HTTPError(
+                getattr(req, "full_url", "http://127.0.0.1:8188/free"),
+                400, "Bad Request", {}, None)
+
+        P.urllib.request.urlopen = refuse
+        rt2 = P.ComfyUI("http://127.0.0.1:8188")
+        bad = rt2.free_models()
+        check("a refused /free is one sentence, never a traceback",
+              bad.get("ok") is False
+              and "DrawingFailed" in (bad.get("words") or ""), str(bad))
+    finally:
+        P.urllib.request.urlopen = urlopen0
+    # The poll itself is unchanged, and it is still the one that was measured.
+    rt3 = P.ComfyUI("http://127.0.0.1:8188")
+    seen = []
+
+    def fake(path, payload=None, *, timeout=None, **kw):
+        seen.append((path, kw.get("allow_empty")))
+        return {} if path == "/free" else {"devices": [{"torch_vram_total": 0}]}
+
+    rt3._json = fake
+    out = rt3.free_models()
+    check("free_models asks /free for an empty answer, then waits on the card",
+          out.get("ok") is True and seen
+          and seen[0] == ("/free", True)
+          and seen[1][0] == "/system_stats" and seen[1][1] is not True,
+          str((out, seen)))
 
 
 def t_the_route_waits_long_enough_for_a_real_draw():
@@ -625,6 +696,8 @@ def t_the_route_waits_long_enough_for_a_real_draw():
           "the wait is not the measured one")
     check("ComfyUI is asked to free its models (its own /free)",
           '"/free"' in src and "def free_models" in src, "no /free call")
+    check("... and its empty answer is accepted, not parsed as JSON",
+          "allow_empty=True" in src, "the empty-body answer would fail again")
     check("... and the card is really free before the chat comes back",
           "FREE_WAIT_S" in src and '"/system_stats"' in src
           and "torch_vram_total" in src, "no release wait")
@@ -1339,6 +1412,7 @@ def main() -> int:
                t_way_b_is_a_plain_sentence_not_a_broken_draw,
                t_a_phone_cannot_free_the_pcs_everyday_chat,
                t_the_picture_model_is_given_time_to_let_go_of_the_card,
+               t_the_free_answer_is_allowed_to_have_no_body_at_all,
                t_the_route_waits_long_enough_for_a_real_draw,
                t_the_storage_round_trip_keeps_the_record,
                t_the_file_name_is_the_date_the_time_and_a_slug,

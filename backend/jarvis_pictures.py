@@ -191,10 +191,13 @@ DRAW_WAIT_S = 600.0
 
 #: How long ComfyUI may take to LET GO of its models after ``POST /free``, and
 #: how little it must still hold before the everyday chat is warmed back. The
-#: first real draw (2026-10-24) showed why a normal 30 s call is not enough:
-#: releasing ~10.9 GB took over half a minute, the warm-back began early, and
-#: the chat came back with 1.36 GB spilled into system RAM. Waiting here is
-#: what makes the chat come back whole.
+#: first real draw (2026-10-24) showed why waiting is needed: the warm-back
+#: began while the picture models were still being released, and the chat came
+#: back with 1.36 GB spilled into system RAM. (What went wrong there was NOT a
+#: slow ``/free``: that route answers 200 with a body of 0 bytes, and the old
+#: code parsed the empty body as JSON, raised in 0.0 s and so never waited at
+#: all - measured on the live install 2026-10-25.) Waiting here is what makes
+#: the chat come back whole.
 FREE_WAIT_S = 180.0
 FREE_FLOOR_BYTES = 1024 ** 3
 
@@ -413,7 +416,14 @@ class LocalRuntime:
         self.timeout = float(timeout)
 
     # -- helpers ---------------------------------------------------------
-    def _json(self, path, payload=None, *, method=None, timeout=None):
+    def _json(self, path, payload=None, *, method=None, timeout=None,
+              allow_empty=False):
+        """One JSON call. ``allow_empty`` is for the one route whose answer is
+        the call itself: ComfyUI's ``POST /free`` answers HTTP 200 with a body
+        of 0 bytes (measured on this PC's live install, 2026-10-25), so parsing
+        that body as JSON raised DrawingFailed and the swap never waited. Only
+        a route that is known to answer this way passes the flag; every other
+        route keeps the old rule that an unreadable answer is an error."""
         url = self.address + path
         data = None
         headers = {"Accept": "application/json"}
@@ -436,6 +446,12 @@ class LocalRuntime:
                     exc.code, ": " + detail if detail else ""))
         except Exception as exc:
             raise NotReady(type(exc).__name__)
+        if not body.strip():
+            if allow_empty:
+                # The route answered with no body on purpose: the call is done.
+                return {}
+            raise DrawingFailed("The drawing program answered with something "
+                                "this PC could not read.")
         try:
             return json.loads(body.decode("utf-8"))
         except Exception:
@@ -750,18 +766,22 @@ class ComfyUI(LocalRuntime):
         - the program keeps running, its loaded models are released, and the
         next draw loads them again.
 
-        Why it WAITS (measured on the first real draw, 2026-10-24): releasing
-        ~10.9 GB under WDDM took longer than a normal call's 30 s, so the old
-        version returned "done" while the card was still full and the chat
-        reloaded with 1.36 GB spilled into system RAM. This polls ComfyUI's own
-        ``/system_stats`` until it holds no more than ``FREE_FLOOR_BYTES``, so
-        the warm-back that follows starts from a card that is really free.
+        Why it WAITS (updated 2026-10-25, measured). ``/free`` answers HTTP 200
+        with a body of 0 bytes: the call only ASKS the program to let go, and
+        the release happens after it returns. The first version parsed that
+        empty body as JSON, raised, and answered "did not let go" in 0.0 s, so
+        the warm-back started while ~10.9 GB was still being released and the
+        chat came back with 1.36 GB spilled (first real draw, 2026-10-24). This
+        version ACCEPTS the empty answer (``allow_empty=True``, never a body
+        parse) and polls ComfyUI's own ``/system_stats`` until it holds no more
+        than ``FREE_FLOOR_BYTES``, so the warm-back that follows starts from a
+        card that is really free.
         Never raises: a failure becomes a sentence, because the chat's warm-back
         must still be attempted.
         """
         try:
             self._json("/free", {"unload_models": True, "free_memory": True},
-                       timeout=FREE_WAIT_S)
+                       timeout=FREE_WAIT_S, allow_empty=True)
         except Exception as exc:
             return {"ok": False,
                     "words": "The drawing program did not let go of its models "
