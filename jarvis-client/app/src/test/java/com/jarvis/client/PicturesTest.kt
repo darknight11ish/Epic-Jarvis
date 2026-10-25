@@ -324,12 +324,22 @@ class PicturesTest {
     }
 
     @Test
-    fun theDrawingIdIsReadFromThePcsAnswer() {
-        assertEquals("2026-10-11-140509-a-red-panda", Pictures.madeId(
-            obj("ok" to true, "id" to "2026-10-11-140509-a-red-panda"),
-        ))
-        assertNull(Pictures.madeId(obj("ok" to true)))
-        assertNull(Pictures.madeId(obj("ok" to true, "id" to "")))
-        assertNull(Pictures.madeId(null))
+    fun aFailedReadIsNotAMissingFeature() {
+        // The PC's own handler answers a failed gallery read with
+        // {"ok":false,"available":false,"error":"The pictures could not be
+        // read (…)."} and NO `pictures` key. The phone used to fall through to
+        // Reply.MISSING and tell the owner to run apply-patches.ps1 for a
+        // folder/permission fault (the 2026-10-24 round-2 audit, M7).
+        val body = obj(
+            "ok" to false,
+            "available" to false,
+            "error" to "The pictures could not be read (PermissionError).",
+        )
+        val r = Pictures.readReply(503, body)
+        assertFalse("a failed read is still drawn as 'no Pictures feature'", r == Pictures.Reply.MISSING)
+        assertTrue("the failure is not marked available, so the plate hides it", r.available)
+        assertTrue("the PC's own sentence was thrown away", r.words.contains("PermissionError"))
+        // A body that says nothing about a failure is still an older PC.
+        assertEquals(Pictures.Reply.MISSING, Pictures.readReply(200, obj("ok" to true)))
     }
 }
