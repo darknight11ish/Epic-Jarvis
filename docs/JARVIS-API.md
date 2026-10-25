@@ -20963,8 +20963,12 @@ again.
                                  saves one to itself.
     POST /api/pictures           {"prompt": "...", "seed"?: n,
                                   "settings"?: {"steps","width","height",
-                                                "model","negative"}}
-                                 Draw one and keep it.
+                                                "model","negative"},
+                                  "free_card"?: true}
+                                 Draw one and keep it. `free_card` is the
+                                 second request that consents to the everyday
+                                 chat stepping aside; it is described in 129.4b
+                                 and is never needed when the card is free.
     POST /api/pictures/settings  ONE named change, and the PC REFUSES all of it
                                  from anywhere but the PC (403 pc_only):
 
@@ -21057,6 +21061,68 @@ error and never a silent nothing:**
   pictures\" in Settings, under Pictures, when you want Jarvis to use the
   second card for this."* - `503`, `off: true`.
 
+### 129.4b The swap: the everyday chat steps aside (added 2026-10-25)
+
+The owner's 2026-09-27 decision says the picture-maker is *"swapped in when
+asked, since both cannot sit on the card at once"*. Until 2026-10-25 the swap
+was never done by Jarvis: the route drew if the program answered and the
+owner's chat stayed on the card, which on this PC means a real Chroma1-HD draw
+(8.57 GiB of weights) cannot fit. It is now two requests, and nothing moves on
+the first one:
+
+    POST /api/pictures  {"prompt": "a red panda"}                 -> 409
+    POST /api/pictures  {"prompt": "a red panda", "free_card": true} -> 200
+
+The 409 is the price, said before anything is unloaded:
+
+    {"ok": false, "available": true, "needs": "free_card", "option": "A",
+     "estimate": {"draw_seconds": 275.0, "chat_away_seconds": 335.0,
+                  "minutes": 6},
+     "confirm": {"free_card": true},
+     "error": "Drawing needs the 12 GB card, and your everyday chat is using
+               it. If you agree, Jarvis sets the everyday chat aside for a few
+               minutes, draws the picture, then loads the chat back the way it
+               was - the conversation and its settings are kept. Nothing else
+               changes. This takes about 6 minutes, and the chat comes back on
+               its own afterwards."}
+
+The confirmed request does, in this order: the everyday chat lane is unloaded
+(`keep_alive: 0` - Ollama's own "unload now"; the lane's settings are not
+changed), the picture is drawn, ComfyUI is asked to release its models (its own
+`POST /free`), and the everyday chat is warmed back. The 200 carries the normal
+body plus the swap's own record:
+
+    "card": {"option": "A", "did": true, "chat_away_seconds": 2.5,
+             "chat_back_seconds": 9.0, "chat_back": true,
+             "models_freed": true,
+             "words": "Your everyday chat stepped aside for 2.5 seconds and is
+                       back on the card after another 9.0 seconds."}
+
+Rules that are part of the feature, not implementation detail:
+
+- **Never silent.** The first request tells the owner what will pause and for
+  roughly how long; no `free_card: true` request, no swap.
+- **Never on an error path.** The warm-back runs in a `finally`: a refused or
+  crashed draw still puts the everyday model back and says so in the answer.
+  If it cannot come back the answer says that too - and does not claim a
+  picture was the only thing that happened.
+- **Only from the PC.** `POST /api/pictures` refuses a confirmed swap from any
+  device but this PC (`403 pc_only`): freeing this PC's everyday model is the
+  PC's own act. A phone may still draw when the card is free.
+- **No approval card.** The card belongs to turning image mode ON (the switch
+  above, PC-only and off by default), not to an in-and-out swap of the same
+  card whose price is reported before and after in plain seconds.
+- **The three ways are the card module's (`/api/picture-card`).** Way A (the
+  recommended one) is the swap above; way C asks for no swap because it never
+  touches the chat; way B (moving the chat to the 8 GB card) is recorded but
+  not wired, and a draw under B answers one plain sentence rather than
+  pretending.
+- **It still starts nothing.** Starting ComfyUI remains the owner's own
+  program, as 129.4 says; this section only unloads and warms the chat.
+- **The wait is ten minutes, not two.** `DRAW_WAIT_S = 600` in
+  `jarvis_pictures.py`: the measured 274.4 s draw plus a cold load, and still
+  a finite wait - a wedged job ends in a sentence, never in a hung route.
+
 ### 129.5 No approval card, and why that is not a loophole
 
 **Making a picture needs no approval card.** The gate exists for things that
@@ -21138,6 +21204,27 @@ switch; the listing route (newest first, the folder and its size, a lost
 sidecar handled); the picture itself as bytes and a refusal for anything that
 is not one of our ids; `install()` and its origin/token refusals; and that no
 other backend module imports this one.
+
+**The swap (2026-10-25) is covered with the card module stood in for:** the
+plan finds A/B/C and the price from a real `handshake_plan` call against a
+stand-in card module (A with the chat on the card needs the swap, C never
+does, B says it is not wired, a card with no chat needs nothing, a backend
+without the card module plans nothing); the first request answers 409 with
+`needs: "free_card"` and draws nothing; the confirmed request sets the chat
+aside **before** the draw, asks ComfyUI to free its models, warms the chat
+back and records the measurement **after** it, and reports both seconds; a
+refused draw still warms the chat back; a chat that will not step aside stops
+the draw with nothing written; a phone cannot start the swap; and source pins
+hold the ten-minute wait, the `/free` call, the `finally` warm-back and the
+`pc_only` hand-off to the route.
+
+**What is honestly NOT proved by that suite:** that ComfyUI draws a real
+picture here (that needs the real card and program - a stub proves the code
+path, never the picture), that the warm-back really reloads the owner's model
+in a measured number of seconds, and the desktop panel's confirm flow. Those
+are measured on the owner's PC and written down in
+`docs/PICTURE-CARD-MEASUREMENTS-2026-10-11.md` and the runbook; the suite's own
+docstring says so out loud.
 
 Desktop: the Rust reading functions are plain functions of `(status, body)` and
 are tested without a Tauri app or a network
