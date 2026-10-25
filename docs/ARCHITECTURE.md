@@ -3058,7 +3058,12 @@ and keeps a SQLite price history with last-known-good/stale semantics and an
 outside-text diff behind `[price_radar] enabled = false`. It is read-only: no
 cart, no seat hold, no checkout, no booking/PNR path, no cookies, no login, no
 redirects, one host, one GET, one attempt (a 403/429 is recorded stale and
-never retried), at least 300 s between checks with jitter. It adds **no app
+never retried), at least 300 s between checks plus up to 30% jitter that only
+ever delays. **Measured live once, 2026-10-24:** the page returned HTTPS 200,
+2,306,825 bytes identity / 309,768 bytes gzipped, and parsed into 11
+itineraries for SEA->NRT on 2026-12-12 (lowest $856.00) - so the module now
+asks for gzip and its page cap is 8 MB; the first 2 MB cap refused every live
+page. The endpoint's stability over time is still not measured. It adds **no app
 surface at all** - no route, no card, no Settings row in either app - so
 nothing here is on one app and missing from the other. The multi-source
 product pages are F2's own module (`jarvis_price_sources.py`: local SearXNG
@@ -3066,7 +3071,7 @@ price mentions + the dual-persona steering probe); F1 installs its source
 objects lazily from `enabled()` (`install_f2()`, nothing imported while the
 switch is off), and F2 delegates to F1's disclosure constants so each
 approved sentence exists once. Proxy exits (F3) are a later, separate slice.
-Design, the disclosure wording and what is NOT measured (the endpoint
+Design, the disclosure wording and what is still NOT measured (the endpoint
 is unofficial and no live request is made in the suite):
 `docs/DESIGN-PRICE-RADAR.md`.
 

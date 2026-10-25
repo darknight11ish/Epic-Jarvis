@@ -3257,3 +3257,34 @@ latch still comes first. The lane itself was measured on the owner's PC on
 stopped again so the coding lane keeps its port; one line starts it. A real
 portal export, a real phone screen and a real medical review remain
 NOT-TESTABLE - and NOT-TESTABLE is never a pass.
+
+## 2026-10-24 - the flight price radar's live test: the page is 2.3 MB, and the "hard" 300 s floor wasn't
+
+  * **What the live test found.** The first real read-only GET of Google
+    Flights' public page (SEA -> NRT, 2026-12-12, economy, USD) came back
+    HTTPS 200 at **2,306,825 bytes identity / 309,768 bytes gzipped**, while
+    the module's cap was 2,000,000 bytes and it did not ask for gzip. So
+    `fetch_page()` raised `FetchFailed("the page was larger than a search page
+    can be")` - with the switch on, every check would have recorded
+    `fetch_failed` and never produced a price. The parser itself was right
+    against the real page: 11 itineraries, lowest $856.00.
+  * **The fix, owner-approved the same night.** The request now sends
+    `Accept-Encoding: gzip` (what a browser sends, and roughly 7x fewer bytes
+    per check); the page cap is 8,000,000 bytes with a separate
+    2,000,000-byte wire cap for compressed answers, and a compressed body is
+    inflated only up to the page cap - a gzip bomb is refused, never
+    decompressed without a bound. The measurement is written into the module,
+    the design and the architecture note.
+  * **The poll floor, corrected.** The design and the module both said the
+    floor was "at least 300 s", but `next_check_at` applied its +/-30% jitter
+    before returning, so a wait could be as short as 210 s (measured live: 257
+    s). The jitter now only ADDS time (300-390 s), so "at least 300 s between
+    checks" is literally true; a test pins `>= 300`. This does not loosen the
+    2026-10-21 ruling - it makes the code match the "hard" part that was
+    approved. F2's cadence was already safe: it delegates to
+    `jarvis_tellme.next_poll_timestamp`, which clamps with
+    `max(POLL_MIN_SECONDS, ...)`.
+  * **What is still not measured.** The switch stays off, nothing is
+    scheduled, and there is still no route or app surface. The endpoint's
+    stability over time is NOT-MEASURED; the suite makes no live request.
+

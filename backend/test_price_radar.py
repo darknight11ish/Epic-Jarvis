@@ -28,9 +28,14 @@ WHAT IS CHECKED HERE:
   4. **The hard invariants**: switch off = zero network; strict SSRF allowlist
      (only the one https Google page URL; redirects refused); no
      cookies/authorization headers; 403/429 = blocked_by_site_challenge, one
-     attempt only; poll floor >= 300 s with seeded +/-30% jitter; no
-     POST/PUT/checkout/booking surface at all; the disclosure words the owner
-     approved are the ones in the module constants.
+     attempt only; the page is asked for gzip and a compressed body is
+     inflated only up to the page cap (a gzip bomb is refused, never
+     decompressed without a bound); poll floor >= 300 s with seeded 0-30%
+     jitter that only ever delays (measured live 2026-10-24: the real page is
+     2,306,825 bytes identity / 309,768 bytes gzipped, so the old 2,000,000
+     cap refused every live page); no POST/PUT/checkout/booking surface at
+     all; the disclosure words the owner approved are the ones in the module
+     constants.
   5. **F2/F3 integration points**: set_sources/register_alert_renderer and the
      explicit PriceStore; the core imports nothing from the sources module.
 
@@ -367,10 +372,10 @@ def t_parser():
 # ==========================================================================
 
 class FakeResponse:
-    def __init__(self, body=b"<html>ok</html>", status=200):
+    def __init__(self, body=b"<html>ok</html>", status=200, headers=None):
         self._body = body if isinstance(body, bytes) else str(body).encode()
         self.status = status
-        self.headers = {"Content-Type": "text/html"}
+        self.headers = dict(headers) if headers else {"Content-Type": "text/html"}
 
     def read(self, n=-1):
         return self._body[:n] if isinstance(n, int) and n >= 0 else self._body
@@ -426,6 +431,44 @@ def t_ssrf_and_fetch():
     check("the request is a GET of the page", req.get_method() == "GET", req.get_method())
     cache = next((v for k, v in req.headers.items() if k.lower() == "cache-control"), "")
     check("the request says it does not want a cached copy", "no-cache" in cache, cache)
+    check("the request asks for gzip (a live page is 2.3 MB identity, 310 KB gzipped)",
+          any(k.lower() == "accept-encoding" and "gzip" in v.lower()
+              for k, v in req.headers.items()), dict(req.headers))
+
+    # MEASURED LIVE 2026-10-24: the real page is 2,306,825 bytes identity and
+    # 309,768 bytes gzipped, so the old 2,000,000-byte cap refused every real
+    # page. A gzip answer is inflated; a compressed body that unpacks past the
+    # cap is refused, never decompressed without a bound.
+    import gzip as _gzip
+    page = _page_html(_payload([_row(295.0)]))
+    gz = _gzip.compress(page.encode("utf-8"))
+    gz_headers = {"Content-Type": "text/html", "Content-Encoding": "gzip"}
+    got = R.fetch_page(good, opener=_opener_returning(
+        FakeResponse(gz, headers=gz_headers), []))
+    check("a gzip answer is read and inflated back to the page", got == page,
+          (len(gz), len(got)))
+    check("the page cap carries the live measurement, not the old 2 MB",
+          R.PAGE_MAX_BYTES >= 2_306_825 and R.PAGE_MAX_BYTES <= 16_000_000,
+          R.PAGE_MAX_BYTES)
+    check("a compressed body is bounded before it is read off the wire",
+          0 < R.PAGE_MAX_WIRE_BYTES < R.PAGE_MAX_BYTES, R.PAGE_MAX_WIRE_BYTES)
+    too_big = b"x" * (R.PAGE_MAX_BYTES + 1)
+    check("an identity page over the cap is FetchFailed, not a price",
+          _raises(R.FetchFailed, lambda: R.fetch_page(good, opener=_opener_returning(
+              FakeResponse(too_big), []))))
+    bomb = _gzip.compress(too_big)
+    check("a gzip bomb that unpacks over the cap is refused (wire is small)",
+          len(bomb) < R.PAGE_MAX_WIRE_BYTES
+          and _raises(R.FetchFailed, lambda: R.fetch_page(good, opener=_opener_returning(
+              FakeResponse(bomb, headers=gz_headers), []))), len(bomb))
+    check("a compression this reader does not know is FetchFailed, never a crash",
+          _raises(R.FetchFailed, lambda: R.fetch_page(good, opener=_opener_returning(
+              FakeResponse(gz, headers={"Content-Type": "text/html",
+                                        "Content-Encoding": "br"}), []))))
+    huge_wire = _gzip.compress(os.urandom(R.PAGE_MAX_WIRE_BYTES + 1))
+    check("a compressed body over the wire cap is refused before inflation",
+          _raises(R.FetchFailed, lambda: R.fetch_page(good, opener=_opener_returning(
+              FakeResponse(huge_wire, headers=gz_headers), []))), len(huge_wire))
     for label, status, kind in (("403", 403, R.BlockedBySiteChallenge),
                                 ("429", 429, R.BlockedBySiteChallenge),
                                 ("500", 500, R.FetchFailed)):
@@ -494,15 +537,15 @@ def t_switch_and_poll_floor():
     rng = _random.Random(7)
     stamps = [R.next_check_at(now, rng=rng) for _ in range(50)]
     check("the poll floor is at least 300 s", floor >= 300, floor)
-    check("every next check is >= floor*(1-30%) out",
-          all(t >= now + floor * (1 - R.POLL_JITTER_FRACTION) for t in stamps),
+    check("every next check is >= the floor out (the floor is HARD)",
+          all(t >= now + floor for t in stamps),
           min(t - now for t in stamps))
-    check("... and <= floor*(1+30%) out",
+    check("... and <= floor*(1+30%) out (the jitter only delays)",
           all(t <= now + floor * (1 + R.POLL_JITTER_FRACTION) for t in stamps),
           max(t - now for t in stamps))
     check("jitter is not a constant tick", len({round(t - now, 3) for t in stamps}) > 1)
     check("asking for a faster floor is raised to the hard floor",
-          R.next_check_at(0.0, rng=_random.Random(1), floor=1) >= floor * 0.7)
+          R.next_check_at(0.0, rng=_random.Random(1), floor=1) >= floor)
     check("the approved disclosure wording is the module's constant",
           R.DISCLOSURE.startswith("Checks public product and flight prices without "
                                   "sending cookies, saved logins, or tracking tags")
