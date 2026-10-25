@@ -1290,6 +1290,16 @@ html[data-hud-shell="center-core"] .composer{
 .hud-region-left{margin-top:6px;}
 .hud-region-stage-top{margin:8px 0 0; order:-1;}
 .hud-region-right{margin-top:6px;}
+/* P0.7 (2026-10-25, the HUD screen walk at 1440x900): the Right rail is a
+ * scrolling column in the NORMAL Cockpit view too, not only in Edit HUD. Its
+ * bento region wrapper used to be a shrinkable flex item (`flex:0 1 auto` with
+ * `min-height:0`), so the rail squeezed it to 342px for 725px of cards and the
+ * cards painted past it - REMINDERS covered the bottom of SECOND BRAIN & VAULT
+ * and all of FREE-TIER BUDGET and VOICE, and the rail could not scroll to
+ * them. A non-shrinking wrapper keeps every card in its own in-flow row and
+ * the rail's own `overflow-y:auto` scrolls the column. Edit HUD's rules below
+ * keep working unchanged; this is the same rule, for every view. */
+#rail-right .hud-region-right{flex:0 0 auto;}
 body[data-hud-edit="on"] .hud-region{gap:7px; padding:4px; border:1px dashed var(--line); border-radius:4px;}
 body[data-hud-edit="on"] .hud-region-drop{border-color:var(--ice); background:rgb(var(--accent-rgb) / .05);}
 .hud-card{
