@@ -60,17 +60,25 @@ plus these six files:
         animal-shared.js, hud-layout.js, hud-layout-store.js,
         hud-web-bridge.js (PWA Slice 2's browser bridge),
         manifest.webmanifest, sw.js and jarvis-180/192/512.png
-        (PWA Slice 3b's home-screen files)
+        (PWA Slice 3b's home-screen files),
+        faces.html and the sixteen scripts it loads - the eleven <script src>s,
+        face-words.js and jarvis-link.js which its inline script imports, and
+        card-words.js and replace-confirm.js which jarvis-link.js imports
+        (the browser HUD's face, 2026-10-25: the owner chose to serve it)
 and one file this repository DERIVES rather than copies:
     _where.py                backend/_where.py, plus a trailer that says what it is
 ```
 
-The 27 static files above are the closed-world whitelist
+The 43 static files above are the closed-world whitelist
 `jarvis_hud.py`'s `STATIC_ASSETS` serves at `GET /theme.css`, `/fonts/*`,
-`/<module>.js`, `/manifest.webmanifest`, `/sw.js` and `/icons/*`: without
-them the page loads in a browser and every file it
+`/<module>.js`, `/faces.html`, `/manifest.webmanifest`, `/sw.js` and `/icons/*`:
+without them the page loads in a browser and every file it
 then asks for is a 404, so the HUD arrives half-dressed with no theme, no
-fonts and every shell module off. This repository keeps them in
+fonts and every shell module off. The browser HUD's face is the newest of them:
+until 2026-10-25 the page's `#reactor` iframe asked for `faces.html` and the
+server's own 404 answered, so a browser painted `{"error": "not found"}` where
+the red panda belongs; the owner chose to SERVE it (Option A of the HUD screen
+walk) rather than drop it. This repository keeps them in
 `backend/static/`; the page's real copies are in `jarvis-desktop/src/`, and
 `backend/test_hud_static.py` fails if the two ever differ. They are re-taken
 from `backend/static/` by this same rule (the `BESIDE` table in

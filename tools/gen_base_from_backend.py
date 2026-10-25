@@ -43,6 +43,10 @@ re-taken", and nothing else:
                                  the worker the bridge registers, and the
                                  icons the manifest names. The icons are
                                  BYTES, like the fonts.
+        faces.html and the sixteen scripts it loads
+                                 from backend/static/ too (2026-10-25: the
+                                 browser HUD's face, which the owner chose to
+                                 SERVE - Option A of the HUD screen walk)
 
 Everything is written with LF line endings, which is this repository's rule
 (`.gitattributes`), and read with UTF-8. `jarvis-backend/README.md` and
@@ -196,6 +200,43 @@ BESIDE = (
      "the home-screen manifest the page links at /manifest.webmanifest"),
     ("sw.js", "{repo}/backend/static/sw.js",
      "the privacy-safe service worker the bridge registers at /sw.js"),
+    # The browser HUD's face (2026-10-25, the owner's decision: serve it). The
+    # HUD page's #reactor iframe asks for faces.html; the page and the eleven
+    # scripts it loads are served by the closed whitelist from beside the
+    # server, so the published base has to carry them or a fresh copy of the
+    # base answers the face with the server's own 404 again.
+    ("faces.html", "{repo}/backend/static/faces.html",
+     "the HUD's face page; served at /faces.html"),
+    ("faces-spec.js", "{repo}/backend/static/faces-spec.js",
+     "a script faces.html loads; served at /faces-spec.js"),
+    ("face-pace.js", "{repo}/backend/static/face-pace.js",
+     "a script faces.html loads; served at /face-pace.js"),
+    ("critter-pose.js", "{repo}/backend/static/critter-pose.js",
+     "a script faces.html loads; served at /critter-pose.js"),
+    ("critter-owl.js", "{repo}/backend/static/critter-owl.js",
+     "a script faces.html loads; served at /critter-owl.js"),
+    ("critter-otter.js", "{repo}/backend/static/critter-otter.js",
+     "a script faces.html loads; served at /critter-otter.js"),
+    ("critter-monkey.js", "{repo}/backend/static/critter-monkey.js",
+     "a script faces.html loads; served at /critter-monkey.js"),
+    ("critter-robot.js", "{repo}/backend/static/critter-robot.js",
+     "a script faces.html loads; served at /critter-robot.js"),
+    ("critters-gen.js", "{repo}/backend/static/critters-gen.js",
+     "a script faces.html loads (generated critters); served at /critters-gen.js"),
+    ("lipsync.js", "{repo}/backend/static/lipsync.js",
+     "a script faces.html loads; served at /lipsync.js"),
+    ("sky.js", "{repo}/backend/static/sky.js",
+     "a script faces.html loads; served at /sky.js"),
+    ("season.js", "{repo}/backend/static/season.js",
+     "a script faces.html loads; served at /season.js"),
+    ("face-words.js", "{repo}/backend/static/face-words.js",
+     "a module faces.html imports; served at /face-words.js"),
+    ("jarvis-link.js", "{repo}/backend/static/jarvis-link.js",
+     "a module faces.html imports (the face signal); served at /jarvis-link.js"),
+    ("card-words.js", "{repo}/backend/static/card-words.js",
+     "a module jarvis-link.js imports; served at /card-words.js"),
+    ("replace-confirm.js", "{repo}/backend/static/replace-confirm.js",
+     "a module jarvis-link.js imports; served at /replace-confirm.js"),
 )
 
 #: The beside-files that are BYTES, not text: the seven woff2 faces and the

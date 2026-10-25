@@ -19,6 +19,13 @@ WHAT THIS SUITE PROVES, against the real published base HUD and the real page:
      whitelist key; and every non-planned key is reachable from the page. A
      page file that is not whitelisted fails here - the point of "closed
      world" - and a whitelist entry nothing loads fails too.
+     The browser HUD's FACE PAGE is the one file the page does not name in
+     markup: the page builds its iframe URL in JS
+     (`faces.html?mode=display&feed=parent` in `jarvis_hud.html`), so
+     `/faces.html` is seeded by name below and the scripts it loads - its
+     eleven `<script src>`s and the two modules its own inline script imports -
+     are followed exactly like the page's own (the owner's decision of
+     2026-10-25: serve the real face page, Option A of the HUD screen walk).
   2. **Every PWA file is served today.** Slice 3a listed the ones the slices
      had not written yet; Slice 2 put the bridge beside the server and Slice
      3b put the manifest, the service worker and the home-screen icons there.
@@ -68,10 +75,16 @@ STATIC = REPO / "backend" / "static"
 DESKTOP = REPO / "jarvis-desktop" / "src"
 PS1 = REPO / "scripts" / "apply-patches.ps1"
 
+#: The browser HUD's face page (2026-10-25, the owner's decision: serve it).
+#: The HUD page builds its `#reactor` iframe URL in JS, so this is the one
+#: closed-world file that is seeded by name rather than discovered from markup.
+FACE_PAGE = "/faces.html"
+
 #: The exact Content-Type each extension must get (the ruling names exact MIME
 #: types; "text/plain for everything" is what a careful test catches).
 CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
     ".woff2": "font/woff2",
     ".webmanifest": "application/manifest+json",
@@ -163,7 +176,7 @@ def _clean_ref(ref: str) -> str:
 
 
 def _is_asset_path(ref: str) -> bool:
-    return bool(re.search(r"\.(js|css|woff2|png|webmanifest)$", ref))
+    return bool(re.search(r"\.(js|css|woff2|png|webmanifest|html)$", ref))
 
 
 def page_refs() -> set:
@@ -213,6 +226,35 @@ def js_imports(filename: str) -> set:
     return out
 
 
+def html_refs(url: str, filename: str) -> set:
+    """The local files one served HTML page asks for, as site paths.
+
+    Same reference shapes as `page_refs()`: `<link href>`, `<script src>` and
+    the local module imports of its inline script. Used for `faces.html`, the
+    browser HUD's face page, so the eleven scripts it loads are discovered
+    rather than typed into a list here."""
+    source = STATIC / filename
+    if not source.is_file():
+        return set()
+    text = source.read_text(encoding="utf-8", errors="replace")
+    base = posixpath.dirname(url)
+    found = set()
+    for pattern in (r'(?:href|src)\s*=\s*"([^"]+)"',
+                    r'import\s*\(\s*"([^"]+)"\s*\)',
+                    r'\bfrom\s*"([^"]+)"'):
+        found.update(m.group(1) for m in re.finditer(pattern, text))
+    out = set()
+    for ref in found:
+        clean = _clean_ref(ref)
+        if not clean:
+            continue
+        resolved = clean if clean.startswith("/") else posixpath.join(base, clean)
+        resolved = posixpath.normpath(resolved)
+        if resolved.startswith("/") and _is_asset_path(resolved):
+            out.add(resolved)
+    return out
+
+
 def expected_asset_refs(assets: dict) -> set:
     """Everything the page loads, transitively, as site paths.
 
@@ -220,8 +262,13 @@ def expected_asset_refs(assets: dict) -> set:
     `url()` values and each served module's local imports until nothing new
     appears. That set is what a browser pulls in; the whitelist must equal it
     (the manifest's icons and the registered service worker included, though
-    neither is an <img>/<script> in the page itself)."""
+    neither is an <img>/<script> in the page itself). The face page is seeded
+    by name: the HUD page builds its iframe URL in JS, so no markup reference
+    to `faces.html` exists to discover."""
     wanted = page_refs()
+    # The browser HUD's face page (2026-10-25): `#reactor`'s iframe URL is
+    # assembled in the page's own script, not an attribute, so it is named.
+    wanted.add(FACE_PAGE)
     seen = set()
     while True:
         new = set()
@@ -235,6 +282,8 @@ def expected_asset_refs(assets: dict) -> set:
                 new |= css_refs(url, filename)
             elif filename.endswith(".js"):
                 new |= js_imports(filename)
+            elif filename.endswith(".html"):
+                new |= html_refs(url, filename)
         if new <= wanted:
             break
         wanted |= new
@@ -293,6 +342,19 @@ def t_the_whitelist_covers_everything_the_page_loads():
           and (STATIC / "hud-web-bridge.js").is_file()
           and (STATIC / "manifest.webmanifest").is_file()
           and (STATIC / "sw.js").is_file())
+    face_entry = assets.get(FACE_PAGE)
+    check("the browser HUD serves its face page as text/html (the owner's "
+          "2026-10-25 decision: serve the real faces page)",
+          face_entry == ("faces.html", CONTENT_TYPES[".html"]), str(face_entry))
+    face_refs = html_refs(FACE_PAGE, "faces.html") if face_entry else set()
+    check("... and every local file faces.html loads is a whitelist key",
+          face_refs and face_refs <= set(assets),
+          "not whitelisted: " + ", ".join(sorted(face_refs - set(assets))))
+    face_scripts = sorted(r for r in face_refs if r.endswith(".js"))
+    check("... and every script the face page loads is a key (fifteen of them: "
+          "the eleven <script src>s plus the two it imports - and one missing "
+          "means the page draws nothing)",
+          len(face_scripts) == 15, f"{len(face_scripts)} script(s): " + ", ".join(face_scripts))
 
 
 def t_every_content_type_is_exact_and_every_file_is_flat():
@@ -336,6 +398,19 @@ def t_the_real_handler_serves_files_and_refuses_everything_else():
               and got.sent[-1][2] == CONTENT_TYPES[".css"]
               and ("X-Content-Type-Options", "nosniff") in got.sent[-1][3],
               got.sent[-1][:3])
+
+        # The face page is the first .html the whitelist serves: prove the
+        # handler answers it with the HTML type a browser needs to render it
+        # rather than to download it.
+        (folder / "faces.html").write_bytes(b"<!doctype html><title>face</title>\n")
+        face = Request()
+        face_handled = serve(face, FACE_PAGE)
+        check("the browser HUD's face page is served as text/html, read beside "
+              "the server by the whitelist's own name",
+              face_handled is True and face.sent and face.sent[-1][0] == 200
+              and face.sent[-1][2] == CONTENT_TYPES[".html"]
+              and ("X-Content-Type-Options", "nosniff") in face.sent[-1][3],
+              face.sent[-1][:3])
 
         for path in ("/jarvis_hud.py", "/theme.css/../jarvis_hud.py",
                      "/%2e%2e/jarvis_hud.py", "/theme.css%00", "//theme.css",

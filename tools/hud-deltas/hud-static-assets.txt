@@ -55,6 +55,39 @@ STATIC_ASSETS = {
     "/icons/jarvis-180.png": ("jarvis-180.png", "image/png"),
     "/icons/jarvis-192.png": ("jarvis-192.png", "image/png"),
     "/icons/jarvis-512.png": ("jarvis-512.png", "image/png"),
+    # The browser HUD's face (2026-10-25, the owner's decision: SERVE it -
+    # Option A of the HUD screen walk's two choices). The page's #reactor
+    # iframe asks for faces.html?mode=display&feed=parent; this server used to
+    # answer that with its own 404, so a browser painted `{"error": "not
+    # found"}` where the red panda belongs. The page and the eleven scripts it
+    # loads are real files beside the server now, served by the same closed
+    # whitelist (no directory walk). Their real copies live in
+    # jarvis-desktop/src/, and backend/test_hud_static.py pins them byte for
+    # byte and keeps this table equal to what the page actually loads.
+    "/faces.html": ("faces.html", "text/html; charset=utf-8"),
+    "/faces-spec.js": ("faces-spec.js", "text/javascript; charset=utf-8"),
+    "/face-pace.js": ("face-pace.js", "text/javascript; charset=utf-8"),
+    "/critter-pose.js": ("critter-pose.js", "text/javascript; charset=utf-8"),
+    "/critter-owl.js": ("critter-owl.js", "text/javascript; charset=utf-8"),
+    "/critter-otter.js": ("critter-otter.js", "text/javascript; charset=utf-8"),
+    "/critter-monkey.js": ("critter-monkey.js", "text/javascript; charset=utf-8"),
+    "/critter-robot.js": ("critter-robot.js", "text/javascript; charset=utf-8"),
+    "/critters-gen.js": ("critters-gen.js", "text/javascript; charset=utf-8"),
+    "/lipsync.js": ("lipsync.js", "text/javascript; charset=utf-8"),
+    "/sky.js": ("sky.js", "text/javascript; charset=utf-8"),
+    "/season.js": ("season.js", "text/javascript; charset=utf-8"),
+    # The face page also imports two more modules from its own inline script:
+    # face-words.js (the sentences the phone says too) and jarvis-link.js (the
+    # face signal). backend/test_hud_static.py discovers them from the page's
+    # own `import("./...")` calls, so this table cannot drift from what the
+    # page really loads.
+    "/face-words.js": ("face-words.js", "text/javascript; charset=utf-8"),
+    "/jarvis-link.js": ("jarvis-link.js", "text/javascript; charset=utf-8"),
+    # ... and the two modules jarvis-link.js imports in turn (the page's own
+    # words and the replace confirmation), so the face's import graph is closed
+    # inside this whitelist too - backend/test_hud_static.py follows it.
+    "/card-words.js": ("card-words.js", "text/javascript; charset=utf-8"),
+    "/replace-confirm.js": ("replace-confirm.js", "text/javascript; charset=utf-8"),
 }
 
 
