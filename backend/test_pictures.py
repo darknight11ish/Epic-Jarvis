@@ -1126,19 +1126,32 @@ def t_the_route_waits_long_enough_for_a_real_draw():
     # 8. THE BUDGET BOTH APPS MUST GIVE IT (2026-10-25, ruling B6). A read
     #    timeout measures SILENCE, and this route says nothing at all for the
     #    whole swap - so an app's budget must outlast the PC's WORST CASE, which
-    #    is the SUM of its four own ceilings, not one measured draw. The two
+    #    is the SUM of its five own ceilings, not one measured draw. The two
     #    card ceilings are read from the function defaults themselves, so a
-    #    change there cannot leave this check green by accident.
+    #    change there cannot leave this check green by accident. FREE_WAIT_S
+    #    counts TWICE and that is the whole correction: free_models() sends
+    #    `POST /free` with timeout=FREE_WAIT_S and THEN sets
+    #    deadline = time.time() + FREE_WAIT_S to poll /system_stats, so the
+    #    "let go" step costs up to 360 s. The earlier four-term sum counted
+    #    that step once and was 180 s short.
+    free_src = inspect.getsource(P.ComfyUI.free_models)
+    check("the let-go step is TWO FREE_WAIT_S waits, not one: /free's own "
+          "timeout, then the /system_stats poll deadline set after it",
+          "timeout=FREE_WAIT_S" in free_src
+          and "deadline = time.time() + FREE_WAIT_S" in free_src,
+          free_src[:300])
     ceilings = (
         inspect.signature(C.unload_lane).parameters["timeout"].default,
         P.DRAW_WAIT_S,
         P.FREE_WAIT_S,
+        P.FREE_WAIT_S,
         inspect.signature(C.warm_lane).parameters["timeout"].default,
     )
     worst = sum(ceilings)
-    check("the PC's worst case is its four ceilings together: unload_lane 120 "
-          "+ DRAW_WAIT_S 600 + FREE_WAIT_S 180 + warm_lane 600 = 1,500 s",
-          ceilings == (120.0, 600.0, 180.0, 600.0) and worst == 1_500.0,
+    check("the PC's worst case is its five ceilings together: unload_lane 120 "
+          "+ DRAW_WAIT_S 600 + /free's FREE_WAIT_S 180 + its /system_stats "
+          "poll's FREE_WAIT_S 180 + warm_lane 600 = 1,680 s",
+          ceilings == (120.0, 600.0, 180.0, 180.0, 600.0) and worst == 1_680.0,
           str(ceilings))
     # The clients' numbers are in two other languages. Reading their source
     # here is deliberate: this is the check that fails if either app is ever
@@ -1154,9 +1167,9 @@ def t_the_route_waits_long_enough_for_a_real_draw():
         "desktop": (int(desktop_budget.group(1).replace("_", ""))
                     if desktop_budget else None),
     }
-    check("both apps wait longer than that: 1,560 s, so a legitimate slow draw "
+    check("both apps wait longer than that: 1,740 s, so a legitimate slow draw "
           "and warm-back is never a false failure",
-          all(got is not None and got >= 1_560 and got > worst
+          all(got is not None and got >= 1_740 and got > worst
               for got in budgets.values()), str(budgets))
 
 

@@ -343,7 +343,7 @@ class JarvisApi(
      * SILENCE and restarts on every byte, so the PC thinking for minutes is
      * never cut off. No call timeout is set, because it would bound the whole
      * request a second time and a real draw plus the swap and warm-back can
-     * take twenty-five minutes on the PC's own worst-case bound (1,500 s).
+     * take twenty-eight minutes on the PC's own worst-case bound (1,680 s).
      */
     private val makeCall: OkHttpClient = client.newBuilder()
         .readTimeout(Pictures.CONFIRM_TIMEOUT_S, TimeUnit.SECONDS)
