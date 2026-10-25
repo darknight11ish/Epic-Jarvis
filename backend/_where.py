@@ -810,6 +810,27 @@ SHIPPED = (
     "static/jarvis-180.png",
     "static/jarvis-192.png",
     "static/jarvis-512.png",
+    # The browser HUD's face (2026-10-25, the owner's decision: serve it). The
+    # HUD page's #reactor iframe asks for faces.html, which the server used to
+    # 404; the page and the eleven scripts it loads ship beside jarvis_hud.py
+    # now, read by the STATIC_ASSETS whitelist like the files above.
+    # backend/test_hud_static.py pins each to its desktop copy.
+    "static/faces.html",
+    "static/faces-spec.js",
+    "static/face-pace.js",
+    "static/critter-pose.js",
+    "static/critter-owl.js",
+    "static/critter-otter.js",
+    "static/critter-monkey.js",
+    "static/critter-robot.js",
+    "static/critters-gen.js",
+    "static/lipsync.js",
+    "static/sky.js",
+    "static/season.js",
+    "static/face-words.js",
+    "static/jarvis-link.js",
+    "static/card-words.js",
+    "static/replace-confirm.js",
     # --- the five the base already carried but SHIPPED did not list (2026-10-07) ---
     # Found by comparing a working backend against this list: all five were
     # already IN jarvis-backend/, and a SHIPPED module imports each of them, but

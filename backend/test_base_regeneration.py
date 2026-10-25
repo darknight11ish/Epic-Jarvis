@@ -102,6 +102,15 @@ def t_the_rule_is_the_readme_s_rule():
                      "hud-web-bridge.js",
                      # ... PWA Slice 3b's manifest and service worker
                      "manifest.webmanifest", "sw.js",
+                     # ... and the browser HUD's face page with the scripts it
+                     # loads (the owner's decision of 2026-10-25: serve it;
+                     # Option A of the HUD screen walk)
+                     "faces.html", "faces-spec.js", "face-pace.js",
+                     "critter-pose.js", "critter-owl.js", "critter-otter.js",
+                     "critter-monkey.js", "critter-robot.js", "critters-gen.js",
+                     "lipsync.js", "sky.js", "season.js",
+                     "face-words.js", "jarvis-link.js",
+                     "card-words.js", "replace-confirm.js",
                      # ... and the seven woff2 faces and the three icons, which are BYTES
                      "chakra-petch-400.woff2", "chakra-petch-500.woff2",
                      "chakra-petch-600.woff2", "chakra-petch-700.woff2",
