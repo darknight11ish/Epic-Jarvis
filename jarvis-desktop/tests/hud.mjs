@@ -89,8 +89,18 @@ const TYPES = {
  *  reactor is faces.html in an iframe, which pulls faces-spec.js and the
  *  fonts - every one a real request under the real policy,
  *  so a CSP or path mistake in any of them shows up here. HTML gets its own
- *  header CSP, hashed for ITS inline scripts, as every page does. */
-function serveStatic(route, url) {
+ *  header CSP, hashed for ITS inline scripts, as every page does.
+ *
+ *  A plain-browser scenario loads the face page from here exactly as the web
+ *  server does after #814 (it is in the closed whitelist now). `faceMissing`
+ *  is the server BEFORE that whitelist, or a deploy that has not happened
+ *  yet: the request answers the same 404 JSON jarvis_hud.py sends, which is
+ *  the failure the page's orb fallback exists for. */
+function serveStatic(route, url, status = {}) {
+  if (url.pathname === "/faces.html" && status.faceMissing) {
+    return route.fulfill({ status: 404, contentType: "application/json",
+                           body: '{"error": "not found"}' });
+  }
   const file = normalize(join(SRC, decodeURIComponent(url.pathname)));
   if (!file.startsWith(SRC) || !existsSync(file)) return route.fulfill({ status: 404, body: "" });
   const body = readFileSync(file);
@@ -113,6 +123,9 @@ async function openHud(browser, status, pageOptions = {}) {
   // Requests that reached the backend WITHOUT the token the shell adds - so
   // made by the page itself, not by the shell (apps security audit M2).
   const direct = [];
+  // Every ask for the browser HUD's face page, so a check can prove the page
+  // asks once and then settles on the orb instead of retrying a failure.
+  const faceAsks = [];
   page.on("pageerror", (e) => problems.push(String(e)));
   page.on("console", (m) => {
     if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) problems.push(m.text());
@@ -407,13 +420,16 @@ async function openHud(browser, status, pageOptions = {}) {
       }
       return route.fulfill({ status: 404, headers: cors, json: { error: "not in this test" } });
     }
-    if (url.origin === ORIGIN) return serveStatic(route, url);
+    if (url.origin === ORIGIN) {
+      if (url.pathname === "/faces.html") faceAsks.push(url.search);
+      return serveStatic(route, url, status);
+    }
     return route.abort();
   });
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
   await page.waitForTimeout(800);
   return { page, problems, chats, marks, decisions, memoryReads, memoryWrites, direct,
-           scheduleWrites, hudLayoutWrites };
+           faceAsks, scheduleWrites, hudLayoutWrites };
 }
 
 
@@ -757,6 +773,8 @@ await check("the reactor is faces.html in display mode, and it draws", async () 
   await page.waitForTimeout(600);
   const px = await litPixels(frame);
   const box = await page.locator("#reactor").boundingBox();
+  const builtin = await page.evaluate(() =>
+    document.querySelector(".reactor-wrap").classList.contains("reactor-builtin"));
   const url = frame.url();
   await page.close();
   // Fed by this page, not asking the shell: the HUD window has no app
@@ -770,6 +788,7 @@ await check("the reactor is faces.html in display mode, and it draws", async () 
   assert.ok(px.lit > 150, `only ${px.lit} of 9216 sampled pixels lit - the face is not drawing`);
   assert.equal(Math.round(box.width), 220);
   assert.equal(Math.round(box.height), 220);
+  assert.equal(builtin, false, "the desktop shell was drawn with the browser's fallback orb");
   assert.deepEqual(problems, [], "a CSP refusal or a page error in the HUD or its face");
 });
 
@@ -913,6 +932,96 @@ await check("the face stops while Galaxy is up, and the narrow layout keeps 150p
   await page.close();
   assert.equal(Math.round(narrow.width), 150);
   assert.equal(away, "about:blank", "the face kept animating behind the Galaxy view");
+  assert.deepEqual(problems, []);
+});
+
+/* ── A plain browser's face: ask the server, fall back to the orb ────────── */
+
+await check("in a plain browser the HUD loads the server's face page and feeds it", async () => {
+  // 2026-10-25: #814 put faces.html and its whole import closure in the web
+  // server's closed whitelist (the owner's decision: serve it), so a browser
+  // asks for the same page the shell asks for. This is the page's browser
+  // branch: `shell` is false (no __TAURI__) and the served page proves itself
+  // by carrying `display-mode`, which takes `.reactor-builtin` off the wrap.
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, noShell: true });
+  const frame = await faceFrame(page);
+  await page.waitForTimeout(600);
+  const px = await litPixels(frame);
+  const shape = await page.evaluate(() => {
+    const wrap = document.querySelector(".reactor-wrap");
+    const f = document.getElementById("reactor");
+    const orb = document.querySelector(".reactor-orb");
+    return {
+      builtin: wrap.classList.contains("reactor-builtin"),
+      orbDisplay: orb ? getComputedStyle(orb).display : "missing",
+      frameVisibility: getComputedStyle(f).visibility,
+      src: f.getAttribute("src") || "",
+    };
+  });
+  // The browser's face is fed by this page's own state machine, exactly as
+  // the shell's is - the orb fallback is not the only thing a browser gets.
+  await page.evaluate(() => reactor.set("thinking"));
+  await page.waitForTimeout(150);
+  const live = await frame.evaluate(() => LIVE_STATE);
+  await page.close();
+  assert.match(shape.src, /^faces\.html\?mode=display&feed=parent$/, shape.src);
+  assert.equal(shape.builtin, false, "the built-in orb stayed on top of the real face page");
+  assert.equal(shape.orbDisplay, "none", "the orb is still drawn under the real face");
+  assert.equal(shape.frameVisibility, "visible", "the real face page is still hidden");
+  assert.ok(px.lit > 150, `only ${px.lit} of 9216 sampled pixels lit - the browser's face is not drawing`);
+  assert.equal(live, "thinking", "the browser's face page is not fed by this page's state machine");
+  assert.deepEqual(problems, []);
+});
+
+await check("a plain browser falls back to the built-in orb when the server has no face page", async () => {
+  // The server BEFORE #814 - or a deploy that has not happened yet: the page
+  // must land on the orb, never paint the 404 body, and not retry forever.
+  const { page, problems, faceAsks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, noShell: true, faceMissing: true });
+  // The harness always injects the shell bootstrap, so in noShell mode the
+  // page's "wait up to 1200 ms for a pushed appearance" startup path runs
+  // first (a real browser has no feed at all and asks at once). Wait for the
+  // ask instead of guessing at that timer.
+  for (let i = 0; i < 40 && faceAsks.length === 0; i++) await page.waitForTimeout(100);
+  await page.waitForTimeout(400);
+  const shape = await page.evaluate(() => {
+    const wrap = document.querySelector(".reactor-wrap");
+    const f = document.getElementById("reactor");
+    const orb = document.querySelector(".reactor-orb");
+    const fBox = f.getBoundingClientRect();
+    const oBox = orb ? orb.getBoundingClientRect() : null;
+    return {
+      builtin: wrap.classList.contains("reactor-builtin"),
+      frameVisibility: getComputedStyle(f).visibility,
+      orbDisplay: orb ? getComputedStyle(orb).display : "missing",
+      // The orb's breathing keyframes scale it between 0.985 and 1, so its
+      // BOUNDING box moves under the animation; the computed width is the
+      // shared grid cell and is what proves the two share one cell.
+      frameWidth: getComputedStyle(f).width,
+      orbWidth: orb ? getComputedStyle(orb).width : "missing",
+      sameCell: Boolean(oBox) && Math.abs(oBox.width - fBox.width) / fBox.width < 0.02
+                 && Math.round(oBox.height) >= Math.round(fBox.height) - 5,
+      faceBox: { w: Math.round(fBox.width), h: Math.round(fBox.height) },
+      src: f.getAttribute("src") || "",
+    };
+  });
+  await page.evaluate(() => reactor.set("thinking"));
+  await page.waitForTimeout(100);
+  const stateAttr = await page.evaluate(() =>
+    document.querySelector(".reactor-wrap").getAttribute("data-reactor-state"));
+  await page.close();
+  assert.match(shape.src, /^faces\.html\?mode=display&feed=parent$/, shape.src);
+  assert.equal(shape.builtin, true, "a 404 answer dropped the orb instead of keeping it");
+  assert.equal(shape.frameVisibility, "hidden",
+    "the server's 404 body is still painted in the face box");
+  assert.equal(shape.orbDisplay, "block", "the fallback orb is not drawn");
+  assert.equal(shape.orbWidth, shape.frameWidth,
+    "the fallback orb does not share the face's grid cell");
+  assert.equal(shape.sameCell, true, "the fallback orb does not fill the face's own box");
+  assert.ok(shape.faceBox.w > 0 && shape.faceBox.h > 0, "the fallback face box measured nothing");
+  assert.equal(faceAsks.length, 1, `the page asked ${faceAsks.length} times after a 404`);
+  assert.equal(stateAttr, "thinking", "the fallback orb is not driven by the page's state");
   assert.deepEqual(problems, []);
 });
 

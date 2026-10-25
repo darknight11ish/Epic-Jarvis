@@ -328,15 +328,18 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   text-shadow:0 0 14px rgb(var(--accent-rgb) / .5);
 }
 
-/* ---------- the browser HUD's face (2026-10-25, HUD sweep) ------------
+/* ---------- the browser HUD's face (2026-10-25, HUD sweep and serve) ----
  * Inside the desktop shell the face in the iframe above is the real one and
- * none of this is drawn. A plain browser has no face page to load: the web
- * server serves a closed list of named files and faces.html is not one of
- * them, so the old code asked for it anyway, got a 404 and painted
- * `{"error": "not found"}` where the red panda belongs, logging that 404 as
- * the page's only console error on every load. The script now leaves the
- * frame at about:blank in a browser and adds `.reactor-builtin` to the wrap
- * instead; this orb is what a browser sees.
+ * none of this is drawn. A plain browser used to have no face page to load:
+ * the web server served a closed list of named files and faces.html was not
+ * on it (#812), so the page left the frame at about:blank and drew this orb
+ * instead of painting the server's 404. The owner then chose to SERVE the
+ * face page (#814), and the script asks for it again in a browser: this orb
+ * is drawn only while that request has not produced the real page - the
+ * server has no whitelist yet, the request failed, or the view is elsewhere
+ * - and the frame takes over the moment the real page loads.
+ * `.reactor-builtin` on the wrap is that "not the real page" state; the orb
+ * is the fallback a browser lands on, never the 404 body.
  *
  * It needs no size of its own: the frame and the orb are put in ONE grid cell,
  * so every rule that already sizes #reactor (220px in Cockpit, 150px narrow,
@@ -2034,10 +2037,11 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         <div class="reactor-rings" aria-hidden="true"><i></i><i></i><i></i></div>
         <!-- Jarvis's face: the same kit renderer the Widget shows, in
              display mode, driven by this page's own state. No src here -
-             the script sets it once it knows which face the owner chose.
-             In a plain browser the script never sets it (the web HUD was
-             never given faces.html) and the CSS orb below is drawn in this
-             same box instead; see "the browser HUD's face" in the style. -->
+             the script sets it once it knows which face the owner chose,
+             and a plain browser asks the server for the same page. The CSS
+             orb below stands in this same box only while that page has not
+             loaded (or cannot be served); see "the browser HUD's face" in
+             the style. -->
         <iframe id="reactor" title="Jarvis" tabindex="-1" aria-hidden="true"></iframe>
         <div class="reactor-orb" aria-hidden="true"></div>
         <div class="reactor-state" id="reactor-state">standing by</div>
@@ -2707,19 +2711,31 @@ function demoGraph(){
  * ================================================================== */
 const reactor = (() => {
   const frame = $("reactor");
-  /* 2026-10-25 (HUD sweep): only the desktop shell has the face page. The web
-   * HUD's server is a whitelist of named files (jarvis_hud.py's STATIC_ASSETS)
-   * and faces.html - with the eleven scripts it pulls - is not on it, so in a
-   * plain browser the old code asked for it, got a 404, painted
-   * `{"error": "not found"}` where the face belongs, and logged that 404 as the
-   * page's only console error on every load. In a browser the frame is never
-   * given that URL: it stays at about:blank and the CSS orb in the markup above
-   * is drawn in the frame's own box instead. The shell's face is untouched -
-   * this is the same test the page already makes for "am I in the shell?"
-   * (`hudShellStore` at the bottom of this file). */
+  /* 2026-10-25 (HUD sweep, then the owner's decision to serve the face).
+   * The server's closed whitelist (jarvis_hud.py's STATIC_ASSETS) now carries
+   * the face page and its whole import closure (#814), so a plain browser asks
+   * for exactly what the shell asks for:
+   * faces.html?mode=display&feed=parent. The built-in CSS orb in the markup
+   * above is the fallback, not the browser's whole face: the wrap starts with
+   * `.reactor-builtin`, and the `load` handler below takes the class off only
+   * when the frame's own document is the real page (it carries `display-mode`;
+   * a 404, an error page or about:blank do not). So a server without the
+   * whitelist still gets the orb and never its 404 body - the frame stays
+   * `visibility:hidden` while the class is on. The shell's face is untouched:
+   * the class is never added there and the frame is loaded by the same
+   * `sync()` as before. This is the same test the page already makes for
+   * "am I in the shell?" (`hudShellStore` at the bottom of this file). */
   const shell = Boolean(window.__TAURI__ && window.__TAURI__.core);
   const wrap = frame.closest ? frame.closest(".reactor-wrap") : frame.parentElement;
-  if (!shell && wrap) wrap.classList.add("reactor-builtin");
+  // True while the CSS orb stands in for a face page that is not loaded. A
+  // shell always has its face page, so it is never true there.
+  let builtin = !shell;
+  function setBuiltin(on){
+    if (builtin === on) return;
+    builtin = on;
+    if (wrap) wrap.classList.toggle("reactor-builtin", on);
+  }
+  if (builtin && wrap) wrap.classList.add("reactor-builtin");
   const words = { idle:"standing by", listening:"listening", thinking:"thinking", speaking:"speaking" };
   // This page's states are a subset of the spec's eight, by the same names.
   // Offline is not one of them: it is "standby" - Jarvis is not answering,
@@ -2752,8 +2768,8 @@ const reactor = (() => {
   let shown = "";          // what the frame currently holds, so equal pushes do not reload it
 
   function post(){
-    if (!shell) {
-      // No face to post to. The orb reads the state from this attribute
+    if (builtin) {
+      // No face page loaded. The orb reads the state from this attribute
       // (see "the browser HUD's face" in the style).
       if (wrap) wrap.setAttribute("data-reactor-state", faceState());
       return;
@@ -2783,10 +2799,10 @@ const reactor = (() => {
    * since reset to the default, which merging the new document over the old
    * one would keep. It only happens on a save in the Faces window. */
   function sync(){
-    // A plain browser: there is no face page to load, and asking for one the
-    // web HUD cannot serve is the 404 this note exists for. The orb is
-    // already drawing; nothing here has a URL to set.
-    if (!shell) return;
+    // A plain browser asks for the served page too. If the server does not
+    // answer with the real page (no whitelist yet, a 404, a failed load) the
+    // `load` handler below keeps or puts back `.reactor-builtin`, so the
+    // fallback is the orb and never the server's 404 text.
     const face = appearance && typeof appearance.face === "string" ? appearance.face : "";
     // `feed=parent`: take state and colours from this page's posts instead
     // of asking the shell, which would refuse this window anyway.
@@ -2807,11 +2823,15 @@ const reactor = (() => {
 
   // Every load of faces.html gets the current state and colours straight
   // away: display mode registers its message listener before the frame's
-  // load event fires, so this first post is never lost.
+  // load event fires, so this first post is never lost. A load that is NOT
+  // the real page (a 404 body, an error page, about:blank) is how a plain
+  // browser learns to fall back to the orb; the shell never sets that class.
   frame.addEventListener("load", () => {
     let doc = null;
     try { doc = frame.contentDocument; } catch(e) { return; }
-    if (!doc || !doc.documentElement.classList.contains("display-mode")) return;
+    const real = Boolean(doc && doc.documentElement.classList.contains("display-mode"));
+    if (!shell) setBuiltin(!real);
+    if (!real) return;
     post();
   });
 
@@ -2857,7 +2877,9 @@ const reactor = (() => {
   }
   // The browser's orb starts in whatever state the page is in right now,
   // rather than waiting for the first voice or status change to paint it.
-  if (!shell) post();
+  // (Inside the shell `builtin` is false: the face gets its first state from
+  // the `load` listener when the served page arrives, as it always has.)
+  if (builtin) post();
 
   return {
     set(state){
