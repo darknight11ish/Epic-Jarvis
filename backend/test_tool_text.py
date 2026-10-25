@@ -116,23 +116,16 @@ def t_a_use_that_line_only_names_a_tool_the_turn_has():
 def t_both_tools_the_model_never_picked_carry_the_two_cues():
     """D7, the architect's Q9 ruling: `memory_search` and `feature_guide` were
     never selected in the live campaign's 24 model-tools turns, so each carries
-    a "Use when / Do NOT use when" pair in those words. `change_setting` gained
-    the same pair plus one worked example (D5) - a description that reads as a
-    note about the feature is what the 2026-10-13 field test measured falling
-    from 18/21 calls to none."""
-    for name in ("memory_search", "feature_guide", "change_setting"):
+    a "Use when / Do NOT use when" pair in those words.
+
+    `change_setting` deliberately keeps main's 2026-10-13 field-test wording,
+    byte for byte: eight description checks in test_settings_tool.py pin it,
+    and D5's reachability is carried by the quick lane's settings pre-router
+    and the claim corrections, not by rewriting a pinned description."""
+    for name in ("memory_search", "feature_guide"):
         text = AG.TOOLS[name].description
         check(f"{name} says 'Use when'", "Use when" in text, text[:160])
         check(f"{name} says 'Do NOT use'", "Do NOT use" in text, text[:160])
-    check("change_setting's text names settings explicitly",
-          "SETTINGS" in AG.TOOLS["change_setting"].description)
-    check("change_setting carries one worked example with both arguments",
-          "\"setting\"" in AG.TOOLS["change_setting"].description
-          and "\"value\"" in AG.TOOLS["change_setting"].description,
-          AG.TOOLS["change_setting"].description[-200:])
-    check("change_setting never promises a setting is unavailable without a call",
-          "unavailable before calling this" in AG.TOOLS["change_setting"].description)
-
 
 def t_the_model_is_sent_only_lines_for_tools_it_has():
     for enabled, want in (({"calendar_read"}, False), ({"calendar_read", "email_check"}, True)):
