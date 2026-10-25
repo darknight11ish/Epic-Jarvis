@@ -21125,9 +21125,17 @@ warmed back. The 200 carries the normal body plus the swap's own record:
 
     "card": {"option": "A", "did": true, "chat_away_seconds": 2.5,
              "chat_back_seconds": 9.0, "chat_back": true,
-             "models_freed": true,
-             "words": "Your everyday chat stepped aside for 2.5 seconds and is
-                       back on the card after another 9.0 seconds."}
+             "models_freed": true}
+
+**One sentence, one field (2026-10-25).** The swap's sentence - *"Your
+everyday chat stepped aside for 2.5 seconds and is back on the card after
+another 9.0 seconds."* - is appended to the answer's own `words` when the
+picture was drawn, and to `error` when the draw failed; `card` carries the
+numbers only and has **no `words` key**. It used to be in both, so one answer
+handed every app two copies of the same words and a client that joined them
+printed it twice (the desktop page did before PR #818; the phone's
+`Pictures.madeWords` joins both). The backend is now the one owner: an app
+reads `words` for a drawing, `error` for a failure, and the card for the times.
 
 Rules that are part of the feature, not implementation detail:
 

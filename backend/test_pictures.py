@@ -507,6 +507,112 @@ def t_a_draw_that_fails_still_brings_the_everyday_chat_back():
           list(folder.glob("*.png")) == [], str(list(folder.glob("*.png"))))
 
 
+#: The swap's sentence, searched for as a PHRASE in the WHOLE answer below.
+#: Never the key name `words`: the bug was one sentence carried in two fields,
+#: so a check that looked for a key - or counted `words` - could not see it.
+SWAP_PHRASE = "stepped aside for"
+#: The other sentence `_swap_words` can build, for a chat that did not come back.
+NOT_BACK_PHRASE = "has not come back yet"
+
+
+def swap_answer(*, fail=None, back_ok=True, away=2.5, back_seconds=9.0):
+    """One confirmed draw through the REAL route, with the swap scripted.
+
+    Nothing here has a graphics card, a model or a drawing program: `fail`
+    makes the drawing program refuse, and `back_ok=False` makes the chat fail
+    to come back. Every answer is the module's own, unchanged.
+    """
+    stub = StubRuntime("x", fail=fail)
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": away,
+                                 "words": "The chat stepped aside."}
+    P.step_back = lambda plan: {"ok": back_ok, "did": True,
+                                "seconds": back_seconds,
+                                "words": "The chat did not answer."}
+    P.record_measurement = lambda plan, piece: None
+    use_plan(SWAP_PLAN)
+    try:
+        return make(settings_for(tmpdir()), json.dumps(
+            {"prompt": "a red panda", "free_card": True}).encode(), runtime=stub)
+    finally:
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+
+
+def t_the_swap_sentence_is_said_once_and_the_card_carries_no_words():
+    """ONE sentence, ONE place, on every answer the swap can produce.
+
+    Before 2026-10-25 the sentence went into the answer's own `words` (or
+    `error`) AND again into `card.words`, so every app received it twice and a
+    client that joined the two printed it twice - the desktop page did before
+    PR #818, and the phone's `Pictures.madeWords` joins them. Each check counts
+    the SENTENCE in the whole answer serialised as JSON, so a second copy in
+    any field fails it, and each also pins that the sentence reached the field
+    the apps actually show.
+    """
+    code, out = swap_answer()
+    whole = json.dumps(out)
+    check("a drawn picture answers 200 with the swap's own times",
+          code == 200 and out.get("card", {}).get("chat_away_seconds") == 2.5
+          and out.get("card", {}).get("chat_back_seconds") == 9.0,
+          str(out.get("card")))
+    check("... and says the swap's sentence ONCE in the whole answer",
+          whole.count(SWAP_PHRASE) == 1
+          and SWAP_PHRASE in (out.get("words") or ""),
+          f"count={whole.count(SWAP_PHRASE)} words={out.get('words')!r} "
+          f"card={out.get('card')!r}")
+    check("... with no second copy inside the machine-readable card",
+          "words" not in (out.get("card") or {}), str(out.get("card")))
+
+    # A draw that FAILED still tells the owner the chat came back - once, in
+    # `error`, which is the field both apps show for a refusal or a failure.
+    code, out = swap_answer(
+        fail=P.DrawingFailed("The drawing program refused that (500)."))
+    whole = json.dumps(out)
+    check("a draw that failed still says the swap's sentence ONCE",
+          code == 502 and whole.count(SWAP_PHRASE) == 1
+          and SWAP_PHRASE in (out.get("error") or ""),
+          f"code={code} count={whole.count(SWAP_PHRASE)} "
+          f"error={out.get('error')!r}")
+    check("... and its card repeats none of it",
+          "words" not in (out.get("card") or {}), str(out.get("card")))
+
+    # A chat that did not come back has its own sentence. It was duplicated the
+    # same way, so it is counted the same way - and it must not claim the chat
+    # is back.
+    code, out = swap_answer(back_ok=False)
+    whole = json.dumps(out)
+    check("a chat that did not come back is said ONCE, in the answer's own words",
+          code == 200 and whole.count(NOT_BACK_PHRASE) == 1
+          and NOT_BACK_PHRASE in (out.get("words") or "")
+          and SWAP_PHRASE not in whole,
+          f"code={code} count={whole.count(NOT_BACK_PHRASE)} "
+          f"words={out.get('words')!r}")
+    check("... and its card repeats none of that either",
+          "words" not in (out.get("card") or {}), str(out.get("card")))
+
+
+def t_the_swap_sentence_has_one_owner_in_the_source():
+    """A pin, because a second copy only shows up when a client joins the two.
+
+    origin/main's module named `_swap_words` four times: its own `def` and
+    three calls - one inside `_card_block` (the duplicate every answer carried)
+    and one in each answer path. Three is the whole contract now, so a fourth
+    occurrence - the card builder being handed the sentence again - fails here
+    even if a client happened to hide the second copy.
+    """
+    source = (HERE / "jarvis_pictures.py").read_text(encoding="utf-8")
+    check("the swap sentence is built in exactly two places in the module",
+          source.count("_swap_words(") == 3, str(source.count("_swap_words(")))
+    card = source.split("def _card_block(", 1)[1].split("\ndef ", 1)[0]
+    check("... and the machine-readable card is not one of them",
+          "_swap_words(" not in card and '"words":' not in card, card[-300:])
+    check("... and it is the answer's own words/error that carry it",
+          'words = words + " " + swap' in source
+          and 'answer["error"] = ((answer.get("error") or "") + " " + swap).strip()'
+          in source)
+
+
 def t_a_failed_set_aside_draws_nothing_and_says_so():
     folder = tmpdir()
     stub = StubRuntime("x")
@@ -1724,6 +1830,8 @@ def main() -> int:
                t_the_first_request_asks_before_anything_moves,
                t_the_confirmed_draw_steps_the_chat_aside_and_brings_it_back,
                t_a_draw_that_fails_still_brings_the_everyday_chat_back,
+               t_the_swap_sentence_is_said_once_and_the_card_carries_no_words,
+               t_the_swap_sentence_has_one_owner_in_the_source,
                t_a_failed_set_aside_draws_nothing_and_says_so,
                t_way_b_is_a_plain_sentence_not_a_broken_draw,
                t_the_phone_may_confirm_the_swap_too,

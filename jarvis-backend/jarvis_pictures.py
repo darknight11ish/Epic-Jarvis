@@ -1309,7 +1309,16 @@ def record_measurement(plan: dict, piece) -> None:
 
 
 def _swap_words(plan: dict, aside: dict, back: dict) -> str:
-    """One plain sentence for the answer: what paused, for how long, and back."""
+    """The ONE copy of the swap's sentence: what paused, for how long, and back.
+
+    It goes into the sentence the owner reads and NOWHERE ELSE: the top-level
+    `words` of a drawn picture, or the top-level `error` of a draw that failed.
+    Until 2026-10-25 the machine-readable `card` block repeated it as well, so
+    one answer handed every app two copies of the same words and a client that
+    joined the two printed it twice - the desktop page did before PR #818, and
+    the phone's `Pictures.madeWords` joins them too. The backend is the one
+    owner of the sentence; no client needs to be taught which copy to drop.
+    """
     if not (plan or {}).get("needs"):
         return ""
     if not back.get("did"):
@@ -1325,7 +1334,14 @@ def _swap_words(plan: dict, aside: dict, back: dict) -> str:
 
 
 def _card_block(plan: dict, aside: dict, back: dict, freed=None) -> dict:
-    """The machine-readable half of the swap, for an app that wants the times."""
+    """The machine-readable half of the swap, for an app that wants the times.
+
+    NOT the sentence: `words` here used to be a second copy of the sentence
+    `_swap_words` builds, so one answer carried the same words twice and a
+    client that joined the two fields printed them twice. The sentence belongs
+    to the answer's own `words` (a drawn picture) or `error` (a draw that
+    failed), which is where both apps read it; this block is the numbers only.
+    """
     if not (plan or {}).get("needs"):
         return {}
     return {
@@ -1335,7 +1351,6 @@ def _card_block(plan: dict, aside: dict, back: dict, freed=None) -> dict:
         "chat_back_seconds": round(float(back.get("seconds") or 0.0), 1),
         "chat_back": bool(back.get("ok")),
         "models_freed": (None if freed is None else bool(freed.get("ok"))),
-        "words": _swap_words(plan, aside, back),
     }
 
 

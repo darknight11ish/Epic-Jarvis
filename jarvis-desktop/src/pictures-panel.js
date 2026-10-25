@@ -33,9 +33,10 @@
  * not a question at all - no way of making pictures is switched on - so its
  * `error` sentence is the whole answer. When a drawing does come back, the
  * gallery is read again from the PC and the PC's own success sentence is shown
- * ONCE: the backend already appends "stepped aside ... and is back" to `words`,
- * and `card.words` repeats that same sentence, so adding both would print it
- * twice. `card.words` is only the fallback for a PC whose `words` is empty.
+ * ONCE: the backend appends "stepped aside ... and is back" to `words` and is
+ * the ONE owner of that sentence (since 2026-10-25); a PC older than that
+ * update also repeats it in `card.words`, so adding both would print it twice.
+ * `card.words` is only the fallback for a PC whose `words` is empty.
  *
  * NO APPROVAL CARD, and this comment is where that is written down on this
  * side: a picture is a new file in a folder on THIS PC, drawn by a program on
@@ -283,9 +284,10 @@ function setAsideLabel(seconds) {
  *     PC's own `error` sentence is the whole answer; there is nothing to
  *     confirm, so no button is drawn.
  *   * anything else - the PC's own `words`. After a handshake that sentence
- *     already ends with "stepped aside ... and is back" (the backend appends
- *     it), and `card.words` is that same sentence again - it is a fallback for
- *     a PC that answers without `words`, never something added on top.
+ *     already ends with "stepped aside ... and is back", which the backend puts
+ *     there and nowhere else (2026-10-25). A PC older than that update repeats
+ *     it in `card.words`, read only as the fallback for a PC that answers
+ *     without `words`, never something added on top.
  */
 function handleMakeAnswer(out, prompt) {
   if (unavailable(out)) {
@@ -305,10 +307,11 @@ function handleMakeAnswer(out, prompt) {
     say(out.error || "");
     return;
   }
-  // ONE sentence, not two: the PC's `words` already carries the swap sentence
-  // when the card was stepped aside, and `card.words` is that same sentence
-  // again, so joining them printed the swap twice on every confirmed draw.
-  // `card.words` is only reached when a PC answers without `words` at all.
+  // ONE sentence, not two: the PC's `words` carries the swap sentence when the
+  // card was stepped aside, and the backend is that sentence's one owner
+  // (2026-10-25). A PC older than that update repeats it in `card.words`, so
+  // joining them printed the swap twice on every confirmed draw; `card.words`
+  // is only reached when a PC answers without `words` at all.
   const made = String((out && out.words) || "");
   const cardWords = out && out.card ? String(out.card.words || "") : "";
   const said = made || cardWords;
