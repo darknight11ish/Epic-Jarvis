@@ -243,8 +243,8 @@ of them are named `check_*.py` under `tools/` (`Get-ChildItem tools/check_*.py`
 The checkers that gate changes include:
 
 - `tools/check_claims.py` — *"one row per thing this project says about itself,
-  with a check a machine runs"* (`docs/CLAIMS.tsv`, 147 rows). On the tree this
-  page was written from it reports **147 claims: 132 built, 7 still open, 8
+  with a check a machine runs"* (`docs/CLAIMS.tsv`, 148 rows). On the tree this
+  page was written from it reports **148 claims: 133 built, 7 still open, 8
   unverifiable** — *"and every `open` one is still a real gap."*
 - `tools/check_parity.py` — did a feature land in both apps, or is one side
   deliberately left out?
@@ -520,11 +520,9 @@ goes with it.
 ### Still open, at the time of writing
 
 The register is not a museum: on the tree this page was written from,
-`docs/defect-register.tsv` holds **12 rows, 10 closed and 2 open** — DEF-002 (a
-measured 4,598 ms against 9 ms, `docs/DEFECT-REGISTER.md:107`) and DEF-012
-(a latent defect *"unreachable today and not exploited"*, recorded rather than
-claimed as fixed, `docs/DEFECT-REGISTER.md:108`). And 7 of the 147 claims in
-`docs/CLAIMS.tsv` are still marked open.
+`docs/defect-register.tsv` holds **14 rows, 13 closed and 1 open** — DEF-002 (a
+measured 4,598 ms against 9 ms, `docs/DEFECT-REGISTER.md:107`). And 7 of the 148
+claims in `docs/CLAIMS.tsv` are still marked open.
 
 ---
 
@@ -546,8 +544,8 @@ rather than trusting the number.
 | Phone test files | **218** `*Test.kt` | `Get-ChildItem jarvis-client -Recurse -Filter *Test.kt` |
 | Documents | **379** markdown files, about 9.3 MB | `Get-ChildItem docs -Recurse -Filter *.md`; the page's own figures are checked by `tools/check_docs_map.py` |
 | Checkers named `check_*` | **26** | `Get-ChildItem tools/check_*.py` |
-| Claims about itself, each with a machine check | **147 rows**, 132 built / 7 open / 8 unverifiable | `python -B tools/check_claims.py` |
-| Defect register | **12 rows**, 10 closed / 2 open | `docs/defect-register.tsv` |
+| Claims about itself, each with a machine check | **148 rows**, 133 built / 7 open / 8 unverifiable | `python -B tools/check_claims.py` |
+| Defect register | **14 rows**, 13 closed / 1 open | `docs/defect-register.tsv` |
 | Launch videos kept | **6** numbered versions, v1–v6, never replaced | `videos/README.md`; the owner's rule of 2026-09-24 (`CLAUDE.md`) |
 
 **What runs when a change is pushed.** Ten CI jobs are declared in
@@ -564,7 +562,7 @@ required status checks are expected."*).
 
 - `python -B tools/check_docs_map.py` — `docs map OK: 379 documents, 9,292,745 bytes, and README.md agrees`
 - `python -B tools/check_feature_list.py` — `129 entries in 9 groups; 122 of 139 route sections and menu ids covered` / `5 passed, 0 failed`
-- `python -B tools/check_claims.py` — `147 claim(s) checked ... 132 built, 7 still open, 8 unverifiable`
+- `python -B tools/check_claims.py` — `148 claim(s) checked ... 133 built, 7 still open, 8 unverifiable`
 - `python -B tools/check_vacuous_checks.py` — `320 suite file(s) read, 21735 check() call(s) looked at: no check is a fake skip`
 - `python -B tools/check_parity.py` — `No undecided drift.` (with three `planned` warnings, which it prints rather than hides)
 
@@ -734,7 +732,7 @@ and it is the part the project already has machinery for:
    check a machine runs"*, and `tools/check_claims.py` *"says so when a gap
    closes ... so the row cannot outlive the build the way CLAUDE.md's 'not yet
    built' queue outlived tap-to-talk."* The countable statements in §6 of this
-   page are the obvious first rows. **Honest caution:** 8 of the 147 rows are
+   page are the obvious first rows. **Honest caution:** 8 of the 148 rows are
    `unverifiable` and say why, so a claim in the chapter that no machine can
    check should be written as a quotation with a date on it, not as a fact.
 3. **The numbers are re-measured, never remembered.** §6's table names the
