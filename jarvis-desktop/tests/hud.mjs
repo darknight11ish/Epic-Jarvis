@@ -2715,6 +2715,53 @@ async function openGalaxy(browser, graph) {
   return opened;
 }
 
+/* The owner's own shape, found on his PC 2026-10-25: Studio layout, the Galaxy
+ * tab on the Inspector Stage, and the conversation as the page's own view
+ * (`default_stage_tab: "talk"`). The Studio stage shows the map through CSS
+ * while `S.view` stays "talk", so a draw loop that only watched `S.view` never
+ * ran and the stage was a visible, permanently empty canvas. A visible canvas
+ * is not evidence; count the pixels the map actually painted. */
+await check("Studio: the Galaxy stage really draws the map, not just an empty canvas", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: true, ollama: true, proxy: false, graph: GALAXY_GRAPH });
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:hud-shell", {
+    detail: { shell_template: "split-stage", density: "comfortable", default_stage_tab: "talk" },
+  })));
+  await K.until(page, "the Studio shell", async () =>
+    (await page.evaluate(() => document.body.dataset.hudShell)) === "split-stage", { ms: 5000 });
+  await K.until(page, "the Studio stage's Galaxy tab", async () =>
+    (await page.evaluate(() => document.body.dataset.hudTab)) === "galaxy", { ms: 5000 });
+  const painted = await page.evaluate(async () => {
+    const canvas = document.getElementById("galaxy");
+    const end = performance.now() + 6000;
+    let best = { lit: 0, w: canvas.width, h: canvas.height };
+    while (performance.now() < end) {
+      if (canvas.width > 1 && canvas.height > 1) {
+        const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+        let lit = 0;
+        for (let i = 3; i < data.length; i += 4 * 7) if (data[i] > 0) lit++;
+        if (lit > best.lit) best = { lit, w: canvas.width, h: canvas.height };
+        if (lit > 20) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return {
+      ...best,
+      view: S.view,
+      shell: document.documentElement.dataset.hudShell,
+      tab: document.documentElement.dataset.hudTab,
+      shown: getComputedStyle(document.getElementById("brain")).display !== "none",
+    };
+  });
+  await page.close();
+  assert.equal(painted.shell, "split-stage");
+  assert.equal(painted.tab, "galaxy", "the Studio stage did not open on its Galaxy tab");
+  assert.equal(painted.view, "talk", "this check is meant to keep the conversation as the page's own view");
+  assert.equal(painted.shown, true, "the Galaxy stage is not visible at all");
+  assert.ok(painted.lit > 20,
+    `the Studio Galaxy stage shows a canvas with no picture painted on it (lit=${painted.lit})`);
+  assert.deepEqual(problems, []);
+});
+
 await check("GALAXY v2: three lenses, real node buttons, and counts computed from the payload", async () => {
   const { page, problems } = await openGalaxy(browser, GALAXY_GRAPH);
   const neural = await galaxySnap(page);

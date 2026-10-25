@@ -3198,7 +3198,7 @@ const galaxy = (() => {
 
     for(let i=0;i<260;i++) step(0.9);   // pre-warm off-screen
     fitCamera();
-    setRunning(S.view === "brain");   // only while the map is the view on screen (P8 idle, 2026-10-23)
+    syncRunning();   // the map may be on screen beside the conversation (Studio), not only as the view
     buildLegend(graph);
     if(!overlayEl) overlayEl = document.getElementById("galaxy-overlay");
     syncOverlay();
@@ -3268,11 +3268,24 @@ const galaxy = (() => {
     return { x: W/2 + x*k, y: H/2 + y*k, k, depth };
   }
 
-  /** True only when the drawing loop has a reason to run: the Brain map is
-   *  the view on screen AND the window itself is visible. A hidden window, or
-   *  the Conversation view, must not keep stepping a picture nobody can see
-   *  (P8 idle work, 2026-10-23). */
-  function shouldRun(){ return !document.hidden && S.view === "brain"; }
+  /** True only when the drawing loop has a reason to run: the Brain map is on
+   *  screen AND the window itself is visible. A hidden window, or the
+   *  Conversation view, must not keep stepping a picture nobody can see
+   *  (P8 idle work, 2026-10-23).
+   *
+   *  The map can be on screen two ways, and the first one is not `S.view`. The
+   *  Studio layout (split-stage) draws it BESIDE the conversation through CSS,
+   *  while the page's own view stays `talk` - that "both views live at once"
+   *  shape is the design, not an accident. Testing `S.view === "brain"` alone
+   *  therefore left the Studio Galaxy tab a visible, permanently empty canvas
+   *  (found on the owner's PC, 2026-10-25). The tab is part of the visibility
+   *  test now, so a hidden map still stops the loop and the Studio stage
+   *  starts it. */
+  function shouldRun(){
+    return !document.hidden && (S.view === "brain"
+      || (document.documentElement.dataset.hudShell === "split-stage"
+          && document.documentElement.dataset.hudTab === "galaxy"));
+  }
 
   /** Arm (start) or disarm (stop) the one drawing loop. Idempotent: the loop
    *  only re-arms itself while shouldRun() stays true. */
@@ -5383,6 +5396,16 @@ subscribe();
     if (body.dataset.hudShell === "split-stage" && body.dataset.hudTab === "galaxy") {
       window.requestAnimationFrame(resizeGalaxy);
     }
+    /* The Studio Galaxy tab shows the map through CSS, not through the page's
+     * own view, so the drawing loop cannot notice the tab from `S.view`.
+     * Re-check it here: this starts the picture when the Galaxy tab opens and
+     * stops it when another tab takes the stage. Without it the tab drew an
+     * empty canvas (found on the owner's PC, 2026-10-25). */
+    try {
+      if (typeof galaxy !== "undefined" && galaxy && typeof galaxy.syncRunning === "function") {
+        galaxy.syncRunning();
+      }
+    } catch (e) {}
   }
 
   /* L3/FT-3: remember where the ONE reminders panel lives, dock it into the
