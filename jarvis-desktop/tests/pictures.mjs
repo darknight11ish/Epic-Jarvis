@@ -40,7 +40,7 @@
  *     the PC answers 409 `needs: "free_card"` and NOTHING IS DRAWN - the page
  *     asks with a confirm button and never retries on its own, the confirm is
  *     the one place `free_card: true` is sent, the wait says how many minutes,
- *     and success reads the gallery back and shows both sentences.
+ *     and success reads the gallery back and shows the PC's sentence once.
  *
  * The first parts are pure node. `node tests/pictures.mjs`.
  */
@@ -578,12 +578,13 @@ check(
   "busy + disabled",
 );
 check(
-  "(iii) success refreshes the gallery and shows BOTH sentences",
+  "(iii) success refreshes the gallery and shows the PC's sentence once, not twice",
   retryJs.includes("finally")
     && retryJs.includes("await refreshPictures()")
-    && answerJs.includes("out.card.words")
-    && answerJs.includes('say(said.join(" "))'),
-  "words + card.words, after a re-read",
+    && answerJs.includes("out.words")
+    && !answerJs.includes('say(said.join(" "))')
+    && answerJs.includes("say(said)"),
+  "out.words only, after a re-read",
 );
 check(
   "(iii) the status line is the panel's own #pictures-said, not a new one",
@@ -688,13 +689,27 @@ check(
 );
 
 // The confirm click is the only thing that retries, and the wait says so.
+// The body below is the REAL body a handshake answers with
+// (backend/jarvis_pictures.py: `words` is the "drawn in ..." sentence with the
+// swap sentence appended, and `card.words` is that same swap sentence again).
+// The old fixture invented a `words` WITHOUT the swap, which hid a real bug:
+// the page joined `words` + `card.words` and printed the swap twice every draw.
 calls.length = 0;
+const swapSentence =
+  "Your everyday chat stepped aside for 300.0 seconds and is back on the card after 41.0 seconds.";
+const drawnWords =
+  "Drawn in 274.0 seconds and saved as 2026-10-24-101010-a-red-panda.png.";
 answer = {
   ok: true,
   available: true,
   name: "2026-10-24-101010-a-red-panda.png",
-  words: "Drew it in 274 seconds.",
-  card: { option: "A", chat_away_seconds: 300, words: "The chat is back on the card." },
+  words: `${drawnWords} ${swapSentence}`,
+  card: {
+    option: "A",
+    chat_away_seconds: 300,
+    chat_back_seconds: 41,
+    words: swapSentence,
+  },
 };
 const click = page.setChatAsideAndDraw();
 check(
@@ -719,8 +734,9 @@ check(
   JSON.stringify(calls.map((c) => c.command)),
 );
 check(
-  "(iii) RUN: ... and BOTH sentences are shown",
-  page.state.said === "Drew it in 274 seconds. The chat is back on the card.",
+  "(iii) RUN: ... and the PC's whole sentence is shown ONCE - the swap sentence is never doubled",
+  page.state.said === `${drawnWords} ${swapSentence}`
+    && page.state.said.split(swapSentence).length === 2,
   page.state.said,
 );
 
