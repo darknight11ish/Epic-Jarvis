@@ -5377,6 +5377,7 @@ What it understands:
 | Morning briefing | "brief me now", "brief me every weekday at 7" (**a card**), "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
 | Features (§130) | "what is the prompt coach", "what does the prompt coach do", "is the prompt coach on", "is the prompt coach on right now", "how do I turn on the prompt coach", "how do I turn off the prompt coach", "what features do you have", "list the memory features", "turn on <a feature that names one switch>" - added 2026-10-20 |
+| Clock and date (21.10, 2026-10-25) | "what time is it", "what's the time", "what is the time", "what time is it now", "what time is it right now", "tell me the time", "current time", "what's the date", "what is the date", "what date is it", "what day is it", "what day is it today", "what's today's date", "today's date", "what is the time and date", "what time and date is it" - answered from THIS PC's own clock (`time.localtime`, the same 24-hour form both apps show) in `jarvis_quick._run_clock`. A sentence that only MENTIONS a time - "what time is the meeting?", "what time is it in Tokyo?" (a timezone conversion), "what time is my alarm set for" - is not ours and keeps its old owner |
 
 **Feature questions are answered from the feature list, not the model.** The
 three "Features" wordings above read `features/features.json` itself (through
@@ -5394,6 +5395,43 @@ only an explicit "Jarvis, what is <thing> feature" gets "I do not have that
 one". The "turn on <feature>" wording goes through that setting's own setter
 and approval rule - the same `BoolSetting.set` the settings phrases and the
 `change_setting` tool use - and answers with its real outcome.
+
+**The clock and the date are read from this PC, never guessed (2026-10-25,
+§21.10).** Campaign row R13 asked "What time is it?" and waited **82.1 s** for
+the 9B model to answer "10:42 AM" while the PC's own clock read 20:16. The fast
+path now answers `time_now`, `date_today` and `clock_both` from
+`time.localtime(now)` alone - no model, no network, no file - in the same
+24-hour form `jarvis_schedule.clock` gives every other answer, so a spoken
+answer and both apps agree. The measured turn is under a second and its
+`X-Jarvis-Route` says `"quick": "time_now"`, `"lane": "no AI model"`,
+`"where": "local"`. A sentence that only MENTIONS a time is deliberately not
+ours: "what time is the meeting?" is the calendar's, "what time is it in
+Tokyo?" is a timezone conversion this PC's clock cannot answer, and "what time
+is my alarm set for" stays the alarm path - all three go where they went
+before. `backend/test_clock_intent.py` pins the grammar, the local-not-UTC
+answer, the no-model route and the under-a-second budget. The same wave fixed
+`feature_guide`'s documented blank listing call (§130): `feature` is no longer
+a required argument, so the model can read the real feature list instead of
+inventing one.
+
+### 21.10 Clock and date (added 2026-10-25)
+
+The grammar is `jarvis_quick._clock`: three whole-sentence intents, each
+matching the WHOLE message after "please"/"Jarvis," are taken off.
+
+| Intent | What it answers | The words |
+|---|---|---|
+| `time_now` | this PC's local clock and day | "It is 20:16 on Sunday 25 October 2026." |
+| `date_today` | this PC's local date | "Today is Sunday 25 October 2026." |
+| `clock_both` | time and date in one sentence | "It is 20:16 on Sunday 25 October 2026." |
+
+The answer is computed from `time.localtime(now)` (the `now` the fast path was
+called with) and `jarvis_schedule.clock`'s 24-hour form - **never UTC when the
+PC's own clock is not**, and never a model's guess. Nothing is read but the
+clock, nothing is written, no card is raised and nothing leaves this PC, so the
+route line carries `"lane": "no AI model"` / `"where": "local"` with no memory
+injected. The wrong answer this replaces is recorded in
+`.dsh-scratch/LIVE-TOOLS-2026-10-25/CAMPAIGN-REPORT.md` (R13, D3).
 
 **"How long is left" is only ours while something is left to measure.** With
 no timer running, the **bare** sentence ("how long is left", "how much time is
