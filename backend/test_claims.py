@@ -198,8 +198,15 @@ ABOUT_COUNT_SPOTS = (
      r"\*\*(\d+) rows\*\*, (\d+) built / (\d+) open / (\d+) unverifiable",
      ("rows", "built", "open", "unverifiable")),
     ("the quoted output of the checker itself",
+     # `tools/check_claims.py` prints the summary line with its own closing
+     # words - "... 8 unverifiable (the reason is in each row)." - so a page
+     # that quotes the checker verbatim ends its backtick after that
+     # parenthetical, not after "unverifiable". Both the full quotation and the
+     # older abbreviated one are the same line, and the test's own docstring
+     # says a reworded page is re-anchored rather than allowed to stop looking;
+     # anything else still fails.
      r"`(\d+) claim\(s\) checked [^`]*?(\d+) built, (\d+) still open, "
-     r"(\d+) unverifiable`",
+     r"(\d+) unverifiable(?: \(the reason is in each row\)\.)?`",
      ("rows", "built", "open", "unverifiable")),
     ("the honest caution about unverifiable rows",
      r"(\d+) of the (\d+) rows are `unverifiable`",
