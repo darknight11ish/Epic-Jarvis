@@ -3463,3 +3463,25 @@ calls, holds no lock while it waits and loads no model.
     `models_freed: true`, and brought the chat back whole 117.1 s after it
     stepped aside, spill 0).
 
+## 2026-10-25 — The browser HUD serves the real face page (the page half)
+
+  * **What was decided.** The owner chose to serve the real face page to the
+    browser HUD (2026-10-25), reversing the "serving it was turned down on
+    cost" half of this date's earlier cockpit entry. The server half landed in
+    PR #814: `faces.html` and its whole import closure are in the published
+    base's closed `STATIC_ASSETS` whitelist. This entry records the page half
+    (PR #819): in a plain browser the HUD asks for the same
+    `faces.html?mode=display&feed=parent` the desktop shell asks for, shows it
+    when it loads, and keeps the built-in CSS orb only while the loaded
+    document is not the real page (a 404, an error page or `about:blank`), so
+    the server's 404 text is never painted. The desktop shell's face path is
+    unchanged.
+  * **What replaced what.** The earlier entry's reasoning was that the orb was
+    the cheap, honest fallback and serving meant twelve static files and
+    whitelist entries. The owner decided the real face is worth the files (it
+    is sixteen, not twelve: the page, the eleven scripts it loads, and the four
+    modules they import), so the orb is now only the fallback a browser lands
+    on when the page is not there.
+  * **Not deployed by this record.** The live install still answers
+    `/faces.html` with the old 404 and still shows the orb until the page, the
+    whitelist and the sixteen files are deployed together with the owner's go.
