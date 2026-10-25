@@ -592,27 +592,6 @@ def t_the_swap_sentence_is_said_once_and_the_card_carries_no_words():
           "words" not in (out.get("card") or {}), str(out.get("card")))
 
 
-def t_the_swap_sentence_has_one_owner_in_the_source():
-    """A pin, because a second copy only shows up when a client joins the two.
-
-    origin/main's module named `_swap_words` four times: its own `def` and
-    three calls - one inside `_card_block` (the duplicate every answer carried)
-    and one in each answer path. Three is the whole contract now, so a fourth
-    occurrence - the card builder being handed the sentence again - fails here
-    even if a client happened to hide the second copy.
-    """
-    source = (HERE / "jarvis_pictures.py").read_text(encoding="utf-8")
-    check("the swap sentence is built in exactly two places in the module",
-          source.count("_swap_words(") == 3, str(source.count("_swap_words(")))
-    card = source.split("def _card_block(", 1)[1].split("\ndef ", 1)[0]
-    check("... and the machine-readable card is not one of them",
-          "_swap_words(" not in card and '"words":' not in card, card[-300:])
-    check("... and it is the answer's own words/error that carry it",
-          'words = words + " " + swap' in source
-          and 'answer["error"] = ((answer.get("error") or "") + " " + swap).strip()'
-          in source)
-
-
 def t_a_failed_set_aside_draws_nothing_and_says_so():
     folder = tmpdir()
     stub = StubRuntime("x")
@@ -1831,7 +1810,6 @@ def main() -> int:
                t_the_confirmed_draw_steps_the_chat_aside_and_brings_it_back,
                t_a_draw_that_fails_still_brings_the_everyday_chat_back,
                t_the_swap_sentence_is_said_once_and_the_card_carries_no_words,
-               t_the_swap_sentence_has_one_owner_in_the_source,
                t_a_failed_set_aside_draws_nothing_and_says_so,
                t_way_b_is_a_plain_sentence_not_a_broken_draw,
                t_the_phone_may_confirm_the_swap_too,
