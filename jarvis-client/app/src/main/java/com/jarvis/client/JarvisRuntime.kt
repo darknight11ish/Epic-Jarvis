@@ -8797,15 +8797,27 @@ object JarvisRuntime {
      * a plain "start it on this PC", "nothing is set up yet" or "the switch is
      * off" - never a code, never a blank.
      *
-     * THE CARD HANDSHAKE (2026-10-25). When the everyday chat is holding the
-     * 12 GB card, the PC answers a phone with `403 pc_only` and a sentence
-     * saying the chat has to be set aside first - which only the PC can start.
-     * That comes back as [com.jarvis.client.net.PicturesMake.needsPc], with the
-     * PC's sentence and its own minutes when it sent them; the plate shows the
-     * sentence word for word and never offers to do the step from here.
+     * THE CARD HANDSHAKE (2026-10-25, the final contract). When the everyday
+     * chat is holding the 12 GB card the first request answers **409
+     * `needs: "free_card"`** and draws NOTHING. That comes back with
+     * [com.jarvis.client.net.PicturesMake.needsConfirm], the PC's own sentence
+     * and its minutes; the owner's tap then calls this again with
+     * [confirm] true, which sends the SAME words plus `free_card: true` - the
+     * one long request (the PC's measured 500.1 s on this machine), and the
+     * only place anything is confirmed.
+     *
+     * [confirm] true is set ONLY by that tap. It runs on the API's long-timeout
+     * client, and its timeout is NOT retried: the PC may still be drawing the
+     * picture ([com.jarvis.client.net.Pictures.TIMED_OUT_MAKE]). A second
+     * draw's answer (`409 needs: "drawing"`) is that sentence, as sent, and no
+     * retry either. An older PC's `403 pc_only` is shown as
+     * [com.jarvis.client.net.PicturesMake.oldPc], never as a bad token.
      */
-    suspend fun makePicture(prompt: String): com.jarvis.client.net.PicturesMake {
-        val body = com.jarvis.client.net.Pictures.makeBody(prompt)
+    suspend fun makePicture(
+        prompt: String,
+        confirm: Boolean = false,
+    ): com.jarvis.client.net.PicturesMake {
+        val body = com.jarvis.client.net.Pictures.makeBody(prompt, freeCard = confirm)
             ?: return com.jarvis.client.net.PicturesMake(
                 false, com.jarvis.client.net.Pictures.WORDS.getValue("no_words"), null,
             )
@@ -8815,15 +8827,33 @@ object JarvisRuntime {
             )
         }
         actionBlocker()?.let { return com.jarvis.client.net.PicturesMake(false, it, null) }
-        return when (val r = api.makePicture(body)) {
+        return when (val r = api.makePicture(body, confirming = confirm)) {
             is ApiResult.Ok -> when (val answer = r.value) {
-                is com.jarvis.client.net.PicturesAnswer.NeedsPc -> com.jarvis.client.net.PicturesMake(
-                    false, answer.said, null, needsPc = true, minutes = answer.minutes,
-                )
+                is com.jarvis.client.net.PicturesAnswer.NeedsConfirm ->
+                    com.jarvis.client.net.PicturesMake(
+                        false, answer.said, null,
+                        needsConfirm = true, minutes = answer.minutes,
+                    )
+                // 409 needs: "drawing" - a draw is already running. The PC's own
+                // sentence is the whole answer: nothing here retries, because
+                // the first draw is still going.
+                is com.jarvis.client.net.PicturesAnswer.StillDrawing ->
+                    com.jarvis.client.net.PicturesMake(false, answer.said, null)
+                // 403 pc_only - a PC still on the rule before 2026-10-24. Its
+                // sentence, then the phone's line saying it needs the newer
+                // Jarvis; no retry and no status code.
+                is com.jarvis.client.net.PicturesAnswer.OldPc ->
+                    com.jarvis.client.net.PicturesMake(false, answer.said, null, oldPc = true)
+                is com.jarvis.client.net.PicturesAnswer.Missing ->
+                    com.jarvis.client.net.PicturesMake(
+                        false, com.jarvis.client.net.Pictures.WORDS.getValue("missing"), null,
+                    )
+                is com.jarvis.client.net.PicturesAnswer.Refused ->
+                    com.jarvis.client.net.PicturesMake(false, answer.said, null)
                 is com.jarvis.client.net.PicturesAnswer.Made -> {
-                    // The PC's own sentence ("Drawn in 41.2 seconds and saved as
-                    // ..."), shown word for word. Read as a plain string, never
-                    // rebuilt here.
+                    // The PC's own words ("Drawn in 41.2 seconds and saved as
+                    // ..."), and the swap's own sentence after them when the chat
+                    // stepped aside. Read as plain strings, never rebuilt here.
                     val words = com.jarvis.client.net.Pictures.madeWords(answer.body)
                     com.jarvis.client.net.PicturesMake(
                         true, words.ifBlank { "Drawn and kept on your PC." },
@@ -8831,9 +8861,20 @@ object JarvisRuntime {
                     )
                 }
             }
-            is ApiResult.Failed -> com.jarvis.client.net.PicturesMake(
-                false, describe(r.error), null,
-            )
+            is ApiResult.Failed -> {
+                // A confirm that timed out is not a failure the owner can tap
+                // away: the PC may still be drawing and putting the chat back.
+                // Pictures.TIMED_OUT_MAKE offers no confirm, so the request can
+                // never be sent twice.
+                val failure = r.error
+                val timedOut = confirm && failure is ApiError.Unreachable &&
+                    com.jarvis.client.net.Pictures.gaveUpWaiting(failure.network)
+                if (timedOut) {
+                    com.jarvis.client.net.Pictures.TIMED_OUT_MAKE
+                } else {
+                    com.jarvis.client.net.PicturesMake(false, describe(failure), null)
+                }
+            }
         }
     }
 

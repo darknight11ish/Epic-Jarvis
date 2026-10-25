@@ -1,8 +1,8 @@
 package com.jarvis.client
 
 import com.jarvis.client.net.Pictures
+import com.jarvis.client.net.PicturesAnswer
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
@@ -23,26 +23,29 @@ import org.junit.Test
  *
  * There is no phone, no PC, no graphics card and no model anywhere in this
  * file, and there must not be. It tests the ONE thing the phone actually
- * decides: how it reads what the PC sent, what it refuses to send, and what
- * it does while the private lists are hidden. Whether ComfyUI draws a good
- * picture is not a question this suite can ask, and it does not pretend to.
+ * decides: how it reads what the PC sent, what it sends and when, and what it
+ * does while a request is running or the private lists are hidden. Whether
+ * ComfyUI draws a good picture is not a question this suite can ask, and it
+ * does not pretend to.
  *
  * WHAT IS COVERED
  *
- *  - a real answer reads back: the folder, the size, the switch, and every
+ *  - a real gallery reads back: the folder, the size, the switch, and every
  *    picture's own prompt, seed and when it was made;
  *  - the PC's own sentences are shown word for word, never rebuilt here;
- *  - the PC's "the everyday chat has to be set aside first" answer (403
- *    `pc_only` to a phone, 409 to the PC) is read as that answer - never as a
- *    bad token, and never as an ordinary refusal - and the phone never sends
- *    the PC's `free_card` consent;
- *  - a PC without the route draws nothing at all (not "no pictures yet");
+ *  - the FINAL card contract (2026-10-25): the first request sends the words
+ *    alone; a 409 `free_card` is read with the PC's own minutes; only the
+ *    owner's tap sends the same words plus `free_card: true`; that one is a
+ *    1,200 s request and is never re-sent, including on a timeout;
+ *  - a 409 `needs: "drawing"` is the PC's own "wait for that one" sentence,
+ *    shown as sent and not retried;
+ *  - a 403 `pc_only` from an OLDER PC is its sentence plus one honest line
+ *    saying the PC needs the newer Jarvis - never a bad token, never a code;
+ *  - "Not now" sends nothing and leaves the typed words in the box (checked
+ *    against the plate's own source, the way the settings check below is);
  *  - a HIDDEN answer is read as hidden, and holds no prompt at all;
  *  - the phone cannot change the switch, the program or the folder: it has no
  *    call for them, and the settings route is the PC's alone;
- *  - the body it sends holds the prompt and NOTHING else - never a seed, a
- *    model, a size or a step count, so the phone cannot pick a drawing
- *    program's knobs;
  *  - a blank or too-long prompt is refused before anything is sent;
  *  - an id is a bare file stem: no separator, no "..", no other path;
  *  - "Save to my phone" names the file safely, from the PC's own name;
@@ -57,6 +60,7 @@ class PicturesTest {
             is String -> put(k, v)
             is Int -> put(k, v)
             is Long -> put(k, v)
+            is Double -> put(k, v)
             is Boolean -> put(k, v)
             // A nested array or object (a buildJsonObject { } fixture, or
             // arr(...)). This branch was missing, and the helper DROPPED the
@@ -69,6 +73,38 @@ class PicturesTest {
 
     private fun arr(vararg items: JsonObject) =
         kotlinx.serialization.json.JsonArray(items.toList())
+
+    /** One of the app's own source files, or null when run from elsewhere. */
+    private fun source(path: String): String? =
+        java.io.File(path).takeIf { it.isFile }?.readText()
+
+    private fun plate(): String? =
+        source("src/main/java/com/jarvis/client/ui/screens/PicturesPlate.kt")
+
+    private fun api(): String? =
+        source("src/main/java/com/jarvis/client/net/JarvisApi.kt")
+
+    /**
+     * The body of the first `{...}` block after [marker], brace-matched. Used
+     * to hold ONE handler to its rule without depending on line numbers.
+     */
+    private fun blockAfter(text: String, marker: String): String? {
+        val at = text.indexOf(marker)
+        if (at < 0) return null
+        val open = text.indexOf('{', at)
+        if (open < 0) return null
+        var depth = 0
+        for (i in open until text.length) {
+            when (text[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return text.substring(open + 1, i)
+                }
+            }
+        }
+        return null
+    }
 
     private val realAnswer: JsonObject = buildJsonObject {
         put("ok", true)
@@ -95,6 +131,18 @@ class PicturesTest {
                 "record" to false),
         ))
     }
+
+    /** The PC's own 409 question, exactly as `jarvis_pictures.py` sends it. */
+    private val freeCardQuestion: JsonObject = obj(
+        "ok" to false, "available" to true, "needs" to "free_card", "option" to "A",
+        "estimate" to obj("draw_seconds" to 275.0, "chat_away_seconds" to 335.0, "minutes" to 6),
+        "confirm" to obj("free_card" to true),
+        "error" to ("Drawing needs the 12 GB card, and your everyday chat is using it. " +
+            "If you agree, Jarvis sets the everyday chat aside for a few minutes, draws " +
+            "the picture, then loads the chat back the way it was - the conversation and " +
+            "its settings are kept. Nothing else changes. This takes about 6 minutes, and " +
+            "the chat comes back on its own afterwards."),
+    )
 
     // ── a real answer ────────────────────────────────────────────────────
 
@@ -150,82 +198,273 @@ class PicturesTest {
         assertEquals(Pictures.WORDS.getValue("unreadable"), Pictures.refusal(null))
     }
 
-    // ── the card has to be freed, and only the PC can do it (2026-10-25) ──
+    // ── the 409 question, and the owner's two answers (2026-10-25) ───────
 
     @Test
-    fun aDrawThatNeedsTheEverydayChatSetAsideIsReadAsThePcsOwnAnswer() {
-        // What a PHONE gets (backend `make_answer`: 403 pc_only): the PC's own
-        // sentence, no estimate, and nothing that says the phone could do it.
-        val phoneWords = "Making a picture now means setting this PC's everyday chat aside " +
-            "for a few minutes. That can only be started on the PC itself."
-        val phone = obj(
-            "ok" to false, "pc_only" to true, "needs" to "free_card",
-            "error" to phoneWords,
+    fun the409QuestionIsReadWithThePcsOwnMinutes() {
+        val answer = Pictures.readMake(409, freeCardQuestion)
+        assertTrue(answer is PicturesAnswer.NeedsConfirm)
+        val question = answer as PicturesAnswer.NeedsConfirm
+        // The PC's sentence, word for word - nothing rebuilt on the phone.
+        assertEquals(Pictures.refusal(freeCardQuestion), question.said)
+        assertTrue(question.said.endsWith("the chat comes back on its own afterwards."))
+        // The minutes are the PC's own estimate, never guessed here.
+        assertEquals(6, question.minutes)
+        // The two answers the plate draws, in the PC's own minutes.
+        assertEquals(
+            "Set the chat aside and draw (about 6 minutes)",
+            Pictures.confirmLabel(question.minutes),
         )
-        val free = Pictures.freeCard(403, phone)
-        assertNotNull(free)
-        val phoneCard = free!!
-        assertEquals(phoneWords, phoneCard.said)
-        assertNull(phoneCard.minutes)
-
-        // What the PC itself gets first: 409, with its own price in minutes.
-        val pcWords = "Drawing needs the 12 GB card, and your everyday chat is using it. " +
-            "If you agree, Jarvis sets the everyday chat aside for a few minutes, draws " +
-            "the picture, then loads the chat back the way it was - the conversation and " +
-            "its settings are kept. Nothing else changes. This takes about 6 minutes, and " +
-            "the chat comes back on its own afterwards."
-        val pc = obj(
-            "ok" to false, "available" to true, "needs" to "free_card", "option" to "A",
-            "estimate" to obj("draw_seconds" to 275, "chat_away_seconds" to 335, "minutes" to 6),
-            "confirm" to obj("free_card" to true),
-            "error" to pcWords,
+        assertEquals(
+            "Set the chat aside and draw (about 1 minute)",
+            Pictures.confirmLabel(1),
         )
-        val asked = Pictures.freeCard(409, pc)
-        assertNotNull(asked)
-        val askedCard = asked!!
-        assertEquals(pcWords, askedCard.said)
-        assertEquals(6, askedCard.minutes)
+        assertEquals("Set the chat aside and draw", Pictures.confirmLabel(null))
+        assertEquals(
+            "Drawing - this takes about 6 minutes. Your everyday chat will come back when it is done.",
+            Pictures.confirmingWords(question.minutes),
+        )
+        assertEquals(
+            "Drawing - this takes a few minutes. Your everyday chat will come back when it is done.",
+            Pictures.confirmingWords(null),
+        )
+        // No estimate at all is still a question with a plain label.
+        val bare = Pictures.readMake(409, obj("ok" to false, "needs" to "free_card", "error" to "May I?"))
+        assertTrue(bare is PicturesAnswer.NeedsConfirm)
+        assertNull((bare as PicturesAnswer.NeedsConfirm).minutes)
     }
 
     @Test
-    fun anOrdinaryNoIsNotTheCardAnswer() {
+    fun theFirstRequestSendsTheWordsAloneAndOnlyTheTapAddsFreeCard() {
+        val first = Pictures.makeBody("  a red panda in a library  ")
+        assertNotNull(first)
+        assertEquals("{\"prompt\":\"a red panda in a library\"}", first)
+        assertFalse("the first request must never confirm the swap", first!!.contains("free_card"))
+        // The tap sends the SAME words plus the one consent key, and nothing else.
+        val confirm = Pictures.confirmBody("  a red panda in a library  ")
+        assertEquals(
+            "{\"prompt\":\"a red panda in a library\",\"free_card\":true}",
+            confirm,
+        )
+        assertEquals(Pictures.makeBody("a red panda in a library", freeCard = true), confirm)
+        // Both refuse a blank or over-long prompt before anything is sent.
+        assertNull(Pictures.makeBody("   ", freeCard = true))
+        assertNull(Pictures.confirmBody("   "))
+        assertNull(Pictures.confirmBody(""))
+        assertNull(Pictures.confirmBody("x".repeat(Pictures.MAX_PROMPT + 1)))
+        assertNotNull(Pictures.confirmBody("x".repeat(Pictures.MAX_PROMPT)))
+        // `free_card` is put ONLY behind the parameter: no path in this file
+        // can add it without the caller asking for the owner's own confirm.
+        val text = source("src/main/java/com/jarvis/client/net/Pictures.kt")
+        if (text != null) {
+            assertTrue(text.contains("if (freeCard) put(\"free_card\", true)"))
+        }
+    }
+
+    @Test
+    fun aConfirmIsOneLongRequestAndOnlyOnePlaceSendsIt() {
+        // 1,200 s: the PC's own bound is DRAW_WAIT_S 600 + FREE_WAIT_S 180 plus
+        // the warm-back, and the phone path was measured at 500.1 s.
+        assertTrue("the confirm must outlast the PC's bound", Pictures.CONFIRM_TIMEOUT_S >= 1_200L)
+        val api = api()
+        if (api != null) {
+            assertTrue(
+                "the confirm's client must use the shared constant",
+                api.contains("readTimeout(Pictures.CONFIRM_TIMEOUT_S, TimeUnit.SECONDS)"),
+            )
+            assertTrue("the confirm runs on its own long client", api.contains("longWait -> confirmCall"))
+            // The first request keeps the ordinary budget and can never wait
+            // twenty minutes for something that answered 409 at once.
+            assertTrue(api.contains("else -> writeCall"))
+        }
+        val plate = plate()
+        if (plate != null) {
+            // EXACTLY ONE place sends `confirm = true`: the confirm tap.
+            assertEquals(
+                "one tap, one request",
+                1,
+                Regex("confirm = true").findAll(plate).count(),
+            )
+            val handler = blockAfter(plate, "suspend fun confirmNow()")
+            assertNotNull("the confirm handler must exist", handler)
+            // The question is cleared BEFORE the request, so a second tap
+            // cannot send the same confirmation twice.
+            val cleared = handler!!.indexOf("confirmPrompt = \"\"")
+            val sent = handler.indexOf("confirm = true")
+            assertTrue("the question is cleared before the call", cleared in 0 until sent)
+            // And no loop around it: this is one request, never a retry.
+            assertFalse(handler.contains("while ("))
+            assertFalse(handler.contains("for ("))
+            assertEquals(1, Regex("makePicture\\(").findAll(handler).count())
+            assertFalse(plate.contains("resend", ignoreCase = true))
+            assertFalse(plate.contains("retry", ignoreCase = true))
+            // The waiting state lasts minutes and offers no button while it runs.
+            assertTrue(plate.contains("Pictures.confirmingWords(minutes)"))
+            assertTrue(plate.contains("if (confirming)"))
+        }
+    }
+
+    @Test
+    fun aTimedOutConfirmIsNeverSentAgainAndSaysSo() {
+        // A read timeout on THIS phone is not the PC saying no: the draw may
+        // still be running there, so the answer offers no confirm again.
+        assertTrue(Pictures.gaveUpWaiting("read_timeout"))
+        assertFalse(Pictures.gaveUpWaiting("refused"))
+        assertFalse(Pictures.gaveUpWaiting("connect_timeout"))
+        assertTrue(Pictures.TIMED_OUT_MAKE.timedOut)
+        assertFalse(Pictures.TIMED_OUT_MAKE.ok)
+        assertFalse("a timeout must not offer the confirm again", Pictures.TIMED_OUT_MAKE.needsConfirm)
+        assertNull(Pictures.TIMED_OUT_MAKE.id)
+        assertTrue(Pictures.TIMED_OUT_MAKE.said.contains("may still be drawing"))
+        assertTrue(Pictures.TIMED_OUT_MAKE.said.contains("not sent again"))
+        // The phone's own sentence must never claim the picture failed.
+        assertFalse(Pictures.TIMED_OUT_MAKE.said.contains("was not drawn"))
+    }
+
+    @Test
+    fun aSecondDrawIsThePcsOwnSentenceAndIsNotRetried() {
+        val still = "Jarvis is still drawing the last picture. Wait for that one to finish, then ask again."
+        val answer = Pictures.readMake(
+            409,
+            obj("ok" to false, "available" to true, "needs" to "drawing", "error" to still),
+        )
+        assertTrue(answer is PicturesAnswer.StillDrawing)
+        // Shown as sent, word for word. It is NOT a question and NOT a refusal
+        // with a retry: the first draw is still running.
+        assertEquals(still, (answer as PicturesAnswer.StillDrawing).said)
+        assertEquals(still, Pictures.refusal(obj("error" to still)))
+        // The plate shows that sentence through the ordinary `said` line and
+        // offers no second request when it is a `drawing` answer.
+        val plate = plate()
+        if (plate != null) {
+            assertFalse(plate.contains("needs = \"drawing\""))
+            // No branch in the plate turns any answer into another request.
+            assertEquals(2, Regex("makePicture\\(").findAll(plate).count())  // ask + confirmNow
+        }
+    }
+
+    @Test
+    fun anOlderPcIsShownHonestlyAndNeverRetried() {
+        // What an older PC (the rule before 2026-10-24) answers a phone's
+        // confirm with: 403 pc_only, and its own sentence.
+        val oldWords = "Making a picture now means setting this PC's everyday chat aside " +
+            "for a few minutes. That can only be started on the PC itself."
+        val answer = Pictures.readMake(
+            403,
+            obj("ok" to false, "pc_only" to true, "needs" to "free_card", "error" to oldWords),
+        )
+        assertTrue(answer is PicturesAnswer.OldPc)
+        assertEquals(oldWords, (answer as PicturesAnswer.OldPc).said)
+        // The phone's one added line says this PC needs the NEWER Jarvis, and
+        // it is never a raw status code.
+        assertTrue(Pictures.OLD_PC_WORDS.contains("needs the newer Jarvis"))
+        assertTrue(Pictures.OLD_PC_WORDS.contains("apply-patches.ps1"))
+        assertFalse(Pictures.OLD_PC_WORDS.contains("403"))
+        assertFalse(Pictures.OLD_PC_WORDS.contains("pc_only"))
+        // A 403 that is NOT pc_only is a cross-origin refusal: the old reading
+        // of it (a bad token) is unchanged, and it is never this answer.
+        val crossOrigin = obj("ok" to false, "error" to "cross-origin request refused")
+        assertFalse(Pictures.isPcOnly(crossOrigin))
+        assertTrue(Pictures.readMake(403, crossOrigin) is PicturesAnswer.Refused)
+        assertTrue(Pictures.isPcOnly(obj("pc_only" to true)))
+    }
+
+    @Test
+    fun notNowSendsNothingAndKeepsTheTypedWords() {
+        val plate = plate()
+        assertNotNull("the plate's own source is where this rule lives", plate)
+        val handler = blockAfter(plate!!, "Pictures.WORDS.getValue(\"set_aside_no\")")
+        assertNotNull("the Not now button must exist", handler)
+        val body = handler!!
+        // NOTHING is sent: no call, no coroutine started.
+        assertFalse("Not now must send no request", body.contains("makePicture("))
+        assertFalse("Not now must start no coroutine", body.contains("launch"))
+        // The typed words stay in the box: the box's own `prompt` is not cleared.
+        assertFalse("Not now must keep the typed words", body.contains(Regex("\\bprompt = ")))
+        // The owner is told the truth about what did not happen.
+        assertTrue(body.contains("set_aside_stopped"))
+    }
+
+    // ── an ordinary no is not a question ────────────────────────────────
+
+    @Test
+    fun anOrdinaryNoIsNotTheCardQuestion() {
         // Nothing set up / the switch off / the drawing program not running:
-        // their own status and sentence, and the ordinary failure path shows
-        // them rather than pretending the step belongs somewhere else.
-        assertNull(Pictures.freeCard(
+        // their own sentence, shown as an ordinary refusal.
+        val notSetUp = Pictures.readMake(
             503,
             obj("ok" to false, "available" to false,
                 "error" to "Jarvis has no picture-making program set up yet."),
-        ))
-        assertNull(Pictures.freeCard(
+        )
+        assertTrue(notSetUp is PicturesAnswer.Refused)
+        assertEquals(
+            "Jarvis has no picture-making program set up yet.",
+            (notSetUp as PicturesAnswer.Refused).said,
+        )
+        val off = Pictures.readMake(
             503,
-            obj("ok" to false, "available" to true, "off" to true,
-                "error" to "Jarvis is set to not make pictures."),
-        ))
-        // A 403 that is not pc_only is a cross-origin refusal, not this answer.
-        assertNull(Pictures.freeCard(403, obj("ok" to false, "error" to "cross-origin request refused")))
-        // A 409 with another reason, or with no answer at all.
-        assertNull(Pictures.freeCard(409, obj("ok" to false, "error" to "something else")))
-        assertNull(Pictures.freeCard(409, null))
+            obj("ok" to false, "available" to true, "off" to true, "error" to "Making pictures is switched off."),
+        )
+        assertTrue(off is PicturesAnswer.Refused)
+        // A 409 with another reason, or with no needs at all, is not the question.
+        assertTrue(Pictures.readMake(409, obj("ok" to false, "error" to "something else")) is PicturesAnswer.Refused)
+        assertTrue(Pictures.readMake(409, null) is PicturesAnswer.Refused)
         // A 503 that NAMES free_card because setting the chat aside FAILED is a
-        // real failure with its own sentence, not "go and do it on the PC".
-        assertNull(Pictures.freeCard(
+        // real failure with its own sentence, not a question to confirm again.
+        val failed = Pictures.readMake(
             503,
             obj("ok" to false, "available" to true, "needs" to "free_card",
                 "error" to "The everyday chat could not be set aside, so nothing was drawn."),
-        ))
+        )
+        assertTrue(failed is PicturesAnswer.Refused)
+        assertEquals(
+            "The everyday chat could not be set aside, so nothing was drawn.",
+            (failed as PicturesAnswer.Refused).said,
+        )
+        // A PC with no pictures route at all.
+        assertTrue(Pictures.readMake(404, null) is PicturesAnswer.Missing)
+        assertTrue(Pictures.readMake(501, null) is PicturesAnswer.Missing)
     }
 
     @Test
-    fun thePhoneNeverSendsThePcsConsentToFreeTheCard() {
-        val body = Pictures.makeBody("a red panda in a library")
-        assertNotNull(body)
-        assertFalse("the phone must never confirm the swap", body!!.contains("free_card"))
-        // The one line the screen adds under the PC's sentence says the step is
-        // the PC's, and that the picture still turns up on the phone after.
-        assertTrue(Pictures.NEEDS_PC_WORDS.contains("PC"))
-        assertTrue(Pictures.NEEDS_PC_WORDS.contains("phone cannot"))
-        assertTrue(Pictures.NEEDS_PC_WORDS.contains("appear here"))
+    fun theDrawnAnswerCarriesThePcsTwoSentencesAndTheSwapRecord() {
+        val drawn = obj(
+            "ok" to true, "available" to true,
+            "name" to "2026-10-11-140509-a-red-panda.png",
+            "id" to "2026-10-11-140509-a-red-panda",
+            "words" to "Drawn in 41.2 seconds and saved as 2026-10-11-140509-a-red-panda.png.",
+            "card" to obj(
+                "option" to "A", "did" to true,
+                "chat_away_seconds" to 2.5, "chat_back_seconds" to 9.0,
+                "chat_back" to true, "models_freed" to true,
+                "words" to ("Your everyday chat stepped aside for 2.5 seconds and is " +
+                    "back on the card after another 9.0 seconds."),
+            ),
+        )
+        val answer = Pictures.readMake(200, drawn)
+        assertTrue(answer is PicturesAnswer.Made)
+        val made = (answer as PicturesAnswer.Made).body
+        assertEquals("2026-10-11-140509-a-red-panda", Pictures.madeId(made))
+        // Both of the PC's sentences, word for word, in the order the PC sent
+        // them. Nothing here is rebuilt or rounded on the phone.
+        val words = Pictures.madeWords(made)
+        assertTrue(words.startsWith("Drawn in 41.2 seconds"))
+        assertTrue(words.endsWith("back on the card after another 9.0 seconds."))
+        assertTrue(words.contains("Your everyday chat stepped aside for 2.5 seconds"))
+        // The swap's own numbers, as the PC measured them.
+        assertEquals(2.5, Pictures.cardAwaySeconds(made)!!, 0.001)
+        assertEquals(9.0, Pictures.cardBackSeconds(made)!!, 0.001)
+        assertEquals(
+            "Your everyday chat stepped aside for 2.5 seconds and is back on the card " +
+                "after another 9.0 seconds.",
+            Pictures.cardWords(made),
+        )
+        // A draw that needed no swap has no card block and still reads whole.
+        val plain = obj("ok" to true, "words" to "Drawn in 5.0 seconds and saved as a.png.")
+        assertEquals("Drawn in 5.0 seconds and saved as a.png.", Pictures.madeWords(plain))
+        assertNull(Pictures.cardAwaySeconds(plain))
+        assertEquals("", Pictures.cardWords(plain))
+        assertNull(Pictures.cardAwaySeconds(null))
     }
 
     @Test
@@ -271,9 +510,17 @@ class PicturesTest {
         // And the plate's own rule: while hidden it throws the answer away and
         // fetches nothing, which is what Reply.HIDDEN is for.
         assertFalse(Pictures.Reply.HIDDEN.visible)
+        // A draw can outlast the owner hiding the lists: its answer must not
+        // fetch then, so every refresh in the plate is guarded on the switch
+        // as it is NOW, not as it was when the request started.
+        val plate = plate()
+        if (plate != null) {
+            assertTrue(plate.contains("hiddenNow = hidden"))
+            assertTrue(plate.contains("if (!hiddenNow) load()"))
+        }
     }
 
-    // ── the phone changes nothing ────────────────────────────────────────
+    // ── the phone changes nothing but its own consent ────────────────────
 
     @Test
     fun thePhoneHasNoWayToChangeTheSwitchTheProgramOrTheFolder() {
@@ -289,16 +536,24 @@ class PicturesTest {
         // "runtime" and "folder" appeared NOWHERE in the file, which is not
         // the rule and cannot hold: `body["enabled"]`, `body["folder"]` and
         // `one["plain"]` are how it reads them back. It failed on every run.
-        val source = java.io.File("src/main/java/com/jarvis/client/net/Pictures.kt")
-        if (!source.isFile) return  // run from somewhere else: the checks below still hold
-        val text = source.readText()
+        //
+        // `free_card` is here because the owner's 2026-10-24 decision lets a
+        // phone confirm the swap. It is still not a SETTING: it is the one
+        // consent key, and it is put only behind `freeCard = true`, which only
+        // the confirm tap passes.
+        val text = source("src/main/java/com/jarvis/client/net/Pictures.kt")
+        if (text == null) return  // run from somewhere else: the checks below still hold
         assertFalse(text.contains("pictures/settings"))
         val sent = Regex("put\\(\"([\\w_]+)\"").findAll(text).map { it.groupValues[1] }.toSet()
         listOf("enabled", "runtime", "address", "folder", "seed", "model", "steps",
                "width", "height", "settings").forEach {
             assertFalse("the phone must not send $it", sent.contains(it))
         }
-        assertEquals("the body carries the prompt and nothing else", setOf("prompt"), sent)
+        assertEquals(
+            "the body carries the words, plus the owner's own consent and nothing else",
+            setOf("prompt", "free_card"),
+            sent,
+        )
         assertTrue(text.contains("const val PATH = \"/api/pictures\""))
         assertTrue(text.contains("const val FILE_PATH = \"/api/pictures/file\""))
     }
@@ -385,16 +640,41 @@ class PicturesTest {
             "saved_phone", "empty", "hidden", "hidden_short", "prompt_label",
             "made_label", "seed_label", "no_record", "not_kept", "missing",
             "unreadable", "no_words", "show", "show_title", "still_hidden",
+            // The PC's 409 question and the owner's two answers (2026-10-25).
+            "set_aside", "set_aside_no", "set_aside_stopped", "timed_out",
         )) {
             assertTrue("no `$key`", Pictures.WORDS.containsKey(key))
             assertTrue("`$key` is empty", Pictures.WORDS.getValue(key).isNotBlank())
         }
         assertTrue(Pictures.WORDS.getValue("not_kept").contains("never sent anywhere"))
         assertEquals("Pictures", Pictures.WORDS.getValue("title"))
+        // The owner's own name for the feature, so the plate is findable by it.
+        assertEquals("Image mode", Pictures.IMAGE_MODE)
+        // The PC's two answers, in the words the desktop's own panel uses.
+        assertEquals("Not now", Pictures.WORDS.getValue("set_aside_no"))
+        assertTrue(Pictures.WORDS.getValue("set_aside").startsWith("Set the chat aside and draw"))
         // A picture with no record is still listed, and says so rather than
         // showing a blank line where the words should be.
         val shot = Pictures.Shot("a.png", "2026-10-11-140509-a", "", null, "", "11 Oct", 0L, false)
         assertTrue(shot.said().contains(Pictures.WORDS.getValue("no_record")))
+    }
+
+    @Test
+    fun theImageModeIsNamedOnItsOneScreen() {
+        // The owner asked for the phone's image mode to be easy to find. It is
+        // found by its own name, in the one place it lives: a heading on the
+        // Pictures plate. Not a new screen, not a preset, and not a button -
+        // the switch is the PC's, so a control here would be a fake one.
+        assertEquals("Image mode", Pictures.IMAGE_MODE)
+        val plate = plate()
+        if (plate != null) {
+            assertTrue(
+                "the plate draws the owner's own name for it",
+                plate.contains("Kicker(Pictures.IMAGE_MODE"),
+            )
+            assertFalse(plate.contains("Primary(Pictures.IMAGE_MODE"))
+            assertFalse(plate.contains("Quiet(Pictures.IMAGE_MODE"))
+        }
     }
 
     @Test

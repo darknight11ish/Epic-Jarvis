@@ -335,6 +335,22 @@ class JarvisApi(
     private val cardCall: OkHttpClient = client.newBuilder()
         .readTimeout(1_200, TimeUnit.SECONDS)
         .callTimeout(1_200, TimeUnit.SECONDS)
+
+     * The ONE long request that confirms the picture swap
+     * ([Pictures.CONFIRM_TIMEOUT_S], docs/JARVIS-API.md 129.4b): the PC sets
+     * the everyday chat aside, draws, makes the drawing program let go of its
+     * models and loads the chat back, and answers only when all of that is
+     * done. Measured on this PC: 500.1 s wall clock for the phone path.
+     *
+     * A READ timeout, not a call timeout, is the right clock here: it measures
+     * SILENCE and restarts on every byte, so the PC thinking for minutes is
+     * never cut off. No call timeout is set, because it would bound the whole
+     * request a second time and a real draw plus its warm-back can take
+     * fourteen minutes on the PC's own bound.
+     */
+    private val confirmCall: OkHttpClient = client.newBuilder()
+        .readTimeout(Pictures.CONFIRM_TIMEOUT_S, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     fun baseUrl(): String? = settings.baseUrl()
@@ -1576,25 +1592,25 @@ class JarvisApi(
      * sentence - "nothing is set up yet", "start it on this PC" or "the switch
      * is off" - and the caller shows that sentence as sent.
      *
-     * TWO ANSWERS ARE NOT REFUSALS (added 2026-10-25, the card handshake): the
-     * PC answers **403 `pc_only`** to a phone whose draw would need the everyday
-     * chat set aside first (and **409 `needs: "free_card"`** to the PC itself).
-     * Both carry the PC's own plain sentence, and the phone must show it rather
-     * than call it a bad token or a failure - so this one call keeps its 403 and
-     * hands the answer up whole. See [Pictures.freeCard].
+     * TWO REQUESTS WHEN THE CARD HAS TO BE FREED (the final contract, added
+     * 2026-10-25). The FIRST request answers **409 `needs: "free_card"`** and
+     * moves nothing: the PC is asking whether it may set the everyday chat
+     * aside. [confirming] is true only for the owner's own tap, which sends the
+     * same words plus `free_card: true` - and that one is ONE LONG request, so
+     * it runs on [confirmCall] with the 1,200 s read timeout.
+     *
+     * The answer is read by [Pictures.readMake] and handed up whole, because a
+     * 409 question, a 409 "still drawing", a 403 `pc_only` from an older PC
+     * and an ordinary refusal are four different things to the screen - and
+     * none of them is a bad pairing token. A 401 always is, and a 403 that is
+     * NOT `pc_only` (a cross-origin refusal) keeps its old reading.
      */
-    suspend fun makePicture(body: String): ApiResult<PicturesAnswer> =
-        when (val result = picturesCall(Pictures.PATH, body)) {
-            is ApiResult.Ok -> {
-                val (status, obj) = result.value
-                val free = Pictures.freeCard(status, obj)
-                when {
-                    free != null -> ApiResult.Ok(PicturesAnswer.NeedsPc(free.said, free.minutes))
-                    status >= 400 || obj?.get("ok")?.jsonPrimitive?.booleanOrNull == false ->
-                        ApiResult.Failed(ApiError.Server(status, Pictures.refusal(obj)))
-                    else -> ApiResult.Ok(PicturesAnswer.Made(obj ?: JsonObject(emptyMap())))
-                }
-            }
+    suspend fun makePicture(
+        body: String,
+        confirming: Boolean = false,
+    ): ApiResult<PicturesAnswer> =
+        when (val result = picturesCall(Pictures.PATH, body, longWait = confirming)) {
+            is ApiResult.Ok -> ApiResult.Ok(Pictures.readMake(result.value.first, result.value.second))
             is ApiResult.Failed -> result
         }
 
@@ -1604,10 +1620,14 @@ class JarvisApi(
      * carrying the PC's own plain sentence must read differently - and because a
      * 403 that carries `pc_only` is the PC saying "on the PC only" (the same
      * reading [projectsCall] gives it), not a bad pairing token.
+     *
+     * [longWait] is true for the confirming draw only: nothing else on these
+     * routes takes minutes before its first byte.
      */
     private suspend fun picturesCall(
         path: String,
         json: String?,
+        longWait: Boolean = false,
     ): ApiResult<Pair<Int, JsonObject?>> = withContext(Dispatchers.IO) {
         val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
         val builder = Request.Builder().url(target)
@@ -1618,15 +1638,18 @@ class JarvisApi(
         }
         val req = builder.authed().build()
         runCatching {
-            // A drawing takes far longer than a read: the PC waits for the
-            // program itself. The same longer budget the quiz's own
-            // model-backed calls use, so a slow card is not cut off.
-            val call = if (json == null) shortCall else writeCall
+            // A read is quick; a draw's FIRST request is quick too (it answers
+            // 409 at once when the card is busy). Only the owner's confirm waits
+            // for the whole swap, and it gets its own long client.
+            val call = when {
+                json == null -> shortCall
+                longWait -> confirmCall
+                else -> writeCall
+            }
             call.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
-                val pcOnly = (obj?.get("pc_only") as? JsonPrimitive)?.booleanOrNull == true
-                if (resp.code == 401 || (resp.code == 403 && !pcOnly)) {
+                if (resp.code == 401 || (resp.code == 403 && !Pictures.isPcOnly(obj))) {
                     ApiResult.Failed(ApiError.BadToken)
                 } else {
                     ApiResult.Ok(resp.code to obj)
