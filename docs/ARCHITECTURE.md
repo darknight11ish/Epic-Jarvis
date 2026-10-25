@@ -3134,6 +3134,32 @@ backend route or phone source names any of it - so `tools/check_parity.py` has
 nothing to classify. The five rich 3D presets the blueprint also lists are shown
 as disabled "not built yet" chips, never faked.
 
+**The medical record and the local medical model are PC-only, and that is
+one-sided on purpose** (2026-10-24; `backend/jarvis_medical_advocate.py`,
+`docs/MEDICAL-STORE.md`). The store and the checker run here because the record
+is the owner's own file in this PC's profile, the 30-minute health latch and the
+gate it uses live here, and MedGemma 1.5 4B runs on this PC's RTX 2080 SUPER in
+its own loopback lane (`127.0.0.1:11435`) - none of that can be moved to a phone
+without a new route, a new permission argument and a copy of the record on the
+device, and this slice deliberately added none of those. There is **no route and
+no UI on either app yet**: the slice is a shipped library, not a feature with a
+screen, so the phone has nothing new to draw and does nothing (its existing
+screens and reads are unchanged). Because no backend route exists, and no app
+source names the module, `tools/check_parity.py` has nothing to classify - the
+gap is written down here rather than left to read as an oversight. The honest
+limits are on the same page and in the module's docstring: the latch expires
+after 30 minutes, **the record is encrypted at rest** (every field sealed with
+AES-256-GCM under its own key in Windows Credential Manager, first version of
+this paragraph said otherwise, reversed by the owner on 2026-10-24), **it is in
+`.jbak` backups** under `db/medical/health.db` with that key inside the
+encrypted archive so a new PC can open it, chat history still contains the
+conversation, and the model is an explainer with no authority over codes. What
+encryption does not hide is written down too: the file's name, its row numbers,
+a random per-row label, when each row was made, and the audit rows' action,
+kind and counts. A phone screen, a desktop panel, a backup toggle and a
+biometric lock screen are named follow-ups, not things this slice pretends to
+have.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

@@ -3138,3 +3138,122 @@ fails against the old reader (2 checks red) and passes against the fix (5 of
 5). `jarvis-client/.../PastApprovalsTest.kt` pins the Kotlin reader the same
 way; CI is the first compiler for it, since there is no Android build at this
 desk.
+
+## 2026-10-24 - the medical record is its own file, and the local medical model is an explainer with no authority
+
+The owner asked for medical records "kept separate from other information",
+a health conversation that stays on the PC, and MedGemma 1.5 4B on the second
+card as a helper to "verify FHIR records and lab terminology 100% offline".
+Tonight's slice built the smallest honest version of that, and wrote down where
+the words in the request are stronger than the code. It first shipped with the
+record **unencrypted and out of backups**, because that question was still the
+owner's to answer; he answered it the same evening, so this entry records both
+the first version and the reversal, in that order.
+
+**What was built and why each part.** The record lives in
+`~/.openjarvis/medical/health.db` - its own folder and its own file, not one
+more name in `memory.db` - in `backend/jarvis_medical_advocate.py`, shipped
+whole with no route and no screen. Every read and write sets
+`jarvis_gate.latch_taint(why="health_data")` *before* it opens anything and
+fails closed with `MedicalStoreUnavailable` when the latch cannot be set; a
+medical read therefore pins the chat to local models for the gate's
+**30 minutes**, and no longer. `erase_all()` empties only that file (secure
+delete, a truncated write-ahead log, then a vacuum), and a test proves a
+neighbouring `memory.db` is byte-for-byte untouched and never created. The
+local model client is the ONE HTTP path already in `jarvis_second_card`
+(`generate()` gained a narrow `model=`/`keep_alive=` override whose default
+request is unchanged), so this feature adds no second client and inherits that
+module's loopback refusal; it probes `127.0.0.1:11435` in 0.20 s, strips the
+`<unused94> ... <unused95>` thinking markers MedGemma leaks, and on any failure
+returns a calm fallback that names the main local model on `:11436`.
+`validate_bundle()` is a deterministic offline checker of a named subset of FHIR
+R4 (32 checks: Bundle rules, required elements and required-bound status
+values, id and instant shapes, reference syntax and in-bundle resolution,
+Observation value/unit/range/flag/component contradictions, duplicate rows and a
+magnitude heuristic, and code SHAPE), with `summarise()`; its verdict is
+`no_errors_found`, `errors_found` or `not_checked` - never "valid" - every code
+meaning is listed under `unverified`, and the optional model is attributed with
+`authority: "none"` and can never move a finding.
+
+**What the request asked for that this slice does NOT do, and why.** The latch
+is NOT permanent: the two settings that look like they promise a
+whole-conversation latch (`taint_persists_for_conversation`,
+`always_taint_conversation`) are read by nobody; a non-expiring latch is a code
+change for a later slice. There is no biometric lock screen, no phone or desktop
+screen, no backup toggle, no import of a bundle into the store, and no federal
+API (RxNav, MedlinePlus, openFDA, DailyMed) and no outbound de-identifier - the
+federal-API route is network, so "100% offline" would be false, and a bare LOINC
+code already reveals which tests the owner had; `jarvis_scrub.py` is not reused
+because its own header says it is not an egress filter. **"Verify lab
+terminology" is not achievable offline**: the LOINC, RxNorm/ RxCUI, ICD-10-CM,
+SNOMED CT and UCUM tables are not on this PC, so the checker reports code shapes
+and lists every meaning as not checked. And the 4B model is not a terminology
+authority - measured 2026-10-24, it answered a basic metabolic panel LOINC spot
+check with `8141` (and `81416-1`/`81417-1` elsewhere) where the usual code is
+`24323-8` - so nothing it says may be written down as "verified". The first
+version of this entry also recorded that the record was not encrypted and not in
+backups; that half was a pending decision, not a limit, and the next paragraph
+records what the owner said.
+
+**The owner's answer, the same day - a deliberate reversal (2026-10-24).** Asked
+whether the health database should stay out of the encrypted backups and
+unlocked, the owner said: **"I wanted it encrypted as well and part of that
+file."** Both halves were built immediately after, and they reverse this
+entry's first version on purpose:
+
+- **Encrypted at rest.** Every record field - label, dates, value, unit,
+  source, note - is sealed as ONE JSON payload per row with AES-256-GCM, under
+  a fresh 12-byte nonce and with the table name and a random per-row label as
+  associated data, so a sealed row cannot be moved to another row or kind and
+  still open. The 32-byte key is kept in Windows Credential Manager under its
+  own target, **`Jarvis Backend/medical key`**, created on first use and read
+  back before use, through the SAME `jarvis_chat_log.CredentialKey` helper chat
+  history and the review decks use - a second key, not the chats'. It is never
+  written to a file by this module and never logged. The module also seals a
+  check value into the store, so a replaced or deleted key raises
+  `MedicalStoreUnavailable` instead of being read as "an empty record"; a file
+  an earlier version wrote unencrypted is refused in plain words rather than
+  read or overwritten. The plain columns are the structural minimum: row
+  number, random row label, when the row was made, and the audit table's
+  action/kind/row-number/count. These say a medical row exists and when, not
+  what it says - written down in the module's docstring and in
+  `docs/MEDICAL-STORE.md`.
+- **In the backup.** `health.db` moved out of `jarvis_backup.NOT_BACKED_UP`
+  and into `SOURCE_DBS`; the archive carries it under `db/medical/health.db`
+  (its own folder, never flattened beside `memory.db`), and carries this
+  store's own key inside the encrypted archive as
+  `secrets/medical-key.b64`, exactly as chat history's key already travels.
+  A restore writes the database back into `medical/` and the key back into its
+  own Credential Manager entry, so a **new PC whose Credential Manager has
+  nothing in it** can open the restored record. If the key cannot be read when
+  the backup is made, the record is left out rather than carried unopenable -
+  the same rule `study.db` already follows. The pinned counts moved from
+  `17 + 8` to `18 + 7`.
+- **The MedGemma request timeout** was raised from 25 s to **120 s**: measured
+  on 2026-10-24, one answer took 28.35 s, so 25 s was cutting the model off and
+  returning the fallback instead of the answer.
+
+**What is honestly testable tonight, and what is not.** 93 hermetic tests
+(`backend/test_medical_advocate.py`) cover the store round-trip, **encryption
+at rest** (a distinctive secret is written, then the raw database bytes and any
+journal beside it are scanned for it and the payload is checked to be
+unreadable JSON), the plain-metadata list, the latch ordering, fail-closed for
+a missing / broken / short / replaced key and for a file from the unencrypted
+version, the path separation, the backup pins, the loopback guard, the
+120-second timeout reaching the HTTP call, the lane's three states, the
+fallback note, the marker strip and the FHIR canaries, each with a positive
+control. `backend/test_backup.py` adds two real round-trips: a record is written
+with a fake Credential Manager, backed up, the local file is deleted, and a
+"new PC" with an EMPTY Credential Manager restores the archive and reads the
+record back with the key the restore put there; the second is the harder case -
+that new PC had already minted its OWN medical key before restoring, and the
+restore replaces it with the backup's so the record still opens, with a stale
+`-wal` beside the restored file removed. The pre-push audit also pinned the two
+store-side holes: a sealed payload moved between rows is refused (the AAD binds
+it to its kind and row label), and `erase_all()` still wipes when no key can be
+had - a lost key must never stop the owner erasing their own record - while the
+latch still comes first. The lane itself was measured on the owner's PC on
+2026-10-24 (100% GPU, 16,384 context, `size_vram` 2,817,953,626 bytes), then
+stopped again so the coding lane keeps its port; one line starts it. A real
+portal export, a real phone screen and a real medical review remain
+NOT-TESTABLE - and NOT-TESTABLE is never a pass.

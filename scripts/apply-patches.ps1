@@ -2177,6 +2177,13 @@ $SHIPPED = @(
 # wired into the briefing by jarvis_briefing.live_deps(). No route, no card,
 # no network; a source it cannot read is reported "not checked".
 'jarvis_pulse_sources.py'
+# The owner's medical record, kept apart, on this PC only (2026-10-24): its
+# own store file, a 30-minute health latch on every read and write, the local
+# MedGemma 1.5 4B lane client (127.0.0.1:11435, loopback only), and the
+# offline FHIR R4 structural checker. A library nothing imports yet: no
+# route, no app surface, no patch of its own, so a backend without it runs
+# exactly as before (docs/MEDICAL-STORE.md).
+'jarvis_medical_advocate.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -3584,14 +3584,24 @@ def learning_idle_seconds(default: float) -> float:
     return default
 
 
-def generate(lane: Lane, prompt: str, *, timeout: float = 120.0) -> Optional[str]:
+def generate(lane: Lane, prompt: str, *, timeout: float = 120.0,
+             model: Optional[str] = None,
+             keep_alive: Optional[str] = None) -> Optional[str]:
     """One non-streamed answer from the lane's model, or None. Loopback only.
     num_ctx matches the lane's OLLAMA_CONTEXT_LENGTH, so asking never makes
-    Ollama reload the model at a different size."""
+    Ollama reload the model at a different size.
+
+    `model` names a different installed model on the SAME lane (2026-10-24, for
+    the medical lane: `medgemma1.5:4b-it-q4_K_M` is on :11435 although the lane
+    object is built for another feature). None keeps this call exactly as it
+    was - `lane.model`, and no `keep_alive` in the request. `keep_alive` is
+    Ollama's own idle-unload setting, sent only when a caller asks for it."""
     if lane is None or not _is_loopback_url(lane.url):
         return None
-    body = {"model": lane.model, "prompt": prompt, "stream": False, "think": False,
+    body = {"model": model or lane.model, "prompt": prompt, "stream": False, "think": False,
             "options": {"num_ctx": int(lane.num_ctx), "temperature": 0}}
+    if keep_alive is not None:
+        body["keep_alive"] = keep_alive
     for attempt in (1, 2):
         try:
             out = _http_json(f"{lane.url}/api/generate", body, timeout=timeout)
