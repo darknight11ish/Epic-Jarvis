@@ -3332,3 +3332,63 @@ NOT-TESTABLE - and NOT-TESTABLE is never a pass.
     `models_freed: true`, and brought the chat back whole 117.1 s after it
     stepped aside, spill 0).
 
+## 2026-10-25 — The HUD's three measured cockpit defects, and why the browser draws its own face
+
+  * **What was measured, on the real page at 1440x900 (headless Chromium,
+    the HUD sweep of 2026-10-25).** In the ordinary Cockpit view the right
+    rail painted three cards on top of each other. `#rail-right` is a flex
+    column and its first child, the card region, was a shrinkable flex item
+    (`flex:0 1 auto` with `min-height:0`): it was squeezed to 342 px while
+    its six cards needed 798 px, so the overlaps are real 2-D
+    intersections - `#rail-memory` ∩ `#rail-reminders` 239x119 px,
+    `#rail-budget` ∩ `#rail-reminders` 239x108 px (the budget card entirely
+    inside the reminders card) and `#rail-voice` ∩ `#rail-reminders`
+    239x136 px (also entirely covered) - and `#rail-right` measured
+    `scrollHeight 900 = clientHeight 900`, so there was **no scroll range at
+    all** to reach the two cards that were not visible.
+  * **The preset names were squeezed to nothing.** `.preset-name` had an
+    ellipsis but no minimum width, and `.preset-model` was `flex-shrink:0`
+    with no ellipsis, so a 60-character GGUF tag held 324 px, made its
+    button 272 px wide inside a 220 px rail (66 px of it hanging over the
+    conversation pane) and squeezed "General Uncensored" to **0 px** and
+    "Coding" to **5 px**.
+  * **The browser asked for a face page the web server has never served.**
+    `#reactor` was pointed at `faces.html?mode=display&feed=parent`
+    unconditionally, but the web server answers a closed list of named
+    files (`STATIC_ASSETS` in `jarvis_hud.py`) and `faces.html` is not a key
+    in it, so a browser painted `{"error": "not found"}` where the red panda
+    belongs and logged that 404 as the page's only console error on every
+    load: **1 request and 1 console error before, 0 and 0 after**.
+  * **The fix lives in the normal layout, not only in edit mode.** The rule
+    that stops the stacking already existed, but only under
+    `body[data-hud-edit="on"]` (P0.5 D-UI-3, 2026-10-23) - so a correctly
+    laid-out Edit HUD shipped beside a broken ordinary view, which is the
+    view that actually ships. The ordinary view now carries it
+    (`#rail-right{overflow-y:auto;min-height:0}`,
+    `#rail-right .hud-region-right{flex:0 0 auto;min-height:0}`), scoped to
+    the right rail, and the edit-mode block is left exactly as it was.
+    Measured after: **0 overlapping card pairs and 457 px of scroll range**
+    in Cockpit; Edit HUD unchanged at 813 px and 0 overlaps; the preset
+    names **97 px and 88 px** visible and the button **191 px**; no element
+    outside the rail and the page width still equal to the window.
+  * **The browser draws its own face, and that is the decision.** Serving
+    `faces.html` would mean 12 static files (the 405,699-byte `faces.html`
+    plus the 11 scripts it loads), a 12-key whitelist in `jarvis_hud.py`'s
+    `STATIC_ASSETS` and the matching deploy-sync entries - all for a
+    fallback of five lines of script. So in a plain browser the frame stays
+    at `about:blank` and a built-in CSS orb is drawn in the frame's own
+    box; the frame and the orb share one grid cell, so every rule that
+    already sizes `#reactor` (220 px in Cockpit, 150 px narrow, 48 px in
+    Studio, 320 px in Ambient) sizes the orb too and it cannot drift from
+    the face it stands in for. Inside the desktop shell - the same
+    `window.__TAURI__ && window.__TAURI__.core` test the page already
+    makes - the animated face is untouched and none of this is drawn.
+  * **Honest limits.** Everything above was measured in headless Chromium at
+    1440x900 in Cockpit only. The other shells were checked to still lay
+    out, and Studio's core-plus-label row was corrected so the orb is not
+    stretched, but overlap was not re-measured in them, and a real tablet or
+    laptop browser remains a field-test row rather than a pass. The page
+    ships three times byte-identically (`backend/`, `jarvis-backend/`,
+    `jarvis-desktop/src/`) and all three changed together; no backend, Rust,
+    API or live-folder file changed.
+
