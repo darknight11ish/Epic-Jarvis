@@ -179,6 +179,15 @@ def fresh_conf() -> Path:
     # wants files there calls fake_backend().
     empty = _scratch_dir("backend")
     B._source_dir = lambda: empty
+    # The framework config path must never fall back to the tracked checkout
+    # toml. This scratch conf holds no `jarvis-framework.toml`, so
+    # jarvis_framework.config_path() falls through to the one beside the modules
+    # (`backend/rebuilt/`), and the restore path then copies THAT file aside and
+    # os.replace()s a byte-identical copy back over it. Two runs at once collide
+    # (`PermissionError: [WinError 5]` on the swap), and a failed one leaves
+    # `.old` litter in the checkout. Answer None instead: no toml is archived
+    # and none is restored here.
+    B._toml_source = lambda: None
     B._reset_for_tests()
     backups = Path(tempfile.mkdtemp(dir=str(TMP), prefix="backups-"))
     return conf, backups
