@@ -215,7 +215,12 @@ jobs:
     # and the memory ones (onnxruntime and the meaning model, sqlite-vec) are left out on purpose -
     # the suites use a hash embedder and must pass without them.
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Measured 2026-10-25: 32m43s (PR #813), 35m07s (this PR's previous head),
+    # then 40m11s CANCELLED by the old 40-minute cap on 88dfb6b9f - the only
+    # thing wrong with that run was that the suite and a loaded shared runner
+    # came within five minutes of the cap. 60 gives the real work room without
+    # hiding a genuine hang.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
