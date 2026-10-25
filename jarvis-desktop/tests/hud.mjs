@@ -350,6 +350,13 @@ async function openHud(browser, status, pageOptions = {}) {
         return route.fulfill({ status: 200, headers: cors,
           json: { available: true, pending: status.pending || [], history: [] } });
       }
+      // The focus presets (the owner's ask of 2026-10-21, GET /api/presets).
+      // Only a scenario that gives a list gets one; otherwise the real 404
+      // path stays exactly as it was, so the page's own fallback words are
+      // still what an older PC produces.
+      if (url.pathname === "/api/presets" && status.presets) {
+        return route.fulfill({ status: 200, headers: cors, json: status.presets });
+      }
       if (url.pathname === "/api/chat") {
         chats.push(JSON.parse(req.postData() || "{}"));
         // A case from chat-stream-cases.json: the body AND Content-Type the
@@ -3389,6 +3396,108 @@ await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escap
   assert.equal(after, "off", "Escape did not leave edit mode");
   await page.close();
   assert.deepEqual(problems, []);
+});
+
+/* The HUD screen walk (2026-10-25, 1440x900, Cockpit, edit mode OFF): the two
+ * defects the walk measured in the NORMAL view. The check above this pair only
+ * drives EDIT HUD - where the P0.5 D-UI-3 rules already worked - so it could
+ * not see either of these. */
+const PRESETS_LONG_MODEL = { presets: [
+  { id: "general", title: "General Uncensored",
+    model: "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M" },
+  { id: "coding", title: "Coding", model: "qwen3-coder:30b" },
+], chosen_preset: null };
+
+await check("the normal Cockpit view at 1440x900: the right rail does not stack cards, and BUDGET/VOICE are reachable", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, schedule: REMINDERS_SCHEDULE },
+    { viewport: { width: 1440, height: 900 } });
+  try {
+    await page.waitForSelector('#rail-right [data-hud-region="right_rail"]', { timeout: 10000 });
+    await setHudLook(page, "cockpit");
+    await page.waitForTimeout(300);
+    const m = await page.evaluate(() => {
+      const shown = (n) => {
+        const r = n.getBoundingClientRect(); const cs = getComputedStyle(n);
+        return cs.display !== "none" && cs.visibility !== "hidden" && r.width > 1 && r.height > 1;
+      };
+      const rail = document.getElementById("rail-right");
+      const region = rail.querySelector('[data-hud-region="right_rail"]');
+      const cards = [...rail.querySelectorAll("[data-hud-card]")].filter(shown).map((n) => {
+        const r = n.getBoundingClientRect();
+        return { id: n.getAttribute("data-hud-card"), top: r.top, bottom: r.bottom };
+      }).sort((a, b) => a.top - b.top);
+      const overlaps = [];
+      for (let i = 1; i < cards.length; i += 1) {
+        if (cards[i].top < cards[i - 1].bottom - 1) overlaps.push([cards[i - 1].id, cards[i].id]);
+      }
+      const regionBox = region.getBoundingClientRect();
+      const reach = ["rail-budget", "rail-voice"].map((id) => {
+        const n = document.getElementById(id);
+        if (!shown(n)) return { id, visible: false, hit: false };
+        n.scrollIntoView({ block: "nearest" });
+        const r = n.getBoundingClientRect();
+        const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { id, visible: true, hit: Boolean(at && (at === n || n.contains(at))) };
+      });
+      return { cards, overlaps, reach,
+        region: { h: regionBox.height, scrollHeight: region.scrollHeight },
+        rail: { clientHeight: rail.clientHeight, scrollHeight: rail.scrollHeight } };
+    });
+    assert.ok(m.cards.length >= 2, "the right rail has fewer than two cards to test");
+    assert.deepEqual(m.overlaps, [],
+      `right-rail cards overlap in the normal Cockpit view: ${JSON.stringify(m.overlaps)}`);
+    assert.ok(m.region.h >= m.region.scrollHeight - 1,
+      `the bento region is squeezed: ${m.region.h}px for ${m.region.scrollHeight}px of cards`);
+    assert.ok(m.rail.scrollHeight > m.rail.clientHeight + 1,
+      "the right rail cannot scroll to its lower cards");
+    for (const card of m.reach) {
+      assert.equal(card.visible, true, `${card.id} is not visible`);
+      assert.equal(card.hit, true, `${card.id} is covered in the normal Cockpit view`);
+    }
+    assert.deepEqual(problems, []);
+  } finally {
+    await page.close();
+  }
+});
+
+await check("a 60-character model name ellipsises instead of squeezing the preset name or the rail", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, presets: PRESETS_LONG_MODEL },
+    { viewport: { width: 1440, height: 900 } });
+  try {
+    await K.until(page, "the two preset buttons", async () =>
+      (await page.evaluate(() => document.querySelectorAll("#presets .preset").length)) === 2, { ms: 8000 });
+    const m = await page.evaluate(() => {
+      const rail = document.querySelector(".rail.left").getBoundingClientRect();
+      return { rail: { x: rail.x, right: rail.right },
+        docScrollWidth: document.documentElement.scrollWidth, vw: innerWidth,
+        presets: [...document.querySelectorAll("#presets .preset")].map((b) => {
+          const name = b.querySelector(".preset-name");
+          const model = b.querySelector(".preset-model");
+          const r = b.getBoundingClientRect();
+          return { name: name.textContent,
+            nameClient: name.clientWidth, nameScroll: name.scrollWidth,
+            modelClient: model.clientWidth, modelScroll: model.scrollWidth,
+            x: r.x, right: r.right };
+        }) };
+    });
+    const general = m.presets.find((p) => p.name === "General Uncensored");
+    assert.ok(general, "the long-model preset did not render");
+    for (const p of m.presets) {
+      assert.ok(p.nameClient >= p.nameScroll - 1,
+        `"${p.name}"'s name is squeezed: ${p.nameClient}px for ${p.nameScroll}px`);
+      assert.ok(p.x >= m.rail.x - 1 && p.right <= m.rail.right + 1,
+        `"${p.name}"'s button leaves the rail: ${p.x}..${p.right} vs ${m.rail.x}..${m.rail.right}`);
+    }
+    assert.ok(general.modelScroll > general.modelClient + 1,
+      "the 60-character model name was not ellipsised");
+    assert.ok(m.docScrollWidth <= m.vw + 1,
+      `the page overflows horizontally: ${m.docScrollWidth} > ${m.vw}`);
+    assert.deepEqual(problems, []);
+  } finally {
+    await page.close();
+  }
 });
 
 await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card toolbar are clickable", async () => {
