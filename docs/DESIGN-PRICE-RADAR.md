@@ -110,8 +110,11 @@ price_level, stale, stale_reason).
   outside text and nothing read from the page is learned or logged - the same
   rule `jarvis_tellme` applies (`why="page_watch"`).
 * **The poll floor is hard.** `next_check_at` is at least
-  `POLL_FLOOR_SECONDS = 300` seconds out, with seeded +/-30% jitter, so no
-  check can fire on a robotic tick or faster than every five minutes.
+  `POLL_FLOOR_SECONDS = 300` seconds out, plus seeded 0-30% jitter that only
+  ever delays, so no check can fire on a robotic tick or faster than every five
+  minutes. (Live-tested 2026-10-24: the first build applied the jitter as
+  +/-30%, which could produce a 210-second wait and contradicted this
+  sentence; the jitter now only adds time, and a test pins `>= 300`.)
 
 ## 5. The hard refusal invariants (each tested)
 
@@ -136,7 +139,7 @@ price_level, stale, stale_reason).
    sends every request directly (and the default opener goes through
    `jarvis_local_http.public_urlopen`, which re-checks private addresses at
    the connection). No public proxy lists exist anywhere.
-6. **Hard poll floor >= 300 s with +/-30% jitter** (see §4).
+6. **Hard poll floor >= 300 s, with 0-30% jitter above it** (see §4).
 
 The disclosure the owner approved, in the module as constants so F2/F3 reuse
 it verbatim:
@@ -201,9 +204,16 @@ feature is still a price radar, never a booking flow.
   no route, no chat tool, no card, no Settings row in either app is added by
   F1. When F2/F3 make it visible, the desktop/phone split (if any) belongs in
   `docs/ARCHITECTURE.md` §8 with the same rule the other features follow.
-* **Not measured:** the endpoint's stability and the real page payload on the
-  owner's network. The suite uses recorded reference goldens and synthetic
-  payload fixtures only - **no live request is made anywhere in it**. Enabling
-  the switch is the first real measurement, and the PR says so.
+* **Measured once, live (2026-10-24).** One real read-only GET of the page from
+  the owner's PC came back HTTPS 200, **2,306,825 bytes** identity / **309,768
+  bytes** gzipped, and parsed into **11 itineraries** for SEA -> NRT on
+  2026-12-12 (lowest $856.00). That measurement is why the module now asks for
+  gzip and why its page cap is above 2.3 MB: the first build's 2,000,000-byte
+  cap refused every live page, so with the switch on every check would have
+  recorded stale and never produced a price. **Still not measured:** the
+  endpoint's stability over time and whether the payload survives a site-side
+  change. The suite uses recorded reference goldens and synthetic payload
+  fixtures only - **no live request is made anywhere in it**. Turning the
+  switch on is the first scheduled measurement, and the PR says so.
 * F1 does not claim Google's prices are the lowest available; that is F2's
   cross-check, and neither is a booking tool.

@@ -53,7 +53,8 @@ THE HARD REFUSAL INVARIANTS (baked in, each tested):
      outright (the page has no business redirecting us);
   5. no proxy support in F1 (``proxy_urls`` and exit labels are F3's);
   6. hard poll floor - :func:`next_check_at` is at least
-     :data:`POLL_FLOOR_SECONDS` (300 s) and carries seeded +/-30% jitter.
+     :data:`POLL_FLOOR_SECONDS` (300 s), plus seeded 0-30% jitter that only
+     ever delays.
 
 PRIVACY. Page/flight words are outside text: a recorded change latches
 ``jarvis_gate.latch_taint(why="price_radar")`` exactly like ``jarvis_tellme``
@@ -100,8 +101,14 @@ No code is copied verbatim: the wire format is reimplemented in this module
 from those documents, and the test suite stores their recorded ``tfs`` golden
 values and asserts **byte parity**.
 
-NOT MEASURED. No live request is made by the suite or by this module in F1;
-the endpoint's stability is unproven and explicitly not claimed.
+MEASURED ONCE, LIVE (2026-10-24). One real read-only GET of the page came back
+HTTPS 200, **2,306,825 bytes** with no compression and **309,768 bytes** gzipped,
+and parsed into 11 itineraries for SEA -> NRT on 2026-12-12 (lowest $856.00). So
+the page is about 2.3 MB now, not the 100-250 KB this module was first written
+against - the caps and the gzip request below carry that measurement, and the old
+2 MB cap was the one thing stopping a live check from ever succeeding. The suite
+still makes no live request, and the endpoint's stability is still unproven and
+not claimed: it is Google's public search page and it can change without notice.
 """
 from __future__ import annotations
 
@@ -144,7 +151,9 @@ PAGE_TEMPLATE = "https://www.google.com/travel/flights"
 #: (a tracker parameter added to the URL is the same mistake as a cookie).
 ALLOWED_QUERY_KEYS = frozenset({"tfs", "hl", "gl", "curr"})
 
-#: Hard poll floor, in seconds, and the +/- jitter around it (ruling 10.3).
+#: Hard poll floor, in seconds, and the jitter ABOVE it (ruling 10.3). The
+#: jitter only ever delays: :func:`next_check_at` never returns less than the
+#: floor, so "at least 300 s between checks" is literally true.
 POLL_FLOOR_SECONDS = 300
 POLL_JITTER_FRACTION = 0.30
 
@@ -502,18 +511,28 @@ def page_problem(url: str) -> str:
 
 #: The browser-shaped headers the disclosure describes: standard, fixed,
 #: and deliberately without Cookie/Authorization/tracking or cache validators.
+#: ``Accept-Encoding: gzip`` is what a browser sends and what keeps ONE check
+#: small: measured 2026-10-24, the live page is 2,306,825 bytes as identity and
+#: 309,768 bytes gzipped.
 DEFAULT_HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                    "AppleWebKit/537.36 (KHTML, like Gecko) "
                    "Chrome/128.0.0.0 Safari/537.36"),
     "Accept": "text/html,application/xhtml+xml",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip",
     "Cache-Control": "no-cache",
 }
 FORBIDDEN_HEADERS = ("Cookie", "Authorization", "If-None-Match", "If-Modified-Since")
 
-#: Body cap: the page is ~100-250 KB; more than this is not a search page.
-PAGE_MAX_BYTES = 2_000_000
+#: Body caps. MEASURED LIVE 2026-10-24: the page was 2,306,825 bytes as
+#: identity and 309,768 bytes gzipped, so the old 2,000,000-byte cap refused
+#: every real page. PAGE_MAX_BYTES bounds the page itself; PAGE_MAX_WIRE_BYTES
+#: bounds what is read off the socket when the site compresses, and a gzip body
+#: that unpacks past PAGE_MAX_BYTES is refused like an over-size page (never
+#: decompressed without a bound).
+PAGE_MAX_BYTES = 8_000_000
+PAGE_MAX_WIRE_BYTES = 2_000_000
 PAGE_TIMEOUT_SECONDS = 15
 
 
@@ -530,6 +549,44 @@ def _default_open(req: urllib.request.Request, timeout: float,
                   handlers: Sequence) -> Any:
     import jarvis_local_http as LH
     return LH.public_urlopen(req, timeout, *handlers)
+
+
+def _content_encoding(resp: Any) -> str:
+    """The response's own Content-Encoding, lowercased; "" when it says none.
+
+    A response-like object with no headers (a suite fake, or a server that
+    sends none) is the identity encoding, exactly as before gzip existed.
+    """
+    headers = getattr(resp, "headers", None)
+    try:
+        value = headers.get("Content-Encoding") if headers is not None else ""
+    except Exception:
+        return ""
+    return str(value or "").strip().lower()
+
+
+def _unpack_page(body: bytes, encoding: str) -> bytes:
+    """The page bytes, gunzipped when the site compressed the answer.
+
+    Never returns more than :data:`PAGE_MAX_BYTES`. A compressed body that
+    unpacks past the cap (a "gzip bomb") is refused with the same words as an
+    over-size page, and it is never decompressed without that bound.
+    """
+    if not encoding or encoding == "identity":
+        return body
+    if encoding not in ("gzip", "x-gzip", "deflate"):
+        raise FetchFailed(
+            f"the page came back compressed in a way this reader does not know ({encoding})")
+    import zlib
+    wbits = zlib.MAX_WBITS if encoding == "deflate" else 16 + zlib.MAX_WBITS
+    try:
+        stream = zlib.decompressobj(wbits)
+        page = stream.decompress(body, PAGE_MAX_BYTES + 1)
+    except zlib.error as exc:
+        raise FetchFailed("the page's compressed body could not be read") from exc
+    if len(page) > PAGE_MAX_BYTES or stream.unconsumed_tail:
+        raise FetchFailed("the page was larger than a search page can be")
+    return page
 
 
 def fetch_page(url: str, *, opener: Optional[Callable] = None,
@@ -558,7 +615,13 @@ def fetch_page(url: str, *, opener: Optional[Callable] = None,
                     f"the site answered HTTP {status}; not retried")
             if status >= 400:
                 raise FetchFailed(f"the site answered HTTP {status}")
-            body = resp.read(PAGE_MAX_BYTES + 1)
+            encoding = _content_encoding(resp)
+            # Compressed bodies are bounded tighter on the wire; an identity
+            # page may be as large as PAGE_MAX_BYTES itself (measured 2.3 MB
+            # on 2026-10-24 - the old 2 MB read cap refused every real page).
+            wire_cap = (PAGE_MAX_BYTES if not encoding or encoding == "identity"
+                        else PAGE_MAX_WIRE_BYTES)
+            body = resp.read(wire_cap + 1)
     except BlockedBySiteChallenge:
         raise
     except urllib.error.HTTPError as exc:
@@ -570,9 +633,9 @@ def fetch_page(url: str, *, opener: Optional[Callable] = None,
         raise
     except Exception as exc:                      # network, TLS, timeout...
         raise FetchFailed(str(exc) or "the page could not be read") from exc
-    if len(body) > PAGE_MAX_BYTES:
+    if len(body) > wire_cap:
         raise FetchFailed("the page was larger than a search page can be")
-    return body.decode("utf-8", errors="replace")
+    return _unpack_page(body, encoding).decode("utf-8", errors="replace")
 
 
 # ==========================================================================
@@ -799,17 +862,19 @@ def parse_page(html: str, *, currency: str = "USD") -> dict:
 
 
 # ==========================================================================
-#   The poll floor (hard: >= 300 s, seeded +/-30% jitter)
+#   The poll floor (hard: >= 300 s, seeded 0-30% jitter above it)
 # ==========================================================================
 
 def next_check_at(now: float, *, rng: Optional[Any] = None,
                   floor: int = POLL_FLOOR_SECONDS) -> float:
-    """The earliest next check: ``floor`` seconds out, +/-30% jitter.
+    """The earliest next check: ``floor`` seconds out, plus 0-30% jitter.
 
     The floor is HARD (the ruling): an interval below
     :data:`POLL_FLOOR_SECONDS` is raised to it, so no caller can poll faster
-    than once every five minutes, and the jitter is seeded when ``rng`` is
-    given (deterministic in tests). Checks never fire on a robotic tick.
+    than once every five minutes. The jitter only ever ADDS time (0 to +30%),
+    so the sentence "at least 300 s between checks" is literally true; it is
+    seeded when ``rng`` is given (deterministic in tests), so checks never fire
+    on a robotic tick.
     """
     try:
         base = float(floor)
@@ -819,9 +884,9 @@ def next_check_at(now: float, *, rng: Optional[Any] = None,
     spread = base * POLL_JITTER_FRACTION
     if rng is None:
         import random
-        offset = random.uniform(-spread, spread)
+        offset = random.uniform(0.0, spread)
     else:
-        offset = rng.uniform(-spread, spread)
+        offset = rng.uniform(0.0, spread)
     return float(now) + base + offset
 
 

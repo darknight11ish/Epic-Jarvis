@@ -2043,8 +2043,8 @@ enabled = false
 # or tracking tags are ever sent; standard browser headers only, so repeated
 # checks are not linked together; it never follows a redirect; the only host
 # it may ask is the public Google Flights page; a site challenge (403/429)
-# is recorded as stale and NEVER retried; checks are at least 300 s apart
-# with +/-30% jitter; no proxy is used in F1.
+# is recorded as stale and NEVER retried; checks are at least 300 s apart,
+# plus up to 30% jitter that only ever delays; no proxy is used in F1.
 #
 # The owner's disclosure, shown on the switch and on every result:
 # "Checks public product and flight prices without sending cookies, saved
