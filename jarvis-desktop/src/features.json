@@ -134,6 +134,20 @@
     ]
   },
   {
+    "id": "personality-by-chat",
+    "group": "Talking",
+    "title": "Make a personality by talking",
+    "what": "Describe a personality in your own words and Jarvis drafts it in the chat: a name, how it should sound, one example exchange, and the built-in preset it starts from. You then say what to change.",
+    "where": "In any chat, on the PC or the phone: type or say \"make me a personality like a grumpy but caring mechanic\". Say what to change, then \"save it\" to keep it, or \"forget it\" to drop it. Saved ones are in Settings, How Jarvis talks, My personalities.",
+    "asks": "No card - it changes wording only, and it saves through the same path the Settings form uses.",
+    "limit": "It drafts with this PC's own model, so nothing leaves the PC, and a temporary chat refuses it. At most 20 saved personalities; a name of 60 characters; a line and each example half of 240.",
+    "surface": "both",
+    "covers": [
+      "settings.manner",
+      "how-it-talks"
+    ]
+  },
+  {
     "id": "write-like-me",
     "group": "Talking",
     "title": "Write like me",
