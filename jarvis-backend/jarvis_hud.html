@@ -211,14 +211,31 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   padding:7px 9px; border:1px solid var(--line); border-radius:3px;
   background:var(--plate-2); font-family:var(--f-mono); font-size:11px;
   color:var(--dim); text-align:left; transition:border-color .15s, color .15s;
+  /* 2026-10-25 (HUD sweep, 1440x900 Cockpit): a flex item's automatic minimum
+     size is its content's, so a 60-character model tag used to make the whole
+     button 272px wide in a 220px rail and push it over the conversation pane.
+     min-width:0 lets the button take the row it is given; the two spans below
+     decide what gives way inside it. */
+  min-width:0;
 }
 .preset:hover{border-color:var(--line-hot); color:var(--text);}
 .preset[aria-pressed="true"]{
   border-color:var(--ice); color:var(--ice);
   background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
 }
-.preset .preset-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.preset .preset-model{font-size:9px; color:var(--dim); flex-shrink:0;}
+/* 2026-10-25 (HUD sweep, 1440x900 Cockpit): the NAME used to be what gave way.
+   It had ellipsis but no minimum width, so it was squeezed to nothing -
+   "General Uncensored" measured 0px wide and "Coding" 5px - while the model
+   name kept its whole length (flex-shrink:0 and no ellipsis). It is the other
+   way round now: the name takes the free room and keeps at least what it
+   needs to be readable, and the model name gives way with a "...". */
+.preset .preset-name{
+  flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.preset .preset-model{
+  font-size:9px; color:var(--dim);
+  flex:0 1 45%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
 .preset[aria-pressed="true"] .preset-model{color:var(--ice);}
 .preset-cloud{
   display:flex; align-items:center; justify-content:center; gap:6px;
@@ -310,6 +327,66 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   text-transform:uppercase; color:var(--ice); white-space:nowrap;
   text-shadow:0 0 14px rgb(var(--accent-rgb) / .5);
 }
+
+/* ---------- the browser HUD's face (2026-10-25, HUD sweep) ------------
+ * Inside the desktop shell the face in the iframe above is the real one and
+ * none of this is drawn. A plain browser has no face page to load: the web
+ * server serves a closed list of named files and faces.html is not one of
+ * them, so the old code asked for it anyway, got a 404 and painted
+ * `{"error": "not found"}` where the red panda belongs, logging that 404 as
+ * the page's only console error on every load. The script now leaves the
+ * frame at about:blank in a browser and adds `.reactor-builtin` to the wrap
+ * instead; this orb is what a browser sees.
+ *
+ * It needs no size of its own: the frame and the orb are put in ONE grid cell,
+ * so every rule that already sizes #reactor (220px in Cockpit, 150px narrow,
+ * 48px in Studio, 320px in Ambient...) sizes the orb too, and the orb can
+ * never drift from the face it stands in for. The frame keeps its box
+ * (visibility:hidden, not display:none) so the grid cell is still the face's
+ * size. The loop stops under `prefers-reduced-motion` by the rule near the
+ * bottom of this stylesheet, like every other animation here. */
+.reactor-orb{display:none;}
+.reactor-wrap.reactor-builtin{display:grid; place-items:stretch;}
+.reactor-wrap.reactor-builtin #reactor{grid-area:1/1; visibility:hidden;}
+.reactor-wrap.reactor-builtin .reactor-orb{
+  grid-area:1/1; display:block; position:relative; border-radius:50%;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 44%, rgb(var(--accent-rgb) / .50) 0%,
+                    rgb(var(--accent-rgb) / .16) 30%, transparent 62%),
+    radial-gradient(circle at 50% 50%, var(--plate-2) 0%, var(--void) 70%);
+  box-shadow:
+    inset 0 0 42px rgb(var(--accent-rgb) / .28),
+    0 0 30px rgb(var(--accent-rgb) / .16);
+  animation:reactor-orb-breathe 4.2s ease-in-out infinite;
+}
+.reactor-wrap.reactor-builtin .reactor-orb::before{
+  content:""; position:absolute; inset:9%; border-radius:50%;
+  border:1px dashed rgb(var(--accent-rgb) / .26);
+  animation:reactor-orb-spin 24s linear infinite;
+}
+.reactor-wrap.reactor-builtin .reactor-orb::after{
+  content:""; position:absolute; inset:26%; border-radius:50%;
+  border:1px solid rgb(var(--accent-rgb) / .20);
+  box-shadow:inset 0 0 18px rgb(var(--accent-rgb) / .22);
+}
+@keyframes reactor-orb-breathe{
+  0%,100%{opacity:.82; transform:scale(.985);}
+  50%{opacity:1; transform:scale(1);}
+}
+@keyframes reactor-orb-spin{to{transform:rotate(360deg);}}
+/* The face's own four states, so the orb is not a dead picture: the pulse
+   speeds up while Jarvis is working and goes quiet while it sleeps. */
+.reactor-wrap.reactor-builtin[data-reactor-state="listening"] .reactor-orb{animation-duration:3.4s;}
+.reactor-wrap.reactor-builtin[data-reactor-state="thinking"] .reactor-orb{animation-duration:2.4s;}
+.reactor-wrap.reactor-builtin[data-reactor-state="speaking"] .reactor-orb{animation-duration:1.6s;}
+.reactor-wrap.reactor-builtin[data-reactor-state="standby"] .reactor-orb{opacity:.5; animation:none;}
+/* Studio draws the core as a small header chip with its label BESIDE it
+   (split-stage's .reactor-state is the one that is in the flow, not
+   absolutely placed). Left to auto-placement the label becomes a second ROW of
+   this grid, which widens the column to the label's own width and stretches
+   the orb into an ellipse. It is put back beside the core, where Studio has it. */
+html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{grid-area:1/2;}
 
 #log{
   flex:1; min-height:0; overflow-y:auto; overflow-x:hidden;
@@ -879,7 +956,12 @@ html[data-hud-shell="three-column"] .lane{
 html[data-hud-shell="three-column"] .lane .tag{display:none;}
 html[data-hud-shell="three-column"] .presets{flex-direction:row; flex-wrap:wrap; gap:4px; margin-top:8px;}
 html[data-hud-shell="three-column"] .preset{
-  flex:1 1 46%; justify-content:center; padding:5px 7px; border-radius:2px; font-size:10px;
+  /* 2026-10-25 (HUD sweep): 46% put two presets on one line, and half of a
+     220px rail cannot hold both a name and a model tag - a GGUF tag can be 60
+     characters. The page already drew them one per row (that long tag forced
+     it, by its minimum width), so the row is explicit now and the name gets
+     the room it needs. */
+  flex:1 1 100%; justify-content:center; padding:5px 7px; border-radius:2px; font-size:10px;
 }
 html[data-hud-shell="three-column"] .preset-cloud{margin-top:5px; padding:5px 7px; font-size:10px;}
 html[data-hud-shell="three-column"] .preset-words{font-size:9px;}
@@ -1290,6 +1372,26 @@ html[data-hud-shell="center-core"] .composer{
 .hud-region-left{margin-top:6px;}
 .hud-region-stage-top{margin:8px 0 0; order:-1;}
 .hud-region-right{margin-top:6px;}
+/* 2026-10-25 (HUD sweep, Cockpit at 1440x900): the right rail painted three
+ * cards on top of each other. #rail-right is a flex column, and its first
+ * child - this region - was a shrinkable flex item (`flex:0 1 auto`) with
+ * `min-height:0`, so it was squeezed to 342px while its six cards needed
+ * 725px (798px on the day this was measured, with a waiting card on screen):
+ * the cards were laid out past the region's own box, and REMINDERS,
+ * which paints after them, covered SECOND BRAIN & VAULT, FREE-TIER BUDGET and
+ * VOICE - with no scroll range anywhere to reach the hidden two.
+ *
+ * The rule that stops it already existed, but only under
+ * `body[data-hud-edit="on"]` (the edit-mode block further down, P0.5 D-UI-3 of
+ * 2026-10-23), so it only worked while editing. It is the ORDINARY view that
+ * ships, so the ordinary view gets it too: every card keeps its own row and
+ * the rail scrolls instead of stacking.
+ *
+ * Scoped to the right rail on purpose - the left rail's region and the
+ * stage-top one are untouched, and the edit-mode block is left exactly as it
+ * was, so Edit HUD cannot regress. */
+#rail-right{overflow-y:auto; min-height:0;}
+#rail-right .hud-region-right{flex:0 0 auto; min-height:0;}
 body[data-hud-edit="on"] .hud-region{gap:7px; padding:4px; border:1px dashed var(--line); border-radius:4px;}
 body[data-hud-edit="on"] .hud-region-drop{border-color:var(--ice); background:rgb(var(--accent-rgb) / .05);}
 .hud-card{
@@ -1932,8 +2034,12 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         <div class="reactor-rings" aria-hidden="true"><i></i><i></i><i></i></div>
         <!-- Jarvis's face: the same kit renderer the Widget shows, in
              display mode, driven by this page's own state. No src here -
-             the script sets it once it knows which face the owner chose. -->
+             the script sets it once it knows which face the owner chose.
+             In a plain browser the script never sets it (the web HUD was
+             never given faces.html) and the CSS orb below is drawn in this
+             same box instead; see "the browser HUD's face" in the style. -->
         <iframe id="reactor" title="Jarvis" tabindex="-1" aria-hidden="true"></iframe>
+        <div class="reactor-orb" aria-hidden="true"></div>
         <div class="reactor-state" id="reactor-state">standing by</div>
         <!-- Cockpit layout: the core sits large while the conversation is
              short, and docks to a small header core once it grows. This
@@ -2601,6 +2707,19 @@ function demoGraph(){
  * ================================================================== */
 const reactor = (() => {
   const frame = $("reactor");
+  /* 2026-10-25 (HUD sweep): only the desktop shell has the face page. The web
+   * HUD's server is a whitelist of named files (jarvis_hud.py's STATIC_ASSETS)
+   * and faces.html - with the eleven scripts it pulls - is not on it, so in a
+   * plain browser the old code asked for it, got a 404, painted
+   * `{"error": "not found"}` where the face belongs, and logged that 404 as the
+   * page's only console error on every load. In a browser the frame is never
+   * given that URL: it stays at about:blank and the CSS orb in the markup above
+   * is drawn in the frame's own box instead. The shell's face is untouched -
+   * this is the same test the page already makes for "am I in the shell?"
+   * (`hudShellStore` at the bottom of this file). */
+  const shell = Boolean(window.__TAURI__ && window.__TAURI__.core);
+  const wrap = frame.closest ? frame.closest(".reactor-wrap") : frame.parentElement;
+  if (!shell && wrap) wrap.classList.add("reactor-builtin");
   const words = { idle:"standing by", listening:"listening", thinking:"thinking", speaking:"speaking" };
   // This page's states are a subset of the spec's eight, by the same names.
   // Offline is not one of them: it is "standby" - Jarvis is not answering,
@@ -2633,6 +2752,12 @@ const reactor = (() => {
   let shown = "";          // what the frame currently holds, so equal pushes do not reload it
 
   function post(){
+    if (!shell) {
+      // No face to post to. The orb reads the state from this attribute
+      // (see "the browser HUD's face" in the style).
+      if (wrap) wrap.setAttribute("data-reactor-state", faceState());
+      return;
+    }
     const w = frame.contentWindow;
     // "/" = this page's own origin, and the only receiver the bridge accepts.
     // `offline`: the hollow "not connected" ring (faces.html drawOfflineRing)
@@ -2658,6 +2783,10 @@ const reactor = (() => {
    * since reset to the default, which merging the new document over the old
    * one would keep. It only happens on a save in the Faces window. */
   function sync(){
+    // A plain browser: there is no face page to load, and asking for one the
+    // web HUD cannot serve is the 404 this note exists for. The orb is
+    // already drawing; nothing here has a URL to set.
+    if (!shell) return;
     const face = appearance && typeof appearance.face === "string" ? appearance.face : "";
     // `feed=parent`: take state and colours from this page's posts instead
     // of asking the shell, which would refuse this window anyway.
@@ -2726,6 +2855,9 @@ const reactor = (() => {
     ready = true;
     sync();
   }
+  // The browser's orb starts in whatever state the page is in right now,
+  // rather than waiting for the first voice or status change to paint it.
+  if (!shell) post();
 
   return {
     set(state){
