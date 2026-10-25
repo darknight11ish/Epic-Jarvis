@@ -2584,13 +2584,23 @@ TOOLS: dict = {
     # FEATURE_GUIDE_TOOL above). Decided under the gate's own `skill_list`
     # action ("listing what Jarvis can do", tier "auto"): the arguments are one
     # feature name, so no new action, tier or patch is invented.
+    # NO `required` HERE, and that is the fix for the live-tools campaign's D1
+    # (2026-10-25). The description above and this module's own text document
+    # ONE listing call - a blank `feature` - and `_missing()` counts a blank
+    # string as absent, so `{"feature": ""}` was refused before the tool ran:
+    # "'feature' is required". The tool's one documented READ could therefore
+    # never be made, and the model either looped or answered from general
+    # knowledge. With the field optional, both the documented `{"feature": ""}`
+    # and a call with no arguments at all reach `_run_feature_guide`, which
+    # reads "" as "list the groups"; a named feature is still type-checked by
+    # the same schema.
     FEATURE_GUIDE_TOOL: Tool(
         FEATURE_GUIDE_TOOL, _feature_guide_tool_text(),
         {"type": "object", "properties": {
             "feature": {"type": "string",
                         "description": "the feature the owner named, in their own "
-                                       "words; a group name, or \"\" to list the groups"}},
-         "required": ["feature"]},
+                                       "words, a group name, or \"\" to list the "
+                                       "groups (leaving it out does the same)"}}},
         _plain_prepare("Explain feature"),
         lambda args, state, **_: _run_feature_guide(args),
         gate_lookup_name=lambda args: "skill_list"),

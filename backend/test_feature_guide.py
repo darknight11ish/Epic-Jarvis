@@ -537,8 +537,15 @@ def t_a_feature_with_several_switches_changes_nothing():
 def t_the_tool_is_listed_short_and_read_only():
     check("jarvis_agent.TOOLS has feature_guide", "feature_guide" in AG.TOOLS)
     tool = AG.TOOLS["feature_guide"]
-    check("its arguments are the one feature name", list(tool.parameters["properties"]) == ["feature"]
-          and tool.parameters["required"] == ["feature"], tool.parameters)
+    check("its one argument is the feature name",
+          list(tool.parameters["properties"]) == ["feature"], tool.parameters)
+    # D1 (the live-tools campaign, 2026-10-25): the tool's own description says
+    # a blank `feature` lists the groups, so the field may NOT be required -
+    # `_missing()` counts a blank string as absent and refused the documented
+    # call with "'feature' is required" before the tool ever ran.
+    check("...and it is optional, so the documented blank listing call is not "
+          "refused as a missing required field",
+          not (tool.parameters.get("required") or []), tool.parameters)
     tokens = AG.estimate_tokens(tool.schema())
     check(f"its text is within the per-tool budget (300 tokens; it is {tokens})",
           tokens <= 300, tokens)
@@ -573,6 +580,51 @@ def t_the_tool_returns_the_exact_facts():
     check("an empty feature lists the groups, read-only",
           groups.get("ok") is True and groups.get("kind") == "groups"
           and len(groups["groups"]) == len(CAT.GROUPS), groups.get("kind"))
+
+
+def t_the_documented_blank_listing_call_really_runs():
+    """D1 (the live-tools campaign, 2026-10-25): the tool's OWN description
+    says a blank `feature` lists the groups, and that call was refused BEFORE
+    the tool ran - `_missing()` counts a blank string as absent, so the
+    required field made the one documented READ impossible. The live probe's
+    exact output is recorded in the campaign:
+
+        args sent : {"feature": ""}
+          check_call -> REFUSED: ... 'feature' is required.
+
+    The model then looped or answered from general knowledge (and invented
+    four feature names that are not in the 139-row catalogue). This check
+    drives the whole seam the live turn goes through: the schema as SENT to
+    the model, check_call()'s validation of the arguments it parses, and the
+    tool's own result.""" 
+    tool = AG.TOOLS["feature_guide"]
+    sent, why = AG._parameters_to_send(tool)
+    check("the argument shape sent to the model still passes the sanitiser/guard",
+          sent is not None and "feature" not in (sent.get("required") or []),
+          why or sent)
+    # The exact call the live probe made: `arguments` arrive as JSON text.
+    args, problem = AG.check_call("feature_guide", json.dumps({"feature": ""}),
+                                  {"feature_guide"})
+    check("the documented blank call is accepted: no refusal before the tool",
+          args == {"feature": ""} and problem is None, problem)
+    out = AG._run_feature_guide(args or {})
+    check("...and it lists the guide's real groups, read-only",
+          out.get("ok") is True and out.get("kind") == "groups"
+          and len(out.get("groups") or []) == len(CAT.GROUPS), out.get("kind"))
+    # No argument at all is the same documented listing: nothing was named.
+    args, problem = AG.check_call("feature_guide", {}, {"feature_guide"})
+    check("a call with no argument at all is the same listing, not a refusal",
+          args == {} and problem is None
+          and AG._run_feature_guide(args or {}).get("kind") == "groups", problem)
+    # The fix must not turn the argument check off: a named feature is still
+    # answered, and a wrong type is still refused before the tool runs.
+    args, problem = AG.check_call("feature_guide", {"feature": "prompt coach"},
+                                  {"feature_guide"})
+    check("a named feature still reaches the tool", problem is None
+          and AG._run_feature_guide(args).get("kind") == "feature", problem)
+    args, problem = AG.check_call("feature_guide", {"feature": 5}, {"feature_guide"})
+    check("an argument of the wrong type is still refused before the tool",
+          args is None and "'feature' must be text" in str(problem), problem)
 
 
 def t_a_model_turn_gets_the_facts_with_no_card():
