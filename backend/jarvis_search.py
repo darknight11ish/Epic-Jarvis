@@ -590,6 +590,186 @@ def readiness(provider: Optional[str], s: Optional[dict] = None) -> tuple:
 
 
 # --------------------------------------------------------------------------
+#   The last LIVE test of a provider (D8, the live campaign of 2026-10-25)
+# --------------------------------------------------------------------------
+#
+# D8's evidence: GET /api/search said DuckDuckGo was ready - because the
+# `ddgs` package imports - and the owner switched to it. The test search then
+# came back `no_results`, and the Settings picture STILL said ready, so the
+# only way to learn that it did not work was to lose a search.
+#
+# "Ready" was standing for "installed". It now also stands for what the last
+# real test said, and the record carries WHEN it said it, so the picture can
+# say "ready" about something that answered and "the last test sent back no
+# results (20:16 today)" about something that did not.
+#
+# `readiness()` ITSELF IS UNCHANGED, and stays socket-free, because `plan()`
+# uses it to decide whether anything may be SENT: an old failed test must not
+# stop the owner searching with a provider they chose. This record is for the
+# Settings picture (`display_readiness` below) and for the switch (`handle_
+# settings` tests the new provider before making it the one in use).
+#
+# THE FILE holds no search words and no key: a provider id, whether it worked,
+# its state word, how many results came back, and a timestamp.
+
+def last_test_path() -> Path:
+    """Where the last live test of each provider is kept: beside the
+    settings file, and small enough to read on every /api/search."""
+    return _config_dir() / "web-search-tests.json"
+
+
+_TESTS_LOCK = threading.Lock()
+_LAST_TEST: dict = {}
+_LAST_TEST_LOADED = [False]
+
+#: A test older than this is still shown, but says its age ("at 20:16 today").
+#: Nothing is thrown away: an old answer is evidence, and the words carry it.
+_TEST_STATES = {
+    "works": "it worked",
+    "no_results": "it sent back no results",
+    "rate_limited": "it was limiting searches from this PC",
+    "timeout": "it did not answer in time",
+    "failed": "it failed",
+    "not_installed": "the ddgs package is not installed",
+    "key_missing": "no key is saved on this PC",
+    "turned_off": "web search is switched off",
+}
+
+
+def _load_last_tests() -> dict:
+    with _TESTS_LOCK:
+        if _LAST_TEST_LOADED[0]:
+            return dict(_LAST_TEST)
+        _LAST_TEST_LOADED[0] = True
+        try:
+            doc = json.loads(last_test_path().read_text(encoding="utf-8"))
+        except Exception:
+            doc = {}
+        if isinstance(doc, dict):
+            for pid, rec in doc.items():
+                if pid in PROVIDERS and isinstance(rec, dict) and isinstance(rec.get("at"), (int, float)):
+                    _LAST_TEST[pid] = {"ok": bool(rec.get("ok")), "state": str(rec.get("state") or ""),
+                                       "results": rec.get("results"), "at": float(rec["at"])}
+        return dict(_LAST_TEST)
+
+
+def _save_last_tests() -> None:
+    with _TESTS_LOCK:
+        out = {pid: dict(rec) for pid, rec in _LAST_TEST.items()}
+    try:
+        p = last_test_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps(out), encoding="utf-8")
+        os.replace(tmp, p)
+    except Exception:
+        pass
+
+
+def last_test(provider: Optional[str]) -> Optional[dict]:
+    """What the last LIVE test of `provider` said, or None (never tested)."""
+    if provider not in PROVIDERS:
+        return None
+    rec = _load_last_tests().get(provider)
+    return dict(rec) if rec else None
+
+
+def record_test(provider: Optional[str], ok: bool, state: str = "",
+                results: Optional[int] = None, *, at: Optional[float] = None) -> dict:
+    """Keep what a live test of `provider` said, and when. Never a word of a
+    search, never a key: a state and a time."""
+    if provider not in PROVIDERS:
+        return {}
+    rec = {"ok": bool(ok), "state": str(state or ("works" if ok else "failed")),
+           "results": results, "at": float(at if at is not None else time.time())}
+    with _TESTS_LOCK:
+        _LAST_TEST_LOADED[0] = True
+        _LAST_TEST[str(provider)] = rec
+    _save_last_tests()
+    return dict(rec)
+
+
+def forget_last_tests(provider: Optional[str] = None) -> None:
+    """Drop the record for one provider, or for all of them."""
+    with _TESTS_LOCK:
+        _LAST_TEST_LOADED[0] = True
+        if provider is None:
+            _LAST_TEST.clear()
+        else:
+            _LAST_TEST.pop(str(provider), None)
+    _save_last_tests()
+
+
+def _tested_when(at: float, now: Optional[float] = None) -> str:
+    """When a test ran, in plain words: "a moment ago", "at 20:16 today",
+    "at 20:16 yesterday", "on Friday 24 October"."""
+    now = time.time() if now is None else now
+    age = max(0.0, now - at)
+    if age < 90:
+        return "a moment ago"
+    lt, nt = time.localtime(at), time.localtime(now)
+    clock = f"{lt.tm_hour:02d}:{lt.tm_min:02d}"
+    if (lt.tm_year, lt.tm_yday) == (nt.tm_year, nt.tm_yday):
+        return f"at {clock} today"
+    if (lt.tm_year, lt.tm_yday) == (nt.tm_year, nt.tm_yday - 1):
+        return f"at {clock} yesterday"
+    days = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    months = ("January", "February", "March", "April", "May", "June", "July", "August",
+              "September", "October", "November", "December")
+    return f"on {days[lt.tm_wday]} {lt.tm_mday} {months[lt.tm_mon - 1]}"
+
+
+def display_readiness(provider: Optional[str], s: Optional[dict] = None) -> tuple:
+    """(state, said) for the SETTINGS picture: `readiness()` plus what the last
+    LIVE test said. `ready` in GET /api/search is `not state`, so this is what
+    makes "ready" mean "it answered" rather than "the package is installed".
+
+    Three cases, and only the first two change anything:
+      * a real blocker (not installed, no key, a bad SearXNG address) - as it
+        always was;
+      * DuckDuckGo with NO live test - "untested", said plainly: it is the one
+        provider whose readiness was purely "the package imports", and D8 is
+        what that cost;
+      * a last test that FAILED - "at_risk", with the state and the time, and
+        the same offer to switch back.
+    A provider whose last test worked, or a keyed provider never tested (its
+    key check is a real check), keeps the old empty answer: ready.
+    """
+    state, said = readiness(provider, s)
+    if state:
+        return state, said
+    rec = last_test(provider)
+    if rec is None:
+        if provider == "duckduckgo":
+            return "untested", (
+                "Installed, but not tested on this PC yet, and DuckDuckGo sometimes sends "
+                f"back nothing at all. Press Test to check it before choosing it.")
+        return "", ""
+    if rec.get("ok"):
+        return "", ""
+    why = _TEST_STATES.get(str(rec.get("state") or ""), "it did not work")
+    offer = offer_line(provider)
+    return "at_risk", (
+        f"The last test of {name(provider)} {_tested_when(rec['at'])} did not work: {why}. "
+        f"{offer}")
+
+
+
+    query: str
+    provider: Optional[str]
+    label: str
+    host: str
+    keyed: bool
+    problem: str = ""        # non-empty: nothing will be sent, and this says why
+    state: str = ""          # the problem's code (STATES)
+    offer: str = ""
+    searxng_url: str = ""
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+# --------------------------------------------------------------------------
 #   The plan - built locally, read by a person, sends nothing
 # --------------------------------------------------------------------------
 
@@ -1602,13 +1782,18 @@ def run(p: Plan, *, approved: bool = False) -> dict:
     try:
         results = call(p)
     except SearchError as exc:
+        # A real search is a live test too (D8): what it said, and when, is
+        # what makes "ready" mean "it answered" in the Settings picture.
+        record_test(p.provider, False, exc.state)
         out = {"ok": False, "state": exc.state, "error": exc.said}
         if exc.state not in ("no_results",):
             out["offer"] = offer_line(p.provider)
         return out
     except Exception as exc:
+        record_test(p.provider, False, "failed")
         return {"ok": False, "state": "failed", "offer": offer_line(p.provider),
                 "error": f"The search failed ({type(exc).__name__}). Nothing else was tried."}
+    record_test(p.provider, True, "works", len(results))
     out = {"ok": True, "provider": p.provider, "provider_label": p.label,
            "query": p.query, "results": results}
     if not results:
@@ -1637,7 +1822,10 @@ def view() -> dict:
     s = settings()
     providers = []
     for pid in PROVIDERS:
-        state, said = readiness(pid, s)
+        # D8 (2026-10-25): the picture reads the last LIVE test, not just
+        # "the package is installed" - see display_readiness above.
+        state, said = display_readiness(pid, s)
+        rec = last_test(pid)
         providers.append({
             "id": pid, "label": LABEL[pid], "why": WHY[pid],
             "needs_key": pid in NEEDS_KEY,
@@ -1645,6 +1833,15 @@ def view() -> dict:
             "key_where": KEY_WHERE.get(pid, ""),
             "needs_docker": pid == "searxng",
             "ready": not state, "state": state, "said": said,
+            # Additive, so a client that does not know them loses nothing:
+            # `at_risk` says the provider is installed but its last live test
+            # did not work (or, for DuckDuckGo, that it has never been tested),
+            # and `last_test` carries only a result word and a time - never a
+            # search's words.
+            "at_risk": state in ("at_risk", "untested"),
+            "last_test": ({"ok": bool(rec.get("ok")), "state": str(rec.get("state") or ""),
+                           "results": rec.get("results"), "at": int(rec["at"]),
+                           "when": _tested_when(rec["at"])} if rec else None),
         })
     return {
         "available": True,
@@ -1697,9 +1894,29 @@ def handle_settings(body) -> tuple:
         pid = body["provider"]
         if pid not in PROVIDERS:
             return 400, {"ok": False, "error": f"provider must be one of {', '.join(PROVIDERS)}"}
+        old = settings()
+        was = old.get("provider")
+        # D8 (the live campaign of 2026-10-25, architect ruling Q1): TEST the
+        # provider being chosen, and leave the switch where it was if the test
+        # fails. Before this, choosing DuckDuckGo said "Web search now uses
+        # DuckDuckGo." and only the first real question found out that it sent
+        # nothing back. Only tested when the provider could work at all (a
+        # missing key is a fact `readiness` already knows, and choosing it
+        # first and pasting the key after is what the Settings card is for).
+        if pid != was:
+            state, why = readiness(pid, old)
+            if not state:
+                got = live_test(pid, s=old)
+                if not got.get("ok"):
+                    keep = f" Web search still uses {name(was)}." if was in PROVIDERS else ""
+                    said = str(got.get("error") or got.get("said")
+                               or "The test search did not work.") + keep
+                    return 200, {"ok": False, "state": got.get("state") or "failed",
+                                 "provider": was, "said": said,
+                                 "offer": str(got.get("offer") or ""), **view()}
         s = _save(provider=pid)
         said = f"Web search now uses {name(pid)}."
-        state, why = readiness(pid, s)
+        state, why = display_readiness(pid, s)
         if state:
             said = f"{said} {why}"
         return 200, {"ok": True, "said": said, **view()}
@@ -1719,6 +1936,30 @@ def handle_settings(body) -> tuple:
     return request_ask_every_time(on)
 
 
+def live_test(provider: Optional[str], *, s: Optional[dict] = None) -> dict:
+    """One REAL search through `provider` for the fixed TEST_QUERY word, and
+    what happened - and the result is kept (record_test) as the last live test.
+
+    The same fixed word the Test button already sends, so nothing from a
+    conversation is ever used, and it uses one credit on the metered services
+    exactly as the button does. Called by handle_test (the button) and by
+    handle_settings (before a provider is made the one in use, D8).
+    """
+    s = dict(s or settings(), provider=provider)
+    p = plan(TEST_QUERY, s=s)
+    if p.problem:
+        # Nothing was sent, so this is not evidence about the service: it is a
+        # known blocker (no key, a bad address) and readiness already says so.
+        return {"ok": False, "state": p.state, "error": p.problem, "offer": p.offer,
+                "provider": p.provider, "tested": False}
+    out = run(p, approved=True)
+    record_test(provider, bool(out.get("ok")),
+                "works" if out.get("ok") else str(out.get("state") or "failed"),
+                len(out.get("results") or []) if out.get("ok") else None)
+    out["tested"] = True
+    return out
+
+
 def handle_test(body=None) -> tuple:
     """POST /api/search/test - one search for the fixed word TEST_QUERY
     through the chosen provider, and what happened in plain words. The
@@ -1730,7 +1971,7 @@ def handle_test(body=None) -> tuple:
     if p.problem:
         return 200, {"ok": False, "state": p.state, "said": p.problem,
                      "provider": p.provider, "offer": p.offer}
-    out = run(p, approved=True)
+    out = live_test(p.provider)
     if out.get("ok"):
         n = len(out.get("results") or [])
         return 200, {"ok": True, "state": "works", "provider": p.provider,
@@ -2050,6 +2291,9 @@ def _reset_for_tests() -> None:
         _E_LAST.clear()
         _E_LATEST.clear()
     _DDG_LAST[0] = 0.0
+    # The last-live-test record (D8) is state on disk as well as in memory: a
+    # suite that leaves it behind would make the next test read a stale result.
+    forget_last_tests()
 
 
 # --------------------------------------------------------------------------

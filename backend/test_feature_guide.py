@@ -537,13 +537,22 @@ def t_a_feature_with_several_switches_changes_nothing():
 def t_the_tool_is_listed_short_and_read_only():
     check("jarvis_agent.TOOLS has feature_guide", "feature_guide" in AG.TOOLS)
     tool = AG.TOOLS["feature_guide"]
-    check("its arguments are the one feature name", list(tool.parameters["properties"]) == ["feature"]
-          and tool.parameters["required"] == ["feature"], tool.parameters)
+    check("its argument is the one feature name", list(tool.parameters["properties"]) == ["feature"],
+          tool.parameters)
+    # D1a, the live campaign of 2026-10-25: `feature` used to be REQUIRED, so
+    # the one listing call the tool documents (`{"feature": ""}`) was refused by
+    # check_call before the tool ran - four times in one turn on the owner's PC.
+    # The schema now says what the tool does: the field may be left out.
+    check("its one argument is NOT required, because \"\" lists the groups",
+          "feature" not in (tool.parameters.get("required") or []), tool.parameters)
     tokens = AG.estimate_tokens(tool.schema())
     check(f"its text is within the per-tool budget (300 tokens; it is {tokens})",
           tokens <= 300, tokens)
     check("says what not to do: never invent a feature",
           "never invent" in tool.description)
+    check("says when to use it, in the ruling's own words",
+          "Use when" in tool.description and "Do NOT use" in tool.description,
+          tool.description[:120])
     check("is decided under the gate's read-only skill_list action (tier auto, no card)",
           tool.gate_lookup_name({}) == "skill_list")
     action, known = None, False
@@ -560,6 +569,75 @@ def t_the_tool_is_listed_short_and_read_only():
     check("offered when enabled, not offered when not",
           "feature_guide" in AG.offered_tools({"feature_guide"})
           and "feature_guide" not in AG.offered_tools({"calculator"}))
+
+
+def t_the_documented_listing_call_is_never_refused():
+    """D1a: the listing call the tool's own schema documents must reach the tool.
+
+    Before this fix `check_call` answered "'feature' is required" for
+    `{"feature": ""}` - the exact call `_feature_guide_tool_text()` and the
+    property's own description tell the model to make - so the model retried it
+    four times in one turn and then invented the features instead
+    (calls/200145-probe-feature-guide-2.json in the 2026-10-25 campaign).
+    """
+    for raw, why in ((json.dumps({"feature": ""}), "an empty string"),
+                     ("{}", "no arguments at all"),
+                     (json.dumps({"feature": None}), "a null feature")):
+        args, problem = AG.check_call("feature_guide", raw, ["feature_guide"])
+        check(f"{why} is accepted, not refused", problem is None and isinstance(args, dict),
+              problem or args)
+    groups = AG._run_feature_guide(AG.check_call(
+        "feature_guide", json.dumps({"feature": ""}), ["feature_guide"])[0])
+    check("...and it really answers with the groups",
+          groups.get("ok") is True and groups.get("kind") == "groups"
+          and len(groups["groups"]) == len(CAT.GROUPS), groups.get("kind"))
+
+
+def t_a_model_turn_can_list_the_groups_with_no_refusal():
+    """The same, through a real turn: the model asks for the groups and gets
+    them, in one round, with no refusal sentence in the conversation."""
+    tool_call = {"choices": [{"message": {"role": "assistant", "tool_calls": [
+        {"id": "g1", "function": {"name": "feature_guide",
+                                  "arguments": json.dumps({"feature": ""})}}]}}]}
+    final = {"choices": [{"message": {"role": "assistant",
+                                      "content": "The groups are the ones the guide lists."}}]}
+    opener, calls = scripted_stream([tool_call, final])
+    streamed, refusals = [], []
+
+    def gate(action, detail, prompt):
+        class V:
+            allowed, outcome, tier, request_id, reason = True, "auto", "auto", None, ""
+        V.action = action
+        return V
+
+    real_manner = AG._manner_now
+    real_can = AG._model_can_use_tools
+    AG._manner_now = lambda *a, **k: None
+    AG._model_can_use_tools = lambda url, model: True
+    try:
+        with NoRealIO():
+            AG.run_local_turn(
+                [{"role": "user", "content": "what features do you have",
+                  "provenance": "typed"}], "qwen3:8b",
+                ollama_url="http://127.0.0.1:11434", stream_out=streamed.append,
+                gate_check=gate, open_stream=opener,
+                enabled_tools={"feature_guide"},
+                on_step=refusals.append,
+                request={"conversation_id": "fg-list",
+                         "messages": [{"role": "user", "content": "what features do you have",
+                                       "provenance": "typed"}]})
+    finally:
+        AG._manner_now = real_manner
+        AG._model_can_use_tools = real_can
+    tool_msg = calls[1]["messages"][-1] if len(calls) > 1 else {}
+    refused = [s for s in refusals if s.get("kind") == "tool_refused"]
+    check("the blank listing call is not refused in a real turn", not refused, refused)
+    check("the model is fed the guide's own groups",
+          tool_msg.get("role") == "tool"
+          and any(g in tool_msg.get("content", "") for g in CAT.GROUPS),
+          tool_msg.get("content", "")[:120])
+    check("the turn answers with the model's words", bool(answer_text(streamed)),
+          answer_text(streamed))
 
 
 def t_the_tool_returns_the_exact_facts():
@@ -946,6 +1024,8 @@ if __name__ == "__main__":
                t_a_feature_with_several_switches_changes_nothing,
                t_the_tool_is_listed_short_and_read_only,
                t_the_tool_returns_the_exact_facts,
+               t_the_documented_listing_call_is_never_refused,
+               t_a_model_turn_can_list_the_groups_with_no_refusal,
                t_a_model_turn_gets_the_facts_with_no_card,
                t_what_can_i_change_is_still_the_exact_answer,
                t_every_feature_has_a_matrix_row_and_a_reason,

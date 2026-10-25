@@ -42,6 +42,39 @@ standing rule (CLAUDE.md) is that a feature using the second card keeps its own
 switch, off until *that feature* is measured. `enabled` therefore starts
 `false`, and every route says so plainly rather than pretending.
 
+THE SWAP BEFORE A DRAW (added 2026-10-25 - the owner's own words, 2026-09-27:
+"making pictures too (swapped in when asked, since both cannot sit on the card
+at once)"). The everyday chat holds the 12 GB card; a Chroma1-HD draw alone
+needs 8.57 GiB of weights, so it cannot fit beside it. The swap is now done by
+the ROUTE, and only in two honest steps:
+
+  1. The FIRST ``POST /api/pictures`` answers **409** with
+     ``"needs": "free_card"``, a plain sentence saying the everyday chat will
+     pause for a few minutes and come back, and the measured estimate. Nothing
+     is unloaded and nothing is drawn by that request.
+  2. The SAME request sent again with ``"free_card": true`` is the owner's
+     consent: the everyday chat lane is UNLOADED (``keep_alive: 0`` - Ollama's
+     own "unload now", the lane itself untouched), the picture is drawn,
+     ComfyUI is asked to let go of its models (its own ``POST /free``), and the
+     chat lane is WARMED BACK. The answer reports both wall-clock times.
+
+  * It NEVER happens silently, and it never happens without that second
+    request. EITHER app may send it: since the owner's 2026-10-24 request
+    ("i would like to be able to approve this from my phone as well") a paired
+    phone's ``free_card: true`` is consent exactly as the desktop's is - the
+    swap is local and reversible and the chat reloads on its own. What stays
+    PC-only is changing where pictures are kept and which program draws them
+    (:func:`settings_answer`).
+  * ONE PICTURE AT A TIME: a second request that arrives while a draw is in
+    flight is refused in one plain sentence and starts no second draw.
+  * It NEVER leaves the chat unloaded: the warm-back runs in a ``finally``, so
+    a failed or refused draw still puts the everyday model back and says so.
+  * It does not start, stop or reconfigure the drawing program - that stays the
+    owner's own program, as the paragraph below still says.
+  * No approval card: the card belongs to switching image mode ON (the switch a
+    person turns on, PC-only and off by default), not to an in-and-out swap of
+    the same card that is reported before and after in plain seconds.
+
 THE RUNTIME, AND WHAT THE OWNER MUST INSTALL
 
 The drawing program is a SETTING, never guessed at, because two different
@@ -111,6 +144,12 @@ WHAT THIS MODULE DOES NOT DO, SAID PLAINLY
   * It does not send a picture anywhere. There is no email, no upload, no
     chat attachment and no web search here.
   * It does not read the picture, describe it, or hand it to a model.
+  * The ONE thing it does to the owner's own chat, and only when a draw needs
+    the 12 GB card: it unloads the everyday lane and warms it back (the swap
+    above) - only after the owner's confirmed second request, always with the
+    seconds reported, and always in a ``finally`` so a failed draw cannot
+    leave the chat off the card. It never moves or stops a lane, and it never
+    touches the coding lane.
 """
 from __future__ import annotations
 
@@ -119,6 +158,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -146,6 +186,60 @@ LIST_LIMIT = 60
 MAX_PROMPT = 2000
 MAX_SIDE = 2048
 MIN_SIDE = 64
+
+#: How long the route waits for ONE real draw, in seconds (2026-10-25). A real
+#: Chroma1-HD picture through this PC's own measurement script took a median of
+#: 274.4 s (docs/PICTURE-FIRST-DRAW-RUNBOOK-2026-10-11.md), and the old cap -
+#: max(60, self.timeout * 12) with the default 10 s timeout, i.e. 120 s -
+#: refused the very draw the feature exists for. Ten minutes covers the slow
+#: measured case plus a cold model load, and is still a finite wait: a wedged
+#: job ends in a sentence, never in a hung route.
+DRAW_WAIT_S = 600.0
+
+#: How long ComfyUI may take to LET GO of its models after ``POST /free``, and
+#: how little it must still hold before the everyday chat is warmed back. The
+#: first real draw (2026-10-24) showed why waiting is needed: the warm-back
+#: began while the picture models were still being released, and the chat came
+#: back with 1.36 GB spilled into system RAM. (What went wrong there was NOT a
+#: slow ``/free``: that route answers 200 with a body of 0 bytes, and the old
+#: code parsed the empty body as JSON, raised in 0.0 s and so never waited at
+#: all - measured on the live install 2026-10-25.) Waiting here is what makes
+#: the chat come back whole.
+FREE_WAIT_S = 180.0
+FREE_FLOOR_BYTES = 1024 ** 3
+
+#: The price of the swap, said BEFORE it happens (added 2026-10-25). The owner
+#: sees this in the 409 answer and has to send the draw again with
+#: `free_card: true` before one byte of the chat leaves the card.
+FREE_CARD_WORDS = (
+    "Drawing needs the 12 GB card, and your everyday chat is using it. If you "
+    "agree, Jarvis sets the everyday chat aside for a few minutes, draws the "
+    "picture, then loads the chat back the way it was - the conversation and "
+    "its settings are kept. Nothing else changes."
+)
+
+#: Said when the owner picked way B, which is recorded but not wired: moving a
+#: running lane to the other card is not something this module can do honestly.
+OPTION_B_WORDS = (
+    "Way B (the chat moved to the 8 GB card) is recorded but not wired up yet, "
+    "so nothing was drawn. Use way A (the chat steps aside) or way C (small "
+    "pictures on the 8 GB card)."
+)
+
+#: The one sentence a SECOND picture request gets while a draw is still
+#: running (added 2026-10-25, with the phone confirm). It reuses the draw's own
+#: "still being drawn" plainness, and the refused request moves nothing: no
+#: second draw, no second swap, no unload.
+STILL_DRAWING_WORDS = (
+    "Jarvis is still drawing the last picture. Wait for that one to finish, "
+    "then ask again."
+)
+
+#: One picture at a time. ``make_answer`` takes this before anything moves and
+#: lets it go in a ``finally``. A phone may now confirm a swap, so a double-tap
+#: is a real second request: it must answer a sentence, not start a second draw
+#: beside the first on a card that has no room for two.
+_DRAW_IN_FLIGHT = threading.Lock()
 
 #: How many words of the prompt go into the file name.
 SLUG_WORDS = 6
@@ -337,7 +431,14 @@ class LocalRuntime:
         self.timeout = float(timeout)
 
     # -- helpers ---------------------------------------------------------
-    def _json(self, path, payload=None, *, method=None, timeout=None):
+    def _json(self, path, payload=None, *, method=None, timeout=None,
+              allow_empty=False):
+        """One JSON call. ``allow_empty`` is for the one route whose answer is
+        the call itself: ComfyUI's ``POST /free`` answers HTTP 200 with a body
+        of 0 bytes (measured on this PC's live install, 2026-10-25), so parsing
+        that body as JSON raised DrawingFailed and the swap never waited. Only
+        a route that is known to answer this way passes the flag; every other
+        route keeps the old rule that an unreadable answer is an error."""
         url = self.address + path
         data = None
         headers = {"Accept": "application/json"}
@@ -360,6 +461,12 @@ class LocalRuntime:
                     exc.code, ": " + detail if detail else ""))
         except Exception as exc:
             raise NotReady(type(exc).__name__)
+        if not body.strip():
+            if allow_empty:
+                # The route answered with no body on purpose: the call is done.
+                return {}
+            raise DrawingFailed("The drawing program answered with something "
+                                "this PC could not read.")
         try:
             return json.loads(body.decode("utf-8"))
         except Exception:
@@ -615,12 +722,22 @@ class ComfyUI(LocalRuntime):
         if not pid:
             raise DrawingFailed("The drawing program did not start a picture.")
         # ComfyUI answers the history entry only once the job is done. Polling
-        # is what its own examples do; the cap keeps a wedged job from hanging
-        # the route for ever.
-        deadline = time.time() + max(60.0, self.timeout * 12)
+        # is what its own examples do; DRAW_WAIT_S keeps a wedged job from
+        # hanging the route for ever WITHOUT refusing a real draw: a measured
+        # Chroma1-HD picture on this PC took 274.4 s, and the old
+        # max(60, self.timeout * 12) cap (120 s with the default timeout) gave
+        # up before the first real picture on this machine could finish.
+        deadline = time.time() + max(DRAW_WAIT_S, self.timeout * 12)
         entry = None
         while time.time() < deadline:
-            hist = self._json("/history/" + str(pid))
+            try:
+                hist = self._json("/history/" + str(pid))
+            except NotReady:
+                # One poll failing is not the draw failing: ComfyUI is busy
+                # drawing, and a socket that was slow once must not turn a
+                # picture that is still being made into a "not answering".
+                time.sleep(1.0)
+                continue
             entry = (hist or {}).get(str(pid))
             if entry:
                 break
@@ -654,6 +771,54 @@ class ComfyUI(LocalRuntime):
                                "height": knobs["height"],
                                "guidance": knobs["guidance"]},
                      seconds=time.time() - started)
+
+    def free_models(self) -> dict:
+        """Ask ComfyUI to let go of the models it loaded, and WAIT until it does.
+
+        Added 2026-10-25 for the swap: after a draw the everyday chat has to
+        come back to the same card, and it cannot while the picture model still
+        holds 8.5 GiB of it. ``/free`` is ComfyUI's own route for exactly this
+        - the program keeps running, its loaded models are released, and the
+        next draw loads them again.
+
+        Why it WAITS (updated 2026-10-25, measured). ``/free`` answers HTTP 200
+        with a body of 0 bytes: the call only ASKS the program to let go, and
+        the release happens after it returns. The first version parsed that
+        empty body as JSON, raised, and answered "did not let go" in 0.0 s, so
+        the warm-back started while ~10.9 GB was still being released and the
+        chat came back with 1.36 GB spilled (first real draw, 2026-10-24). This
+        version ACCEPTS the empty answer (``allow_empty=True``, never a body
+        parse) and polls ComfyUI's own ``/system_stats`` until it holds no more
+        than ``FREE_FLOOR_BYTES``, so the warm-back that follows starts from a
+        card that is really free.
+        Never raises: a failure becomes a sentence, because the chat's warm-back
+        must still be attempted.
+        """
+        try:
+            self._json("/free", {"unload_models": True, "free_memory": True},
+                       timeout=FREE_WAIT_S, allow_empty=True)
+        except Exception as exc:
+            return {"ok": False,
+                    "words": "The drawing program did not let go of its models "
+                             "({0}).".format(type(exc).__name__)}
+        deadline = time.time() + FREE_WAIT_S
+        held = None
+        while time.time() < deadline:
+            try:
+                stats = self._json("/system_stats", timeout=10.0)
+                devices = stats.get("devices") or []
+                held = sum(int(d.get("torch_vram_total") or 0) for d in devices
+                           if isinstance(d, dict))
+            except Exception:
+                held = None
+            if held is not None and held <= FREE_FLOOR_BYTES:
+                return {"ok": True, "held_bytes": held,
+                        "words": "The drawing program let go of its models."}
+            time.sleep(1.0)
+        return {"ok": False, "held_bytes": held,
+                "words": ("The drawing program still holds {0:.1f} GB after "
+                          "being asked to let go.")
+                         .format((held or 0) / float(1024 ** 3))}
 
 
 class StableDiffusionCpp(LocalRuntime):
@@ -965,11 +1130,238 @@ def status_answer(settings: dict, *, now=None) -> dict:
     }
 
 
-def make_answer(body, settings: dict, *, runtime=None, now=None) -> tuple:
+# --------------------------------------------------------------------------
+#   The swap: the everyday chat steps aside so a picture can use the card
+# --------------------------------------------------------------------------
+# Added 2026-10-25, from the owner's own 2026-09-27 words ("making pictures
+# too (swapped in when asked, since both cannot sit on the card at once)").
+# The two halves of the swap already existed in `jarvis_picture_card.py` -
+# `prepare()` unloads the everyday lane for way A, `restore()` warms it back -
+# but NOTHING on this feature's path called them: only that module's own tests
+# did. These functions are the missing wiring, kept thin on purpose: the card
+# module still owns the lane, the ports, the model names and the unload/warm
+# calls, and this module only decides WHEN they are called and what the owner
+# is told. Every one of them is safe to call on a machine with no picture card
+# module at all (the answer is "nothing to swap", never an ImportError).
+
+def handshake_plan(cards_module=None) -> dict:
+    """What this draw needs the everyday chat to do first, and the price.
+
+    Returns a dict the route can act on and a test can fake:
+
+        available   the card module is here (False on a backend without it)
+        option      "A" / "B" / "C" (the recommended A while none is chosen)
+        needs       True when the everyday chat is holding the card
+        supported   False for way B, which is recorded but not wired
+        why         a short machine reason: "chat_on_the_card",
+                    "recommended_default", "small_card_chat_untouched",
+                    "option_b_unwired", "no_card_module", ...
+        words       the plain sentence the owner sees BEFORE anything moves
+        estimate    {"draw_seconds", "chat_away_seconds", "minutes"}
+        values      the card module's own settings, passed back to it later
+    """
+    empty = {"available": False, "option": None, "needs": False,
+             "supported": False, "why": "no_card_module", "words": "",
+             "estimate": {}, "values": {}}
+    cards = cards_module or _cards()
+    if cards is None:
+        return empty
+    try:
+        values = dict(cards.load_settings())
+        option = values.get("option")
+        every = (cards.lanes(values) or {}).get("everyday") or {}
+        resident = [m for m in (cards.lane_status(every.get("port")) or [])
+                    if m.get("size_vram")]
+        base = {"available": True, "option": option, "needs": False,
+                "supported": True, "why": "", "words": "",
+                "estimate": {}, "values": values}
+        if option == "B":
+            return dict(base, needs=True, supported=False,
+                        why="option_b_unwired", words=OPTION_B_WORDS)
+        if option == "C":
+            return dict(base, why="small_card_chat_untouched")
+        if option is None:
+            # The card module marks A as its recommended answer, and the owner
+            # has not picked one. The confirmation sentence below says exactly
+            # what will happen, so this is never a silent choice.
+            base["option"] = "A"
+            base["why"] = "recommended_default"
+        else:
+            base["why"] = "chat_on_the_card"
+        if not resident:
+            return base
+        measured = values.get("measured")
+        # Measured on this PC: four real 1152x1152 Chroma1-HD draws took
+        # 383.6, 379.0, 381.0 and 382.0 s, so 380.0 is the honest estimate.
+        draw_seconds = 380.0
+        if isinstance(measured, dict):
+            try:
+                draw_seconds = max(1.0, float(measured.get("draw_seconds")))
+            except (TypeError, ValueError):
+                draw_seconds = 380.0
+        minutes = max(1, int(round((draw_seconds + 60.0) / 60.0)))
+        words = (FREE_CARD_WORDS + " This takes about {0} minutes, and the chat "
+                 "comes back on its own afterwards.").format(minutes)
+        return dict(base, needs=True, supported=True,
+                    estimate={"draw_seconds": round(draw_seconds, 1),
+                              "chat_away_seconds": round(draw_seconds + 60.0, 1),
+                              "minutes": minutes},
+                    words=words)
+    except Exception:
+        return dict(empty, why="card_state_unreadable")
+
+
+def step_aside(plan: dict) -> dict:
+    """Unload the everyday chat before a draw. ``{"ok","did","seconds","words"}``.
+
+    The card module's own `prepare()` does the actual work (way A: unload the
+    everyday lane with ``keep_alive: 0``; way C: nothing). A failure is a plain
+    sentence and NOT a reason to draw anyway: the picture would not fit.
+    """
+    plan = plan or {}
+    if not plan.get("needs") or not plan.get("supported"):
+        return {"ok": True, "did": False, "seconds": 0.0, "words": ""}
+    cards = _cards()
+    if cards is None:
+        return {"ok": False, "did": True, "seconds": 0.0,
+                "words": "The everyday chat could not be set aside (the card "
+                         "module is missing)."}
+    values = dict(plan.get("values") or {})
+    values["option"] = plan.get("option") or "A"
+    started = time.time()
+    try:
+        out = cards.prepare(values)
+    except Exception as exc:
+        return {"ok": False, "did": True,
+                "seconds": round(time.time() - started, 1),
+                "words": "The everyday chat could not be set aside ({0}).".format(
+                    type(exc).__name__)}
+    seconds = round(time.time() - started, 1)
+    steps = out.get("steps") or []
+    words = ""
+    for step in steps:
+        words = step.get("words") or words
+    if not words:
+        words = ("The everyday chat stepped aside in {0:.1f} seconds."
+                 .format(seconds))
+    return {"ok": bool(out.get("ok")), "did": True, "seconds": seconds,
+            "words": words, "steps": steps}
+
+
+def step_back(plan: dict) -> dict:
+    """Warm the everyday chat back after a draw - whatever happened to it."""
+    plan = plan or {}
+    if not plan.get("needs") or not plan.get("supported"):
+        return {"ok": True, "did": False, "seconds": 0.0, "words": ""}
+    cards = _cards()
+    if cards is None:
+        return {"ok": False, "did": True, "seconds": 0.0,
+                "words": "The everyday chat could not be loaded again (the "
+                         "card module is missing)."}
+    values = dict(plan.get("values") or {})
+    values["option"] = plan.get("option") or "A"
+    started = time.time()
+    try:
+        out = cards.restore(values)
+    except Exception as exc:
+        return {"ok": False, "did": True,
+                "seconds": round(time.time() - started, 1),
+                "words": "The everyday chat could not be loaded again ({0})."
+                         .format(type(exc).__name__)}
+    seconds = round(time.time() - started, 1)
+    steps = out.get("steps") or []
+    words = ""
+    for step in steps:
+        words = step.get("words") or words
+    if not words:
+        words = ("The everyday chat was asked to come back after {0:.1f} "
+                 "seconds.".format(seconds))
+    return {"ok": bool(out.get("ok")), "did": True, "seconds": seconds,
+            "words": words, "steps": steps}
+
+
+def record_measurement(plan: dict, piece) -> None:
+    """Write this PC's own real draw into the card module's record.
+
+    The card module's status has said "Not measured yet" since the three ways
+    were built, because nothing had ever recorded a real run. The first
+    confirmed swap IS that measurement, so it is written down here (best
+    effort: a failed write never fails a picture that was really drawn).
+    """
+    plan = plan or {}
+    if not plan.get("needs") or not plan.get("supported"):
+        return
+    cards = _cards()
+    if cards is None:
+        return
+    try:
+        values = dict(plan.get("values") or cards.load_settings())
+        values["option"] = plan.get("option") or "A"
+        values["measured"] = {
+            "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "draw_seconds": round(float(getattr(piece, "seconds", 0.0) or 0.0), 1),
+            "option": values["option"],
+            "model": str(getattr(piece, "model", "") or ""),
+        }
+        cards.save_settings(values)
+    except Exception:
+        pass
+
+
+def _swap_words(plan: dict, aside: dict, back: dict) -> str:
+    """One plain sentence for the answer: what paused, for how long, and back."""
+    if not (plan or {}).get("needs"):
+        return ""
+    if not back.get("did"):
+        return ""
+    if not back.get("ok"):
+        return ("The picture was drawn, but your everyday chat has not come "
+                "back yet: " + (back.get("words") or
+                                "ask it a question and it will reload."))
+    return ("Your everyday chat stepped aside for {0:.1f} seconds and is back "
+            "on the card after another {1:.1f} seconds.".format(
+                float(aside.get("seconds") or 0.0),
+                float(back.get("seconds") or 0.0)))
+
+
+def _card_block(plan: dict, aside: dict, back: dict, freed=None) -> dict:
+    """The machine-readable half of the swap, for an app that wants the times."""
+    if not (plan or {}).get("needs"):
+        return {}
+    return {
+        "option": plan.get("option") or "A",
+        "did": True,
+        "chat_away_seconds": round(float(aside.get("seconds") or 0.0), 1),
+        "chat_back_seconds": round(float(back.get("seconds") or 0.0), 1),
+        "chat_back": bool(back.get("ok")),
+        "models_freed": (None if freed is None else bool(freed.get("ok"))),
+        "words": _swap_words(plan, aside, back),
+    }
+
+
+def make_answer(body, settings: dict, *, runtime=None, now=None,
+                plan=None) -> tuple:
     """``POST /api/pictures`` - draw one picture and keep it.
 
     Returns ``(status, answer)``. Every "no" is a plain sentence in `error`
     with `ok: false`, never a traceback and never an empty 200.
+
+    TWO REQUESTS WHEN THE CARD HAS TO BE FREED (added 2026-10-25). The first
+    answers **409** with ``needs: "free_card"`` and the price in plain words;
+    the same request sent again with ``"free_card": true`` is the owner's
+    consent, and this function then sets the everyday chat aside, draws, frees
+    the picture model and warms the chat back - with the seconds reported.
+
+    WHICH APP MAY CONSENT (owner decision 2026-10-24): either one. The owner
+    asked in their own words to approve it from their phone too, and the swap is
+    local and reversible - the chat reloads on its own, nothing is deleted - so
+    a paired phone's ``free_card: true`` is the same deliberate request as the
+    desktop's. What stays PC-only is changing the folder or the drawing program
+    (:func:`settings_answer`), not this in-and-out swap.
+
+    ONE PICTURE AT A TIME. A second request that arrives while a draw is in
+    flight answers **409** with ``needs: "drawing"`` and one plain sentence; it
+    starts no second draw and moves nothing (``_DRAW_IN_FLIGHT``).
     """
     settings = dict(settings or {})
     body = body if isinstance(body, dict) else {}
@@ -1033,19 +1425,88 @@ def make_answer(body, settings: dict, *, runtime=None, now=None) -> tuple:
                      "runtime": settings.get("runtime"),
                      "error": not_running(settings.get("runtime"))}
 
+    if not _DRAW_IN_FLIGHT.acquire(blocking=False):
+        return 409, {"ok": False, "available": True, "needs": "drawing",
+                     "error": STILL_DRAWING_WORDS}
+    try:
+        return _draw_now(body, settings, adapter, prompt, draw, plan=plan,
+                         now=now)
+    finally:
+        _DRAW_IN_FLIGHT.release()
+
+
+def _draw_now(body, settings, adapter, prompt, draw, *, plan=None, now=None):
+    """The part that really moves the card: swap, draw, release, warm-back.
+
+    Split out of :func:`make_answer` so the one-draw-at-a-time lock has exactly
+    one span to cover: :func:`make_answer` takes it, calls this, and lets it go
+    in a ``finally`` whatever this returns or raises.
+
+    The swap is planned only after the drawing program is known to be
+    answering: pausing the owner's chat and THEN failing because the program is
+    not running would cost them the pause for nothing.
+    """
+    plan = handshake_plan() if plan is None else plan
+    needs_swap = bool(plan.get("needs"))
+    if needs_swap and not plan.get("supported"):
+        return 503, {"ok": False, "available": True,
+                     "needs": "option_unsupported",
+                     "option": plan.get("option"),
+                     "error": plan.get("words") or OPTION_B_WORDS}
+    if needs_swap and not body.get("free_card"):
+        return 409, {"ok": False, "available": True, "needs": "free_card",
+                     "option": plan.get("option"),
+                     "estimate": plan.get("estimate") or {},
+                     "confirm": {"free_card": True},
+                     "error": plan.get("words") or FREE_CARD_WORDS}
+
+    aside = (step_aside(plan) if needs_swap
+             else {"ok": True, "did": False, "seconds": 0.0, "words": ""})
+    if needs_swap and not aside.get("ok"):
+        return 503, {"ok": False, "available": True, "needs": "free_card",
+                     "error": aside.get("words") or
+                              "The everyday chat could not be set aside, so "
+                              "nothing was drawn."}
+
+    outcome = None
+    piece = None
+    freed = None
+    back = {"ok": True, "did": False, "seconds": 0.0, "words": ""}
     try:
         piece = adapter.draw(prompt, seed=body.get("seed"), settings=draw)
     except NotReady:
-        return 503, {"ok": False, "available": False,
-                     "runtime": settings.get("runtime"),
-                     "error": not_running(settings.get("runtime"))}
+        outcome = (503, {"ok": False, "available": False,
+                         "runtime": settings.get("runtime"),
+                         "error": not_running(settings.get("runtime"))})
     except DrawingFailed as exc:
-        return 502, {"ok": False, "error": str(exc) or
-                     "The picture could not be drawn. Try again."}
+        outcome = (502, {"ok": False, "error": str(exc) or
+                         "The picture could not be drawn. Try again."})
     except Exception as exc:
-        return 502, {"ok": False,
-                     "error": "The picture could not be drawn ({0}).".format(
-                         type(exc).__name__)}
+        outcome = (502, {"ok": False,
+                         "error": "The picture could not be drawn ({0}).".format(
+                             type(exc).__name__)})
+    finally:
+        # NEVER LEAVE THE CHAT UNLOADED: this runs on success, on a refusal
+        # and on a crash, exactly as the brief of 2026-10-25 requires.
+        if needs_swap:
+            try:
+                free_models = getattr(adapter, "free_models", None)
+                freed = free_models() if callable(free_models) else None
+            except Exception:
+                freed = {"ok": False}
+            back = step_back(plan)
+            if piece is not None:
+                record_measurement(plan, piece)
+
+    if outcome is not None:
+        status, answer = outcome
+        if needs_swap:
+            answer = dict(answer)
+            answer["card"] = _card_block(plan, aside, back, freed)
+            swap = _swap_words(plan, aside, back)
+            if swap:
+                answer["error"] = ((answer.get("error") or "") + " " + swap).strip()
+        return status, answer
 
     folder = settings.get("folder") or str(default_folder())
     try:
@@ -1055,7 +1516,12 @@ def make_answer(body, settings: dict, *, runtime=None, now=None) -> tuple:
         return 500, {"ok": False,
                      "error": "The picture was drawn but could not be saved in "
                               "{0} ({1}).".format(folder, type(exc).__name__)}
-    return 200, {
+    words = WORDS["made"].format(seconds=record["seconds"],
+                                 name=record["picture"])
+    swap = _swap_words(plan, aside, back)
+    if swap:
+        words = words + " " + swap
+    answer = {
         "ok": True,
         "available": True,
         "name": record["picture"],
@@ -1070,9 +1536,11 @@ def make_answer(body, settings: dict, *, runtime=None, now=None) -> tuple:
         "seconds": record["seconds"],
         "bytes": record["bytes"],
         "made_at_words": record["made_at_words"],
-        "words": WORDS["made"].format(seconds=record["seconds"],
-                                      name=record["picture"]),
+        "words": words,
     }
+    if needs_swap:
+        answer["card"] = _card_block(plan, aside, back, freed)
+    return 200, answer
 
 
 def file_answer(pid: str, settings: dict) -> tuple:
@@ -1200,6 +1668,12 @@ def handle_post(route: str, body, *, settings=None, runtime=None, now=None,
                                        "which program draws them, can only be "
                                        "done on this PC.")}
             return settings_answer(body, settings=settings)
+        # The make route is open to either app now (owner decision 2026-10-24):
+        # the swap is local and reversible and the chat reloads on its own, so
+        # the phone's deliberate `free_card: true` is consent too. One draw at a
+        # time is `make_answer`'s own lock; only the settings route above stays
+        # PC-only, because where pictures are kept and what draws them is this
+        # PC's own configuration.
         return make_answer(body, st, runtime=runtime, now=now)
     except Exception as exc:
         return 503, {"ok": False, "available": False,

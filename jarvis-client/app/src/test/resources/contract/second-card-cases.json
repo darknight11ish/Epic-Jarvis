@@ -116,7 +116,7 @@
           "total_mb": 12288,
           "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
         },
-        "why": "the NVIDIA GeForce RTX 2060 (12 GB) can take the second-card features; everyday chat stays on the NVIDIA GeForce RTX 2080 SUPER"
+        "why": "the Spare card (RTX 2060 12 GB) can take the second-card features; everyday chat stays on the Chat card (RTX 2080 SUPER 8 GB)"
       },
       "enabled": false,
       "features": [
@@ -422,7 +422,7 @@
           "total_mb": 12288,
           "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
         },
-        "why": "the NVIDIA GeForce RTX 2060 (12 GB) can take the second-card features; everyday chat stays on the NVIDIA GeForce RTX 2080 SUPER"
+        "why": "the Spare card (RTX 2060 12 GB) can take the second-card features; everyday chat stays on the Chat card (RTX 2080 SUPER 8 GB)"
       },
       "enabled": true,
       "features": [
@@ -1003,7 +1003,7 @@
           "total_mb": 12288,
           "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
         },
-        "why": "the NVIDIA GeForce RTX 2060 (12 GB) can take the second-card features; everyday chat stays on the NVIDIA GeForce RTX 2080 SUPER"
+        "why": "the Spare card (RTX 2060 12 GB) can take the second-card features; everyday chat stays on the Chat card (RTX 2080 SUPER 8 GB)"
       },
       "enabled": false,
       "features": [
@@ -2146,7 +2146,7 @@
           "total_mb": 12288,
           "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
         },
-        "why": "the NVIDIA GeForce RTX 2060 (12 GB) can take the second-card features; everyday chat stays on the NVIDIA GeForce RTX 2080 SUPER"
+        "why": "the Spare card (RTX 2060 12 GB) can take the second-card features; everyday chat stays on the Chat card (RTX 2080 SUPER 8 GB)"
       },
       "enabled": true,
       "features": [
@@ -2162,7 +2162,7 @@
           "name": "Longer conversations",
           "needs": [],
           "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
-          "why": "Working: qwen3:8b on the NVIDIA GeForce RTX 2060, with room for 32,768 tokens of conversation."
+          "why": "Working: qwen3:8b on the Spare card (RTX 2060 12 GB), with room for 32,768 tokens of conversation."
         },
         {
           "active": false,

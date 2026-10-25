@@ -60,6 +60,7 @@ import socket
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import urllib.request
@@ -415,12 +416,12 @@ def t_cancel_that_takes_back_only_the_last_thing_set_here():
     r = say(w, "cancel that")
     check("'cancel that' right after: the timer is gone, and it says which",
           r.reply == "Cancelled: the 10 minute timer." and w.s.timers() == [], r and r.reply)
-    check("... once: a second 'cancel that' is not ours (the model answers)",
-          say(w, "cancel that") is None)
+    check("... once: a second 'cancel that' says so plainly, and is not handed to the model",
+          say(w, "cancel that").reply == Q.UNDO_NOTHING_SAID)
     r = say(w, "remind me at 6pm to call Mum")
     r = say(w, "cancel that", conversation="conversation-2")
-    check("another conversation cannot take it back", r is None
-          and len([j for j in w.s.listed() if j["kind"] == "reminder"]) == 1)
+    check("another conversation cannot take it back", r.reply == Q.UNDO_NOTHING_SAID
+          and len([j for j in w.s.listed() if j["kind"] == "reminder"]) == 1, r and r.reply)
     w.clock.t = now + S.UNDO_WINDOW + 1
     r = say(w, "cancel that")
     check("more than two minutes later: said, nothing cancelled",
@@ -439,12 +440,19 @@ def t_cancel_that_takes_back_only_the_last_thing_set_here():
           and not any(j["kind"] == "alarm" for j in w.s.listed()), r.reply)
     say(w, "add stamps to my to-do list")
     say(w, "what's on my to-do list")
-    check("anything else said in between: 'cancel that' no longer means the item",
-          say(w, "cancel that") is None and len(w.s.todos()) == 1)
+    # D6 (the live campaign of 2026-10-25): a READ-ONLY answer in between does
+    # not take the record away. It used to: "Remind me next time ..." followed
+    # by "what will you remind me of next time?" left "cancel that" with
+    # nothing, so it cost 69.6 s on the model and the reminder stayed.
+    r = say(w, "cancel that")
+    check("a read-only answer in between: 'cancel that' still means the item just set",
+          r is not None and r.reply == "Removed the item just added to your to-do list."
+          and w.s.todos() == [], r and r.reply)
+    r = say(w, "add stamps to my to-do list")
     r = say(w, "add stamps to my to-do list")
     check("an item that was already there is not 'set' now: nothing to take back",
-          r.reply == "That is already on your to-do list." and say(w, "undo") is None
-          and len(w.s.todos()) == 1)
+          r.reply == "That is already on your to-do list."
+          and say(w, "undo").reply == Q.UNDO_NOTHING_SAID and len(w.s.todos()) == 1)
 
 
 def t_cancel_that_through_the_chat_request():
@@ -458,13 +466,16 @@ def t_cancel_that_through_the_chat_request():
         return Q.answer_turn(body, sched=w.s, now=w.clock.t)
     turn("set a timer for 5 minutes")
     check("the model answering in between: 'cancel that' is about ITS answer, not the timer",
-          turn("what's the capital of Peru") is None and turn("cancel that") is None
+          turn("what's the capital of Peru") is None
+          and turn("cancel that").reply == Q.UNDO_NOTHING_SAID
           and len(w.s.timers()) == 1)
     turn("set a timer for 6 minutes")
-    check("a pasted message in between counts the same", turn("x", prov="pasted") is None
-          and turn("cancel that") is None and len(w.s.timers()) == 2)
+    check("a pasted message in between counts the same",
+          turn("x", prov="pasted") is None
+          and turn("cancel that").reply == Q.UNDO_NOTHING_SAID and len(w.s.timers()) == 2)
     turn("set a timer for 7 minutes", cid="bad id!")
-    check("no valid conversation id: nothing to take back", turn("cancel that", cid="bad id!") is None
+    check("no valid conversation id: nothing to take back",
+          turn("cancel that", cid="bad id!").reply == Q.UNDO_NOTHING_SAID
           and len(w.s.timers()) == 3)
     turn("set a timer for 8 minutes")
     r = turn("never mind")
@@ -898,6 +909,261 @@ def t_the_words_match_both_apps():
           / "net" / "Briefing.kt").read_text(encoding="utf-8")
     check("'What did I miss?' in both apps and on the PC",
           B.MISSED_LABEL in bj and B.MISSED_LABEL in bk)
+
+
+# --------------------------------------------------------------------------
+#   The live campaign of 2026-10-25: the fast lane's own defects (D3, D5,
+#   D11a, D11b, D11c, and the guide that answers without the model, D1b)
+# --------------------------------------------------------------------------
+#
+# Every check here failed on the code before this change: each one is a row
+# of ../.dsh-scratch/LIVE-TOOLS-2026-10-25/CAMPAIGN-REPORT.md measured on the
+# live Jarvis on 2026-10-25, and the architect's ruling Q1/Q6/Q9.
+
+def t_the_clock_and_the_date_come_from_this_pc():
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 20, 16)          # the PC's clock in the campaign
+    w = World(now, name="clock")
+    for said in ("what time is it?", "What's the time?", "what time is it now",
+                 "tell me the time"):
+        check(f"{said!r} is the PC's clock, not the model's",
+              Q.match(said) is not None and Q.match(said).name == "time_now", Q.match(said))
+    started = time.monotonic()
+    r = say(w, "what time is it?")
+    elapsed = time.monotonic() - started
+    check("the answer is the PC's own time (20:16), in one line",
+          r is not None and r.reply == "It is 20:16 on Friday 25 September.", r and r.reply)
+    check(f"...answered in well under a second ({elapsed:.4f} s)", elapsed < 0.5)
+    check("...on the 'no AI model' lane, so no turn can reach a model",
+          Q.route_fields(r).get("lane") == "no AI model"
+          and Q.route_fields(r).get("quick") == "time_now", Q.route_fields(r))
+    check("the date, from the same clock",
+          say(w, "what's the date?").reply == "It is Friday 25 September 2026.")
+    check("the day of the week alone",
+          say(w, "what day is it today").reply == "It is Friday 25 September 2026.")
+    check("both at once", say(w, "what is the time and date").reply
+          == "It is 20:16 on Friday 25 September 2026.")
+    for said in ("what time is the meeting", "what time is it in new york",
+                 "how long does it take to boil an egg"):
+        check(f"{said!r} is still the model's (not a clock question)",
+              Q.match(said) is None, Q.match(said))
+    with NoSockets() as ns:
+        say(w, "what time is it?")
+    check("...and it opens no socket at all", ns.tried == [], ns.tried)
+
+
+def t_turn_on_a_setting_in_the_owners_own_words():
+    """D5: a real setting, named the way the owner said it, raises its OWN card.
+
+    The campaign's two failures: "Turn on learning in the background" (the
+    owner's own level test) and "Change your settings: turn on remembering
+    sensitive topics automatically." (the Lead's card test) both went to the
+    model, which has no settings tool, and answered that the setting did not
+    exist. Both are the registry's own setter now - the SAME function, card,
+    tier and PC-only check a tap in Settings uses.
+    """
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 21, 5)
+    w = World(now, name="settingswords")
+    import jarvis_settings_registry as R
+    import jarvis_auto_learn as AL
+    calls = []
+    real_post = AL.handle_post
+
+    def fake_post(path, body, *a, **k):
+        calls.append((path, dict(body or {})))
+        if path.endswith("/sensitive"):
+            return 200, {"ok": True, "waiting": True,
+                         "message": "Waiting for your approval: one card is on your screen."}
+        return 200, {"ok": True, "message": "Background learning is on."}
+
+    AL.handle_post = fake_post
+    try:
+        for said, key, on in (
+                ("Turn on learning in the background", "background_learning", True),
+                ("turn off learning in the background", "background_learning", False),
+                ("Change your settings: turn on remembering sensitive topics automatically.",
+                 "learn_sensitive_topics", True),
+                ("turn on remembering sensitive topics automatically",
+                 "learn_sensitive_topics", True)):
+            got = Q.match(said)
+            check(f"{said!r} is {key} = {on}, from code",
+                  got is not None and got.name == "settings_bool"
+                  and got.f == {"key": key, "on": on}, got)
+        calls.clear()
+        r = say(w, "Change your settings: turn on remembering sensitive topics automatically.")
+        check("...and the ask-tier card comes from the registry's own setter",
+              r is not None and r.intent == "settings_bool"
+              and calls and calls[0][0].endswith("/api/memory/learning/sensitive")
+              and calls[0][1] == {"enabled": True}, (r and r.reply, calls))
+        check("...the answer is the setter's own words, not a denial",
+              r.reply == "Waiting for your approval: one card is on your screen.", r.reply)
+        calls.clear()
+        r = say(w, "Turn on learning in the background")
+        check("...and background learning goes through its own route",
+              r is not None and calls and calls[0][0].endswith("/api/memory/learning/auto")
+              and calls[0][1] == {"enabled": True}, calls)
+    finally:
+        AL.handle_post = real_post
+    check("the words name the switches the registry already has",
+          [b.key for b in R.BOOL_SETTINGS if b.key in ("background_learning",
+                                                       "learn_sensitive_topics")]
+          == ["background_learning", "learn_sensitive_topics"])
+    for said in ("turn off the kitchen light", "turn on graphics card",
+                 "turn off the turbo setting"):
+        check(f"{said!r} changes nothing (no card, no guess)", Q.match(said) is None
+              or Q.match(said).name in ("settings_unknown", "feature_switch_refused"),
+              Q.match(said))
+
+
+def t_the_briefing_does_not_say_the_same_line_twice():
+    """D11a: R3 printed the Pulse's two lines, then the same two as sections."""
+    text = "\n".join([
+        "Your briefing for Saturday 24 October, made at 20:14.",
+        "Weather and news: not available.",
+        "Today: Nothing else set for today.",
+        "To-do list: Nothing on your to-do list.",
+        "Pulse: Nothing else set for today.",
+        "Pulse: Nothing on your to-do list.",
+        "Not included: your calendar is not set up for Jarvis on this PC.",
+    ])
+    got = Q._briefing_without_repeats(text)
+    check("a Pulse line that repeats a section is dropped",
+          "Pulse: Nothing else set for today." not in got
+          and "Pulse: Nothing on your to-do list." not in got, got)
+    check("...and nothing else changes: every other line is kept, in order",
+          got.split("\n") == [ln for ln in text.split("\n") if not ln.startswith("Pulse: ")],
+          got)
+    extra = text + "\nPulse: 2 approval cards are waiting for your yes or no."
+    check("a Pulse line that adds something stays",
+          "Pulse: 2 approval cards are waiting" in Q._briefing_without_repeats(extra))
+    check("idempotent: a second pass changes nothing",
+          Q._briefing_without_repeats(got) == got)
+
+
+def t_pc_help_is_fast_and_still_gives_real_numbers():
+    """D11b: R9 was right and took 10.44 s - the whole cost is one PowerShell
+    call that samples every process twice, a second apart.
+
+    What this proves: a cold answer waits only PC_HELP_WAIT for that call and
+    answers with the numbers the cheap readings already have, saying plainly
+    that the program list is still being read; and once it has arrived, the
+    next question has the whole answer, with the processor figure.
+    """
+    import jarvis_pc_help as PCH
+    real_readers = PCH.real_readers
+    wait_before = Q.PC_HELP_WAIT
+    release = threading.Event()
+
+    def slow_programs():
+        release.wait(2.0)
+        return {"cores": 8, "cpu_percent": 36.0, "procs": [], "gpu": []}
+
+    def readers():
+        return PCH.Readers(programs=slow_programs,
+                           memory=lambda: {"total_bytes": 32 * 1024 ** 3,
+                                           "available_bytes": 7 * 1024 ** 3},
+                           disks=lambda: [], uptime=lambda: 3600.0,
+                           cards=lambda: [], models=lambda: [])
+    PCH.real_readers = readers
+    Q.PC_HELP_WAIT = 0.15
+    Q._pc_help_forget()
+    try:
+        started = time.monotonic()
+        r = Q._run_pc_help(Q.Intent("pc_help", {"topic": "slow"}))
+        elapsed = time.monotonic() - started
+        check(f"a cold answer comes back in well under a second ({elapsed:.3f} s)",
+              elapsed < 1.0)
+        check("...with the REAL memory numbers it could read at once",
+              "25.0 GB of 32.0 GB" in r.reply or "78%" in r.reply, r.reply)
+        check("...and says plainly that the program list is still being read",
+              Q.PC_HELP_STILL in r.reply, r.reply)
+        check("...naming no program, so the answer is not private",
+              r.private is False and r.read == [], (r.private, r.read))
+        release.set()
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            with Q._PC_HELP_PROGRAMS_LOCK:
+                if Q._PC_HELP_PROGRAMS["value"] is not None:
+                    break
+            time.sleep(0.01)
+        Q._pc_help_forget()
+        started = time.monotonic()
+        r = Q._run_pc_help(Q.Intent("pc_help", {"topic": "slow"}))
+        elapsed = time.monotonic() - started
+        check("once the program list has arrived, the next answer has it",
+              "Your processor is 36% busy" in r.reply, r.reply)
+        check(f"...and that one is fast too ({elapsed:.3f} s)", elapsed < 1.0)
+        # Both readings were taken, and the first was never a guess.
+        check("no made-up number anywhere", "0%" not in r.reply, r.reply)
+    finally:
+        PCH.real_readers = real_readers
+        Q.PC_HELP_WAIT = wait_before
+        Q._pc_help_forget()
+
+
+def t_how_are_you_doing_is_answered_here():
+    """D11c: R14 spent 99.1 s and two web searches to say it did not know."""
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 20, 20)
+    w = World(now, name="wellbeing")
+    for said in ("how are you?", "how are you doing?", "How's it going?",
+                 "how do you feel today"):
+        check(f"{said!r} is answered from a fixed honest line",
+              Q.match(said) is not None and Q.match(said).name == "wellbeing_now",
+              Q.match(said))
+    r = say(w, "how are you doing?")
+    check("...which says plainly that Jarvis is a program",
+          r is not None and r.reply == Q.WELLBEING_SAID, r and r.reply)
+    for said in ("how am I doing?", "how am i doing today", "how is my day going"):
+        check(f"{said!r} with no focus session is answered here, not by the model",
+              Q.match(said) is not None and Q.match(said).name == "wellbeing_me",
+              Q.match(said))
+    r = say(w, "how am I doing?")
+    check("...saying there is no session to report on, and how to start one",
+          r is not None and r.reply == Q.NO_FOCUS_SAID
+          and "focus for 30 minutes" in r.reply, r and r.reply)
+    real_on = Q._focus_on
+    Q._focus_on = lambda: True
+    try:
+        check("while a focus session runs, 'how am I doing?' stays the session's status",
+              Q.match("how am I doing?").name == "focus_status",
+              Q.match("how am I doing?"))
+    finally:
+        Q._focus_on = real_on
+    for said in ("how are you doing on the project", "how are you doing the washing up"):
+        check(f"{said!r} is still the model's", Q.match(said) is None, Q.match(said))
+    with NoSockets() as ns:
+        say(w, "how are you doing?")
+    check("...and neither question opens a socket", ns.tried == [], ns.tried)
+
+
+def t_the_feature_guide_answers_without_the_model():
+    """D1b: A7c's words missed every matcher and the model invented four names."""
+    for said, fid in (
+            ("explain the prompt coach feature from your feature guide", "prompt-coach"),
+            ("use the feature guide to explain the prompt coach", "prompt-coach"),
+            ("check the feature guide for the prompt coach", "prompt-coach"),
+            ("tell me about the prompt coach in your feature guide", "prompt-coach"),
+            ("explain the prompt coach", "prompt-coach")):
+        got = Q.match(said)
+        check(f"{said!r} is answered from the guide, with no model",
+              got is not None and got.name == "feature_explain"
+              and got.f.get("id") == fid, got)
+    got = Q.match("use the feature guide to explain banana mode")
+    check("a name the guide does not have is said so, never invented",
+          got is not None and got.name == "feature_unknown", got)
+    check("...in words that say the list does not have it",
+          got is not None and "do not have a feature called" in Q.run(got, None, 0.0).reply)
+    # Naming the guide IS the context, so an ordinary question about the world
+    # still goes to the model - only the guide-named sentence gets the guide's
+    # own "not in the list" answer.
+    check("'explain the greenhouse effect' is still the model's (no guide named)",
+          Q.match("explain the greenhouse effect") is None,
+          Q.match("explain the greenhouse effect"))
+    got = Q.match("use the feature guide to explain the greenhouse effect")
+    check("...but the SAME words naming the guide get the guide's own answer",
+          got is not None and got.name == "feature_unknown", got)
 
 
 def main():
