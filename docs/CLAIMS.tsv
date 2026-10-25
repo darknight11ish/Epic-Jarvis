@@ -123,7 +123,7 @@ C14	the goals page no longer says nothing here is built	absent:docs/GOALS-PROGRE
 C15	the goals backend is in this tree	file:backend/jarvis_goals.py	built	docs/GOALS-PROGRESS-DESIGN.md:3
 C16	the appearance proposal no longer says the phone does not implement the route	absent:docs/APPEARANCE-SYNC-PROPOSAL.md:implements this yet	built	docs/APPEARANCE-SYNC-PROPOSAL.md:3
 C17	the phone reads and writes /api/appearance	grep:jarvis-client/app/src/main/java/com/jarvis/client/data/AppearanceStore.kt:/api/appearance	built	docs/APPEARANCE-SYNC-PROPOSAL.md:5
-C18	ARCHITECTURE.md no longer says the apps' side of the wellbeing event is unbuilt	absent:docs/ARCHITECTURE.md:not built yet - JARVIS-API Ã‚Â§38.1	built	docs/ARCHITECTURE.md:1715
+C18	ARCHITECTURE.md no longer says the apps' side of the wellbeing event is unbuilt	absent:docs/ARCHITECTURE.md:not built yet - JARVIS-API §38.1	built	docs/ARCHITECTURE.md:1715
 C19	the desktop holds the serious pose from the wellbeing event	grep:jarvis-desktop/src/jarvis-link.js:noteWellbeing	built	docs/ARCHITECTURE.md:1715
 C20	the phone README no longer offers the home network as a way in	absent:jarvis-client/README.md:or the home network	built	jarvis-client/README.md:16
 C21	the phone README no longer lists the home network among the addresses it accepts	absent:jarvis-client/README.md:home network, Tailscale	built	jarvis-client/README.md:75
