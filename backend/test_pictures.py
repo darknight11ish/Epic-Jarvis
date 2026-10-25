@@ -72,6 +72,50 @@ require_shipped("jarvis_pictures.py")
 
 import jarvis_pictures as P  # noqa: E402
 
+# --------------------------------------------------------------------------
+#   The 2026-10-25 swap, kept hermetic in this suite
+# --------------------------------------------------------------------------
+# `handshake_plan()` asks `jarvis_picture_card` what THIS PC's everyday lane is
+# doing. On the owner's PC that lane really is running, so an unpatched suite
+# would answer 409 ("free the card?") where a test expects a draw - and a
+# careless test could even unload the owner's chat. The suite therefore starts
+# from "no swap needed"; each swap test installs its own plan and the unit test
+# below calls the REAL function with a stand-in card module.
+_REAL_HANDSHAKE_PLAN = P.handshake_plan
+NO_SWAP = {"available": True, "option": "A", "needs": False, "supported": True,
+           "why": "suite_hermetic", "words": "", "estimate": {}, "values": {}}
+
+
+def use_plan(plan):
+    """Point the module at a fake handshake plan for the next route calls."""
+    P.handshake_plan = lambda: dict(plan)
+    return plan
+
+
+P.handshake_plan = lambda: dict(NO_SWAP)
+
+
+class FakeCards:
+    """The stand-in for `jarvis_picture_card` used by the REAL plan function."""
+
+    def __init__(self, option=None, *, resident=True, measured=None):
+        self.option = option
+        self.resident = resident
+        self.measured = measured
+
+    def load_settings(self):
+        return {"option": self.option, "lanes": None, "measured": self.measured}
+
+    def lanes(self, values):
+        return {"everyday": {"port": 11436, "model": "qwen3.5:9b", "card": "big"},
+                "coding": {"port": 11435, "model": "qwen3:8b", "card": "small"}}
+
+    def lane_status(self, port, timeout=5.0):
+        if not self.resident or int(port) != 11436:
+            return []
+        return [{"name": "qwen3.5:9b", "size": 9855450480,
+                 "size_vram": 9855450480, "spill": 0, "expires_at": "never"}]
+
 FAILED, PASSED = [], []
 
 
@@ -99,9 +143,15 @@ class StubRuntime:
         self.seed = seed
         self.model = model
         self.asked = []
+        self.freed = False
 
     def available(self):
         return self.ready
+
+    def free_models(self):
+        """ComfyUI's own /free, stood in for: the swap must call it (2026-10-25)."""
+        self.freed = True
+        return {"ok": True, "words": "The drawing program let go of its models."}
 
     def draw(self, prompt, *, seed=None, settings=None):
         self.asked.append({"prompt": prompt, "seed": seed,
@@ -291,6 +341,690 @@ def t_a_drawing_program_that_fails_is_a_sentence_not_a_traceback():
     check("... and a very long prompt is refused in words",
           P.handle_post("/api/pictures", {"prompt": "x" * (P.MAX_PROMPT + 1)},
                         settings=settings_for(tmpdir()))[0] == 400)
+
+
+# ---------------------------------------------------------------------------
+#   2b. The swap: the everyday chat steps aside, and always comes back
+#       (added 2026-10-25 - the owner's 2026-09-27 words: "making pictures
+#       too (swapped in when asked, since both cannot sit on the card at once)")
+# ---------------------------------------------------------------------------
+
+SWAP_PLAN = {
+    "available": True, "option": "A", "needs": True, "supported": True,
+    "why": "chat_on_the_card",
+    "words": ("Drawing needs the 12 GB card, and your everyday chat is using "
+              "it. If you agree, Jarvis sets the everyday chat aside for a few "
+              "minutes, draws the picture, then loads the chat back the way it "
+              "was. This takes about 7 minutes, and the chat comes back on its "
+              "own afterwards."),
+    "estimate": {"draw_seconds": 380.0, "chat_away_seconds": 440.0,
+                 "minutes": 7},
+    "values": {"option": "A"},
+}
+
+
+def reset_plan():
+    P.handshake_plan = lambda: dict(NO_SWAP)
+
+
+def t_the_plan_finds_the_three_ways_and_the_price():
+    """The REAL plan function, with the card module stood in for."""
+    plan = _REAL_HANDSHAKE_PLAN(cards_module=FakeCards("A"))
+    check("way A with the chat on the card needs the swap",
+          plan["needs"] is True and plan["supported"] is True, str(plan)[:200])
+    check("... and names the card and the chat in plain words",
+          "12 GB card" in plan["words"] and "everyday chat" in plan["words"],
+          plan["words"])
+    check("... and says it comes back on its own",
+          "comes back on its own" in plan["words"], plan["words"])
+    check("... with an estimate in minutes and seconds",
+          plan["estimate"].get("draw_seconds") == 380.0
+          and plan["estimate"].get("chat_away_seconds") == 440.0
+          and plan["estimate"].get("minutes") == 7, str(plan["estimate"]))
+    plan = _REAL_HANDSHAKE_PLAN(cards_module=FakeCards(
+        "A", measured={"draw_seconds": 100.0}))
+    check("a recorded real draw sets the estimate", plan["estimate"]["draw_seconds"] == 100.0,
+          str(plan["estimate"]))
+    plan = _REAL_HANDSHAKE_PLAN(cards_module=FakeCards(None))
+    check("with no way chosen the recommended A is planned",
+          plan["option"] == "A" and plan["needs"] is True, str(plan)[:200])
+    plan = _REAL_HANDSHAKE_PLAN(cards_module=FakeCards("C"))
+    check("way C needs no swap: the chat is not touched",
+          plan["needs"] is False, str(plan)[:200])
+    plan = _REAL_HANDSHAKE_PLAN(cards_module=FakeCards("B"))
+    check("way B is refused in one plain sentence, not wired",
+          plan["needs"] is True and plan["supported"] is False
+          and "not wired" in plan["words"], str(plan)[:200])
+    plan = _REAL_HANDSHAKE_PLAN(cards_module=FakeCards("A", resident=False))
+    check("a card with no everyday chat needs no swap",
+          plan["needs"] is False, str(plan)[:200])
+    plan = _REAL_HANDSHAKE_PLAN(cards_module=object())
+    check("a backend without the card module plans nothing and says so",
+          plan["needs"] is False and plan["available"] is False, str(plan)[:200])
+
+
+def t_the_first_request_asks_before_anything_moves():
+    """The owner must be told what will pause BEFORE one byte leaves the card."""
+    folder = tmpdir()
+    stub = StubRuntime("http://127.0.0.1:8188")
+    use_plan(SWAP_PLAN)
+    try:
+        code, out = make(settings_for(folder),
+                         json.dumps({"prompt": "a red panda"}).encode(),
+                         runtime=stub)
+    finally:
+        reset_plan()
+    check("a draw that needs the card answers 409 first", code == 409,
+          str(out)[:300])
+    check("... with needs=free_card", out.get("needs") == "free_card",
+          str(out)[:200])
+    check("... naming way A and the estimate",
+          out.get("option") == "A" and out.get("estimate", {}).get("minutes") == 7,
+          str(out)[:200])
+    check("... and the plain sentence saying what will pause",
+          "everyday chat" in (out.get("error") or ""), str(out)[:300])
+    check("... and a confirm instruction carrying free_card",
+          out.get("confirm", {}).get("free_card") is True, str(out)[:200])
+    check("... and NOTHING was drawn", stub.asked == [], str(stub.asked))
+    check("... and nothing was written",
+          list(folder.glob("*.png")) == [], str(list(folder.glob("*.png"))))
+
+
+def t_the_confirmed_draw_steps_the_chat_aside_and_brings_it_back():
+    folder = tmpdir()
+    stub = StubRuntime("http://127.0.0.1:8188")
+    use_plan(SWAP_PLAN)
+    events = []
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+
+    def aside(plan):
+        events.append("aside")
+        return {"ok": True, "did": True, "seconds": 2.5,
+                "words": "The chat stepped aside in 2.5 seconds."}
+
+    def back(plan):
+        events.append("back")
+        return {"ok": True, "did": True, "seconds": 9.0,
+                "words": "The chat was back on the card after 9.0 seconds."}
+
+    P.step_aside = aside
+    P.step_back = back
+    P.record_measurement = lambda plan, piece: events.append("measured")
+    try:
+        code, out = make(settings_for(folder), json.dumps(
+            {"prompt": "a red panda", "free_card": True}).encode(),
+            runtime=stub)
+    finally:
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+    check("a confirmed draw answers 200", code == 200 and out.get("ok"),
+          str(out)[:300])
+    check("... the chat was set aside BEFORE the draw",
+          events[:1] == ["aside"] and bool(stub.asked), str(events))
+    check("... the picture model was asked to let go of the card",
+          stub.freed is True, "")
+    check("... and the chat was warmed back AFTER it, and the run recorded",
+          events[-2:] == ["back", "measured"], str(events))
+    check("... the answer carries the swap's own times",
+          out.get("card", {}).get("chat_away_seconds") == 2.5
+          and out.get("card", {}).get("chat_back_seconds") == 9.0,
+          str(out.get("card")))
+    check("... and says in words that the chat stepped aside and came back",
+          "stepped aside for" in (out.get("words") or "")
+          and "back on the card" in (out.get("words") or ""),
+          str(out.get("words")))
+    check("... and the picture is on disk with its sidecar",
+          Path(out["path"]).is_file()
+          and Path(out["path"]).with_suffix(".json").is_file(),
+          str(out.get("path")))
+
+
+def t_a_draw_that_fails_still_brings_the_everyday_chat_back():
+    """The 2026-10-25 brief: never leave the chat unloaded on an error path."""
+    folder = tmpdir()
+    stub = StubRuntime("x", fail=P.DrawingFailed(
+        "The drawing program refused that (500)."))
+    use_plan(SWAP_PLAN)
+    events = []
+    saved = (P.step_aside, P.step_back)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 2.0,
+                                 "words": "The chat stepped aside."}
+    P.step_back = lambda plan: (events.append("back"), {
+        "ok": True, "did": True, "seconds": 8.0,
+        "words": "The chat was back after 8.0 seconds."})[1]
+    try:
+        code, out = make(settings_for(folder), json.dumps(
+            {"prompt": "a cat", "free_card": True}).encode(), runtime=stub)
+    finally:
+        P.step_aside, P.step_back = saved
+        reset_plan()
+    check("a refused draw is still 502", code == 502, str(out)[:200])
+    check("... the everyday chat was warmed back anyway", events == ["back"],
+          str(events))
+    check("... the answer says the chat is back",
+          out.get("card", {}).get("chat_back") is True, str(out.get("card")))
+    check("... and no picture was written",
+          list(folder.glob("*.png")) == [], str(list(folder.glob("*.png"))))
+
+
+def t_a_failed_set_aside_draws_nothing_and_says_so():
+    folder = tmpdir()
+    stub = StubRuntime("x")
+    use_plan(SWAP_PLAN)
+    calls = []
+    saved = (P.step_aside, P.step_back)
+    P.step_aside = lambda plan: {"ok": False, "did": True, "seconds": 1.0,
+                                 "words": "The everyday chat could not be set "
+                                          "aside: it is still on the card."}
+    P.step_back = lambda plan: (calls.append("back"), {"ok": True})[1]
+    try:
+        code, out = make(settings_for(folder), json.dumps(
+            {"prompt": "a cat", "free_card": True}).encode(), runtime=stub)
+    finally:
+        P.step_aside, P.step_back = saved
+        reset_plan()
+    check("a chat that will not step aside stops the draw", code == 503,
+          str(out)[:200])
+    check("... the answer keeps the same plain sentence", "set aside" in
+          (out.get("error") or ""), str(out)[:200])
+    check("... and nothing was drawn", stub.asked == [], str(stub.asked))
+    check("... and nothing was written",
+          list(folder.glob("*.png")) == [], str(list(folder.glob("*.png"))))
+
+
+def t_way_b_is_a_plain_sentence_not_a_broken_draw():
+    plan = dict(SWAP_PLAN, option="B", supported=False, words=P.OPTION_B_WORDS)
+    folder = tmpdir()
+    stub = StubRuntime("x")
+    use_plan(plan)
+    try:
+        code, out = make(settings_for(folder), json.dumps(
+            {"prompt": "a cat", "free_card": True}).encode(), runtime=stub)
+    finally:
+        reset_plan()
+    check("way B is a 503 with needs=option_unsupported",
+          code == 503 and out.get("needs") == "option_unsupported",
+          str(out)[:200])
+    check("... and the sentence names the ways that do work",
+          "way A" in (out.get("error") or ""), str(out)[:300])
+    check("... and nothing was drawn", stub.asked == [], str(stub.asked))
+
+
+def t_the_phone_may_confirm_the_swap_too():
+    """Owner decision 2026-10-24: "i would like to be able to approve this from
+    my phone as well". The phone's `free_card: true` is the same deliberate
+    consent the desktop's is: the swap is local and reversible, the chat reloads
+    on its own and nothing is deleted. The first request still asks first."""
+    folder = tmpdir()
+    stub = StubRuntime("x")
+    use_plan(SWAP_PLAN)
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 2.0,
+                                 "words": "The chat stepped aside."}
+    P.step_back = lambda plan: {"ok": True, "did": True, "seconds": 8.0,
+                                "words": "The chat was back after 8.0 seconds."}
+    P.record_measurement = lambda plan, piece: None
+    try:
+        # The phone's FIRST request: the same question, and nothing moves.
+        code, out = P.handle_post(
+            "/api/pictures", {"prompt": "a cat"},
+            settings=settings_for(folder), runtime=stub, pc_only=False)
+        check("a phone's first request is the same 409 question",
+              code == 409 and out.get("needs") == "free_card", str(out)[:300])
+        check("... and it unloaded and drew nothing",
+              stub.asked == [] and stub.freed is False, str(stub.asked))
+        # The phone's CONFIRM: the whole swap and the draw, as on the desktop.
+        code2, out2 = P.handle_post(
+            "/api/pictures", {"prompt": "a cat", "free_card": True},
+            settings=settings_for(folder), runtime=stub, pc_only=False)
+    finally:
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+    check("a phone may confirm the swap and gets the normal success shape",
+          code2 == 200 and out2.get("ok") is True
+          and bool(out2.get("name")) and bool(out2.get("path")), str(out2)[:300])
+    check("... the draw really ran, with the chat set aside and back",
+          bool(stub.asked) and stub.freed is True
+          and out2.get("card", {}).get("chat_back") is True,
+          str(out2.get("card")))
+    check("... and the answer carries the same card times as the desktop's",
+          out2.get("card", {}).get("chat_away_seconds") == 2.0
+          and out2.get("card", {}).get("chat_back_seconds") == 8.0,
+          str(out2.get("card")))
+    check("... but where pictures are kept stays the PC's own business",
+          P.handle_post("/api/pictures/settings",
+                        {"action": "enabled", "on": True},
+                        settings=settings_for(folder), pc_only=False)[0] == 403)
+
+
+def t_a_second_confirm_while_a_draw_is_running_is_one_sentence():
+    """One picture at a time. The owner may now confirm from a phone, so a
+    double-tap is a real second request; it must answer one plain sentence and
+    start no second draw beside the first on a card that fits only one."""
+    import threading
+    folder = tmpdir()
+    started, release = threading.Event(), threading.Event()
+
+    class SlowStub(StubRuntime):
+        def draw(self, prompt, *, seed=None, settings=None):
+            started.set()
+            release.wait(20)
+            return super().draw(prompt, seed=seed, settings=settings)
+
+    stub = SlowStub("x")
+    use_plan(SWAP_PLAN)
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 1.0,
+                                 "words": "The chat stepped aside."}
+    P.step_back = lambda plan: {"ok": True, "did": True, "seconds": 1.0,
+                                "words": "The chat was back."}
+    P.record_measurement = lambda plan, piece: None
+    first = {}
+
+    def confirm():
+        first["result"] = P.handle_post(
+            "/api/pictures", {"prompt": "a cat", "free_card": True},
+            settings=settings_for(folder), runtime=stub)
+
+    thread = threading.Thread(target=confirm)
+    try:
+        thread.start()
+        if not started.wait(20):
+            raise RuntimeError("the first draw never started")
+        code, out = P.handle_post(
+            "/api/pictures", {"prompt": "another cat", "free_card": True},
+            settings=settings_for(folder), runtime=stub)
+    finally:
+        release.set()
+        thread.join(20)
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+    check("a confirm while a draw is running is refused, not queued as a "
+          "second draw", code == 409 and out.get("needs") == "drawing",
+          str(out)[:300])
+    check("... with one plain sentence saying it is still drawing",
+          "still drawing" in (out.get("error") or ""), str(out)[:300])
+    check("... and only ONE picture was drawn by the two requests",
+          len(stub.asked) == 1, str(stub.asked))
+    check("... the first request still finished normally",
+          first.get("result", (0, {}))[0] == 200,
+          str(first.get("result"))[:200])
+    code3, out3 = P.handle_post(
+        "/api/pictures", {"prompt": "after"}, settings=settings_for(folder),
+        runtime=stub)
+    check("... and the lock is free again for the next picture",
+          code3 == 200 and out3.get("ok") is True, str(out3)[:200])
+
+
+def t_the_picture_model_is_given_time_to_let_go_of_the_card():
+    """The first real draw's lesson (2026-10-24): the warm-back must not start
+    while the picture model is still releasing the card - it came back 1.36 GB
+    spilled. (Measured 2026-10-25: `/free` answers 200 with a body of 0 bytes,
+    which the old client parsed as JSON and gave up on in 0.0 s.)"""
+    rt = P.ComfyUI("http://127.0.0.1:8188")
+    calls = []
+
+    def fake(path, payload=None, *, timeout=None, **kw):
+        calls.append(path)
+        if path == "/free":
+            return {}
+        held = 10 * 1024 ** 3 if calls.count("/system_stats") < 2 else 0
+        return {"devices": [{"torch_vram_total": held}]}
+
+    rt._json = fake
+    out = rt.free_models()
+    check("free_models waits until the card is really free",
+          out.get("ok") is True and out.get("held_bytes") == 0, str(out))
+    check("... it asked /free first, then polled /system_stats",
+          calls[:3] == ["/free", "/system_stats", "/system_stats"], str(calls))
+    # A program that never lets go is a sentence, not a hang: shorten the wait.
+    saved = P.FREE_WAIT_S
+    P.FREE_WAIT_S = 0.2
+    try:
+        rt2 = P.ComfyUI("http://127.0.0.1:8188")
+        rt2._json = lambda path, payload=None, *, timeout=None, **kw: (
+            {} if path == "/free" else
+            {"devices": [{"torch_vram_total": 9 * 1024 ** 3}]})
+        bad = rt2.free_models()
+    finally:
+        P.FREE_WAIT_S = saved
+    check("... and a program that never lets go is one plain sentence",
+          bad.get("ok") is False and "still holds" in (bad.get("words") or ""),
+          str(bad))
+    # The /free call itself must be allowed the long wait it needs.
+    rt3 = P.ComfyUI("http://127.0.0.1:8188")
+    seen = {}
+
+    def fake3(path, payload=None, *, timeout=None, **kw):
+        seen[path] = timeout
+        return {} if path == "/free" else {"devices": [{"torch_vram_total": 0}]}
+
+    rt3._json = fake3
+    rt3.free_models()
+    check("... and /free itself is given the long time it needs",
+          seen.get("/free") is not None and seen.get("/free") >= 120.0,
+          str(seen))
+
+
+def t_the_free_answer_is_allowed_to_have_no_body_at_all():
+    """The MEASURED cause of the first real draw's 1.36 GB spill (2026-10-25).
+
+    ComfyUI's own ``POST /free`` answers HTTP 200 with a body of 0 bytes - the
+    call is the answer. The old client parsed that empty body as JSON, raised,
+    and ``free_models`` gave up in 0.0 s, so the chat was warmed back onto a
+    card the picture models were still releasing. The empty answer must be a
+    success, and only for the route that is known to answer this way."""
+    class Answer:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self.body
+
+    urlopen0 = P.urllib.request.urlopen
+    try:
+        P.urllib.request.urlopen = lambda req, timeout=None: Answer(b"")
+        rt = P.ComfyUI("http://127.0.0.1:8188")
+        got = rt._json("/free", {"unload_models": True}, timeout=5.0,
+                       allow_empty=True)
+        check("an empty 200 is an answer when the route is known to send none",
+              got == {}, str(got))
+        raised = None
+        try:
+            rt._json("/prompt", {"prompt": {}}, timeout=5.0)
+        except Exception as exc:
+            raised = exc
+        check("... and any other route still treats an empty answer as an error",
+              isinstance(raised, P.DrawingFailed), repr(raised))
+        P.urllib.request.urlopen = (
+            lambda req, timeout=None: Answer(b'{"devices": []}'))
+        check("... a real JSON answer is still parsed",
+              rt._json("/system_stats", timeout=5.0) == {"devices": []})
+
+        def refuse(req, timeout=None):
+            raise P.urllib.error.HTTPError(
+                getattr(req, "full_url", "http://127.0.0.1:8188/free"),
+                400, "Bad Request", {}, None)
+
+        P.urllib.request.urlopen = refuse
+        rt2 = P.ComfyUI("http://127.0.0.1:8188")
+        bad = rt2.free_models()
+        check("a refused /free is one sentence, never a traceback",
+              bad.get("ok") is False
+              and "DrawingFailed" in (bad.get("words") or ""), str(bad))
+    finally:
+        P.urllib.request.urlopen = urlopen0
+    # The poll itself is unchanged, and it is still the one that was measured.
+    rt3 = P.ComfyUI("http://127.0.0.1:8188")
+    seen = []
+
+    def fake(path, payload=None, *, timeout=None, **kw):
+        seen.append((path, kw.get("allow_empty")))
+        return {} if path == "/free" else {"devices": [{"torch_vram_total": 0}]}
+
+    rt3._json = fake
+    out = rt3.free_models()
+    check("free_models asks /free for an empty answer, then waits on the card",
+          out.get("ok") is True and seen
+          and seen[0] == ("/free", True)
+          and seen[1][0] == "/system_stats" and seen[1][1] is not True,
+          str((out, seen)))
+
+
+class _Clock:
+    """A clock the test moves, so a ten-minute wait costs a few hundred steps.
+
+    The WAIT is what this test is about - the route must give a real draw the
+    time it needs and stop at the wait it says it uses - so the clock is moved
+    forward instead of the test sleeping, and the REAL ``ComfyUI.draw`` and
+    ``free_models`` run against a stand-in for the drawing program.
+    """
+
+    def __init__(self):
+        self.now = 0.0
+        self.slept = 0.0
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += float(seconds)
+        self.slept += float(seconds)
+
+
+class _Answer:
+    """The context manager ``urllib.request.urlopen`` hands back."""
+
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self.body
+
+
+def draw_on_a_clock(runtime, *, finish_at=None):
+    """Run the REAL ``ComfyUI.draw`` on a clock this test owns.
+
+    ``finish_at`` is the fake second at which the stand-in program reports the
+    picture done; ``None`` means the job never finishes at all. Answers
+    ``(clock, piece, raised)``: the clock, the Piece the real draw built, and
+    the exception it raised instead, whichever happened.
+    """
+    clock = _Clock()
+    real_time, real_urlopen = P.time, P.urllib.request.urlopen
+
+    def json_call(path, payload=None, *, method=None, timeout=None,
+                  allow_empty=False):
+        if path == "/prompt":
+            return {"prompt_id": "p1"}
+        if finish_at is not None and clock.now >= finish_at:
+            return {"p1": {"outputs": {"9": {"images": [{"filename": "a.png"}]}}}}
+        return {}
+
+    runtime._json = json_call
+    # The graph is not what is under test here (other tests cover it); the wait
+    # around it is. A one-line stand-in keeps the two apart.
+    runtime._workflow = lambda prompt, settings: (
+        {}, {"steps": 1, "width": 64, "height": 64, "guidance": 1.0})
+    P.time = clock
+    P.urllib.request.urlopen = lambda url, timeout=None: _Answer(PNG)
+    try:
+        return clock, runtime.draw("a red panda", settings={}), None
+    except Exception as exc:
+        return clock, None, exc
+    finally:
+        P.time, P.urllib.request.urlopen = real_time, real_urlopen
+
+
+def t_the_route_waits_long_enough_for_a_real_draw():
+    """The three defects found on 2026-10-25, measured at the seams that run.
+
+    Every check calls the real function with the drawing program stood in for
+    and asserts on what it RECEIVED - none of it reads the module's source
+    text, so a rename or a rewrite that keeps the behaviour keeps this green,
+    and a change that breaks the behaviour turns it red.
+
+    The measured case behind the wait: a real Chroma1-HD picture on this PC
+    took a median of 274.4 s, and the old cap was
+    ``max(60, self.timeout * 12)`` = 120 s - it refused the very draw the
+    feature exists for.
+    """
+    check("the wait covers a real measured draw (>= 600 s)",
+          P.DRAW_WAIT_S >= 600.0, str(P.DRAW_WAIT_S))
+
+    # 1. The OLD cap is gone: a draw still running after 200 s is waited for.
+    #    120 s was the old ceiling, so 200 s is past it by a wide margin.
+    clock, piece, raised = draw_on_a_clock(P.ComfyUI("http://127.0.0.1:8188"),
+                                           finish_at=200.0)
+    check("a draw still running after 200 s is waited for, not given up on "
+          "(the old 120 s cap is gone)",
+          piece is not None and piece.png == PNG and clock.slept >= 200.0,
+          str((clock.slept, raised)))
+
+    # 2. The wait IS max(DRAW_WAIT_S, self.timeout * 12), measured twice: the
+    #    module's own constant for a default adapter, and the adapter's own
+    #    12x timeout when THAT is the longer of the two.
+    gave_up, _, stopped = draw_on_a_clock(P.ComfyUI("http://127.0.0.1:8188"),
+                                          finish_at=None)
+    check("... and a job that never finishes ends at DRAW_WAIT_S, not for ever",
+          isinstance(stopped, P.DrawingFailed)
+          and P.DRAW_WAIT_S <= gave_up.slept <= P.DRAW_WAIT_S + 2.0,
+          str((gave_up.slept, stopped)))
+    slow, _, _ = draw_on_a_clock(P.ComfyUI("http://127.0.0.1:8188", timeout=100.0),
+                                 finish_at=None)
+    check("... and a slower adapter gets its own 12x timeout when that is longer",
+          slow.slept > P.DRAW_WAIT_S
+          and 1200.0 <= slow.slept <= 1202.0, str(slow.slept))
+
+    # 3. ComfyUI is asked to let go of its models on its OWN route, with the
+    #    release payload, and the empty answer that route sends is accepted
+    #    rather than parsed as JSON.
+    rt = P.ComfyUI("http://127.0.0.1:8188")
+    asked = []
+    readings = [{"devices": [{"torch_vram_total": 3 * 1024 ** 3}]},
+                {"devices": [{"torch_vram_total": 0}]}]
+
+    def spy(path, payload=None, *, method=None, timeout=None,
+            allow_empty=False):
+        asked.append({"path": path, "payload": payload,
+                      "empty_ok": allow_empty, "timeout": timeout})
+        if path == "/free":
+            return {}
+        return readings.pop(0) if readings else {
+            "devices": [{"torch_vram_total": 0}]}
+
+    rt._json = spy
+    real_time = P.time
+    P.time = _Clock()
+    try:
+        freed = rt.free_models()
+    finally:
+        P.time = real_time
+    check("ComfyUI is asked to free its models on its own /free, with the "
+          "release payload",
+          bool(asked) and asked[0]["path"] == "/free"
+          and asked[0]["payload"] == {"unload_models": True,
+                                      "free_memory": True}, str(asked[:1]))
+    check("... and its empty answer is accepted, not parsed as JSON",
+          bool(asked) and asked[0]["empty_ok"] is True
+          and all(not a["empty_ok"] for a in asked[1:]), str(asked))
+    check("... and it is given FREE_WAIT_S to let go",
+          bool(asked) and asked[0]["timeout"] == P.FREE_WAIT_S, str(asked[:1]))
+    check("... and the card is read from its own /system_stats until it is "
+          "really free",
+          freed.get("ok") is True and freed.get("held_bytes") == 0
+          and len(asked) >= 2 and asked[1]["path"] == "/system_stats"
+          and len([a for a in asked if a["path"] == "/system_stats"]) >= 2,
+          str((freed, asked)))
+
+    # 4. The warm-back runs in a FINALLY, never only on success: a draw that
+    #    CRASHES (a real bug, not a DrawingFailed) still brings the chat back,
+    #    and the answer carries the times step_back itself returned.
+    class Crash(StubRuntime):
+        def draw(self, prompt, *, seed=None, settings=None):
+            raise RuntimeError("a crash the route did not expect")
+
+    folder = tmpdir()
+    events = []
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    use_plan(SWAP_PLAN)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 1.0,
+                                 "words": "The chat stepped aside."}
+
+    def back(plan):
+        events.append("back")
+        return {"ok": True, "did": True, "seconds": 9.0,
+                "words": "The chat was back after 9.0 seconds."}
+
+    P.step_back = back
+    P.record_measurement = lambda plan, piece: None
+    try:
+        code, out = make(settings_for(folder), json.dumps(
+            {"prompt": "a red panda", "free_card": True}).encode(),
+            runtime=Crash("x"))
+    finally:
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+    check("the warm-back runs in a finally: a draw that CRASHES still brings "
+          "the chat back", events == ["back"] and code == 502,
+          str((code, events)))
+    check("... and the answer carries the times step_back itself returned",
+          out.get("card", {}).get("chat_back_seconds") == 9.0
+          and out.get("card", {}).get("chat_back") is True,
+          str(out.get("card")))
+
+    # 5. The make route no longer refuses a phone's confirm - it draws. The
+    #    SETTINGS route is still this PC's alone, because where pictures are
+    #    kept and which program draws them is this PC's own configuration.
+    saved = (P.step_aside, P.step_back, P.record_measurement)
+    use_plan(SWAP_PLAN)
+    P.step_aside = lambda plan: {"ok": True, "did": True, "seconds": 1.0,
+                                 "words": "The chat stepped aside."}
+    P.step_back = lambda plan: {"ok": True, "did": True, "seconds": 2.0,
+                                "words": "The chat was back."}
+    P.record_measurement = lambda plan, piece: None
+    phone_stub = StubRuntime("x")
+    try:
+        code, out = P.handle_post(
+            "/api/pictures", {"prompt": "a cat", "free_card": True},
+            settings=settings_for(tmpdir()), runtime=phone_stub, pc_only=False)
+    finally:
+        P.step_aside, P.step_back, P.record_measurement = saved
+        reset_plan()
+    check("the make route no longer refuses a phone's confirm: it draws",
+          code == 200 and out.get("ok") is True and not out.get("pc_only")
+          and bool(phone_stub.asked), str(out)[:200])
+    refused = []
+    for change in ({"action": "folder", "folder": str(tmpdir("phone-folder"))},
+                   {"action": "runtime", "runtime": "sd_cpp"}):
+        code, out = P.handle_post("/api/pictures/settings", change,
+                                  settings=settings_for(tmpdir()), pc_only=False)
+        refused.append((code, out.get("pc_only")))
+    check("... while changing the folder or the program is still the PC's alone",
+          refused == [(403, True), (403, True)], str(refused))
+
+    # 6. One picture at a time, guarded by the module's OWN lock: take it and
+    #    the second request is a sentence, and nothing is drawn.
+    held = P._DRAW_IN_FLIGHT.acquire(blocking=False)
+    try:
+        code, out = make(settings_for(tmpdir()),
+                         json.dumps({"prompt": "a cat"}).encode(),
+                         runtime=StubRuntime("x"))
+    finally:
+        # `locked()` rather than the flag alone: a module that releases a lock
+        # it never took must be REPORTED as a failed check, not crash the suite
+        # with a traceback and hide the checks after this one.
+        if held and P._DRAW_IN_FLIGHT.locked():
+            P._DRAW_IN_FLIGHT.release()
+    check("... and only one picture can be drawn at a time: the module's own "
+          "lock refuses the second with its own sentence",
+          held and code == 409 and out.get("needs") == "drawing"
+          and out.get("error") == P.STILL_DRAWING_WORDS, str(out)[:200])
+
+    # 7. The two-request consent key the apps may pin: needs=free_card, and a
+    #    confirm instruction that carries it.
+    use_plan(SWAP_PLAN)
+    try:
+        code, out = make(settings_for(tmpdir()), json.dumps(
+            {"prompt": "a cat"}).encode(), runtime=StubRuntime("x"))
+    finally:
+        reset_plan()
+    check("the two-request consent key the apps may pin is needs=free_card and "
+          "confirm={free_card: true}",
+          code == 409 and out.get("needs") == "free_card"
+          and out.get("confirm") == {"free_card": True}, str(out)[:200])
 
 
 # ---------------------------------------------------------------------------
@@ -986,6 +1720,17 @@ def main() -> int:
                t_the_route_draws_and_says_where_and_how_long,
                t_a_stub_that_is_not_answering_is_one_plain_sentence,
                t_a_drawing_program_that_fails_is_a_sentence_not_a_traceback,
+               t_the_plan_finds_the_three_ways_and_the_price,
+               t_the_first_request_asks_before_anything_moves,
+               t_the_confirmed_draw_steps_the_chat_aside_and_brings_it_back,
+               t_a_draw_that_fails_still_brings_the_everyday_chat_back,
+               t_a_failed_set_aside_draws_nothing_and_says_so,
+               t_way_b_is_a_plain_sentence_not_a_broken_draw,
+               t_the_phone_may_confirm_the_swap_too,
+               t_a_second_confirm_while_a_draw_is_running_is_one_sentence,
+               t_the_picture_model_is_given_time_to_let_go_of_the_card,
+               t_the_free_answer_is_allowed_to_have_no_body_at_all,
+               t_the_route_waits_long_enough_for_a_real_draw,
                t_the_storage_round_trip_keeps_the_record,
                t_the_file_name_is_the_date_the_time_and_a_slug,
                t_two_pictures_on_one_day_do_not_collide,

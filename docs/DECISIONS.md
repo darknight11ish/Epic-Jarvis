@@ -3419,4 +3419,47 @@ calls, holds no lock while it waits and loads no model.
     ships three times byte-identically (`backend/`, `jarvis-backend/`,
     `jarvis-desktop/src/`) and all three changed together; no backend, Rust,
     API or live-folder file changed.
+## 2026-10-24 - the phone may approve the picture swap too (`free_card`)
+
+  * **What the owner asked, in their own words.** "i would like to be able to
+    approve this from my phone as well" (2026-10-24). Until then the
+    picture-maker's swap was the PC's own act: a confirmed `POST /api/pictures`
+    from anything but this PC was refused `403 pc_only`, so the owner had to
+    walk to the PC to say yes.
+  * **What replaced it.** The refusal is gone for the make route. A paired
+    phone that sends the draw again with `"free_card": true` - after the same
+    `409 needs: "free_card"` question, the same plain sentence and the same
+    minutes - runs the identical swap: the everyday chat lane is unloaded
+    (`keep_alive: 0`), the picture is drawn, ComfyUI is asked to let go of its
+    models and waited for, and the chat is warmed back in a `finally`. The
+    answer keeps its shape, including `card.chat_away_seconds`,
+    `card.chat_back_seconds` and the words.
+  * **Why this is safe.** The swap is local and reversible: the same PC's own
+    model is unloaded for a few minutes and reloads on its own; nothing is
+    deleted, nothing leaves the PC, and no new way out of it opens. It is the
+    same deliberate-confirm shape the project already uses for the phone
+    raising a spending limit with its own fingerprint (2026-10-11): a person
+    taps the one confirm, there is still no auto-confirm, and no phone-side
+    timer sends it.
+  * **Still the PC's alone.** Changing where pictures are kept and which
+    drawing program draws them (`POST /api/pictures/settings`, `403 pc_only`)
+    is this PC's own configuration, not the in-and-out swap.
+  * **One picture at a time.** Because a phone may now confirm, a double tap is
+    a real second request: a confirm that arrives while a draw is running is
+    refused in one plain sentence (`409 needs: "drawing"`) and starts no second
+    draw beside the first. The first draw still warms the chat back in its
+    `finally`.
+  * **Proved, not assumed.** `backend/test_pictures.py` holds the phone's first
+    409, the phone's confirmed 200 with the same card times, the desktop
+    confirm unchanged, the settings route still refusing the phone, and the
+    one-draw-at-a-time sentence; the twin is byte-identical. The swap was then
+    driven for real on this PC (Chroma1-HD, ComfyUI 0.39.0 on the RTX 2060):
+    with the everyday chat resident, the fixed release wait saw ComfyUI let go
+    (`models_freed: true`), the chat came back WHOLE (`size_vram == size`,
+    spill 0) 23.6 s after being away 0.5 s, and the picture was 2,087,566 bytes
+    drawn in 381.0 s. The phone path was then driven through the same route,
+    with `X-Jarvis-Client: phone` on both requests (the first answered 409 and
+    moved nothing; the confirm drew a 1,721,489-byte picture in 382.0 s, saw
+    `models_freed: true`, and brought the chat back whole 117.1 s after it
+    stepped aside, spill 0).
 
