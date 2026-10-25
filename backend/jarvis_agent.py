@@ -1934,15 +1934,15 @@ def _settings_tool_text() -> str:
     still the door that answers every wording without the model, and the
     "nothing was actually done" line is still the backstop. See `SETTINGS_TOOL`
     above."""
-    head = ("Change one of Jarvis's own SETTINGS when the owner asks, in any words - "
-            "do not ask first, just call it. Use when: they say turn on or off, "
-            "enable, disable, start or stop something Jarvis does. Do NOT use it "
-            "for questions about a setting. Example: \"turn on learning in the "
-            "background\" -> {\"setting\":\"background learning\",\"value\":"
-            "\"on\"}. ")
-    tail = ("Its result says what happened: a loosening change waits for one card, a "
-            "cosmetic one applies at once. Never say a setting changed when it did "
-            "not, or that it is unavailable before calling this.")
+    head = ("Call this tool when the owner asks you to change one of Jarvis's own "
+            "settings, in any words - do not ask first, just call it. Examples: "
+            "\"turn on humour\", \"switch the prompt coach off\", \"enable web "
+            "search\", \"turn on quiet hours\". \"setting\" is the setting in "
+            "their words, e.g. \"humour\"; \"value\" is on or off. ")
+    tail = ("Its own result says what happened: a change that loosens a rule or "
+            "reads more waits for one approval card, a cosmetic one changes at "
+            "once. Repeat that result - never say a setting changed when it did "
+            "not.")
     return head + tail
 
 
