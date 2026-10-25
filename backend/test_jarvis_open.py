@@ -168,8 +168,11 @@ def t_the_phrases_that_already_had_an_owner_still_do():
     # through jarvis_quick.py, where the ordering actually lives.
     check("'open a chat' is still the chat, not an app called chat",
           Q.match("open a chat").name == "open_chat")
-    check("'what time is it' is still the model's",
-          Q.match("what time is it") is None)
+    # D3 (the live campaign of 2026-10-25): "what time is it" used to be the
+    # model's - it took 82.1 s and answered 10:42 AM while the PC read 20:16.
+    # It is the PC's own clock now, in the fast path, and never the model's.
+    check("'what time is it' is answered from this PC's clock, not the model",
+          Q.match("what time is it").name == "time_now")
     check("'pause the music' is still music control",
           Q.match("pause the music").name == "media_pause")
     # "open my email" has no owner yet, so it is an app name and will be
@@ -286,11 +289,88 @@ def t_the_route_carries_every_field_the_apps_need():
 
 
 def t_the_reply_says_on_this_pc_because_the_phone_cannot():
-    for said in ("open notion", "open settings", "open Jarvis settings", "open notepad"):
+    for said in ("open settings", "open Jarvis settings", "open notepad"):
         reply = Q.run(Q.match(said), None, 0.0).reply
         check(f"{said!r} answers with 'on this PC'", "on this PC" in reply, reply)
     check("the phone's own sentence says where it happens",
           "PC" in O.ON_PC and "phone" in O.ON_PC)
+
+
+# --------------------------------------------------------------------------
+#   D4 - honesty in the promise (the live campaign of 2026-10-25, ruling Q6)
+# --------------------------------------------------------------------------
+#
+# B8, B9 and B12 of the campaign each became an APP called the whole sentence
+# ("command shell and show me ipconfig", "notepad and type hello", "small
+# python script to average 3, 7 and 9"), answered "Opening <that> on this PC."
+# with `open_app_built: false` and nothing started. Two separate failures: the
+# match, and the sentence that promised.
+
+def t_a_command_or_a_second_thing_is_never_an_app_name():
+    for said in ("run a command shell and show me ipconfig",
+                 "Run a command shell and show me ipconfig.",
+                 "open notepad and type hello",
+                 "Open Notepad and type hello.",
+                 "open small python script to average 3, 7 and 9",
+                 "open chrome and go to youtube"):
+        opened = O.resolve(O.parse(said)[0], O.parse(said)[1])
+        check(f"{said!r} is refused, not turned into a program", opened.kind == "refused",
+              opened)
+        check(f"...and nothing is named for a client to open", opened.target == "",
+              opened.target)
+        check(f"...and the answer says why, in one sentence",
+              opened.said and opened.said == O.words(opened) and "Opening" not in opened.said,
+              opened.said)
+    shell = O.resolve("command shell and show me ipconfig")
+    check("...a command or script says a command is its own tool",
+          "commands or scripts" in shell.said, shell.said)
+    two = O.resolve("notepad and type hello")
+    check("...two things in one sentence says so, and asks for one",
+          "more than one thing" in two.said and "one thing at a time" in two.said, two.said)
+    # The fixed tables are tried FIRST, so a real name that happens to hold
+    # one of those words still works: "Movies and TV" is a Windows app.
+    check("'open movies and tv' is still that app, not a refusal",
+          O.resolve("movies and tv").kind == "app" and O.resolve("movies and tv").built)
+    check("'open cmd' is still the command prompt", O.resolve("cmd").target == "cmd.exe")
+    check("'open powershell' is still PowerShell",
+          O.resolve("powershell").target == "powershell.exe")
+    check("'open command prompt' is still the command prompt",
+          O.resolve("command prompt").target == "cmd.exe")
+
+
+def t_the_route_carries_nothing_for_a_refused_sentence():
+    def route(said):
+        return Q.route_fields(Q.run(Q.match(said), None, 0.0))
+
+    r = route("run a command shell and show me ipconfig")
+    check("a refused sentence puts NO open_app on the route, so no client acts",
+          "open_app" not in r and "open_app_kind" not in r, r)
+    reply = Q.run(Q.match("run a command shell and show me ipconfig"), None, 0.0).reply
+    check("...and the answer is the refusal itself", reply == O.SHELL_REFUSED, reply)
+
+
+def t_never_opening_when_nothing_can_be_opened():
+    notion = Q.run(Q.match("open notion"), None, 0.0)
+    check("a program named in the owner's own words is ASKED for, not promised",
+          notion.reply.startswith("I have asked this PC to open notion"), notion.reply)
+    check("...and it never says 'Opening'", "Opening" not in notion.reply, notion.reply)
+    notepad = Q.run(Q.match("open notepad"), None, 0.0)
+    check("a program the BACKEND named itself is still opened: 'Opening notepad on this PC.'",
+          notepad.reply == "Opening notepad on this PC.", notepad.reply)
+    # A request that did not come from this PC (the phone) can open nothing:
+    # the sentence says where it happens instead of pretending. `peer` is the
+    # request's own address, exactly as schedule.patch hands it over
+    # (`self.client_address[0]`, a string).
+    phone = Q.run(Q.match("open notepad"), None, 0.0, peer="100.64.0.9",
+                  local="100.64.0.1")
+    check("from the phone: it says it happens on the PC, and nothing was opened",
+          phone.reply == O.ON_PC, phone.reply)
+    check("from this PC (loopback) the promise is kept",
+          Q.run(Q.match("open notepad"), None, 0.0, peer="127.0.0.1",
+                local="127.0.0.1").reply == "Opening notepad on this PC.")
+    ref = Q.run(Q.match("run a command shell and show me ipconfig"), None, 0.0)
+    check("a refusal is the same wherever it was asked from",
+          ref.reply == O.SHELL_REFUSED)
 
 
 def main():

@@ -244,6 +244,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -1092,6 +1093,15 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "what time is it?" / "what's the date?" (D3, 2026-10-25) -------------
+    # FIRST among the questions: the words are a whole question and nothing
+    # else below wants them, and this is the one answer that is a fact about
+    # the PC rather than a guess - so it must never be reachable by a model,
+    # and never slow. Reads nothing but `now`.
+    got = _clock(s)
+    if got is not None:
+        return got
+
     # --- bulk is refused outright: one at a time ----------------------------
     if re.fullmatch(r"(?:cancel|delete|remove|clear|stop)\s+(?:all|every|both)\s+(?:(?:of\s+)?"
                     r"(?:my|the)\s+)?(timers|alarms|reminders|todos?|todo\s+list|todo\s+items)"
@@ -1131,6 +1141,14 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- focus sessions (jarvis_focus.py) --------------------------------------
     got = _focus(s)
+    if got is not None:
+        return got
+
+    # --- "how are you doing?" / "how am I doing?" with no focus session -------
+    # (D11c, 2026-10-25). AFTER `_focus`, on purpose: while a session runs,
+    # "how am I doing?" is that session's own status and stays that way. With
+    # none running it used to fall to the model for 99 s and a web search.
+    got = _wellbeing(s)
     if got is not None:
         return got
 
@@ -1617,6 +1635,128 @@ def _undo(s: str) -> Optional[Intent]:
 
 
 # --------------------------------------------------------------------------
+#   The clock and the date - answered from the PC, never the model (D3,
+#   the live campaign of 2026-10-25)
+# --------------------------------------------------------------------------
+#
+# R13 of the campaign ("What time is it?") took 82.1 s on `qwen3.5:9b` and
+# came back with 10:42 AM while the PC's own clock read 20:16-20:18 - a wrong
+# answer to a question this PC can answer exactly, for free, in microseconds.
+# A model never sees the clock, so it can only guess. These two intents read
+# `time.localtime(now)` and nothing else: no file, no socket, no model.
+#
+# THE GRAMMAR IS A WHOLE SHORT SENTENCE, as everywhere in this file, so a
+# question that only mentions a time ("what time is the meeting?") still goes
+# to the model and to the calendar - the words have to BE the question.
+
+_CLOCK_TIME = re.compile(
+    r"(?:what(?:'s|\s+is)\s+the\s+time"
+    r"|what\s+time\s+is\s+it"
+    r"|what\s+time\s+(?:do\s+you\s+have|have\s+you\s+got)"
+    r"|have\s+you\s+got\s+the\s+time"
+    r"|tell\s+me\s+the\s+time"
+    r"|(?:the\s+)?current\s+time)"
+    r"(?:\s+(?:now|right\s+now|please|on\s+this\s+pc|here|for\s+me|exactly))*")
+_CLOCK_DATE = re.compile(
+    r"(?:what(?:'s|\s+is)\s+(?:the\s+|today's\s+|todays\s+)?date(?:\s+today)?"
+    r"|what\s+date\s+is\s+it(?:\s+today)?"
+    r"|what\s+day\s+is\s+it(?:\s+today)?"
+    r"|what(?:'s|\s+is)\s+today(?:'s)?\s+date"
+    r"|tell\s+me\s+the\s+date(?:\s+today)?"
+    r"|(?:the\s+)?current\s+date)"
+    r"(?:\s+(?:today|now|right\s+now|please|on\s+this\s+pc|here))*")
+#: Both at once: "what is the time and date?" is one question with one answer.
+_CLOCK_BOTH = re.compile(
+    r"(?:what(?:'s|\s+is)\s+the\s+time\s+and\s+(?:the\s+)?date"
+    r"|what\s+time\s+and\s+(?:what\s+)?date(?:\s+is\s+it)?"
+    r"|the\s+time\s+and\s+(?:the\s+)?date)")
+
+
+def _clock(s: str) -> Optional[Intent]:
+    """`time_now`, `date_today` or `clock_both` for a whole question about the
+    PC's own clock, or None (then nothing here has claimed it)."""
+    if _CLOCK_BOTH.fullmatch(s):
+        return Intent("clock_both")
+    if _CLOCK_TIME.fullmatch(s):
+        return Intent("time_now")
+    if _CLOCK_DATE.fullmatch(s):
+        return Intent("date_today")
+    return None
+
+
+def _run_clock(intent: Intent, now: float) -> Result:
+    """The PC's own clock, in the owner's words. Reads nothing else.
+
+    The same 24-hour form both apps show (jarvis_schedule.clock), and the day
+    and date the PC itself thinks it is - never a model's guess.
+    """
+    n = intent.name
+    lt = time.localtime(now)
+    weekday = _WEEKDAYS[lt.tm_wday].capitalize()
+    month = _MONTHS[lt.tm_mon - 1].capitalize()
+    day = f"{weekday} {lt.tm_mday} {month}"
+    clock = f"{lt.tm_hour:02d}:{lt.tm_min:02d}"
+    if n == "date_today":
+        return Result(f"It is {day} {lt.tm_year}.", n)
+    if n == "clock_both":
+        return Result(f"It is {clock} on {day} {lt.tm_year}.", n)
+    return Result(f"It is {clock} on {day}.", n)
+
+
+# --------------------------------------------------------------------------
+#   "How are you doing?" and "How am I doing?" - answered here, not by a
+#   99-second model turn that searches the web for the owner's mood (D11c)
+# --------------------------------------------------------------------------
+#
+# R14 of the campaign: "How am I doing?" (no focus session) went to the local
+# model for 99.1 s, ran web_search twice and came back with "I do not know how
+# you are doing personally, sir" - honest, but a minute and a half to say that
+# a program cannot know. Both questions have a short, fixed, honest answer:
+#   * "how am I doing?" with no focus session running - there is nothing of
+#     Jarvis's to report on, and it says so and says how to start one;
+#   * "how are you doing?" - Jarvis is a program; it says so plainly.
+# While a focus session runs, "how am I doing?" is the session's own status
+# (the `_focus` block above runs first and keeps it).
+
+_WELLBEING_YOU = re.compile(
+    r"how\s+are\s+you(?:\s+(?:doing|today|feeling|going|keeping))?"
+    r"|how'?s\s+it\s+going"
+    r"|how\s+are\s+things(?:\s+going)?"
+    r"|how\s+do\s+you\s+feel(?:\s+today)?"
+    r"|are\s+you\s+(?:ok|okay|all\s+right|doing\s+ok|doing\s+okay)")
+_WELLBEING_ME = re.compile(
+    r"how\s+am\s+i\s+doing(?:\s+(?:today|so\s+far))?"
+    r"|how'?s\s+my\s+(?:day|focus|session|progress)(?:\s+going)?"
+    r"|how\s+is\s+my\s+(?:day|focus|session|progress)(?:\s+going)?")
+
+#: Said for "how are you doing?" - the truth about a program, in one line.
+WELLBEING_SAID = ("I am a program on your PC, so I have no day of my own to report - "
+                  "but I am here and answering.")
+#: Said for "how am I doing?" with no focus session: nothing of Jarvis's to
+#: measure, and how to give it something. Never a guess about the owner.
+NO_FOCUS_SAID = ('No focus session is running, so there is nothing of mine to report on. '
+                 'Say "focus for 30 minutes" and I will tell you how it is going.')
+
+
+def _wellbeing(s: str) -> Optional[Intent]:
+    """"how are you doing?" / "how am I doing?" with no focus session."""
+    if _WELLBEING_YOU.fullmatch(s):
+        return Intent("wellbeing_now")
+    if _WELLBEING_ME.fullmatch(s):
+        return Intent("wellbeing_me")
+    return None
+
+
+def _run_wellbeing(intent: Intent) -> Result:
+    n = intent.name
+    if n == "wellbeing_me":
+        # "how am I doing?" with no focus session: the same fixed line, never
+        # a model turn and never a read of anything else.
+        return Result(NO_FOCUS_SAID, n)
+    return Result(WELLBEING_SAID, n)
+
+
+# --------------------------------------------------------------------------
 #   Focus sessions (jarvis_focus.py)
 # --------------------------------------------------------------------------
 
@@ -1937,16 +2077,144 @@ def _pc_help(s: str) -> Optional[Intent]:
 PC_HELP_MISSING = ("Your PC's Jarvis cannot answer questions about the PC yet - run "
                    "apply-patches.ps1 on the PC.")
 
+#: How long a PC-help answer is reused, in seconds, and how long a cold one
+#: waits for the slow half (D11b, the live campaign of 2026-10-25).
+#:
+#: R9 ("Why is my PC slow?") was honest and right, and took 10.44 s - because
+#: `jarvis_pc_help.slow_words` runs one PowerShell call that samples every
+#: process twice, a second apart, and that call is the whole cost. Its own
+#: cache holds the reading for 5 s, which helps a second question asked in the
+#: same breath and nothing else. This is the fast lane, so two things change
+#: here and NOT in that module:
+#:   * the ANSWER is reused for `PC_HELP_TTL` seconds - a follow-up question
+#:     (the same one again, or the disk after the processor) answers at once;
+#:   * a cold answer waits only `PC_HELP_WAIT` seconds for the program list
+#:     and answers with the numbers the cheap readings already have (memory is
+#:     a kernel call, not a program launch), saying plainly that the program
+#:     list is still being read. The list itself carries on in the background
+#:     and the next ask within the minute has it.
+#: Real numbers either way; never a made-up one.
+PC_HELP_TTL = 120.0
+PC_HELP_WAIT = 2.5
+PC_HELP_STILL = ("Jarvis is still reading which programs are using the most - ask again "
+                 "in a moment.")
+
+_PC_HELP_ANSWERS: dict = {}
+_PC_HELP_ANSWERS_LOCK = threading.Lock()
+_PC_HELP_PROGRAMS: dict = {"at": -1e9, "value": None, "running": False}
+_PC_HELP_PROGRAMS_LOCK = threading.Lock()
+
+
+def _pc_help_forget() -> None:
+    """Drop the cached readings (tests; and it costs nothing to be able to)."""
+    with _PC_HELP_ANSWERS_LOCK:
+        _PC_HELP_ANSWERS.clear()
+    with _PC_HELP_PROGRAMS_LOCK:
+        _PC_HELP_PROGRAMS.update(at=-1e9, value=None, running=False)
+
+
+def _pc_help_programs(PCH, wait: float):
+    """The program reading: the last one while it is fresh, else what can be
+    had within `wait` seconds, else None (the answer says so).
+
+    One probe at a time, in a background thread, so two questions asked at
+    once do not start two PowerShell calls - and a cold answer is never held
+    for the ten seconds that call takes on this PC.
+    """
+    stale = None
+    with _PC_HELP_PROGRAMS_LOCK:
+        value, at = _PC_HELP_PROGRAMS["value"], _PC_HELP_PROGRAMS["at"]
+        if value is not None and time.monotonic() - at < PC_HELP_TTL:
+            return value
+        stale = value
+        start = not _PC_HELP_PROGRAMS["running"]
+        if start:
+            _PC_HELP_PROGRAMS["running"] = True
+    if start:
+        def probe():
+            got = None
+            try:
+                got = PCH.real_readers().programs()
+            except Exception:
+                got = None
+            with _PC_HELP_PROGRAMS_LOCK:
+                if got is not None:
+                    _PC_HELP_PROGRAMS.update(at=time.monotonic(), value=got)
+                _PC_HELP_PROGRAMS["running"] = False
+        threading.Thread(target=probe, name="jarvis-pc-help-programs", daemon=True).start()
+    deadline = time.monotonic() + max(0.0, wait)
+    while time.monotonic() < deadline:
+        with _PC_HELP_PROGRAMS_LOCK:
+            if not _PC_HELP_PROGRAMS["running"]:
+                return _PC_HELP_PROGRAMS["value"]
+        time.sleep(0.02)
+    return stale if stale is not None else None
+
+
+def _pc_help_answer(PCH, topic: str, wait: float):
+    """(the answer dict, whether the program list was missing) for one topic.
+
+    The readers are jarvis_pc_help's own, with ONE of them replaced: the
+    program list is read through `_pc_help_programs`, which is what bounds the
+    wait. If that module's Readers ever stops being writable, the plain answer
+    is taken instead - a slow answer is bad, a crash is worse.
+    """
+    readers = PCH.real_readers()
+    seen = []
+
+    def programs():
+        got = _pc_help_programs(PCH, wait)
+        seen.append(got)
+        return got
+
+    try:
+        readers.programs = programs
+    except Exception:
+        return PCH.answer(topic), False
+    try:
+        out = PCH.answer(topic, readers)
+    except Exception:
+        out = {"said": "Jarvis could not read this on your PC just now.",
+               "private": False, "read": []}
+    missing = bool(seen) and seen[0] is None
+    return out, missing
+
 
 def _run_pc_help(intent: Intent) -> Result:
     """Read-only, no card: nothing changes and nothing leaves this PC. An
     answer naming programs is private (it stays on screen) and marks the
-    turn as having read outside text - a program chooses its own name."""
+    turn as having read outside text - a program chooses its own name.
+
+    Cached and bounded (D11b, 2026-10-25): see PC_HELP_TTL above. The answer,
+    its private flag and its read mark are cached together, so a repeated
+    question cannot lose the private mark.
+    """
     try:
         import jarvis_pc_help as PCH
     except Exception:
         return Result(PC_HELP_MISSING, intent.name)
-    out = PCH.answer(str(intent.f.get("topic") or ""))
+    topic = str(intent.f.get("topic") or "")
+    key = topic or ""
+    now = time.monotonic()
+    with _PC_HELP_ANSWERS_LOCK:
+        got = _PC_HELP_ANSWERS.get(key)
+    if got is not None and now - got[0] < got[2]:
+        out = got[1]
+    else:
+        out, missing = _pc_help_answer(PCH, topic, PC_HELP_WAIT)
+        if missing and topic == "slow":
+            said = str(out.get("said") or "").strip()
+            if said:
+                out = dict(out, said=f"{said} {PC_HELP_STILL}")
+                # The program list is NOT in this answer, so it names no
+                # program: the private mark and the read mark go with it.
+                out["private"] = False
+                out["read"] = []
+        # A partial answer is kept only for a moment: once the program list
+        # has arrived, the next ask must get the whole answer.
+        with _PC_HELP_ANSWERS_LOCK:
+            _PC_HELP_ANSWERS[key] = (time.monotonic(), out,
+                                     5.0 if missing else PC_HELP_TTL)
     return Result(str(out.get("said") or ""), intent.name, private=bool(out.get("private")),
                   read=list(out.get("read") or []))
 
@@ -3455,11 +3723,25 @@ def _settings_choice(s: str) -> Optional[Intent]:
     return None
 
 
+#: A sentence that says out loud what it is: "change your settings: turn on
+#: remembering sensitive topics automatically." The lead-in is the owner's
+#: framing, not part of the setting's name, and it is peeled HERE (only for
+#: the settings block) because the words after it are the same sentences the
+#: patterns below already own. Narrow on purpose: it must name "settings", and
+#: the rest must be there.
+_SETTINGS_LEAD_SAID = re.compile(
+    r"(?:change|update|adjust|edit|set)\s+(?:your|my|the)\s+(?:jarvis\s+)?settings?"
+    r"\s*[:,;-]?\s*(.+)")
+
+
 def _settings_adjust(s: str) -> Optional[Intent]:
     try:
         import jarvis_settings_registry as R
     except Exception:
         return None
+    m = _SETTINGS_LEAD_SAID.fullmatch(s)
+    if m:
+        s = m.group(1).strip()
     # The interruption budget first: its sentences are the most specific ones
     # here ("speak up 3 times a day"), so nothing below can swallow one.
     budget = _budget_intent(s)
@@ -3492,6 +3774,23 @@ def _settings_adjust(s: str) -> Optional[Intent]:
         else:                           # "disable <name>"
             on, name = False, g[5]
         setting = R.find_bool_setting(name)
+        if setting is None:
+            # THE OWNER'S OWN WORDS FOR A REAL SWITCH (D5, the live campaign of
+            # 2026-10-25). "Turn on learning in the background" named
+            # `background_learning` to a person and to no matcher here, so it
+            # fell to the model, which has no settings tool and answered "It is
+            # not available to me" - a denial of a setting that exists, with no
+            # card. The registry's own word-tolerant matcher is the one the
+            # model's restatements already pass through, and its rules are the
+            # safe ones: it accepts the words only when they exactly ARE one
+            # switch's name (after filler is removed) or CONTAIN a whole one,
+            # it refuses a bare one-word name, and it refuses ambiguity rather
+            # than guess. So "learning in the background" reaches
+            # background_learning's own setter - the same function, card, tier
+            # and PC-only check a tap in Settings uses - and "turn off the
+            # kitchen light" still falls through, because no switch's whole
+            # name is in those words.
+            setting = R.find_bool_setting_words(name)
         if setting is not None:
             return Intent("settings_bool", {"key": setting.key, "on": on})
         # The name is a real switch on the Settings page that this backend has
@@ -3688,29 +3987,41 @@ def _feature_setting(target: str):
         return None
 
 
-def _feature_explain_intent(s: str, raw, target: str):
+def _feature_context_ok(raw, explicit: bool = False) -> bool:
+    """Is this sentence explicitly about Jarvis's OWN features?
+
+    Either it named Jarvis ("Jarvis", "here", "my settings") as before, or it
+    named the feature guide itself ("explain the prompt coach from your feature
+    guide", "use the feature guide to ...") - which is at least as explicit a
+    way of asking Jarvis's guide rather than the world (D1b, 2026-10-25).
+    """
+    return bool(explicit) or _feature_says_jarvis(raw)
+
+
+def _feature_explain_intent(s: str, raw, target: str, explicit: bool = False):
     row = _feature_lookup_exact(target)
-    if row is None and _feature_says_jarvis(raw):
+    if row is None and _feature_context_ok(raw, explicit):
         row = _feature_lookup(_feature_without_context(target))
     if row is not None:
         return Intent("feature_explain", {"id": row["id"]})
     # "I do not have that one" needs BOTH: the sentence said it is Jarvis's
-    # own ("Jarvis", "here", "my settings") AND said the word feature/option.
-    # A general "what is <something>" never receives that answer.
-    if _feature_says_jarvis(raw) and _feature_explicit(s):
+    # own ("Jarvis", "here", "my settings", the feature guide) AND said the
+    # word feature/option. A general "what is <something>" never receives
+    # that answer.
+    if _feature_context_ok(raw, explicit) and (_feature_explicit(s) or explicit):
         return Intent("feature_unknown",
                       {"words": _feature_target(_feature_without_context(target))})
     return None
 
 
-def _feature_state_intent(raw, target: str):
+def _feature_state_intent(raw, target: str, explicit: bool = False):
     row = _feature_lookup_exact(target)
     if row is not None:
         return Intent("feature_state", {"id": row["id"]})
     setting = _feature_setting(target)
     if setting is not None:
         return Intent("feature_state_setting", {"key": setting.key})
-    if _feature_says_jarvis(raw):
+    if _feature_context_ok(raw, explicit):
         clean = _feature_without_context(target)
         row = _feature_lookup(clean)
         if row is not None:
@@ -3721,14 +4032,14 @@ def _feature_state_intent(raw, target: str):
     return None
 
 
-def _feature_howto_intent(raw, target: str, on: bool):
+def _feature_howto_intent(raw, target: str, on: bool, explicit: bool = False):
     row = _feature_lookup_exact(target)
     if row is not None:
         return Intent("feature_howto", {"id": row["id"], "on": bool(on)})
     setting = _feature_setting(target)
     if setting is not None:
         return Intent("feature_howto_setting", {"key": setting.key, "on": bool(on)})
-    if _feature_says_jarvis(raw):
+    if _feature_context_ok(raw, explicit):
         clean = _feature_without_context(target)
         row = _feature_lookup(clean)
         if row is not None:
@@ -3739,10 +4050,10 @@ def _feature_howto_intent(raw, target: str, on: bool):
     return None
 
 
-def _feature_switch_intent(raw, target: str, on: bool):
-    clean = _feature_without_context(target) if _feature_says_jarvis(raw) else target
+def _feature_switch_intent(raw, target: str, on: bool, explicit: bool = False):
+    clean = _feature_without_context(target) if _feature_context_ok(raw, explicit) else target
     row = _feature_lookup_exact(clean)
-    if row is None and _feature_says_jarvis(raw):
+    if row is None and _feature_context_ok(raw, explicit):
         row = _feature_lookup(clean)
     if row is None:
         return None
@@ -3756,12 +4067,56 @@ def _feature_switch_intent(raw, target: str, on: bool):
     return Intent("feature_switch", {"key": setting.key, "on": bool(on)})
 
 
+#: "from your feature guide", "in the guide", "according to the feature
+#: guide" - the tail that says WHICH guide to answer from, not part of a
+#: feature's name (D1b, 2026-10-25). Anchored at the end of the sentence.
+_GUIDE_TAIL = re.compile(
+    r"\s*(?:,|\s)*\b(?:from|in|out\s+of|per|using)\s+(?:your|the|my)\s+(?:jarvis\s+)?"
+    r"(?:own\s+)?feature\s+guide\b.*$"
+    r"|\s*(?:,|\s)*\baccording\s+to\s+(?:your|the|my)\s+(?:jarvis\s+)?feature\s+guide\b.*$")
+#: "use the feature guide to ...", "check the feature guide for ...",
+#: "read your feature guide and tell me ..." - the owner naming the guide
+#: before the question. Group 1 is the rest of the sentence.
+_GUIDE_LEAD = re.compile(
+    r"(?:please\s+)?(?:use|check|read|consult|look\s+(?:in|at)|search|ask|open|"
+    r"show\s+me\s+in|according\s+to)\s+(?:your|the|my)\s+(?:jarvis\s+)?(?:own\s+)?"
+    r"feature\s+guide\s*(?:[,;:-]\s*)?(.*)$")
+
+
 def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
     """The whole feature-guidance block, in one place, in this order.
 
     `s` is the tidied sentence (no leading "Jarvis,"); `raw` is the message as
     typed/spoken, used only for the explicit-context check (see
-    _FEATURE_CONTEXT)."""
+    _FEATURE_CONTEXT).
+
+    NAMING THE GUIDE IS ITSELF THE CONTEXT (D1b, the live campaign of
+    2026-10-25). A7c's words - "explain the prompt coach feature from your
+    feature guide" - missed every matcher here and went to the 9B model, which
+    invented four feature names that appear nowhere in the guide. The owner
+    asking the feature guide is at least as explicit as saying "Jarvis", so a
+    trailing "from your feature guide" is taken off, a leading "use/check the
+    feature guide to ..." is taken off, and the rest of the sentence is read by
+    the SAME patterns below - with `said_guide` counting as explicit context.
+    """
+    said_guide = False
+    m = _GUIDE_TAIL.search(s)
+    if m:
+        said_guide = True
+        s = s[:m.start()].strip(" ,;:-")
+    m = _GUIDE_LEAD.fullmatch(s)
+    if m:
+        said_guide = True
+        s = (m.group(1) or "").strip()
+        # "use the feature guide to explain <x>" / "check the feature guide
+        # for <x>": the words after the lead are the question.
+        s = re.sub(r"^to\s+", "", s).strip()
+        only = re.fullmatch(r"(?:for|about|on|of)\s+(.+)", s)
+        if only:
+            return _feature_explain_intent(s, raw,
+                                          _feature_target(only.group(1)), said_guide)
+    if not s:
+        return None
     if _CLOUD_SYNC_TOPIC.search(s):
         # The guide's #646 note is the answer: Jarvis does not use cloud sync.
         # Answered here, deterministically, so a model never gets to suggest a
@@ -3776,7 +4131,7 @@ def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
     if m:
         # "how do I train you to write like me?" - explain the feature named
         # after "to", never a switch (it has no on/off of its own).
-        return _feature_explain_intent(s, raw, _feature_target(m.group(1)))
+        return _feature_explain_intent(s, raw, _feature_target(m.group(1)), said_guide)
     m = _FEATURE_HOWTO.fullmatch(s)
     if m:
         g = m.groups()
@@ -3790,16 +4145,17 @@ def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
             on, target = g[6] == "on", g[7]
         else:                           # where do i enable/disable <x>
             on, target = g[8] == "enable", g[9]
-        return _feature_howto_intent(raw, _feature_target(target), on)
+        return _feature_howto_intent(raw, _feature_target(target), on, said_guide)
     m = _FEATURE_STATE.fullmatch(s)
     if m:
-        return _feature_state_intent(raw, _feature_target(m.group(1) or m.group(2) or ""))
+        return _feature_state_intent(raw, _feature_target(m.group(1) or m.group(2) or ""),
+                                     said_guide)
     m = _FEATURE_WHAT.fullmatch(s)
     if m:
         target = _feature_target(next(g for g in m.groups() if g is not None))
         if not target:
             return None
-        return _feature_explain_intent(s, raw, target)
+        return _feature_explain_intent(s, raw, target, said_guide)
     m = _FEATURE_SWITCH.fullmatch(s)
     if m:
         g = m.groups()
@@ -3809,7 +4165,7 @@ def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
             on, target = g[3] == "on", g[2]
         else:                           # enable/disable <x>
             on, target = g[4] == "enable", g[5]
-        return _feature_switch_intent(raw, _feature_target(target), on)
+        return _feature_switch_intent(raw, _feature_target(target), on, said_guide)
     return None
 
 
@@ -5395,11 +5751,27 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # line (route_fields below) and opens it. The desktop does that in
         # Rust through the Windows shell; the phone cannot, so it says so -
         # which is also why the sentence says "on this PC".
+        #
+        # D4 (the live campaign of 2026-10-25, architect ruling Q6): the
+        # sentence no longer promises what this half cannot know. A REFUSED
+        # sentence ("run a command shell and show me ipconfig", "open notepad
+        # and type hello") carries no route field at all - there is nothing
+        # for any client to open - and a name in the owner's own words is
+        # "I have asked this PC to open ..." rather than "Opening ...", with
+        # the desktop's own failure line being the half that knows.
         import jarvis_open as OPEN
         opened = intent.f.get("opened")
         if opened is None:
             return Result("I could not tell what to open.", n)
-        return Result(OPEN.words(opened), n,
+        if opened.kind == "refused":
+            return Result(opened.said, n)
+        here = True
+        try:
+            import jarvis_owner_check as OC
+            here = bool(OC.from_this_pc(peer, local))
+        except Exception:
+            here = True
+        return Result(OPEN.words(opened, this_pc=here), n,
                       open_app=(None if opened.kind == "jarvis" else opened.target),
                       open_app_kind=opened.kind,
                       open_app_built=(opened.kind == "app" and opened.built),
@@ -5411,6 +5783,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_next_time(intent, sched)
     if n.startswith("today_"):
         return _run_today(intent, sched)
+    if n in ("time_now", "date_today", "clock_both"):
+        return _run_clock(intent, now)
+    if n in ("wellbeing_now", "wellbeing_me"):
+        return _run_wellbeing(intent)
     if n == "pc_help":
         return _run_pc_help(intent)
     if n in ("phone_ring", "phone_stop"):
@@ -5697,6 +6073,40 @@ def _run_snooze(f: dict, sched, now: float) -> Result:
 
 
 UNDO_NOTHING_LEFT = "It is not on the list any more, so there was nothing to cancel."
+#: Said when there is genuinely nothing of this fast path's to take back, and
+#: the owner said a COMMAND ("cancel that", "undo") rather than "never mind" -
+#: which is ordinary words too and still goes to the model (D6, 2026-10-25).
+UNDO_NOTHING_SAID = "Nothing of mine to cancel."
+
+#: The answers that change NOTHING at all - so they must not take away what
+#: "cancel that" would take back (D6, the live campaign of 2026-10-25).
+#:
+#: The campaign's row 7: "Remind me next time ..." -> "what will you remind me
+#: of next time?" (a read) -> "cancel that" fell to the model for 69.6 s and
+#: left the reminder in place. The read had wiped the record. Every name here
+#: was checked against `run()` below: none of them writes a job, a setting, a
+#: file or a memory. Media control is here because playing or pausing is not
+#: something "cancel that" can take back either - it is not a thing this fast
+#: path SET.
+#:
+#: Deliberately a list of READ-ONLY answers rather than of state-changing ones:
+#: an intent added later, and forgotten here, keeps the old safe behaviour
+#: (the record is dropped, so "cancel that" can never take back something the
+#: owner did not just do).
+READ_ONLY_INTENTS = frozenset({
+    "alarm_list", "animal_ask", "approval_where", "briefing_list", "briefing_now",
+    "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
+    "feature_explain", "feature_howto", "feature_howto_setting", "feature_state",
+    "feature_state_setting", "feature_switch_refused", "feature_unknown",
+    "features_group", "features_list", "focus_status", "identity_help", "list_clear",
+    "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
+    "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",
+    "open_app", "open_chat", "pc_help", "personality_status", "project_log",
+    "reach_list", "sayable_help", "screen_status", "search_explain", "settings_choice_bad",
+    "settings_choice_help", "settings_help", "settings_not_by_asking", "settings_only",
+    "settings_open", "settings_unknown", "tellme_help", "thinking_status", "thinking_when",
+    "time_now", "timer_status", "today_list", "todo_list", "weather_now", "wellbeing_me",
+    "wellbeing_now", "where_put"})
 
 
 def _run_undo(f: dict, sched, now: float, conversation) -> Optional[Result]:
@@ -5722,7 +6132,15 @@ def _run_undo(f: dict, sched, now: float, conversation) -> Optional[Result]:
             kind = next(iter(rec.get("nouns") or ("thing",)))
             return Result(f"The last thing set here was {_a(kind)}, not {_a(noun)}, so nothing "
                           f"was cancelled.", n)
-        return None
+        # D6 (the live campaign of 2026-10-25): a COMMAND with nothing to take
+        # back is answered here, in one line, instead of being handed to the
+        # model for a minute of guessing. "never mind" keeps going to the
+        # model: it is ordinary words as well as a command, and a chat that
+        # answers it with "Nothing of mine to cancel." would read as a machine
+        # that did not listen.
+        if f.get("soft"):
+            return None
+        return Result(UNDO_NOTHING_SAID, n)
     minutes = int(S.UNDO_WINDOW // 60)
     if rec["age"] > S.UNDO_WINDOW:
         if f.get("soft"):
@@ -5926,6 +6344,37 @@ def _run_news_list() -> Optional[Result]:
     return Result("\n".join(f"- {u}" for u in listed), "news_list")
 
 
+def _briefing_without_repeats(text: str) -> str:
+    """The briefing's lines with a Pulse line that repeats a section dropped.
+
+    R3 of the live campaign (2026-10-25) printed "Today: Nothing else set for
+    today." and then "Pulse: Nothing else set for today." - the Pulse is built
+    from the same summaries the sections above already said, so on a quiet day
+    the whole Pulse half is those two lines said twice.
+
+    Conservative on purpose, and only about EXACT repeats: a "Pulse: X" line is
+    dropped when some earlier line already ends in exactly X ("<Title>: X").
+    Nothing is reworded, reordered or summarised, and a Pulse line that adds
+    anything at all stays.
+    """
+    if not text:
+        return text
+    lines = text.split("\n")
+    summaries = set()
+    for line in lines:
+        head, sep, tail = line.partition(": ")
+        if sep and head and not head.startswith(("Pulse", "-", "(", " ")):
+            summaries.add(" ".join(tail.split()))
+    if not summaries:
+        return text
+    kept = []
+    for line in lines:
+        if line.startswith("Pulse: ") and " ".join(line[len("Pulse: "):].split()) in summaries:
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
 def _run_briefing(intent: Intent, sched, now: float) -> Result:
     """The morning briefing: put one together now (reads only - no card), set
     one up (a repeat: the scheduler's ONE card; once: no card), stop ONE, or
@@ -5940,7 +6389,10 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
         b = B.make(sched=sched, now=now, source="chat")
         # Private: it quotes the calendar, reminders and the to-do list, so a
         # spoken question's answer stays on screen under the apps' rule.
-        return Result(b["text"], n, private=True, read=list(b.get("read") or []))
+        # `_briefing_without_repeats`: the Pulse half repeats the section lines
+        # word for word on a quiet day (D11a, the live campaign of 2026-10-25).
+        return Result(_briefing_without_repeats(str(b["text"] or "")), n,
+                      private=True, read=list(b.get("read") or []))
     jobs = B.setups(sched)
     if n == "briefing_list":
         if not jobs:
@@ -6011,9 +6463,20 @@ def answer(text, *, sched=None, now: Optional[float] = None,
         try:
             if res.made and conversation:
                 sched.note_set(conversation, res.made, res.what, res.intent, nouns=res.nouns)
-            elif res.intent != "undo" and conversation:
-                # Something else happened since: "cancel that" would now
-                # mean THAT, which cannot be taken back - so nothing can.
+            elif res.intent != "undo" and conversation and res.intent not in READ_ONLY_INTENTS:
+                # Something else CHANGED since: "cancel that" would now mean
+                # THAT, which cannot be taken back - so nothing can.
+                #
+                # D6 (the live campaign of 2026-10-25). This used to run for
+                # EVERY quick answer that created nothing, including a plain
+                # read - so after "remind me next time ..." and then "what
+                # will you remind me of next time?", "cancel that" no longer
+                # meant the reminder: it fell to the model (69.6 s) and the
+                # reminder stayed. A read-only answer changes nothing, so it
+                # must not take the record away. `READ_ONLY_INTENTS` is the
+                # list of answers that change nothing at all; anything not on
+                # it (including an intent added later) keeps the old, safe
+                # behaviour.
                 sched.forget_set(conversation)
         except Exception:
             pass
