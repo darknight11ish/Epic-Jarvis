@@ -21178,12 +21178,16 @@ Rules that are part of the feature, not implementation detail:
   `jarvis_pictures.py`: the measured 274.4 s draw plus a cold load, and still
   a finite wait - a wedged job ends in a sentence, never in a hung route.
 - **The confirm is ONE long request.** Measured on this PC: **405.8 s** wall
-  clock (draw 381.0 s; the rest is the swap and the warm-back). The bound is
-  `DRAW_WAIT_S` (600) + `FREE_WAIT_S` (180) + the warm-back, about 14 minutes,
-  so an app must give this single request a read timeout longer than that - the
-  desktop uses 1,200 s - and must not re-send it on a timeout: a re-send while
-  the draw runs is answered by the one-at-a-time sentence above, and the draw
-  keeps going.
+  clock (draw 381.0 s; the rest is the swap and the warm-back). The app's budget
+  must cover the PC's WORST CASE, not that measurement: the four ceilings are
+  `unload_lane(timeout=120)` 120 + `DRAW_WAIT_S` (600) + `FREE_WAIT_S` (180) +
+  `warm_lane(timeout=600)` 600 = **1,500 s**, about 25 minutes
+  (`backend/jarvis_picture_card.py:526` and `:564-565`;
+  `backend/jarvis_pictures.py:197` and `:208`). So an app must give this single
+  request a read timeout longer than that. Both apps use **1,560 s**, about 26
+  minutes - a minute of headroom - and must not re-send it on a timeout: a
+  re-send while the draw runs is answered by the one-at-a-time sentence above,
+  and the draw keeps going.
 
 ### 129.5 No approval card, and why that is not a loophole
 
@@ -21245,12 +21249,10 @@ setup (JARVIS-API section 109).
   `/api/pictures/file` and writes the PNG into the phone's own Pictures
   collection through MediaStore. Nothing about a model, a catalogue or a
   drawing program is on the phone: it sends a prompt and reads a picture.
-  **The 409 confirm flow is not drawn on the phone yet in this branch:** the
-  backend now accepts a phone's `free_card: true` (owner decision 2026-10-24,
-  129.4b), but `PicturesPlate.kt` still sends only the first request, so on the
-  phone the 409 question currently arrives as its error sentence. The confirm
-  control and the long read timeout are the remaining Android step of this
-  feature.
+  **The 409 confirm flow is drawn on the phone** (2026-10-25): the backend
+  accepts a phone's `free_card: true` (owner decision 2026-10-24, 129.4b), and
+  `PicturesPlate.kt` sends it only on the owner's own tap, on the same long
+  1,560 s read budget as the desktop (`Pictures.CONFIRM_TIMEOUT_S`).
 
 ### 129.8 Tests, and what is honestly not proved
 

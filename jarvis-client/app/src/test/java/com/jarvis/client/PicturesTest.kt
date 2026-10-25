@@ -263,9 +263,22 @@ class PicturesTest {
 
     @Test
     fun aConfirmIsOneLongRequestAndOnlyOnePlaceSendsIt() {
-        // 1,200 s: the PC's own bound is DRAW_WAIT_S 600 + FREE_WAIT_S 180 plus
-        // the warm-back, and the phone path was measured at 500.1 s.
-        assertTrue("the confirm must outlast the PC's bound", Pictures.CONFIRM_TIMEOUT_S >= 1_200L)
+        // The PC's worst case is the SUM of its four own ceilings, not the
+        // draw alone: unload_lane 120 s + DRAW_WAIT_S 600 s + FREE_WAIT_S
+        // 180 s + warm_lane 600 s = 1,500 s (backend/jarvis_picture_card.py:526
+        // and :564-565; backend/jarvis_pictures.py:197 and :208). A read
+        // timeout measures silence, and the PC says nothing until the swap is
+        // done, so the phone must wait longer than that whole sum.
+        val pcWorstCaseS = 120L + 600L + 180L + 600L
+        assertEquals("the PC's four ceilings add up to 1,500 s", 1_500L, pcWorstCaseS)
+        assertTrue(
+            "the confirm must outlast the PC's ${pcWorstCaseS} s worst case",
+            Pictures.CONFIRM_TIMEOUT_S > pcWorstCaseS,
+        )
+        assertTrue(
+            "... with a minute to spare (the settled 1,560 s)",
+            Pictures.CONFIRM_TIMEOUT_S >= 1_560L,
+        )
         val api = api()
         if (api != null) {
             assertTrue(
@@ -322,7 +335,7 @@ class PicturesTest {
         assertFalse("the old 300 s write client must not make a picture", call.contains("writeCall"))
         val long = api.substringAfter("private val makeCall").substringBefore(".build()")
         assertTrue(
-            "the long client uses the shared 1,200 s constant",
+            "the long client uses the shared 1,560 s constant",
             long.contains("readTimeout(Pictures.CONFIRM_TIMEOUT_S, TimeUnit.SECONDS)"),
         )
         // A read timeout measures silence; a whole-call bound would cut a real

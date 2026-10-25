@@ -34,7 +34,9 @@
  *  8. the phone's half is the app's own file, and it has no field for the
  *     switch, the program or the folder;
  *  9. a drawing is allowed to take minutes on this PC: the make call gets its
- *     own 1,200 s budget (a real draw was measured at 274 s) and every other
+ *     own 1,560 s budget - the PC's worst case is the sum of its four own
+ *     ceilings, 120 + 600 + 180 + 600 = 1,500 s, and a read timeout covers the
+ *     whole silent swap, not one measured 274 s draw - and every other
  *     pictures write keeps the 20 s one;
  * 10. THE TWO-STEP CONFIRM: when the everyday chat is holding the 12 GB card
  *     the PC answers 409 `needs: "free_card"` and NOTHING IS DRAWN - the page
@@ -460,11 +462,26 @@ function jsFn(name) {
 
 // (i) THE BUG THIS FIXES: 20 s would time out every real drawing. A draw was
 // measured at 274 s on this PC, so the make call has a budget of its own.
+const pictureBudget = (
+  brain.match(/const PICTURE_TIMEOUT: Duration = Duration::from_secs\(([\d_]+)\);/) || []
+)[1];
 check(
-  "brain.rs gives a drawing its own long budget, in the shape the other one uses",
-  /const PICTURE_TIMEOUT: Duration = Duration::from_secs\(1_200\);/.test(brain)
+  "brain.rs gives a drawing its own long budget, next to the repeat-edit one",
+  /const PICTURE_TIMEOUT: Duration = Duration::from_secs\(1_560\);/.test(brain)
     && /const REPEAT_EDIT_TIMEOUT: Duration = Duration::from_secs\(1_200\);/.test(brain),
   "PICTURE_TIMEOUT next to REPEAT_EDIT_TIMEOUT",
+);
+// 2026-10-25 (ruling B6): the PC's worst case is the SUM of its own ceilings -
+// unload_lane 120 + DRAW_WAIT_S 600 + FREE_WAIT_S 180 + warm_lane 600 =
+// 1,500 s - and a read timeout covers the whole silent swap. The budget is
+// read back out of brain.rs, so a number trimmed under that sum fails here.
+const pcWorstCaseS = 120 + 600 + 180 + 600;
+check(
+  "... and that budget outlasts the PC's 1,500 s worst case",
+  pcWorstCaseS === 1_500
+    && pictureBudget !== undefined
+    && Number(pictureBudget.replace(/_/g, "")) > pcWorstCaseS,
+  `PICTURE_TIMEOUT=${pictureBudget} vs PC worst case ${pcWorstCaseS}`,
 );
 const makeRust = rustFn("brain_pictures_make");
 check(

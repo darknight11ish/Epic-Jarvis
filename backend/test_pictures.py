@@ -48,6 +48,7 @@ WHAT IS COVERED
 from __future__ import annotations
 
 import base64
+import inspect
 import json
 import re
 import sys
@@ -71,6 +72,17 @@ except Exception:
 require_shipped("jarvis_pictures.py")
 
 import jarvis_pictures as P  # noqa: E402
+
+#: The two ceilings that live on the card module rather than the route module.
+#: Imported directly so the sum check reads the REAL defaults, not a copy.
+import jarvis_picture_card as C  # noqa: E402
+
+#: The two clients' budgets are written in Kotlin and Rust, so the sum check
+#: below reads their source. A copy of the number here would be a third copy
+#: that could drift silently.
+PHONE_PICTURES = (REPO / "jarvis-client" / "app" / "src" / "main" / "java"
+                  / "com" / "jarvis" / "client" / "net" / "Pictures.kt")
+DESKTOP_BRAIN = REPO / "jarvis-desktop" / "src-tauri" / "src" / "brain.rs"
 
 # --------------------------------------------------------------------------
 #   The 2026-10-25 swap, kept hermetic in this suite
@@ -1110,6 +1122,42 @@ def t_the_route_waits_long_enough_for_a_real_draw():
           "confirm={free_card: true}",
           code == 409 and out.get("needs") == "free_card"
           and out.get("confirm") == {"free_card": True}, str(out)[:200])
+
+    # 8. THE BUDGET BOTH APPS MUST GIVE IT (2026-10-25, ruling B6). A read
+    #    timeout measures SILENCE, and this route says nothing at all for the
+    #    whole swap - so an app's budget must outlast the PC's WORST CASE, which
+    #    is the SUM of its four own ceilings, not one measured draw. The two
+    #    card ceilings are read from the function defaults themselves, so a
+    #    change there cannot leave this check green by accident.
+    ceilings = (
+        inspect.signature(C.unload_lane).parameters["timeout"].default,
+        P.DRAW_WAIT_S,
+        P.FREE_WAIT_S,
+        inspect.signature(C.warm_lane).parameters["timeout"].default,
+    )
+    worst = sum(ceilings)
+    check("the PC's worst case is its four ceilings together: unload_lane 120 "
+          "+ DRAW_WAIT_S 600 + FREE_WAIT_S 180 + warm_lane 600 = 1,500 s",
+          ceilings == (120.0, 600.0, 180.0, 600.0) and worst == 1_500.0,
+          str(ceilings))
+    # The clients' numbers are in two other languages. Reading their source
+    # here is deliberate: this is the check that fails if either app is ever
+    # trimmed back under the PC's ceiling, which is the false failure this
+    # ruling fixes.
+    phone_budget = re.search(r"CONFIRM_TIMEOUT_S\s*=\s*([\d_]+)L",
+                             PHONE_PICTURES.read_text(encoding="utf-8"))
+    desktop_budget = re.search(
+        r"PICTURE_TIMEOUT: Duration = Duration::from_secs\(([\d_]+)\)",
+        DESKTOP_BRAIN.read_text(encoding="utf-8"))
+    budgets = {
+        "phone": int(phone_budget.group(1).replace("_", "")) if phone_budget else None,
+        "desktop": (int(desktop_budget.group(1).replace("_", ""))
+                    if desktop_budget else None),
+    }
+    check("both apps wait longer than that: 1,560 s, so a legitimate slow draw "
+          "and warm-back is never a false failure",
+          all(got is not None and got >= 1_560 and got > worst
+              for got in budgets.values()), str(budgets))
 
 
 # ---------------------------------------------------------------------------
