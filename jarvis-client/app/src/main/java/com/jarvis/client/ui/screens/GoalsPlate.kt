@@ -206,7 +206,15 @@ internal fun GoalsSection(
                             )
                         }
                     }
-                    val ordered = Goals.ordered(view)
+                    // The REDACTED view, not the raw one: while the lists are
+                    // hidden, `Goals.hide` blanks the step's own words AND the
+                    // PC's lock/reached/measure lines, because those repeat
+                    // other steps' words and the owner's own numbers. Building
+                    // the rows from `view` skipped all of that - the hidden
+                    // flag only blanked some fields - so "after: …", a reached
+                    // "69 kg" and "Follows: …" were drawn and spoken under the
+                    // hidden setting (the 2026-10-24 round-2 audit, M4).
+                    val ordered = Goals.ordered(shown)
                     if (ordered.isEmpty()) {
                         Gap(4)
                         Text(Goals.EMPTY, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)

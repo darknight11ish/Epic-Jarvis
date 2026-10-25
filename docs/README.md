@@ -1,13 +1,13 @@
 # The documents, and which ones are current
 
-There are **400 markdown documents** here, adding up to about **9.7 MB**. Neither
+There are **403 markdown documents** here, adding up to about **9.7 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-13
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 400 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 403 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
   Measure-Object -Property Length -Sum).Sum                             # 9,687,760 bytes
 ```
@@ -96,6 +96,7 @@ Also current, for one area each:
 | [CHATBOT-DRIVER-DESIGN.md](CHATBOT-DRIVER-DESIGN.md) | **Chatbot driver: Jarvis talks to ChatGPT or Gemini for you (design).** Status (corrected 2026-09-28): built, reachable from both apps, not yet tried against the real sites. |
 | [CLOUD-BRAIN-DESIGN.md](CLOUD-BRAIN-DESIGN.md) | **A cloud brain, and the second opinion: design only.** Status: DESIGN. No code, no patch, nothing switched on. |
 | [DEFECT-REGISTER.md](DEFECT-REGISTER.md) | **Defect register.** Where the agents on this repo write down a defect before they touch it, so two of them do not repair the same thing twice and nobody has to guess who is on what. |
+| [DESIGN-5C-SIGNED-TYPED-PHONE-JOBS.md](DESIGN-5C-SIGNED-TYPED-PHONE-JOBS.md) | **Design 5C - signed, typed phone jobs.** A design only: nothing built, no route, no test. What the phone may ask the PC to run, how a job is signed and typed, and the findings that changed the plan. |
 | [DOCKER-INTEGRATION-DESIGN.md](DOCKER-INTEGRATION-DESIGN.md) | **More Docker integration — design note.** Written 2026-10-09, for the owner's request in his own words: "add more docker integration into jarvis that can be toggled with settings inside both the android app and desktop program." This note does three things: says honestly what Docker does in Jarvis today, sets out three separate things "more integration" could mean so the owner can pick (they are not one feature), and writes down the safety shape that is not up for a vote whatever he picks. |
 | [DSH-PLUGIN-BRIDGE-DESIGN.md](DSH-PLUGIN-BRIDGE-DESIGN.md) | **Custom plugins for Jarvis and DeepSeek Harness: one server, two hosts (design, 2026-10-04).** Status: designed, not built. The owner asked (2026-10-04) whether DeepSeek Harness (DSH), which can build its own plug-ins, could be used to give Jarvis a specific new tool or ability - either by taking an existing GitHub plug-in and adapting it, or by writing a custom one when nothing suitable exists. |
 | [EXPERIENTIAL-LEARNING-DESIGN.md](EXPERIENTIAL-LEARNING-DESIGN.md) | **Learning from experience: the design.** Date: 2026-10-10 · Branch: docs/experiential-learning-design (worktree .dsh-scratch/exp-learn, based on origin/main at 8c05ba71) · Status: design only. |
@@ -132,6 +133,7 @@ Also current, for one area each:
 | [TOPIC-CONTROLS-DESIGN.md](TOPIC-CONTROLS-DESIGN.md) | **Topic controls: include or exclude topics in Jarvis's brain (design, 2026-09-30).** Status: backend and both apps built 2026-09-30 (a first audit's fixes are in). |
 | [TUTORIALS-DESIGN.md](TUTORIALS-DESIGN.md) | **Tutorials and FAQ — design.** Status: BUILT (2026-10-05). Everything below is implemented; this section at the top says where each piece lives, so the design and the code can be read together. |
 | [UPDATER-REDESIGN.md](UPDATER-REDESIGN.md) | **The updater: why it cannot finish, and what to do about the owner's own edits.** Written 2026-10-08 on design/updater-redesign, from origin/main at 165e8f2d. |
+| [WATCHER-QUIET-RULES.md](WATCHER-QUIET-RULES.md) | **The watchers' quiet rules: what may be silent, and what may never be.** A decision on paper (written 2026-10-15), no code. Which background watchers may stay quiet, and the cases where they must always speak. |
 | [WORK-SETUPS.md](WORK-SETUPS.md) | **Work setups.** Five combinations of local models, each chosen for a kind of work, each explaining in plain words what it is for before the owner starts. |
 
 ## Audits and research (dated - true on the day written)
@@ -143,6 +145,7 @@ what changed when.
 | Date | Document | About |
 |---|---|---|
 | undated | [clean-room/](clean-room/) | **Clean-room specs.** Each file here describes one good idea from a project whose licence Jarvis cannot copy code from (GPL, AGPL, closed-source apps and the like), in plain words and with no code in it. |
+| 2026-10-23 | [REVIEW-1-PROMPT-STACK-MEASURED-2026-10-23.md](REVIEW-1-PROMPT-STACK-MEASURED-2026-10-23.md) | **Review #1, measured: what Jarvis's prompt stack really costs.** The work order's six-block table and 3,600/4,500-token caps, checked against the code: two of the six blocks do not exist, 3,838 is a measured ordinary prompt rather than a ceiling, and the one real defect is that nothing puts a floor under the tool schemas. Every figure an estimate, with the two commands that settle it on the owner's PC. |
 | 2026-10-14 | [FIELD-TEST-2026-10-14-RUN.md](FIELD-TEST-2026-10-14-RUN.md) | **The field-test run, 2026-10-14: what was driven, and what was not.** The result of the pass `FIELD-TEST-PLAN-2026-10-14.md` planned, against the live desktop 0.2.169, the live backend and the phone at 0.2.1380. Four PASS, seven PARTIAL, twenty-six BLOCKED and twenty-six NOT-TESTABLE rows, each with the literal words it answered with; §5 is the explicit list of what is blocked on the newer phone APK, checked commit by commit with `git merge-base --is-ancestor` rather than assumed from a date. One recovery code was minted and left to lapse, no backup was committed, three cards were raised and denied, and every setting written was proved back by SHA-256. |
 | 2026-10-13 | [FIELD-TEST-2026-10-13-DESKTOP.md](FIELD-TEST-2026-10-13-DESKTOP.md) | **Desktop field test, 2026-10-13: the two FAILs, the conversation gap, and what was left unreachable.** Written by the desktop half of the owner's 2026-10-13 request - "make sure everything is field tested that can be on both the desktop and android app." The phone is another session's; nothing below touches it, adb was not used, and no phone was read or driven. |
 | 2026-10-12 | [CHECKER-CENSUS-2026-10-12.md](CHECKER-CENSUS-2026-10-12.md) | **The checker census (2026-10-12).** Why this exists. A checker that nothing runs is green this morning and worthless the moment it stops being green, because nothing tells anyone. |

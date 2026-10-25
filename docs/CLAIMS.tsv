@@ -199,3 +199,4 @@ C55	Chat answers the clock from this PC's own clock, with no model	test:backend/
 C56	A fast answer may only promise what this PC can do	test:backend/test_jarvis_open.py	built	docs/JARVIS-API.md:902
 C57	An answer that claims a search, calculation, feature list or missing setting without a tool is corrected in one plain line	grep:backend/jarvis_agent.py:_claim_corrections	built	docs/JARVIS-API.md:915
 C58	The two graphics cards keep their names and roles across a reboot	grep:jarvis-backend/jarvis_second_card.py:_approved_spare	built	docs/DECISIONS.md:3333
+R10	Review #1 prompt-stack measurer exists, and its numbers come from the shipped catalogue rather than a typed-in table: a tool added to a fixture changes the reported cost, a comment that lies about the tool count fails --check, and a broken import falls back to a stated static read	test:backend/test_measure_prompt_stack.py	built	tools/measure_prompt_stack.py:1

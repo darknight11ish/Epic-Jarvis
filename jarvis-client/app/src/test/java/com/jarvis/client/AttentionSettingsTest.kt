@@ -103,9 +103,14 @@ class AttentionSettingsTest {
             method.contains("AttentionSettings.classifyPost(resp.code, obj)"))
         assertTrue("the write is authed, so X-Jarvis-Client rides along:\n$method",
             method.contains(".authed()"))
-        // The short call: an arbiter on the same machine either answers at once
-        // or is not there, exactly as the limits write reasons.
-        assertTrue("the write must use the short call:\n$method",
+        // The CARD call, not the short one: raising the budget can raise an
+        // approval card, and the PC writes its HTTP answer only when that gate
+        // returns (up to 900 s). The 20 s short call reported "Jarvis took too
+        // long to answer." while the card was still up (the 2026-10-24 round-2
+        // audit, M1).
+        assertTrue("the write must use the card call:\n$method",
+            method.contains("cardCall.newCall(req)"))
+        assertFalse("the write still runs on the short call:\n$method",
             method.contains("shortCall.newCall(req)"))
         // Never the token in a log line, and no URL built by hand.
         assertFalse("the token must never be logged", method.contains("X-Jarvis-Token"))

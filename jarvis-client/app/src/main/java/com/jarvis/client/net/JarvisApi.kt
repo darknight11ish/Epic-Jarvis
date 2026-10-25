@@ -321,6 +321,22 @@ class JarvisApi(
         .callTimeout(1_200, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * A POST that can raise an approval card and WAIT for the owner's answer.
+     *
+     * The PC writes its HTTP answer only when the approval gate returns, and the
+     * gate waits up to `APPROVAL_TIMEOUT` (900 s by default), so these calls
+     * must outlast it by a comfortable margin - the same 1,200 s [applyCall]
+     * gives the preset apply. Reads and writes that never wait keep [shortCall]
+     * (the 2026-10-24 round-2 audit, M1: the phone used to report "Jarvis took
+     * too long to answer." after 15 s while the card was still up, and then the
+     * change landed anyway).
+     */
+    private val cardCall: OkHttpClient = client.newBuilder()
+        .readTimeout(1_200, TimeUnit.SECONDS)
+        .callTimeout(1_200, TimeUnit.SECONDS)
+        .build()
+
     fun baseUrl(): String? = settings.baseUrl()
 
     /** Why the saved address is refused (off the owner's own networks), or null. */
@@ -467,7 +483,7 @@ class JarvisApi(
      * the server, so success means "a decision card was raised".
      */
     suspend fun switchModel(ref: String): ApiResult<Unit> =
-        postJson("/api/models/switch", """{"ref":${quote(ref)}}""")
+        postCard("/api/models/switch", """{"ref":${quote(ref)}}""")
 
     /** `POST /api/models/rollback {}` - tier `auto`, never waits. */
     suspend fun rollbackModel(): ApiResult<Unit> = postJson("/api/models/rollback", "{}")
@@ -483,7 +499,7 @@ class JarvisApi(
      * why a typed name and not a catalogue.
      */
     suspend fun installModel(ref: String): ApiResult<Unit> =
-        postJson("/api/models/install", """{"ref":${quote(ref)}}""")
+        postCard("/api/models/install", """{"ref":${quote(ref)}}""")
 
     // ------------------------------------------------- autonomy proposals --
 
@@ -2694,7 +2710,7 @@ class JarvisApi(
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
-                shortCall.newCall(req).execute().use { resp ->
+                cardCall.newCall(req).execute().use { resp ->
                     val text = resp.body?.string().orEmpty()
                     val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
                         .getOrNull()
@@ -2734,7 +2750,7 @@ class JarvisApi(
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
-                shortCall.newCall(req).execute().use { resp ->
+                cardCall.newCall(req).execute().use { resp ->
                     val text = resp.body?.string().orEmpty()
                     val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
                         .getOrNull()
@@ -3247,7 +3263,14 @@ class JarvisApi(
     private suspend fun postId(path: String, id: String): ApiResult<Unit> =
         postJson(path, """{"id":${quote(id)}}""")
 
+    /** [postJson] on the long client: this POST can raise a card and wait for it. */
+    private suspend fun postCard(path: String, json: String): ApiResult<Unit> =
+        postJson(path, json, cardCall)
+
     private suspend fun postJson(path: String, json: String): ApiResult<Unit> =
+        postJson(path, json, shortCall)
+
+    private suspend fun postJson(path: String, json: String, call: OkHttpClient): ApiResult<Unit> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(
                 noAddress(),
@@ -3255,7 +3278,7 @@ class JarvisApi(
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
-                shortCall.newCall(req).execute().use {
+                call.newCall(req).execute().use {
                     when {
                         it.isSuccessful -> ApiResult.Ok(Unit)
                         // Routine whenever the desktop and the phone are
