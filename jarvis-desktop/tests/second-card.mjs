@@ -191,7 +191,15 @@ await check("a capable card, all off: only the main switch can be turned on, and
   const page = await open({ status: SC.capable_off });
   const s = await section(page);
   await page.close();
-  assert.match(s.found, /The NVIDIA GeForce RTX 2060 \(12 GB\) can take the second-card features/);
+  // The words are the backend's own. Read them from the fixture (which
+  // tools/gen_second_card_cases.py writes from the real status()) instead of
+  // repeating the card's name here: on 2026-10-25 that name became a role name
+  // ("Spare card (RTX 2060 12 GB)", jarvis_second_card.py's card-naming fix),
+  // and a repeated literal made this check stale while the page was right.
+  // Compared case-insensitively only because the page capitalises the first
+  // letter of the sentence it shows; every other word is the backend's own.
+  assert.ok(s.found.toLowerCase().includes(SC.capable_off.detected.why.toLowerCase()),
+    `the backend's own words are not on the page: ${s.found}`);
   assert.match(s.cards[0], /The one chat runs on/);
   assert.match(s.cards[1], /NVIDIA GeForce RTX 2060 \(12 GB\)/);
   assert.match(s.cards[1], /The second card\. The second-card features would run here\./);
@@ -650,7 +658,9 @@ await check("when the approval queue changes, the page re-reads and shows what t
   const long = row(s, "long_context");
   assert.equal(long.checked, true);
   assert.equal(long.state, "on");
-  assert.match(long.text, /Working: qwen3:8b on the NVIDIA GeForce RTX 2060/);
+  assert.ok(long.text.includes(
+    SC.running_long_context.features.find((f) => f.id === "long_context").why),
+    `the backend's own 'why' is not on the page: ${long.text}`);
   assert.match(s.status, /"Longer conversations" is on\./);
   assert.match(s.lane, /^Running\. Running on 127\.0\.0\.1:11435 \(this PC only\)/);
   assert.match(s.pinned, /Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER/);
