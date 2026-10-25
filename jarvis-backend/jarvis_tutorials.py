@@ -746,7 +746,7 @@ CATALOGUE = (
     # ------------------------------------------------------------------
     {
         "id": "model-page",
-        "version": 1,
+        "version": 2,
         "section": "pc",
         "title": "The Model page, and which model answers",
         "why": "What is loaded, why it matters, and where the choice is made.",
@@ -775,14 +775,13 @@ CATALOGUE = (
                      "not installed, and which need the second card. When "
                      "something is refused, this is the page that says why.",
              "where": "Settings \u2192 What this backend supports"},
-            {"title": "Skills, and checking them for updates",
-             "body": "A Skill is one thing Jarvis can do as a tool: reading a "
-                     "document, the calendar, pictures, the wiki. Skills is the "
-                     "list, and each one has its own switch. Check for tool "
-                     "updates asks whether the installed ones have newer "
-                     "versions - it only looks; nothing is installed without "
-                     "your yes.",
-             "where": "Settings \u2192 Check for tool updates"},
+            {"title": "Skills, and what one is",
+             "body": "A Skill is a folder with one file called SKILL.md in it: "
+                     "a page of written instructions Jarvis reads when it is "
+                     "useful, not a program that runs. It cannot run anything "
+                     "by itself. The Skills list shows the ones installed on "
+                     "this PC, and each one was scanned before it got there.",
+             "where": "Brain \u2192 Model \u2192 Skills"},
             {"title": "Which card runs your everyday chat",
              "body": "There is a setting for which graphics card runs the model "
                      "you chat with, and it is the one the Set up Jarvis card "
@@ -1122,18 +1121,26 @@ CATALOGUE = (
     },
     {
         "id": "how-it-talks",
-        "version": 1,
+        "version": 2,
         "section": "both",
         "title": "How Jarvis talks, and how to change it",
         "why": "Shorter answers, a different voice, and how to stop it talking.",
         "minutes": 3,
         "steps": (
             {"title": "How Jarvis talks",
-             "body": "The manner settings decide how it sounds when it answers, "
-                     "and Short answers is the one for spoken questions: with it "
-                     "on, a reply that will be read out loud is kept short "
-                     "instead of being a page. A sensitive fact still keeps its "
-                     "answer on screen, whatever this says.",
+             "body": "The personality decides how it sounds when it answers, "
+                     "and the four dials tune the details. Spoken answers stay "
+                     "short and easy to listen to either way, and a sensitive "
+                     "fact still keeps its answer on screen, whatever this says.",
+             "where": "Settings \u2192 How Jarvis talks"},
+            {"title": "Pick a personality, and hear it",
+             "body": "A personality changes how Jarvis sounds - warm, brisk, "
+                     "dry, or a patient advocate - and there are nine built "
+                     "in. Pick one in Settings, How Jarvis talks; Hear Sample "
+                     "plays its voice, and Use This Personality makes it the "
+                     "one Jarvis uses. My personalities saves your own mix of "
+                     "the four dials. Each chat can have its own, and a "
+                     "temporary chat keeps its choice in that chat only.",
              "where": "Settings \u2192 How Jarvis talks"},
             {"title": "Jarvis's voice",
              "body": "The voice it speaks with, chosen from the ones installed "
