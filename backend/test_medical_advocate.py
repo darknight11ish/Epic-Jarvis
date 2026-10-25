@@ -564,8 +564,10 @@ class SeparationTests(_StoreCase):
         self.assertEqual(BACKUP.not_backed_up_reason("health.db"), "")
 
     def test_the_docstring_no_longer_says_the_record_is_plain_or_excluded(self):
-        text = (HERE / "jarvis_medical_advocate.py").read_text(encoding="utf-8")
-        doc = text[:text.index('"""', text.index('"""') + 3)]
+        # The module's DOCSTRING through the AST, not a pin on source TEXT
+        # (tools/check_no_source_pins.py): a docstring is an ast.Constant.
+        tree = ast.parse((HERE / "jarvis_medical_advocate.py").read_text(encoding="utf-8"))
+        doc = ast.get_docstring(tree) or ""
         self.assertIn("IS encrypted at rest", doc)
         self.assertIn("IS carried in .jbak backups", doc)
         self.assertNotIn("It is NOT encrypted at rest", doc)
