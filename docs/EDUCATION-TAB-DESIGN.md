@@ -69,6 +69,15 @@ Counted by loading the module and walking `CATALOGUE` (a script, not a guess):
 Steps per tutorial run from **4 to 5**. `docs/TUTORIALS-DESIGN.md` says "4–8
 steps and two minutes"; the real range is tighter than that.
 
+> **This section is the 2026-10-10 snapshot, kept as the design record.** As of
+> 2026-10-25 the same module loads **36 lessons, 168 steps, 3 to 6 steps per
+> lesson**, because 13 lessons were added after this table was written (the
+> 2026-10-10 set and later ones, including `how-it-talks`). The enumeration in
+> §2.2 is the original 23-lesson set; its rows are not re-counted here, except
+> `screens-and-pictures` (6, after the "Ask for a picture" step added
+> 2026-10-25). A full re-count and re-enumeration belongs with a docs PR of its
+> own, not with a teaching-text fix.
+
 ### 2.2 The 23 tutorials, and what each one teaches
 
 This is the enumeration asked for. `where` is not repeated here — it is in the
