@@ -532,11 +532,11 @@ CATALOGUE = (
     },
     {
         "id": "screens-and-pictures",
-        "version": 1,
+        "version": 2,
         "section": "pc",
         "title": "Screens and pictures",
-        "why": "Two ways to show Jarvis your screen, and what is kept afterwards.",
-        "minutes": 3,
+        "why": "Two ways to show Jarvis your screen, what is kept, and how to ask for a picture.",
+        "minutes": 4,
         "steps": (
             {"title": "\"Look at this\" is one look",
              "body": "\"Look at this\" takes a single look at your screen when "
@@ -570,6 +570,17 @@ CATALOGUE = (
                      "understanding is still coming, and waits for the second "
                      "card to be measured.",
              "where": "Settings → Look at this and Watch with me → Picture mode"},
+            {"title": "Ask for a picture",
+             "body": "Say what the picture should show and Jarvis draws it on "
+                     "your PC with a program on your own machine - nothing is "
+                     "sent anywhere - then keeps it, with a note beside it "
+                     "saying what made it. The kept ones are in Brain, "
+                     "Projects, Pictures on the PC, and the phone shows them "
+                     "under Brain, Pictures too. A draw may first stop and ask, "
+                     "in plain words, whether Jarvis may set the everyday chat "
+                     "aside for about seven minutes; sending the same request "
+                     "again is your yes, from either app.",
+             "where": "Brain → Projects → Pictures; on the phone, Brain → Pictures"},
         ),
     },
     {
@@ -615,7 +626,7 @@ CATALOGUE = (
     },
     {
         "id": "faces",
-        "version": 1,
+        "version": 2,
         "section": "pc",
         "title": "The faces",
         "why": "Choosing how Jarvis looks, and what the expressions mean.",
@@ -625,7 +636,8 @@ CATALOGUE = (
              "body": "You can pick a red panda, a pygmy owl, a sea otter, a "
                      "monkey, or a small robot. Each is drawn by the app from "
                      "its own parts - nothing is downloaded - and each sits in "
-                     "the HUD, the widget and the phone.",
+                     "the HUD, the widget, the phone, and a page a browser on "
+                     "the PC can open.",
              "where": "Settings → Appearance → Faces"},
             {"title": "What the expressions mean",
              "body": "The face shows the state: listening, thinking, waiting on "

@@ -3,7 +3,7 @@
 The owner's feature list, as data: 139 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 1e182c02efeb6044bc94b6567ed8b265c3168dee71875c925202023c87eb28c2); the apps' Features pages read their own
+`features/features.json` (sha256 397342c13f5e15266fa54e1d5ef8b856309cc2a62fe86036571b96d35959c67c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "1e182c02efeb6044bc94b6567ed8b265c3168dee71875c925202023c87eb28c2"
+SOURCE_SHA256 = "397342c13f5e15266fa54e1d5ef8b856309cc2a62fe86036571b96d35959c67c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -499,7 +499,7 @@ FEATURES = (
         "id": "galaxy",
         "group": "Memory",
         "title": "Galaxy",
-        "what": "A map of what Jarvis knows, drawn from your own facts.",
+        "what": "A map of what Jarvis knows, drawn from your own facts. It can be drawn as the constellation, or as one of three flat layouts - Star map, Clean tree, Zen ring - and the choice is remembered on this PC.",
         "where": "Brain, Galaxy.",
         "asks": "No card.",
         "limit": "Drawn from the same memory lists, so it hides with them.",
@@ -1057,7 +1057,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Choose Jarvis's face",
         "what": "Twenty faces - five of them animals or a robot - drawn live.",
-        "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance.",
+        "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance. The HUD's face page also shows in a browser on the PC.",
         "asks": "The first time you pick an animal face, one line asks whether to use its own voice. A face never changes the voice by itself, and an approval never gets a wave or anything cute.",
         "limit": "Animal voices are Jarvis's own voices, blends and pitch - never a real person's.",
         "surface": "both",
@@ -1444,7 +1444,7 @@ FEATURES = (
         "what": "One card for each thing Jarvis wants to do that is not completely safe.",
         "where": "The card appears in the Jarvis bar, the widget, the HUD, or on the phone's Home.",
         "asks": "Nothing runs until you decide. There is no approve-all anywhere. Approving a risky card asks for Windows Hello on the PC, or your screen lock on the phone.",
-        "limit": "On a PC with no Windows Hello, or a phone with no screen lock, a risky approval is refused until one is set up, with a plain message saying how.",
+        "limit": "Four cards wait for you instead of expiring after 15 minutes - pairing a device, unretiring a shared key, registering a phone's approval key, and restoring a backup. On a PC with no Windows Hello, or a phone with no screen lock, a risky approval is refused until one is set up, with a plain message saying how.",
         "surface": "both",
         "covers": ["safety.approvals", "settings.approval-cards", "asks-first", "phone-approvals"],
     },

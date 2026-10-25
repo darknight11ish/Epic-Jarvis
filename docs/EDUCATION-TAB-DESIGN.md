@@ -95,7 +95,7 @@ file — but what each tutorial is *for* is.
 | `projects` | Projects, goals and benchmarks | What a project is; benchmarks; goals; the Shareable switch, off by default; what is ready and what waits for the second card | 5 |
 | `notes-and-wiki` | Notes and the wiki | The three note apps; when a note asks first; the wiki reads one folder; what the wiki needs to run | 4 |
 | `documents-and-search` | Documents, folders and search | You choose the folders; asking about a document; a Notion export; a note after reading asks first | 4 |
-| `screens-and-pictures` | Screens and pictures | "Look at this" is one look; "Watch with me" is a session; where it pauses; what is kept; reading pictures and Picture mode | 5 |
+| `screens-and-pictures` | Screens and pictures | "Look at this" is one look; "Watch with me" is a session; where it pauses; what is kept; reading pictures and Picture mode; ask for a picture | 6 |
 | `home-calendar-email` | Home, calendar and email | Calendar read-only; Home Assistant; reading and sending email; the card says when it read something; the morning briefing | 5 |
 | `faces` | The faces | Five faces; what the expressions mean; a voice per face; Animal options; serious moments stay plain | 5 |
 | `backups` | Backups and recovery | One locked file; the recovery code is shown once; what a lost code means; restoring and the preview; a limit worth knowing | 5 |
