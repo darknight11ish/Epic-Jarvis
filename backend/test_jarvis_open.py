@@ -168,8 +168,14 @@ def t_the_phrases_that_already_had_an_owner_still_do():
     # through jarvis_quick.py, where the ordering actually lives.
     check("'open a chat' is still the chat, not an app called chat",
           Q.match("open a chat").name == "open_chat")
-    check("'what time is it' is still the model's",
-          Q.match("what time is it") is None)
+    # D3 (2026-10-25): this sentence used to be the model's. "What time is it?"
+    # now has its own whole-sentence intent, answered from this PC's own clock
+    # (jarvis_quick._run_clock) - it must keep that owner, and a question that
+    # only MENTIONS a time must still go to the model.
+    check("'what time is it' is the clock's, not the model's",
+          Q.match("what time is it").name == "time_now")
+    check("'what time is it in Tokyo' is still the model's",
+          Q.match("what time is it in Tokyo") is None)
     check("'pause the music' is still music control",
           Q.match("pause the music").name == "media_pause")
     # "open my email" has no owner yet, so it is an app name and will be

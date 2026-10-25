@@ -74,6 +74,14 @@ can say", 2026-09-27, feasibility I116) is here too: "what can you do?",
 from jarvis_sayable.py's own fixed list - the same one both apps show in
 place of the Jarvis bar's old shortcut rows. No model, no state read.
 
+"WHAT TIME IS IT?" / "WHAT'S THE DATE?" (2026-10-25, the live-tools campaign's
+D3) is here too: "what time is it?", "what's the time", "what's the date?",
+"what day is it?" and the both-at-once wording are answered from THIS PC's own
+clock - `time.localtime(now)` and nothing else: no model, no network, no file -
+in the same 24-hour form both apps show. A question that only mentions a time
+("what time is the meeting?", "what time is it in Tokyo?") is not ours and goes
+to the model, because the words have to BE the question.
+
 "FROM NOW ON ..." (jarvis_manner.py, 2026-09-27) is here too: "from now on,
 be more plain", "from now on be warmer" and close phrasings change the
 manner setting at once - no card either way, like a tap in Settings - and
@@ -1291,6 +1299,14 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- thinking commands (jarvis_thinking.py, Section 5.5) --------------------
     got = _thinking_cmd(s)
+    if got is not None:
+        return got
+
+    # --- "what time is it?" / "what's the date?" (D3, 2026-10-25) --------------
+    # FIRST among the fixed answers, and answered only from `now`: a fact this
+    # PC knows exactly, so the model never sees the clock. See the _CLOCK_*
+    # grammar above for why a question that only MENTIONS a time is not ours.
+    got = _clock(s)
     if got is not None:
         return got
 
@@ -4128,6 +4144,51 @@ _TYPED_DECISION = re.compile(
     r"|yes,?\s+please")
 
 
+#: "What time is it?" and "What's the date?" (D3, the live-tools campaign of
+#: 2026-10-25). R13 of that campaign asked "What time is it?" and waited 82.1 s
+#: for the 9B model to answer "10:42 AM" while the PC's own clock read 20:16 -
+#: a wrong answer to a question this machine knows exactly, for free.
+#:
+#: THE WORDS MUST BE THE WHOLE QUESTION, as everywhere in this file. "what time
+#: is the meeting?" and "what time is it in Tokyo?" only MENTION a time (the
+#: second is a timezone conversion the PC's own clock cannot answer), so both
+#: go to the model, never here.
+_CLOCK_TAIL = (r"(?:\s+(?:please|on\s+this\s+pc|here|for\s+me|exactly))*")
+_CLOCK_TIME = re.compile(
+    r"(?:what(?:\s+is|'s)\s+the\s+time"
+    r"|what\s+time\s+is\s+it(?:\s+(?:right\s+)?now)?"
+    r"|what\s+time\s+do\s+you\s+have(?:\s+now)?"
+    r"|what\s+time\s+have\s+you\s+got(?:\s+now)?"
+    r"|tell\s+me\s+the\s+time(?:\s+now)?"
+    r"|(?:the\s+)?current\s+time(?:\s+now)?)" + _CLOCK_TAIL)
+_CLOCK_DATE = re.compile(
+    r"(?:what(?:\s+is|'s)\s+(?:the\s+|today's\s+|todays\s+)?date(?:\s+today)?"
+    r"|what\s+date\s+is\s+it(?:\s+today)?"
+    r"|what\s+day\s+is\s+it(?:\s+today)?"
+    r"|what\s+day\s+is\s+today"
+    r"|(?:today's|todays)\s+date"
+    r"|tell\s+me\s+(?:the\s+|today's\s+)?date"
+    r"|(?:the\s+)?current\s+date)"
+    r"(?:\s+(?:today|now|right\s+now|please|on\s+this\s+pc|here))*")
+_CLOCK_BOTH = re.compile(
+    r"(?:what(?:\s+is|'s)\s+the\s+(?:time\s+and\s+(?:the\s+)?date"
+    r"|date\s+and\s+(?:the\s+)?time)"
+    r"|what\s+time\s+and\s+(?:what\s+)?date\s+is\s+it"
+    r"|(?:the\s+)?time\s+and\s+(?:the\s+)?date)" + _CLOCK_TAIL)
+
+
+def _clock(s: str) -> Optional[Intent]:
+    """`time_now`, `date_today` or `clock_both` for a whole question about this
+    PC's own clock, or None (then nothing here has claimed it)."""
+    if _CLOCK_BOTH.fullmatch(s):
+        return Intent("clock_both")
+    if _CLOCK_TIME.fullmatch(s):
+        return Intent("time_now")
+    if _CLOCK_DATE.fullmatch(s):
+        return Intent("date_today")
+    return None
+
+
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     the owner's request of 2026-10-10).
@@ -4177,6 +4238,25 @@ def _run_identity(intent: Intent) -> Result:
         return Result(jarvis_identity.sentence(), intent.name)
     except Exception:
         return Result(IDENTITY_MISSING, intent.name)
+
+
+def _run_clock(intent: Intent, now: float) -> Result:
+    """"What time is it?" / "What's the date?" (D3, 2026-10-25).
+
+    `time.localtime(now)` is the whole input - the clock both apps show and the
+    day the PC itself thinks it is. No model, no network, no file, so the answer
+    can neither be slow nor be a guess. The words come from jarvis_schedule's
+    own WEEKDAYS/MONTHS/clock, the same ones every other answer here uses, so
+    the two can never drift apart."""
+    import jarvis_schedule as S
+    lt = time.localtime(now)
+    day = (f"{S.WEEKDAYS[lt.tm_wday]} {lt.tm_mday} "
+           f"{S.MONTHS[lt.tm_mon - 1]} {lt.tm_year}")
+    if intent.name == "date_today":
+        return Result(f"Today is {day}.", intent.name)
+    # `time_now` and `clock_both` share one sentence: naming the day is what
+    # makes a spoken clock answer useful, and it costs nothing.
+    return Result(f"It is {S.clock(now)} on {day}.", intent.name)
 
 
 # --------------------------------------------------------------------------
@@ -5357,6 +5437,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n in ("time_now", "date_today", "clock_both"):
+        return _run_clock(intent, now)
     if n == "sayable_help":
         return _run_sayable(intent)
     if n == "identity_help":
