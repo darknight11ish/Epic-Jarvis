@@ -501,16 +501,17 @@ mod tests {
 
     #[test]
     fn a_drawing_answers_with_its_name_and_a_409_carries_the_question() {
-        // The real body of a handshake: the backend puts the swap sentence
-        // inside `words` and repeats that same sentence in `card.words`, so the
-        // page must show `words` alone - joining both printed the swap twice.
+        // The real body of a handshake since 2026-10-25: the backend puts the
+        // swap sentence inside `words` ONCE, and `card` carries the numbers
+        // only - no `words` key, so no client can be handed that sentence
+        // twice. The page still shows `words` alone.
         let drawn = serde_json::json!({
             "ok": true,
             "available": true,
             "name": "2026-10-24-101010-a-red-panda.png",
             "id": "2026-10-24-101010-a-red-panda",
             "words": "Drawn in 274.0 seconds and saved as 2026-10-24-101010-a-red-panda.png. Your everyday chat stepped aside for 300.0 seconds and is back on the card after 41.0 seconds.",
-            "card": { "option": "A", "chat_away_seconds": 300, "chat_back_seconds": 41, "words": "Your everyday chat stepped aside for 300.0 seconds and is back on the card after 41.0 seconds." },
+            "card": { "option": "A", "chat_away_seconds": 300, "chat_back_seconds": 41 },
         })
         .to_string();
         let got = make_answer(200, &drawn).unwrap();
@@ -518,8 +519,21 @@ mod tests {
             got["words"],
             "Drawn in 274.0 seconds and saved as 2026-10-24-101010-a-red-panda.png. Your everyday chat stepped aside for 300.0 seconds and is back on the card after 41.0 seconds."
         );
+        assert!(got["card"].get("words").is_none(), "{}", got["card"]);
+        assert_eq!(got["card"]["chat_away_seconds"], 300);
+        assert_eq!(got["card"]["chat_back_seconds"], 41);
+        // An OLDER PC repeated the same sentence in `card.words`. That copy
+        // still has to reach the page whole: it is the fallback the page reads
+        // only when `words` is empty, never something it adds on top.
+        let older = serde_json::json!({
+            "ok": true,
+            "name": "2026-10-24-101010-a-red-panda.png",
+            "words": "Drawn in 274.0 seconds and saved as 2026-10-24-101010-a-red-panda.png.",
+            "card": { "chat_away_seconds": 300, "words": "Your everyday chat stepped aside for 300.0 seconds and is back on the card after 41.0 seconds." },
+        })
+        .to_string();
         assert_eq!(
-            got["card"]["words"],
+            make_answer(200, &older).unwrap()["card"]["words"],
             "Your everyday chat stepped aside for 300.0 seconds and is back on the card after 41.0 seconds."
         );
         // `name` is a STRING on this route: the gallery's array rule would call

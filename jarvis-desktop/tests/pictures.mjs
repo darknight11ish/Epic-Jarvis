@@ -689,10 +689,12 @@ check(
 );
 
 // The confirm click is the only thing that retries, and the wait says so.
-// The body below is the REAL body a handshake answers with
-// (backend/jarvis_pictures.py: `words` is the "drawn in ..." sentence with the
-// swap sentence appended, and `card.words` is that same swap sentence again).
-// The old fixture invented a `words` WITHOUT the swap, which hid a real bug:
+// The body below is what a PC that has NOT taken the backend change of
+// 2026-10-25 still sends: `words` is the "drawn in ..." sentence with the swap
+// sentence appended, and `card.words` is that same swap sentence again. It is
+// kept on purpose - the PC the owner runs may be older than that change, and
+// the page's `made || card.words` must keep printing it ONCE (PR #818's bug).
+// The old fixture invented a `words` WITHOUT the swap, which hid that bug:
 // the page joined `words` + `card.words` and printed the swap twice every draw.
 calls.length = 0;
 const swapSentence =
@@ -735,6 +737,27 @@ check(
 );
 check(
   "(iii) RUN: ... and the PC's whole sentence is shown ONCE - the swap sentence is never doubled",
+  page.state.said === `${drawnWords} ${swapSentence}`
+    && page.state.said.split(swapSentence).length === 2,
+  page.state.said,
+);
+
+// Since 2026-10-25 the backend is the sentence's ONE owner: the swap sentence
+// is inside `words`, and `card` carries only the numbers - no `words` key at
+// all. That is the body this PC will send after the update, and the page must
+// show its sentence once as well (nothing is appended to `words` by the page).
+answer = {
+  ok: true,
+  available: true,
+  name: "2026-10-24-101010-a-red-panda.png",
+  words: `${drawnWords} ${swapSentence}`,
+  card: { option: "A", chat_away_seconds: 300, chat_back_seconds: 41 },
+};
+page.state.pending = { prompt: "a red panda", error: "", option: "A", seconds: 300 };
+calls.length = 0;
+await page.setChatAsideAndDraw();
+check(
+  "(iii) RUN: the newer one-copy body (no card.words) shows the sentence ONCE too",
   page.state.said === `${drawnWords} ${swapSentence}`
     && page.state.said.split(swapSentence).length === 2,
   page.state.said,
