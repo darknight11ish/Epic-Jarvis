@@ -19,6 +19,11 @@
 //!   program on this PC, from words the owner typed - the same shape as a
 //!   timer or a note. It opens no way out of the PC and loosens no rule.
 //!   Held on a stale link anyway (rule 4), because it does change something.
+//!   **A drawing takes minutes, not seconds** (274 s measured on this PC), so
+//!   this is the one command with `PICTURE_TIMEOUT`; and when the everyday
+//!   chat is holding the 12 GB card the PC answers 409 `needs: "free_card"`,
+//!   which is a QUESTION for the owner - the retry that answers it carries
+//!   `free_card: true` and nothing sends it on its own.
 //! * [`brain_pictures_settings`] - `POST /api/pictures/settings`. The switch,
 //!   the drawing program and the folder. ONE named change at a time, and the
 //!   backend refuses all of it unless it came from this PC.
@@ -48,7 +53,7 @@
 
 use tauri::AppHandle;
 
-use super::{require_link_live, READ_TIMEOUT, WRITE_TIMEOUT};
+use super::{require_link_live, PICTURE_TIMEOUT, READ_TIMEOUT, WRITE_TIMEOUT};
 use crate::commands;
 
 /// A PC whose backend has no pictures feature yet. Plain words, the same shape
@@ -130,6 +135,44 @@ pub(crate) fn file_answer(status: u16, body: &str) -> Result<serde_json::Value, 
     Err(commands::backend_refusal(status, body))
 }
 
+/// The drawing's own answer, and the ONE refusal that is a question rather
+/// than a failure.
+///
+/// `POST /api/pictures` can answer **409** with
+/// `{"ok": false, "available": true, "needs": "free_card", "error": "...",
+/// "option": "A", "estimate": {...}}` when the everyday chat is holding the 12
+/// GB card. Nothing was drawn, and the PC is asking whether it may step the
+/// chat aside - so the whole body goes back to the page, which asks the owner
+/// and only then retries with `free_card: true`. Every other refusal keeps
+/// [`pictures_answer`]'s reading, which is the PC's own sentence.
+///
+/// A success is read here rather than there because a drawn picture answers
+/// with `"name"` as a **string** (the file it was saved as); `pictures_answer`
+/// requires its key to be an ARRAY, which is the gallery's shape. Using it for
+/// the make call would call every real drawing unreadable.
+pub(crate) fn make_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if status == 409 {
+        let asked = parsed(body).filter(|v| {
+            v.get("needs")
+                .and_then(|n| n.as_str())
+                .is_some_and(|n| !n.is_empty())
+        });
+        if let Some(asked) = asked {
+            return Ok(asked);
+        }
+    }
+    if (200..300).contains(&status) {
+        return parsed(body)
+            .filter(|v| v.get("ok").and_then(|o| o.as_bool()) != Some(false))
+            .filter(|v| v.get("name").is_some_and(|x| x.is_string()))
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if let Some(sentence) = backend_error(body) {
+        return Err(sentence);
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
 /// A picture id as the PC makes it: `YYYY-MM-DD-HHMMSS-<slug>`, so letters,
 /// digits, dashes, dots and underscores only - never a separator and never a
 /// `..`. A page cannot make the PC read another path.
@@ -149,7 +192,16 @@ pub(crate) fn valid_id(id: &str) -> bool {
 
 /// The prompt as the PC's own cap allows it, or the plain reason it cannot be
 /// sent. Trimmed, because a prompt of spaces is no prompt at all.
-pub(crate) fn prompt_body(prompt: &str) -> Result<serde_json::Value, String> {
+///
+/// `free_card` is the second half of the handshake and is sent **only** after
+/// the owner said yes to the PC's own 409 question: `true` asks the PC to step
+/// the everyday chat aside, draw, and load the chat back. Anything else (the
+/// page's first try, or no value at all) leaves the key out entirely, so the
+/// first request is exactly the request it always was.
+pub(crate) fn prompt_body(
+    prompt: &str,
+    free_card: Option<bool>,
+) -> Result<serde_json::Value, String> {
     let text = prompt.trim();
     if text.is_empty() {
         return Err("Say what the picture should show, and Jarvis will draw it.".to_string());
@@ -159,7 +211,11 @@ pub(crate) fn prompt_body(prompt: &str) -> Result<serde_json::Value, String> {
             "That is a very long request for a picture. Keep it under {MAX_PROMPT} characters."
         ));
     }
-    Ok(serde_json::json!({ "prompt": text }))
+    let mut body = serde_json::json!({ "prompt": text });
+    if free_card == Some(true) {
+        body["free_card"] = serde_json::json!(true);
+    }
+    Ok(body)
 }
 
 /// The body of `POST /api/pictures/settings`, rebuilt from the page's request
@@ -288,15 +344,27 @@ pub async fn brain_pictures_file(app: AppHandle, id: String) -> Result<serde_jso
 
 /// Draw one picture and keep it. NO CARD (see this file's own doc), but held
 /// on a stale link: it writes a file, so it is a change and rule 4 applies.
+///
+/// TWO STEPS WHEN THE CHAT IS HOLDING THE CARD. The first try carries the
+/// prompt alone; if the PC answers 409 `needs: "free_card"` nothing was drawn
+/// and [`make_answer`] hands the question back, and the page asks the owner
+/// before calling this again with `free_card: true` - which steps the chat
+/// aside, draws, and loads the chat back. This command never retries on its
+/// own: the owner's yes is the whole point.
 #[tauri::command]
 pub async fn brain_pictures_make(
     app: AppHandle,
     prompt: String,
+    free_card: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
-    let body = prompt_body(&prompt)?;
+    let body = prompt_body(&prompt, free_card)?;
     let base = commands::jarvis_base(&app);
-    let response = commands::jarvis_client(Some(WRITE_TIMEOUT))?
+    // A drawing is minutes, not seconds (274 s measured on this PC), so this is
+    // the one call with `PICTURE_TIMEOUT`; the settings write below keeps the
+    // ordinary budget. A timeout here would report a failure for a picture the
+    // PC is still drawing.
+    let response = commands::jarvis_client(Some(PICTURE_TIMEOUT))?
         .post(format!("{base}/api/pictures"))
         .headers(commands::jarvis_headers(&app)?)
         .json(&body)
@@ -310,7 +378,7 @@ pub async fn brain_pictures_make(
     }
     // A drawing takes far longer than a read's budget: the PC waits for the
     // program itself, and the answer is what it finally says.
-    pictures_answer(status, &text, "name")
+    make_answer(status, &text)
 }
 
 /// The switch, the drawing program and the folder. ONE named change at a
@@ -399,19 +467,98 @@ mod tests {
     #[test]
     fn a_prompt_is_trimmed_and_bounded() {
         assert_eq!(
-            prompt_body("  a red panda  ").unwrap(),
+            prompt_body("  a red panda  ", None).unwrap(),
             serde_json::json!({ "prompt": "a red panda" })
         );
         assert_eq!(
-            prompt_body("   ").unwrap_err(),
+            prompt_body("   ", None).unwrap_err(),
             "Say what the picture should show, and Jarvis will draw it."
         );
-        assert!(prompt_body(&"x".repeat(MAX_PROMPT)).is_ok());
-        let too_long = prompt_body(&"x".repeat(MAX_PROMPT + 1)).unwrap_err();
+        assert!(prompt_body(&"x".repeat(MAX_PROMPT), None).is_ok());
+        let too_long = prompt_body(&"x".repeat(MAX_PROMPT + 1), None).unwrap_err();
         assert!(too_long.contains("very long request"), "{too_long}");
         // Counted in characters, not bytes: a prompt of non-Latin words that
         // fits under the cap must not be refused for being long in bytes.
-        assert!(prompt_body(&"日".repeat(MAX_PROMPT)).is_ok());
+        assert!(prompt_body(&"日".repeat(MAX_PROMPT), None).is_ok());
+    }
+
+    #[test]
+    fn the_handshake_key_is_only_sent_when_the_owner_said_yes() {
+        // The first try is exactly the request it always was: no key at all,
+        // so a PC that has never heard of the handshake answers it as before.
+        let first = prompt_body("a red panda", None).unwrap();
+        assert!(first.get("free_card").is_none(), "{first}");
+        let said_no = prompt_body("a red panda", Some(false)).unwrap();
+        assert!(said_no.get("free_card").is_none(), "{said_no}");
+        // The retry carries the one extra the PC's own question allows.
+        assert_eq!(
+            prompt_body("  a red panda ", Some(true)).unwrap(),
+            serde_json::json!({ "prompt": "a red panda", "free_card": true })
+        );
+        // The prompt's own rules still apply to the retry.
+        assert!(prompt_body("   ", Some(true)).is_err());
+    }
+
+    #[test]
+    fn a_drawing_answers_with_its_name_and_a_409_carries_the_question() {
+        let drawn = serde_json::json!({
+            "ok": true,
+            "available": true,
+            "name": "2026-10-24-101010-a-red-panda.png",
+            "id": "2026-10-24-101010-a-red-panda",
+            "words": "Drew it in 274 seconds.",
+            "card": { "option": "A", "chat_away_seconds": 300, "words": "The chat is back." },
+        })
+        .to_string();
+        let got = make_answer(200, &drawn).unwrap();
+        assert_eq!(got["words"], "Drew it in 274 seconds.");
+        assert_eq!(got["card"]["words"], "The chat is back.");
+        // `name` is a STRING on this route: the gallery's array rule would call
+        // every real drawing unreadable.
+        assert!(make_answer(200, r#"{"ok": true, "name": []}"#).is_err());
+        assert!(make_answer(200, r#"{"ok": true, "pictures": []}"#).is_err());
+        assert!(make_answer(200, "not json").is_err());
+        // A 409 that names a need is a QUESTION, not a failure, so every field
+        // the page needs - the sentence, the option and the estimate - gets
+        // there whole. Nothing was drawn.
+        let asked = serde_json::json!({
+            "ok": false,
+            "available": true,
+            "needs": "free_card",
+            "error": "Your everyday chat is using the 12 GB card. Set it aside for about 5 minutes and the picture can be drawn.",
+            "option": "A",
+            "estimate": { "draw_seconds": 274, "chat_away_seconds": 300 },
+        })
+        .to_string();
+        let got = make_answer(409, &asked).unwrap();
+        assert_eq!(got["needs"], "free_card");
+        assert_eq!(got["option"], "A");
+        assert_eq!(got["estimate"]["draw_seconds"], 274);
+        assert_eq!(got["estimate"]["chat_away_seconds"], 300);
+        // "No way of making pictures is switched on" travels the same way; the
+        // page shows its `error` sentence and offers no yes/no.
+        let none = serde_json::json!({
+            "ok": false,
+            "needs": "card_none",
+            "error": "None of the three ways of making pictures is switched on.",
+        })
+        .to_string();
+        assert_eq!(
+            make_answer(409, &none).unwrap()["needs"],
+            "card_none",
+            "the page needs the key to know it is not a yes/no"
+        );
+        // An ordinary refusal is the PC's sentence; a 409 without a need is
+        // just a refusal too.
+        assert_eq!(
+            make_answer(503, r#"{"ok": false, "error": "It is off."}"#).unwrap_err(),
+            "It is off."
+        );
+        assert_eq!(
+            make_answer(409, r#"{"ok": false, "error": "That is not a request."}"#).unwrap_err(),
+            "That is not a request."
+        );
+        assert!(make_answer(500, "boom").is_err());
     }
 
     #[test]
@@ -578,6 +725,15 @@ mod tests {
         // nothing). The literals are built so this test cannot find itself.
         let gate = ["require_link_live", "(&app)?;"].concat();
         assert_eq!(code.matches(&gate).count(), 3, "{gate}");
+        // ONE call is allowed to take minutes - the drawing, whose own measured
+        // time was 274 s - and every other write here keeps the ordinary
+        // budget. A future edit that hands the make call back to WRITE_TIMEOUT
+        // makes every real drawing time out, so the split is pinned.
+        let picture = ["Some(PICTURE", "_TIMEOUT)"].concat();
+        let write = ["Some(WRITE", "_TIMEOUT)"].concat();
+        assert_eq!(code.matches(&picture).count(), 1, "{picture}");
+        assert_eq!(code.matches(&write).count(), 1, "{write}");
+        assert!(code.contains("pub async fn brain_pictures_make"));
         assert!(code.contains("crate::lock::private_hidden(app)"));
         assert!(code.contains("crate::lock::app_locked(app)"));
         // The prompt is the owner's own words: nothing here reads a file, a
