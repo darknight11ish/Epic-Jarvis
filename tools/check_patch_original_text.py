@@ -81,17 +81,18 @@ one of them is `cloud-say-yes.patch`:
     position 144  hud-origin-module.patch   (SECPRIV audit 2026-10-18: owner-only _token_ok/_origin_ok bodies)
     position 145  hud-exclusive-bind.patch  (SECPRIV audit 2026-10-18 N4: owner-only main() setup tail)
     position 146  presets.patch             (2026-10-18 preset model selector: the owner's original HUD text)
+    position 151  private-chat.patch        (2026-10-25 H10: the route-audit line under the owner's budget.spend())
 
 A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 `main` with eight findings - the false positives the audit's own next sentence
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all thirteen - those twelve, plus `no-expiry-cards.patch` at position 36, added
-2026-10-23 (rescue #4: only pairing a device, an approval key and a restore may
-have no deadline, so all eight of its hunks read the owner's own gate text) -
-with their positions, instead of pretending they are not there. The
-position-29 rule is kept as a REPORTED fact, not a gate.
+all fourteen - those thirteen, plus `private-chat.patch` at position 151,
+added 2026-10-25 (the architect's H10 ruling: ten of its eleven hunks anchor
+on text an earlier patch writes, and the one route-audit hunk reads the
+owner's own line) - with their positions, instead of pretending they are not
+there. The position-29 rule is kept as a REPORTED fact, not a gate.
 
 THE PIN
 
@@ -116,7 +117,7 @@ from pathlib import Path
 #: `origin/main` 2f85d772 (2026-10-16). A patch that invents nothing is absent
 #: and pinned at zero - which is the state the audit asked every late patch to
 #: be in. Entries at positions 0..26 are the stack's own early core, written
-#: against the owner's file before the stand-in existed; the nine later ones are
+#: against the owner's file before the stand-in existed; the later ones are
 #: the exceptions, each named with its position in the report below.
 PIN = {
     "rebuilt-patches/memory-safety.patch":     (6, 67),    # position 0
