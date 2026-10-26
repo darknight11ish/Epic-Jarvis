@@ -880,7 +880,8 @@ def t_no_model_on_a_match():
           "jarvis_speed.start(lane)" in later and "run_local_turn(" in later
           and "_degrade_hops" in later)
     check("... and returns: nothing after it runs on a match", block.rstrip().endswith("return"))
-    ns = {}
+    ns = {"_private": False, "_private_turn": lambda cfg, body: False,
+          "cfg": {"tools": {"enabled": []}}}
     exec(compile("import json, socket\n"
                  "def f(self, body, route_header, _history, _temporary_chat):\n" + block,
                  "<schedule.patch block>", "exec"), ns)

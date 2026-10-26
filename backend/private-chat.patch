@@ -1,0 +1,261 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -4702,6 +4702,19 @@
+             return self._send(400, {"error": "bad json"})
+         if not isinstance(body, dict):
+             return self._send(400, {"error": "body must be a JSON object"})
++        # private-chat.patch: read the private flag and release the device
++        # sighting the token check HELD, before anything else in the turn. The
++        # token check writes a device's last_seen before the body exists, so
++        # the devices wrapper holds it; dropping it here (private) or
++        # committing it (ordinary) means no early return or exception below can
++        # leave a private turn's sighting for the wrapper to write. A devices
++        # import failure leaves no wrapper installed, so there is nothing held.
++        _private = _private_chat(body)
++        try:
++            import jarvis_devices
++            (jarvis_devices.drop_seen if _private else jarvis_devices.commit_seen)(self)
++        except Exception:
++            pass
+         # An empty body is a dropped prompt, not an empty conversation. Say so
+         # instead of forwarding a blank turn upstream, which is what happened
+         # before: a chunked request had no Content-Length, read(0) returned
+@@ -5120,6 +5133,12 @@
+         # before. The `finally` still runs: this PC's record of the turn
+         # (not for a temporary chat) and the learner, which skips a command
+         # like this one (jarvis_intake.owner_turns).
++        # private-chat.patch: a private turn offers NO tool (the one switch
++        # both chat call sites below read) and writes no hud-budget.json.
++        # `_private` itself was read at the top of the turn.
++        _private_turn(cfg, body)
++        if _private:
++            budget = None
+         # briefing.patch: the owner is talking to Jarvis now, so no offer
+         # nobody asked for is put to them for two minutes (jarvis_backoff.py).
+         # The time only, in memory; never the words.
+@@ -5138,7 +5157,8 @@
+                 _local = self.connection.getsockname()[0]
+             except Exception:
+                 _local = None
+-            _quick = jarvis_quick.answer_turn(body, peer=_peer, local=_local)
++            _quick = jarvis_quick.answer_turn(body, peer=_peer, local=_local,
++                                              private=_private)
+         except Exception:
+             _quick = None
+         if _quick is not None:
+@@ -5147,6 +5167,9 @@
+             if _temporary_chat(body) and route_header.get("memory_side") != "jarvis":
+                 route_header["memory_side"] = "none"
+                 route_header["temporary"] = True
++            if _private:
++                # private-chat.patch: said plainly on every private answer.
++                route_header["private"] = True
+             # briefing.patch: a briefing that quotes calendar titles read
+             # outside text, so this PC's record of the turn says the calendar
+             # was read - the conversation then counts as having read outside
+@@ -5192,7 +5215,9 @@
+         # below checks, so timing can never be the reason an answer fails.
+         try:
+             import jarvis_speed
+-            _speed = jarvis_speed.start(lane)
++            # private-chat.patch: no speed record for a private turn.
++            _speed = (jarvis_speed.start(lane)
++                      if _persist_ok("speed", body) else None)
+         except Exception:
+             _speed = None
+         # Tools only on the local lane, never on a cloud one - a tool result
+@@ -5302,7 +5327,7 @@
+         # served it. Before, both recorded the pre-degrade lane.
+         if ROUTING and budget is not None and lane in lanes:
+             budget.spend()
+-        if GATING:
++        if GATING and _persist_ok("route_audit", body):
+             try:
+                 import jarvis_framework as _fw
+                 _fw.audit_log("route", {
+@@ -5341,6 +5366,12 @@
+                         route_header["remember_off"] = True
+                 except Exception:
+                     pass
++            if _private:
++                # private-chat.patch: the header says it plainly, whether or
++                # not memory was Jarvis's own (the temporary flag above is
++                # left out in that case; this one never is) - on every answer
++                # the turn actually produces after the body was read.
++                route_header["private"] = True
+             # feedback.patch: give this answer an id the owner can mark right
+             # or wrong, and note which remembered facts went into it - ids
+             # only, never text. Here, AFTER the degrade loop, because
+@@ -5351,8 +5382,11 @@
+             # an answer fails.
+             try:
+                 import jarvis_feedback
+-                route_header["turn_id"] = jarvis_feedback.record_turn(
+-                    route_header.get("injected_ids") or [])
++                # private-chat.patch: a private answer gets no turn id and no
++                # feedback row - it was never recorded anywhere else either.
++                if _persist_ok("feedback_turn", body):
++                    route_header["turn_id"] = jarvis_feedback.record_turn(
++                        route_header.get("injected_ids") or [])
+             except Exception:
+                 pass
+             # second-card-suggest.patch: remember a crisis turn's id (in
+@@ -5455,6 +5489,14 @@
+                         # that knows the argument.
+                         **({"lane_choice": _lane2}
+                            if hasattr(jarvis_agent, "choose_lane") else {}),
++                        # private-chat.patch: a private turn is told to the
++                        # agent itself - it runs no tool whatever the hud's
++                        # tool list resolved to, records no chain line and
++                        # writes nothing at the end - and its gate refuses
++                        # anything else, so no approvals row, no receipt and no
++                        # card. The model is answered without the tool.
++                        **({"gate_check": _private_gate, "private": True}
++                           if _private else {}),
+                         # The same doorbell every other capability uses to
+                         # say what it is doing while it does it - see
+                         # jarvis_ui_control.py/jarvis_android_control.py's
+@@ -5487,10 +5529,13 @@
+                     # and chat works exactly as before this patch.
+                     try:
+                         import jarvis_sources
+-                        jarvis_sources.record(
+-                            route_header.get("turn_id"),
+-                            _turn.get("tool_sources") or [],
+-                            _turn.get("unverified_quotes") or [])
++                        # private-chat.patch: no answer-sources row for a
++                        # private turn (there is no turn id to attach it to).
++                        if _persist_ok("sources", body):
++                            jarvis_sources.record(
++                                route_header.get("turn_id"),
++                                _turn.get("tool_sources") or [],
++                                _turn.get("unverified_quotes") or [])
+                     except Exception:
+                         pass
+                     # second-card-suggest.patch: jarvis_agent's own crisis
+@@ -5725,8 +5770,12 @@
+             # reproduced against the real jarvis_chat_log.py).
+             try:
+                 import jarvis_chat_log
+-                if (not _temporary_chat(body)
+-                        or getattr(jarvis_chat_log, "TEMPORARY_CHAT", False)):
++                # private-chat.patch: not even the temporary chat's RAM-only
++                # registry call is made - jarvis_chat_log._housekeeping() and
++                # _seed() run before its own temporary early-return, so the
++                # only provable zero-write path is not to call it at all.
++                if (not _private and (not _temporary_chat(body)
++                        or getattr(jarvis_chat_log, "TEMPORARY_CHAT", False))):
+                     jarvis_chat_log.record_turn(
+                         (dict(body, temporary=True) if _temporary_chat(body) else body),
+                         lane=str(route_header.get("lane") or lane),
+@@ -5929,7 +5978,7 @@
+ # and so does "screen" (a question about the owner's screen, JARVIS-API section
+ # 62: jarvis_agent reads it off the request as the app sent it - it never
+ # reaches a model).
+-_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "interrupted", "temporary", "live", "screen")
++_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "interrupted", "temporary", "private", "live", "screen")
+ 
+ _NO_CHAT_LOG = {
+     "available": False,
+@@ -5968,7 +6017,101 @@
+ # capabilities.temporary_chat asks the running server for this function by
+ # name (jarvis_events._hud_has), so an app offers the mode only on a PC that
+ # has it.
++# private-chat.patch (2026-10-25, the architect's H10 ruling). A PRIVATE chat -
++# `"private": true` on the /api/chat request - is a temporary chat plus a strict
++# reads-only promise: it recalls nothing, learns nothing, keeps nothing AND
++# every disk write its turn would make is refused. The one gate and the one
++# refusal sentence live in the shipped jarvis_private_chat.py; every helper
++# here FAILS CLOSED - if that module is missing or broken, the strict one-line
++# test is still made and a private request is still refused, so a missing file
++# can never turn a private turn into an ordinary one. Everything that changes
++# something - a timer, a setting, a personality, a note, a tool that needs a
++# card - is refused in one plain sentence before it runs; a private chat runs
++# NO tool at all and its approval gate refuses anything the model still asks
++# for, so no approval row, undo receipt or tool output can be written either.
++# The route header says `"private": true`; /api/version's
++# capabilities.private_chat is true only when the running server has this
++# patch AND the shipped module (jarvis_events probes both). An ordinary chat is
++# exactly what it was.
++_PRIVATE_REFUSAL = ("A private chat can read, search, and answer, but it doesn't change "
++                    "settings, save items, or run actions — switch back to a normal chat "
++                    "to do that.")
++
++
++def _private_chat(body) -> bool:
++    """Is this /api/chat request a private chat? FAIL CLOSED: the canonical
++    reading is jarvis_private_chat.is_private (JSON `true`, nothing else), and
++    when that module cannot be imported the same one-line test is made here
++    rather than answering False."""
++    try:
++        import jarvis_private_chat
++        return bool(jarvis_private_chat.is_private(body))
++    except Exception:
++        return isinstance(body, dict) and body.get("private") is True
++
++
++def _private_refusal() -> str:
++    """The one refusal sentence: the shipped module's copy, or a byte-identical
++    fallback when it is missing (the suite asserts they are equal)."""
++    try:
++        import jarvis_private_chat
++        return jarvis_private_chat.REFUSAL
++    except Exception:
++        return _PRIVATE_REFUSAL
++
++
++def _persist_ok(kind: str, body) -> bool:
++    """The single fail-closed write gate: may this turn write `kind` to disk?
++
++    FALSE first whenever the body says private, whatever happened to the
++    module - that is the fail-closed half. Otherwise the shipped module's own
++    persist() answers (it refuses an unknown kind); with no module and no
++    private flag this is an ordinary chat, which writes as it always did."""
++    if _private_chat(body):
++        return False
++    try:
++        import jarvis_private_chat
++        return bool(jarvis_private_chat.persist(kind, body))
++    except Exception:
++        return True
++
++
++def _private_turn(cfg, body) -> bool:
++    """private-chat.patch: a private chat runs NO tool at all. Empties the
++    tools list both chat call sites below read, and answers whether this turn
++    is private. Stricter than refusing only the mutating/card-gated tools, and
++    that is what makes the zero-write promise provable: no tool means no
++    approval row, no undo receipt, no tool output kept or replayed."""
++    private = _private_chat(body)
++    if private:
++        cfg["tools"] = dict(cfg.get("tools") or {})
++        cfg["tools"]["enabled"] = []
++    return private
++
++
++def _private_gate(action, detail, prompt=""):
++    """private-chat.patch: NOTHING is approved in a private chat. Handed to the
++    agent's tool loop, this answers every `gate_check` call with a refusal and
++    never calls jarvis_gate - so no approvals row is written and no tool runs
++    (hence no undo receipt from a tool-based action either)."""
++    class _Refused:
++        allowed = False
++        tier = "ask"
++        outcome = "denied"
++        request_id = None
++
++        def __init__(self, reason):
++            self.reason = reason
++
++    return _Refused(_private_refusal())
++
++
+ def _temporary_chat(body) -> bool:
++    if _private_chat(body):
++        # private-chat.patch: a private chat is a temporary chat too - memory,
++        # history and learning are suppressed by the same call sites - plus
++        # the write gate and the refusal gate, which temporary does not have.
++        return True
+     if not isinstance(body, dict):
+         return False
+     if body.get("temporary") is True:

@@ -1396,6 +1396,7 @@ def t_the_patch():
                    "LEARNER": types.SimpleNamespace(
                        offer=lambda m, origin="unknown", **kw: offered.append((m, origin))),
                    "_temporary_chat": lambda b: isinstance(b, dict) and b.get("temporary") is True,
+                   "_private": False,
                    "body": body, "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
                    "_history": {"turn": {"answer": "hello"}, "at": 5.0}}
             try:

@@ -1370,7 +1370,7 @@ def t_side_talk():
                               now=__import__("time").time() + L.SIDE_TALK_KEEP_S + 5))
     src = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
     check("a side-talk turn skips the 'suggest the bigger model' counters",
-          "if not watch.crisis and not side_talk:" in src)
+          "if not private and not watch.crisis and not side_talk:" in src)
 
 
 # ------------------------------------------------------------ 4. the camera

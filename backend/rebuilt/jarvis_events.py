@@ -855,6 +855,17 @@ def _capability_probe() -> dict:
         # appearance: both apps refuse to offer it - rather than send the
         # flag to a PC that would ignore it - unless this is true.
         "temporary_chat": _hud_has("_temporary_chat"),
+        # A private chat (`"private": true` on /api/chat): strictly reads-only,
+        # zero writes to any disk store, one refusal sentence for any request
+        # to change something (private-chat.patch; the architect's H10 ruling
+        # of 2026-10-25). Asked of the running server, like temporary_chat:
+        # an app must not offer the mode on a PC that would ignore the flag -
+        # the owner would believe the chat was private when it was not.
+        # ... AND the shipped gate module has to be there: the hud function
+        # alone would refuse actions but could not refuse every write, so a
+        # server with the patch and no module must report false (fail closed -
+        # an app then sends nothing, instead of believing a half-gate).
+        "private_chat": _hud_has("_private_chat") and has("jarvis_private_chat"),
         # The count-only retrieval trace (retrieve-count.patch; the owner's
         # decision of 2026-10-08, "Just the number"). True once the running
         # server answers `count=1` on GET /api/retrieve with counts and no

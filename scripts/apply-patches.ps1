@@ -1658,6 +1658,21 @@ $PATCHES = @(
     # media-index.patch), the two meet by construction: whichever merges
     # second rebases its hunk and the loader's anchor onto the other's block.
     'setup.patch'
+    # private-chat.patch (2026-10-25, the architect's H10 ruling): a PRIVATE
+    # chat (`"private": true` on /api/chat) is strictly reads-only - it recalls
+    # no memory, learns nothing, and writes NOTHING to disk (no chat history,
+    # feedback row, speed record, route audit line, budget, approval, receipt
+    # or device last_seen). A request to change something is answered with one
+    # plain sentence before any state change. An ordinary chat, and the
+    # temporary chat, are unchanged.
+    #
+    # It adds one refusal sentence and one strict flag reading, both in the
+    # shipped jarvis_private_chat.py; the hud hunks only ask it at each writer
+    # and switch the tool list off. It sits immediately BEFORE
+    # plugin-loader.patch, which must stay LAST OF ALL, and its context is the
+    # final printed text of the stack above it (no install block, no gate row,
+    # no tier change), so the loader's own anchor is untouched.
+    'private-chat.patch'
     'plugin-loader.patch'
 )
 
@@ -2206,6 +2221,14 @@ $SHIPPED = @(
 # route, no app surface, no patch of its own, so a backend without it runs
 # exactly as before (docs/MEDICAL-STORE.md).
 'jarvis_medical_advocate.py'
+# The fail-closed read-only gate for a private chat (`"private": true` on
+# /api/chat; the architect's H10 ruling of 2026-10-25). jarvis_quick.py asks
+# it before a mutating fast-path intent runs, and private-chat.patch asks it
+# at every writer in the hud's chat turn. Shipped whole, like every module a
+# patch calls; a backend without it ignores the flag and behaves exactly as
+# before (backend/_where.py's SHIPPED list has the same entry, and
+# backend/test_shipped_modules.py fails if the two disagree).
+'jarvis_private_chat.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

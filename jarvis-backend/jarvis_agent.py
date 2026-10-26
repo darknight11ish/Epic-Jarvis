@@ -9031,6 +9031,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    announce: Optional[Callable[[str], None]] = None,
                    post: Optional[Callable[[str, dict], dict]] = None,
                    gate_check: Optional[Callable[[str, dict, str], object]] = None,
+                   private: bool = False,
                    open_stream: Optional[Callable[[str, dict], object]] = None,
                    max_rounds: int = 6,
                    record_chain: Optional[Callable[[list], None]] = None,
@@ -9116,6 +9117,16 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     model...") rather than "thinking". Omitted, it asks Ollama's /api/ps on
     this PC (_model_waking); None means "cannot tell" and changes nothing.
 
+    `private` - a PRIVATE chat (the architect's H10 ruling, 2026-10-25):
+    strictly reads-only. Enforced HERE, not at the call site: `enabled_tools`
+    is emptied before any tool is offered (the owner's framework file wins
+    over a legacy config, so emptying that config alone would not have been
+    enough), any tool call that still comes back is answered with a refusal
+    instead of being dispatched (so the settings and schedule shortcuts,
+    which do not go through the gate, cannot run either), the end-of-turn
+    chain recorder is skipped, and jarvis_next_time / jarvis_energy are not
+    written. False by default: every ordinary turn is exactly what it was.
+
     `lane_choice` - the second graphics card (jarvis_second_card.py). The
     default "auto" asks choose_lane(); None keeps the turn on the main card;
     a LaneChoice (what jarvis_hud.py passes since second-card.patch, so the
@@ -9124,28 +9135,59 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     refused request would lose the answer. A turn that uses browser_control
     continues on the second card's long-context lane after that call, when
     it is working - the pages are what the main card has no room for.
+
+    With `private` True, each of those writes is refused rather than adjusted:
+    see the paragraph above.
     """
     recorder = record_chain if record_chain is not None else _record_chain
+    if private:
+        # private-chat.patch (H10, 2026-10-25): a private chat runs NO tool and
+        # writes NOTHING. This is the one place every local turn goes through,
+        # so the guarantee holds whatever the caller resolved for
+        # `enabled_tools` - the hud's list comes from the owner's framework
+        # file through enabled_tools_for_turn(), which ignores a legacy config,
+        # so an emptied config at the call site would NOT have been enough
+        # (the first review caught exactly that).
+        #   * no tool offered: `enabled_tools` is emptied, and `none=True` is
+        #     passed to _allowed_tools below as the second lock;
+        #   * no tool dispatched: the round loop answers any call with a
+        #     refusal instead of _one_call, so the settings and schedule
+        #     shortcuts (which bypass the gate by design) cannot run either;
+        #   * no chain line: the end-of-turn recorder is off - it would write
+        #     an audit line through jarvis_skill_discovery;
+        #   * no next_time / energy write: both are skipped at the end.
+        enabled_tools = set()
+        recorder = None
     steps: list = []
     watch = _TurnWatch(messages, request)
-    # Write Like Me (Q4, 2026-10-20): on a LOCAL DRAFTING turn only, put the
-    # owner's own (stripped) examples in front of the request. The helper
-    # returns "" - and does not latch - when the feature is off, there is no
-    # sample, the turn is Temporary, or it is an external-chatbot path. A
-    # non-empty block is data, not instructions: the rules line says so, and
-    # the turn is latched local so it cannot escalate to a cloud lane. No
-    # lane, tool list, card or route changes here.
-    try:
-        import jarvis_voiceprint as _VP
-        _draft_text = _newest_user_text(messages)
-        if _draft_text and _VP.drafting_request(_draft_text):
-            _style = _VP.drafting_block(_draft_text,
-                                        temporary=_looks_temporary(request))
-            if _style:
-                messages = ([{"role": "system", "content": _style}]
-                            + list(messages))
-    except Exception:
+    if private:
+        # private-chat.patch (H10; the round-3 review's blocker): the Write
+        # Like Me drafting block is SKIPPED ENTIRELY in a private turn. It
+        # would read voiceprint.db, possibly download the local embedding
+        # model on its first use, latch the conversation, write an audit line
+        # and put the owner's own stored writing samples INTO the prompt - and
+        # a private chat promises none of that. Skipping the import too is
+        # deliberate: nothing from that module is even asked a question here.
         pass
+    else:
+        # Write Like Me (Q4, 2026-10-20): on a LOCAL DRAFTING turn only, put the
+        # owner's own (stripped) examples in front of the request. The helper
+        # returns "" - and does not latch - when the feature is off, there is
+        # no sample, the turn is Temporary, or it is an external-chatbot path.
+        # A non-empty block is data, not instructions: the rules line says so,
+        # and the turn is latched local so it cannot escalate to a cloud lane.
+        # No lane, tool list, card or route changes here.
+        try:
+            import jarvis_voiceprint as _VP
+            _draft_text = _newest_user_text(messages)
+            if _draft_text and _VP.drafting_request(_draft_text):
+                _style = _VP.drafting_block(_draft_text,
+                                            temporary=_looks_temporary(request))
+                if _style:
+                    messages = ([{"role": "system", "content": _style}]
+                                + list(messages))
+        except Exception:
+            pass
     # Jarvis Live's own speed slice (2026-10-18): the Live-only model from
     # `[live]`, the one injected lane URL (the preset-lane patch supplies
     # :11435 later - jarvis_model_lanes.py is not edited here), a 16K context
@@ -9205,8 +9247,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # No tools offered on a crisis turn: the owner's decision that nothing
     # act, and the report's own worry made concrete - a web search for "the
     # tallest bridges near me" is not a turn Jarvis should let itself take.
-    names, model_said_no = _allowed_tools(enabled_tools, cur["url"], cur["model"],
-                                          none=cur["feature"] == "vision" or watch.crisis)
+    names, model_said_no = _allowed_tools(
+        enabled_tools, cur["url"], cur["model"],
+        none=private or cur["feature"] == "vision" or watch.crisis)
     if model_said_no:
         if announce is not None:
             try:
@@ -9778,6 +9821,18 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                                          for c in calls]})
             said["gap"] = True
             round_last_key = None
+            if private and calls:
+                # private-chat.patch: not dispatched at all - not the gate,
+                # not the settings/schedule shortcuts, which bypass it. The
+                # model is told in one line and answers without the tool.
+                for call in calls:
+                    name = str(((call.get("function") or {}).get("name"))
+                               or "that tool")
+                    convo.append({"role": "system", "content":
+                                  f"{name} is not available in a private chat: "
+                                  "it can read, search and answer, but it does "
+                                  "not run actions."})
+                continue
             for call in calls:
                 if out.gone:
                     raise ClientGone()
@@ -9944,14 +9999,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # made it to the client. Only the tools are recorded - see
         # _record_chain. A failing recorder must not replace a real error
         # from the stream, or turn a delivered answer into a failed turn.
-        if steps:
+        if steps and recorder is not None:
             try:
                 recorder(steps)
             except Exception:
                 pass
         # Numbers only, to the speed record (PROMPT_USAGE). Before
         # jarvis_hud's own speed.finish(), which writes the row.
-        _note_prompt_use(prompt_use["prompt"], prompt_use["cached"], rounds)
+        if not private:
+            _note_prompt_use(prompt_use["prompt"], prompt_use["cached"], rounds)
         # Struggle signal (a) continued: every broken tool call this turn
         # (check_call, counted in watch.bad by _one_call's `watch.broken`) -
         # "the model's own output came out malformed". Then, whatever this
@@ -9972,10 +10028,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # A reminder for next time counts as brought up only when the model
         # really answered this turn (jarvis_next_time.brought_up) - side
         # talk, answered with the marker alone, is not an answer.
-        if (next_time["ids"] and "".join(answer).strip() and not watch.crisis
-                and not side_talk):
+        if (not private and next_time["ids"] and "".join(answer).strip()
+                and not watch.crisis and not side_talk):
             _next_time_brought_up(next_time["ids"])
-        if not watch.crisis and not side_talk:
+        if not private and not watch.crisis and not side_talk:
             broken_this_turn = sum(watch.bad.values())
             if broken_this_turn:
                 note_struggle(conv_id, broken_this_turn)
@@ -10007,9 +10063,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # default, and off entirely without a readable card: the module answers
     # `{}` and writes nothing. Never the reason a turn fails.
     try:
-        if not out.gone:
+        if not out.gone and not private:
             # Only a turn somebody was still reading: a client that went away
-            # never got an answer, so there is no answer to price.
+            # never got an answer, so there is no answer to price. A private
+            # turn prices nothing - it writes nothing.
             import jarvis_energy
             jarvis_energy.record(estimate_tokens([{"role": "assistant", "content": final_answer}]),
                                  max(0.0, time.monotonic() - _turn_started))

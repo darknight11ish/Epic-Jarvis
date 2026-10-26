@@ -1253,6 +1253,13 @@ SHIPPED = (
     # it runs exactly as before. docs/MEDICAL-STORE.md says what is built and
     # what is not.
     "jarvis_medical_advocate.py",
+    # The fail-closed read-only gate for a private chat (`"private": true` on
+    # /api/chat; the architect's H10 ruling of 2026-10-25). jarvis_quick.py
+    # asks it before a mutating fast-path intent runs, and private-chat.patch
+    # asks it at every writer in the hud's chat turn. Shipped whole so the
+    # gate and the refusal sentence are the same text on every PC; a backend
+    # without it ignores the flag and behaves exactly as before.
+    "jarvis_private_chat.py",
 )
 
 

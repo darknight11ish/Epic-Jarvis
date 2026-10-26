@@ -274,7 +274,22 @@ RATCHET = {
     #: `test_installed_stand_in` reads 56 and its by_patch names the remaining
     #: three, and the pin must EQUAL the walk. A ratchet: it may still only go
     #: down.
-    "jarvis_hud.py": 56,
+    #: RAISED 2026-10-25, 56 -> 58, for `private-chat.patch` (the architect's
+    #: H10 ruling: a private chat is strictly reads-only). Eleven of its
+    #: thirteen hunks anchor on text an earlier patch writes, so they cost
+    #: nothing; the
+    #: two that do read the owner's own HUD text are the route-audit line
+    #: (`if GATING:` sits four lines under `budget.spend()`) and, after the
+    #: first review's fail-closed fix, the body-parse block where the private
+    #: flag is read and the held device sighting released before anything else
+    #: in the turn can return or raise. Both are honest rather than drift: no
+    #: patch in this walk writes those lines. The patch was checked the other
+    #: way with `git apply` against `jarvis-backend/jarvis_hud.py` (apply,
+    #: reverse, byte for byte - backend/test_private_chat.py re-runs it), which
+    #: is the check this walk cannot make. Measured, not argued: the walk now
+    #: reads 58 and test_installed_stand_in asserts EQUAL. A ratchet: it may
+    #: still only go down.
+    "jarvis_hud.py": 58,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

@@ -1146,8 +1146,25 @@ def _minute(t: float) -> int:
     return int(t) // 60 * 60
 
 
-def _note_seen(device_id: str) -> None:
+def _note_seen(device_id: str, handler=None) -> None:
+    """Note that this device was just used - at most once a minute.
+
+    private-chat.patch: `handler` is the request's own handler. A handler that
+    is HOLDING its sightings (hold_seen: the /api/chat route, whose body says
+    whether the turn is private) gets the sighting stashed on itself instead
+    of written; commit_seen() writes it, drop_seen() throws it away. A
+    handler that is not holding is written at once, exactly as before."""
     now = _wall()
+    if _seen_held(handler):
+        try:
+            handler._jarvis_seen_pending = ("device", device_id, now)
+        except Exception:
+            pass
+        return
+    _note_seen_now(device_id, now)
+
+
+def _note_seen_now(device_id: str, now: float) -> None:
     with _SEEN_LOCK:
         _SEEN[device_id] = _minute(now)
         due = now - _SEEN_WRITTEN.get(device_id, 0.0) >= SEEN_EVERY
@@ -1167,12 +1184,85 @@ def _note_seen(device_id: str) -> None:
         pass
 
 
-def _note_other(address: str) -> bool:
+def _seen_held(handler) -> bool:
+    """Is this request holding its registry sighting (private-chat.patch)?"""
+    return bool(getattr(handler, "_jarvis_seen_hold", False))
+
+
+def hold_seen(handler) -> None:
+    """Hold this request's last_seen write until commit_seen()/drop_seen().
+
+    private-chat.patch: the /api/chat turn's token check writes the device's
+    last_seen BEFORE the body is read, so a private turn cannot be refused at
+    the write itself. The devices wrapper holds it for the one route whose
+    body can say "private", and the hud drops it after reading the body. Any
+    other route, and an older hud, never calls this: their behaviour is
+    unchanged."""
+    try:
+        handler._jarvis_seen_hold = True
+    except Exception:
+        pass
+
+
+def drop_seen(handler) -> None:
+    """A private chat, or a request that failed: throw the held sighting away.
+
+    The `_jarvis_seen_dropped` mark is what makes the wrapper's own `finally`
+    safe: an exception raised anywhere after the token check (or an early
+    return before the hud could drop) drops the sighting here and commit_seen
+    then writes nothing. Fail closed: a private turn with any failure at all
+    still writes no last_seen."""
+    try:
+        handler._jarvis_seen_hold = False
+        handler._jarvis_seen_pending = None
+        handler._jarvis_seen_dropped = True
+    except Exception:
+        pass
+
+
+def commit_seen(handler) -> None:
+    """Write whatever the token check held - unless it was dropped.
+
+    A dropped sighting is never written, whether it was dropped by the hud
+    (private) or by the wrapper's exception path (a turn that failed). An
+    ordinary, successful chat whose hud did not drop it is written once."""
+    try:
+        pending = getattr(handler, "_jarvis_seen_pending", None)
+        dropped = bool(getattr(handler, "_jarvis_seen_dropped", False))
+        handler._jarvis_seen_hold = False
+        handler._jarvis_seen_pending = None
+    except Exception:
+        return
+    if dropped or not pending:
+        return
+    try:
+        if pending[0] == "device":
+            _note_seen_now(pending[1], pending[2])
+        elif pending[0] == "other":
+            _note_other_now(pending[1], pending[2])
+    except Exception:
+        pass
+
+
+def _note_other(address: str, handler=None) -> bool:
     """Remember the shared key's last use from another device. True when this
     call is the one that wrote it (at most once a minute per the lock), so the
     caller can log the same beat rather than logging every poll - a phone asks
-    every couple of seconds and the audit log is the owner's to read."""
+    every couple of seconds and the audit log is the owner's to read.
+
+    private-chat.patch: `handler` is handled exactly as in _note_seen - a
+    holding /api/chat request stashes the sighting; commit_seen() writes it."""
     now = _wall()
+    if _seen_held(handler):
+        try:
+            handler._jarvis_seen_pending = ("other", address, now)
+        except Exception:
+            pass
+        return False
+    return _note_other_now(address, now)
+
+
+def _note_other_now(address: str, now: float) -> bool:
     with _SEEN_LOCK:
         _OTHER.update(at=_minute(now), address=str(address or ""))
         due = now - _SEEN_WRITTEN.get("shared", 0.0) >= SEEN_EVERY
@@ -1409,7 +1499,7 @@ def wrap_token_ok(original: Callable) -> Callable:
             try:
                 handler._jarvis_device = device_id
                 _say_why(handler, None)
-                _note_seen(device_id)
+                _note_seen(device_id, handler)
                 _guard(handler, device_id)
             except Exception:
                 pass
@@ -1437,7 +1527,7 @@ def wrap_token_ok(original: Callable) -> Callable:
                     _say_why(handler, "shared_first_pair_only")
                     _log_shared_once("refused-first-pairing-done")
                     return False
-                if _note_other(peer):
+                if _note_other(peer, handler):
                     # Still the first pairing: kept, and written down, so the
                     # owner can see the old path was used and pair properly.
                     _log_shared_once("first-pairing")
@@ -3069,6 +3159,26 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     def do_POST(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
         if route not in POST_ROUTES:
+            if route == "/api/chat":
+                # private-chat.patch: the chat turn's device last_seen is
+                # written by the token check before the body says whether the
+                # turn is private, so it is HELD here and written only if the
+                # handler did not drop it. Fail-safe both ways: a private turn
+                # writes nothing, and a request that never reaches the body
+                # (or an older hud that knows nothing of this) still updates
+                # the registry exactly as it did before this patch.
+                hold_seen(self)
+                try:
+                    return post0(self)
+                except BaseException:
+                    # private-chat.patch: a request that fails after the token
+                    # check writes NO sighting - drop it and let the error go
+                    # on (the hud's own drop already does this for a private
+                    # turn that reaches its body; this covers everything else).
+                    drop_seen(self)
+                    raise
+                finally:
+                    commit_seen(self)
             return post0(self)
         if not _allowed(self, keyless=route in KEYLESS):
             return None

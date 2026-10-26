@@ -19593,3 +19593,45 @@ back on 900; every omission / 0 / negative / malformed / unknown flow value
 failing closed; and the patch applying to the published base and carrying #378's
 900 rather than the old 180. The supporting tests drive approval, denial,
 withdrawal, the sweep, `expires_in` and the Windows Hello half.
+
+---
+
+## `private-chat.patch` (2026-10-25): a private chat is strictly reads-only
+
+The architect's H10 ruling (2026-10-25, design A), backend Slice 1. A
+`"private": true` on `POST /api/chat` implies the temporary chat (no memory,
+no learning, no chat history) and additionally refuses every disk write a
+turn can make, runs no tool, and answers a request to change something with
+one plain sentence before anything changes.
+
+It ships ONE new module, `jarvis_private_chat.py` (in `$SHIPPED` and in
+`backend/_where.py`'s `SHIPPED`), which owns the strict flag reading, the one
+refusal sentence and the fail-closed `persist(kind, payload)` gate. The patch
+itself is thirteen hunks in `jarvis_hud.py`: the private flag is read and the
+held device `last_seen` released immediately after the body is parsed (so no
+early return or error can leave it for the wrapper), the fast-path block
+empties the tool list and switches the budget write off, the header says
+`"private": true`, the tool-loop gate denies everything without a card, and
+the speed record, route audit, feedback turn, answer-sources row and the
+finally's chat-log and learner calls are gated.
+`jarvis_quick.py` refuses every mutating intent of its own, `jarvis_devices.py`
+gained the sighting hold, `jarvis_agent.py` gained the `private` flag (the
+agent itself empties the tool list, so the owner's framework file cannot
+re-enable one; it refuses any tool call instead of dispatching it, skips the
+end-of-turn chain recorder and the next_time/energy writes, and skips the
+Write Like Me drafting block so no voiceprint.db, model download or stored
+sample is involved), and
+`rebuilt/jarvis_events.py` advertises `capabilities.private_chat` only when
+both the patch and the shipped module are there. All four are shipped modules,
+so the two-file rule applies to each.
+
+`backend/test_private_chat.py` is the proof, including the patch applying to
+the published base and reversing out of it and the fail-closed missing-gate
+case, and it joins a driven agent turn with a framework file naming tools.
+Its two hunks that read the owner's own HUD text (the body-parse flag read and
+the route-audit line, four lines under `budget.spend()`) are recorded in
+`_stack.py`'s RATCHET (56 -> 58) and in
+`tools/check_patch_original_text.py`'s pin table (2 hunks / 13 lines). It sits
+immediately BEFORE `plugin-loader.patch`, which must stay last of all, and the
+suite also checks it applies to the owner's live `jarvis_hud.py` copy when one
+is present.

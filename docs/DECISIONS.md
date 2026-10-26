@@ -3568,6 +3568,45 @@ calls, holds no lock while it waits and loads no model.
     has been true since Pillow 13.0.0 was pinned - it needs Python 3.11 or
     newer.
 
+## 2026-10-25 — A private chat is strictly reads-only (H10 ruling, backend Slice 1)
+
+  * **The ruling.** Gemini's H10 answer to the private-chat question
+    (2026-10-25, design A) is recorded here as the decision the code
+    implements: `"private": true` on `POST /api/chat` is a temporary chat plus
+    a zero-write promise, and the boundary is reads-only - a request to change
+    something is refused, not executed with a receipt. The gate is the shipped
+    `backend/jarvis_private_chat.py`; the hud half is
+    `backend/private-chat.patch`. JARVIS-API section 156 is the contract.
+  * **Why reads-only, not "actions with receipts".** A cardless action would
+    write both the thing it changed and an undo row in `receipts.db` carrying
+    the owner's own words - so the chat would not have been private at all.
+    The eight stores a turn can reach (chat history, memory and the learner,
+    feedback, speed, the route audit, approvals, receipts, the device's
+    last_seen) are each gated, and the gate is fail-closed: a missing or
+    broken module still refuses the private turn rather than making it
+    ordinary. The test suite carries an explicit eight-store table. The agent
+    turn itself enforces the tool half: it is handed `private: true`, empties
+    its own tool list (the owner's framework file cannot re-enable one),
+    refuses any tool call instead of dispatching it, skips the tool-chain audit
+    recorder, the next_time/energy writes and the Write Like Me drafting block
+    (no voiceprint.db, no embedding-model download, no stored writing sample in
+    the prompt) - so the settings and schedule shortcuts, which bypass the
+    approval gate by design, cannot run, and no stored words are read back into
+    the answer.
+  * **What is NOT built.** Neither app sends the flag and neither has a toggle
+    or marker; Slice 2 is the apps' half. Nothing here is a live deploy.
+  * **The cost, measured.** One shipped module, one 13-hunk hud patch, four
+    shipped-module twins changed besides the module (jarvis_quick, jarvis_devices,
+    jarvis_agent, rebuilt/jarvis_events), and two hunks that read the owner's
+    own HUD text (the body-parse block and the route-audit line), recorded in
+    `backend/_stack.py`'s RATCHET (56 -> 58) and in
+    `tools/check_patch_original_text.py`'s pin table (2 hunks / 13 lines). The
+    two independent reviews' findings are recorded in the PR: fail-closed gate,
+    the wrapper drop-on-failure, the explicit deny-all approval gate, the agent
+    turning its own tool list off (the framework file had overridden the config
+    the first version emptied), the tool-chain/next_time/energy writes, the
+    eight-store table and the corrected wording.
+
 ## 2026-10-26 — The visible name is "Incognito"; the internal `temporary` field and capability names stay
 
   * **What changed, and only that.** Every string the owner sees for this

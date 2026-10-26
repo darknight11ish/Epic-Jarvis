@@ -109,14 +109,19 @@ def _fragment(src, start, stop, *, after=0):
 
 
 def helpers(src) -> dict:
-    """The patch's module-level helpers, lifted and run."""
+    """The patch's module-level helpers, lifted and run. private-chat.patch
+    (2026-10-25) added _private_chat, which _temporary_chat now asks first, so
+    it is lifted too; a stack without it lifts nothing there and the temporary
+    checks below are exactly what they were."""
     ns: dict = {}
     fields = next(line for line in src.splitlines() if line.startswith("_CHAT_CLIENT_FIELDS = "))
     note_at = src.index("_TEMPORARY_NOTE = (")
     note = src[note_at:src.index("\n\n", note_at)]
+    private = _stack.function_text(src, "_private_chat") or ""
+    persist = _stack.function_text(src, "_persist_ok") or ""
     code = "\n".join([fields, _stack.function_text(src, "_chat_client_fields_off"),
-                      _stack.function_text(src, "_temporary_chat"), note,
-                      _stack.function_text(src, "_temporary_remember")])
+                      private, _stack.function_text(src, "_temporary_chat"), note,
+                      _stack.function_text(src, "_temporary_remember"), persist])
     exec(compile(code, "<temporary-chat helpers>", "exec"), ns)
     return ns
 
@@ -278,8 +283,14 @@ def _turn(src, st, query, body):
     spy = _Store(st)
     mem = types.SimpleNamespace(store=lambda: spy, with_profile=M.with_profile)
     real_past = sys.modules.get("jarvis_past")
+    # private-chat.patch: the header fragment now reads _private (False for
+    # every turn in THIS suite - these are temporary, not private, chats).
+    # _persist_ok is the stack's REAL helper (lifted above), not a True stub:
+    # a broken gate would then visibly stop an ordinary temporary turn writing,
+    # which is the safe direction and something a stub would hide.
     ns = dict(helpers(src), jarvis_memory=mem, query=query, MEMORY_K=5, time=time, body=body,
-              messages=[{"role": "user", "content": query}])
+              messages=[{"role": "user", "content": query}],
+              _private=False)
     ns["_dated_fact"] = lambda f: "- " + str(f.get("text", ""))
     try:
         exec(compile(search, "<stacked search>", "exec"), ns)
@@ -429,6 +440,10 @@ def _run_finally(snippet, body, stub):
                "LEARNER": types.SimpleNamespace(
                    offer=lambda m, origin="unknown", **kw: offered.append(m)),
                "_temporary_chat": lambda b: isinstance(b, dict) and b.get("temporary") is True,
+               # private-chat.patch: the real snippet also counts a private
+               # turn out of keeping and learning; this suite's bodies are
+               # temporary chats, so False here.
+               "_private": False,
                "body": body, "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
                "_history": {"turn": {"answer": "hi"}, "at": 1.0}}
         exec(snippet, env)
