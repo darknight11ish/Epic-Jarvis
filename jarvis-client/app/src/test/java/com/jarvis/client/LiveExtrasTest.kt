@@ -117,7 +117,32 @@ class LiveExtrasTest {
         assertEquals(LiveExtras.MIC_PHONE, LiveExtras.micWords(null))
         assertEquals("Microphone: your Bluetooth headset (Buds)", LiveExtras.micWords(sco))
         assertEquals(LiveExtras.MIC_FELL_BACK, LiveExtras.micWords(sco, fellBack = true))
-        assertTrue(LiveExtras.HEADSET_HINT.contains("never approves"))
+    }
+
+    /**
+     * The owner's request of 2026-10-26 ("get rid of the long explanation on
+     * jarvis live"): the three-sentence headset-button paragraph is not on the
+     * Live screen any more. The words are checked in the shipped source, and
+     * so is the one short line that stayed (which microphone is in use), so a
+     * later edit cannot quietly put the paragraph back or drop the line.
+     */
+    @Test
+    fun `the Live screen does not carry the long headset explanation`() {
+        val extras = listOf(
+            File("src/main/java/com/jarvis/client/voice/LiveExtras.kt"),
+            File("app/src/main/java/com/jarvis/client/voice/LiveExtras.kt"),
+            File("jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveExtras.kt"),
+        ).first { it.isFile }.readText()
+        val screen = listOf(
+            File("src/main/java/com/jarvis/client/ui/screens/LiveScreen.kt"),
+            File("app/src/main/java/com/jarvis/client/ui/screens/LiveScreen.kt"),
+            File("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/LiveScreen.kt"),
+        ).first { it.isFile }.readText()
+        assertFalse("the removed headset explanation is back in LiveExtras",
+            extras.contains("Headset button:"))
+        assertFalse("the notes plate adds a headset paragraph again", screen.contains("HEADSET_HINT"))
+        assertTrue("the microphone line is still in the notes",
+            screen.contains("mic?.let { add(it) }"))
     }
 
     @Test

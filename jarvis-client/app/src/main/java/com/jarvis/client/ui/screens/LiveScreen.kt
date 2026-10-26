@@ -488,13 +488,16 @@ fun LiveScreen(
                 }
             }
 
-            // What the owner should know while Live is on: App lock ends it
-            // (the review's #3), and interrupting by voice needs an echo
-            // canceller on this phone and the PC's voice check.
+            // What the owner should know while Live is on: which microphone is
+            // in use, App lock ends it (the review's #3), and interrupting by
+            // voice needs an echo canceller on this phone and the PC's voice
+            // check. The long headset-button explanation that used to open this
+            // plate was removed on the owner's request of 2026-10-26 ("get rid
+            // of the long explanation on jarvis live"): the button still does
+            // the same things, it is just not explained on screen any more.
             if (on) {
                 val notes = buildList {
                     mic?.let { add(it) }
-                    add(LiveExtras.HEADSET_HINT)
                     if (security.appLock) {
                         add(
                             if (security.liveEnd == LiveEnd.SCREEN_LOCK) {
