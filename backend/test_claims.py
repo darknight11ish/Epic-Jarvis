@@ -40,6 +40,24 @@ so deleting the safety guard still read as built. So this file now proves:
   * the allow-list is keyed to the suite that needs it: an `icacls` reason
     proves a `test_data_backup` row and proves nothing for another suite's row.
 
+And the environment the suites are started with (2026-10-25). `JARVIS_BACKEND`
+is set for the owner's Windows account on this PC and names the LIVE backend
+folder, and `backend/_where.py` puts that folder first on `sys.path`, so the
+checker used to start every suite against live code: on 2026-10-25 that made it
+report claim MED-01 as no longer holding (`backend/test_medical_advocate.py
+exited 1: AssertionError: MedicalStoreUnavailable not raised`) on a `main` that
+was never red - the same suite is 95/95 green with the variable removed.
+`backend/run_suites.py:881-884` had ignored that ambient value since 2026-10-21.
+So this file also proves the checker holds the same contract:
+
+  * its own parser offers `--use-env-backend`, off unless it is typed;
+  * with the variable set and no flag, the environment handed to a suite carries
+    no `JARVIS_BACKEND`, and one line names the value that was ignored;
+  * with the flag, the value is passed through unchanged;
+  * end to end, on one throwaway suite that fails on purpose (so its output is
+    quoted rather than swallowed): the child does not see the ambient value, and
+    does see it when the flag asks for it.
+
 And on the real register, four things the checker cannot say about itself:
 
   * it exits 0 today, so the first run after this lands is green;
@@ -55,6 +73,9 @@ checker itself is standard library only, and so is this.
 """
 from __future__ import annotations
 
+import contextlib
+import io
+import os
 import re
 import subprocess
 import sys
@@ -81,12 +102,18 @@ def check(name, cond, detail=""):
 HEADER = "# id\tclaim\tcheck\tstate\tsource\n"
 
 
-def run(*args):
-    """(exit code, output) for one run of the checker, from the repo root."""
+def run(*args, env=None):
+    """(exit code, output) for one run of the checker, from the repo root.
+
+    `env` is the environment the CHECKER is started with; None inherits this
+    process's own, which is what every check except the `JARVIS_BACKEND` ones
+    wants. Those pass a dict so the ambient value is a value this test chose,
+    not whatever the machine happens to carry.
+    """
     done = subprocess.run(
         [sys.executable, str(CHECKER), *args], cwd=str(REPO),
         capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=600)
+        timeout=600, env=env)
     return done.returncode, (done.stdout or "") + (done.stderr or "")
 
 
@@ -532,6 +559,124 @@ def t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it():
               "backend/test_settings_tool.py", settings) is None, settings)
 
 
+# ---------------------------------------------------------------------------
+#   What environment a `test:` row's suite is started with
+# ---------------------------------------------------------------------------
+# `JARVIS_BACKEND` is set for the owner's Windows account on this PC and names
+# the LIVE backend folder, and `backend/_where.py` puts that folder first on
+# `sys.path`. The checker used to pass the variable straight to every suite, so
+# each one ran against live code: on 2026-10-25 that made the register report
+# claim MED-01 as no longer holding on a `main` that was never red.
+# `backend/run_suites.py:881-884` has ignored that ambient value since
+# 2026-10-21. The checks below are the checker holding the same contract.
+
+#: A value that is plainly not this checkout, so a suite printing it proves the
+#: ambient variable reached the CHILD and not merely this test's own dict.
+LOOKS_LIVE = r"C:\a\pretend live backend"
+
+
+def env_with_ambient(value=None):
+    """This process's environment, carrying `JARVIS_BACKEND` `value` (or not).
+
+    Built by filtering rather than by assignment so there is exactly ONE entry
+    for the name: Windows treats environment names case-insensitively, and a
+    dict holding both `JARVIS_BACKEND` and some other spelling of it would be a
+    test of which one wins, not of the checker.
+    """
+    env = {key: item for key, item in os.environ.items()
+           if key.upper() != "JARVIS_BACKEND"}
+    if value is not None:
+        env["JARVIS_BACKEND"] = value
+    return env
+
+
+def t_the_parser_offers_the_opt_in_flag():
+    """The flag exists on the checker's OWN parser, is spelled the same word
+    `backend/run_suites.py` uses, and is off unless it is typed."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
+
+    parser = check_claims._parser()
+    check("the checker's parser knows --use-env-backend",
+          parser.parse_args(["--use-env-backend"]).use_env_backend is True)
+    check("... and a run that does not type it leaves the ambient value ignored",
+          parser.parse_args([]).use_env_backend is False)
+    check("... spelled the same word the runner uses for the same choice",
+          check_claims.USE_ENV_BACKEND_FLAG == "--use-env-backend",
+          check_claims.USE_ENV_BACKEND_FLAG)
+    help_text = " ".join(parser.format_help().split())
+    check("... and its help says what it does, naming the live folder",
+          "--use-env-backend" in help_text and "JARVIS_BACKEND" in help_text
+          and "LIVE" in help_text, help_text)
+    check("... and a register path still parses after the flag",
+          parser.parse_args(["--use-env-backend", "some.tsv"]).register
+          == "some.tsv")
+
+
+def t_the_ambient_backend_variable_is_ignored_unless_asked_for():
+    """The environment handed to a suite carries no `JARVIS_BACKEND` unless the
+    flag asked for it; the one line names the value it ignored; and the
+    process's own environment is never mutated to achieve either."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_claims
+
+    before = os.environ.get("JARVIS_BACKEND")
+    os.environ["JARVIS_BACKEND"] = LOOKS_LIVE
+    try:
+        note = io.StringIO()
+        with contextlib.redirect_stdout(note):
+            ignored = check_claims._suite_env(False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            passed_through = check_claims._suite_env(True)
+        still_there = os.environ.get("JARVIS_BACKEND")
+    finally:
+        if before is None:
+            os.environ.pop("JARVIS_BACKEND", None)
+        else:
+            os.environ["JARVIS_BACKEND"] = before
+    check("without the flag the environment a suite is given has no "
+          "JARVIS_BACKEND", "JARVIS_BACKEND" not in ignored, sorted(ignored))
+    check("... and one line names the value that was ignored",
+          "ignoring ambient JARVIS_BACKEND" in note.getvalue()
+          and LOOKS_LIVE in note.getvalue(), note.getvalue())
+    check("with the flag the value is passed through unchanged",
+          passed_through.get("JARVIS_BACKEND") == LOOKS_LIVE,
+          passed_through.get("JARVIS_BACKEND"))
+    check("... and neither call mutates this process's own environment",
+          still_there == LOOKS_LIVE, still_there)
+
+
+def t_a_suite_the_checker_runs_does_not_see_the_ambient_value():
+    """End to end, on ONE throwaway suite: the checker starts it with `env=`
+    explicitly, so the value its parent carries does not reach it - and with the
+    flag it does.
+
+    The suite FAILS on purpose, because a passing suite's output is never
+    printed; a failing one's last lines are quoted in the checker's own report,
+    so what the child saw is read off the checker's output rather than assumed.
+    """
+    suite = Path(tempfile.mkstemp(suffix=".py")[1])
+    suite.write_text(
+        "import os, sys\n"
+        "print('SEEN=' + str(os.environ.get('JARVIS_BACKEND')))\n"
+        "sys.exit(1)\n", encoding="utf-8")
+    path = register_with(
+        f"X15\tthe suite must not read the live folder\ttest:{suite}\tbuilt\t"
+        f"CLAUDE.md:1\n")
+    code, out = run(str(path), env=env_with_ambient(LOOKS_LIVE))
+    check("a suite the checker starts does NOT see the ambient JARVIS_BACKEND",
+          "SEEN=None" in out, out)
+    check("... and that run says one line naming the value it ignored",
+          "ignoring ambient JARVIS_BACKEND" in out and LOOKS_LIVE in out, out)
+    code, out = run(str(path), "--use-env-backend",
+                    env=env_with_ambient(LOOKS_LIVE))
+    check("with --use-env-backend the suite DOES see the value, unchanged",
+          f"SEEN={LOOKS_LIVE}" in out, out)
+    code, out = run(str(path), "--use-env-backend", env=env_with_ambient())
+    check("... and with no value on the machine there is nothing to pass, and "
+          "no crash", "SEEN=None" in out, out)
+
+
 if __name__ == "__main__":
     for fn in (t_the_checker_exists, t_the_committed_register_is_green,
                t_list_prints_every_row_it_checked,
@@ -554,7 +699,10 @@ if __name__ == "__main__":
                t_a_skipped_substance_is_not_proof,
                t_a_clean_suite_still_proves_a_row,
                t_a_skip_count_with_no_reason_is_not_proof,
-               t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it):
+               t_the_skip_allow_list_is_keyed_to_the_suite_that_needs_it,
+               t_the_parser_offers_the_opt_in_flag,
+               t_the_ambient_backend_variable_is_ignored_unless_asked_for,
+               t_a_suite_the_checker_runs_does_not_see_the_ambient_value):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
