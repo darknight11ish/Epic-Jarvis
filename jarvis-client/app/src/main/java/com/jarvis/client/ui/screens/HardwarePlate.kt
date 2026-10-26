@@ -88,6 +88,26 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
     }
 
     val status = (read as? Hardware.Read.Loaded)?.status
+    // This plate asks for the hardware itself as well as through Brain's
+    // whole-board refresh: the two used to be the only ask, and a slow or
+    // cancelled board read left this card at Read.NotAsked ("Asking your PC…")
+    // with no way forward.
+    var hardwareAskBusy by remember { mutableStateOf(false) }
+    val askHardware: () -> Unit = {
+        if (!hardwareAskBusy) {
+            hardwareAskBusy = true
+            scope.launch {
+                try {
+                    JarvisRuntime.refreshHardware()
+                } finally {
+                    hardwareAskBusy = false
+                }
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (JarvisRuntime.hardware.value is Hardware.Read.NotAsked) askHardware()
+    }
     // While a step's card waits, or a measurement runs, read again gently:
     // neither has an event of its own.
     val waiting = status != null && (
@@ -104,6 +124,11 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
     Section("Hardware", trailing = { Quiet("Refresh", enabled = busy == null, onClick = recheck) }) {
         if (status == null) {
             Plate {
+                // The owner came here for the presets. They have their own read
+                // (FocusPresetsPlate.kt) and must not wait behind a hardware read
+                // that has not answered.
+                FocusPresetsSection(canAct)
+                Gap(8)
                 Text(
                     Hardware.readLine(read).orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
@@ -113,9 +138,22 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
                     Gap(8)
                     Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
                 }
+                if (read is Hardware.Read.NotAsked || read is Hardware.Read.Failed) {
+                    Gap(6)
+                    Quiet(
+                        "Try again",
+                        enabled = !hardwareAskBusy,
+                        color = chrome.textMid,
+                    ) { askHardware() }
+                }
             }
         } else {
             Plate {
+                // The presets are first: this plate is the destination of
+                // More -> Jarvis Presets, so they are on screen when the anchor
+                // stops, not below the cards and "What runs now".
+                FocusPresetsSection(canAct)
+                Gap(12)
                 // 1. The cards: names and memory only.
                 Kicker("Your cards", Modifier.semantics { heading() })
                 Gap(4)
@@ -139,12 +177,6 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
                     color = if ((status.nowOnCardPercent ?: 100) < 100) chrome.warnInk else chrome.textMid,
                 )
 
-                // 2b. Focus presets (owner decision 2026-10-18): the one
-                // backend contract's presets, replacing the old work-setups
-                // plate. Above the three hardware presets on purpose - this is
-                // what the owner picks BEFORE starting work, and each "Use
-                // this preset" only raises one approval card.
-                FocusPresetsSection(canAct)
 
                 // 3. The three setups.
                 Gap(12)

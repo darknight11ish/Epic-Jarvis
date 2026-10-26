@@ -2434,9 +2434,17 @@ object JarvisRuntime {
 
     // --------------------------------------------------------- hardware ----
 
+    /** A hardware read must end: the card cannot sit at "Asking your PC…" forever. */
+    private const val HARDWARE_READ_TIMEOUT_MS = 25_000L
+
     /** Re-reads `/api/hardware`. Reads only; a failed read is said in words. */
     suspend fun refreshHardware() {
-        _hardware.value = Hardware.readOf(api.hardware())
+        val result = withTimeoutOrNull(HARDWARE_READ_TIMEOUT_MS) { api.hardware() }
+        _hardware.value = if (result == null) {
+            Hardware.Read.Failed(Hardware.DID_NOT_ANSWER)
+        } else {
+            Hardware.readOf(result)
+        }
     }
 
     /**

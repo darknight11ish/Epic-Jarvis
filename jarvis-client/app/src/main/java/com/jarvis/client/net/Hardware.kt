@@ -84,6 +84,10 @@ object Hardware {
     const val UPDATE = "This PC's Jarvis does not have the hardware part yet. Update the backend " +
         "by running apply-patches.ps1, then open this again."
 
+    /** The hardware read did not answer in time; the card offers a retry. */
+    const val DID_NOT_ANSWER =
+        "Your PC did not answer the hardware read in time. Tap Try again below."
+
     /** The phone's own line under the command: it is for the PC. */
     const val COMMAND_ON_PC = "This line is for your PC. Read it here; to run it, use the Copy " +
         "button in the desktop app (Settings, Hardware and models)."

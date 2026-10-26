@@ -95,6 +95,9 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
+/** How long "Refreshing…" may show before the header offers Refresh again. */
+private const val BRAIN_REFRESH_STUCK_MS = 30_000L
+
 /**
  * State of Mind — what Jarvis is doing, thinking with, and holding.
  *
@@ -323,6 +326,20 @@ fun BrainScreen(
     // while a read is already out: the button then says "Retrying…" rather
     // than stacking a second read on the first.
     val retry = if (brain.refreshing) null else onRefresh
+    // "Refreshing…" must never be the last word (owner report 2026-10-26): a
+    // board read that has not finished after 30 s puts Refresh back, so the
+    // owner can retry instead of watching a spinner that may never stop.
+    var refreshStuck by remember { mutableStateOf(false) }
+    val refreshingNow by rememberUpdatedState(brain.refreshing)
+    LaunchedEffect(brain.refreshing) {
+        if (!brain.refreshing) {
+            refreshStuck = false
+        } else {
+            delay(BRAIN_REFRESH_STUCK_MS)
+            if (refreshingNow) refreshStuck = true
+        }
+    }
+    val showRefreshing = brain.refreshing && !refreshStuck
 
     if (autoRefreshMs > 0L && link == LinkState.CONNECTED) {
         val refreshNow by rememberUpdatedState(onRefresh)
@@ -343,8 +360,8 @@ fun BrainScreen(
         // pass (2026-09-27): one name for one place.
         TopBar("Brain", onBack) {
             Quiet(
-                if (brain.refreshing) "Refreshing…" else "Refresh",
-                enabled = !brain.refreshing,
+                if (showRefreshing) "Refreshing…" else "Refresh",
+                enabled = !showRefreshing,
                 onClick = onRefresh,
             )
         }

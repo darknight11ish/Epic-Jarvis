@@ -35,6 +35,9 @@ internal object MoreMenuWords {
     /** "Jarvis Presets" (the owner's words) - opens the Brain's Hardware plate. */
     const val PRESETS = "Jarvis Presets"
 
+    /** The line under the row: where the presets really are, so the next screen is not a surprise. */
+    const val PRESETS_DETAIL = "In Brain, under Hardware"
+
     /** The Photo key that used to sit at the start of the composer row. */
     const val PHOTO = "Photo"
 

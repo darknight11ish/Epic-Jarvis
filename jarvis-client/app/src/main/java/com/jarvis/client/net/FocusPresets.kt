@@ -72,6 +72,7 @@ object FocusPresets {
         "Not connected to the desktop, so using a preset waits until the link is back."
     const val UPDATE =
         "This PC's Jarvis does not have focus presets yet. Update the backend, then open this again."
+    const val ASKING = "Asking your PC for the focus presets…"
     const val WAITING =
         "Asked. Your PC raises one approval card; nothing changes until you approve it."
     const val NOTHING_CHANGED = "Nothing was changed."
