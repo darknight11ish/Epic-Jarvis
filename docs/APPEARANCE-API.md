@@ -2,7 +2,8 @@
 
 > **Written, tested and ready to apply:** `backend/appearance.patch`. This page
 > is the contract; that patch is the implementation of it for `jarvis_hud.py`,
-> with nineteen checks in `backend/test_appearance.py` (the merge is in there).
+> with nineteen checks in `backend/test_appearance.py` (the merge is in there)
+> and fifteen in `backend/test_appearance_command.py` (asking for a face).
 
 The desktop's Faces window edits which face Jarvis wears and how each of the
 eight states looks. That choice is **data, not drawing code**, which is the
@@ -68,20 +69,58 @@ rule for a false capability.
 
 Body is the part of the document the caller owns. **A key that is present
 replaces its stored value; a key that is absent keeps it** (the merge rule
-below). `face` and `bindings` are the only fields a client sends that matter;
-the server owns `updated` and stamps it.
+below). The server owns `updated` and stamps it.
 
 ```json
 { "ok": true, "updated": 1758067200.0 }
 ```
+
+## Asking for a face, from either app (2026-10-26)
+
+The owner asked to be able to *say* what face to wear, from the desktop or the
+phone. The storage and the live event were already here; what was missing was a
+way to ask. It is one named choice in `jarvis_settings_registry.py`
+(`ChoiceSetting("face")`), reached by the grammar `jarvis_quick.py` already
+has for settings, and its setter calls `_appearance_set_face` in
+`appearance.patch` — the same one write this page describes. There is **no new
+route**.
+
+Sentences it answers, typed or spoken, from either app:
+
+| Say | What happens |
+|---|---|
+| "change your face to Spiral" | the face becomes `spiral` |
+| "use the Orbit face" | `orbit` |
+| "switch the face to the red panda" | `redpanda` (the spec's display name) |
+| "make your face the accretion face" | `accretion` |
+| "put the spiral face on" | `spiral` |
+| "what face are you using?" | a read: "The face is Red Panda. The voice is separate and unchanged." |
+
+* **No approval card.** This document is cosmetic (see the rules below), so a
+  face changes at once, exactly as the Faces window's own pick does.
+* **One key, one event.** `_appearance_set_face` sends `{"face": id}` and
+  nothing else. The merge keeps the state colours, so a face asked for in
+  chat cannot erase what the phone or the Faces window owns — and the
+  `appearance` event carries the merged document, so the other app repaints
+  without asking.
+* **The voice does not change.** A face never changes the voice by itself; the
+  answer says so out loud. The question "does this animal use its own voice?"
+  is the Faces window's own offer, not something a chat turn answers for the
+  owner.
+* **A name this PC does not have is refused with the real list**, never
+  guessed at. A PC with no `jarvis-visual-spec.json` refuses too ("the face
+  cannot be checked and nothing was changed") rather than storing an id its
+  renderer does not know.
+* That list is the spec's own (`_appearance_faces()`), so a face added to
+  `jarvis-visual-spec.json` can be asked for without editing any Python.
 
 ## Rules worth keeping
 
 **Last write wins, key by key.** There is one owner and two of their devices; a
 merge strategy would be machinery for a conflict that does not happen. The
 desktop stamps `updated` locally too, so a server that ignores the field still
-behaves. Two devices setting the SAME key within the same second still end with
-one of them — that is the rule, not an accident.
+behaves. Two devices setting the SAME key within the same second still end
+with one of them — that is the rule, not an accident.
 
 **A partial write MERGES; it does not replace.** This is a correctness rule,
 not a convenience, and it was a real defect before 2026-10-26: the write used
@@ -98,18 +137,6 @@ cannot make a colour change fail.
 forgetting something has to be said: `"face": null` (or `""`) clears the face,
 and `"bindings": {}` clears every state binding so each client falls back to
 the spec's defaults.
-
-**Two narrow ways a save can still lose a half, recorded rather than claimed
-away.** The merge covers the ordinary partial document, not two rarer cases.
-The server is a `ThreadingHTTPServer` and the read-modify-write has no lock, so
-two saves that overlap inside the server can both read the same old document
-and the second write can carry the first one's stale other half. And
-`_appearance_view` cannot tell a corrupt file from one that is unreadable just
-now, so a save made in that moment merges onto an empty document and can lose
-the rest. Both were found by the independent review of 2026-10-26; closing
-them means a `threading.Lock` and a "could not read just now" refusal, and is
-the obvious next change if either is ever seen. The windows are small: one
-owner, two devices.
 
 **Validate against the spec, and reject rather than clamp.** An unknown
 `pattern` or `color` should be a 400 naming the offender. A server that

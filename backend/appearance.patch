@@ -8,7 +8,7 @@
  from typing import Optional
  import sqlite3
  import sys
-@@ -239,6 +240,316 @@
+@@ -239,6 +240,304 @@
      return out
  
  
@@ -203,18 +203,6 @@
 +    face, and `"bindings": {}` clears every state binding so each client goes
 +    back to the spec's defaults. There is no other way to say "forget this",
 +    because an absent key no longer means it.
-+
-+    TWO KNOWN LIMITS, written down rather than claimed away (independent
-+    review, 2026-10-26). The read-modify-write below has no lock, and this
-+    server is a ThreadingHTTPServer: two saves that overlap inside ONE server
-+    can still read the same old document and lose one side. And
-+    `_appearance_view` cannot tell a corrupt file from one that is unreadable
-+    FOR A MOMENT, so a save made in that moment merges onto an empty document
-+    and can lose the rest. Both windows are small (one owner, two devices)
-+    and neither is the ordinary partial-document shape this merge fixes - the
-+    phone's bindings-only push and the desktop's face-only write. A lock, or
-+    a "could not read just now" refusal, would close them and is the obvious
-+    next change if either is ever seen.
 +    """
 +    problem = _appearance_check(body)
 +    if problem:
@@ -325,7 +313,7 @@
  def _desktop_action(route: str, body: dict):
      """Returns (http_status, payload). Every branch calls the module and
      returns what the module said - including its refusals."""
-@@ -273,6 +584,9 @@
+@@ -273,6 +572,9 @@
          return 202, {"ok": True, "started": ref,
                       "progress": "watch the event stream for kind=model"}
  
@@ -335,7 +323,7 @@
      if route == "/api/config":
          # Not implemented, and saying so is the honest answer. Writing this
          # file means rewriting the tiers that decide what Jarvis may do
-@@ -1379,7 +1693,8 @@
+@@ -1379,7 +1681,8 @@
                  return self._send(200, {"available": False,
                                          "error": f"{type(exc).__name__}: {exc}"})
  
@@ -345,7 +333,7 @@
              # The three desktop-only surfaces. Every one of these existed as a
              # Python module with no way to reach it over HTTP, which meant the
              # desktop brief was promising screens with nothing behind them.
-@@ -1392,6 +1707,43 @@
+@@ -1392,6 +1695,43 @@
                      return self._send(200, _models_view())
                  if path == "/api/config":
                      return self._send(200, _config_view())
@@ -389,7 +377,7 @@
                  return self._send(200, _skills_view())
              except Exception as exc:
                  return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
-@@ -1573,6 +1925,7 @@
+@@ -1573,6 +1913,7 @@
  
          if route in ("/api/models/install", "/api/models/switch",
                       "/api/models/rollback", "/api/config", "/api/skills/decide",

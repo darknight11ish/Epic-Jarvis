@@ -2145,6 +2145,17 @@ def cannot_change_setting_words(words: str = "") -> str:
     dom_id = find_not_by_asking_words(words or "")
     if dom_id is not None:
         return f"{lead} {not_by_asking_sentence(dom_id)}"
+    choice = find_choice_setting(asked)
+    if choice is not None:
+        # A NAMED CHOICE is changeable by asking - just not by an on/off tool.
+        # The old lead ("I cannot change it by asking") would be false here,
+        # and the answer after it lists the setting among what CAN be changed
+        # (2026-10-26: the face made that contradiction reachable).
+        name = choice.names[0] if choice.names else choice.key
+        return (f'"{asked}" is a choice rather than an on/off switch, so it is '
+                f"set by naming a value: say \"set {name} to ...\" with one of "
+                f"its values - ask \"what are the choices for {name}\" and I "
+                f"will read them out.")
     return f"{lead} {changeable_words()}"
 
 
@@ -2427,6 +2438,125 @@ def _preset_choices() -> dict:
     return out
 
 
+def _hud_function(name: str):
+    """The RUNNING server's own `name`, or None.
+
+    `jarvis_hud.py` normally runs as `__main__`; under a test or an importer it
+    is `jarvis_hud`. This is the same lookup `jarvis_events._hud_has` makes,
+    and deliberately NOT a fresh `import jarvis_hud`: under `__main__` that
+    would execute the server's file a second time. None is an answer, not a
+    failure - every caller below says so in words instead of guessing."""
+    import sys
+    for modname in ("__main__", "jarvis_hud"):
+        mod = sys.modules.get(modname)
+        fn = getattr(mod, name, None) if mod is not None else None
+        if callable(fn):
+            return fn
+    return None
+
+
+def _faces_from_repo_spec() -> list:
+    """The spec's faces read from a file, or [].
+
+    A FALLBACK, and only for a process with no server in it: the checker and
+    the suites import this file in a plain Python process, where the running
+    `jarvis_hud` does not exist. The authority stays
+    `jarvis_hud._appearance_faces()` - the list `_appearance_set_face`
+    validates against - and it is used first whenever it is available.
+
+    Three places, in the order they mean something: a real backend folder (the
+    published base carries the spec beside the code), this repository's
+    desktop source, and the published base itself. None found is [] - the face
+    then cannot be named, and the answer says so."""
+    import json
+    from pathlib import Path
+    here = Path(__file__).resolve().parent
+    for path in (here / "jarvis-visual-spec.json",
+                 here.parent / "jarvis-desktop" / "src" / "jarvis-visual-spec.json",
+                 here.parent / "jarvis-backend" / "jarvis-visual-spec.json"):
+        try:
+            spec = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:                   # noqa: BLE001 - try the next one
+            continue
+        rows = spec.get("faces") if isinstance(spec, dict) else None
+        out = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict) or not row.get("id"):
+                continue
+            out.append({"id": str(row["id"]),
+                        "name": str(row.get("name") or row["id"])})
+        if out:
+            return out
+    return []
+
+
+def _face_rows() -> list:
+    """The faces this PC really has: the running server's list, else the repo's."""
+    fn = _hud_function("_appearance_faces")
+    rows = []
+    if fn is not None:
+        try:
+            rows = fn() or []
+        except Exception:                   # noqa: BLE001 - [] is the answer
+            rows = []
+    return rows if rows else _faces_from_repo_spec()
+
+
+def _face_choices() -> dict:
+    """The face ids and the spec's own display names - never typed twice.
+
+    A face added to `jarvis-visual-spec.json` appears here without editing this
+    file, the same rule `_voice_speaker_choices` keeps for the voices pack. {}
+    means this machine has no spec: then no face is accepted, and the answer
+    says so rather than guessing an id the renderer may not know."""
+    out = {}
+    for row in _face_rows():
+        fid = str(row.get("id") or "").strip()
+        if not fid:
+            continue
+        out[fid] = fid
+        label = str(row.get("name") or "").strip()
+        if label:
+            out[_bare(label)] = fid
+    # The grammar's own short forms for the two animal faces
+    # (jarvis_quick's _BEAST list says "red panda|panda|owl"): the owner
+    # saying "the panda" or "the owl" means the same two faces.
+    for short, fid in (("panda", "redpanda"), ("owl", "pygmyowl")):
+        if fid in out:
+            out.setdefault(short, fid)
+    return out
+
+
+def _face_label(face_id: str) -> str:
+    """One face id's display name from the spec, or the id itself."""
+    for row in _face_rows():
+        if str(row.get("id") or "") == str(face_id):
+            return str(row.get("name") or face_id)
+    return str(face_id)
+
+
+def _face_now() -> str:
+    """The face in the stored document, in the spec's own words."""
+    fn = _hud_function("_appearance_view")
+    if fn is None:
+        return "unknown"
+    try:
+        view = fn() or {}
+    except Exception:                       # noqa: BLE001 - unknown is the answer
+        return "unknown"
+    face = str(view.get("face") or "")
+    return _face_label(face) if face else "no face chosen"
+
+
+def face_words() -> str:
+    """The answer to "what face are you using?" - a read, never a guess."""
+    now = _face_now()
+    if now in ("unknown", "no face chosen"):
+        return ("No face has been chosen, so each app draws its own default. "
+                "Say \"change your face to Spiral\" to pick one.")
+    return f"The face is {now}. The voice is separate and unchanged."
+
+
 def _set_handoff_mode(mode: str) -> Outcome:
     try:
         import jarvis_handoff_mode as HM
@@ -2471,6 +2601,42 @@ def set_voice_speaker(value: str, *, peer=None, local=None) -> Outcome:
         return _missing("the built-in voice")
     code, out = JV.set_speaker({"speaker": str(value)})
     return _say(code, out)
+
+
+def set_face(value: str, *, peer=None, local=None) -> Outcome:
+    """ONE face, at once, from either app or by asking - cosmetic, no card.
+
+    Calls the ONE function `POST /api/appearance` reaches
+    (`_appearance_set_face` in appearance.patch), so there is one file write
+    and one `appearance` event - which is what makes the other app follow.
+
+    The VOICE is deliberately untouched, and the answer says so: a face never
+    changes the voice by itself (the owner's rule, features.json), and the
+    animal-voice question belongs to the Faces window, not to a chat turn that
+    would be answering it for the owner.
+    """
+    fn = _hud_function("_appearance_set_face")
+    if fn is None:
+        # Honesty path: the repo ships patches, and this PC may not have run
+        # this one. Words, never a traceback and never a silent success.
+        return Outcome(False, "This PC's Jarvis cannot change the face by "
+                              "asking yet - run apply-patches.ps1. Nothing was "
+                              "changed.")
+    code, out = fn(str(value))
+    if code >= 400:
+        out = out if isinstance(out, dict) else {}
+        names = out.get("faces") or []
+        if names:
+            # The refusal lists the REAL faces - never a guess at the closest.
+            return Outcome(False, "I cannot set the face to that. The faces on "
+                                  "this PC are: "
+                                  + ", ".join(str(n) for n in names)
+                                  + ". Nothing was changed.")
+        return Outcome(False, str(out.get("reason") or out.get("error")
+                                  or "That face could not be set. Nothing was "
+                                     "changed."))
+    return Outcome(True, f"Face: {_face_label(str(value))}. It changed on both "
+                         f"apps, and the voice stayed as it was.")
 
 
 def set_focus_preset(value: str, *, peer=None, local=None) -> Outcome:
@@ -2537,6 +2703,12 @@ CHOICE_SETTINGS: tuple = (
          "which preset jarvis uses"),
         "focus-presets", _preset_choices, set_focus_preset,
         "which focus preset Jarvis runs (each apply raises its one card)"),
+    ChoiceSetting(
+        "face",
+        ("the face", "your face", "jarvis's face", "jarvis face",
+         "which face jarvis wears", "the face jarvis wears"),
+        "appearance-card", _face_choices, set_face,
+        "which face Jarvis wears (the visual spec's own face names, no card)"),
 )
 
 
@@ -2644,6 +2816,13 @@ CONTROL_FIELDS: dict = {
     "focus preset": (
         ControlField("preset", _choice("focus_preset"), ("preset",)),
     ),
+    "face": (
+        # One field, named the same as the control: "change your face to
+        # Spiral" says the field by saying the face, so the clarifying question
+        # can only ever be about the value.
+        ControlField("face", _choice("face"),
+                     ("face", "look", "character", "which face")),
+    ),
 }
 
 #: The words a person may say for each control, longest first at match time.
@@ -2653,6 +2832,8 @@ CONTROL_NAMES = {
                          "the hand-off", "the handoff", "the captcha",
                          "captcha hand-off", "captcha handoff", "hand-off", "handoff"),
     "focus preset": ("the focus preset", "focus preset", "the model preset"),
+    "face": ("which face jarvis wears", "the face jarvis wears", "your face",
+             "jarvis's face", "jarvis face", "the face", "face"),
 }
 
 
@@ -2795,6 +2976,8 @@ def control_current_words(setting: ChoiceSetting) -> str:
             import jarvis_voices as JV
             view = JV.speaker_view() or {}
             return str(view.get("label") or view.get("choice") or "unknown")
+        if key == "face":
+            return _face_now()
         if key == "focus_preset":
             import jarvis_presets as JP
             chosen = JP.choice()
@@ -2831,6 +3014,13 @@ def control_invalid_words(control: str, words: str) -> str:
     rows = fields_for_control(control)
     if not rows:
         return f"I do not have fields for {control}."
+    if len(rows) == 1:
+        # One field means there is nothing to clarify: naming it back at the
+        # owner ("Its fields are: face") is not an answer. The values are.
+        options = sorted(rows[0].setting.options().keys())
+        if options:
+            return (f"I did not recognise \"{words}\" as a value for {control}. "
+                    f"Say one of: {', '.join(options)}.")
     fields = "; ".join(r.field for r in rows)
     return (f"I did not recognise \"{words}\" as a value for {control}. "
             f"Its fields are: {fields}.")
@@ -2911,6 +3101,7 @@ def choice_bad_words(setting: ChoiceSetting) -> str:
 #: sections that can appear below need an entry.
 SECTION_PLAIN = {
     "web-search": "the web search",
+    "appearance-card": "appearance",
     "asks-first": "what asks first",
     "voice": "the voice",
     "animals": "the animal faces",

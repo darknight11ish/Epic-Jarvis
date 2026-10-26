@@ -2,6 +2,7 @@
 # Written by tools/build_patch_history.py - do not edit by hand.
 # Columns: patch, file (under backend/patch-history/), commit, date, subject
 app-control.patch	app-control/2759987.patch	2759987e4fd87570b15c2e6846aa6b4bd79e9011	2026-10-19T19:38:16-07:00	feat(phone): app-control backend half - one allow-list, ONE card, ONE atomic step (OFF by default)
+appearance.patch	appearance/70d90fa.patch	70d90fa849363f3477d4573e4bf0aaef5376e092	2026-10-26T15:45:00-07:00	fix(appearance): a partial save merges instead of erasing the other half
 appearance.patch	appearance/6383842.patch	63838420943523cdcb608d60c8669e68bf4fce02	2026-09-16T16:52:07Z	Fix findings from two eight-agent audits: desktop<->Android and memory/self-improvement
 appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a23a	2026-09-15T03:11:39Z	Three honesty fixes: /api/visual-spec, the HUD proposal handler, INSTALL
 appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30Z	I invented a NameError, then reported it twice as a finding

@@ -1654,7 +1654,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/digest` | GET | `attention.rs:81`, `routes.rs:35` | `JarvisApi.kt:280` | List key: `digest`. |
 | `/api/config` | GET | `routes.rs:36` | **no** | **Read-only: writing answers 501.** This is why there is no shared place to store a preference — `API-DISAGREEMENTS.md` §11. |
 | `/api/visual-spec` | GET | `spec_drift.rs:50` | **no** | Desktop checks its bundled spec against the server's at startup. The phone never fetches it. |
-| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Since 2026-09-28 a GET also carries `animal` - "Keep the animal still" and the behaviour switches (`animal.patch`, §93) - read only: a POST ignores it (they change through `/api/animal`). Not in this document, on purpose: display choices kept on ONE device - the face's sharpness (quality), frame rate and speed. The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its `FaceTuning` (`AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. ("Keep the animal still" was one of these until 2026-09-28; each device's old "on" is sent to the PC once, §93.4.) |
+| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Since 2026-09-28 a GET also carries `animal` - "Keep the animal still" and the behaviour switches (`animal.patch`, §93) - read only: a POST ignores it (they change through `/api/animal`). Since 2026-10-26 a POST MERGES: a key the request does not carry keeps its stored value, and only the keys it carries are replaced (clearing is explicit - `face: null` clears the face, `bindings: {}` clears the state bindings). Before that the whole document was replaced, so a fresh phone pushing its colours wrote `face: null` and erased the desktop's face. The face can also be ASKED for in chat ("change your face to Spiral", "use the Orbit face", §58.2.1): one `face` key through the same write, no card, and both apps follow it through the `appearance` event. Not in this document, on purpose: display choices kept on ONE device - the face's sharpness (quality), frame rate and speed. The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its `FaceTuning` (`AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. ("Keep the animal still" was one of these until 2026-09-28; each device's old "on" is sent to the PC once, §93.4.) |
 | `/api/animal` | GET / POST | `animal.rs` | `JarvisApi.animal` / `animalPost` | `animal.patch` (2026-09-28): the shared animal switches with the PC's words; ONE change per POST, no card. §93. |
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
@@ -11537,6 +11537,44 @@ jumps there. Everything `jarvis_quick.py` already answers with its own
 grammar (timers, reminders, focus, media, "tell me when", the to-do list,
 web search's provider, manner, ...) is unchanged; this feature adds no
 second version of any of it.
+
+### 58.2.1 Named choices - "set the voice to heart", "change your face to Spiral"
+(2026-10-22; the face added 2026-10-26)
+
+Some settings are not on/off: they take a NAME from a real list. Those live in
+`jarvis_settings_registry.CHOICE_SETTINGS` and are reached by the same
+`/api/chat` with two sentence shapes, both through the setting's OWN setter -
+no second mutation path:
+
+- the one generic grammar, "set/change/switch/adjust/put <control> to <value>"
+  (the closed `CONTROL_FIELDS` table): "set the built-in voice to heart",
+  "set the captcha hand-off to patient";
+- the setting's own name, "set/change <setting> to <value>": "set the focus
+  preset to coding", "change the face to the red panda".
+
+The FACE is the newest, and it also answers the shapes a person uses for a face
+rather than for a switch: **"change your face to Spiral"**, **"use the Orbit
+face"**, **"switch the face to the red panda"**, **"make your face the accretion
+face"**, **"put the spiral face on"**, and the plain question **"what face are
+you using?"** (a read - nothing changes). `jarvis_settings_registry.set_face`
+calls `_appearance_set_face` in `appearance.patch`, which calls the ONE function
+`POST /api/appearance` calls, so a face asked for in either app is one file
+write and one `appearance` event and the other app follows by itself
+(`stream.rs` on the desktop, `JarvisRuntime.refreshAppearance` on the phone).
+It is cosmetic, so it raises **no card** (`docs/APPEARANCE-API.md`). The answer
+names the face, says it changed on both apps, and says plainly that the voice
+did **not** change: a face never changes the voice by itself, and the
+animal-voice question is the Faces window's offer, not something a chat turn
+answers for the owner. A face this PC's spec does not have is refused with the
+real list, and a PC with no `jarvis-visual-spec.json` refuses honestly rather
+than storing a guessed id. The list itself is the spec's
+(`_appearance_faces()`), so a face added to the visual spec can be asked for
+without editing Python.
+
+"What can I change?" counts each named choice as ONE setting - 68 with the face
+on 2026-10-26. The model-facing `change_setting` tool still accepts `on`/`off`
+only: asking for a named value is the grammar's job, not the model's, and a
+sentence the grammar does not recognise still never changes anything.
 
 ### 58.3 What is NOT covered, and why
 
