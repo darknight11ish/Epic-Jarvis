@@ -4140,7 +4140,10 @@ private fun HomeMoreMenu(
             // plate - the destination OpenPlace already names for "open focus
             // presets" - so this row navigates there rather than growing a
             // second copy of the list here.
-            MoreRow(MoreMenuWords.PRESETS) { onDismiss(); actions.onOpenPresets() }
+            MoreRow(
+                MoreMenuWords.PRESETS,
+                detail = MoreMenuWords.PRESETS_DETAIL,
+            ) { onDismiss(); actions.onOpenPresets() }
 
             // Photo, while the PC's Pictures feature works (HomeState.pictureOffered).
             if (state.pictureOffered) {
@@ -4224,12 +4227,27 @@ private fun HomeMoreMenu(
  * dialog.
  */
 @Composable
-private fun MoreRow(label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Quiet(
-        label,
-        enabled = enabled,
-        color = LocalChrome.current.textHi,
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-    )
+private fun MoreRow(
+    label: String,
+    enabled: Boolean = true,
+    detail: String? = null,
+    onClick: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Quiet(
+            label,
+            enabled = enabled,
+            color = LocalChrome.current.textHi,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onClick,
+        )
+        if (detail != null) {
+            Text(
+                detail,
+                style = MaterialTheme.typography.labelSmall,
+                color = LocalChrome.current.textMid,
+                modifier = Modifier.padding(start = 16.dp, top = 2.dp),
+            )
+        }
+    }
 }

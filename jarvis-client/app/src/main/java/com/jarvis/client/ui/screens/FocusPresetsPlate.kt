@@ -135,7 +135,12 @@ internal fun FocusPresetsSection(canAct: Boolean) {
         color = chrome.textMid,
     )
     if (view == null) {
-        val failure = (read as? FocusPresets.Read.Failed)?.words ?: FocusPresets.UPDATE
+        val currentRead = read
+        val failure = when (currentRead) {
+            is FocusPresets.Read.Failed -> currentRead.words
+            FocusPresets.Read.NotAsked -> FocusPresets.ASKING
+            else -> FocusPresets.UPDATE
+        }
         Gap(8)
         Text(failure, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
         Gap(6)
