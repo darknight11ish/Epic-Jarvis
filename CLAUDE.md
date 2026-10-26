@@ -152,6 +152,16 @@ an approval card; turning it off is immediate. **Chat history, including
 voice transcripts, is kept on the PC by default**, encrypted, with a switch
 to turn it off. Background learning stays on by default.
 
+Amended by the owner on 2026-10-26: **the phone may show a READ-ONLY Galaxy
+picture** of stored memory - the names it holds and the links a shared saved
+fact already makes between them, drawn with the desktop's deterministic
+zen-ring layout, at most 48 names, from the same `/api/memory/entities` read
+the phone's list already makes. A tap opens that name's existing facts view.
+This reverses only the "no picture/canvas on the phone" part of the rule
+above: nothing on the picture can create, edit, delete, merge or drag a
+name, it adds no route, and `/api/graph` stays off the phone. The desktop
+keeps the interactive map.
+
 ## The dated decision log lives in `docs/DECISIONS.md`
 
 Everything this file used to carry as a **dated decision** - every block written
