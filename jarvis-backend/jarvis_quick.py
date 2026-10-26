@@ -3914,6 +3914,11 @@ _FEATURE_USE = re.compile(
 _FEATURE_WHERE = re.compile(
     r"where\s+(?:is|can\s+i\s+find|do\s+i\s+find|do\s+i\s+see|can\s+i\s+see)\s+"
     r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    # "where do I change the presets?" (the owner's live field-test question,
+    # 2026-10-26) matched nothing at all: "where do I change" is a where
+    # question, not the "how do I change" one below. The same exact-name gate
+    # applies, so "where do I change my wifi password" is still the model's.
+    r"|where\s+do\s+i\s+(?:change|set|edit|adjust)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
     r"|where\s+in\s+jarvis\s+is\s+(?:the\s+|my\s+)?(.+)")
 #: "can I change <feature>", "how do I change <feature>", "is it adjustable" -
 #: answered from the five owner-facing labels and the real switch table, never
@@ -4527,10 +4532,20 @@ SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-pat
 #: "What can you do?" and close phrasings (jarvis_sayable.py, the ease-of-use
 #: audit's "Things you can say", 2026-09-27). Whole sentences only: "what can
 #: you do about the weather" goes to the model.
+#:
+#: "What are you CAPABLE of?" was the owner's own screenshot question
+#: (2026-10-26) and the word "capable" appeared nowhere in this file, so the
+#: sentence fell through to the model and could be answered differently each
+#: time. It is the same question as "what can you do?", so it gets the same
+#: fixed list, the same lane and no model.
 _SAYABLE = re.compile(
     r"what\s+can\s+(?:you|i|jarvis)\s+(?:do|say|ask(?:\s+you)?|tell\s+you)(?:\s+here)?"
     r"|what\s+(?:should|do)\s+i\s+(?:say|ask|type)(?:\s+to\s+you)?"
     r"|what\s+(?:are|were)\s+(?:your|jarvis'?s?)\s+commands"
+    r"|what\s+(?:are\s+you|is\s+jarvis)\s+capable\s+of"
+    r"|what\s+are\s+(?:your|my|jarvis'?s?)\s+capabilities"
+    r"|what\s+are\s+you\s+able\s+to\s+do"
+    r"|what\s+(?:is|does)\s+jarvis\s+able\s+to\s+do"
     r"|(?:show|list|tell)\s+me\s+what\s+(?:i\s+can\s+say|you\s+can\s+do)"
     r"|help(?:\s+me)?")
 

@@ -689,11 +689,46 @@ def _example_words(row: dict) -> str:
     return "Ask for it in your own words when you want it."
 
 
+def _phone_settings_words(row: dict) -> str:
+    """The phone's own Settings place, named from the row's own `where`.
+
+    The row's `where` starts with "Settings, " on every phone row, and the
+    sentence around this already says Settings, so the leading word is dropped
+    rather than reading "Settings, Settings, ...".
+    """
+    where = str(row.get("where") or "").strip()
+    head, sep, rest = where.partition(",")
+    if head.strip().lower() == "settings" and sep:
+        where = rest.strip()
+    if where and not where.endswith("."):
+        where += "."
+    return f"the phone's own Settings, {where}"
+
+
+def phone_change_words(row: dict) -> str:
+    """How a PHONE-ONLY row is changed: on the phone, never "on this PC".
+
+    Five rows (phone-notifications, phone-watch, phone-floating, phone-tiles,
+    phone-screen-rate) carry the PC-Only label because the phone is the only app
+    with the control, and `_label_from` picks that label from the row's reason
+    without looking at `surface`. The label's own words therefore said "on this
+    PC" for rows the PC does not have at all (2026-10-26 review, F3). The row's
+    `surface` wins, and the row's own `where` names the place.
+    """
+    return (f"It is changed in {_phone_settings_words(row)} "
+            f"The PC does not have that control.")
+
+
 def change_words(row: dict) -> str:
     """How to use, turn on, or change this feature - never an invented switch.
 
-    The five owner-facing labels decide the shape, so this can never call a
-    Command-Only ability a switch or a safety rule a setting:
+    A PHONE-ONLY row is answered from its `surface` BEFORE the label: the label
+    says PC-Only for the five phone controls (the phone is the only app with a
+    control), and reading that label's words out loud told the owner to change a
+    phone setting "on this PC" (2026-10-26 review, F3). No label count changes.
+
+    The five owner-facing labels decide the rest of the shape, so this can never
+    call a Command-Only ability a switch or a safety rule a setting:
 
       * Switchable / Adjustable - the exact phrase for the ONE switch, or the
         names of the several (nothing changes until one is named). A row whose
@@ -705,6 +740,12 @@ def change_words(row: dict) -> str:
         list pins one, plus the Settings place it is listed at.
     """
     label = label_for(row)
+    # The surface wins over the label's own words: see this docstring and
+    # phone_change_words(). Both Settings-shaped labels are covered because
+    # either one would otherwise say "on this PC" / "Open ... on the PC".
+    if (str(row.get("surface") or "") == "phone"
+            and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY)):
+        return phone_change_words(row)
     settings = feature_switches(row)
     if label == LABEL_SWITCH_ADJUST and settings:
         labels = [setting["label"] for setting in settings]
@@ -1888,6 +1929,12 @@ def ability_explanation(row: dict) -> str:
     label = label_for(row)
     title = str(row.get("title") or row.get("id") or "That")
     path = settings_path_words(row)
+    # Same rule as change_words(): a phone-only row is changed on the phone, and
+    # the PC-Only label must never put its control "on this PC" (F3, 2026-10-26).
+    if (str(row.get("surface") or "") == "phone"
+            and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY)):
+        return (f"{title} is on the phone only: it is changed in "
+                f"{_phone_settings_words(row)} The PC does not have that control.")
     if label == LABEL_ALWAYS_ON:
         why = str(row.get("what") or row.get("asks") or "").strip()
         extra = ALWAYS_ON_EXCEPTION.get(str(row.get("id") or ""))

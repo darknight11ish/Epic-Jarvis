@@ -21622,22 +21622,22 @@ grammar learned the rest of the questions a person actually asks:
 | --- | --- | --- |
 | "what is <feature>" / "what does it do" / "tell me about" / "explain" | `feature_explain` | name, what it does, status, Settings place, where, whether it asks first, the honest limit, which apps have it, its current switch state, and how to use or change it |
 | "how do I use <feature>" / "how does it work" | `feature_explain` | the same, because using it is the row's own `where` + its real example sentence |
-| "where is <feature>" / "where do I find" | `feature_explain` | the same `where` line, plus the phone's own copy of the list |
+| "where is <feature>" / "where do I find" / "where do I change" | `feature_explain` | the same `where` line, plus the phone's own copy of the list |
 | "how do I turn on/off <feature>" / "enable/disable" / "how to" / "where do I" | `feature_howto` | the row's `where` and `asks`, the exact phrase that would change the ONE switch, and the current state |
 | "can I change <feature>" / "how do I change" / "is it adjustable" | `feature_change` (new) | which of the five owner-facing kinds it is, whether it has one switch, several or none, and the exact phrase or Settings place - **changing nothing** |
 | "is <feature> on?" / "off" / "enabled" / "right now" / "what is the state of" | `feature_state` | the switch's real value, read from the module that owns it, or "I could not read it" |
 | "what features do you have?" / "list the features" | `features_list` | the 9 groups with real counts |
 | a group's name | `features_group` | that group's rows |
-| "what can you do?" | `sayable_help` | unchanged: the fixed list of real sentences (`jarvis_sayable.py`) |
+| "what can you do?" / "what are you capable of?" / "what are you able to do?" | `sayable_help` | unchanged: the fixed list of real sentences (`jarvis_sayable.py`) |
 
-Every answer is assembled by one renderer (`jarvis_feature_guide.explain_words`), so a
+Every explain answer is assembled by one renderer (`jarvis_feature_guide.explain_words`), so a
 model turn and a fixed phrase cannot say different things. "Can I change it?" is read-only:
 it is in `jarvis_quick.READ_ONLY_INTENTS`, so "cancel that" never takes back something it
 did not do, and the test suite proves no `BoolSetting.set` runs for any of the 140 rows.
 
 **The list learned two fields (2026-10-26).** `features/features.json` rows may carry
 `aliases` - the owner's other names for ONE feature, e.g. "customer support" for the row
-titled "Deal with customer support for me" (28 rows carry 50 aliases). They are matched
+titled "Deal with customer support for me" (30 rows carry 55 aliases). They are matched
 EXACTLY, like the id and the title, so they widen what a person can say without widening
 what counts as a guess. Every one-sided row also carries `surface_reason`: 27 of 27 now do
 (the 8 `phone` ones already did; the 19 `desktop` ones were written on 2026-10-26 from the

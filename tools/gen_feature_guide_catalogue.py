@@ -107,7 +107,7 @@ def load_rows() -> tuple:
         for key in ("id", "group", "title", "what", "where", "asks", "surface"):
             if not isinstance(row[key], str) or not row[key].strip():
                 raise SystemExit(f"{SOURCE}: row {n} ({row.get('id')!r}) has an empty {key}")
-        # `limit` is allowed to be empty: 17 rows have none to state, and the
+        # `limit` is allowed to be empty: 16 rows have none to state, and the
         # guide says exactly that ("the list gives no limit for this one")
         # rather than inventing one.
         if not isinstance(row["limit"], str):

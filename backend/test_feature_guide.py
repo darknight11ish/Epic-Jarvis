@@ -58,6 +58,17 @@ WHAT THIS PROVES
      section existed, three of those nine questions reached no feature intent
      at all (0/140), five rows could not be named, and 127 answers never said
      how to use or change the feature.
+  9. THE OWNER'S TWO UNANSWERED QUESTIONS, AND ONE FALSE ANSWER (2026-10-26
+     review). "What are you capable of?" - the screenshot question - matched
+     nothing in the fast grammar ("capable" appeared nowhere in
+     `jarvis_quick.py`), so it went to the model; it now answers from the fixed
+     "things you can say" list, with no model. "Where do I change the jarvis
+     presets?" matched no phrase at all; "where do I change <x>" is a
+     where-question now, and the two kinds of preset carry the owner's own
+     names as exact aliases on the rows that own them. And the five phone-only
+     controls stopped saying they are changed "on this PC" - the row's
+     `surface` wins over the PC-Only label's wording, with the owner-approved
+     label counts untouched.
 
 No model runs, no network, no real settings file is touched: every read/write
 here is a temp folder or a recording stand-in.
@@ -1072,6 +1083,16 @@ def _flat(text) -> str:
     return " ".join(str(text).replace('"', "").split()).lower()
 
 
+#: The ways an answer says how to use or change a row. A PHONE-ONLY control is
+#: "changed in the phone's own Settings" rather than "changed at ... on this PC"
+#: (F3, 2026-10-26 review): the row's surface wins over the PC-Only label's own
+#: words, so both spellings are legitimate answers here.
+HOW_WORDS = ("To turn it on or off", "To change it", "more than one switch",
+             "no switch of its own", "no on/off switch", "Always On",
+             "changed only at", "changed at", "changed in the phone's own Settings",
+             "not wired yet")
+
+
 def _names(row: dict) -> list:
     """Every name a person may use for this row: title, id, aliases."""
     out, seen = [], set()
@@ -1128,29 +1149,20 @@ def t_every_feature_answers_every_owner_question():
                     ("where", row["where"] in text),
                     ("asks", row["asks"] in text),
                     ("apps", FG.surface_words(row) in text),
-                    ("how", any(m in text for m in (
-                        "To turn it on or off", "To change it", "more than one switch",
-                        "no switch of its own", "Always On", "changed only at",
-                        "changed at", "not wired yet"))),
+                    ("how", any(m in text for m in HOW_WORDS)),
                 )
             elif want == "feature_howto":
                 required = (
                     ("name", row["title"] in text),
                     ("where", row["where"] in text),
                     ("asks", row["asks"] in text),
-                    ("how", any(m in text for m in (
-                        "To change it", "more than one switch", "no on/off switch",
-                        "Always On", "changed only at", "changed at",
-                        "not wired yet"))),
+                    ("how", any(m in text for m in HOW_WORDS)),
                 )
             elif want == "feature_change":
                 required = (
                     ("name", row["title"] in text),
                     ("status", "Status:" in text),
-                    ("how", any(m in text for m in (
-                        "To turn it on or off", "To change it", "more than one switch",
-                        "no switch of its own", "Always On", "changed only at",
-                        "changed at", "not wired yet"))),
+                    ("how", any(m in text for m in HOW_WORDS)),
                 )
             else:                            # feature_state
                 required = (
@@ -1176,9 +1188,7 @@ def t_every_feature_answers_every_owner_question():
         if not out.get("ok") or out.get("kind") != "feature":
             bad.append((row["id"], "not found"))
             continue
-        if not any(marker in words for marker in (
-                "To turn it on or off", "To change it", "more than one switch", "no switch of its own",
-                "Always On", "changed only at", "changed at", "not wired yet")):
+        if not any(marker in words for marker in HOW_WORDS):
             bad.append((row["id"], "no way to use or change it"))
         if row["surface"] == "both" and "both apps" not in words:
             bad.append((row["id"], "does not name both apps"))
@@ -1205,9 +1215,7 @@ def t_can_i_change_answers_and_changes_nothing():
             if "Status:" not in text:
                 problems.append((row["id"], "no status", text[:60]))
                 continue
-            if not any(marker in text for marker in (
-                    "To turn it on or off", "To change it", "more than one switch", "no switch of its own",
-                    "Always On", "changed only at", "changed at", "not wired yet")):
+            if not any(marker in text for marker in HOW_WORDS):
                 problems.append((row["id"], "no how", text[:80]))
         check("every feature says whether and how it can be changed", not problems,
               problems[:8])
@@ -1321,6 +1329,7 @@ def t_the_new_questions_do_not_swallow_other_questions():
     other = ("how do I use a chainsaw", "how do I use python",
              "where is my file manager", "where did I put my passport",
              "where are my keys", "can I change my password in chrome",
+             "where do I change my wifi password",
              "how do I change my wifi password", "how does the weather work",
              "is my oven on", "what is a focus session in psychology",
              "how do I turn on dark mode in chrome",
@@ -1358,6 +1367,115 @@ def t_what_can_you_do_still_answers():
     check("...and it still lists the real sentences",
           out is not None and "Set a timer for 10 minutes." in out.reply,
           out.reply[:120] if out else None)
+    # THE OWNER'S OWN SCREENSHOT QUESTION (2026-10-26). "what are you capable
+    # of?" matched NOTHING in jarvis_quick.py's fast grammar - the word
+    # "capable" appeared nowhere in the module and nowhere in this branch - so
+    # it went to the model and could be answered differently every time. It is
+    # the same question as "what can you do?", so it is the same fixed list.
+    for phrase in ("what are you capable of", "what are you capable of?",
+                   "what are you able to do", "what are my capabilities",
+                   "what is jarvis capable of", "what can jarvis do"):
+        got = match(phrase)
+        check(f"the owner's own wording answers with no model: {phrase!r}",
+              got is not None and got.name == "sayable_help",
+              got.name if got else "the model")
+    for phrase in ("what are you capable of", "what are you able to do"):
+        out = say(match(phrase))
+        check(f"...and {phrase!r} lists the real sentences, not a model's prose",
+              out is not None and "Set a timer for 10 minutes." in out.reply,
+              out.reply[:120] if out else None)
+
+
+def t_the_presets_question_reaches_the_guide():
+    """The owner's other live question: "where do i change the jarvis presets?"
+
+    It matched no phrase at all, so it went to the model, which told them to
+    look in the PC's system settings - a place Jarvis's presets are not.
+    "where do I change <x>" is now a where question (the same exact-name gate as
+    every other fixed phrase), and the two kinds of preset carry the owner's own
+    names as exact aliases on the rows that really own them.
+    """
+    for phrase, want in (
+            ("where do i change the jarvis presets", "focus-presets"),
+            ("where do i change presets", "focus-presets"),
+            ("tell me about presets", "focus-presets"),
+            ("where do i change personality presets", "manner"),
+            ("where do i change my personalities", "manner"),
+            ("tell me about personalities", "manner")):
+        got = match(phrase)
+        check(f"{phrase!r} reaches the row that owns it",
+              got is not None and got.name == "feature_explain"
+              and got.f.get("id") == want,
+              (got.name if got else None, got.f if got else None))
+    out = say(match("where do i change the jarvis presets"))
+    check("...and the answer names the real place, never 'system settings'",
+          out is not None and "Settings, Focus presets" in out.reply
+          and "system settings" not in out.reply.lower(),
+          out.reply[:160] if out else None)
+    out = say(match("where do i change personality presets"))
+    check("...and the personality presets answer is Settings, How Jarvis talks",
+          out is not None and "Settings, How Jarvis talks" in out.reply,
+          out.reply[:160] if out else None)
+    # The aliases are the row's own words: the catalogue carries them, exactly
+    # as it carries every other row's, and the generator refuses a short one.
+    by_id = {row["id"]: row for row in SOURCE}
+    check("the two preset rows really carry those names",
+          by_id["focus-presets"].get("aliases") == ["presets", "jarvis presets"]
+          and by_id["manner"].get("aliases") == ["personalities", "personality presets",
+                                                 "my personalities"],
+          (by_id["focus-presets"].get("aliases"), by_id["manner"].get("aliases")))
+
+
+def t_a_phone_only_row_is_never_changed_on_this_pc():
+    """F3 (2026-10-26 review): five phone-only rows were changed "on this PC".
+
+    `change_words` branched on the five-label mix only, and `_label_from` maps a
+    row's reason (pc-only / app-local) to PC-Only without looking at `surface` -
+    so phone-notifications, phone-watch, phone-floating, phone-tiles and
+    phone-screen-rate answered "It is changed at ... on this PC" for controls
+    the PC does not have. The surface now wins in the WORDS, and the
+    owner-approved label counts are untouched.
+    """
+    phone = [row for row in SOURCE if row["surface"] == "phone"]
+    check("there are phone-only rows to check", len(phone) >= 5, len(phone))
+    bad = []
+    for row in phone:
+        words = FG.change_words(row)
+        if "on this PC" in words:
+            bad.append((row["id"], "change_words", words))
+        ability = FG.ability_explanation(row)
+        if "on this PC" in ability:
+            bad.append((row["id"], "ability_explanation", ability))
+    check("no phone-only row is ever said to change 'on this PC'", not bad, bad[:8])
+    settings_rows = [row for row in phone if FG.label_for(row) in
+                     (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
+    check("...the five phone controls are the PC-Only-labelled ones",
+          len(settings_rows) == 5, [r["id"] for r in settings_rows])
+    # Each names its OWN path and says plainly that the PC has no control, in
+    # both the change sentence and the whole answer.
+    missing = []
+    for row in settings_rows:
+        where = str(row["where"])
+        head, sep, rest = where.partition(",")
+        tail = rest.strip() if head.strip().lower() == "settings" and sep else where
+        for label, words in (("change_words", FG.change_words(row)),
+                             ("explain", str(FG.explain(row["id"]).get("words") or ""))):
+            if ("phone's own Settings" not in words
+                    or "The PC does not have that control" not in words):
+                missing.append((row["id"], label, words[:120]))
+            if tail.rstrip(".") not in words:
+                missing.append((row["id"], label, "does not name its own path", tail))
+            if "on this PC" in words:
+                missing.append((row["id"], label, "still says on this PC"))
+    check("...and each says the phone's own Settings, names its own path, and "
+          "says the PC has no control", not missing, missing[:8])
+    # The other three phone rows are abilities, not settings: their sentence must
+    # stay the Command-Only one instead of pretending the PC has a control.
+    for fid in ("memory-people", "live-camera", "phone-limits"):
+        row = next(r for r in SOURCE if r["id"] == fid)
+        check(f"{fid} keeps its Command-Only sentence",
+              "no switch of its own" in FG.change_words(row),
+              FG.change_words(row))
 
 
 def t_the_matrix_keeps_every_typed_phrase():
@@ -1439,6 +1557,8 @@ if __name__ == "__main__":
                t_every_one_sided_answer_says_why,
                t_the_new_questions_do_not_swallow_other_questions,
                t_what_can_you_do_still_answers,
+               t_the_presets_question_reaches_the_guide,
+               t_a_phone_only_row_is_never_changed_on_this_pc,
                t_the_matrix_keeps_every_typed_phrase):
         print(f"\n--- {fn.__name__} ---")
         try:

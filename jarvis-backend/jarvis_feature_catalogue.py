@@ -3,7 +3,7 @@
 The owner's feature list, as data: 140 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 7bf93b73514baa86a9791485281143e3ebb1b6dd157e9fd78312895ae04a834c); the apps' Features pages read their own
+`features/features.json` (sha256 c21ac68bfebd2d116728eb4dd46ccabe0e732deef9e4786944ae8fc9f74c810d); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "7bf93b73514baa86a9791485281143e3ebb1b6dd157e9fd78312895ae04a834c"
+SOURCE_SHA256 = "c21ac68bfebd2d116728eb4dd46ccabe0e732deef9e4786944ae8fc9f74c810d"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -129,6 +129,7 @@ FEATURES = (
         "asks": "No card either way - it changes wording only.",
         "limit": "A personality changes how Jarvis sounds, never what it does, asks or remembers, and humour never appears on a card, an error or a serious topic.",
         "surface": "both",
+        "aliases": ["personalities", "personality presets", "my personalities"],
         "covers": ["settings.manner", "how-it-talks"],
     },
     {
@@ -1264,9 +1265,10 @@ FEATURES = (
         "title": "Focus presets",
         "what": "Five presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
-        "asks": "Opening the list changes nothing. Applying a preset will raise one approval card when the lane/apply patch lands; until then the apply action stays disabled.",
-        "limit": "The apply/lane patch is not merged, so no preset can be applied yet and no model changes.",
+        "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
+        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands.",
         "surface": "both",
+        "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],
     },
     {

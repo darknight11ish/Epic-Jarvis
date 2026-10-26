@@ -45,7 +45,7 @@ Beyond the four a person reads, a row may carry:
 | `surface_reason` | for a one-sided row: one sentence saying WHY the other app has none (rule 5, both directions since 2026-10-26) |
 | `covers` | the Settings sections, menu ids and lessons this row accounts for |
 | `must_mention` | 1-3 words its lesson really uses (rule 7) |
-| `aliases` | other names the owner says for THIS one feature, e.g. "customer support" for "Deal with customer support for me". Added 2026-10-26: 28 rows carry 50 of them. They are matched exactly, like the id and the title, and nothing else uses them |
+| `aliases` | other names the owner says for THIS one feature, e.g. "customer support" for "Deal with customer support for me". Added 2026-10-26: 30 rows carry 55 of them. They are matched exactly, like the id and the title, and nothing else uses them |
 
 `aliases` and `surface_reason` are there because the list is now SPOKEN as well
 as drawn: chat answers "what is <feature>", "where is it", "how do I use it",
