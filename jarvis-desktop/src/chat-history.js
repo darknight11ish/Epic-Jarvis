@@ -317,7 +317,7 @@ export const CONTINUED_TAINTED =
 export const CONTINUED_NOTHING =
   "None of its answers were kept, so Jarvis has nothing to read back. New questions are still " +
   "filed with this chat.";
-export const CONTINUED_TEMPORARY_OFF = "Temporary chat is off: a continued chat is kept.";
+export const CONTINUED_TEMPORARY_OFF = "Incognito is off: a continued chat is kept.";
 /** Chat history is off, or cannot keep anything right now: what was said in
  *  this chat can be read, but what is said from now on is not filed with it
  *  (the owner, 2026-09-29). Both apps, the same words. */
@@ -357,7 +357,7 @@ export const ESC_LABEL = "Esc: end chat";
 export const ENDED_SAVED = "Chat ended. Kept chats are in Brain > History.";
 /** A temporary chat or a game ends: nothing was kept, so it does not point
  *  to History (the second chat audit, 2026-09-28). */
-export const ENDED_TEMPORARY = "Chat ended. It was a temporary chat, so nothing was kept.";
+export const ENDED_TEMPORARY = "Chat ended. It was an incognito chat, so nothing was kept.";
 export const NEW_CONVERSATION = "New conversation.";
 
 /** "Carrying on "<title>"." */

@@ -70,8 +70,8 @@ import {
 import { DONE_LINE } from "./coming-up.js";
 import { leftOutLine, WORDS as TOPIC_WORDS } from "./topics.js";
 
-/** The strip's line: the label beside it already says "Temporary chat". */
-const TEMPORARY_STRIP_LINE = TEMPORARY_LINE.replace(/^Temporary chat:\s*/, "");
+/** The strip's line: the label beside it already says "Incognito". */
+const TEMPORARY_STRIP_LINE = TEMPORARY_LINE.replace(/^Incognito:\s*/, "");
 /** A game or role-play the PC made temporary by itself. */
 const GAME_STRIP_LINE = "This looks like a game, so nothing in it is kept or learned.";
 
@@ -160,7 +160,7 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
       if (t.on) {
         strip.dataset.state = "on";
         strip.hidden = false;
-        // The label already says "Temporary chat": the line does not repeat it.
+        // The label already says "Incognito": the line does not repeat it.
         line.textContent = empty ? TEMPORARY_STRIP_LINE : "";
         line.hidden = !empty;
       } else if (t.game) {
