@@ -450,7 +450,7 @@ object SettingsSearch {
         ),
         Row(
             // "All features and abilities" (2026-10-22): the phone directory of
-            // the 139 features, in the PC's five labels (FeatureDirectory.kt is
+            // the 140 features, in the PC's five labels (FeatureDirectory.kt is
             // GENERATED from contract/feature-controls.json by
             // jarvis-client/tools/gen_feature_directory.py).
             key = "all-features", title = "All features and abilities",

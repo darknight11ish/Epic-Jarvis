@@ -24,7 +24,7 @@ import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.theme.LocalChrome
 
 /**
- * "All features and abilities" - the phone's searchable directory of the 139
+ * "All features and abilities" - the phone's searchable directory of the 140
  * features the PC knows about. [FeatureDirectory] is GENERATED from
  * `contract/feature-controls.json` by
  * `jarvis-client/tools/gen_feature_directory.py` (the same contract the PC's

@@ -271,10 +271,10 @@
     "id": "private-chat",
     "group": "Talking",
     "title": "Private chat",
-    "what": "A chat where Jarvis reads, searches and answers, but uses none of your saved memory, keeps nothing and learns nothing, and cannot change a setting, save an item or run an action.",
+    "what": "A chat where Jarvis answers from the model alone: it searches nothing - not the web, your history or your files - uses none of your saved memory, keeps nothing and learns nothing, and cannot change a setting, save an item or run an action.",
     "where": "The Private chip beside Incognito in the Jarvis bar. Turning it on or off starts a new conversation, so a private chat and a normal one never mix.",
-    "asks": "No card for turning it on, and none while it is on: nothing that would need a card can run.",
-    "limit": "It only works on a PC whose version of Jarvis has it: an older PC leaves the chip off and says why instead of quietly sending an ordinary chat. It cannot be on at the same time as Incognito - turning one on turns the other off. The phone has no Private chip on purpose: its private mode is Incognito.",
+    "asks": "No card for turning it on, and none from it: nothing it does would need a card.",
+    "limit": "It only works on a PC whose version of Jarvis has it: an older PC leaves it off and says why instead of quietly sending an ordinary chat. It cannot be on at the same time as Incognito - turning one on turns the other off. The phone has no Private chip on purpose: its private mode is Incognito, which is not the same guarantee - Incognito can still run tools.",
     "surface": "desktop",
     "covers": []
   },

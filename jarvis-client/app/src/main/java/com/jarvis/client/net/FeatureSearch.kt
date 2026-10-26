@@ -4,7 +4,7 @@ package com.jarvis.client.net
  * The phone's "All features and abilities" search - pure rules, tested on a
  * plain JVM (the screen supplies the drawing; this file supplies the matching).
  *
- * Every one of the 139 rows is searchable by its own words: its name, what it
+ * Every one of the 140 rows is searchable by its own words: its name, what it
  * is for, the example phrase the PC wrote, and its screen path. The match is
  * tokenised (as SettingsSearch is, 2026-10-13) so one typo-free extra word
  * still finds the row, and every word typed must appear somewhere.

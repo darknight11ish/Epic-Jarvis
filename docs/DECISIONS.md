@@ -3645,3 +3645,25 @@ calls, holds no lock while it waits and loads no model.
     module and the regenerated `live-cases.json` in the same change.
 
 Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute secret-page read taint inside it. This reverses the earlier "2 then 1" order, and the reason is measured in `makecindy/cindy`'s source: its taint is triggered only by `onSecretEntered` during the hand-off, so a standalone taint would guard a flow that does not exist and could not be tested against a real typed secret. The host draws the card, shows the HOST-VERIFIED target (a page's scheme+host+path, or a window's executable+PID+title+IsPassword) separately from the agent's cleaned and explicitly-untrusted purpose note, and aborts with ZERO characters typed if the live target, the control, or the password-field property changed, if the card is older than 180 seconds, if it is answered from another machine, or if the value is empty or over 4096 characters. The 15-minute taint is marked BEFORE the first character is typed, lives in memory only (at most 32 targets, monotonic clock), and its keys are page addresses or pid/hwnd/class - never a secret value. The secret itself is never written to disk, a database, a log, the clipboard, model context or a tool result, and `backend/jarvis_secret_handoff.py` imports no storage or logging library at all. Slice 1 is the rule engine only (module, twin, `backend/test_secret_handoff.py`: 82 checks); the wiring into `jarvis_ui_control.py` / `jarvis_browser_control.py`, the host-only route and the HUD card are the next slice, and the phone is deliberately out for now. `docs/DESIGN-SECRET-HANDOFF.md` records both halves and the honest limit that Python cannot wipe memory.
+
+## 2026-10-26 — The apps' half of the private-chat decision has landed: the desktop Private chip, and Incognito as the phone's private mode
+
+  * **What landed, and when.** The desktop Private chip (`#856`, 2026-10-26)
+    sends ONLY `"private": true` on `POST /api/chat` (never `temporary` too -
+    the PC implies that half) and starts a new conversation when it is turned
+    on or off, so a private chat and a normal one never mix; a PC that does not
+    advertise `capabilities.private_chat` leaves the mode off and says why
+    instead of quietly sending an ordinary chat. On the phone the private mode
+    is Incognito (the 2026-10-26 rename above): a temporary chat that still
+    runs tools, so it is not the same guarantee as the desktop's private turn.
+    The catalogue's own `private-chat` row (`#862`) and the files it generates
+    now say so.
+  * **The sentence this supersedes, and the older entry keeps its words.** The
+    2026-10-25 entry's "What is NOT built" bullet says "Neither app sends the
+    flag and neither has a toggle or marker; Slice 2 is the apps' half." That
+    is now out of date, and per the append-only rule it is not edited above:
+    the desktop app sends the flag and has a chip and a marker, so Slice 2's
+    desktop half is built and live. The phone half is still not built on
+    purpose - the phone sends no `private` flag and has no Private toggle or
+    marker, because its private mode is Incognito - so "neither app" is the
+    part that expired, not the phone's own choice.
