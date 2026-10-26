@@ -102,7 +102,7 @@ These are the shortest steps to a first chat. Each one has a full section in [do
 
 8. **Your first chat.** Press `Alt+Space` (or click **Re-claim `Alt+Space`** in **Settings → Shortcuts**, or tray icon → **Show or hide the Jarvis bar** if another program took that key), type `hello`, and press Enter. An answer means the whole chain works.
 
-9. **For developers - one check line.** From the repository folder, run every backend test suite that can run here (it ignores any ambient `JARVIS_BACKEND` variable by default, stages a throwaway copy of the backend, and never touches your real data):
+9. **For developers - one check line.** From the repository folder, run every backend test suite that can run here (it ignores any ambient `JARVIS_BACKEND` variable by default, stages a throwaway copy of the backend, and never touches your real data; four suites that open a real, visible browser window are skipped unless `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1` is set):
 
    ```powershell
    python -B backend/run_suites.py

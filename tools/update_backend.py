@@ -137,7 +137,10 @@ BASE_REL = Path("jarvis-backend")
 VISIBLE_BROWSER_ENV = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
 #: How run_suites.py phrases that reason on its `skip` line. Matched, never
 #: imported: this tool must not import the runner (and its `_where`) to read a
-#: sentence, and the runner's own suite pins the wording it prints.
+#: sentence. Only `test_chatbot_sites.py`'s runner line is pinned, and only the
+#: shorter phrase `VISIBLE browser` (backend/test_browser_test_guard.py), so all
+#: four reasons must keep the whole phrase or their skips fall back to the
+#: missing-file note below.
 VISIBLE_BROWSER_SKIP_WORDS = "VISIBLE browser window"
 
 #: How a shell is looked for. An indirection (not a direct `shutil.which` call
