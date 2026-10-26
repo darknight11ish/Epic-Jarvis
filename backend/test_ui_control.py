@@ -1528,6 +1528,137 @@ def t_uia_com_init_failure_is_left_to_the_real_call():
           getattr(U._UI_THREAD_READY, "done", False) is False)
 
 
+class _FakeHandoffControl:
+    """One fake password-masked UIA control, for the fill-path tests below."""
+
+    ControlTypeName = "EditControl"
+    Name = ""
+
+    def __init__(self):
+        self.typed = []
+        self.focused = False
+
+    def SetFocus(self):
+        self.focused = True
+
+    def SendKeys(self, text):
+        self.typed.append(text)
+
+
+class _FakeHandoffTop:
+    """One fake top-level window that the fill-path measurement can read."""
+
+    ProcessId = 4242
+    NativeWindowHandle = 777
+    ClassName = "WindowsForms10.Window"
+    Name = "throwaway password box"
+
+    def Exists(self, maxSearchSeconds=2):
+        return True
+
+
+def t_handoff_control_index_keeps_zero():
+    """The live defect of 2026-10-26: `control_index or -1` read the FIRST walked
+    control (index 0) as "missing", so a password field at index 0 was refused
+    at fill time with "no longer password-masked". 0 and "missing" stay apart."""
+    check("UIA: the hand-off index keeps 0 as a real index",
+          U._handoff_control_index({"control_index": 0}) == 0,
+          repr(U._handoff_control_index({"control_index": 0})))
+    check("UIA: ... a missing/blank index is still -1",
+          U._handoff_control_index({}) == -1
+          and U._handoff_control_index({"control_index": None}) == -1
+          and U._handoff_control_index({"control_index": ""}) == -1,
+          "absent/None/''")
+    check("UIA: ... a numeric string is read and junk is -1",
+          U._handoff_control_index({"control_index": "3"}) == 3
+          and U._handoff_control_index({"control_index": "x"}) == -1,
+          "='3'/'x'")
+
+
+def t_a_handoff_target_at_index_zero_is_remeasured_and_typed():
+    """With fakes: a password control stored at walk index 0 is re-measured as
+    password-masked (not "changed") and receives the typed value."""
+    top = _FakeHandoffTop()
+    control = _FakeHandoffControl()
+    walk = [{"masked": True, "control": control}]
+    identity = "auto:42:EditControl"
+    control_id = f"uia:4242:777:0:EditControl:{identity}"
+    descriptor = {"hwnd": 777, "control_index": 0,
+                  "control_type": "EditControl", "control_id": control_id,
+                  "purpose": "unit test"}
+    saved = {}
+    for name in ("_uia_lib", "_secret_handoff_walk", "_secret_handoff_module",
+                 "_secret_handoff_identity", "_process_name"):
+        saved[name] = getattr(U, name)
+
+    class _FakeAuto:
+        @staticmethod
+        def ControlFromHandle(hwnd):
+            return top
+
+    class _FakeEngine:
+        @staticmethod
+        def normalize_secret_target_key(**kwargs):
+            return "pid:1:hwnd:2:class"
+
+    U._uia_lib = lambda: _FakeAuto()
+    U._secret_handoff_walk = lambda win: walk
+    U._secret_handoff_module = lambda: _FakeEngine()
+    U._secret_handoff_identity = lambda ctrl: identity
+    U._process_name = lambda pid: "test.exe"
+    try:
+        live = U.secret_handoff_live_snapshot(descriptor)
+        check("UIA: a target at walk index 0 is re-measured as password-masked",
+              live.get("is_password_field") is True, live)
+        check("UIA: ... and the live snapshot keeps the stored control id",
+              live.get("control_id") == control_id, live)
+        U.secret_handoff_type(descriptor, "fake-secret")
+        check("UIA: ... and the stored control at index 0 receives the value",
+              control.typed == ["fake-secret"] and control.focused, control.typed)
+    finally:
+        for name, fn in saved.items():
+            setattr(U, name, fn)
+
+
+def t_a_handoff_live_snapshot_still_names_a_different_control():
+    """The other half of the same check: a different control's identity must
+    still come back as "changed", so the engine keeps voiding a moved target."""
+    top = _FakeHandoffTop()
+    control = _FakeHandoffControl()
+    walk = [{"masked": True, "control": control}]
+    descriptor = {"hwnd": 777, "control_index": 0,
+                  "control_type": "EditControl",
+                  "control_id": "uia:4242:777:0:EditControl:auto:42:EditControl",
+                  "purpose": "unit test"}
+    saved = {}
+    for name in ("_uia_lib", "_secret_handoff_walk", "_secret_handoff_module",
+                 "_secret_handoff_identity", "_process_name"):
+        saved[name] = getattr(U, name)
+
+    class _FakeAuto:
+        @staticmethod
+        def ControlFromHandle(hwnd):
+            return top
+
+    class _FakeEngine:
+        @staticmethod
+        def normalize_secret_target_key(**kwargs):
+            return "pid:1:hwnd:2:class"
+
+    U._uia_lib = lambda: _FakeAuto()
+    U._secret_handoff_walk = lambda win: walk
+    U._secret_handoff_module = lambda: _FakeEngine()
+    U._secret_handoff_identity = lambda ctrl: "OTHER:9:EditControl"
+    U._process_name = lambda pid: "test.exe"
+    try:
+        live = U.secret_handoff_live_snapshot(descriptor)
+        check("UIA: a live snapshot of a different control reads as changed",
+              live.get("control_id") == "changed", live)
+    finally:
+        for name, fn in saved.items():
+            setattr(U, name, fn)
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_control_is_treated_as_unmatched,
@@ -1559,7 +1690,10 @@ if __name__ == "__main__":
                t_the_audit_lines_carry_no_typed_text_and_no_window_tree,
                t_a_type_step_focuses_first_and_refuses_a_non_editable_control,
                t_uia_com_is_initialized_once_per_working_thread,
-               t_uia_com_init_failure_is_left_to_the_real_call):
+               t_uia_com_init_failure_is_left_to_the_real_call,
+               t_handoff_control_index_keeps_zero,
+               t_a_handoff_target_at_index_zero_is_remeasured_and_typed,
+               t_a_handoff_live_snapshot_still_names_a_different_control):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

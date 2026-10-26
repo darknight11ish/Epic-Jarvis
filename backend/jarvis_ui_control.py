@@ -2239,7 +2239,7 @@ def secret_handoff_focused_descriptor() -> dict:
         raise UiaMeasurementError(
             "E_UIA_READ_FAIL",
             f"the focused control could not be read ({type(exc).__name__})",
-            hresult=getattr(exc, "hresult", None),
+            hresult=(getattr(exc, "hresult", None) or getattr(exc, "winerror", None)),
         ) from exc
     if focused is None:
         raise UiaMeasurementError("E_NO_FOCUSED_CONTROL", "there is no focused control")
@@ -2254,7 +2254,7 @@ def secret_handoff_focused_descriptor() -> dict:
         raise UiaMeasurementError(
             "E_UIA_READ_FAIL",
             f"the focused control could not be measured ({type(exc).__name__})",
-            hresult=getattr(exc, "hresult", None),
+            hresult=(getattr(exc, "hresult", None) or getattr(exc, "winerror", None)),
         ) from exc
     if top is None:
         raise UiaMeasurementError("E_NO_TOP_WINDOW", "the focused control has no window")
@@ -2265,6 +2265,24 @@ def secret_handoff_focused_descriptor() -> dict:
     raise UiaMeasurementError(
         "E_NOT_IN_WINDOW_TREE",
         "the focused password control is not in the window's read tree")
+
+
+def _handoff_control_index(descriptor: dict) -> int:
+    """The stored walk index, where 0 is a REAL index.
+
+    Only a missing value means "no index". The obvious `value or -1` turns the
+    first walked control (index 0) into -1, so a password field that happened to
+    be first was re-measured as "not password-masked" at fill time and the
+    engine voided the card with nothing typed. That is the live defect the
+    hand-off field test found on 2026-10-26; this keeps 0 and "missing" apart.
+    """
+    raw = descriptor.get("control_index")
+    if raw is None or raw == "":
+        return -1
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return -1
 
 
 def secret_handoff_live_snapshot(descriptor: dict) -> dict:
@@ -2292,7 +2310,7 @@ def secret_handoff_live_snapshot(descriptor: dict) -> dict:
     if H is None:
         raise RuntimeError("the secret hand-off engine is not installed")
     walk = _secret_handoff_walk(top)
-    index = int(descriptor.get("control_index") or -1)
+    index = _handoff_control_index(descriptor)
     masked, control_type = False, str(descriptor.get("control_type") or "control")
     control_id = "changed"
     expected = str(descriptor.get("control_id") or "")
@@ -2301,7 +2319,17 @@ def secret_handoff_live_snapshot(descriptor: dict) -> dict:
         control = item["control"]
         control_type = str(getattr(control, "ControlTypeName", "") or control_type)
         masked = bool(item.get("masked"))
-        if masked and _secret_handoff_identity(control) == expected.rsplit(":", 1)[-1]:
+        try:
+            identity = _secret_handoff_identity(control)
+        except Exception:
+            identity = ""
+        # The stored id ends with ":" + the control's identity (see
+        # _secret_handoff_descriptor_from); comparing the identity against the
+        # id's LAST colon segment can never match, so the live snapshot used to
+        # say "changed" for the very control it had just measured and the engine
+        # voided every fill ("the focused input control changed"). Compare the
+        # whole identity as a suffix instead (measured live 2026-10-26).
+        if masked and identity and expected.endswith(":" + identity):
             control_id = expected
     return {
         "target_key": H.normalize_secret_target_key(pid=pid, hwnd=live_hwnd,
@@ -2320,7 +2348,7 @@ def secret_handoff_type(descriptor: dict, secret_value: str) -> None:
     """
     auto = _uia_lib()
     hwnd = int(descriptor.get("hwnd") or 0)
-    index = int(descriptor.get("control_index") or -1)
+    index = _handoff_control_index(descriptor)
     try:
         top = auto.ControlFromHandle(hwnd)
         if top is None or not top.Exists(maxSearchSeconds=2):
