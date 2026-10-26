@@ -1269,6 +1269,13 @@ SHIPPED = (
     # is the next slice, so nothing imports it today and a backend without it
     # runs exactly as before. docs/DESIGN-SECRET-HANDOFF.md is the record.
     "jarvis_secret_handoff.py",
+    # The offline product-check engine, slice 1 (2026-10-25, the owner's
+    # product-research request; docs/DESIGN-PRODUCT-RESEARCH.md): tolerant
+    # review records, evidence-only signals, validation of the local model's
+    # aspects/quotes and a reasons-based report. PURE - no network, no
+    # subprocess, no route, no tool and no app surface; nothing imports it yet,
+    # so a backend without it runs exactly as before.
+    "jarvis_product_research.py",
 )
 
 
