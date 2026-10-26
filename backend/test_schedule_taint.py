@@ -343,6 +343,40 @@ def t_a_firing_latch_does_not_change_the_row():
           GATE.latches[-1] == "scheduled_task:" + S.SOURCE_TAINT, GATE.latches)
 
 
+def t_due_active_reminders_report_the_row_mark():
+    """The PC-activity getter is a polling READ: each returned reminder carries
+    its own stored mark, and the getter latches NOTHING (the caller that acts
+    on a reminder latches from that value at the moment it acts)."""
+    s, _path, clock = make("due-mark")
+    GATE.active = False
+    GATE.latches.clear()
+    plain = s.add_at("reminder", clock.t + 10.0, "Water the test plants",
+                     trigger="on_pc_active")
+    GATE.active = True
+    marked = s.add_at("reminder", clock.t + 10.0, "Read the test letter",
+                      trigger="on_pc_active")
+    GATE.active = False
+    clock.t += 20.0
+    at_pc = {"session_unlocked": lambda: True, "app_locked": lambda: False,
+             "idle_seconds": lambda: 5.0, "focus_active": lambda: False}
+    latches_before = list(GATE.latches)
+    due = S.due_active_reminders(now=clock.t, scheduler=s, readers=at_pc)
+    by_id = {j["id"]: j for j in due}
+    check("both on_pc_active reminders are ready to go off",
+          set(by_id) == {plain["id"], marked["id"]}, list(by_id))
+    check("every due reminder carries the source_taint key",
+          bool(due) and all("source_taint" in j for j in due),
+          [sorted(j) for j in due])
+    check("an untainted row's mark is the empty string",
+          by_id[plain["id"]]["source_taint"] == "",
+          by_id[plain["id"]]["source_taint"])
+    check("a row written while the gate was tainted carries read_outside",
+          by_id[marked["id"]]["source_taint"] == S.SOURCE_TAINT,
+          by_id[marked["id"]]["source_taint"])
+    check("the read-only getter latched nothing while polling",
+          GATE.latches == latches_before, GATE.latches)
+
+
 def main():
     print(f"--- schedule source taint --- ({S.__file__})")
     for name, fn in list(globals().items()):

@@ -908,12 +908,23 @@ def t_the_agent_runs_no_tool_in_a_private_chat():
     check("the owner's framework file overrides an emptied legacy config (the leak)",
           resolved == {"calculator", "change_setting"}, resolved)
 
+    NEXT_NOTE = ("Remember: next time I talk about the test dentist, ask about "
+                 "the test bill.")
+
     def turn(private):
         dispatch, cards, chains, energy, requests = [], [], [], [], []
+        brought = []
         real_settings, real_schedule = AG._settings_call, AG._schedule_call
         real_chain = AG._record_chain
         real_calc = AG.TOOLS["calculator"].execute
         real_energy = sys.modules.get("jarvis_energy")
+        real_next = sys.modules.get("jarvis_next_time")
+        sys.modules["jarvis_next_time"] = _stub(
+            "jarvis_next_time",
+            should_look=lambda *a, **k: True,
+            due_for=lambda *a, **k: [{"id": "nt-residual-1"}],
+            note_text=lambda items: NEXT_NOTE,
+            brought_up=lambda ids: brought.append(list(ids)))
         def settings_spy(args, call, convo, steps, say_step, watch=None):
             dispatch.append("settings")
             steps.append({"tool": "change_setting", "ran": True, "ok": True,
@@ -965,8 +976,10 @@ def t_the_agent_runs_no_tool_in_a_private_chat():
             AG._record_chain = real_chain
             AG.TOOLS["calculator"].execute = real_calc
             _uninstall("jarvis_energy", real_energy)
+            _uninstall("jarvis_next_time", real_next)
         return {"dispatch": dispatch, "cards": cards, "chains": chains,
-                "energy": energy, "requests": requests, "out": out}
+                "energy": energy, "requests": requests, "out": out,
+                "brought": brought}
 
     private = turn(True)
     check("private turn: the tool offer is empty whatever the framework file says",
@@ -991,6 +1004,26 @@ def t_the_agent_runs_no_tool_in_a_private_chat():
           len(ordinary["chains"]) == 1, ordinary["chains"])
     check("CONTROL ordinary turn: the energy row is written",
           len(ordinary["energy"]) == 1, ordinary["energy"])
+
+    def prompt_texts(reqs):
+        out = []
+        for payload in reqs:
+            for message in (payload.get("messages") or []):
+                content = message.get("content")
+                out.append(content if isinstance(content, str)
+                           else json.dumps(content, ensure_ascii=False))
+        return "\n".join(out)
+
+    check("private turn: a stored next-time reminder is NOT carried into the prompt",
+          NEXT_NOTE not in prompt_texts(private["requests"]),
+          prompt_texts(private["requests"])[-500:])
+    check("... and it is not marked brought up", private["brought"] == [],
+          private["brought"])
+    check("CONTROL ordinary turn: the stored next-time reminder IS carried in",
+          NEXT_NOTE in prompt_texts(ordinary["requests"]),
+          prompt_texts(ordinary["requests"])[-500:])
+    check("CONTROL ordinary turn: it is marked brought up once",
+          ordinary["brought"] == [["nt-residual-1"]], ordinary["brought"])
 
 
 def t_the_drafting_block_is_skipped():
