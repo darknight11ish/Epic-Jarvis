@@ -432,7 +432,7 @@
     "where": "Brain, Memory.",
     "asks": "No card.",
     "limit": "The lists hide while \"Hide memory lists and chat history\" is on.",
-    "surface": "desktop",
+    "surface": "both",
     "covers": [
       "brain.tab.memory",
       "memory"
@@ -660,7 +660,7 @@
     "where": "Brain, Memory, Bring in old chats.",
     "asks": "It only proposes: every fact it finds waits for its own yes.",
     "limit": "Imported text is outside text - it is never learned from.",
-    "surface": "desktop",
+    "surface": "both",
     "covers": [
       "brain.memory.history-import",
       "memory-lists"
@@ -1784,7 +1784,7 @@
     "where": "Brain, Work.",
     "asks": "No card.",
     "limit": "",
-    "surface": "desktop",
+    "surface": "both",
     "covers": [
       "brain.tab.work",
       "work-and-attention"
