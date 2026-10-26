@@ -205,7 +205,11 @@ def _hud():
 
 def _temporary_chat_fn(src):
     ns: dict = {}
-    exec(compile(_stack.function_text(src, "_temporary_chat"), "<_temporary_chat>", "exec"), ns)
+    # private-chat.patch: _temporary_chat now asks _private_chat first, and
+    # both are defined in the assembled stack - lift both into this namespace.
+    code = ((_stack.function_text(src, "_private_chat") or "") + "\n"
+            + _stack.function_text(src, "_temporary_chat"))
+    exec(compile(code, "<_temporary_chat>", "exec"), ns)
     return ns["_temporary_chat"]
 
 
@@ -308,6 +312,7 @@ def _run_finally(snippet, body, temporary_chat_fn):
                "LEARNER": types.SimpleNamespace(
                    offer=lambda m, origin="unknown", **kw: offered.append(m)),
                "_temporary_chat": temporary_chat_fn,
+               "_private": False,
                "body": body, "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
                "_history": {"turn": {"answer": "hi"}, "at": 1.0}}
         exec(snippet, env)
@@ -362,6 +367,7 @@ def t_a_detected_game_is_not_in_the_real_chat_history():
             env = {"_activity": lambda *a: None, "MEMORY": True, "jarvis_side_memory": False,
                    "LEARNER": types.SimpleNamespace(offer=lambda m, origin="unknown", **kw: None),
                    "_temporary_chat": fn, "body": body, "route_header": {"lane": "q"},
+                   "_private": False,
                    "lane": "q",
                    "_history": {"turn": {"answer": "The dragon roars.", "finish_reason": "stop"},
                                 "at": 1.0}}

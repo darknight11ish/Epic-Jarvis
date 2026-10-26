@@ -585,7 +585,14 @@ def t_hygiene():
              # plugin-loader.patch: the active-lane helper, the four chat call sites
              # and the install block that wires POST /api/work/apply. No gate list,
              # no tier row, no _RISK row, no line this patch writes.
-             "presets.patch"}
+             "presets.patch",
+             # private-chat.patch (2026-10-25) is appended after it, immediately before plugin-loader.patch
+             # and immediately before plugin-loader.patch: 13 hunks in
+             # jarvis_hud.py (the private flag read, the held sighting, the
+             # tool-list switch, the header, the deny-all gate and the write
+             # guards). No gate list entry, no tier row, no _RISK row, and
+             # no line this patch writes - ordering safe.
+             "private-chat.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

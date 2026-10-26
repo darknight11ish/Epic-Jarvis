@@ -769,7 +769,14 @@ def t_the_patch_is_registered_and_carries_the_change():
              # ONE ADDED install block in jarvis_hud.py, on presets.patch's last
              # printed lines. No gate list, no tier row, no _RISK row, no line
              # this patch writes.
-             "setup.patch"}
+             "setup.patch",
+             # private-chat.patch (2026-10-25) is appended after it, immediately before plugin-loader.patch
+             # and immediately before plugin-loader.patch: 13 hunks in
+             # jarvis_hud.py (the private flag read, the held sighting, the
+             # tool-list switch, the header, the deny-all gate and the write
+             # guards). No gate list entry, no tier row, no _RISK row, and
+             # no line this patch writes - ordering safe.
+             "private-chat.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

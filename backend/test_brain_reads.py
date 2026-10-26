@@ -606,7 +606,12 @@ def t_patch_and_shipping():
     for later in order[order.index("brain-reads.patch") + 1:] if "brain-reads.patch" in order else []:
         body = (REPO / "backend" / later).read_text(encoding="utf-8")
         check(f"{later}, after it, leaves answer-sources' install block alone",
-              "jarvis_sources" not in body and "answer-sources" not in body)
+              # The block is `jarvis_sources.install(Handler, ...)` and the
+              # `[sources]` startup banner. A later patch may still NAME the
+              # module - private-chat.patch gates its own jarvis_sources.record
+              # call - but it must not install or re-anchor that block.
+              "jarvis_sources.install(" not in body
+              and "# answer-sources.patch" not in body)
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("jarvis_brain_reads.py is shipped by the script and in _where.SHIPPED",
           "'jarvis_brain_reads.py'" in ps1 and "jarvis_brain_reads.py" in _where.SHIPPED)

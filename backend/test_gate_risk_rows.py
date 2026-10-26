@@ -242,7 +242,14 @@ def t_the_patch_is_registered_last():
              # plugin-loader.patch: the active-lane helper, the four chat call sites
              # and the install block that wires POST /api/work/apply. No gate list,
              # no tier row, no _RISK row, no line this patch writes.
-             "presets.patch"}
+             "presets.patch",
+             # private-chat.patch (2026-10-25) is appended after it, immediately before plugin-loader.patch
+             # and immediately before plugin-loader.patch: 13 hunks in
+             # jarvis_hud.py (the private flag read, the held sighting, the
+             # tool-list switch, the header, the deny-all gate and the write
+             # guards). No gate list entry, no tier row, no _RISK row, and
+             # no line this patch writes - ordering safe.
+             "private-chat.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)
