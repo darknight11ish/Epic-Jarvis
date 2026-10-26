@@ -1003,8 +1003,17 @@ def t_purity():
             continue
         if "jarvis_decks" in f.read_text(encoding="utf-8", errors="ignore"):
             hits.append(f.name)
-    check("no other module (no model tool, no voice command, no learner) reaches the decks: only the scheduler's kind list and the locked backup (for its key's name) name it",
-          set(hits) <= {"jarvis_schedule.py", "jarvis_backup.py"}, hits)
+    # Three modules may name the decks, and each is named rather than waved
+    # through: the scheduler's kind list, the locked backup (it saves the key
+    # by name), and the Daily Pulse's study source, which only READS the
+    # decks' own line and radar for the strip (merged #767, 2026-10-23). A
+    # model tool, a voice command or the learner still may not.
+    allowed = {"jarvis_schedule.py", "jarvis_backup.py",
+               "jarvis_pulse_sources.py"}   # #767, 2026-10-23: read-only study source
+    check("no other module (no model tool, no voice command, no learner) reaches the decks: only the "
+          "scheduler's kind list, the locked backup (for its key's name) and the Daily Pulse's read-only "
+          "study source name it",
+          set(hits) <= allowed, hits)
     tools = "".join(p.read_text(encoding="utf-8", errors="ignore") for p in
                     (HERE / "jarvis_agent.py", HERE / "jarvis_quick.py", HERE / "jarvis_reach.py") if p.exists())
     check("... and the model's tool list, the fast path and the 'what asks first' page know no deck action",
