@@ -69,10 +69,16 @@ class FakeGate(types.ModuleType):
     def taint_active(self) -> bool:
         return self.active
 
-    def latch_taint(self, minutes=None, why=""):
+    def _fake_latch_taint(self, minutes=None, why=""):
         self.latches.append(why)
         self.active = True
         return True
+
+    # The module calls this name; it is exposed by assignment rather than by
+    # a second definition line, because the self-improve real-tree check
+    # retrieves the definition of this name, and a test-file definition
+    # outranks the real one on the file-name bonus.
+    latch_taint = _fake_latch_taint
 
     def clear_taint(self):
         self.clears += 1
