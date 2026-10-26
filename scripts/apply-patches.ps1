@@ -2240,9 +2240,11 @@ $SHIPPED = @(
 # product-research request; docs/DESIGN-PRODUCT-RESEARCH.md): tolerant review
 # records, evidence-only signals, validation of the local model's aspects and
 # quotes, and a reasons-based report. PURE - no network, no subprocess, no
-# route, no tool and no app surface; nothing imports it yet, so a backend
-# without it runs exactly as before (backend/_where.py's SHIPPED list has the
-# same entry, and backend/test_shipped_modules.py fails if the two disagree).
+# route, no tool and no app surface. Its own read half (jarvis_product_read.py)
+# imports it; no route, tool or app screen calls either of them yet, so a
+# backend without it runs exactly as before (backend/_where.py's SHIPPED list
+# has the same entry, and backend/test_shipped_modules.py fails if the two
+# disagree).
 'jarvis_product_research.py'
 # The product-check READ path, slice 2 (2026-10-26): page HTML captured from
 # the owner's own browser -> tolerant review records in the engine's schema +
