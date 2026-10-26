@@ -2581,7 +2581,16 @@ badge opens the **Layouts** menu: built-in layouts, My layouts, Duplicate to My
 layouts (the first edit of a shipped layout becomes the owner's copy - Ruling
 27), rename, delete, Reset to the shipped layout, and **Export / Import JSON** as
 copy/paste text only (Ruling 9: no file picker, no `blob:`, no Tauri dialog
-capability, CSP untouched). Settings lists the same library and adds a one-click
+capability, CSP untouched). **The left rail has its own door to the same menu
+(the owner's request of 2026-10-26: "where are the presets on the jarvis hud in
+desktop? add a button in the left column"):** `#rail-presets`, in the page's
+`.rail-toolbar`, dispatches the same `jarvis:hud-presets-open` event the badge
+does, so there is still ONE menu and one listing - it just opens beside the
+control that asked for it. The same toolbar is where the shell's settings gear
+now sits, moved out of the stage bar on the same day ("move the settings from
+the top right to the left column"); the gear is still injected by
+`hud_bootstrap.js` and still calls `open_fix_place { place: "settings" }`.
+Settings lists the same library and adds a one-click
 "Reset HUD to Cockpit" row. **Honest limits, in the PR:** the library is
 per-computer (export/import is the manual move path; no sync), touch/pen and the
 real monitor look are NOT-TESTABLE in CI, and H4's non-hideable safety rail

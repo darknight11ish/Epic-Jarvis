@@ -587,14 +587,22 @@ await check("with the shell, the HUD's own chat box is usable, and the button op
   assert.deepEqual(problems, []);
 });
 
-await check("in a plain browser (no shell) the HUD keeps its own box", async () => {
+await check("in a plain browser (no shell) the HUD keeps its own box, gets no settings gear, and keeps its Presets button", async () => {
   const { page } = await openHud(browser, { jarvis: false, ollama: true, proxy: false, noShell: true });
   const shown = await page.evaluate(() => ({
     input: document.getElementById("input").hidden,
     button: Boolean(document.getElementById("hud-open-bar")),
+    // 2026-10-26 (the owner's request): the settings gear is the SHELL's, and
+    // it now lives in the rail's toolbar. A page served on its own has no
+    // Settings window to open and no open_fix_place to call, so it must get no
+    // gear at all. The Presets button is the PAGE's and needs no shell, so it
+    // is there either way.
+    gear: Boolean(document.getElementById("hud-settings")),
+    presets: Boolean(document.getElementById("rail-presets")),
+    presetsInRail: Boolean(document.querySelector("#rail-left .rail-toolbar #rail-presets")),
   }));
   await page.close();
-  assert.deepEqual(shown, { input: false, button: false });
+  assert.deepEqual(shown, { input: false, button: false, gear: false, presets: true, presetsInRail: true });
 });
 
 // The button has a switch of its own (the owner's request of 2026-10-06,
@@ -2239,6 +2247,10 @@ const KEPT_IDS = [
   "r-docs", "r-ents", "r-tools", "r-mem", "r-rpm", "r-rpd", "r-stt", "r-tts",
   "r-level", "hud-layout-badge", "stage-tabs", "history-toggle", "core-expand",
   "rail-quickbar", "lane-compact", "appr-badge", "ambient-status", "studio-dock",
+  // The owner's two rail controls (2026-10-26). `hud-settings` is the shell's,
+  // added into the rail's tools group by hud_bootstrap.js - it is in this list
+  // because every view shape must keep it, exactly like the page's own ids.
+  "rail-toolbar", "rail-presets", "hud-settings",
 ];
 
 const layoutOf = (page) => page.evaluate(() => {
@@ -2351,6 +2363,125 @@ await check("every view shape keeps every id, and the Layout badge is reachable 
   for (const r of report) {
     assert.deepEqual(r.missing, [], `${r.layout}: removed ${JSON.stringify(r.missing)}`);
     assert.equal(r.badgeShown, true, `${r.layout}: the Layout badge is not reachable`);
+  }
+  assert.deepEqual(problems, []);
+});
+
+/* The owner's request of 2026-10-26, in their own words: "where are the
+ * presets on the jarvis hud in desktop? add a button in the left column. and
+ * move the settings from the top right to the left column".
+ *
+ * This is the behaviour, on the real page with the shell's real bootstrap
+ * injected: ONE Presets button in the left rail that opens the ONE Layouts
+ * menu (beside the button, not at the far corner), and ONE settings gear in
+ * that same rail - never on the stage bar any more, never two of them. In
+ * Ambient the left rail is a fixed drawer; the check opens it with the page's
+ * own [Controls] button, because "in the drawer" is where a control has to be
+ * for the drawer to be a way to it.
+ *
+ * tests/hud-rail-tools.mjs is the browser-free half (markup, all six shells'
+ * CSS, the wiring and the one-gear guard), so a machine without Playwright
+ * still catches a structural regression here. */
+await check("the owner's two rail controls: Presets opens the one Layouts menu, and there is exactly one gear", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.waitForSelector("#hud-settings", { timeout: 10000 });
+  const report = [];
+  for (const look of HUD_LAYOUTS) {
+    await setHudLook(page, look);
+    await page.waitForTimeout(200);
+    const neededDrawer = await page.evaluate(() => {
+      const rail = document.getElementById("rail-left");
+      if (!rail) return false;
+      const r = rail.getBoundingClientRect();
+      if (r.width > 1 && r.left >= -1) return false;
+      const toggle = document.getElementById("left-toggle");
+      if (!toggle) return false;
+      toggle.click();
+      return true;
+    });
+    if (neededDrawer) await page.waitForTimeout(350);
+    const before = await page.evaluate(() => {
+      const rail = document.getElementById("rail-left");
+      const gear = document.getElementById("hud-settings");
+      const presets = document.getElementById("rail-presets");
+      const box = (node) => {
+        if (!node) return null;
+        const r = node.getBoundingClientRect();
+        const cs = getComputedStyle(node);
+        const hitAt = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return {
+          w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right),
+          shown: cs.display !== "none" && cs.visibility !== "hidden" && r.width > 1 && r.height > 1,
+          hit: Boolean(hitAt && (hitAt === node || node.contains(hitAt))),
+        };
+      };
+      return {
+        shell: document.body.dataset.hudShell,
+        gears: document.querySelectorAll("#hud-settings").length,
+        gearInRail: Boolean(gear && rail && rail.contains(gear)),
+        gearInTools: Boolean(gear && gear.closest(".rail-toolbar")),
+        gearOnBar: Boolean(gear && gear.closest(".stage-bar")),
+        presetsInTools: Boolean(presets && presets.closest(".rail-toolbar")),
+        presetsBox: box(presets),
+        gearBox: box(gear),
+      };
+    });
+    await page.click("#rail-presets");
+    await page.waitForTimeout(250);
+    const opened = await page.evaluate(() => {
+      const menu = document.getElementById("hud-presets-menu");
+      const badge = document.getElementById("hud-layout-badge");
+      const presets = document.getElementById("rail-presets");
+      const mr = menu ? menu.getBoundingClientRect() : null;
+      const pr = presets ? presets.getBoundingClientRect() : null;
+      return {
+        menus: document.querySelectorAll("#hud-presets-menu").length,
+        shown: Boolean(menu && !menu.hidden),
+        badgeExpanded: badge ? badge.getAttribute("aria-expanded") : null,
+        railExpanded: presets ? presets.getAttribute("aria-expanded") : null,
+        besideButton: Boolean(mr && pr && mr.left >= pr.right - 2),
+      };
+    });
+    await page.click("#rail-presets");
+    await page.waitForTimeout(250);
+    const closed = await page.evaluate(() => {
+      const menu = document.getElementById("hud-presets-menu");
+      const presets = document.getElementById("rail-presets");
+      return {
+        hidden: Boolean(menu && menu.hidden),
+        railExpanded: presets ? presets.getAttribute("aria-expanded") : null,
+      };
+    });
+    report.push({ look, ...before, opened, closed });
+    if (neededDrawer) {
+      await page.evaluate(() => {
+        const rail = document.getElementById("rail-left");
+        if (rail) rail.classList.remove("open");
+      });
+    }
+  }
+  await page.close();
+  for (const r of report) {
+    assert.equal(r.gears, 1, `${r.look}: #hud-settings appears ${r.gears} times, not exactly once`);
+    assert.equal(r.gearInRail, true, `${r.look}: the settings gear is not in the left rail`);
+    assert.equal(r.gearInTools, true, `${r.look}: the settings gear is not in the rail's tools group`);
+    assert.equal(r.gearOnBar, false, `${r.look}: the settings gear is back on the stage bar`);
+    assert.equal(r.presetsInTools, true, `${r.look}: the Presets button is not in the rail's tools group`);
+    assert.ok(r.presetsBox && r.presetsBox.shown,
+      `${r.look}: the Presets button is not on screen (${JSON.stringify(r.presetsBox)})`);
+    assert.ok(r.gearBox && r.gearBox.shown,
+      `${r.look}: the settings gear is not on screen (${JSON.stringify(r.gearBox)})`);
+    assert.equal(r.presetsBox.hit, true, `${r.look}: something is drawn over the Presets button`);
+    assert.equal(r.gearBox.hit, true, `${r.look}: something is drawn over the settings gear`);
+    assert.equal(r.opened.menus, 1, `${r.look}: the page holds ${r.opened.menus} Layouts menus, not one`);
+    assert.equal(r.opened.shown, true, `${r.look}: the rail Presets button did not open the Layouts menu`);
+    assert.equal(r.opened.badgeExpanded, "true",
+      `${r.look}: the Layout badge does not agree that the one menu is open`);
+    assert.equal(r.opened.railExpanded, "true", `${r.look}: the rail button does not say the menu is open`);
+    assert.equal(r.opened.besideButton, true,
+      `${r.look}: the menu opened away from the control that asked for it`);
+    assert.equal(r.closed.hidden, true, `${r.look}: a second click on the rail button did not close the menu`);
+    assert.equal(r.closed.railExpanded, "false", `${r.look}: the rail button still says the menu is open`);
   }
   assert.deepEqual(problems, []);
 });

@@ -469,6 +469,42 @@ Adding to §9: that the gear is **findable at a glance** on the HUD's stage bar
 at the window's real size, and that tapping it opens Settings at the top. No
 build, no restart and no window was opened by this work.
 
+### 10.5 MOVED 2026-10-26: the gear is in the left rail, not the stage bar
+
+The owner asked for the opposite of §10.2's placement, in their own words:
+*"move the settings from the top right to the left column"*, and in the same
+breath *"where are the presets on the jarvis hud in desktop? add a button in
+the left column"*. What changed, and what did not:
+
+* **The gear now sits in the HUD's left rail**, in the page's own
+  `.rail-toolbar` (inside `#rail-left`), beside a new **Presets** button. It is
+  still the shell's: `hud_bootstrap.js` injects it, `jarvis_hud.html` still
+  carries no `#hud-settings`, and it is still added only when `__TAURI__` is
+  there. The id, the glyph, the "Jarvis settings" name and the
+  `open_fix_place { place: "settings" }` call are unchanged.
+* **Why the rail and not the sections below it:** the Studio shell the owner
+  runs (`split-stage`) draws a 60px icon rail and hides `.rail-nav`,
+  `.rail-lanes` and `.rail-systems` by CSS. The toolbar is the one rail block
+  no shell hides, and it is drawn in all six shells; the three drawer shells
+  (Ambient, `two-column-right`, `single-stage-bento`) carry it in the drawer.
+* **The Presets button opens the Layouts menu the badge already owned** - the
+  same `jarvis:hud-presets-open` event, one menu, no second list - and the menu
+  now opens beside whichever control asked for it. The `Layout: <name>` badge
+  and `[Edit HUD]` did NOT move (not asked).
+* **This supersedes §10.2's "Where:" bullet, §10.3's "sits on the stage bar"
+  and §10.4's "on the HUD's stage bar"** for the gear's position. Everything
+  else in §10.2 (the command, the grant, the glyph, the name, the route-line
+  note) is unchanged and still true.
+* **Tests:** `bar-chrome.mjs`'s stage-bar pin was replaced by the rail-toolbar
+  pin plus a pin that fails if the gear goes back (19 checks now, was 18);
+  `jarvis-desktop/tests/hud-rail-tools.mjs` is new and holds the structural
+  half; `tests/hud.mjs` drives the real page in all three UI looks and proves
+  one gear in the rail, the Presets button opening the one menu beside itself,
+  and a second click closing it. `tests/csp-inline.mjs` still sees 4 inline
+  script blocks in the page - the button needed no new inline script.
+* **Not verified:** no live HUD window was driven (no desktop rebuild here).
+  That is still the owner's/Lead's look at the real window.
+
 ---
 
 ## 11. The rebase onto `main` (348ffbb2, 2026-10-10), and what CI found

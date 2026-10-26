@@ -171,11 +171,30 @@ check("the HUD's gear calls the same navigation-only command as the other two", 
     "there is no such command; a new name would be refused by the ACL");
 });
 
-check("the HUD's gear sits on the page's own stage bar, beside its controls", () => {
-  assert.match(hudBootstrap, /document\.querySelector\("\.stage-bar"\)/,
-    "the gear must be added to the stage bar the vendored page already draws");
-  assert.match(hudBootstrap, /bar\.insertBefore\(gear, telemetry\)/,
-    "the gear must sit beside the page's own Telemetry control");
+check("the HUD's gear sits in the left rail's own toolbar, beside the Presets button", () => {
+  // MOVED 2026-10-26, the owner's request: "move the settings from the top
+  // right to the left column". It used to go on the page's stage bar, beside
+  // the page's own Telemetry button; it now goes into the rail's
+  // `.rail-toolbar`, which is the one rail block no shell hides (split-stage
+  // hides the rail's nav/lanes/systems sections). Nothing else about it
+  // changed. The name is `rail-toolbar` and NOT `rail-tools`: `#rail-tools` is
+  // the RIGHT rail's "Abilities used" card, which hud-edit.js maps.
+  const gear = blockFor(hudBootstrap, "function addSettingsGear", 2600);
+  assert.match(gear, /document\.querySelector\("\.rail-toolbar"\)/,
+    "the gear must be added to the left rail's own toolbar");
+  assert.match(gear, /railToolbar\.appendChild\(gear\)/,
+    "the gear must be appended to the rail's toolbar");
+});
+
+check("the HUD's gear is NOT put back on the stage bar", () => {
+  // The pin the move exists for. A future change that puts the gear back in
+  // the top-right row has to fail here and say why, not quietly undo the
+  // owner's request.
+  const gear = blockFor(hudBootstrap, "function addSettingsGear", 2600);
+  assert.doesNotMatch(gear, /stage-bar/,
+    "the settings gear is back on the stage bar - the owner asked for the left column (2026-10-26)");
+  assert.doesNotMatch(gear, /insertBefore\(gear, telemetry\)/,
+    "the gear is being inserted beside Telemetry again, which is the stage bar it left");
 });
 
 check("the HUD's gear draws the bar's and widget's own glyph", () => {
