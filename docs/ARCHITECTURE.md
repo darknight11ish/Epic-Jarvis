@@ -3167,11 +3167,15 @@ kind and counts. A phone screen, a desktop panel, a backup toggle and a
 biometric lock screen are named follow-ups, not things this slice pretends to
 have.
 
-**Private chat (2026-10-25) is backend-only in Slice 1.** The server accepts
-`"private": true` on `POST /api/chat` and treats the turn as strictly
-reads-only (JARVIS-API §156), but neither client sends it yet: there is no
-toggle and no marker in either app, so there is nothing one-sided to record
-here. When the apps' half lands it lands in both.
+**Private chat (2026-10-25; the desktop's half, 2026-10-26) is desktop-only.** The
+server accepts `"private": true` on `POST /api/chat` and treats the turn as
+strictly reads-only (JARVIS-API §156). The DESKTOP now sends it: a Private chip
+beside Incognito starts a new conversation and sends only `"private": true`
+(the server implies the temporary half), and the Rust command refuses with an
+honest sentence if `/api/version` does not advertise `capabilities.private_chat`
+- never an ordinary turn. The PHONE deliberately does not send it: its private
+mode is Incognito, and this slice is desktop-only. That is the one-sided
+decision, recorded here rather than left to be discovered.
 
 ## 9. Where the backend lives
 

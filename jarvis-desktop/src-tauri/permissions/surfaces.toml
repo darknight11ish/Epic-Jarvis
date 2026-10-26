@@ -347,6 +347,10 @@ permissions = [
   # GET /api/version's capabilities. A read; stream_chat checks again before
   # it sends a temporary question.
   "allow-temporary-chat-available",
+  # Private chat (the owner-approved desktop toggle, 2026-10-26): can this PC
+  # hold one? GET /api/version's capabilities.private_chat. A read;
+  # stream_chat checks again before it sends a private question.
+  "allow-private-chat-available",
   # An error's fix button (plain_errors.rs): opens Settings or the Brain, and
   # nothing else - the app lock still applies. It changes no setting.
   # "Earlier chats" uses it too, for the Brain's History tab.

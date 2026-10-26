@@ -37,6 +37,7 @@ import http from "node:http";
 import fs from "node:fs";
 import fsSync from "node:fs";
 import path from "node:path";
+import { PRIVATE_UNAVAILABLE } from "../src/private-chat.js";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -795,9 +796,14 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             // which `finishStream` already turns into its own honest
             // placeholder - still a real "done" turn, just with nothing
             // scripted to say.
-            // A PC without a temporary chat refuses one here, as
-            // commands.rs stream_chat does, before anything is sent.
-            if (args && args.temporary === true && window.__temporaryOk !== true) {
+            // A PC without the mode refuses it here, as commands.rs stream_chat
+            // does, before anything is sent. Private wins if a bad caller sends
+            // both, exactly as the Rust command does.
+            if (args && args.private === true && window.__privateOk !== true) {
+              throw new Error(PRIVATE_UNAVAILABLE);
+            }
+            if (args && args.private !== true && args.temporary === true &&
+                window.__temporaryOk !== true) {
               throw new Error("Incognito isn't available on this PC's version of Jarvis, " +
                 "so nothing was sent. Run apply-patches.ps1 on the PC to update it.");
             }
@@ -1777,6 +1783,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // scenario sets window.__temporaryOk; unset, an older PC.
           case "temporary_chat_available":
             return window.__temporaryOk === true;
+          // Private chat (commands.rs private_chat_available): a scenario sets
+          // window.__privateOk; unset, an older PC.
+          case "private_chat_available":
+            return window.__privateOk === true;
           // "Used in this answer" (brain/used.rs memory_used): the facts a
           // scenario puts in window.__usedFacts, by id, in the order asked;
           // unknown ids are `missing`; emptied while the lists are hidden;

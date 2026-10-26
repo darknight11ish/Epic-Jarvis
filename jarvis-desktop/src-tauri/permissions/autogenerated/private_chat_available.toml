@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-private-chat-available"
+description = "Enables the private_chat_available command without any pre-configured scope."
+commands.allow = ["private_chat_available"]
+
+[[permission]]
+identifier = "deny-private-chat-available"
+description = "Denies the private_chat_available command without any pre-configured scope."
+commands.deny = ["private_chat_available"]

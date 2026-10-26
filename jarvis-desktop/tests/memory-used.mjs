@@ -379,7 +379,15 @@ await check("CONTROL: stream_chat sends temporary only to a PC that has it; memo
   assert.ok(check > 0 && check < body.indexOf("pump_chat("), "no capability check before sending");
   assert.ok(/if supported != Ok\(true\) \{[\s\S]*?TEMPORARY_UNAVAILABLE/.test(body),
     "an older PC is not refused");
-  assert.ok(body.indexOf('body.insert("temporary".into(), serde_json::json!(true))') > check);
+  assert.ok(body.indexOf("add_chat_mode_flags(body, temporary, private, cloud_yes)") > check,
+    "the mode flag is written only after the capability check");
+  const flagsStart = rust.indexOf("pub(crate) fn add_chat_mode_flags(");
+  const flags = rust.slice(flagsStart, rust.indexOf("\n}\n", flagsStart));
+  assert.ok(flags.indexOf('body.insert("temporary".into(), serde_json::json!(true))') > 0,
+    "a temporary chat still asks the PC for temporary");
+  assert.ok(flags.indexOf("if private {") >= 0 &&
+    flags.indexOf("} else if temporary {") > flags.indexOf("if private {"),
+    "private wins over temporary, so a private body never carries temporary too");
   assert.match(rust, /out\.insert\("memory_ids"\.to_string\(\), serde_json::json!\(ids\)\)/);
   const used = read("src-tauri/src/brain/used.rs");
   assert.match(used, /if crate::lock::private_hidden\(&app\) \{\s*redact_used\(answer\)/);
