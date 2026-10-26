@@ -28,10 +28,11 @@ Jarvis does, in the owner's own words.
 And it proves the TEACHING claim is tested, not just made (rule 7, 2026-10-25).
 A feature row can name a lesson that never mentions it, and every other rule
 here stayed green while it did: "Save a draft to your Drafts folder" was taught
-by a lesson containing no "draft". Every taught row now carries `must_mention`,
-the suite proves a made-up row whose lesson lacks its word FAILS and that the
-real list passes, and `TEACHING_GAP` records the rows whose lesson genuinely
-does not teach them yet - one line each, self-emptying.
+by a lesson containing no "draft". Every taught row now carries either
+`must_mention` or a `TEACHING_GAP` line, the suite proves a made-up row whose
+lesson lacks its word FAILS and that the real list passes, and `TEACHING_GAP`
+records the rows whose lesson genuinely does not teach them yet - one line
+each, self-emptying.
 
 Needs nothing from the owner's PC; runs anywhere, including CI (it is picked up
 by backend/run_suites.py like every other test_*.py).

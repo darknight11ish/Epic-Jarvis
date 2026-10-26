@@ -77,6 +77,32 @@ feature" and "the lesson teaches it" are two different claims:
   list for the teaching side, never a silence: a row that gains `must_mention`
   fails until its gap line is deleted.
 
+The 14 rows recorded on 2026-10-25, as a work order for the teaching side. The
+checker's `TEACHING_GAP` is the authority and prints this same list on every
+run, so it cannot grow silently; the table is the list in readable form, and
+each row names the lesson it is taught by and what that lesson leaves out.
+
+| feature row | lesson it names | what the lesson leaves out |
+| --- | --- | --- |
+| `talk-to-type` | `how-it-talks` | holding a key to type what you say |
+| `about` | `intro` | the About page's version, licences and credits |
+| `photo-reminder` | `screens-and-pictures` | reading dates off a photo and offering a reminder |
+| `live-camera` | `phone-live` | the word camera appears in no step (the row says the feature is not built yet) |
+| `github-watchlist` | `work-and-attention` | "github", "watch" and "topic" in neither lesson the row names |
+| `email-drafts` | `home-calendar-email` | saving a draft to the owner's Drafts folder |
+| `inbox-tidy` | `home-calendar-email` | archiving, starring, marking read, Trash and tidying |
+| `news-and-page-watches` | `work-and-attention` | feeds and watched pages (only the briefing's own "news" line exists) |
+| `updates` | `limits-and-notes` | an update, a version or a release page |
+| `tool-updates` | `model-page` | checking a package is out of date |
+| `app-lock` | `phone-limits` | App lock, a fingerprint, a PIN (the nearest sentence is in the sibling lesson `phone-stays-on-pc`, which the row does not name) |
+| `captcha-handoff` | `phone-approvals` | a captcha, the solve-it-here hand-off and a stuck browser window |
+| `stale-link` | `when-something-is-wrong` | the stale event stream and the block on acting |
+| `rush-latch` | `when-something-is-wrong` | the rush-latch banner and the fact that no control clears it |
+
+Closing a gap is two edits in one commit: teach the step, then delete its line
+here. Keeping the gaps honest needs a person to read the lesson — the checker
+can see a word occurs, not that the gap is still real.
+
 Run through `backend/run_suites.py test_feature_list.py` so it runs in CI with
 the other Python suites.
 

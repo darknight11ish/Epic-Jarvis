@@ -63,12 +63,13 @@ BOTH DIRECTIONS, which is the whole point:
      feature. The row "Save a draft to your Drafts folder" can name
      `home-calendar-email` and pass every rule above while that lesson's steps
      never say "draft" - so "it is taught" was a claim nothing tested. Every
-     taught row now carries `must_mention`: 1-3 lowercase words or short
-     phrases that must occur, whole-word and case-insensitively, in the step
-     `title`+`body` text of the lessons that row names. A missing word FAILS,
-     naming the feature, the lesson(s) and the word. So does a taught row with
-     no `must_mention` (the gate cannot be skipped) and a `must_mention` on a
-     row no lesson teaches (a stale field).
+     taught row now carries either `must_mention` or a `TEACHING_GAP` line:
+     `must_mention` is 1-3 lowercase words or short phrases that must occur,
+     whole-word and case-insensitively, in the step `title`+`body` text of the
+     lessons that row names. A missing word FAILS, naming the feature, the
+     lesson(s) and the word. So does a taught row with neither of the two (the
+     gate cannot be skipped) and a `must_mention` on a row no lesson teaches
+     (a stale field).
 
 WHAT RULE 7 CANNOT JUDGE, AND WHAT IT DOES ABOUT THAT
 
@@ -885,8 +886,9 @@ def main() -> int:
         (f"every one of the {len(lessons)} lessons is named by a feature row or in "
          f"LESSON_UNCOVERED ({len(LESSON_UNCOVERED)} exempt) - reverse completeness",
          lesson_problems(got)),
-        (f"every taught feature names words its lesson really uses - {keyworded} with "
-         f"`must_mention`, {len(TEACHING_GAP)} recorded as a teaching gap",
+        (f"every taught feature names words its lesson really uses, or is a "
+         f"recorded teaching gap - {keyworded} with `must_mention`, "
+         f"{len(TEACHING_GAP)} recorded as a teaching gap",
          keyword_problems(got)),
     ]
     failed = 0
