@@ -2229,6 +2229,13 @@ $SHIPPED = @(
 # before (backend/_where.py's SHIPPED list has the same entry, and
 # backend/test_shipped_modules.py fails if the two disagree).
 'jarvis_private_chat.py'
+# The owner-secret hand-off's rule engine (2026-10-26): the 15-minute
+# secret-page read taint and the hand-off card state machine, shipped whole
+# like every module a patch will call. No route, no card, no typing and no
+# network yet - the wiring is the next slice, so nothing imports it today
+# and a backend without it runs exactly as before
+# (docs/DESIGN-SECRET-HANDOFF.md is the record).
+'jarvis_secret_handoff.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -1265,7 +1265,7 @@ SHIPPED = (
     # owner's reversal of the order so the taint ships inside the flow it
     # protects). A pure rule engine: the taint table, the hand-off card state
     # machine and the abort conditions. No route, no card, no typing and no
-    # network yet - the wiring into jarvis_ui_control.py / browser_control.py
+    # network yet - the wiring into jarvis_ui_control.py / jarvis_browser_control.py
     # is the next slice, so nothing imports it today and a backend without it
     # runs exactly as before. docs/DESIGN-SECRET-HANDOFF.md is the record.
     "jarvis_secret_handoff.py",

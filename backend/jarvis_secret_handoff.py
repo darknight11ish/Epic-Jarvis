@@ -67,6 +67,7 @@ HONEST LIMITS, SAID PLAINLY
 from __future__ import annotations
 
 import collections
+import posixpath
 import secrets
 import threading
 import time
@@ -115,9 +116,12 @@ def normalize_secret_target_key(*, url: str = "", pid: int = 0, hwnd: int = 0,
     """The one normalized key for a hand-off target.
 
     For a browser page: `url:<scheme>://<host[:port]><path>` with the query
-    string and the `#fragment` stripped - the same "same document for this
-    purpose" rule cindy uses, and the rule that keeps a one-time token in a
-    query string out of the key. Only http/https is accepted.
+    string, the `#fragment` and any `user:pass@` userinfo stripped. Two
+    spellings of the same page get the same key: scheme and host lower-cased,
+    a default port (:80 http / :443 https) dropped, `.`/`..` path segments
+    resolved and a trailing slash dropped. That keeps a one-time token, and a
+    secret typed next to a login form, out of the key a refusal or a status
+    surface can show. Only http/https is accepted.
 
     For a desktop window: `hwnd:<pid>:<hwnd>:<window class>`, lower-cased; an
     empty class becomes `-` rather than being silently dropped, so two windows
@@ -131,11 +135,22 @@ def normalize_secret_target_key(*, url: str = "", pid: int = 0, hwnd: int = 0,
         scheme = (parsed.scheme or "").lower()
         if scheme not in _WEB_SCHEMES:
             raise ValueError("a hand-off target page must be an http or https address")
-        netloc = (parsed.netloc or "").lower()
-        if not netloc:
+        host = (parsed.hostname or "").lower()
+        if not host:
             raise ValueError("a hand-off target page needs a host")
-        path = parsed.path or "/"
-        return f"url:{scheme}://{netloc}{path}"
+        try:
+            port = parsed.port
+        except ValueError:
+            raise ValueError("a hand-off target page has an invalid port")
+        default_port = 443 if scheme == "https" else 80
+        host_text = f"[{host}]" if ":" in host else host
+        if port is not None and port != default_port:
+            host_text = f"{host_text}:{port}"
+        path = posixpath.normpath(parsed.path or "/")
+        path = "/" + path.lstrip("/")
+        if path != "/" and path.endswith("/"):
+            path = path.rstrip("/")
+        return f"url:{scheme}://{host_text}{path}"
     try:
         ipid = int(pid)
         ihwnd = int(hwnd)
@@ -369,7 +384,7 @@ class SecretHandoffCoordinator:
         *,
         current_live_snapshot: VerifiedTargetSnapshot,
         type_into_control_fn: Callable[[str, str], None],
-        from_this_pc: bool = True,
+        from_this_pc: bool = False,
     ) -> Dict[str, object]:
         """Carry out an owner-approved hand-off, or void it with zero typed.
 
@@ -377,6 +392,11 @@ class SecretHandoffCoordinator:
         every check runs BEFORE the first character is typed, and the 15-minute
         taint is marked BEFORE typing starts, so a failure halfway through
         typing still leaves the page/window read-locked.
+
+        `from_this_pc` has no safe default: the wiring layer must assert that
+        the request really came from this PC (loopback/host-only route and a
+        verified caller). A caller that forgets to say so is refused with zero
+        characters typed, not trusted.
         """
         if not from_this_pc:
             raise self._void("A secret hand-off card can only be answered on this PC.")
@@ -390,7 +410,7 @@ class SecretHandoffCoordinator:
             with self._lock:
                 self._pending.pop(handoff_id, None)
             raise self._void("The secret hand-off card expired; nothing was typed.")
-        if not isinstance(secret_value, str) or not secret_value:
+        if not isinstance(secret_value, str) or not secret_value.strip():
             raise self._void("The secret value is empty; nothing was typed.")
         if len(secret_value) > SECRET_MAX_CHARS:
             raise self._void(
@@ -420,8 +440,16 @@ class SecretHandoffCoordinator:
 
         # 1. Taint FIRST. A failure while typing must not leave the page readable.
         self.taint.mark_secret_entered(snap.target_key)
-        # 2. Type through the injected function. Its exceptions carry no secret.
-        type_into_control_fn(snap.control_id, secret_value)
+        # 2. Type through the injected function. A failure is reported with a
+        #    fixed sentence: the injected exception is replaced rather than
+        #    re-raised, so a third-party error string cannot echo the value it
+        #    failed on into a log, a card or a tool result.
+        try:
+            type_into_control_fn(snap.control_id, secret_value)
+        except Exception:
+            raise SecretHandoffError(
+                "Typing into the target failed; the page/window stays read-locked "
+                "for the taint window. Check it before reading it back.") from None
         # 3. Return only metadata. `secret_value` goes out of scope here and is
         #    never stored anywhere in this object (see the module's honest limits).
         return {

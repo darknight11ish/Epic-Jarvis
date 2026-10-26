@@ -49,31 +49,39 @@ Two clearly separated boxes, because the model's text is untrusted and the targe
 The owner types into a `type=password`, `autocomplete=off` input, then presses one
 button - `[Type into <verified target>]` - or `[Cancel]`.
 
+**Who measures the target.** In this slice the snapshot is *supplied by the caller* and the
+engine compares it; the engine cannot itself read the OS. So the verification is exactly as
+strong as the wiring that builds that snapshot - which is why the wiring slice in section 4
+is not optional, and why this record says "compares" rather than "the host verifies".
+
 ### 1.3 What voids the step, and how the taint works
 
 **Voided with ZERO characters typed** when, at submit time, the host re-reads the target
 and finds: the page address or window changed; the kind changed; the focused control is
 no longer the same one; the control is no longer password-masked; the card is older than
-180 seconds; the card is answered from another machine; the value is empty or over 4096
-characters; or the card was already used or cancelled.
+180 seconds; the card is answered from another machine (a caller that does not assert it is
+this PC is refused, because `from_this_pc` has no safe default); the value is empty or only
+whitespace or over 4096 characters; or the card was already used or cancelled.
 
 **The taint.** `mark_secret_entered(target_key)` runs BEFORE the first character is
 typed, so a typing failure halfway through still leaves the target read-locked. The
 registry is in memory only: `SECRET_TAINT_TTL_S = 900` (15 minutes), at most
 `SECRET_TAINT_MAX_KEYS = 32` targets, oldest evicted first, monotonic clock so a wall-clock
-adjustment cannot shorten or extend it. Keys are page addresses (scheme, host, path -
-query string and fragment stripped) or `pid:hwnd:window class`; a secret value is never
-part of a key. While a key is tainted, the wiring layer's read paths must call
+adjustment cannot shorten or extend it. Keys are canonicalised page addresses (scheme and
+host lower-cased, a default `:80`/`:443` dropped, `.`/`..` path segments resolved, a
+trailing slash dropped, query string, fragment and any `user:pass@` userinfo stripped) or
+`pid:hwnd:window class`; a secret value is never part of a key. While a key is tainted, the wiring layer's read paths must call
 `require_read_allowed(key)` and receive the honest refusal; once the browser navigates to
 a different pathname, the new page is readable and the login page stays locked.
 
 ## 2. What is built, and what the suite proves
 
 `backend/jarvis_secret_handoff.py` (+ twin) and `backend/test_secret_handoff.py`:
-**82 checks, 0 skipped, 0 failed**, no GUI, no network, no sleeps.
+**93 checks, 0 skipped, 0 failed**, no GUI, no network, no sleeps.
 
-- key normalisation (query/fragment stripped, lower-cased host, non-http refused, window
-  class lower-cased and never silently dropped);
+- key normalisation (query/fragment/userinfo stripped, default ports dropped, `.`/`..`
+  path segments resolved, lower-cased host, non-http refused, window class lower-cased and
+  never silently dropped);
 - the taint table (TTL, re-mark refreshes, bounded eviction, clear, status carries
   addresses and counts only);
 - the card (only for a password-masked control, agent purpose cleaned and labelled
@@ -81,7 +89,9 @@ a different pathname, the new page is readable and the login page stays locked.
 - the fill order (taint before typing, card consumed once, receipt has no secret);
 - every void condition in 1.3, each asserting nothing was typed and no taint was set
   where it should not be;
-- a typing failure: the exception surfaces, the target STILL taints, the card is spent;
+- a typing failure: the injected exception is *replaced* by the module's own fixed
+  sentence (so a third-party error string cannot echo the value it failed on), the target
+  STILL taints, the card is spent;
 - no persistence: the module never calls `open`, never prints, imports no sqlite/
   logging/network/clipboard library.
 
@@ -93,6 +103,9 @@ a different pathname, the new page is readable and the login page stays locked.
   written anywhere. It is not a secure enclave.
 - **The taint table is memory only.** A backend restart clears it. That is intended: it
   is a session protection against reading a just-filled page back, not a durable record.
+- **The origin check is only as strong as its caller.** `from_this_pc` has no safe default
+  (a caller that omits it is refused), but the wiring must still prove the request came
+  from this PC; the engine cannot see the network.
 - **The keys are page addresses and window handles**, not secrets, so a future status
   page may show them; no reviewer or secret ever appears.
 - **Nothing is measured live.** No real browser session, no real UIA window and no real

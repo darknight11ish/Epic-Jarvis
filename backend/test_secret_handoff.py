@@ -108,9 +108,21 @@ def raises(exc_type: type, fn) -> bool:
 
 def t_key_normalization():
     raw = "https://Example.COM:443/login?next=%2Fhome#fragment"
-    check("query string and fragment are stripped from the page key",
-          S.normalize_secret_target_key(url=raw) == "url:https://example.com:443/login",
+    check("query string, fragment and the default :443 are stripped from the page key",
+          S.normalize_secret_target_key(url=raw) == "url:https://example.com/login",
           S.normalize_secret_target_key(url=raw))
+    check("userinfo never becomes part of a key",
+          S.normalize_secret_target_key(url="https://alice:secretpw@Example.com/login")
+          == "url:https://example.com/login")
+    check("a non-default port is kept so two services do not share a key",
+          S.normalize_secret_target_key(url="https://example.com:8443/login") ==
+          "url:https://example.com:8443/login")
+    check("http's default :80 is stripped",
+          S.normalize_secret_target_key(url="http://Example.com:80/login") ==
+          "url:http://example.com/login")
+    check("a dot-segment path is canonicalised",
+          S.normalize_secret_target_key(url="https://example.com/a/../login") ==
+          "url:https://example.com/login")
     check("the scheme and host are lower-cased",
           S.normalize_secret_target_key(url="HTTPS://GitHub.com/Login") ==
           "url:https://github.com/Login")
@@ -264,7 +276,8 @@ def t_execute_success():
 
     receipt = coord.execute_owner_fill(
         card["handoff_id"], "correct horse battery staple",
-        current_live_snapshot=snap, type_into_control_fn=type_into)
+        current_live_snapshot=snap, type_into_control_fn=type_into,
+        from_this_pc=True)
     check("the secret is typed into the named control",
           seen.get("control") == "input-1" and seen.get("value") == "correct horse battery staple")
     check("the taint is marked BEFORE the first character is typed",
@@ -281,7 +294,11 @@ def t_execute_success():
           coord.pending_count() == 0 and raises(
               S.SecretHandoffVoidedError, lambda: coord.execute_owner_fill(
                   card["handoff_id"], "again", current_live_snapshot=snap,
-                  type_into_control_fn=lambda *a: None)))
+                  from_this_pc=True, type_into_control_fn=lambda *a: None)))
+    check("no surface after the fill carries the secret",
+          "horse" not in json.dumps(receipt)
+          and "horse" not in json.dumps(coord.taint.status())
+          and "horse" not in json.dumps(card))
     check("the page is read-locked for 15 minutes after typing",
           taint.is_read_restricted(snap.target_key) is True)
     clock.advance(S.SECRET_TAINT_TTL_S + 1)
@@ -297,7 +314,7 @@ def t_execute_voids():
         coord, taint = make_coordinator(clock)
         snap = browser_snapshot(clock, purpose="sign in")
         card = coord.create_handoff_card(snapshot=snap)
-        args = dict(current_live_snapshot=snap,
+        args = dict(current_live_snapshot=snap, from_this_pc=True,
                     type_into_control_fn=lambda c, v: typed.append((c, v)))
         args.update(overrides)
         return coord, taint, snap, card, args, typed
@@ -336,9 +353,24 @@ def t_execute_voids():
     check("... and nothing was typed", typed == [])
 
     coord, taint, snap, card, args, typed = fresh()
+    check("a whitespace-only secret aborts",
+          raises(S.SecretHandoffVoidedError, lambda: coord.execute_owner_fill(
+              card["handoff_id"], "  \t  ", **args)))
+    check("... and nothing was typed", typed == [])
+    check("... and the card is still pending, not consumed",
+          coord.pending_count() == 1)
+
+    coord, taint, snap, card, args, typed = fresh()
+    check("from_this_pc has no unsafe default: a caller that omits it is refused",
+          raises(S.SecretHandoffVoidedError, lambda: coord.execute_owner_fill(
+              card["handoff_id"], "pw", current_live_snapshot=snap,
+              type_into_control_fn=lambda c, v: typed.append((c, v)))))
+    check("... and nothing was typed by that unproven caller", typed == [])
+
+    coord, taint, snap, card, args, typed = fresh()
     check("a card cannot be answered from another PC",
           raises(S.SecretHandoffVoidedError, lambda: coord.execute_owner_fill(
-              card["handoff_id"], "pw", from_this_pc=False, **args)))
+              card["handoff_id"], "pw", **{**args, "from_this_pc": False})))
     check("... and the card is still usable on this PC", coord.pending_count() == 1)
 
     coord, taint, snap, card, args, typed = fresh()
@@ -359,11 +391,23 @@ def t_execute_voids():
     coord, taint, snap, card, args, typed = fresh()
     def boom(control_id, value):
         typed.append((control_id, value))
-        raise RuntimeError("the control refused the text")
-    check("a typing failure surfaces without the secret",
-          raises(RuntimeError, lambda: coord.execute_owner_fill(
-              card["handoff_id"], "pw", current_live_snapshot=snap,
-              type_into_control_fn=boom)))
+        raise RuntimeError("the control refused the text for " + value)
+    failure = {}
+    try:
+        coord.execute_owner_fill(
+            card["handoff_id"], "s3cretpw", current_live_snapshot=snap,
+            from_this_pc=True, type_into_control_fn=boom)
+        failure["raised"] = False
+    except S.SecretHandoffError as exc:
+        failure["raised"] = True
+        failure["text"] = str(exc)
+    except Exception as exc:  # a raw third-party error is a failure of this test
+        failure["raised"] = False
+        failure["wrong"] = repr(exc)
+    check("a typing failure surfaces as the module's own error",
+          failure.get("raised") is True, failure)
+    check("... the fixed sentence carries no secret",
+          "s3cretpw" not in failure.get("text", "s3cretpw"))
     check("... yet the target is still tainted",
           taint.is_read_restricted(snap.target_key) is True)
     check("... and the card was consumed", coord.pending_count() == 0)
@@ -381,7 +425,7 @@ def t_execute_voids():
     card = coord.create_handoff_card(snapshot=glass)
     receipt = coord.execute_owner_fill(
         card["handoff_id"], "pw", current_live_snapshot=glass,
-        type_into_control_fn=lambda c, v: None)
+        type_into_control_fn=lambda c, v: None, from_this_pc=True)
     check("a desktop window hand-off works and taints by pid+hwnd+class",
           receipt["target_kind"] == "desktop_window"
           and taint.is_read_restricted("hwnd:4812:9001:edit") is True)
@@ -421,8 +465,9 @@ def t_no_persistence():
         if isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
     check("the only imports are the standard library essentials",
-          imported <= {"__future__", "collections", "secrets", "threading",
-                       "time", "urllib", "dataclasses", "typing"} and bool(imported),
+          imported <= {"__future__", "collections", "posixpath", "secrets",
+                       "threading", "time", "urllib", "dataclasses",
+                       "typing"} and bool(imported),
           sorted(imported))
     check("nothing in the module writes a temp or database path",
           ("sqlite" not in source.lower()) and ("tempfile" not in source.lower()))
@@ -444,7 +489,7 @@ def t_singletons():
     receipt = S.execute_owner_fill(
         card["handoff_id"], "pw",
         current_live_snapshot=snap,
-        type_into_control_fn=lambda c, v: None)
+        type_into_control_fn=lambda c, v: None, from_this_pc=True)
     check("the process-wide coordinator carries a module-level hand-off",
           receipt["filled"] is True)
     S.reset_for_tests()
