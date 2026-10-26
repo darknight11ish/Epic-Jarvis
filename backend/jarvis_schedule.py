@@ -475,7 +475,64 @@ _ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "
                   # this and for done/fired rows; the open path below backfills
                   # each list 0..n-1 once, deterministically, and old code
                   # ignores the column, so a code rollback stays safe.
-                  ("rank", "INTEGER"))
+                  ("rank", "INTEGER"),
+                  # Schedule-source taint (2026-10-26): "read_outside" on a job
+                  # written while jarvis_gate's private latch was on, so the
+                  # taint outlives the latch's own minutes instead of dying
+                  # with it. A row written BEFORE this column exists reads as
+                  # NULL and is treated as trusted - deliberate: there is no
+                  # way to know, and marking every old reminder tainted would
+                  # latch on a job nobody read anything for. The latch is
+                  # replayed once when the job fires (see `tick`).
+                  ("source_taint", "TEXT"))
+
+#: The one value `jobs.source_taint` holds. It is a value, not a boolean, so
+#: a later reason (a pasted-text job, say) can be added without a rewrite.
+#:
+#: MEASURED 2026-10-26, against every `register_kind(on_fire=...)` callback in
+#: this checkout (twelve: briefing, decks, focus, goals, next_time, referee,
+#: standby_schedule, tag_suggest, tellme, tidy, today, topics): NONE of them
+#: starts an agent turn or runs a tool. They do local work or read a mailbox's
+#: metadata, and three ask a loopback model directly (topics, tag_suggest,
+#: tidy) - never through jarvis_agent's tool loop. So replaying the mark on
+#: fire is DEFENCE IN DEPTH for a future on_fire that can start a turn, not a
+#: fix for a live exploit. It does have a live effect for any module that asks
+#: the latch after a firing: the latch's own 30 minutes no longer decide.
+SOURCE_TAINT = "read_outside"
+
+
+def _taint_mark() -> Optional[str]:
+    """The mark a row written or edited RIGHT NOW must carry.
+
+    None when jarvis_gate cannot be imported: with no latch module there is
+    nothing to replay when the job fires either, and failing closed here
+    would tag every row on an install that simply does not ship the gate.
+    """
+    try:
+        import jarvis_gate
+        return SOURCE_TAINT if jarvis_gate.taint_active() else None
+    except Exception:
+        return None
+
+
+def _row_taint(row) -> str:
+    """One row's stored mark, "" for none - including a DB opened by a build
+    before the column existed (the migration adds it on open, but a row read
+    by a caller that never constructed a Scheduler must not raise)."""
+    try:
+        return str(row["source_taint"] or "")
+    except (IndexError, KeyError):
+        return ""
+
+
+def _latch_fired_taint(tag: str) -> bool:
+    """Replay a fired row's mark through the one process-wide latch."""
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.latch_taint(why="scheduled_task:" + str(tag)))
+    except Exception:
+        return False
+
 
 #: States. `active` and `paused` are on the list; `waiting` is a repeating
 #: job whose card has not been answered; `fired` is a one-off that went off
@@ -1052,9 +1109,18 @@ class Scheduler:
                 context_bundle: Optional[dict] = None, trigger: Optional[str] = None,
                 condition_kind: Optional[str] = None,
                 condition_target: Optional[str] = None,
-                rank: Optional[int] = None) -> str:
+                rank: Optional[int] = None,
+                source_taint: Optional[str] = None) -> str:
+        """The ONE insert. Every creation path (timer, alarm, reminder, to-do,
+        repeat, both snooze copies) comes through here, so the creation-time
+        taint mark is recorded in exactly one place.
+
+        `source_taint`: an explicit mark to carry over (a snooze copy of a
+        tainted row). When it is None the row is marked iff the private latch
+        is on at this moment."""
         jid = "s" + uuid.uuid4().hex[:10]
         now = self.now()
+        taint = source_taint or _taint_mark()
         with self._lock, self._db() as c:
             if kind == "todo" and rank is None:
                 # Phase 2: a new to-do appends to the end of its list, so the
@@ -1066,13 +1132,13 @@ class Scheduler:
                 rank = int(top) + 1
             c.execute("INSERT INTO jobs (id, kind, text, state, due, rule, duration, created, "
                       "changed, source, list_name, snooze_of, extra, context_bundle, trigger, "
-                      "condition_kind, condition_target, rank) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      "condition_kind, condition_target, rank, source_taint) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (jid, kind, text, state, due,
                        json.dumps(rule) if rule else None, duration, now, now, source,
                        list_name, snooze_of, json.dumps(extra) if extra else None,
                        json.dumps(context_bundle) if context_bundle else None,
-                       trigger or "time", condition_kind, condition_target, rank))
+                       trigger or "time", condition_kind, condition_target, rank, taint))
         _audit("schedule.add", {"id": jid, "kind": kind, "repeats": bool(rule)})
         self._changed(jid, kind)
         return jid
@@ -1446,6 +1512,12 @@ class Scheduler:
                         if cur["state"] == "active":
                             sets.append("due = ?")
                             args.append(next_run(rule, now))
+                        # Edited while private material was in the turn: the
+                        # row is marked too, not only the ones created then.
+                        mark = _taint_mark()
+                        if mark:
+                            sets.append("source_taint = ?")
+                            args.append(mark)
                         c.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?",
                                   (*args, jid))
             _audit("schedule.card", {"id": jid, "outcome": outcome})
@@ -1817,6 +1889,12 @@ class Scheduler:
         if new_duration is not None:
             sets.append("duration = ?")
             args.append(new_duration)
+        # The same rule as creation: an edit made while the private latch is
+        # on marks the row, so the next firing replays it.
+        mark = _taint_mark()
+        if mark:
+            sets.append("source_taint = ?")
+            args.append(mark)
         c.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", (*args, row["id"]))
         if has_list:
             self._move_in_tx(c, row, target_key, now)
@@ -2014,7 +2092,10 @@ class Scheduler:
                 kind, text = row["kind"], row["text"]
             copy_id = self._insert(kind, text=text, state="active", due=now + length, rule=None,
                                    duration=length if kind == "timer" else None,
-                                   source="snooze", snooze_of=jid)
+                                   source="snooze", snooze_of=jid,
+                                   # A snooze copy of a tainted row inherits
+                                   # the mark even after the latch expired.
+                                   source_taint=_row_taint(row) or None)
             with self._db() as c:
                 c.execute("UPDATE jobs SET snoozed_to = ?, changed = ? WHERE id = ?",
                           (copy_id, now, jid))
@@ -2225,7 +2306,8 @@ class Scheduler:
                               "late = ?, changed = ?, resolved_at = COALESCE(resolved_at, ?) "
                               "WHERE id = ?",
                               (now, row["due"], int(late), now, now, row["id"]))
-                went.append((row["id"], row["kind"], late, ended, past_end))
+                went.append((row["id"], row["kind"], late, ended, past_end,
+                             _row_taint(row)))
             # Housekeeping: what went off a day ago, and done to-dos a week old.
             c.execute("DELETE FROM jobs WHERE state = 'fired' AND fired_at < ?",
                       (now - FIRED_KEEP,))
@@ -2236,7 +2318,7 @@ class Scheduler:
             # BUNDLE_RETENTION_DAYS days - the bare reminder row stays, the
             # details that were only there to help do it do not.
             _expire_bundles(c, now)
-        for jid, kind, late, ended, past_end in went:
+        for jid, kind, late, ended, past_end, taint in went:
             self.fired += 1
             k = KINDS.get(kind)
             if past_end:
@@ -2245,6 +2327,14 @@ class Scheduler:
                 _audit("schedule.ended", {"id": jid, "kind": kind, "past_end": True})
                 self._changed(jid, kind)
                 continue
+            if taint:
+                # Schedule-source taint: the row was written while the private
+                # latch was on, and that latch's own minutes have long passed.
+                # Replay it ONCE, here, before the fired event, before the
+                # kind's own on_fire and before anything this row can
+                # influence runs. Nothing in jarvis_schedule reads the latch
+                # itself afterwards; it is there for whatever does.
+                _latch_fired_taint(taint)
             if k is not None and k.silent:
                 # A look, not news ("tell me when" checking the inbox every
                 # five minutes): no doorbell, and no audit line per look -
@@ -3557,7 +3647,10 @@ def snooze_reminder(reminder_id, preset: str = "15m", *, now=None,
                        trigger=trigger,
                        condition_kind=row["condition_kind"],
                        condition_target=_safe_condition_target(row["condition_target"])
-                       or None)
+                       or None,
+                       # The copy carries the original's creation-time mark
+                       # too, so a snooze cannot launder a tainted reminder.
+                       source_taint=_row_taint(row) or None)
     with s._lock, s._db() as c:
         c.execute("UPDATE jobs SET snoozed_to = ?, changed = ? WHERE id = ?",
                   (new_id, at, str(reminder_id)))
