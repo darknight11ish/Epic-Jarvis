@@ -89,8 +89,9 @@ warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
 all fourteen - those thirteen, plus `private-chat.patch` at position 151,
-added 2026-10-25 (the architect's H10 ruling: ten of its eleven hunks anchor
-on text an earlier patch writes, and the one route-audit hunk reads the
+added 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks
+anchor on text an earlier patch writes, and the other two - the body-parse
+block that reads the private flag, and the route-audit line - read the
 owner's own line) - with their positions, instead of pretending they are not
 there. The position-29 rule is kept as a REPORTED fact, not a gate.
 

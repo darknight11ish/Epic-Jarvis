@@ -115,8 +115,6 @@ plugin-loader.patch	plugin-loader/ff4ee28.patch	ff4ee2880fa1880279aadfc4cd34f02f
 plugin-loader.patch	plugin-loader/f2077b5.patch	f2077b51f724257747ab8d8b2f0aa1e9f345549a	2026-10-11T05:50:49-07:00	finish the uncensored opt-ins: off by default, on is one card, and a way in (#253)
 plugin-loader.patch	plugin-loader/d258b98.patch	d258b980ae95e1c19b121095cce7f5301a9823ae	2026-10-10T02:43:26-07:00	a feature whose only wiring was one start-up call is now a folder
 presets.patch	presets/41c9069.patch	41c906981c399944d236123b1bdd3e5f7a2786e9	2026-10-19T13:45:56-07:00	feat(presets): lane-aware single-approval apply with rollback
-private-chat.patch	private-chat/c50fdf7.patch	c50fdf7dda45711f2b009501dc8d99cf68705c23	2026-10-25T17:41:23-07:00	fix(chat): make the private gate fail closed, and gate the carded paths
-private-chat.patch	private-chat/3caf5ae.patch	3caf5aec4821c474087c79be3b22f92ee241e19b	2026-10-25T17:05:15-07:00	feat(chat): a private chat is strictly reads-only (backend Slice 1)
 projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2026-09-28T01:04:31Z	Projects, build steps 1 and 2: projects, life benchmarks and their numbers (backend only)
 prompt-coach.patch	prompt-coach/f56e6ab.patch	f56e6abc597daa98e826022584f6fe9b2c3fcba9	2026-10-08T20:47:48-07:00	the two things CI caught that this machine could not
 prompt-coach.patch	prompt-coach/54ed3dc.patch	54ed3dc1566ccb824ad38921a110c83503db3e54	2026-10-08T18:39:20-07:00	prompt coach: the patch, generated from the real jarvis_hud.py

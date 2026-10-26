@@ -21577,7 +21577,7 @@ fixed phrases, but no chat path could EXPLAIN a feature: "how do I turn on the p
 coach?" was answered thinly by the model (never saying what the coach does or where it
 lives), and "is the prompt coach on right now?" was answered "I don't know its current
 state directly". The exact answers were already written down - `features/features.json`,
-the 138 rows both apps' Features pages draw - and nothing read them.
+the 139 rows both apps' Features pages draw - and nothing read them.
 
 **One read-only tool, `feature_guide`** (`jarvis_feature_guide.py`; the tool in
 `jarvis_agent.py`). Its one argument is `feature`, in the owner's words (or a group
@@ -21642,7 +21642,7 @@ owner's decision of 2026-10-19/20); on an existing install the model tool is off
 inherited `config.toml`, if the settings file names no `[tools]` section) - the fixed
 phrases need no config at all.
 
-**Tests.** `backend/test_feature_guide.py`: all 138 rows found with facts equal to the
+**Tests.** `backend/test_feature_guide.py`: all 139 rows found with facts equal to the
 JSON; every switch has a state reader and the answers never claim a state they did not
 read; unknown/ambiguous honesty; the fixed phrases and their near misses; switching
 through the real setter with its real words; the tool's 300-token text, `auto`-tier
