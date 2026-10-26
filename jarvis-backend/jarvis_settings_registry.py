@@ -1129,7 +1129,7 @@ def set_web_search_provider(provider: str, *, peer=None, local=None) -> Outcome:
 
 
 def set_personality(personality: str, *, peer=None, local=None) -> Outcome:
-    """One of the eight personality presets (jarvis_manner.py, 2026-10-22).
+    """One of the nine personality presets (jarvis_manner.py, 2026-10-22).
 
     Cardless by design, like the manner: it changes how Jarvis words things,
     never what it does, asks, approves or remembers. An unknown name is refused
