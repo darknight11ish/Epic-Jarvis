@@ -19588,14 +19588,15 @@ quarter of a second when the card is denied, withdrawn or expires while the
 dialog is up (and it can only close ITS OWN prompt: the watcher's queue read can
 outlive a two-second stop, so the prompt is tagged when it is raised and the
 cancel is matched by that tag), the request that queues for the prompt has a
-bounded wait (`_PROMPT_WAIT_MAX` - a whole prompt, the ten seconds its child gets
-to answer, and the cancel after it) instead of waiting for ever, and the re-read
-after the prompt still refuses a card that is no longer the live one.
+bounded wait (`_PROMPT_WAIT_MAX` = 210 s: the prompt's 180, the ten seconds its
+child gets to answer, two for the cancel and two for the watcher's stop - a
+worst legitimate hold of about 194 s) instead of waiting for ever, and the
+re-read after the prompt still refuses a card that is no longer the live one.
 
 **Deploying this half: copy BOTH modules into the live backend in one go.**
 `jarvis_owner_check.py` asks `jarvis_card_words.has_written_title()` before any
 prompt, and that function is new in `jarvis_card_words.py`. A one-module copy
-(the new owner-check without the new words module) makes that import answer
+(the new owner-check without the new words module) makes the wrapper answer
 False, so **every risky approval from this PC is refused with 403 `unlabelled`
 before any prompt** - silently, and it looks like the new guard working. Copy
 both files, then restart the backend. `scripts/apply-patches.ps1` copies every

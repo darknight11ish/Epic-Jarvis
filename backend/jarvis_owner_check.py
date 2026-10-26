@@ -182,13 +182,14 @@ _PROMPT_MAX = 180.0
 
 #: The ceiling on how long a request waits for the one-prompt-at-a-time lock
 #: before it is refused (2026-10-26 review). The prompt in front of it can last
-#: `_PROMPT_MAX`; its child then gets ten seconds to answer after its own
-#: deadline (`_verify_windows`'s `proc.wait`), and the cancel that follows gets
-#: two more - so a whole prompt plus thirty seconds covers the worst legitimate
-#: hold with slack to spare. `_PROMPT.acquire(-1)` waited for ever: one child
-#: that never answered held every later approval until the backend was
-#: restarted. A card that has not had its turn is refused with the same 409 as
-#: one that ran out.
+#: `_PROMPT_MAX` (180 s); its child then gets ten seconds to answer after its
+#: own deadline (`_verify_windows`'s `proc.wait`), the cancel that follows gets
+#: two more, and `stop()`'s two-second join runs while the lock is still held -
+#: so the worst legitimate hold is about 194 s, and 210 is the ceiling that
+#: covers it. (The thirty seconds is slack over the PROMPT, not over that hold:
+#: 210 - 180.) `_PROMPT.acquire(-1)` waited for ever: one child that never
+#: answered held every later approval until the backend was restarted. A card
+#: that has not had its turn is refused with the same 409 as one that ran out.
 _PROMPT_WAIT_MAX = _PROMPT_MAX + 30.0
 
 #: How often the card is asked whether it is still waiting while its prompt is
@@ -204,10 +205,12 @@ def _wait_for_prompt(left: Optional[float]) -> float:
 
     A card with no deadline waits the whole `_PROMPT_WAIT_MAX`; a card with one
     waits its own time left, because it can never be prompted after that - and
-    never more than `_PROMPT_WAIT_MAX`, which is the worst legitimate hold of
-    the prompt in front (2026-10-26 review: the cap used to be `_PROMPT_MAX`,
-    30 s shorter than the hold it was waiting behind, so a card could be
-    refused just as its turn arrived).
+    never more than `_PROMPT_WAIT_MAX`, the ceiling that covers the worst
+    legitimate hold of the prompt in front: about 194 s, being 180 s of prompt,
+    ten seconds for the child's answer, two for the cancel and two for
+    `stop()`'s join (2026-10-26 review: the cap used to be `_PROMPT_MAX`,
+    180 s, up to about 14 s short of that hold, so a card could be refused just
+    as its turn arrived).
     """
     return _PROMPT_WAIT_MAX if left is None else min(left, _PROMPT_WAIT_MAX)
 
@@ -1533,9 +1536,11 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         # can never be prompted after it, so its own number is the whole useful
         # wait; a card with no deadline waits the worst legitimate hold of the
         # prompt in front, `_PROMPT_WAIT_MAX` (`_wait_for_prompt`). The cap is
-        # `_PROMPT_WAIT_MAX`, NOT `_PROMPT_MAX`: the prompt in front can last up
-        # to the cap plus its child's answer time, so capping the wait 30 s
-        # shorter refused a card just as its turn arrived (2026-10-26 review).
+        # `_PROMPT_WAIT_MAX`, NOT `_PROMPT_MAX`: the prompt in front can spend
+        # its 180 s and then hold this lock for about 14 more (ten for its
+        # child's answer, two for the cancel, two for the watcher's `stop()`),
+        # so a wait capped at `_PROMPT_MAX` was up to about 14 s short and
+        # refused a card just as its turn arrived (2026-10-26 review).
         if not _PROMPT.acquire(timeout=_wait_for_prompt(left)):
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
         try:

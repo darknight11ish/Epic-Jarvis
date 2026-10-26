@@ -758,11 +758,16 @@ def t_a_stale_watcher_closes_only_its_own_prompt():
 
     mine_token = object()
     mine, next_card = Live(mine_token), Live(object())
-    with OC._LIVE_LOCK:
-        OC._LIVE_PROMPTS.add(mine)
-    watch = OC._PromptWatch(slow_pending, "s1", interval=0.01,
-                            cancel=lambda: OC._cancel_prompts_for(mine_token)).start()
+    watch = None
     try:
+        # INSIDE the try, not before it: this stand-in goes into a module-level
+        # set, and a construction or start() that raised on the OLD code path
+        # used to leave it there for every later test - the review measured two
+        # cascade failures from exactly that leak.
+        with OC._LIVE_LOCK:
+            OC._LIVE_PROMPTS.add(mine)
+        watch = OC._PromptWatch(slow_pending, "s1", interval=0.01,
+                                cancel=lambda: OC._cancel_prompts_for(mine_token)).start()
         check("the slow queue read started", entered.wait(5))
         watch.stop()               # two-second join, and the read is slower
         check("the watcher thread really can outlive stop()",
@@ -777,18 +782,242 @@ def t_a_stale_watcher_closes_only_its_own_prompt():
               next_card.cancels == 0, next_card.cancels)
     finally:
         release.set()
-        watch.stop()
+        if watch is not None:
+            watch.stop()
         with OC._LIVE_LOCK:
             OC._LIVE_PROMPTS.discard(mine)
             OC._LIVE_PROMPTS.discard(next_card)
 
 
+def _until(pred, timeout: float = 10.0, step: float = 0.01):
+    """Wait for `pred()` to be truthy and return what it returned, or None.
+
+    Used where a test has to see a thread REACH a point rather than sleep past
+    it: a sleep long enough on this machine is a test that fails on a slower
+    one. The bound is on the wait, so a regression still ends the test."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        value = pred()
+        if value:
+            return value
+        time.sleep(step)
+    return None
+
+
+def t_card_ones_stale_watcher_cannot_close_card_twos_prompt():
+    """THE WIRING, END TO END (2026-10-26 review, test gap 1).
+
+    `_PromptWatch`'s token scoping was proved on the watcher alone; nothing
+    went through `approve_check` to check WHICH cancel it wires in, so putting
+    `cancel=_cancel_live_prompts` back at that call site left the suite green.
+    This drives two real approvals through `approve_check` and lets the stale
+    one cancel.
+
+    Card 1's watcher is made to sit inside a queue read longer than `stop()`'s
+    two-second join, so card 1 returns with its watcher still alive and the
+    prompt lock free. Card 2 then raises its prompt, and only THEN does card
+    1's read return and call its cancel. With the token-scoped cancel it can
+    close only the prompt tagged for card 1; with the shutdown-wide one it
+    closes card 2's too - the regression this pins.
+
+    Both prompts are FAKE children (`_SPAWN` is replaced) and the verifier is
+    the real `_verify_windows` pointed at them: nothing starts, no dialog."""
+    row1 = _risky_row("tk1", expires_in=900)
+    row2 = _risky_row("tk2", expires_in=900)
+    _fresh_stamps()
+    stalled, release_stale = threading.Event(), threading.Event()
+    reads, lock, seen = {"n": 0}, threading.Lock(), {}
+
+    def pending1():
+        """Card 1's queue. The watcher's FIRST read (the third call) stalls;
+        every other read says the card is still there."""
+        with lock:
+            reads["n"] += 1
+            count = reads["n"]
+        if count == 3:
+            seen["stalled_on"] = threading.current_thread()
+            stalled.set()
+            release_stale.wait(10)
+            return []                  # this read finally says: card 1 is gone
+        return [row1]
+
+    def pending2():
+        return [row2]
+
+    def live():
+        with OC._LIVE_LOCK:
+            return list(OC._LIVE_PROMPTS)
+
+    child1, child2 = FakeChild("confirmed"), FakeChild("confirmed")
+    queue = [child1, child2]
+
+    def fake_spawn(*args, **kwargs):
+        with lock:
+            return queue.pop(0) if queue else child2
+
+    made = []
+
+    class Recording(OC._PromptWatch):
+        """The watcher `approve_check` makes, found by the card id it was told
+        to watch - a constructor argument, not something read out of a
+        closure."""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            made.append(self)
+
+    class Live:
+        def __init__(self, token):
+            self.token, self.cancels = token, 0
+
+        def cancel(self):
+            self.cancels += 1
+
+    old_watch, old_spawn = OC._PromptWatch, OC._SPAWN
+    box, mine, prompt2, token1 = {}, None, None, None
+    t1 = t2 = None
+    try:
+        OC._PromptWatch, OC._SPAWN = Recording, fake_spawn
+        OC.set_verifier(OC._verify_windows)
+        t1 = threading.Thread(target=lambda: box.setdefault(
+            "one", OC.approve_check({"id": "tk1"}, peer="127.0.0.1",
+                                    pending=pending1, own=())))
+        t1.start()
+        check("card 1's prompt is up, with the card's question in its child",
+              bool(_until(lambda: child1.written and live(), 5)), child1.written)
+        prompt1 = live()[0] if live() else None
+        token1 = prompt1.token if prompt1 is not None else None
+        check("...tagged for its own approval, not untagged", token1 is not None, token1)
+        check("card 1's watcher is inside a stalled queue read", bool(stalled.wait(5)))
+        check("...on the watcher's own thread, not card 1's approval thread",
+              seen.get("stalled_on") is not None and seen["stalled_on"] is not t1,
+              (seen.get("stalled_on"), t1))
+        # The owner answers WHILE that read is stalled: card 1 comes back at a
+        # two-second join timeout, with its watcher still alive.
+        answered = time.monotonic()
+        child1.answered.set()
+        # card 2 arrives at once and queues on the one-prompt lock
+        t2 = threading.Thread(target=lambda: box.setdefault(
+            "two", OC.approve_check({"id": "tk2"}, peer="127.0.0.1",
+                                    pending=pending2, own=())))
+        t2.start()
+        t1.join(15)
+        elapsed = time.monotonic() - answered
+        check("card 1 came back at a JOIN TIMEOUT (> 2 s), not a clean join",
+              elapsed >= 1.9, round(elapsed, 3))
+        check("...so its watcher is still alive and can still cancel later",
+              bool(_until(lambda: [w for w in made
+                                   if w.request_id == "tk1" and w._thread.is_alive()],
+                          5)),
+              [(w.request_id, w._thread.is_alive()) for w in made])
+        check("card 2's prompt is up, on a NEW token",
+              bool(_until(lambda: child2.written and len(live()) == 1, 10))
+              and live()[0].token is not None and live()[0].token is not token1,
+              (child2.written, [p.token for p in live()], token1))
+        prompt2 = live()[0] if live() else None
+        watch2 = next((w for w in made if w.request_id == "tk2"), None)
+        check("...and card 2's own watcher is the one watching it",
+              watch2 is not None and prompt2 is not None and prompt2.token is not token1,
+              (watch2, prompt2))
+        # Card 1's own prompt is gone (its owner answered), so give the stale
+        # watcher a prompt of ITS own to close - tagged with card 1's token.
+        mine = Live(token1)
+        with OC._LIVE_LOCK:
+            OC._LIVE_PROMPTS.add(mine)
+        release_stale.set()
+        check("the stale read returned, and its watcher saw its own card gone",
+              bool(_until(lambda: mine.cancels, 5)), mine.cancels)
+        time.sleep(0.35)                   # several more watcher passes
+        check("(a) card 2's child was never told 'cancel', its prompt not stopped",
+              not any("cancel" in w for w in child2.written)
+              and prompt2 is not None and not prompt2.stop.is_set(),
+              (child2.written, prompt2.stop.is_set() if prompt2 else None))
+        check("(b) card 2's watcher never saw its own card gone",
+              watch2 is not None and not watch2.gone.is_set(),
+              watch2.gone.is_set() if watch2 else None)
+        check("(d) the stale watcher closed only the prompt tagged for card 1",
+              mine.cancels >= 1, mine.cancels)
+        # card 2's owner answers normally: its approval must go through
+        child2.answered.set()
+        t2.join(15)
+        check("(c) card 2 was approved (None), not poisoned into a 409",
+              "two" in box and box["two"] is None, box.get("two"))
+        check("...and stamped for its own action",
+              OC.take_stamp("tk2", row2["action"]) is True)
+        check("card 1, whose owner answered, was approved too",
+              "one" in box and box["one"] is None, box.get("one"))
+    finally:
+        release_stale.set()
+        OC._PromptWatch, OC._SPAWN = old_watch, old_spawn
+        OC.set_verifier(None)
+        for thread in (t1, t2):
+            if thread is not None:
+                thread.join(15)
+        for watch in made:
+            watch.stop()
+        with OC._LIVE_LOCK:
+            OC._LIVE_PROMPTS.clear()
+        OC._CURRENT_PROMPT.token = None
+
+
+def t_a_watcher_that_never_started_can_still_be_stopped():
+    """`stop()`'s guard on a watcher whose thread never started (2026-10-26
+    review, test gap 3), and the `start()` failure inside `approve_check` it
+    exists for.
+
+    Unconditional, `join()` raises "cannot join thread before it is started" -
+    a NAMED thread object cannot be joined until it has been started - and in
+    `approve_check` that raise happens inside a `finally` while the real error
+    is in flight, so it REPLACES the error the caller needs to see."""
+    watch = OC._PromptWatch(lambda: [], "never")
+    raised = None
+    try:
+        watch.stop()
+    except Exception as exc:                    # noqa: BLE001 - that IS the check
+        raised = exc
+    check("stop() on a never-started watcher does not raise", raised is None, repr(raised))
+    check("...and its thread really never started", watch._thread.ident is None,
+          watch._thread.ident)
+
+    class BrokenStart(OC._PromptWatch):
+        def start(self):
+            raise RuntimeError("start failed (probe)")
+
+    row = _risky_row("bs1", expires_in=150)
+    v = Verifier(RuntimeError("no prompt may be shown"))
+    saved_watch = OC._PromptWatch
+    caught = None
+    OC._PromptWatch = BrokenStart
+    OC.set_verifier(v)
+    OC._CURRENT_PROMPT.token = None
+    try:
+        try:
+            OC.approve_check({"id": "bs1"}, peer="127.0.0.1", pending=lambda: [row], own=())
+        except Exception as exc:                # noqa: BLE001 - that IS the check
+            caught = exc
+    finally:
+        OC._PromptWatch = saved_watch
+        OC.set_verifier(None)
+    check("a start() failure surfaces as ITS OWN error, not a masked join error",
+          isinstance(caught, RuntimeError) and str(caught) == "start failed (probe)",
+          repr(caught))
+    check("...the prompt token is cleared on that path too",
+          OC._prompt_token() is None, OC._prompt_token())
+    free = OC._PROMPT.acquire(timeout=0.2)
+    if free:
+        OC._PROMPT.release()
+    check("...with the one-prompt lock free again and nothing stamped",
+          free and not v.asked and not OC.take_stamp("bs1", row["action"]),
+          (free, v.asked))
+
+
 def t_a_wait_for_the_prompt_is_bounded_and_refuses_after_it():
     """`_PROMPT.acquire(-1)` waited for ever: one child that never answered
     held every later approval until the backend restarted. The wait is now
-    bounded by `_PROMPT_WAIT_MAX` (a whole prompt, the ten seconds its child
-    gets to answer, and the cancel that follows - thirty seconds of slack in
-    all), and a card that never gets its turn is a 409 (2026-10-26 review)."""
+    bounded by `_PROMPT_WAIT_MAX` - 210 s, the ceiling that covers the worst
+    legitimate hold of the prompt in front (about 194 s: 180 of prompt, 10 for
+    the child's answer, 2 for the cancel and 2 for the watcher's stop) - and a
+    card that never gets its turn is a 409 (2026-10-26 review)."""
     check("a card with no deadline waits the whole worst-case hold",
           OC._wait_for_prompt(None) == OC._PROMPT_WAIT_MAX, OC._wait_for_prompt(None))
     check("a card with 150 s waits its own 150 s",
@@ -814,6 +1043,62 @@ def t_a_wait_for_the_prompt_is_bounded_and_refuses_after_it():
           got is not None and got[0] == 409 and got[1]["owner_check"] == "gone"
           and elapsed < 2.0, (got, round(elapsed, 2)))
     check("...and no prompt was shown", not v.asked, v.asked)
+
+
+def t_the_wait_covers_the_whole_hold_of_the_prompt_in_front():
+    """The CALL SITE's expression, with the constants scaled down (2026-10-26
+    review, test gap 2).
+
+    `_wait_for_prompt`'s own arithmetic is pinned above, but nothing pinned what
+    `approve_check` does with it: putting the old
+    `min(left, _PROMPT_MAX, _PROMPT_WAIT_MAX)` back at the call site left the
+    suite green. The prompt in front here is `_PROMPT` held by this thread for
+    0.8 s - longer than the OLD cap (0.6 s, the scaled `_PROMPT_MAX`) and
+    shorter than the whole hold the new one allows (1.0 s, the scaled
+    `_PROMPT_WAIT_MAX`) - so the card gets its turn only if the call site asks
+    for the whole hold."""
+    row = _risky_row("wc1", expires_in=1.5)
+    v = Verifier("confirmed")
+    saved = (OC._PROMPT_MAX, OC._PROMPT_WAIT_MAX)
+    box, held, thread = {}, False, None
+    started = time.monotonic()
+
+    def run():
+        box["out"] = OC.approve_check({"id": "wc1"}, peer="127.0.0.1",
+                                      pending=lambda: [row], own=())
+        box["at"] = time.monotonic() - started
+
+    OC.set_verifier(v)
+    # Bounded, so a regression that leaks the lock fails this test rather than
+    # parking the suite for ever on the next line.
+    if not OC._PROMPT.acquire(timeout=5):
+        OC.set_verifier(None)
+        raise AssertionError("_PROMPT was already held when this test started")
+    held = True
+    OC._PROMPT_MAX, OC._PROMPT_WAIT_MAX = 0.6, 1.0
+    try:
+        thread = threading.Thread(target=run)
+        thread.start()
+        time.sleep(0.8)                    # past the old cap, inside the new hold
+        OC._PROMPT.release()
+        held = False
+        thread.join(15)
+    finally:
+        if held:
+            OC._PROMPT.release()
+        OC._PROMPT_MAX, OC._PROMPT_WAIT_MAX = saved
+        OC.set_verifier(None)
+        if thread is not None:
+            thread.join(15)
+    check("a card queued behind a 0.6 s prompt cap is not refused at 0.6 s",
+          box.get("out", "never ran") is None, box.get("out", "never ran"))
+    check("...it was still waiting at 0.75 s, which only the whole-hold cap allows",
+          box.get("at", 0) >= 0.75, round(box.get("at", 0), 3))
+    check("...and its prompt was then raised", len(v.asked) == 1, v.asked)
+    free = OC._PROMPT.acquire(timeout=0.2)
+    if free:
+        OC._PROMPT.release()
+    check("...with the one-prompt lock free again afterwards", free, free)
 
 
 def t_the_live_row_is_checked_again_after_the_wait():
