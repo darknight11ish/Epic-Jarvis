@@ -1311,7 +1311,7 @@ def describe_start(p: StartPlan) -> str:
               "separately before using any of its tools, every time."]
     if not card_every_start():
         lines += ["", "If you say yes, Jarvis starts it again later without asking - until "
-                      "the program, its settings or its version change."]
+                      "the program, its settings, its version or its list of tools change."]
     lines += ["",
               "If you say no: the program does not start, and none of its tools are "
               "available until you are asked again."]

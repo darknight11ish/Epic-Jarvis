@@ -250,8 +250,10 @@ def t_planning_starts_nothing_and_opens_nothing():
     check("but never its value", "hunter2" not in card and "hunter2" not in repr(p))
     check("it says what refusing costs", "If you say no" in card)
     check("it says Jarvis cannot limit the program", "cannot see or limit" in card)
-    check("it says when it will ask again (a new or changed program)",
-          "until the program, its settings or its version change" in card, card)
+    check("it says when it will ask again (a new or changed program, or a changed "
+          "list of tools)",
+          "until the program, its settings, its version or its list of tools change"
+          in card, card)
     check("the start action is its own gate action", p.action == "mcp_start__fake")
     check("the plan carries a fingerprint", p.fingerprint.startswith("sha256:"))
 
