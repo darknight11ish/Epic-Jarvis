@@ -261,11 +261,14 @@ class ThinkingChoiceTest {
     }
 
     @Test
-    fun `the key beside the chat box sends nothing on its own`() {
+    fun `the Think row in the More menu sends nothing on its own`() {
         val home = source("$main/ui/screens/HomeScreen.kt")
-        val key = home.substringAfter("if (state.thinkOffered) {").substringBefore("Spacer(Modifier.width(4.dp))\n        }")
+        // The key used to sit beside the chat box; the owner's ask of
+        // 2026-10-25 moved it into the shared More menu. "offered" is still
+        // the PC's own answer (HomeState.thinkOffered).
+        val key = home.substringAfter("if (state.thinkOffered) {").substringBefore("// Coach this")
         assertTrue("the label is the word the owner reads", key.contains("Thinking.ONE_SHOT_LABEL"))
-        assertTrue("it is a toggle, not a send", key.contains("onClick = actions.onToggleThinkOnce"))
+        assertTrue("it is a toggle, not a send", key.contains("actions.onToggleThinkOnce()"))
         assertFalse("nothing is sent by tapping it", key.contains("onSend"))
         val activity = source("$main/MainActivity.kt")
         assertTrue(

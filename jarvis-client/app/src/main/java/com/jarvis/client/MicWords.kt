@@ -4,21 +4,26 @@ package com.jarvis.client
  * Why the talk button cannot start a clip, in words, said where the button is.
  *
  * The owner, 2026-10-13: "the mic button in the bottom right hand corner of
- * the android app doesnt work if i tap it or hold it down". Its tap and hold
- * gestures are fine - [com.jarvis.client.ui.parts.VoiceButton] calls
- * `onBegin`/`onRelease` on both, and its whole `pointerInput` returns at once
- * when `enabled` is false, so a disabled microphone does exactly nothing. The
- * button is disabled whenever `state.link != LinkState.CONNECTED ||
- * state.streaming`, and the app never said which. That is the defect this file
- * fixes, and the project had already written it down
- * (`docs/ease-audit-2026-09-27/everyday.md:65`: "The reason ... is shown only
- * on the Checks screen, never on Home").
+ * the android app doesnt work if i tap it or hold it down". That report had
+ * TWO causes, and this file first only named the second one.
+ *
+ *  - The button really was cancelling every press. Its `pointerInput` was
+ *    keyed on `capturing`, and `onBegin()` flips capturing within a frame, so
+ *    the key change restarted the gesture mid-press; the restarted gesture's
+ *    `finally` saw no release and ran the teardown branch, `onCancel()`. Fixed
+ *    on 2026-10-25 in [com.jarvis.client.ui.parts.VoiceButton] (keys on
+ *    `enabled` only, capturing read through `rememberUpdatedState`, decision in
+ *    [com.jarvis.client.ui.parts.VoicePress]). A tap now starts a recording
+ *    that outlives the tap; it does NOT send until the second tap or a pause.
+ *  - On top of that, a disabled microphone said nothing about why. The button
+ *    is disabled whenever `state.link != LinkState.CONNECTED ||
+ *    state.streaming`, and home never said which. That is the defect this file
+ *    fixes: every reason a tap can do nothing is named here, in the order a tap
+ *    meets them, and the words are pure so a JVM test can hold them still.
  *
  * This is the same shape as [LinkWords.composerHeldLine], which was added on
  * 2026-10-10 for the identical fault on Send: a greyed control that never
  * reaches the runtime's own blocker, so the runtime's sentence is never shown.
- * Every reason a tap can do nothing is named here, in the order a tap meets
- * them, and the words are pure so a JVM test can hold them still.
  *
  * What this file deliberately does NOT do: re-enable the button. The link gate
  * is correct behaviour (rule 4 - nothing acts on a link that cannot be

@@ -109,8 +109,8 @@ enum class Screen {
      * search over every place in the app - the phone's half of the desktop's
      * command palette (Alt+Space), built for the last of the parity audit's
      * eight gaps (`.dsh-scratch/android-verify/PARITY-AUDIT-2026-10-10.md`,
-     * row 244). Opened from the "Find" button on Home's status line - always
-     * on screen, whether or not the owner has the navigation row showing.
+     * row 244). Opened from the Find row inside Help since 2026-10-25 (it was
+     * on Home's status line before that, and the owner asked for it to move).
      * Last, for the same reason as the others above: a saved back stack from
      * an older build restores by name.
      */

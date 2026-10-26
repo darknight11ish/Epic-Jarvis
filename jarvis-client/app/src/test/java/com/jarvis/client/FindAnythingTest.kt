@@ -724,35 +724,36 @@ class FindAnythingTest {
     }
 
     @Test
-    fun `the way in is a labelled control on Home, not a gesture`() {
+    fun `the way in is a labelled control inside Help, not a gesture`() {
         val home = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt").readText()
-        assertTrue(
-            "the Find button must be drawn with the desktop's own word for it",
-            home.contains("com.jarvis.client.ui.FindWords.BUTTON"),
-        )
-        assertTrue("the button must be wired to the screen", home.contains("actions.onOpenFind"))
-        assertTrue(
-            "HomeActions must carry the callback, or the button does nothing",
-            home.contains("val onOpenFind: () -> Unit = {}"),
-        )
-        // It sits on the status line, which is on screen whether or not the
-        // owner shows the navigation row - not as a seventh destination in a
-        // row that weights six equally.
-        val navRow = home.substringAfter("private fun NavRow")
+        val faq = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/FaqScreen.kt").readText()
+        // The owner's ask of 2026-10-25: the Find button left Home's status
+        // line, and Help is where a control is looked for when it cannot be
+        // found. One door, not two.
         assertFalse(
-            "the way in must not be a seventh item in the navigation row: that row " +
-                "weights its destinations equally and \"Appearance\" already just fits",
-            navRow.substringBefore("\n}\n").contains("onOpenFind"),
+            "Home still carries a Find control of its own",
+            home.contains("actions.onOpenFind"),
+        )
+        assertFalse(
+            "HomeActions still carries the removed Find callback",
+            home.contains("val onOpenFind: () -> Unit"),
         )
         assertTrue(
-            "the Find button must be drawn above the navigation row's own definition " +
-                "(StatusLine, which is always on screen)",
-            home.substring(0, home.indexOf("private fun NavRow")).contains("actions.onOpenFind"),
+            "Help does not draw the Find row with the screen's own name",
+            faq.contains("com.jarvis.client.ui.FindWords.TITLE"),
+        )
+        assertTrue(
+            "Help's Find row is not drawn as a pressable destination",
+            faq.contains(".pressable(onClick = onOpenFind)"),
+        )
+        assertTrue(
+            "the Help row is not handed the callback",
+            faq.contains("item(key = \"find\") { FindAnythingEntry(onOpenFind = find) }"),
         )
         val activity = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/MainActivity.kt").readText()
         assertTrue(
-            "Home's Find button must open the screen",
-            activity.contains("onOpenFind = { nav.go(Screen.FIND) }"),
+            "Help's Find row must open the screen",
+            activity.contains("onOpenFind = if (paired) ({ nav.go(Screen.FIND) }) else null"),
         )
         assertTrue(
             "and the screen must be one of the app's screens",

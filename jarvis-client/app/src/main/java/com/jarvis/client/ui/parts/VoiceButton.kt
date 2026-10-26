@@ -21,6 +21,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +56,22 @@ import com.jarvis.client.ui.theme.LocalRadii
  * old fixed second of quiet). Sliding away cancels because a tap is easy to
  * start by accident and an utterance cannot be unsent once the desktop has
  * verified it.
+ *
+ * GESTURE KEYS, AND THE BUG THEY CAUSED (the owner's report, 2026-10-13:
+ * "the mic button ... doesnt work if i tap it or hold it down"). This block
+ * used to be keyed `pointerInput(enabled, capturing)`. `onBegin()` makes
+ * VoiceSession set its phase to CAPTURING within a frame, so `capturing`
+ * changed in the middle of the very gesture that started it; a key change
+ * RESTARTS a `pointerInput` coroutine, and the restarted gesture ran its
+ * `finally` with no release - which is the teardown branch, so it called
+ * `onCancel()` immediately after `onBegin()`. Every tap and every hold began
+ * and instantly cancelled. The keys are now `enabled` ONLY, and `capturing`
+ * is read through [rememberUpdatedState] at the moment the finger goes down:
+ * the flag can change mid-gesture without restarting the gesture that is
+ * running. The callbacks are read the same way, because a key that no longer
+ * changes cannot be relied on to refresh captured lambdas either. The decision
+ * at the end of a press is the pure [VoicePress.release], so the cases are
+ * testable off-device.
  */
 @Composable
 fun VoiceButton(
@@ -77,7 +94,12 @@ fun VoiceButton(
     val haptics = LocalHapticFeedback.current
     var wouldCancel by remember { mutableStateOf(false) }
     val cancelPx = with(LocalDensity.current) { CANCEL_SLIDE_DP.dp.toPx() }
-    val isCapturing = capturing
+    // Read inside the gesture, never used as a key: changing this must NOT
+    // restart the press that changed it (see the doc comment above).
+    val capturingNow = rememberUpdatedState(capturing)
+    val currentOnBegin = rememberUpdatedState(onBegin)
+    val currentOnRelease = rememberUpdatedState(onRelease)
+    val currentOnCancel = rememberUpdatedState(onCancel)
 
     Box(
         modifier
@@ -109,18 +131,18 @@ fun VoiceButton(
                     radius = size.minDimension / 2f * (0.55f + 0.45f * level),
                 )
             }
-            .pointerInput(enabled, isCapturing) {
+            .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
                     wouldCancel = false
                     val downTime = System.currentTimeMillis()
-                    val wasCapturingAtDown = isCapturing
+                    val wasCapturingAtDown = capturingNow.value
 
                     if (!wasCapturingAtDown) {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onBegin()
+                        currentOnBegin.value()
                     }
 
                     var cancelled = false
@@ -142,21 +164,16 @@ fun VoiceButton(
                     } finally {
                         wouldCancel = false
                         val duration = System.currentTimeMillis() - downTime
-                        if (cancelled) {
-                            onCancel()
-                        } else if (released) {
-                            if (wasCapturingAtDown) {
-                                // Second tap while capturing: stop and send.
-                                onRelease()
-                            } else if (duration >= HOLD_THRESHOLD_MS) {
-                                // Sustained hold-to-talk released: send.
-                                onRelease()
-                            }
-                            // Otherwise, a quick tap (< 400ms) entered capturing mode;
-                            // recording continues until second tap or Smart Turn pause detection.
-                        } else {
-                            // Torn down gesture without release: cancel.
-                            onCancel()
+                        when (VoicePress.release(
+                            wasCapturingAtDown = wasCapturingAtDown,
+                            cancelled = cancelled,
+                            released = released,
+                            durationMs = duration,
+                        )) {
+                            VoicePress.Release.SEND -> currentOnRelease.value()
+                            VoicePress.Release.CANCEL -> currentOnCancel.value()
+                            // A quick first tap: the recording outlives it.
+                            VoicePress.Release.KEEP -> Unit
                         }
                     }
                 }
@@ -234,6 +251,3 @@ fun VoiceStrip(
 
 /** How far up the finger must travel before a release cancels instead of sends. */
 private const val CANCEL_SLIDE_DP = 64
-
-/** Sustained press duration that distinguishes hold-to-talk from tap-to-talk. */
-private const val HOLD_THRESHOLD_MS = 400L
