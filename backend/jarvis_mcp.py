@@ -56,6 +56,8 @@ folder and setting NAMES, and the bytes of the program file and of every
 argument that is a file - plus the version the server reported. A start
 with the same fingerprint and version needs no card (it is written to the
 audit log); anything different asks again, and the card says what changed.
+The digest of the server's `tools/list` is remembered too - a 32-byte
+SHA-256, never the tool text - and a list that changed asks again.
 The stricter answer, "a card every time it starts", is one line:
 CARD_EVERY_START = True.
 
@@ -949,6 +951,7 @@ class _Connection:
         self.bad_lines = 0
         self.refused_requests = collections.Counter()   # method names only
         self.tools_changed = False
+        self.tools_sha = ""          # the digest of the last tools/list (tools_digest)
         self._stderr = collections.deque()
         self._stderr_len = 0
         self.server_info = {}
@@ -1257,6 +1260,21 @@ def fingerprint_of(cfg: ServerConfig, cwd: str) -> str:
     return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
 
+_DIGEST_OK = re.compile(r"\A[0-9a-f]{64}\Z")     # a stored tools/list SHA-256
+
+
+def tools_digest(tools: list) -> str:
+    """A 32-byte SHA-256 of a server's normalized `tools/list` result: the
+    digest is remembered, never the text. Tools are put in name order and
+    object keys sorted, so a server that repeats the same list in another
+    order does not ask again. Only this hex digest is written to
+    mcp-approved.json - no tool name, description or schema from the server
+    is stored, so a hostile one has no text to plant there."""
+    canon = json.dumps(sorted(tools, key=lambda t: str(t.get("name", ""))),
+                       sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
+
+
 def _shown(arg: str) -> str:
     """One command-line argument, as a person would see it typed.
 
@@ -1293,7 +1311,7 @@ def describe_start(p: StartPlan) -> str:
               "separately before using any of its tools, every time."]
     if not card_every_start():
         lines += ["", "If you say yes, Jarvis starts it again later without asking - until "
-                      "the program, its settings or its version change."]
+                      "the program, its settings, its version or its list of tools change."]
     lines += ["",
               "If you say no: the program does not start, and none of its tools are "
               "available until you are asked again."]
@@ -1456,16 +1474,25 @@ class Bridge:
                 return res
             now = str((self._conns.get(name).server_info or {}).get("version") or "")
             then = str(known.get("version") or "")
-            if now == then:
-                self._audit("mcp.start.remembered", {"server": name, "version": now})
+            stored = str(known.get("tools_sha") or "")
+            seen = getattr(self._conns.get(name), "tools_sha", "")
+            if now == then and _DIGEST_OK.fullmatch(stored) and stored == seen:
+                self._audit("mcp.start.remembered",
+                            {"server": name, "version": now, "tools_sha": stored})
                 return dict(res, remembered=True)
-            # Same program file, different version (an update inside a
-            # package the command does not name): stop it and ask.
+            # Not confirmably the same: stop it, forget the old yes, and ask
+            # again - a different version, a changed tools/list, or an
+            # approval from before this digest existed.
             self.stop(name)
             self._approvals.drop(name)
             plan = plan_start(cfg, self._work_root)
-            plan.changed = (f"it now says it is version {now or '(none)'}, not "
-                            f"{then or '(none)'} as when you approved it")
+            if now != then:
+                plan.changed = (f"it now says it is version {now or '(none)'}, not "
+                                f"{then or '(none)'} as when you approved it")
+            elif _DIGEST_OK.fullmatch(stored):
+                plan.changed = "its list of tools has changed since you approved it"
+            else:
+                plan.changed = "Jarvis has no digest of the tools you approved before"
         elif known:
             plan.changed = "the program or its settings have changed since then"
         card = describe_start(plan)
@@ -1476,7 +1503,8 @@ class Bridge:
         res = self._spawn(plan, cfg)
         if res.get("ok") and self._approvals is not None:
             version = str((self._conns.get(name).server_info or {}).get("version") or "")
-            self._approvals.put(name, plan.fingerprint, version)
+            self._approvals.put(name, plan.fingerprint, version,
+                                tools_sha=getattr(self._conns.get(name), "tools_sha", ""))
         return res
 
     def _spawn(self, plan: StartPlan, cfg: ServerConfig) -> dict:
@@ -1536,6 +1564,7 @@ class Bridge:
             if not isinstance(cursor, str) or not cursor:
                 break
         conn.tools_changed = False
+        conn.tools_sha = tools_digest(tools)
         return tools
 
     def inventory(self, name: str) -> dict:
@@ -1826,10 +1855,12 @@ def agent_tools(bridge: Bridge, tool_cls) -> dict:
 # --------------------------------------------------------------------------
 
 class ApprovalStore:
-    """{server: {"fingerprint", "version", "approved_at"}} in one small JSON
-    file in Jarvis's config folder. Only ever written after a person
-    approved a start card. A file that cannot be read is treated as empty -
-    which asks again, the safe direction."""
+    """{server: {"fingerprint", "version", "tools_sha", "approved_at"}} in one
+    small JSON file in Jarvis's config folder. Only ever written after a
+    person approved a start card. `tools_sha` is the digest of the server's
+    tools/list (tools_digest), so a changed list asks again; it is a hash,
+    never the text. A file that cannot be read is treated as empty - which
+    asks again, the safe direction."""
 
     def __init__(self, path: str):
         self.path = path
@@ -1855,10 +1886,12 @@ class ApprovalStore:
             got = self._read().get(name)
         return got if isinstance(got, dict) else None
 
-    def put(self, name: str, fingerprint: str, version: str) -> None:
+    def put(self, name: str, fingerprint: str, version: str,
+            tools_sha: str = "") -> None:
         with self._lock:
             doc = self._read()
             doc[name] = {"fingerprint": fingerprint, "version": version,
+                         "tools_sha": tools_sha,
                          "approved_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
             self._write(doc)
 
