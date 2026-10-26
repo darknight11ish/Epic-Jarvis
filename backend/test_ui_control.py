@@ -1659,6 +1659,129 @@ def t_a_handoff_live_snapshot_still_names_a_different_control():
             setattr(U, name, fn)
 
 
+def _live_snapshot_against(live_identity, control_id, *, masked=True):
+    """`secret_handoff_live_snapshot` against the fake UIA seam, one identity.
+
+    The same five patches the two #864 tests above make, lifted into one place
+    so the identity rule can be asked about several stored ids without
+    repeating twenty lines of save/restore per case. Every patch is restored,
+    always.
+    """
+    top = _FakeHandoffTop()
+    control = _FakeHandoffControl()
+    walk = [{"masked": masked, "control": control}]
+    descriptor = {"hwnd": 777, "control_index": 0, "control_type": "EditControl",
+                  "control_id": control_id, "purpose": "unit test"}
+    saved = {}
+    for name in ("_uia_lib", "_secret_handoff_walk", "_secret_handoff_module",
+                 "_secret_handoff_identity", "_process_name"):
+        saved[name] = getattr(U, name)
+
+    class _FakeAuto:
+        @staticmethod
+        def ControlFromHandle(hwnd):
+            return top
+
+    class _FakeEngine:
+        @staticmethod
+        def normalize_secret_target_key(**kwargs):
+            return "pid:1:hwnd:2:class"
+
+    U._uia_lib = lambda: _FakeAuto()
+    U._secret_handoff_walk = lambda win: walk
+    U._secret_handoff_module = lambda: _FakeEngine()
+    U._secret_handoff_identity = lambda ctrl: live_identity
+    U._process_name = lambda pid: "test.exe"
+    try:
+        return U.secret_handoff_live_snapshot(descriptor)
+    finally:
+        for name, fn in saved.items():
+            setattr(U, name, fn)
+
+
+def t_a_handoff_identity_matches_exactly_not_by_suffix():
+    """TRAP B2: the stored id must name the SAME control, not one whose
+    identity is a `:`-suffix of it.
+
+    The stored id is `uia:<pid>:<hwnd>:<index>:<control_type>:<identity>`, and
+    the identity may itself contain colons. #864 matched it with
+    `expected.endswith(":" + identity)`, which accepted a control whose
+    identity had SHRUNK: a stored `login:foo:bar` matched a live `bar`, so the
+    card followed a different control and still reported itself unchanged.
+    Compare the exact sixth field instead, and let an id that is not a
+    well-formed `uia:` id read as "changed" so the engine keeps voiding it.
+    """
+    stored = "uia:4242:777:0:EditControl:login:foo:bar"
+    same = _live_snapshot_against("login:foo:bar", stored)
+    check("UIA: a stored identity containing colons still matches exactly",
+          same.get("control_id") == stored, same)
+    four = "uia:4242:777:0:EditControl:a:b:c:d"
+    deep = _live_snapshot_against("a:b:c:d", four)
+    check("UIA: ... and a three-colon identity matches exactly too",
+          deep.get("control_id") == four, deep)
+    stop = _live_snapshot_against("d", four)
+    check("UIA: ... while its last colon segment alone does not",
+          stop.get("control_id") == "changed", stop)
+    shrunk = _live_snapshot_against("bar", stored)
+    check("UIA: ... a shrunk identity (login:foo:bar -> bar) is changed",
+          shrunk.get("control_id") == "changed", shrunk)
+    longer = _live_snapshot_against("login:foo:bar:baz", stored)
+    check("UIA: ... and a longer live identity is changed too",
+          longer.get("control_id") == "changed", longer)
+    for bad in ("bar",                          # no prefix at all
+                "uia:4242:777:0:EditControl",   # five parts: no identity field
+                "auto:4242:777:0:EditControl:bar",  # not a `uia:` id
+                "uia:4242:777:0"):              # a stub that ends at the index
+        got = _live_snapshot_against("bar", bad)
+        check(f"UIA: a stored id that cannot name this control never matches ({bad!r})",
+              got.get("control_id") == "changed", got)
+    prefix = _live_snapshot_against("bar", "uia:4242:777:0:EditControl:bar:extra")
+    check("UIA: ... an identity that is only a prefix of the stored one is changed",
+          prefix.get("control_id") == "changed", prefix)
+    other = _live_snapshot_against("OTHER:9:EditControl", stored)
+    check("UIA: ... and an unrelated control is still changed",
+          other.get("control_id") == "changed", other)
+    not_masked = _live_snapshot_against("login:foo:bar", stored, masked=False)
+    check("UIA: ... and an exact identity is still changed when the control "
+          "stopped being password-masked",
+          not_masked.get("control_id") == "changed"
+          and not_masked.get("is_password_field") is False, not_masked)
+
+
+def t_the_handoff_fill_never_waits_for_keyboard_focus():
+    """A real HUD click takes keyboard focus away - and the fill must still work.
+
+    Measured live 2026-10-26 against the backend deployed at `ad0b1cab7`: with
+    the owner's own `jarvis-desktop.exe` HUD owning Windows foreground and the
+    throwaway password control reporting `HasKeyboardFocus=False`, `fill`
+    answered 200 and the control received exactly the fake secret (8/8 checks,
+    `.dsh-scratch/HANDOFF-FOCUS-2026-10-26/focus_shift_live_test.log`).
+
+    That works because `secret_handoff_type` focuses the STORED control itself
+    before typing, and because the engine voids only on a real loss (the target
+    key, its kind, its control id, or the password masking). So two things must
+    stay true, and neither is visible from a background CLI test - which is
+    what hid the risk in the first place:
+
+    * the stored control is focused before a character is typed, and
+    * no focus reading is added to the snapshot the engine voids on. A gate on
+      `HasKeyboardFocus` here would void EVERY real HUD fill while every
+      background script kept passing.
+    """
+    source = Path(U.__file__).read_text(encoding="utf-8")
+    body = source[source.index("def secret_handoff_type("):]
+    body = body[:body.index("\ndef ", 1)]
+    focus_at = body.find("control.SetFocus()")
+    type_at = body.find("control.SendKeys(")
+    check("UIA: the fill focuses the stored control before typing",
+          0 <= focus_at < type_at,
+          f"SetFocus at {focus_at}, SendKeys at {type_at}")
+    live = _live_snapshot_against(
+        "login:foo:bar", "uia:4242:777:0:EditControl:login:foo:bar")
+    check("UIA: the live snapshot the engine voids on carries no focus reading",
+          not any("focus" in str(key).lower() for key in live), sorted(live))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_control_is_treated_as_unmatched,
@@ -1693,7 +1816,9 @@ if __name__ == "__main__":
                t_uia_com_init_failure_is_left_to_the_real_call,
                t_handoff_control_index_keeps_zero,
                t_a_handoff_target_at_index_zero_is_remeasured_and_typed,
-               t_a_handoff_live_snapshot_still_names_a_different_control):
+               t_a_handoff_live_snapshot_still_names_a_different_control,
+               t_a_handoff_identity_matches_exactly_not_by_suffix,
+               t_the_handoff_fill_never_waits_for_keyboard_focus):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
