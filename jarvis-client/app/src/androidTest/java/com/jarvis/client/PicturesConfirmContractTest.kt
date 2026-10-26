@@ -53,7 +53,7 @@ import java.util.concurrent.TimeUnit
  *
  * On 127.0.0.1, which `network_security_config.xml` already permits in
  * cleartext for debug builds (the same setup [ApiContractTest] uses). The stub
- * PC answers at once, so the app's real 1,200 s picture read timeout
+ * PC answers at once, so the app's real 1,740 s picture read timeout
  * ([Pictures.CONFIRM_TIMEOUT_S]) is never exercised here - it exists for a
  * real draw on the PC - and nothing in this file sleeps or waits on a clock.
  *

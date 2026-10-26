@@ -5067,7 +5067,7 @@
       "name": "Choose Jarvis's face",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance.",
+      "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance. The HUD's face page also shows in a browser on the PC.",
       "control": {
         "type": "refused",
         "setting_keys": [],

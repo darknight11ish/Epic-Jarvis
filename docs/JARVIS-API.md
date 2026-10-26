@@ -21169,21 +21169,34 @@ Rules that are part of the feature, not implementation detail:
 - **It still starts nothing.** Starting ComfyUI remains the owner's own
   program, as 129.4 says; this section only unloads and warms the chat.
 - **The chat comes back onto a card that is really free.** The `/free` request
-  gets `FREE_WAIT_S` (180 s) and is followed by a `/system_stats` poll until
+  gets `FREE_WAIT_S` (180 s) and is then followed by a `/system_stats` poll until
   ComfyUI holds no more than 1 GiB (`FREE_FLOOR_BYTES`), so the warm-back starts
-  from a freed card. If the program never lets go, the answer says so
+  from a freed card. The poll has its OWN `FREE_WAIT_S` deadline, set after the
+  `/free` call returns (`free_models()`: `timeout=FREE_WAIT_S`, then
+  `deadline = time.time() + FREE_WAIT_S`), so the whole let-go step can cost up
+  to 360 s. If the program never lets go, the answer says so
   (`models_freed: false`, with the GB still held) and the chat is still brought
   back, possibly partly spilled.
 - **The wait is ten minutes, not two.** `DRAW_WAIT_S = 600` in
   `jarvis_pictures.py`: the measured 274.4 s draw plus a cold load, and still
   a finite wait - a wedged job ends in a sentence, never in a hung route.
 - **The confirm is ONE long request.** Measured on this PC: **405.8 s** wall
-  clock (draw 381.0 s; the rest is the swap and the warm-back). The bound is
-  `DRAW_WAIT_S` (600) + `FREE_WAIT_S` (180) + the warm-back, about 14 minutes,
-  so an app must give this single request a read timeout longer than that - the
-  desktop uses 1,200 s - and must not re-send it on a timeout: a re-send while
-  the draw runs is answered by the one-at-a-time sentence above, and the draw
-  keeps going.
+  clock (draw 381.0 s; the rest is the swap and the warm-back). The app's budget
+  must cover the PC's WORST CASE, not that measurement: the five ceilings are
+  `unload_lane(timeout=120)` 120 + `DRAW_WAIT_S` (600) + the `/free` call's
+  `FREE_WAIT_S` (180) + the `/system_stats` poll's second `FREE_WAIT_S` (180) +
+  `warm_lane(timeout=600)` 600 = **1,680 s**, about 28 minutes
+  (`backend/jarvis_picture_card.py:526` and `:564-565`;
+  `backend/jarvis_pictures.py:197` and `:208`). So an app must give this single
+  request a read timeout longer than that. Both apps use **1,740 s**, about 29
+  minutes - a minute of headroom - and must not re-send it on a timeout: a
+  re-send while the draw runs is answered by the one-at-a-time sentence above,
+  and the draw keeps going.
+  **Correction (2026-10-25):** an earlier version of this paragraph said the
+  ceilings added up to 1,500 s over four terms. That was 180 s short - it
+  counted the let-go step once, and `free_models()` waits twice, once for
+  `/free` and again for its own poll. The five-term sum is 1,680 s and the
+  apps' budget is 1,740 s.
 
 ### 129.5 No approval card, and why that is not a loophole
 
@@ -21245,12 +21258,10 @@ setup (JARVIS-API section 109).
   `/api/pictures/file` and writes the PNG into the phone's own Pictures
   collection through MediaStore. Nothing about a model, a catalogue or a
   drawing program is on the phone: it sends a prompt and reads a picture.
-  **The 409 confirm flow is not drawn on the phone yet in this branch:** the
-  backend now accepts a phone's `free_card: true` (owner decision 2026-10-24,
-  129.4b), but `PicturesPlate.kt` still sends only the first request, so on the
-  phone the 409 question currently arrives as its error sentence. The confirm
-  control and the long read timeout are the remaining Android step of this
-  feature.
+  **The 409 confirm flow is drawn on the phone** (2026-10-25): the backend
+  accepts a phone's `free_card: true` (owner decision 2026-10-24, 129.4b), and
+  `PicturesPlate.kt` sends it only on the owner's own tap, on the same long
+  1,740 s read budget as the desktop (`Pictures.CONFIRM_TIMEOUT_S`).
 
 ### 129.8 Tests, and what is honestly not proved
 
