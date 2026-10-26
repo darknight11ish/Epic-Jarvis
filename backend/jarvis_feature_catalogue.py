@@ -3,7 +3,7 @@
 The owner's feature list, as data: 139 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 65cb6a272bdf8dd06c50f14957173f9c718069f4f88451fae6615623466dded5); the apps' Features pages read their own
+`features/features.json` (sha256 397342c13f5e15266fa54e1d5ef8b856309cc2a62fe86036571b96d35959c67c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "65cb6a272bdf8dd06c50f14957173f9c718069f4f88451fae6615623466dded5"
+SOURCE_SHA256 = "397342c13f5e15266fa54e1d5ef8b856309cc2a62fe86036571b96d35959c67c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -124,10 +124,10 @@ FEATURES = (
         "id": "manner",
         "group": "Talking",
         "title": "How Jarvis talks",
-        "what": "Warm and brief, or plain, and whether Jarvis may use humour.",
+        "what": "On the PC, nine built-in personalities decide how Jarvis sounds - Warm Collaborator, Classic British Butler, Dry & Deadpan, Patient Advocate and five more - with four dials for humour, answer length, formality and how it addresses you. \"My personalities\" saves up to 20 mixes of your own, and each chat can have its own.",
         "where": "Settings, How Jarvis talks.",
         "asks": "No card either way - it changes wording only.",
-        "limit": "Humour is off to start, and never appears on a card, an error or a serious topic.",
+        "limit": "A personality changes how Jarvis sounds, never what it does, asks or remembers, and humour never appears on a card, an error or a serious topic.",
         "surface": "both",
         "covers": ["settings.manner", "how-it-talks"],
     },
@@ -190,7 +190,7 @@ FEATURES = (
         "id": "chat-thread",
         "group": "Talking",
         "title": "The whole conversation, and carrying it on",
-        "what": "The current chat is one scrollable thread, and an earlier chat can be picked up again.",
+        "what": "The current chat is one scrollable thread, and an earlier chat can be picked up again. Under an answer, a quiet line says how many saved facts it used, and pressing it shows them.",
         "where": "Scroll the Jarvis bar (or Home on the phone). History has \"Continue this chat\" and an \"Earlier chats\" link. How long a chat can sit before the next message starts a new one is in Settings, A new conversation starts after.",
         "asks": "No card.",
         "limit": "The thread hides while \"Hide memory lists and chat history\" is on. A new conversation starts after 30 quiet minutes by default - 10 minutes, 1 hour, 4 hours or never can be chosen in Settings - and the old one stays in History, where Continue brings it back.",
@@ -204,7 +204,7 @@ FEATURES = (
         "what": "A chat where nothing is kept and nothing you have saved is used.",
         "where": "Temporary chat in the Jarvis bar. Games and role-play use it automatically.",
         "asks": "No card.",
-        "limit": "Only on a PC that has it. Answers there do not use your saved facts.",
+        "limit": "Only on a PC that has it. It also learns nothing from what you say there - no fact is saved, even with a \"Remember:\".",
         "surface": "both",
         "covers": [],
     },
@@ -499,7 +499,7 @@ FEATURES = (
         "id": "galaxy",
         "group": "Memory",
         "title": "Galaxy",
-        "what": "A map of what Jarvis knows, drawn from your own facts.",
+        "what": "A map of what Jarvis knows, drawn from your own facts. It can be drawn as the constellation, or as one of three flat layouts - Star map, Clean tree, Zen ring - and the choice is remembered on this PC.",
         "where": "Brain, Galaxy.",
         "asks": "No card.",
         "limit": "Drawn from the same memory lists, so it hides with them.",
@@ -590,7 +590,7 @@ FEATURES = (
         "title": "Ask for a picture, and keep it",
         "what": "You type what the picture should show, and Jarvis draws it on your PC and keeps it, with a note beside it saying what made it. Both apps show the ones you kept, and the phone can save one to itself.",
         "where": "PC: Brain, Projects, Pictures. Phone: Brain, Pictures.",
-        "asks": "No card. A picture is a new file in a folder on your PC, drawn by a program on your PC, from your own words - the same as a timer or a note.",
+        "asks": "No card. A picture is a new file in a folder on your PC, drawn by a program on your PC, from your own words - the same as a timer or a note. A draw may first stop and ask, in plain words, whether Jarvis may set the everyday chat aside for about seven minutes; sending the same request again is your yes, from either app.",
         "limit": "Nothing is ever sent anywhere: there is no share, no upload and no email. The feature starts switched off (Settings, Pictures, \"Making pictures\") because it shares the second graphics card with the everyday model, and it needs ComfyUI or stable-diffusion.cpp installed on the PC first. The pictures and their prompts hide while \"Hide memory lists and chat history\" is on.",
         "surface": "both",
         "covers": ["brain.projects.pictures", "settings.pictures", "screens-and-pictures"],
@@ -1057,7 +1057,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Choose Jarvis's face",
         "what": "Twenty faces - five of them animals or a robot - drawn live.",
-        "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance.",
+        "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance. The HUD's face page also shows in a browser on the PC.",
         "asks": "The first time you pick an animal face, one line asks whether to use its own voice. A face never changes the voice by itself, and an approval never gets a wave or anything cute.",
         "limit": "Animal voices are Jarvis's own voices, blends and pitch - never a real person's.",
         "surface": "both",
@@ -1147,7 +1147,7 @@ FEATURES = (
         "what": "Extra abilities installed for Jarvis, each with a scan verdict.",
         "where": "Brain, Model, Skills.",
         "asks": "Installing or removing one is its own decision.",
-        "limit": "",
+        "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing one happens only on the PC, and no app can install one. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
         "surface": "both",
         "covers": ["skills", "brain.model.skills", "model-page"],
     },
@@ -1444,7 +1444,7 @@ FEATURES = (
         "what": "One card for each thing Jarvis wants to do that is not completely safe.",
         "where": "The card appears in the Jarvis bar, the widget, the HUD, or on the phone's Home.",
         "asks": "Nothing runs until you decide. There is no approve-all anywhere. Approving a risky card asks for Windows Hello on the PC, or your screen lock on the phone.",
-        "limit": "On a PC with no Windows Hello, or a phone with no screen lock, a risky approval is refused until one is set up, with a plain message saying how.",
+        "limit": "Four cards wait for you instead of expiring after 15 minutes - pairing a device, unretiring a shared key, registering a phone's approval key, and restoring a backup. On a PC with no Windows Hello, or a phone with no screen lock, a risky approval is refused until one is set up, with a plain message saying how.",
         "surface": "both",
         "covers": ["safety.approvals", "settings.approval-cards", "asks-first", "phone-approvals"],
     },

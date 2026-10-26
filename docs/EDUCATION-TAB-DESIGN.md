@@ -69,6 +69,15 @@ Counted by loading the module and walking `CATALOGUE` (a script, not a guess):
 Steps per tutorial run from **4 to 5**. `docs/TUTORIALS-DESIGN.md` says "4–8
 steps and two minutes"; the real range is tighter than that.
 
+> **This section is the 2026-10-10 snapshot, kept as the design record.** As of
+> 2026-10-25 the same module loads **36 lessons, 168 steps, 3 to 6 steps per
+> lesson**, because 13 lessons were added after this table was written (the
+> 2026-10-10 set and later ones, including `how-it-talks`). The enumeration in
+> §2.2 is the original 23-lesson set; its rows are not re-counted here, except
+> `screens-and-pictures` (6, after the "Ask for a picture" step added
+> 2026-10-25). A full re-count and re-enumeration belongs with a docs PR of its
+> own, not with a teaching-text fix.
+
 ### 2.2 The 23 tutorials, and what each one teaches
 
 This is the enumeration asked for. `where` is not repeated here — it is in the
@@ -95,7 +104,7 @@ file — but what each tutorial is *for* is.
 | `projects` | Projects, goals and benchmarks | What a project is; benchmarks; goals; the Shareable switch, off by default; what is ready and what waits for the second card | 5 |
 | `notes-and-wiki` | Notes and the wiki | The three note apps; when a note asks first; the wiki reads one folder; what the wiki needs to run | 4 |
 | `documents-and-search` | Documents, folders and search | You choose the folders; asking about a document; a Notion export; a note after reading asks first | 4 |
-| `screens-and-pictures` | Screens and pictures | "Look at this" is one look; "Watch with me" is a session; where it pauses; what is kept; reading pictures and Picture mode | 5 |
+| `screens-and-pictures` | Screens and pictures | "Look at this" is one look; "Watch with me" is a session; where it pauses; what is kept; reading pictures and Picture mode; ask for a picture | 6 |
 | `home-calendar-email` | Home, calendar and email | Calendar read-only; Home Assistant; reading and sending email; the card says when it read something; the morning briefing | 5 |
 | `faces` | The faces | Five faces; what the expressions mean; a voice per face; Animal options; serious moments stay plain | 5 |
 | `backups` | Backups and recovery | One locked file; the recovery code is shown once; what a lost code means; restoring and the preview; a limit worth knowing | 5 |
