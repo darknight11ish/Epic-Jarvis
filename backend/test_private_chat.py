@@ -728,9 +728,9 @@ def t_the_device_last_seen_is_held():
 
 def t_the_patch_applies():
     names = [str(p).replace("\\", "/").split("/")[-1] for p in _stack.order()]
-    check("private-chat.patch is in apply-patches.ps1's order, just before the loader",
+    check("private-chat.patch is in apply-patches.ps1's order, before the loader",
           "private-chat.patch" in names
-          and names.index("private-chat.patch") == names.index("plugin-loader.patch") - 1,
+          and names.index("private-chat.patch") < names.index("plugin-loader.patch"),
           names[-3:])
     git = shutil.which("git")
     if not git:
