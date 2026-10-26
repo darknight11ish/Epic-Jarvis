@@ -85,6 +85,11 @@ def t_the_patch_is_registered_last():
     # own `count=1` branch - and jarvis_gate.py not at all, so it cannot
     # rewrite the stale rows this patch removes either.
     later = {"screen-attach.patch", "prompt-coach.patch",
+             # secret-handoff.patch (2026-10-26): ONE added install block in
+             # jarvis_hud.py, on setup.patch own last printed lines, and no
+             # hunk in jarvis_gate.py - so it rewrites none of the stale rows
+             # this patch removes.
+             "secret-handoff.patch",
              "tasks.patch", "retrieve-count.patch",
              # attention-settings.patch (2026-10-08) comes after it as well: ONE
              # route in jarvis_hud.py (POST /api/attention/settings), anchored on

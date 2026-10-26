@@ -108,6 +108,7 @@ picture-card.patch	picture-card/39c005e.patch	39c005e915c2c465e1311620914dd9da51
 picture-card.patch	picture-card/c16c2b1.patch	c16c2b14736b3d5c4938807688eb8d5b98a96650	2026-10-10T22:03:36-07:00	Give the picture-maker a card, and the chat a choice of three ways
 pictures.patch	pictures/a347e27.patch	a347e277aaff0914fd9094d95c56614306858598	2026-10-11T12:08:18-07:00	Merge main (f1d53b6a) into feat/ask-for-a-picture: the CI failures fixed, the section renumbered to 129, and two real defects the fix exposed
 pictures.patch	pictures/c94e180.patch	c94e180b71f69eddea088b7ecff56eaaa6385cc8	2026-10-10T22:01:24-07:00	Ask for a picture, and keep it (JARVIS-API section 124)
+plugin-loader.patch	plugin-loader/71c3e08.patch	71c3e08321fd23d1c5ffdf4d4e56aa39ad111077	2026-10-20T02:27:11-07:00	feat(setup): setup questionnaire backend half - read-only plan, confirm-only apply, one card per loosening setting (#643)
 plugin-loader.patch	plugin-loader/41c9069.patch	41c906981c399944d236123b1bdd3e5f7a2786e9	2026-10-19T13:45:56-07:00	feat(presets): lane-aware single-approval apply with rollback
 plugin-loader.patch	plugin-loader/2f85d77.patch	2f85d772d81ebaf493ffdad2161bf9d9ca11eea2	2026-10-16T04:41:54-07:00	feat(status): a dead model lane is started again by Jarvis itself (#440)
 plugin-loader.patch	plugin-loader/e8d837d.patch	e8d837d609c8bcb522dd83afd56d71551054c764	2026-10-11T14:40:50-07:00	#266: pictures.patch joins the install chain (#290's placement), so the loader stays the last block before the socket
