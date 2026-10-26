@@ -18,11 +18,12 @@ import java.util.Locale
  * decision of 2026-09-30, docs/GALAXY-PANEL-DESIGN.md sections 4 and 7,
  * option B; the connections added 2026-10-11, see below).
  *
- * It is NOT the Galaxy's picture: no canvas, no force layout, no draggable
- * dots, no positions, no merging. The desktop draws the map; the phone draws
- * words.
+ * The picture itself is [GalaxyPicture]'s job (owner, 2026-10-26): the phone
+ * draws the Galaxy, deterministically, above this list. This file keeps the
+ * data and the words the list uses; there is still no force layout, nothing to
+ * drag, no merging and no write here.
  *
- * ## Why the phone shows connections but not a map (owner, 2026-10-11)
+ * ## Why the phone got connections in words first (owner, 2026-10-11)
  *
  * The owner asked to see the Galaxy on the phone - "can i see the galaxy on
  * the android phone? I should be able to see it" - and, offered a choice,
@@ -32,10 +33,12 @@ import java.util.Locale
  * alongside whom**. That last part is the map's edges, and it is the half a
  * plain list was missing.
  *
- * So the phone gets the map's *information* and not its *drawing*:
+ * So the phone first got the map's *information* in place of its *drawing*:
  * [connections] turns the same list into "the other names these facts
  * mention", which is what a desktop line between two dots means, said in
- * words that fit a thumb-width column and a screen reader.
+ * words that fit a thumb-width column and a screen reader. The drawing itself
+ * followed on 2026-10-26 ([GalaxyPicture]); these words stay, because a
+ * column and a screen reader still read a list better than a knot of dots.
  *
  * **Read-only, and that is the owner's decision, not an oversight.** He
  * narrowed CLAUDE.md's "do not build ... the memory graph ... on the phone"
@@ -382,10 +385,12 @@ object Entities {
 
     // --------------------------------------- the Galaxy band (2026-10-23) ---
     // The owner's choice for the phone's Galaxy (2026-10-23): a read-only
-    // "Galaxy at a glance" band above this list, instead of a canvas. It reads
-    // nothing new: the names and their facts are the two reads the plate
-    // already makes, and the connections are the same [sharedPartners] rule
-    // the rows already say in words. Phone-only words, like the A1 chips.
+    // "Galaxy at a glance" band above this list. Since 2026-10-26 the PICTURE
+    // (below) sits above the band - the owner asked to see the Galaxy drawn on
+    // the phone too - and the band keeps its summary line and its "Most
+    // connected" labels. Both read nothing new: the names and their facts are
+    // the two reads the plate already makes, and the connections are the same
+    // [sharedPartners] rule the rows already say in words.
     const val GALAXY_TITLE = "Galaxy at a glance"
     const val GALAXY_TOP = "Most connected"
 
@@ -434,13 +439,45 @@ object Entities {
      * "Priya, 4 facts, shares facts with 2 names". The shares half is left out
      * when [shared] is zero, so a label never promises an edge that is not there.
      */
-    fun galaxyNameLine(e: Entity, shared: Int): String {
-        val base = rowLine(e)
+    fun galaxyNameLine(e: Entity, shared: Int): String =
+        galaxyNameLine(e.name, e.count, shared)
+
+    /**
+     * The same line for a dot on the picture, which carries the name and the
+     * two counts rather than an [Entity] - one rule, so the band, the list and
+     * the picture's TalkBack announcements cannot drift apart.
+     */
+    fun galaxyNameLine(name: String, facts: Int, shared: Int): String {
+        val base = "$name, " + factCount(facts)
         if (shared <= 0) return base
         val shares = if (shared == 1) "shares facts with 1 name"
         else "shares facts with $shared names"
         return "$base, $shares"
     }
+
+    // ----------------------------------- the Galaxy picture (2026-10-26) ---
+    // The owner's decision of 2026-10-26: the phone also DRAWS the Galaxy, in
+    // a read-only picture above the band. That deliberately reverses only the
+    // "no canvas on the phone" part of the standing rule; the list and the band
+    // keep every word they had, nothing on this screen writes, and the
+    // picture's graph is [GalaxyPicture], worked out from the same
+    // /api/memory/entities answer this list already holds (no new route).
+    const val PICTURE = "The Galaxy picture"
+    const val PICTURE_HINT = "Tap a dot to open that name. Every name is also in the list below."
+    const val OPEN_NAME = "Open {name}"
+
+    /** What TalkBack hears for the whole picture: what it is, how much it
+     *  holds, and the one thing a finger can do with it. Each dot announces
+     *  its own name line ([galaxyNameLine]); the list below holds every name,
+     *  including the ones the [GalaxyPicture.MAX_NODES] cap leaves out. */
+    fun pictureSaid(names: Int, connections: Int): String {
+        val n = if (names == 1) "1 name" else "$names names"
+        val c = if (connections == 1) "1 connection" else "$connections connections"
+        return "$PICTURE: $n, $c. $PICTURE_HINT"
+    }
+
+    /** The TalkBack action on one dot of the picture. */
+    fun openName(name: String): String = OPEN_NAME.replace("{name}", name)
 
     // ------------------------------------------------------------- as of ---
 

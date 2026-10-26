@@ -71,21 +71,24 @@ import java.time.ZoneId
  * one without asking the owner first, and read [Entities]'s docstring for the
  * full reason.
  *
- * ## Why there is no canvas
+ * ## The picture, and why the list stays
  *
- * A force layout is the wrong tool for a phone: the desktop's map wants a wide
- * canvas, a pointer and a hover, and drawn at thumb size it becomes a knot of
- * unlabelled dots that TalkBack cannot read and a finger cannot select. The
- * list below is the same data in the shape the device is good at. It also
- * costs nothing to keep on screen: no animation frame, no GL context, no
- * battery, and nothing to recompute when the owner scrolls.
+ * The owner asked for the Galaxy drawn on the phone too (2026-10-26: "i want
+ * the android phone to have a picture"). [GalaxyPicture] draws it above this
+ * list: deterministic positions (the desktop's own zen-ring layout, ported and
+ * pinned to the desktop JavaScript - no force simulation and no animation),
+ * read-only, and capped so a thumb-width canvas stays legible. That
+ * deliberately reverses only the "no canvas on the phone" part of the standing
+ * rule: the list below is unchanged, every name is still in it, and the
+ * picture is a view of the same data rather than the only way to reach any of
+ * it. There is still no GL/AGSL and nothing to animate.
  *
  * Two reads, no new route: the names from `GET /api/memory/entities`, the
  * words from `GET /api/memory/used?ids=` ([JarvisRuntime.memoryUsed]). Both
  * are read when this is shown and dropped when it is left; nothing is kept on
  * the phone. The connections need **neither** - they are worked out from the
  * same list of names already in memory, so opening a name is not a second
- * round trip.
+ * round trip, and the picture reads nothing at all beyond that list.
  *
  * "Hide memory lists and chat history" (Security) replaces the whole thing
  * with [HiddenSection] until Show is confirmed, and because the panel is part
@@ -112,7 +115,8 @@ internal fun PeopleAndThingsSection(
     // Every one of them is a VIEW of the one list this plate already reads: the
     // chip and the search filter in memory, and the as-of chips narrow each
     // name's own fact ids to the ones the PC says were active on that date. No
-    // route is added, nothing is written, and there is still no canvas.
+    // route is added, nothing is written, and the picture above is a view, not
+    // a control.
     var kind by remember { mutableStateOf(Entities.ALL) }
     var search by remember { mutableStateOf("") }
     var asOfEpoch by remember { mutableStateOf<Long?>(null) }
@@ -197,11 +201,18 @@ internal fun PeopleAndThingsSection(
         Plate {
             Text(Entities.UNDER, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
             Gap(6)
-            // The owner's phone Galaxy (2026-10-23): a read-only glance above
-            // the list. It is hidden while the list shows a past date, because
-            // then the counts on screen are that date's, not today's.
+            // The owner's phone Galaxy: the PICTURE (2026-10-26) over the
+            // "at a glance" band (2026-10-23), both above the list. Both are
+            // hidden while the list shows a past date, because then the counts
+            // on screen are that date's, not today's - and the picture is a
+            // view of those same counts. Neither reads anything new: the names
+            // are the read above, and the connections are worked out from it.
             val band = entities
             if (asOfEpoch == null && !band.isNullOrEmpty()) {
+                Kicker(Entities.GALAXY_TITLE)
+                Gap(2)
+                GalaxyPicture(band, onOpen = { openId = it })
+                Gap(8)
                 GalaxyBand(band)
                 Gap(8)
             }
@@ -392,16 +403,16 @@ private fun AsOfChip(label: String, on: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * "Galaxy at a glance" - the phone's read-only Galaxy picture, chosen by the
- * owner on 2026-10-23 (option A of three). It is deliberately NOT a canvas and
- * NOT a control: the signed 2026-10-21 ruling keeps the phone as a read-only
- * list with zero canvas, so this draws the same facts as plain labels.
+ * "Galaxy at a glance" - the band under the picture (owner, 2026-10-23). The
+ * picture above it is [GalaxyPicture] (owner, 2026-10-26); this band keeps what
+ * a picture cannot say in a line: the counts in words and the best-connected
+ * names, as labels.
  *
- * The names are [Pill]s, whose own docstring says what that shape means: "this
- * is a label, not a control". They are not tappable, so TalkBack does not
- * announce "button" over things that do nothing - the same rule the
- * connections list below already follows. The row is spoken as one line:
- * "Priya, 4 facts, shares facts with 2 names".
+ * It is NOT a control: the names are [Pill]s, whose own docstring says what
+ * that shape means - "this is a label, not a control". They are not tappable,
+ * so TalkBack does not announce "button" over things that do nothing - the
+ * same rule the connections list below already follows. The row is spoken as
+ * one line: "Priya, 4 facts, shares facts with 2 names".
  *
  * It adds NO read: [Entities.mostConnected] and [Entities.totalFacts] work on
  * the list the plate has already fetched, using the same shared-facts rule the
@@ -413,8 +424,6 @@ private fun GalaxyBand(entities: List<Entities.Entity>) {
     val chrome = LocalChrome.current
     val partners = remember(entities) { Entities.sharedPartners(entities) }
     val connected = remember(entities) { Entities.mostConnected(entities) }
-    Kicker(Entities.GALAXY_TITLE)
-    Gap(2)
     Text(
         Entities.galaxySummary(entities.size, Entities.totalFacts(entities)),
         style = MaterialTheme.typography.labelLarge,

@@ -23,6 +23,10 @@ import java.io.File
  * phone" forbids unless he says otherwise. He has now said otherwise for this
  * one screen, and no further.
  *
+ * His decision of 2026-10-26 adds a read-only, deterministic picture of the
+ * Galaxy above the list and its "at a glance" band, reversing only the
+ * no-canvas part of the rule and leaving read-only unchanged.
+ *
  * Four things are held here, in the two house styles:
  *
  *  * **Reachable** ([thePlateIsUnderAHeadingAndTwoTapsFromTheTop]): the plate

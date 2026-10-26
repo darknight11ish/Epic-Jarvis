@@ -7,7 +7,9 @@ import org.junit.Test
 
 /**
  * The phone's read-only "Galaxy at a glance" band (the owner's choice,
- * 2026-10-23: a summary above the list, not a canvas).
+ * 2026-10-23: a summary above the list, not a canvas). The owner's decision of
+ * 2026-10-26 adds a deterministic read-only picture of the Galaxy above this
+ * band; the band itself is still a summary, not a canvas.
  *
  * Everything here is the pure data half - no Compose host, no emulator - so a
  * JVM test can hold it. It proves:

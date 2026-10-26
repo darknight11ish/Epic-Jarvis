@@ -20,8 +20,9 @@ push-to-talk), approvals, the Brain (memory, history, settings), the
 floating avatar (Bubble/Overlay mode), notifications, and a home-screen
 widget. What each screen must and must not do is written down in
 `docs/ARCHITECTURE.md` and `CLAUDE.md` - in particular: no model catalogue,
-no memory graph, no deep config editing, and no speech-to-text of its own
-on this app (the desktop does that, and hands the words back).
+no editable memory graph (the Galaxy is a read-only picture, 2026-10-26), no
+deep config editing, and no speech-to-text of its own on this app (the
+desktop does that, and hands the words back).
 
 ## Layout
 
