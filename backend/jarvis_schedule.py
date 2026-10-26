@@ -3371,6 +3371,11 @@ def due_active_reminders(*, now=None, readers=None, scheduler=None) -> list:
     out = []
     for row in rows:
         view = s._view(row, at)
+        # The row's own stored mark goes out with the reminder (2026-10-26,
+        # Ruling 2.3 residual): the caller that ACTS on it latches from this
+        # value at that moment. This getter is read-only and may be polled, so
+        # it never latches here itself - see the docstring above.
+        view["source_taint"] = _row_taint(row)
         ready, _why = reminder_ready(view, now=at, readers=readers)
         if ready:
             out.append(view)

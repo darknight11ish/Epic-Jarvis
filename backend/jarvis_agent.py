@@ -9286,8 +9286,17 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             and looks_like_correction(watch.newest_own_words)):
         note_correction(conv_id)
     # "Remind me next time I talk about X" (jarvis_next_time.py): worked out
-    # once, from the owner's own newest words, before any round.
-    next_time = _next_time_due(watch, messages, req)
+    # once, from the owner's own newest words, before any round - but NEVER in a
+    # private chat (2026-10-26, Ruling 2.3 residual). A stored reminder is
+    # private context, and a direct caller can set private=True while the
+    # request's provenance is "typed", so the flag is checked HERE as well as at
+    # the end of the turn (which already skips brought_up for private). The
+    # empty answer keeps every downstream use (`next_time["note"]`,
+    # `next_time["ids"]`) valid, so ordinary turns are unchanged.
+    if private:
+        next_time = {"note": "", "ids": []}
+    else:
+        next_time = _next_time_due(watch, messages, req)
     try:
         _live_limit = jarvis_live.live_tool_limit() if live_turn else None
     except Exception:
