@@ -780,8 +780,12 @@ def t_owner_check_does_not_refuse_a_card_with_no_deadline():
                                pending=lambda: [row])
         check("a deliberate card with no deadline is not refused", out is None, out)
         check("...and Windows Hello was actually asked", asked != [], asked)
-        check("...with a bounded prompt (the shipped 900), never 'for ever'",
-              asked == [float(MINUTES_15)], asked)
+        # 2026-10-26: the prompt is capped at 180 s, because its own deadline
+        # is its only cancel - a no-deadline card therefore reaches the prompt
+        # with the cap, not the shipped 900. The card itself is not used up: it
+        # keeps waiting, and Approve can be pressed again.
+        check("...with a bounded prompt (the 180 s cap), never 'for ever'",
+              asked == [OC._PROMPT_MAX] and OC._PROMPT_MAX == 180.0, asked)
 
         # The row's OWN number wins over the allow-list: an exempt action that
         # somehow carries a deadline (an old row, a foreign backend) is still

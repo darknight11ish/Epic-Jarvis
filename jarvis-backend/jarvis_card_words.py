@@ -588,6 +588,36 @@ def title_for(action) -> str:
     return FALLBACK.format(name=name) if name else NO_ACTION
 
 
+def has_written_title(action) -> bool:
+    """True when somebody WROTE words for this action, rather than Jarvis
+    quoting a name it has never been told about.
+
+    This is not "does the title read": `title_for` always produces one, and
+    for an action with no phrase it quotes the name it was given
+    (`FALLBACK`). That reads fine, but it says nothing about what is being
+    approved - so a Windows Hello prompt built on it asks the owner to
+    confirm a blank. `jarvis_owner_check.approve_check` refuses such a card
+    before the prompt is shown (2026-10-26); `title_for` itself is unchanged,
+    because a card still has to show a readable title for an action this
+    repository has never seen.
+
+    A plug-in program's own name counts as written: the owner wrote that name
+    themself (the `[mcp.servers.<name>]` line), and `title_for` puts it in a
+    written sentence. An empty action, a bare prefix, or anything else is
+    not written.
+    """
+    action = str(action or "").strip()
+    if not action:
+        return False
+    if action in TITLES:
+        return True
+    if action.startswith(PLUGIN_START_PREFIX):
+        return bool(_name(action[len(PLUGIN_START_PREFIX):]))
+    if action.startswith(PLUGIN_USE_PREFIX):
+        return bool(_name(action[len(PLUGIN_USE_PREFIX):].split("__", 1)[0]))
+    return False
+
+
 def _first_sentence(text: str) -> str:
     """`text` up to and including its first full stop, question mark or
     exclamation mark - or all of it when it has none.

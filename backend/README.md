@@ -19588,8 +19588,26 @@ listening. Nothing runs without a person: waiting is not approving.
 halves are file edits, not hunks: an absent `expires_in` is asked of
 `jarvis_gate.timeout_for()` rather than read as "the shipped timeout" (which used
 to answer 409 GONE for a card the gate was still waiting on), the Windows Hello
-prompt is still bounded by that timeout, and the re-read after the prompt still
-refuses a card that is no longer the live one.
+prompt is bounded by the smaller of the card's time left and 180 s (capped
+2026-10-26; the dialog is Windows's, so that number is how long it can stay up
+when the backend is killed outright), a watcher asks the child to close within a
+quarter of a second when the card is denied, withdrawn or expires while the
+dialog is up (and it can only close ITS OWN prompt: the watcher's queue read can
+outlive a two-second stop, so the prompt is tagged when it is raised and the
+cancel is matched by that tag), the request that queues for the prompt has a
+bounded wait (`_PROMPT_WAIT_MAX` = 210 s: the prompt's 180, the ten seconds its
+child gets to answer, two for the cancel and two for the watcher's stop - a
+worst legitimate hold of about 194 s) instead of waiting for ever, and the
+re-read after the prompt still refuses a card that is no longer the live one.
+
+**Deploying this half: copy BOTH modules into the live backend in one go.**
+`jarvis_owner_check.py` asks `jarvis_card_words.has_written_title()` before any
+prompt, and that function is new in `jarvis_card_words.py`. A one-module copy
+(the new owner-check without the new words module) makes the wrapper answer
+False, so **every risky approval from this PC is refused with 403 `unlabelled`
+before any prompt** - silently, and it looks like the new guard working. Copy
+both files, then restart the backend. `scripts/apply-patches.ps1` copies every
+shipped module in one run, so use it rather than a hand copy.
 
 **Test it.** `backend/test_gate_no_expiry.py` — 10 tests / 170 checks, built the
 way this repository tests a gate patch: apply `no-expiry-cards.patch` to
