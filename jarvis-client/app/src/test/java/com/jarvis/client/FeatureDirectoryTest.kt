@@ -44,12 +44,13 @@ class FeatureDirectoryTest {
             assertTrue("unapproved label: $label",
                 expectedPrefixes.any { label.startsWith(it) })
         }
-        // The counts the PC sends (labels 40/2/16/69/12; corrected 2026-10-23 by
-        // the adjustment-truth pass), so a wrong label is caught.
+        // The counts the PC sends (labels 40/2/16/70/12; corrected 2026-10-23 by
+        // the adjustment-truth pass, and Command-Only 69 -> 70 by the desktop
+        // Private chat row on 2026-10-26), so a wrong label is caught.
         assertEquals(40, rows.count { it.label.startsWith("Switchable / Adjustable") })
         assertEquals(2, rows.count { it.label.startsWith("Settings-Only") })
         assertEquals(16, rows.count { it.label.startsWith("PC-Only Setting") })
-        assertEquals(69, rows.count { it.label.startsWith("Command-Only") })
+        assertEquals(70, rows.count { it.label.startsWith("Command-Only") })
         assertEquals(12, rows.count { it.label.startsWith("Always On") })
     }
 

@@ -4,7 +4,7 @@
     python3 tools/gen_feature_guide_catalogue.py            # write it (both copies)
     python3 tools/gen_feature_guide_catalogue.py --check    # compare only
 
-WHAT THIS IS FOR. The owner's feature list (`features/features.json`, 139 rows:
+WHAT THIS IS FOR. The owner's feature list (`features/features.json`, 140 rows:
 id, group, title, what, where, asks, limit, surface, covers) is the ONE place
 the apps' Features pages draw from. It lives in this repository, NOT in the
 backend folder an installer ships to the PC - so a backend module cannot read it

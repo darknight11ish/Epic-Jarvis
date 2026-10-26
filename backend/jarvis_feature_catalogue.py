@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 139 rows from features/features.json.
+The owner's feature list, as data: 140 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 02a455842fa8f8739d28b2f50861f9a159a6d1a20f5e4279d9ca1402ec12ccd2); the apps' Features pages read their own
+`features/features.json` (sha256 2a7bc03d2c70c1e14e829b86222908e5ef9df4df608b31a140bd5aa747d93136); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "02a455842fa8f8739d28b2f50861f9a159a6d1a20f5e4279d9ca1402ec12ccd2"
+SOURCE_SHA256 = "2a7bc03d2c70c1e14e829b86222908e5ef9df4df608b31a140bd5aa747d93136"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -206,6 +206,17 @@ FEATURES = (
         "asks": "No card.",
         "limit": "Only on a PC that has it. It also learns nothing from what you say there - no fact is saved, even with a \"Remember:\".",
         "surface": "both",
+        "covers": [],
+    },
+    {
+        "id": "private-chat",
+        "group": "Talking",
+        "title": "Private chat",
+        "what": "A chat where Jarvis reads, searches and answers, but uses none of your saved memory, keeps nothing and learns nothing, and cannot change a setting, save an item or run an action.",
+        "where": "The Private chip beside Incognito in the Jarvis bar. Turning it on or off starts a new conversation, so a private chat and a normal one never mix.",
+        "asks": "No card for turning it on, and none while it is on: nothing that would need a card can run.",
+        "limit": "It only works on a PC whose version of Jarvis has it: an older PC leaves the chip off and says why instead of quietly sending an ordinary chat. It cannot be on at the same time as Incognito - turning one on turns the other off. The phone has no Private chip on purpose: its private mode is Incognito.",
+        "surface": "desktop",
         "covers": [],
     },
     {

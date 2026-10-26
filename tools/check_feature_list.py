@@ -255,7 +255,7 @@ INTERNAL = {
     # feature row above, so a row for the index itself would list the list. It
     # is a Settings menu id (never hideable: it is the phone's map of where each
     # control lives), not an ability of its own.
-    "settings.all-features": "the phone directory row itself: it indexes the 139 features, and every ability it lists has its own row",
+    "settings.all-features": "the phone directory row itself: it indexes the 140 features, and every ability it lists has its own row",
 }
 
 #: The lessons a feature may be taught by, read from the real catalogue. A
@@ -272,6 +272,7 @@ LESSON_EXEMPT = {
     "typing": "the box you type in; the app's own prompt field is the lesson",
     "interrupt": "the talk button stops the answer; there is nothing to learn",
     "temporary-chat": "one switch in the chat head; its own label is the lesson",
+    "private-chat": "one chip in the chat head, and its own strip line says what it does: no memory, nothing kept, no tools, no changes",
     "history-search": "a search box over the list it is above",
     "file-history": "the drawer explains itself: it lists the copies Jarvis "
                     "took and asks before a restore",

@@ -172,7 +172,7 @@ MENUS: tuple = (
        why="Never hideable on either app: it is a start-here setup card. The phone's row is the read-only plan; the changes are applied on the PC.",
        names=("first time setup", "the setup questionnaire", "the setup questions")),
     # "All features and abilities" (2026-10-22, #749): the phone's read-only,
-    # searchable directory of all 139 features. PHONE only: the desktop's own
+    # searchable directory of all 140 features. PHONE only: the desktop's own
     # card has no `<section class="card" id>` (it is a generated index, not a
     # settings section), so there is no desktop menu id to give; the desktop
     # page shows it unconditionally. NEVER hideable, for the same reason the
