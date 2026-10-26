@@ -45,6 +45,19 @@ WHAT THIS PROVES
      scripted model turn gets the exact facts back with NO approval card.
   7. "WHAT CAN I CHANGE?" IS UNCHANGED. The existing exact answer still comes
      from jarvis_settings_registry.changeable_words.
+  8. EVERY FEATURE ANSWERS EVERY OWNER QUESTION (2026-10-26). The owner asked
+     for Jarvis to talk about ANY feature of the project, in detail. All 140
+     rows are asked the nine questions a person actually uses - "tell me
+     about", "what does it do", "explain", "how do I use", "where is", "how do
+     I turn on", "can I change", "is it on", "what is it" - through the row's
+     title, its id AND its aliases, and every answer must carry the name, what
+     it does, where it lives, whether it asks first, which apps have it, and
+     how to use or change it. "Can I change it?" never runs a setter. Every
+     one-sided answer carries the row's own reason, and the two names that
+     carry "Jarvis" for real (not as an address) still resolve. Before this
+     section existed, three of those nine questions reached no feature intent
+     at all (0/140), five rows could not be named, and 127 answers never said
+     how to use or change the feature.
 
 No model runs, no network, no real settings file is touched: every read/write
 here is a temp folder or a recording stand-in.
@@ -104,7 +117,33 @@ PC._config_dir = lambda: TMP
 FEATURE_INTENTS = ("feature_explain", "feature_unknown", "feature_state",
                    "feature_state_setting", "feature_howto",
                    "feature_howto_setting", "feature_switch",
-                   "feature_switch_refused", "features_list", "features_group")
+                   "feature_switch_refused", "feature_change", "features_list",
+                   "features_group")
+
+#: The owner's own questions (2026-10-26) and the intent each must reach. Every
+#: row is asked every one of them through its title, id and aliases below.
+OWNER_QUESTIONS = (
+    ("tell me about {}", "feature_explain"),
+    ("what does {} do", "feature_explain"),
+    ("explain {}", "feature_explain"),
+    ("how do I use {}", "feature_explain"),
+    ("where is {}", "feature_explain"),
+    ("how do I turn on {}", "feature_howto"),
+    ("can I change {}", "feature_change"),
+    ("is {} on", "feature_state"),
+    ("what is {}", "feature_explain"),
+)
+
+#: The two questions an OLDER intent deliberately owns for one row. "What is
+#: the morning briefing?" reads the briefing (it has read it since 2026-09-28),
+#: and "is the morning briefing on?" asks the briefing module whether one is
+#: set up - both are real answers to the question, in the briefing's own words,
+#: not a fall-through. The feature itself is still explained by the other seven
+#: questions, so this is a named exception rather than a hole.
+OWNER_QUESTION_EXCEPTIONS = {
+    ("briefing", "is {} on"): {"briefing_list"},
+    ("briefing", "what is {}"): {"briefing_now"},
+}
 
 
 def check(name, cond, detail=""):
@@ -1018,6 +1057,356 @@ def t_the_matrix_reports_the_switch_and_adjust_counts_honestly():
     check("the multi-field gaps are named, not hidden", bool(multi), multi)
 
 
+# ------------------- 8. every feature, every owner question (2026-10-26) ----
+#
+# The field test this section exists for: the owner asked for Jarvis to be able
+# to talk about ANY feature of the project, in detail. The gap was not one
+# feature's row - it was that the fixed-phrase grammar only knew three of the
+# nine questions a person asks, and that a handful of names could not be said
+# at all. These checks compare against the DATA (features/features.json) and
+# the real matcher, never against typed prose, so a new row is covered the day
+# it is added.
+
+def _flat(text) -> str:
+    """A phrase's own text: quotes flattened, whitespace collapsed, lower-case."""
+    return " ".join(str(text).replace('"', "").split()).lower()
+
+
+def _names(row: dict) -> list:
+    """Every name a person may use for this row: title, id, aliases."""
+    out, seen = [], set()
+    for name in [row["title"], row["id"].replace("-", " ")] + list(row.get("aliases") or []):
+        key = _flat(name)
+        if key and key not in seen:
+            seen.add(key)
+            out.append(name)
+    return out
+
+
+def t_every_feature_answers_every_owner_question():
+    """All 140 rows, all nine questions - by title, by id and by alias.
+
+    This is the completeness check the owner's request needs: it fails for a
+    row whose name no phrasing reaches, and for an answer that lost one of the
+    facts (name, what, where, asks, apps, how to change it)."""
+    misses, thin = [], []
+    for row in SOURCE:
+        for template, want in OWNER_QUESTIONS:
+            allowed = OWNER_QUESTION_EXCEPTIONS.get((row["id"], template), set())
+            asked = []
+            for name in _names(row):
+                phrase = template.format(_flat(name))
+                got = match(phrase)
+                asked.append((got.name if got is not None else None, phrase))
+            hit = next((a for a in asked if a[0] == want), None)
+            if hit is None:
+                hit = next((a for a in asked if a[0] in allowed), None)
+            if hit is None:
+                misses.append((row["id"], template.format("<name>"),
+                               [a[0] for a in asked[:3]]))
+                continue
+            if hit[0] != want:
+                # An older intent owns this one question for this row; the
+                # feature itself is still explained by the other eight (each of
+                # which is checked with the same row, above and below).
+                continue
+            if want == "feature_explain" and template != "tell me about {}":
+                # Every explain phrasing routes to ONE renderer, so its answer
+                # is checked once per row (below, on the "tell me about" case)
+                # rather than six times for the same text.
+                continue
+            out = say(match(hit[1]))
+            text = out.reply if out is not None else ""
+            # Each question gets the answer THAT question needs: the explain
+            # questions carry every fact, the switch/state/change questions
+            # carry their own (where + card + phrase, or the real state), never
+            # less than a beginner needs to act.
+            if want == "feature_explain":
+                required = (
+                    ("name", row["title"] in text),
+                    ("what", row["what"] in text),
+                    ("where", row["where"] in text),
+                    ("asks", row["asks"] in text),
+                    ("apps", FG.surface_words(row) in text),
+                    ("how", any(m in text for m in (
+                        "To turn it on or off", "To change it", "more than one switch",
+                        "no switch of its own", "Always On", "changed only at",
+                        "changed at", "not wired yet"))),
+                )
+            elif want == "feature_howto":
+                required = (
+                    ("name", row["title"] in text),
+                    ("where", row["where"] in text),
+                    ("asks", row["asks"] in text),
+                    ("how", any(m in text for m in (
+                        "To change it", "more than one switch", "no on/off switch",
+                        "Always On", "changed only at", "changed at",
+                        "not wired yet"))),
+                )
+            elif want == "feature_change":
+                required = (
+                    ("name", row["title"] in text),
+                    ("status", "Status:" in text),
+                    ("how", any(m in text for m in (
+                        "To turn it on or off", "To change it", "more than one switch",
+                        "no switch of its own", "Always On", "changed only at",
+                        "changed at", "not wired yet"))),
+                )
+            else:                            # feature_state
+                required = (
+                    ("name", row["title"] in text),
+                    ("state", any(m in text for m in (
+                        "right now", "Right now", "no on/off switch",
+                        "could not read"))),
+                )
+            missing = [label for label, present in required if not present]
+            if missing:
+                thin.append((row["id"], hit[1], missing))
+    check("every one of the 140 rows answers all nine owner questions", not misses,
+          misses[:8])
+    check("...and every answer names the feature, what it does, where it lives, "
+          "whether it asks first, and which apps have it", not thin, thin[:8])
+
+    # The same facts for the one answer the model is given, so a model turn and
+    # a fixed phrase cannot disagree.
+    bad = []
+    for row in SOURCE:
+        out = FG.explain(row["id"])
+        words = str(out.get("words") or "")
+        if not out.get("ok") or out.get("kind") != "feature":
+            bad.append((row["id"], "not found"))
+            continue
+        if not any(marker in words for marker in (
+                "To turn it on or off", "To change it", "more than one switch", "no switch of its own",
+                "Always On", "changed only at", "changed at", "not wired yet")):
+            bad.append((row["id"], "no way to use or change it"))
+        if row["surface"] == "both" and "both apps" not in words:
+            bad.append((row["id"], "does not name both apps"))
+    check("...and the single answer always says how to use or change it",
+          not bad, bad[:8])
+
+
+def t_can_i_change_answers_and_changes_nothing():
+    """'Can I change <feature>?' - the five kinds, and not one setter runs."""
+    calls = []
+    backup = R.BOOL_SETTINGS
+    try:
+        R.BOOL_SETTINGS = tuple(
+            dataclasses.replace(b, set=lambda on, _k=b.key, **_kw: calls.append(_k))
+            for b in R.BOOL_SETTINGS)
+        problems = []
+        for row in SOURCE:
+            got = match(f"can I change {_flat(row['title'])}")
+            if got is None or got.name != "feature_change":
+                problems.append((row["id"], "intent", got.name if got else None))
+                continue
+            out = say(got)
+            text = out.reply if out is not None else ""
+            if "Status:" not in text:
+                problems.append((row["id"], "no status", text[:60]))
+                continue
+            if not any(marker in text for marker in (
+                    "To turn it on or off", "To change it", "more than one switch", "no switch of its own",
+                    "Always On", "changed only at", "changed at", "not wired yet")):
+                problems.append((row["id"], "no how", text[:80]))
+        check("every feature says whether and how it can be changed", not problems,
+              problems[:8])
+        check("...and no answer changed a setting: no setter ran", not calls, calls[:8])
+    finally:
+        R.BOOL_SETTINGS = backup
+    check("...and the real setter table is put back", R.BOOL_SETTINGS is backup)
+    # The phrase the answer SUGGESTS must be a phrase that really works: every
+    # switch label the read answers can name, said as "turn on/off <label>",
+    # must reach that switch (through the registry's own exact name, the
+    # feature's own switch phrase, or the honest refusal for several).
+    dead = []
+    seen = set()
+    for row in SOURCE:
+        for switch in FG.feature_switches(row):
+            key, label = switch["key"], switch["label"]
+            if (key, label) in seen:
+                continue
+            seen.add((key, label))
+            for on, word in ((True, "on"), (False, "off")):
+                got = match(f"turn {word} {label}")
+                name = got.name if got else None
+                works = ((name in ("settings_bool", "feature_switch")
+                          and got.f.get("key") == key)
+                         or name in ("feature_switch_refused", "settings_choice"))
+                if not works:
+                    dead.append((row["id"], key, label, word, name))
+    check("every 'turn on/off <switch>' sentence the answer suggests really resolves",
+          not dead, dead[:8])
+    expected_keys = {key for mrow in FG.control_matrix()
+                     for key in (mrow.get("switch_keys") or [])}
+    check("...and every switch the matrix names was covered by that sweep",
+          len(seen) == len(expected_keys), (len(seen), len(expected_keys)))
+    out = say(match("can I change background learning"))
+    check("a plain switch (not a feature row) gets its own honest change answer",
+          out is not None and "on/off setting" in out.reply
+          and "turn on background learning" in out.reply, out.reply if out else None)
+
+
+def t_aliases_are_the_rows_own_names():
+    """Every alias names ONE row, exactly, and the catalogue carries it."""
+    seen = {}
+    problems = []
+    for row in SOURCE:
+        for name in [row["title"], row["id"].replace("-", " ")]:
+            seen.setdefault(FG._norm(name), set()).add(row["id"])
+        cat = next((r for r in CAT.FEATURES if r["id"] == row["id"]), None)
+        if cat is None:
+            problems.append((row["id"], "not in the catalogue"))
+            continue
+        if list(cat.get("aliases") or []) != list(row.get("aliases") or []):
+            problems.append((row["id"], "catalogue aliases differ", cat.get("aliases")))
+        for alias in row.get("aliases") or []:
+            if alias != alias.lower():
+                problems.append((row["id"], "alias is not lower case", alias))
+            words = FG._norm(alias).split()
+            if len(words) == 1 and words[0] in (FG._GENERIC | FG._STOP):
+                problems.append((row["id"], "alias is a generic word", alias))
+            found = FG.find_exact(alias)
+            if found is None or found["id"] != row["id"]:
+                problems.append((row["id"], "alias does not find its row", alias,
+                                 found and found["id"]))
+            key = FG._norm(alias)
+            if key in seen and row["id"] not in seen[key]:
+                problems.append((row["id"], "alias is another row's name", alias,
+                                 sorted(seen[key])))
+            seen.setdefault(key, set()).add(row["id"])
+    check("every alias names its own row exactly, and only that row", not problems,
+          problems[:8])
+    # A row's alias is as usable as its title: the same four questions answer.
+    bad = []
+    for row in SOURCE:
+        for alias in row.get("aliases") or []:
+            for template in ("tell me about {}", "where is {}", "how do I use {}",
+                             "can I change {}"):
+                got = match(template.format(_flat(alias)))
+                if got is None or got.name not in ("feature_explain", "feature_change"):
+                    bad.append((row["id"], alias, template, got.name if got else None))
+    check("...and every alias answers the explain, where, use and change questions",
+          not bad, bad[:8])
+
+
+def t_every_one_sided_answer_says_why():
+    """No feature is called one-app-only without the row's own reason."""
+    problems = []
+    for row in SOURCE:
+        out = FG.explain(row["id"])
+        words = str(out.get("words") or "")
+        if row["surface"] == "both":
+            if "both apps" not in words or FG.PHONE_FEATURES_PAGE not in words:
+                problems.append((row["id"], "a both-apps answer does not name both"))
+            continue
+        reason = str(row.get("surface_reason") or "")
+        if len(reason.split()) < 6:
+            problems.append((row["id"], "no surface_reason"))
+        line = "PC only" if row["surface"] == "desktop" else "phone only"
+        if line not in words or (reason and reason not in words):
+            problems.append((row["id"], "the answer does not say why", line))
+        if out.get("feature", {}).get("surface_reason") != reason:
+            problems.append((row["id"], "the facts lost the reason"))
+    check("every one-sided row carries a reason and its answer says it", not problems,
+          problems[:8])
+    # The rule this enforces was checked by hand when the 19 desktop reasons
+    # were written; a row that claims BOTH is never asked for one.
+    check("...and a both-apps row is never asked for a reason",
+          all(r.get("surface") != "both" for r in SOURCE if r.get("surface_reason")))
+
+
+def t_the_new_questions_do_not_swallow_other_questions():
+    """The nine questions did not turn general questions into feature answers."""
+    other = ("how do I use a chainsaw", "how do I use python",
+             "where is my file manager", "where did I put my passport",
+             "where are my keys", "can I change my password in chrome",
+             "how do I change my wifi password", "how does the weather work",
+             "is my oven on", "what is a focus session in psychology",
+             "how do I turn on dark mode in chrome",
+             "Jarvis, how do I use a chainsaw", "Jarvis, where is my passport",
+             "Jarvis, can I change my password")
+    for phrase in other:
+        got = match(phrase)
+        check(f"'{phrase}' is not answered as a feature",
+              got is None or got.name not in FEATURE_INTENTS,
+              f"got {got.name if got else 'the model'}")
+    got = match("where did I put my passport")
+    check("'where did I put my passport' keeps the lost-object path",
+          got is not None and got.name == "where_put",
+          got.name if got else None)
+    got = match("where is the prompt coach")
+    check("...while 'where is the prompt coach' IS the feature's own answer",
+          got is not None and got.name == "feature_explain",
+          got.name if got else None)
+    for phrase in ("Jarvis, where is the turbo feature",
+                   "Jarvis, how do I use the turbo feature",
+                   "Jarvis, can I change the turbo feature"):
+        got = match(phrase)
+        check(f"'{phrase}' says the feature is unknown, never a guess",
+              got is not None and got.name == "feature_unknown",
+              got.name if got else "the model")
+
+
+def t_what_can_you_do_still_answers():
+    """"What can you do?" is the neighbour these questions must not eat."""
+    got = match("what can you do")
+    check("'what can you do' is still the sayable answer",
+          got is not None and got.name == "sayable_help",
+          got.name if got else None)
+    out = say(got)
+    check("...and it still lists the real sentences",
+          out is not None and "Set a timer for 10 minutes." in out.reply,
+          out.reply[:120] if out else None)
+
+
+def t_the_matrix_keeps_every_typed_phrase():
+    """The build's own re-entrancy: a phrase asked mid-build is not lost.
+
+    `control_matrix()` calls the real matcher ~500 times, and a "turn on
+    <ability>" phrase reaches back into `label_for` -> `_matrix()`. Without the
+    guard that rebuilt the table from inside its own build, the nested ask died
+    on the recursion limit and `_quick_intent` swallowed it - four rows (How
+    Jarvis talks, Floating Jarvis, Starting Jarvis for you, What Jarvis can
+    reach) lost their typed phrases. Measured on this branch before the fix:
+    4 of 140 rows had an empty on/off phrase; after: 0.
+    """
+    FG._MATRIX_CACHE = None
+    rows = FG.control_matrix()
+    missing = [(r["id"], key) for r in rows
+               for key in ("on_phrase", "off_phrase", "how_to_phrase")
+               if not r[key]["intent"]]
+    check("every feature keeps its on, off and how-to phrases", not missing,
+          missing[:8])
+    check("...and the build left no half-built state",
+          FG._MATRIX_BUILDING is False and FG._MATRIX_CACHE is not None)
+    FG._MATRIX_CACHE = None
+    FG._MATRIX_BUILDING = True
+    try:
+        check("a nested ask during the build gets an empty table, not a recursion",
+              FG._matrix() == [])
+    finally:
+        FG._MATRIX_BUILDING = False
+        FG._MATRIX_CACHE = None
+    check("...and the next build is complete again",
+          len(FG.control_matrix()) == len(SOURCE))
+    # The four names that carry "Jarvis" in the feature's OWN name, not as an
+    # address: each must reach a real change path for "turn on". A title that is
+    # also one of the registry's exact switch names legitimately takes the older
+    # settings_bool path - the SAME switch, so it is accepted only when the key
+    # is one this row names.
+    for row in SOURCE:
+        if "jarvis" not in row["title"].lower():
+            continue
+        got = match(f"turn on {_flat(row['title'])}")
+        mine = {s.key for s in FG.switches_for(row)}
+        ok = got is not None and (
+            got.name in ("feature_switch", "feature_switch_refused")
+            or (got.name == "settings_bool" and got.f.get("key") in mine))
+        check(f"'{row['title']}' can be turned on by its own name",
+              ok, (got.name if got else None, got.f if got else None))
+
+
 if __name__ == "__main__":
     for fn in (t_every_row_is_looked_up_and_its_facts_equal_the_json,
                t_unknown_and_ambiguous_never_guess,
@@ -1043,7 +1432,14 @@ if __name__ == "__main__":
                t_settings_gaps_are_real_named_and_owned,
                t_the_five_owner_labels_are_exact_and_every_feature_has_one,
                t_turning_on_an_ability_gets_a_deterministic_honest_answer,
-               t_abilities_directory_labels_are_consistent_with_reason_codes):
+               t_abilities_directory_labels_are_consistent_with_reason_codes,
+               t_every_feature_answers_every_owner_question,
+               t_can_i_change_answers_and_changes_nothing,
+               t_aliases_are_the_rows_own_names,
+               t_every_one_sided_answer_says_why,
+               t_the_new_questions_do_not_swallow_other_questions,
+               t_what_can_you_do_still_answers,
+               t_the_matrix_keeps_every_typed_phrase):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

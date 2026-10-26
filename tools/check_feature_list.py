@@ -41,8 +41,9 @@ BOTH DIRECTIONS, which is the whole point:
      misinformed the owner three times (see below) - so it must carry a
      `surface_reason`: one sentence saying why, quoted from
      `docs/ARCHITECTURE.md` section 8's one-sided table where the table has it.
-     The value alone is not a reason ("phone only" is refused). It covers one
-     direction on purpose - see "WHY THE RULE COVERS ONLY `phone`" below.
+     Since 2026-10-26 the same rule covers `"desktop"` entries: the chat answer
+     tells the owner why the phone has none, so that sentence has to exist too.
+     The value alone is not a reason ("phone only" is refused).
 
   6. EVERY LESSON IS CLAIMED BY A FEATURE ROW, OR EXEMPT WITH A REASON
      (reverse completeness). Rule 1 asks "is every menu/route listed?", rules 2
@@ -119,35 +120,36 @@ MEASURED before one was written, and both fail:
     green through the case it exists for, and lies on the one case it reaches,
     buys false confidence - which is why there is no such check here.
 
-What is true, for anyone weighing the alternative: 101 of the 131 entries are
-`"both"` and only 30 are not (19 `"desktop"`, 11 `"phone"`; #495 moves three of
-the phone ones to `"both"`). Each of those 30 is a claim that ONE APP LACKS A
-FEATURE - exactly the claim that misinformed the owner here.
+What is true, for anyone weighing the alternative: 113 of the 140 entries are
+`"both"` and 27 are not (19 `"desktop"`, 8 `"phone"`, measured 2026-10-26).
+Each of those 27 is a claim that ONE APP LACKS A FEATURE - exactly the claim
+that misinformed the owner here.
 
-WHY THE RULE COVERS ONLY `phone`, AND NOT `"desktop"` TOO (2026-10-16)
+WHY THE RULE NOW COVERS `desktop` AS WELL AS `phone` (2026-10-26)
 
-Rule 5 is deliberately one-directional, and this is the reason written down so
-it does not read as an oversight:
+Rule 5 was one-directional for a year, and this is why that changed:
 
   * `"phone"` has EVIDENCE OF HARM. Three entries said `"phone"` while the
     desktop had the feature - PC help, "What did I believe on this date?" and
     the rush-latch banner - and each told the owner his PC was missing
     something it had. A `surface_reason` makes that negative claim a sentence
     somebody had to write and a reader can weigh.
-  * `"desktop"` has no harm this checker can see, and no sentence anybody could
-    write honestly today without a fresh survey of the phone, one entry at a
-    time. The tempting mechanical signal - "its cover id is a desktop menu id,
-    so the phone must not have it" - is NOISE: it fires on 9 of the 11
-    phone-only entries, including genuinely Android-only ones (smartwatch
-    notifications, Quick Settings tiles, screen refresh rate, the floating
-    face), because `menu-catalog.js` is the SHARED registry that the phone's
-    `MenuCatalog.kt` is held to. A rule built on it would be switched off
-    inside a week.
-  * Three `"phone"` entries are exempt through `REASON_PENDING` for the same
-    honesty: their claim is FALSE on this tree (the desktop has all three), so
-    no sentence saying the desktop lacks them would be true. That list empties
-    itself - an id that stops being a `"phone"` entry FAILS, with the line to
-    delete named.
+  * `"desktop"` claims the phone lacks the feature, and from 2026-10-26 that
+    claim is SPOKEN, not just drawn on a page: the chat answer for a one-sided
+    row says "It is on the PC only: <reason>". Told without a reason, that is
+    the same thin answer the owner's field test complained about, so every
+    desktop-only row now carries one (19 were written on 2026-10-26 from the
+    row's own `limit`/`where` or from the app structure, and a reader can
+    disagree with any of them in a diff).
+  * The old objection - no honest sentence without a fresh survey of the phone,
+    one row at a time - is still true in the sense that a checker cannot judge
+    the sentence. That is why only its SHAPE is checked, exactly as for
+    `"phone"`: the sentence has to exist for a person to read.
+  * Three `"phone"` entries were once exempt through `REASON_PENDING` for the
+    same honesty: their claim was FALSE on that tree (the desktop had all
+    three), so no sentence saying the desktop lacked them would have been true.
+    That list is empty and empties itself - an id in it that stops being a
+    one-sided entry FAILS, with the line to delete named.
 
 WHY `INTERNAL` AND NOT "one entry per route": 249 backend routes are not 249
 features to a person - most are plumbing behind a button that IS listed. The
@@ -555,15 +557,16 @@ def field_problems(got: list) -> list:
             bad.append(f"{where}: group `{e.get('group')}` is not one of the nine")
         if e.get("surface") not in SURFACES:
             bad.append(f"{where}: surface `{e.get('surface')}` is not one of {SURFACES}")
-        # Rule 5: a `"phone"` entry claims the DESKTOP lacks the feature, so it
-        # must say why - unless REASON_PENDING has already said why no sentence
-        # is owed (see that dict, and the docstring's "WHY THE RULE COVERS ONLY
-        # `phone`").
-        if e.get("surface") == "phone" and where not in REASON_PENDING:
+        # Rule 5: a one-sided entry claims the OTHER app lacks the feature, so
+        # it must say why - unless REASON_PENDING has already said why no
+        # sentence is owed (see that dict and the docstring above).
+        if e.get("surface") in ("phone", "desktop") and where not in REASON_PENDING:
             reason = str(e.get("surface_reason") or "").strip()
+            missing = "the desktop" if e.get("surface") == "phone" else "the phone"
             if not reason:
-                bad.append(f"{where}: says `phone` with no `surface_reason` - add one "
-                           f"sentence saying why the desktop does not have it")
+                bad.append(f"{where}: says `{e.get('surface')}` with no "
+                           f"`surface_reason` - add one sentence saying why "
+                           f"{missing} does not have it")
             elif not reason_is_a_sentence(reason):
                 bad.append(f"{where}: `surface_reason` is not a reason, it is the value "
                            f"said again: {reason!r}")
@@ -843,15 +846,15 @@ def pending_problems(got: list) -> list:
     """Rule 5's other half: an exemption that is no longer needed FAILS.
 
     `REASON_PENDING` names the entries that cannot carry a true one-sided
-    sentence yet. The moment one of them stops being a `"phone"` entry it has
+    sentence yet. The moment one of them stops being a one-sided entry it has
     been corrected (`#495`), so its line is stale - the same rule `INTERNAL`
     already follows for a line whose id is gone. That is what keeps the list
     from becoming a permanent hiding place."""
-    phones = {e.get("id") for e in got
-              if isinstance(e, dict) and e.get("surface") == "phone"}
-    return [f"REASON_PENDING names `{name}`, which is no longer a `phone` entry - "
+    one_sided = {e.get("id") for e in got
+                 if isinstance(e, dict) and e.get("surface") in ("phone", "desktop")}
+    return [f"REASON_PENDING names `{name}`, which is no longer a one-sided entry - "
             f"delete its line (the entry has been corrected): {why}"
-            for name, why in sorted(REASON_PENDING.items()) if name not in phones]
+            for name, why in sorted(REASON_PENDING.items()) if name not in one_sided]
 
 
 def problems() -> list:
