@@ -212,6 +212,21 @@ def _staged_handler(repo: Path, backend: Path, *, suites="fail-first",
                         "(exit 1)  2 passed, 0 skipped, 1 failed")
                 on_line("2 passed, 0 skipped, 1 failed")
                 return 1
+        if suites == "visible-browser-skip":
+            # One whole-suite skip for a VISIBLE browser window, one for a file
+            # only the owner's PC has. The runner prints both as `skip` lines;
+            # the updater must report them with different reasons.
+            for name in U.suite_names(repo):
+                if name == "test_b.py":
+                    on_line("skip  test_b.py  it opens a real, VISIBLE browser "
+                            "window (a support chat); set "
+                            "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 to run it")
+                elif name == "test_c.py":
+                    on_line("skip  test_c.py  needs the owner's jarvis_hud.py")
+                else:
+                    on_line(f"ok    {name:<34} 0.1s")
+            on_line("2 passed, 0 skipped, 0 failed")
+            return 0
         for name in U.suite_names(repo):
             on_line(f"ok    {name:<34} 0.1s")
         on_line("3 passed, 0 skipped, 0 failed")
@@ -697,6 +712,50 @@ def t_the_suite_result_treats_an_unreadable_run_as_ambiguous_not_a_pass():
     check("a skipped suite is unproven, not a failure and not proven",
           skipped["ok"] is True and skipped["unproven"] is True
           and skipped["skipped_suites"] == ["test_c.py"], skipped)
+    browser = U.suite_result(
+        0, ["skip  test_d.py  it opens a real, VISIBLE browser window (Gemini); "
+            "set JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 to run it",
+            "2 passed, 0 skipped, 0 failed"])
+    check("a visible-browser skip is recognised as that reason, and is still "
+          "unproven, not failed",
+          browser["skipped_suites"] == ["test_d.py"]
+          and browser["visible_browser_suites"] == ["test_d.py"]
+          and browser["unproven"] is True and browser["failed"] is False, browser)
+
+
+def t_a_visible_browser_skip_is_not_reported_as_a_missing_owner_file():
+    """The owner-facing note must say what is really going on (review, #861).
+
+    The update used to print ONE sentence for every whole-suite skip: "N
+    suite(s) need files that live only on the owner's PC". For the four suites
+    this branch guards that is false - the files are on his PC and the suite is
+    skipped because it would open real, VISIBLE browser windows. Measured here
+    through the real update flow with a fake runner, so the fix is checked
+    where the owner would see it, not only in the parser.
+    """
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_staged_handler(repo, backend, suites="visible-browser-skip"))
+    said = []
+    code = U.update(repo, backend, "safe", run=fake, say=said.append,
+                    clock=lambda: 0.0, timings_path=root / "timings.json")
+    text = "\n".join(said)
+    check("the update still ends unproven, never failed",
+          code == 0 and "DONE - no problems, but NOT fully proven" in text,
+          (code, said[-8:]))
+    check("... the VISIBLE-browser suite is named with the opt-in that runs it",
+          "1 suite(s) open a real, VISIBLE browser window on this screen and "
+          "were skipped: test_b.py" in text
+          and f"Set {U.VISIBLE_BROWSER_ENV}=1 to run them." in text,
+          said[-8:])
+    check("... the real missing-file skip keeps its own reason, with its name",
+          "need files that live only on the owner's PC and were skipped: test_c.py"
+          in text, said[-8:])
+    check("... and the visible-browser suite is NOT put in that list",
+          "owner's PC and were skipped: test_b.py" not in text, said[-8:])
+    check("... the final event still says unproven, not ok",
+          (lambda done: bool(done) and done[-1].get("verdict") == "unproven")(
+              [e for e in _events(said) if e.get("phase") == "done"]), _events(said)[-3:])
 
 
 def t_the_line_readers_agree_with_the_two_programs_output_shapes():

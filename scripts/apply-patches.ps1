@@ -5546,6 +5546,16 @@ $pass = 0; $fail = @()
 # backend file is not there. The output is read, and a suite that skipped
 # anything is counted and named, never folded into "passed".
 $skipped = @()
+# A WHOLE-SUITE OPT-OUT IS NOT A MISSING FILE (2026-10-26, review of #861).
+# Four suites open a real, VISIBLE browser window and print one SKIPPED
+# sentence unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set; they read that
+# themselves, and the CI jobs set it where no browser can start. Counting that
+# as "a backend file or a package is not there" printed a false reason on
+# every update, so the two are kept apart and reported in their own words.
+# Proven/Unproven is unchanged: either kind of skip still means NOT fully
+# proven.
+$skippedVisible = @()
+$visibleBrowserEnv = 'JARVIS_ALLOW_VISIBLE_BROWSER_TESTS'
 
 # Same trap as Invoke-Patch: a test that prints anything to stderr - which a
 # failing one does, and several passing ones do too - would terminate the run
@@ -5590,8 +5600,17 @@ try {
             if ($sm.Success -and [int]$sm.Groups[1].Value -gt $skipN) { $skipN = [int]$sm.Groups[1].Value }
             $pass++
             if ($skipN -gt 0) {
-                Warn "$($t.Name) - passed, but $skipN part(s) were SKIPPED (not proven)"
-                $skipped += "$($t.Name) ($skipN)"
+                # Read the suite's OWN sentence, not just its name: a skip to
+                # avoid a visible window is an intentional opt-out and must not
+                # be reported as a file, a package or a machine feature that is
+                # not there.
+                if ($txt -match '(?im)^\s*SKIPPED\s+.*VISIBLE browser window') {
+                    Warn "$($t.Name) - passed, but its checks were SKIPPED (not proven): it starts a real, VISIBLE browser window. Set $visibleBrowserEnv=1 to run it."
+                    $skippedVisible += $t.Name
+                } else {
+                    Warn "$($t.Name) - passed, but $skipN part(s) were SKIPPED (not proven)"
+                    $skipped += "$($t.Name) ($skipN)"
+                }
             } else { Ok $t.Name }
         }
         else {
@@ -5640,12 +5659,25 @@ if ($fail.Count -gt 0) {
     Say "or that a rebuilt module is wrong - and the second one has happened." Cyan
     Add-Problem "$($fail.Count) test suite(s) FAILED: $(($fail | ForEach-Object { $_.Name }) -join ', '). The output is above."
 } elseif ($ran -gt 0) {
-    if ($skipped.Count -eq 0) {
+    $skippedTotal = $skipped.Count + $skippedVisible.Count
+    if ($skippedTotal -eq 0) {
         Ok "$pass suites passed, none skipped."
         if (-not $script:State.Partial) { $script:State.Proven = $true }
     } else {
-        Warn "$pass suites passed, but $($skipped.Count) of them skipped part or all of their checks."
-        Add-Note "Patched, but $($skipped.Count) of the $pass suites could not fully run, so this is NOT fully proven: $($skipped -join ', '). (A skip usually means a backend file, a Python package or a machine feature the suite needs is not there.)"
+        Warn "$pass suites passed, but $skippedTotal of them skipped part or all of their checks."
+        $names = @($skipped) + @($skippedVisible)
+        $why = @()
+        if ($skippedVisible.Count -gt 0) {
+            $why += "Skipped on purpose, because each one starts a real, VISIBLE browser window: $($skippedVisible -join ', '); set $visibleBrowserEnv=1 to run them"
+        }
+        if ($skipped.Count -gt 0) {
+            if ($skippedVisible.Count -gt 0) {
+                $why += "The other skips usually mean a backend file, a Python package or a machine feature the suite needs is not there"
+            } else {
+                $why += "A skip here usually means a backend file, a Python package or a machine feature the suite needs is not there"
+            }
+        }
+        Add-Note "Patched, but $($skippedTotal) of the $pass suites could not fully run, so this is NOT fully proven: $($names -join ', '). $($why -join '. ')."
     }
 }
 if ($py) { $script:State.StartLine = "& `"$($py.Exe)`" `"$hudPath`"" }

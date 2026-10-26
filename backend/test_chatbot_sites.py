@@ -52,8 +52,21 @@ drives the browser itself; every send selector names "send" or "submit"
 profile folder, commands, registration and card note; shipped and
 documented.
 
-SKIPS the browser half (exit 0) when Playwright is not installed or no
-Chromium can be started. Here, point Playwright at the downloaded browser:
+NOTHING RUNS WITHOUT AN EXPLICIT OPT-IN (2026-10-26). This file starts real,
+VISIBLE browser windows, so unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set
+it prints one SKIPPED sentence and exits 0 - it starts no browser and runs no
+check. That is the measured fix for the owner's PC, where Playwright IS
+installed, so the old "Playwright is not installed" skip could never stop it
+and a plain `py -3 -B backend/run_suites.py` put Chromium windows on the
+owner's screen, one profile at a time. backend/run_suites.py also skips this
+whole suite by name unless the same variable is set, so the default suite run
+never reaches it at all:
+
+    JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 python3 backend/test_chatbot_sites.py
+
+Otherwise it SKIPS the browser half (exit 0) when Playwright is not installed
+or no Chromium can be started. Here, point Playwright at the downloaded
+browser:
     PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 backend/test_chatbot_sites.py
 On Linux with no screen it starts Xvfb (a pretend screen): the adapters
 never run headless, and neither does this test.
@@ -106,6 +119,30 @@ import jarvis_chatbot_web as W  # noqa: E402
 MODS = {k: importlib.import_module(f"jarvis_chatbot_{k}") for k in SITE_FILES}
 
 PASSED, FAILED = [], []
+
+#: The ONE switch that lets a suite start its real, VISIBLE browser window.
+#: READ THIS BEFORE RENAMING IT: backend/run_suites.py names the same variable
+#: and skips these suites by name unless it is set, and the regression test
+#: backend/test_browser_test_guard.py fails if the two ever disagree.
+VISIBLE_BROWSER_ENV = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+
+#: What a run with no opt-in prints, and the whole of what it prints: one
+#: plain sentence saying nothing ran AND that this is not a pass.
+SKIPPED_VISIBLE_BROWSER = (
+    f"SKIPPED  test_chatbot_sites.py - this suite starts real, VISIBLE browser "
+    f"windows, and {VISIBLE_BROWSER_ENV}=1 is not set. It did NOT run, and it did "
+    f"NOT pass. Set {VISIBLE_BROWSER_ENV}=1 to run it by hand.")
+
+
+def visible_browser_tests_allowed(env=None) -> bool:
+    """True only when the operator has explicitly asked for a visible window.
+
+    Exactly "1", and anything else ("yes", "true", "0", empty) fails closed -
+    a half-typed opt-in must never put a browser on the owner's screen. `env`
+    is for a caller with its own mapping; it defaults to os.environ.
+    """
+    env = os.environ if env is None else env
+    return str(env.get(VISIBLE_BROWSER_ENV) or "").strip() == "1"
 
 
 def check(name, cond, detail=""):
@@ -1070,9 +1107,17 @@ def _run(fn, *args):
 
 
 def main(argv):
-    only = [k for k in argv if k in SITE_FILES] or list(SITE_FILES)
     xvfb = None
     try:
+        # THE GUARD, AND IT IS FIRST. Everything below - the code checks, the
+        # fake sites, and above all every adapter.open() - is unreachable
+        # without the explicit opt-in, so the default run cannot start a
+        # browser here whatever else changes. The finally below still runs,
+        # so the import-time temp folder is removed on this path too.
+        if not visible_browser_tests_allowed():
+            print(SKIPPED_VISIBLE_BROWSER)
+            return 0
+        only = [k for k in argv if k in SITE_FILES] or list(SITE_FILES)
         for fn in (t_still_true_no_proxy_no_captcha_solving, t_the_base_launches_one_visible_real_browser, t_site_files_are_thin,
                    t_selector_tables, t_registered_and_ready, t_shipped_and_documented):
             _run(fn)
