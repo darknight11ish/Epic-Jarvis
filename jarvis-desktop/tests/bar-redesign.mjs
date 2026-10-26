@@ -163,7 +163,7 @@ await check("the mode ids and their names are the ones the suites know", async (
   assert.equal(got.liveAria, "Jarvis Live");
   assert.equal(got.watchAria, "Watch with me");
   assert.match(got.micName, /Hold to talk to Jarvis/);
-  assert.equal(got.tempName, "Temporary chat");
+  assert.equal(got.tempName, "Incognito");
   assert.equal(got.voicePressed, "false");
 });
 

@@ -58,8 +58,8 @@ const check = async (name, fn) => {
 
 await check("the words are both apps' words, word for word", async () => {
   assert.equal(TEMPORARY_LINE,
-    "Temporary chat: Jarvis won't use or learn from your memory, and this chat isn't kept.");
-  assert.equal(REMEMBER_OFF, "Remember: is off in a temporary chat.");
+    "Incognito: Jarvis won't use or learn from your memory, and this chat isn't kept.");
+  assert.equal(REMEMBER_OFF, "Remember: is off in an incognito chat.");
   assert.equal(usedLine(1), "Used 1 memory");
   assert.equal(usedLine(2), "Used 2 memories");
   assert.equal(usedLine(0), "");
@@ -157,10 +157,10 @@ await check("on: a marker for the whole chat, the one line while it is empty, an
   assert.equal(pressed, "true");
   assert.equal(marked, "true");
   assert.match(empty, new RegExp(`^${TEMPORARY_LABEL}`));
-  // The label beside the line already says "Temporary chat", so the strip
+  // The label beside the line already says "Incognito", so the strip
   // does not say it twice (the second chat audit, desktop C8).
-  assert.ok(empty.includes(TEMPORARY_LINE.replace(/^Temporary chat:\s*/, "")), empty);
-  assert.ok(!empty.includes("Temporary chat: "), empty);
+  assert.ok(empty.includes(TEMPORARY_LINE.replace(/^Incognito:\s*/, "")), empty);
+  assert.ok(!empty.includes("Incognito: "), empty);
   assert.equal(strip.trim(), TEMPORARY_LABEL, "the marker went, or the empty-chat line stayed");
   assert.deepEqual(sent.map((s) => s.temporary), [true, true]);
   assert.equal(sent[1].conversationId, sent[0].conversationId);
