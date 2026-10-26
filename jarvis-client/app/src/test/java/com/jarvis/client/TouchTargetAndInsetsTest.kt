@@ -174,9 +174,10 @@ class TouchTargetAndInsetsTest {
         // Window starts, four lines above each call site - they move when a
         // FAQ answer above them grows (moved 444/473 -> 454/483 when the
         // "Train my voice" answer explained the pairing condition, 2026-10-09;
-        // 454/483 -> 468/497 when About gained the "Signed by" line, 2026-10-18).
+        // 454/483 -> 468/497 when About gained the "Signed by" line, 2026-10-18;
+        // 468/497 -> 522/551 when Help gained the Find row, 2026-10-25).
         val faq = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/FaqScreen.kt").readLines()
-        for (lineNumber in listOf(468, 497)) {
+        for (lineNumber in listOf(522, 551)) {
             val window = faq.drop(lineNumber - 1).take(12).joinToString("\n")
             assertTrue("FaqScreen.kt:$lineNumber still pressable:\n$window", window.contains(".pressable("))
             assertFalse(

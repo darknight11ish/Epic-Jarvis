@@ -7149,6 +7149,112 @@ the preset's fallback voice (sherpa-onnx takes one voices file per engine);
 real voice playback, a real Live session and PC latency are NOT-TESTABLE in
 this repository.
 
+### 27.7.1 Making a personality by talking (added 2026-10-25)
+
+The owner's ask of 2026-10-25: make your own personality from the chat box, not
+only from the Settings form. `backend/jarvis_personality_creator.py` (a new
+shipped module) answers it. `jarvis_quick.py`'s fast path (§21) calls its
+`handle()` on the owner's own chat sentence before its own grammar, so the
+sentence is answered by THIS PC instead of the general model. **No route, no
+approval card, no permission tier and no client change**: it is chat text read
+on the PC, so both apps get it through the chat box they already have.
+
+**Phrases that start a draft** (typed or spoken, in either app). The words
+after the verb are the brief:
+
+- "make / create / build / design / invent (me) a (new) personality ..." -
+  "make me a personality like a grumpy but caring mechanic"
+- "I want a personality ...", "I'd like a new personality ..."
+- "let's make a personality ..."
+
+...and close phrasings of each. With no brief after the verb, Jarvis asks for
+one line ("Tell me what it should be like - one line is enough ...") and calls
+nothing. The question is remembered in memory only, for that conversation: the
+next line the owner sends is read as the brief and drafts from it, so "a grumpy
+mechanic" does not dead-end at the general model. A question, a command or a new
+"make me a personality ..." sentence clears it; it is forgotten after ten
+minutes, and nothing about it is written to disk or survives a restart. The word
+"personality" must be in the sentence, so "make me a sandwich" is not this.
+
+**While a draft is waiting**, these are whole-sentence answers, so a pending
+draft is finished before the fast path's ordinary grammar sees the sentence:
+
+| You say | What happens |
+|---|---|
+| "make it ...", "change the ...", "shorter", "more formal" | the draft is revised by the local model, in place |
+| "call it ...", "name it ..." | renamed, with no model call |
+| "base it on ..." | the base preset changes to one of the nine built-ins, with no model call |
+| "show it again" | the draft is shown again, with no model call |
+| "save it", "keep it" | saved as a "My personalities" preset, and the draft is removed |
+| "forget it", "discard it", "cancel it", "scrap it" | dropped; nothing is saved |
+
+Plain "cancel that" is not the draft's cancel: it keeps whatever meaning it
+already had.
+
+**The draft, in the conversation.** Jarvis replies with a name, one line of how
+it should sound, one example exchange (the owner's line and Jarvis's) and which
+of the nine built-in presets it starts from, then: say "save it" to keep it, or
+tell me what to change.
+
+**Saving** goes through `jarvis_manner.save_user_personality()` - the same
+function, and so the same validation, scrubbing and caps the Settings form uses
+(the `POST /api/manner` write §27.7 describes). Jarvis then says it saved it
+under that name, and that "switch to <name>" changes to it (the PC already
+matches a saved personality by name), and points at Settings -> How Jarvis
+talks -> My personalities.
+
+| Cap | Value |
+|---|---|
+| Saved personalities | 20, the same limit the Settings form has |
+| Name | 60 characters |
+| One line of how it sounds | 240 characters |
+| Each half of the example exchange | 240 characters |
+| Base preset | one of the nine built-ins (§27.7) |
+| The persona block it feeds | 750 characters, unchanged |
+
+The draft is asked for shorter than these caps on purpose: the persona block's
+750-character budget is already tight, and a 240-character line pushes a full
+block over it, which silently drops the two cadence examples. A shorter draft
+keeps them.
+
+**A temporary chat refuses it**, in one plain sentence, because a temporary
+chat remembers nothing and a saved personality is kept for good: "I don't build
+personalities in a temporary chat - nothing is kept there, and a saved
+personality is kept for good. Ask me again in a normal chat." Nothing is
+written and no model is called.
+
+**When the local model cannot answer** - down, too slow, or a reply that is not
+the JSON object asked for - Jarvis says so and saves nothing: "I could not
+draft that just now - the local model did not answer, or its answer did not fit
+the personality fields. Nothing was saved. Try again, or add it by hand in
+Settings -> How Jarvis talks." A failed refinement says the draft is unchanged.
+It never invents a personality, and it never shows a field it did not validate.
+
+**What it does not do.** It drafts FIELDS (a name, a line, an example, a base
+preset and dials), never a finished system prompt, so a personality made this
+way cannot add an instruction about tools, approval, permissions, memory or
+safety. It never leaves the PC, and it asks the CHAT's own model: the address
+is the chat lane's own, resolved by `jarvis_model_lanes._hud_ollama_url()`
+(11436 on the owner's PC), and `_loopback_url()` refuses any host that is not
+loopback - so no environment variable can point it at another machine - while
+the NAME is resolved by the HUD's own resolver,
+`jarvis_hud._extract_model()` (the same function the chat lane uses;
+`JARVIS_PERSONALITY_MODEL` is the one deliberate override for this feature),
+never a copied name like the base `qwen3.5:9b` that used to be the fallback.
+The chat lane runs `jarvis-primary:latest` (`/api/ps`, measured 2026-10-25), so
+naming another model would load it and evict the chat's own. The request names
+`options.num_ctx` at the chat's own context size (16,384, `jarvis_chatbot`'s
+`ONE_CARD_NUM_CTX`), so drafting cannot make Ollama reload the model at its
+small default - and with the chat's own name, it cannot load a different model
+at all. The only new state on disk is the pending drafts in
+`~/.openjarvis/personality-drafts.json` (beside `manner.json`): one per
+conversation, a bounded number at once (six), each expiring after two hours;
+the saved personality itself goes to `manner.json`, not there. The unanswered
+"what should it be like" question is memory only - one per conversation, at
+most six, ten minutes, gone on restart, never written anywhere.
+`backend/test_personality_creator.py` holds the phrases, the refusal, the caps,
+the save path and the failure wording.
+
 ## 28. Stop everything (added 2026-09-25)
 
 The owner's decision of 2026-09-25 (CLAUDE.md, after the "Build Your Own

@@ -798,7 +798,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             // A PC without a temporary chat refuses one here, as
             // commands.rs stream_chat does, before anything is sent.
             if (args && args.temporary === true && window.__temporaryOk !== true) {
-              throw new Error("Temporary chat isn't available on this PC's version of Jarvis, " +
+              throw new Error("Incognito isn't available on this PC's version of Jarvis, " +
                 "so nothing was sent. Run apply-patches.ps1 on the PC to update it.");
             }
             const reply = (window.__chatReplies || []).shift();

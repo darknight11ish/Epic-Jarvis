@@ -378,7 +378,7 @@ export const MENUS = [
   {
     "id": "settings.manner",
     "title": "How Jarvis talks",
-    "about": "Warm and brief, or plain.",
+    "about": "Nine personalities and four dials, warm and brief by default.",
     "apps": [
       "desktop",
       "phone"

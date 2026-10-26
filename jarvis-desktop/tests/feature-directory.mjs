@@ -1,5 +1,5 @@
 /**
- * Settings -> Abilities & commands: the directory of all 139 features.
+ * Settings -> Abilities & commands: the directory of every feature.
  *
  * Owner requirement (2026-10-22, Gemini Q2/Q8): Settings must include a
  * directory/search that indexes every feature with exactly five plain labels;
@@ -89,8 +89,12 @@ await check("the generated copy matches the canonical contract", async () => {
   assert.equal(FIXTURE.source_sha256, sha,
     "feature-directory.js/fixture is stale - run python -B tools/gen_feature_directory.py");
   assert.equal(FIXTURE.feature_count, CONTRACT.feature_count);
-  assert.equal(FIXTURE.feature_count, 139);
-  assert.equal(CONTRACT.feature_count, 139);
+  // The declared counts must match the rows each file actually carries, so a
+  // new feature row needs no number typed here.
+  assert.equal(FIXTURE.feature_count, FIXTURE.rows.length,
+    `the fixture says ${FIXTURE.feature_count} features but carries ${FIXTURE.rows.length} rows`);
+  assert.equal(CONTRACT.feature_count, CONTRACT.features.length,
+    `the contract says ${CONTRACT.feature_count} features but carries ${CONTRACT.features.length} rows`);
   assert.equal(LABELS.length, 5, `the contract has ${LABELS.length} labels`);
   assert.deepEqual(FIXTURE.label_order, LABELS,
     "the generated order is not the contract's label order");
@@ -126,10 +130,10 @@ await check("the generated copy matches the canonical contract", async () => {
   assert.match(out, /match the feature contract/);
 });
 
-await check("the page renders all 139 features, grouped under exactly five labels", async () => {
+await check(`the page renders all ${CONTRACT.features.length} features, grouped under exactly five labels`, async () => {
   const page = await open();
   const d = await directory(page);
-  assert.equal(d.count, 139, `the page shows ${d.count} rows`);
+  assert.equal(d.count, CONTRACT.features.length, `the page shows ${d.count} rows`);
   assert.deepEqual(d.labels, [...LABELS].sort());
   assert.equal(d.missingExample, 0, "a row lost its example phrase");
   assert.equal(d.missingWhere, 0, "a row lost its screen path");
@@ -166,13 +170,13 @@ await check("the filter narrows the list and clearing it restores every row", as
   await page.locator("#fd-filter").fill("clipboard");
   await page.waitForTimeout(250);
   const shown = await directory(page);
-  assert.ok(shown.count > 0 && shown.count < 139,
+  assert.ok(shown.count > 0 && shown.count < CONTRACT.features.length,
     `the filter showed ${shown.count} rows for "clipboard"`);
   const countText = await page.locator("#fd-count").textContent();
-  assert.match(countText, new RegExp(`${shown.count} of 139`), countText);
+  assert.match(countText, new RegExp(`${shown.count} of ${CONTRACT.features.length}`), countText);
   await page.locator("#fd-filter").fill("");
   await page.waitForTimeout(250);
-  assert.equal((await directory(page)).count, 139);
+  assert.equal((await directory(page)).count, CONTRACT.features.length);
   await page.close();
 });
 
@@ -231,7 +235,7 @@ await check("the main search brings the directory card up; the card's box narrow
   await page.waitForTimeout(250);
   const shown = await page.evaluate(() =>
     document.querySelectorAll("#fd-list .fd-row").length);
-  assert.ok(shown > 0 && shown < 139, `the row filter showed ${shown} rows`);
+  assert.ok(shown > 0 && shown < CONTRACT.features.length, `the row filter showed ${shown} rows`);
   await page.close();
 });
 
@@ -266,5 +270,5 @@ await check("the labels are the owner's five, never a sixth", async () => {
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}`
-  : "\nthe abilities directory indexes all 139 features honestly");
+  : `\nthe abilities directory indexes all ${CONTRACT.features.length} features honestly`);
 process.exit(fails.length ? 1 : 0);

@@ -44,6 +44,13 @@ TWIN = ROOT / "jarvis-backend" / "jarvis_feature_catalogue.py"
 #: broken list; an UNKNOWN one is refused rather than dropped, so a new field
 #: added to features.json has to be looked at here instead of quietly vanishing.
 REQUIRED = ("id", "group", "title", "what", "where", "asks", "limit", "surface")
+#: A key the source carries and this catalogue deliberately does NOT: the guide
+#: answers "what is this feature, and is it on?", never "how do I learn it", so
+#: the teaching words would be the checker's own bookkeeping inside a runtime
+#: module. It is NAMED here rather than left unknown, because the refusal below
+#: exists so a new field has to be looked at by a person - and this is that
+#: looking, written down (2026-10-25, rule 7 of tools/check_feature_list.py).
+NOT_CARRIED = ("must_mention",)
 OPTIONAL = ("surface_reason", "covers")
 
 HEADER = '''"""GENERATED FILE - do not edit by hand.
@@ -93,7 +100,7 @@ def load_rows() -> tuple:
         missing = [k for k in REQUIRED if k not in row]
         if missing:
             raise SystemExit(f"{SOURCE}: row {n} has no {', '.join(missing)}")
-        unknown = sorted(set(row) - set(REQUIRED) - set(OPTIONAL))
+        unknown = sorted(set(row) - set(REQUIRED) - set(OPTIONAL) - set(NOT_CARRIED))
         if unknown:
             raise SystemExit(f"{SOURCE}: row {n} has unknown key(s) {unknown} - add them "
                              f"to this tool on purpose, in the right order")

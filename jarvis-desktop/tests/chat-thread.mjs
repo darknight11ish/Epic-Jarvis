@@ -233,7 +233,7 @@ await check("the bar: New conversation says where the chat went, and a game says
   const ended = await game.locator("#chat-ended-note").innerText();
   const stripGone = await game.locator("#temporary-strip").isHidden();
   await game.close();
-  assert.match(strip, /^Temporary chat/);
+  assert.match(strip, /^Incognito/);
   assert.match(strip, /looks like a game/);
   assert.equal(state, "game");
   assert.equal(ended, CH.ENDED_TEMPORARY, "a game ending said Kept chats are in History");

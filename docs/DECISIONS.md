@@ -3522,6 +3522,19 @@ calls, holds no lock while it waits and loads no model.
     copies; restoring them removes the sixteen new files (only while their
     sha256 still matches what was deployed) and needs one backend restart.
 
+## 2026-10-25 — A personality can be made by talking to Jarvis
+
+  * **What was decided.** The owner asked for "make your own personality"
+    (2026-10-25): chat co-creation first, the Settings "Draft it for me"
+    button as the later slice.
+  * **What it costs.** Wording only and cardless, drafted on the loopback
+    model so nothing leaves the PC, and saved through
+    `jarvis_manner.save_user_personality()` with the same caps and the same
+    20-personality limit the form enforces.
+  * **Both apps, by construction.** The PC reads the phrase out of the existing
+    chat request, so the desktop and the phone both get it; the Settings editor
+    stays the desktop's.
+
 ## 2026-10-25 — The 2026-10-21 approval of the Python lock floor 3.10 -> 3.11 is on the record
 
   * **What the owner approved, and where it was written down.** On 2026-10-21
@@ -3593,3 +3606,40 @@ calls, holds no lock while it waits and loads no model.
     turning its own tool list off (the framework file had overridden the config
     the first version emptied), the tool-chain/next_time/energy writes, the
     eight-store table and the corrected wording.
+
+## 2026-10-26 — The visible name is "Incognito"; the internal `temporary` field and capability names stay
+
+  * **What changed, and only that.** Every string the owner sees for this
+    feature, in both apps and in the words fixture the two share, now calls it
+    **Incognito**: the quickbar button's screen-reader name ("Incognito") and
+    its two tooltips ("Start an incognito chat: …", "End the incognito chat and
+    start a normal one"), the strip's label and its one line on an empty chat
+    ("Incognito: Jarvis won't use or learn from your memory, and this chat isn't
+    kept."), "Incognito started. Nothing in it is remembered or kept." /
+    "Incognito ended. Your next question starts a normal chat.", the refusal an
+    older PC gets ("Incognito isn't available on this PC's version of Jarvis, so
+    nothing was sent. …"), the unconfirmed-answer warning, "Remember: is off in
+    an incognito chat.", the game line ("This looks like a game or role-play, so
+    it's an incognito chat: nothing is kept or learned."), and Settings' Write
+    like me detail. The two shared History sentences are `tools/gen_history_cases.py`'s
+    (`continued_temporary_off`, `game_temporary`), regenerated into
+    `jarvis-desktop/tests/fixtures/history-cases.json` and
+    `jarvis-client/app/src/test/resources/contract/history-cases.json`; two
+    runs were byte-identical and `--check` is clean.
+  * **What deliberately stayed, and why.** The name changed, the machine did
+    not: the `temporary` JSON/API field and the `"temporary": true` route flag,
+    the `temporary_chat` capability, the Kotlin `TemporaryChat` object and
+    `setTemporaryChat`, the desktop `TEMPORARY_*` constant names, the
+    `temporary-chat` route/id/permission names and the patch filenames are all
+    untouched, so no request, header, capability probe or saved record changed
+    meaning - only the words. Comments were edited only where they quote what
+    the screen says. The feature catalogue's title stays "Temporary chat" in
+    `features/features.json`, `contract/feature-controls.json`, both apps'
+    `features.json`, `jarvis_feature_catalogue.py` and its twin, and
+    `feature-directory.json`; a later change renames that catalogue row, and
+    this entry does not pre-empt it. The Live strip still says "Temporary is on
+    - this Live session will not be kept in History.", because that sentence is
+    `jarvis_live.SEEN["temporary_on"]` on the PC: both apps copy it
+    (`SEEN.temporary_on` in `live-rules.js`, `LiveRules.SEEN` on the phone) and
+    are held to the generated table by tests, so renaming it needs the backend
+    module and the regenerated `live-cases.json` in the same change.

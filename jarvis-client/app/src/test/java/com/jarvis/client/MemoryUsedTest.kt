@@ -29,10 +29,10 @@ class MemoryUsedTest {
     @Test
     fun theWordsAreBothAppsWordForWord() {
         assertEquals(
-            "Temporary chat: Jarvis won't use or learn from your memory, and this chat isn't kept.",
+            "Incognito: Jarvis won't use or learn from your memory, and this chat isn't kept.",
             TemporaryChat.LINE,
         )
-        assertEquals("Remember: is off in a temporary chat.", TemporaryChat.REMEMBER_OFF)
+        assertEquals("Remember: is off in an incognito chat.", TemporaryChat.REMEMBER_OFF)
         assertEquals("Used 1 memory", MemoryUsed.usedLine(1))
         assertEquals("Used 2 memories", MemoryUsed.usedLine(2))
         assertNull(MemoryUsed.usedLine(0))

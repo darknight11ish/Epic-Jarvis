@@ -3217,14 +3217,14 @@ def _from_now_on(s: str) -> Optional[Intent]:
 
 # --------------------------------------------------------------------------
 #   Personality presets (2026-10-22, the owner's decision: Jarvis can slip
-#   into any of eight characters, typed or spoken, with no approval card)
+#   into any of nine characters, typed or spoken, with no approval card)
 # --------------------------------------------------------------------------
 #
 # Every phrase below maps to ONE conversation-free action: either a preset
 # switch (base/aliases from contract/personalities.json), one of the four
 # tuning dials, or a question about the current one. Nothing here reaches the
 # model, nothing opens a card, and everything is answered in the new preset's
-# own voice. "What personality are you using?" lists the eight by title,
+# own voice. "What personality are you using?" lists the nine by title,
 # which is how the owner learns the names to say.
 #
 # Deliberately NOT here: "turn on humour" / "turn off humour" - the existing
@@ -4939,7 +4939,7 @@ def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> R
 
 def _personality_words() -> str:
     """The answer to "what personality are you using?" - the active preset, its
-    dials, and the eight names (plus the owner's own saved ones), so the owner
+    dials, and the nine names (plus the owner's own saved ones), so the owner
     learns the words to say."""
     try:
         import jarvis_manner
@@ -4952,7 +4952,7 @@ def _personality_words() -> str:
     words = (f"You're using {active['title']}. Humour {dials['humor']}/3, "
              f"{dials['brevity']} answers, {dials['formality'].replace('_', ' ')} formality, "
              f"addressing you as {dials['address'].replace('_', ' ')}. "
-             f"The eight personalities are: " + "; ".join(p["title"] for p in builtin) + ".")
+             f"The nine personalities are: " + "; ".join(p["title"] for p in builtin) + ".")
     saved = jarvis_manner.user_personalities()
     if saved:
         words += " Your own: " + "; ".join(str(u.get("name") or u.get("id")) for u in saved) + "."
@@ -6101,7 +6101,11 @@ READ_ONLY_INTENTS = frozenset({
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
     "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",
-    "open_app", "open_chat", "pc_help", "personality_status", "project_log",
+    "open_app", "open_chat", "pc_help", "personality_create",
+    "personality_create_failed", "personality_create_help",
+    "personality_create_refused", "personality_refine",
+    "personality_refine_failed", "personality_show", "personality_show_missing",
+    "personality_status", "project_log",
     "reach_list", "sayable_help", "screen_status", "search_explain", "settings_choice_bad",
     "settings_choice_help", "settings_help", "settings_not_by_asking", "settings_only",
     "settings_open", "settings_unknown", "tellme_help", "thinking_status", "thinking_when",
@@ -6453,6 +6457,20 @@ def answer(text, *, sched=None, now: Optional[float] = None,
     `local`: the request's own address, for a setting on jarvis_owner_check.
     PC_ONLY_ACTIONS (jarvis_settings_registry.py, 2026-09-27)."""
     now = time.time() if now is None else now
+    # Chat co-creation of a personality (2026-10-25, jarvis_personality_creator.py):
+    # "make me a personality like ..." drafts it with the LOCAL model in the
+    # conversation; "save it" stores it through jarvis_manner's own save path.
+    # It runs BEFORE the grammar below, so while a draft is pending a plain
+    # "save it" cannot be mistaken for anything else. The import is wrapped and
+    # a backend without the module keeps exactly the old behaviour.
+    try:
+        import jarvis_personality_creator as _creator
+        _made = _creator.handle(text, conversation=conversation, temporary=temporary)
+    except Exception:
+        _made = None
+    if _made is not None:
+        return Result(str(_made.get("reply") or ""),
+                      str(_made.get("intent") or "personality_draft"))
     intent = match(text, now)
     if intent is None:
         return None

@@ -9144,16 +9144,16 @@ desktop's clipboard message in `jarvis-desktop/tests/provenance.mjs`.
 Jarvis with the big assistants.
 
 - **A temporary chat.** One tap - the ghost button in the quickbar on the
-  PC, or "Temporary chat" above the chat box on the phone. While it is on,
+  PC, or "Incognito" above the chat box on the phone. While it is on,
   Jarvis does not use anything it remembers about you, does not learn
   anything from what you say (not even "Remember: ..."), and the PC does not
   keep the chat in its history. Tools and approval cards work exactly as
-  usual. The whole chat is marked, and the empty chat says: "Temporary chat:
+  usual. The whole chat is marked, and the empty chat says: "Incognito:
   Jarvis won't use or learn from your memory, and this chat isn't kept."
   Turning it on or off needs no card (it only makes Jarvis stricter) and
   starts a new conversation, so nothing from one kind of chat slips into the
   other. If you type "Remember: ..." in one, the answer says "Remember: is
-  off in a temporary chat."
+  off in an incognito chat."
 - **"Used in this answer".** Under an answer that used things Jarvis
   remembers, a quiet line says "Used 2 memories". Tap it to see those facts
   (a pinned one says "pinned"), each with Forget - and on the PC, "Erase the
@@ -9165,7 +9165,7 @@ Jarvis with the big assistants.
 
 **Honest about older PCs.** Both apps offer a temporary chat only when the
 PC says it has one (`/api/version` -> `capabilities.temporary_chat`). If it
-does not, they say "Temporary chat isn't available on this PC's version of
+does not, they say "Incognito isn't available on this PC's version of
 Jarvis, so nothing was sent. Run apply-patches.ps1 on the PC to update it."
 If an answer comes back without the PC confirming it was temporary, the app
 says so rather than pretending.

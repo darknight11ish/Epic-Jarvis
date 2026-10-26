@@ -22,6 +22,10 @@
     "covers": [
       "settings.prompt-coach",
       "how-it-talks"
+    ],
+    "must_mention": [
+      "prompt",
+      "coach"
     ]
   },
   {
@@ -35,6 +39,10 @@
     "surface": "both",
     "covers": [
       "phone-talking"
+    ],
+    "must_mention": [
+      "talk button",
+      "hold"
     ]
   },
   {
@@ -49,6 +57,10 @@
     "covers": [
       "settings.voice",
       "talking"
+    ],
+    "must_mention": [
+      "hey",
+      "hands-free"
     ]
   },
   {
@@ -63,6 +75,10 @@
     "covers": [
       "talking",
       "how-it-talks"
+    ],
+    "must_mention": [
+      "aloud",
+      "read out"
     ]
   },
   {
@@ -76,6 +92,10 @@
     "surface": "both",
     "covers": [
       "how-it-talks"
+    ],
+    "must_mention": [
+      "spoken",
+      "short"
     ]
   },
   {
@@ -89,6 +109,9 @@
     "surface": "both",
     "covers": [
       "how-it-talks"
+    ],
+    "must_mention": [
+      "voice print"
     ]
   },
   {
@@ -103,6 +126,10 @@
     "covers": [
       "entry.voice-check",
       "how-it-talks"
+    ],
+    "must_mention": [
+      "voice print",
+      "checked"
     ]
   },
   {
@@ -117,6 +144,9 @@
     "covers": [
       "settings.voices",
       "how-it-talks"
+    ],
+    "must_mention": [
+      "custom voices"
     ]
   },
   {
@@ -131,6 +161,10 @@
     "covers": [
       "settings.manner",
       "how-it-talks"
+    ],
+    "must_mention": [
+      "personality",
+      "dials"
     ]
   },
   {
@@ -168,6 +202,10 @@
       "safety.live-stop",
       "talking",
       "phone-live"
+    ],
+    "must_mention": [
+      "live",
+      "back-and-forth"
     ]
   },
   {
@@ -182,6 +220,10 @@
     "covers": [
       "talking",
       "phone-live"
+    ],
+    "must_mention": [
+      "headset",
+      "resume"
     ]
   },
   {
@@ -209,6 +251,9 @@
     "covers": [
       "settings.idle-new",
       "records"
+    ],
+    "must_mention": [
+      "chat history"
     ]
   },
   {
@@ -246,6 +291,10 @@
       "brain.work.briefing",
       "settings.briefing-settings",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "briefing",
+      "morning"
     ]
   },
   {
@@ -260,6 +309,9 @@
     "covers": [
       "brain.work.coming-up",
       "timers-reminders"
+    ],
+    "must_mention": [
+      "coming up"
     ]
   },
   {
@@ -274,6 +326,9 @@
     "covers": [
       "brain.work.today",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "today"
     ]
   },
   {
@@ -288,6 +343,10 @@
     "covers": [
       "brain.work.widgets",
       "home-overview"
+    ],
+    "must_mention": [
+      "widget",
+      "describe"
     ]
   },
   {
@@ -302,6 +361,10 @@
     "covers": [
       "brain.work.jobs",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "jobs",
+      "background"
     ]
   },
   {
@@ -319,6 +382,9 @@
       "brain.now.trace",
       "brain.now.findings",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "right now"
     ]
   },
   {
@@ -333,6 +399,10 @@
     "covers": [
       "brain.now.budget",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "interrupt",
+      "budget"
     ]
   },
   {
@@ -348,6 +418,10 @@
       "brain.work.focus",
       "focus-sessions",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "focus session",
+      "quiet"
     ]
   },
   {
@@ -362,6 +436,10 @@
     "covers": [
       "brain.tab.memory",
       "memory"
+    ],
+    "must_mention": [
+      "facts",
+      "learns"
     ]
   },
   {
@@ -376,6 +454,10 @@
     "covers": [
       "brain.memory.auto",
       "memory"
+    ],
+    "must_mention": [
+      "saved",
+      "facts"
     ]
   },
   {
@@ -391,6 +473,10 @@
       "brain.memory.waiting",
       "memory",
       "money-and-health"
+    ],
+    "must_mention": [
+      "wait for your yes",
+      "facts"
     ]
   },
   {
@@ -405,6 +491,10 @@
     "covers": [
       "brain.memory.known",
       "memory-lists"
+    ],
+    "must_mention": [
+      "knows",
+      "forget"
     ]
   },
   {
@@ -420,6 +510,10 @@
     "covers": [
       "brain.memory.people-things",
       "memory-lists"
+    ],
+    "must_mention": [
+      "people",
+      "forget"
     ]
   },
   {
@@ -447,6 +541,9 @@
     "covers": [
       "brain.memory.profile",
       "memory-lists"
+    ],
+    "must_mention": [
+      "keep in mind"
     ]
   },
   {
@@ -461,6 +558,9 @@
     "covers": [
       "brain.memory.between-us",
       "memory-lists"
+    ],
+    "must_mention": [
+      "between us"
     ]
   },
   {
@@ -475,6 +575,9 @@
     "covers": [
       "brain.memory.topics",
       "memory-lists"
+    ],
+    "must_mention": [
+      "topic"
     ]
   },
   {
@@ -490,6 +593,10 @@
       "brain.memory.learning",
       "memory",
       "money-and-health"
+    ],
+    "must_mention": [
+      "switches",
+      "automatically"
     ]
   },
   {
@@ -504,6 +611,10 @@
     "covers": [
       "brain.memory.wiki",
       "notes-and-wiki"
+    ],
+    "must_mention": [
+      "wiki",
+      "obsidian"
     ]
   },
   {
@@ -518,6 +629,9 @@
     "covers": [
       "brain.memory.deep",
       "memory-lists"
+    ],
+    "must_mention": [
+      "deep questions"
     ]
   },
   {
@@ -532,6 +646,10 @@
     "covers": [
       "brain.memory.as-of",
       "memory"
+    ],
+    "must_mention": [
+      "true from",
+      "date"
     ]
   },
   {
@@ -546,6 +664,10 @@
     "covers": [
       "brain.memory.history-import",
       "memory-lists"
+    ],
+    "must_mention": [
+      "bring in old chats",
+      "export"
     ]
   },
   {
@@ -562,6 +684,9 @@
       "brain.history.conversations",
       "entry.history",
       "records"
+    ],
+    "must_mention": [
+      "chat history"
     ]
   },
   {
@@ -577,6 +702,10 @@
       "brain.history.tags",
       "brain.history.tag-suggestions",
       "memory-lists"
+    ],
+    "must_mention": [
+      "tags",
+      "tagging"
     ]
   },
   {
@@ -592,6 +721,10 @@
       "brain.history.forget-range",
       "memory",
       "records"
+    ],
+    "must_mention": [
+      "time frame",
+      "forget"
     ]
   },
   {
@@ -606,6 +739,9 @@
     "covers": [
       "brain.tab.galaxy",
       "memory-lists"
+    ],
+    "must_mention": [
+      "galaxy"
     ]
   },
   {
@@ -633,6 +769,9 @@
     "covers": [
       "settings.screen-look",
       "screens-and-pictures"
+    ],
+    "must_mention": [
+      "look at this"
     ]
   },
   {
@@ -646,6 +785,9 @@
     "surface": "both",
     "covers": [
       "screens-and-pictures"
+    ],
+    "must_mention": [
+      "watch with me"
     ]
   },
   {
@@ -659,6 +801,9 @@
     "surface": "both",
     "covers": [
       "screens-and-pictures"
+    ],
+    "must_mention": [
+      "picture mode"
     ]
   },
   {
@@ -715,6 +860,10 @@
       "brain.projects.pictures",
       "settings.pictures",
       "screens-and-pictures"
+    ],
+    "must_mention": [
+      "ask for a picture",
+      "everyday"
     ]
   },
   {
@@ -741,6 +890,9 @@
     "surface": "both",
     "covers": [
       "notes-and-wiki"
+    ],
+    "must_mention": [
+      "note"
     ]
   },
   {
@@ -755,6 +907,9 @@
     "covers": [
       "settings.folders",
       "documents-and-search"
+    ],
+    "must_mention": [
+      "folders"
     ]
   },
   {
@@ -768,6 +923,10 @@
     "surface": "both",
     "covers": [
       "documents-and-search"
+    ],
+    "must_mention": [
+      "document",
+      "pdf"
     ]
   },
   {
@@ -784,6 +943,10 @@
       "brain.model.tutorials",
       "entry.help",
       "set-up-jarvis-card"
+    ],
+    "must_mention": [
+      "tutorials",
+      "faq"
     ]
   },
   {
@@ -854,6 +1017,9 @@
       "brain.work.chatbot",
       "money-and-health",
       "limits-and-notes"
+    ],
+    "must_mention": [
+      "chatbot"
     ]
   },
   {
@@ -881,6 +1047,10 @@
     "covers": [
       "brain.tab.projects",
       "projects"
+    ],
+    "must_mention": [
+      "project",
+      "benchmarks"
     ]
   },
   {
@@ -895,6 +1065,10 @@
     "covers": [
       "brain.work.goals",
       "projects"
+    ],
+    "must_mention": [
+      "goal",
+      "check-in"
     ]
   },
   {
@@ -909,6 +1083,9 @@
     "covers": [
       "brain.projects.progress",
       "projects"
+    ],
+    "must_mention": [
+      "chart"
     ]
   },
   {
@@ -923,6 +1100,10 @@
     "covers": [
       "settings.spending",
       "money-and-health"
+    ],
+    "must_mention": [
+      "spending",
+      "summaries"
     ]
   },
   {
@@ -937,6 +1118,10 @@
     "covers": [
       "brain.work.retirement",
       "money-and-health"
+    ],
+    "must_mention": [
+      "retirement",
+      "what-if"
     ]
   },
   {
@@ -951,6 +1136,10 @@
     "covers": [
       "settings.chatbot-api-keys",
       "money-and-health"
+    ],
+    "must_mention": [
+      "keys",
+      "monthly"
     ]
   },
   {
@@ -965,6 +1154,10 @@
     "covers": [
       "money-and-health",
       "memory"
+    ],
+    "must_mention": [
+      "health",
+      "money"
     ]
   },
   {
@@ -980,6 +1173,10 @@
       "safety.crisis-help",
       "money-and-health",
       "when-something-is-wrong"
+    ],
+    "must_mention": [
+      "crisis",
+      "helplines"
     ]
   },
   {
@@ -994,6 +1191,10 @@
     "covers": [
       "home-devices",
       "home-calendar-email"
+    ],
+    "must_mention": [
+      "house",
+      "home assistant"
     ]
   },
   {
@@ -1007,6 +1208,10 @@
     "surface": "both",
     "covers": [
       "home-devices"
+    ],
+    "must_mention": [
+      "lights",
+      "plugs"
     ]
   },
   {
@@ -1020,6 +1225,10 @@
     "surface": "both",
     "covers": [
       "home-devices"
+    ],
+    "must_mention": [
+      "locks",
+      "doors"
     ]
   },
   {
@@ -1033,6 +1242,10 @@
     "surface": "desktop",
     "covers": [
       "home-calendar-email"
+    ],
+    "must_mention": [
+      "calendar",
+      "read-only"
     ]
   },
   {
@@ -1046,6 +1259,10 @@
     "surface": "both",
     "covers": [
       "home-devices"
+    ],
+    "must_mention": [
+      "weather",
+      "sky"
     ]
   },
   {
@@ -1059,6 +1276,9 @@
     "surface": "both",
     "covers": [
       "home-calendar-email"
+    ],
+    "must_mention": [
+      "reading email"
     ]
   },
   {
@@ -1073,6 +1293,10 @@
     "covers": [
       "settings.email-sending",
       "home-calendar-email"
+    ],
+    "must_mention": [
+      "sending",
+      "recipients"
     ]
   },
   {
@@ -1132,6 +1356,10 @@
       "phone-pairing",
       "brain",
       "limits-and-notes"
+    ],
+    "must_mention": [
+      "pairing",
+      "key"
     ]
   },
   {
@@ -1147,6 +1375,10 @@
       "settings.devices",
       "phone-pairing",
       "home-overview"
+    ],
+    "must_mention": [
+      "devices",
+      "paired"
     ]
   },
   {
@@ -1162,6 +1394,10 @@
     "covers": [
       "settings.phone-notify",
       "phone-notifications"
+    ],
+    "must_mention": [
+      "notifications",
+      "read"
     ]
   },
   {
@@ -1177,6 +1413,9 @@
     "covers": [
       "settings.watch-notify",
       "phone-extras"
+    ],
+    "must_mention": [
+      "smartwatch"
     ]
   },
   {
@@ -1192,6 +1431,10 @@
     "covers": [
       "settings.floating-avatar",
       "phone-extras"
+    ],
+    "must_mention": [
+      "floating",
+      "always-on-top"
     ]
   },
   {
@@ -1208,6 +1451,10 @@
       "settings.quick-tiles",
       "phone-extras",
       "phone-live"
+    ],
+    "must_mention": [
+      "tiles",
+      "quick"
     ]
   },
   {
@@ -1223,6 +1470,9 @@
     "covers": [
       "settings.screen-rate",
       "phone-extras"
+    ],
+    "must_mention": [
+      "refresh rate"
     ]
   },
   {
@@ -1236,6 +1486,9 @@
     "surface": "both",
     "covers": [
       "home-overview"
+    ],
+    "must_mention": [
+      "also on my phone"
     ]
   },
   {
@@ -1249,6 +1502,9 @@
     "surface": "both",
     "covers": [
       "home-overview"
+    ],
+    "must_mention": [
+      "ring my phone"
     ]
   },
   {
@@ -1264,6 +1520,10 @@
     "covers": [
       "phone-limits",
       "phone-stays-on-pc"
+    ],
+    "must_mention": [
+      "bulk",
+      "speech-to-text"
     ]
   },
   {
@@ -1280,6 +1540,10 @@
       "entry.appearance",
       "faces",
       "home-devices"
+    ],
+    "must_mention": [
+      "face",
+      "expressions"
     ]
   },
   {
@@ -1294,6 +1558,10 @@
     "covers": [
       "settings.crash-notes",
       "limits-and-notes"
+    ],
+    "must_mention": [
+      "crash",
+      "hang"
     ]
   },
   {
@@ -1307,6 +1575,10 @@
     "surface": "both",
     "covers": [
       "faces"
+    ],
+    "must_mention": [
+      "animals",
+      "face"
     ]
   },
   {
@@ -1321,6 +1593,10 @@
     "covers": [
       "settings.animal-options",
       "faces"
+    ],
+    "must_mention": [
+      "animal options",
+      "sharpness"
     ]
   },
   {
@@ -1335,6 +1611,10 @@
     "covers": [
       "settings.first-run",
       "set-up-jarvis-card"
+    ],
+    "must_mention": [
+      "first day",
+      "switches"
     ]
   },
   {
@@ -1362,6 +1642,9 @@
     "covers": [
       "settings.menu-visibility",
       "brain"
+    ],
+    "must_mention": [
+      "show or hide menus"
     ]
   },
   {
@@ -1377,6 +1660,9 @@
       "settings.shortcuts",
       "how-it-talks",
       "pc-at-a-glance"
+    ],
+    "must_mention": [
+      "hotkey"
     ]
   },
   {
@@ -1393,6 +1679,10 @@
       "brain.model.models",
       "brain.tab.faculties",
       "model-page"
+    ],
+    "must_mention": [
+      "models",
+      "everyday"
     ]
   },
   {
@@ -1408,6 +1698,10 @@
       "brain.model.compute",
       "hardware",
       "model-page"
+    ],
+    "must_mention": [
+      "compute",
+      "layers"
     ]
   },
   {
@@ -1423,6 +1717,9 @@
       "skills",
       "brain.model.skills",
       "model-page"
+    ],
+    "must_mention": [
+      "skill"
     ]
   },
   {
@@ -1437,6 +1734,10 @@
     "covers": [
       "brain.model.memory",
       "model-page"
+    ],
+    "must_mention": [
+      "memory",
+      "everyday model"
     ]
   },
   {
@@ -1451,6 +1752,10 @@
     "covers": [
       "settings.notifications",
       "phone-notifications"
+    ],
+    "must_mention": [
+      "urgent",
+      "alerts"
     ]
   },
   {
@@ -1466,6 +1771,9 @@
       "settings.start-jarvis",
       "limits-and-notes",
       "set-up-jarvis-card"
+    ],
+    "must_mention": [
+      "starting jarvis"
     ]
   },
   {
@@ -1480,6 +1788,9 @@
     "covers": [
       "brain.tab.work",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "work tab"
     ]
   },
   {
@@ -1494,6 +1805,10 @@
     "covers": [
       "tasks",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "jobs",
+      "step"
     ]
   },
   {
@@ -1508,6 +1823,10 @@
     "covers": [
       "settings.hardware",
       "hardware"
+    ],
+    "must_mention": [
+      "hardware",
+      "measured"
     ]
   },
   {
@@ -1540,6 +1859,9 @@
       "settings.second-card.chat-card",
       "hardware",
       "model-page"
+    ],
+    "must_mention": [
+      "second card"
     ]
   },
   {
@@ -1554,6 +1876,10 @@
     "covers": [
       "settings.big-model",
       "hardware"
+    ],
+    "must_mention": [
+      "big model",
+      "slow"
     ]
   },
   {
@@ -1596,6 +1922,10 @@
     "covers": [
       "settings.more-options",
       "limits-and-notes"
+    ],
+    "must_mention": [
+      "settings file",
+      "logs"
     ]
   },
   {
@@ -1610,6 +1940,9 @@
     "covers": [
       "settings.backend-supports",
       "model-page"
+    ],
+    "must_mention": [
+      "backend supports"
     ]
   },
   {
@@ -1638,6 +1971,10 @@
     "covers": [
       "settings.hud-window",
       "pc-at-a-glance"
+    ],
+    "must_mention": [
+      "hud",
+      "window"
     ]
   },
   {
@@ -1652,6 +1989,10 @@
     "covers": [
       "settings.backup",
       "backups"
+    ],
+    "must_mention": [
+      "backup",
+      "recovery code"
     ]
   },
   {
@@ -1666,6 +2007,10 @@
     "covers": [
       "settings.account-secrets",
       "money-and-health"
+    ],
+    "must_mention": [
+      "keys",
+      "token"
     ]
   },
   {
@@ -1680,6 +2025,9 @@
     "covers": [
       "settings.reach",
       "documents-and-search"
+    ],
+    "must_mention": [
+      "folders"
     ]
   },
   {
@@ -1694,6 +2042,9 @@
     "covers": [
       "brain.work.undo",
       "work-and-attention"
+    ],
+    "must_mention": [
+      "put back"
     ]
   },
   {
@@ -1709,6 +2060,10 @@
       "brain.work.activity",
       "records",
       "asks-first"
+    ],
+    "must_mention": [
+      "decided",
+      "read-only"
     ]
   },
   {
@@ -1723,6 +2078,10 @@
     "covers": [
       "settings.limits",
       "limits-and-notes"
+    ],
+    "must_mention": [
+      "frequency",
+      "limits"
     ]
   },
   {
@@ -1769,6 +2128,10 @@
     "surface": "desktop",
     "covers": [
       "clipboard-time-machine"
+    ],
+    "must_mention": [
+      "clipboard",
+      "cleanups"
     ]
   },
   {
@@ -1798,6 +2161,10 @@
       "settings.approval-cards",
       "asks-first",
       "phone-approvals"
+    ],
+    "must_mention": [
+      "card",
+      "approve"
     ]
   },
   {
@@ -1814,6 +2181,10 @@
       "asks-first",
       "home-devices",
       "money-and-health"
+    ],
+    "must_mention": [
+      "asks",
+      "stricter"
     ]
   },
   {
@@ -1874,6 +2245,10 @@
       "safety.stop-everything",
       "pc-at-a-glance",
       "how-it-talks"
+    ],
+    "must_mention": [
+      "halts",
+      "hotkey"
     ]
   },
   {
@@ -1891,6 +2266,10 @@
       "brain.trust.content-risk",
       "records",
       "when-something-is-wrong"
+    ],
+    "must_mention": [
+      "audit",
+      "records"
     ]
   },
   {
@@ -1919,6 +2298,9 @@
     "covers": [
       "asks-first",
       "when-something-is-wrong"
+    ],
+    "must_mention": [
+      "outside text"
     ]
   },
   {

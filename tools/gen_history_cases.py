@@ -106,7 +106,7 @@ WORDS = {
                           "some other actions ask you first."),
     "continued_nothing": ("None of its answers were kept, so Jarvis has nothing to read back. "
                           "New questions are still filed with this chat."),
-    "continued_temporary_off": "Temporary chat is off: a continued chat is kept.",
+    "continued_temporary_off": "Incognito is off: a continued chat is kept.",
     # Chat history is off, or cannot keep anything right now (the owner,
     # 2026-09-29): what was said in this chat is still here to read, but
     # what is said from now on is not filed with it.
@@ -153,7 +153,7 @@ WORDS = {
     "hud_opens_bar": "Chat with Jarvis in the Jarvis bar - it opens now.",
     "hud_open_bar": "Open the Jarvis bar",
     # -- other screens -------------------------------------------------------
-    "game_temporary": ("This looks like a game or role-play, so it's a temporary chat: nothing "
+    "game_temporary": ("This looks like a game or role-play, so it's an incognito chat: nothing "
                        "is kept or learned."),
     "project_chats_later": "Saved for later: Jarvis does not read this in chats yet.",
     "erase_chat_named": "Also delete the chat it came from: \"{title}\" ({when})?",

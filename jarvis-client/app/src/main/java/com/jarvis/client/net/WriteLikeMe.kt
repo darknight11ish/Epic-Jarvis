@@ -30,7 +30,7 @@ object WriteLikeMe {
             "examples of your own messages - so drafts sound like you, not a chatbot."
     const val SWITCH_LABEL = "Write like me when drafting"
     const val SWITCH_DETAIL =
-        "Off by default. Adds a short style block to local drafts only; never to Temporary chat " +
+        "Off by default. Adds a short style block to local drafts only; never to Incognito " +
             "or to an external chatbot."
     const val EMPTY = "No samples yet. Paste one above to begin."
     const val SAMPLE_HINT =
