@@ -291,15 +291,15 @@ private val FAQS = listOf(
         // (ease-of-use audit 2026-09-27, #8e). The desktop's own FAQ says the
         // same - in the Brain's "Tutorials and the FAQ" since 2026-10-08.
         "How do I update Jarvis?",
-        "Three parts, in this order. Jarvis on your PC: stop it, then in " +
-            "PowerShell, in your copy of the Jarvis files, get the newest files " +
-            "(git pull) and run apply-patches.ps1 again - it keeps your settings " +
-            "file, backs up what it replaces and saves a log of the run in " +
-            "_jarvis-logs in your Jarvis folder - then start Jarvis again. The " +
-            "desktop app: build and install it again (there is no automatic " +
-            "update yet). This app: install the newest file from the release " +
-            "page over the old one; it stays paired. docs/INSTALL.md, \"Updating " +
-            "everything\", has each step as one line to copy.",
+        "Most of it in one command. In PowerShell, in your copy of the Jarvis " +
+            "files, run scripts/update-jarvis.ps1: it stops Jarvis, gets the " +
+            "newest files, patches the backend, updates the desktop app, starts " +
+            "Jarvis again and runs the live check. It prints the whole plan first " +
+            "with -Print and keeps a log in _jarvis-logs in your Jarvis folder. " +
+            "If it stops and says why, docs/INSTALL.md, \"Updating everything\", " +
+            "has each step as one line to copy. This app: install the newest file " +
+            "from the release page over the old one; it stays paired. Your " +
+            "settings file and phone pairing are left alone.",
     ),
 )
 

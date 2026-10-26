@@ -1535,7 +1535,8 @@ FAQ = (
           "model on this PC. Web search, the chatbot driver, online weather, "
           "customer-support chats and a quiz you send to a cloud service can send "
           "things out: a search from your own words can go without a card, and the "
-          "rest ask first. Web search can be your own SearXNG on this PC.",
+          "rest ask first. Web search can be your own SearXNG on this PC. Support "
+          "chats and the cloud quiz are built but not yet tried for real.",
      "where": "Brain → What asks first"},
     {"q": "Will it open a tunnel so I can reach it from anywhere?",
      "a": "No. The phone reaches the PC over Tailscale or NordVPN Meshnet, both "
@@ -1582,9 +1583,9 @@ FAQ = (
      "where": "Brain → Backup"},
     {"q": "It says \"Jarvis isn't connected\".",
      "a": "The PC's backend is not answering: usually the app is closed, the PC "
-          "is asleep, or the app has lost its connection to the PC. The tray icon "
-          "says the same thing. If the PC is fine and only the model is down, both "
-          "apps say the model isn't running instead.",
+          "is asleep, or the phone is not on the same private network as the PC. "
+          "The tray icon says the same thing. If the PC is fine and only the model "
+          "is down, both apps say the model isn't running instead.",
      "where": "The tray icon, and Brain → About"},
     {"q": "How do I stop it mid-action?",
      "a": "The stop-everything hotkey on the PC, the phone's Stop, or ending a "
@@ -1605,10 +1606,11 @@ FAQ = (
           "and the words are marked as outside text.",
      "where": "Nothing to change - send it again after a screenshot"},
     {"q": "How do I update Jarvis?",
-     "a": "Run scripts/update-jarvis.ps1 from the folder you downloaded: it "
-          "patches the backend, updates the desktop app and starts Jarvis again. "
-          "Then install the newest phone app. Your own jarvis-framework.toml is "
-          "left alone.",
+     "a": "Run scripts/update-jarvis.ps1 from the folder you downloaded: it stops "
+          "Jarvis, gets the newest files, patches the backend, updates the desktop "
+          "app, starts Jarvis again and runs the live check. It prints the whole "
+          "plan first with -Print. Then install the newest phone app. Your own "
+          "jarvis-framework.toml is left alone.",
      "where": "docs/INSTALL.md, and README.md"},
     {"q": "Do I need the second graphics card?",
      "a": "No. Seven optional extras wait for it: longer conversations, pictures "
@@ -1624,9 +1626,9 @@ FAQ = (
      "where": "History, and the log folder in Brain → About"},
     {"q": "Why does an option say it will ask for Windows Hello?",
      "a": "Because loosening a rule asks first. On the PC that is usually Windows "
-          "Hello; a phone may raise a money limit with its own fingerprint or PIN "
-          "instead; and turning a private topic back on is just a card. That is the "
-          "guardrail working, not a fault.",
+          "Hello; raising a money limit is done on the PC today (the phone shows "
+          "the amounts but has no raise control yet); and turning a private topic "
+          "back on is just a card. That is the guardrail working, not a fault.",
      "where": "Brain → What asks first"},
     {"q": "How do I get a tutorial back?",
      "a": "Open Tutorials and choose \"Show this one again\" on any finished "

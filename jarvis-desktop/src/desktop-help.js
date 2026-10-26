@@ -224,14 +224,15 @@ export const DESKTOP_FAQ = Object.freeze([
   {
     id: "how-to-update",
     q: "How do I update Jarvis?",
-    a: "Three parts, in this order. Jarvis on this PC: stop it, then in PowerShell, " +
-      "in your copy of the Jarvis files, get the newest files (git pull) and run " +
-      "apply-patches.ps1 again - it keeps your settings file, backs up what it " +
-      "replaces and saves a log of the run in _jarvis-logs in your Jarvis folder - " +
-      "then start Jarvis again. This app: build and install it again (there is no " +
-      "automatic update yet). The phone app: install the newest file from the " +
-      "release page over the old one; it stays paired. docs/INSTALL.md, \"Updating " +
-      "everything\", has each step as one line to copy.",
+    a: "Most of it in one command. In PowerShell, in your copy of the Jarvis " +
+      "files, run scripts/update-jarvis.ps1: it stops Jarvis, gets the newest " +
+      "files, patches the backend, updates this app, starts Jarvis again and runs " +
+      "the live check. It prints the whole plan first with -Print and keeps a log " +
+      "in _jarvis-logs in your Jarvis folder. If it stops and says why, " +
+      "docs/INSTALL.md, \"Updating everything\", has each step as one line to " +
+      "copy. The phone app: install the newest file from the release page over " +
+      "the old one; it stays paired. Your settings file and your phone pairing " +
+      "are left alone.",
     where: "docs/INSTALL.md, \"Updating everything\"",
   },
   {
