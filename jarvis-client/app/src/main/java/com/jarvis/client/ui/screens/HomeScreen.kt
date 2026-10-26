@@ -3959,14 +3959,24 @@ private fun VoiceBar(
                 onClick = onShowChat,
             )
             Box(Modifier.align(Alignment.Center)) {
-                VoiceButton(
-                    enabled = state.link == LinkState.CONNECTED && !state.streaming,
-                    capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
-                    micLevel = micLevel,
-                    onBegin = actions.onVoiceBegin,
-                    onRelease = actions.onVoiceRelease,
-                    onCancel = actions.onVoiceCancel,
-                )
+                // A PC that has not offered push-to-talk must not get an
+                // enabled microphone that does nothing - the same gate the
+                // composer's own row uses (`if (state.voiceOffered)`, below).
+                // Full screen normally implies an offered microphone already
+                // (see `voiceMode`), but the button's own gate said nothing
+                // about it, so any future change to that branch would have
+                // drawn a dead, enabled mic.
+                if (state.voiceOffered) {
+                    VoiceButton(
+                        enabled = state.voiceOffered &&
+                            state.link == LinkState.CONNECTED && !state.streaming,
+                        capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
+                        micLevel = micLevel,
+                        onBegin = actions.onVoiceBegin,
+                        onRelease = actions.onVoiceRelease,
+                        onCancel = actions.onVoiceCancel,
+                    )
+                }
             }
             // Stop is the same action the composer's Send button turns into
             // while an answer streams: cancelling the call stops generation.

@@ -159,4 +159,58 @@ class AuditPlumbingTest {
             home.contains("state.link == LinkState.CONNECTED && !state.pictureBusy"),
         )
     }
+
+    // ------------------------------------------------- the talk button ---
+
+    @Test
+    fun theTalkButtonsOwnCaptureStateCannotRestartTheGesture() {
+        val button = source("ui/parts/VoiceButton.kt")
+        // The owner's report of 2026-10-13 - "the mic button ... doesnt work
+        // if i tap it or hold it down" - was this: the pointerInput was keyed
+        // on `capturing`, and `onBegin()` makes VoiceSession set CAPTURING
+        // within a frame, so the key change RESTARTED the gesture; the
+        // restarted gesture's `finally` saw no release and ran the teardown
+        // branch, calling onCancel() straight after onBegin(). The keys are
+        // `enabled` only now, and the flag is read live at finger-down.
+        assertTrue(
+            "the talk button's gesture is not keyed on `enabled` alone",
+            button.contains(".pointerInput(enabled)"),
+        )
+        assertFalse(
+            "`capturing` is a pointerInput key again - the gesture will restart and cancel itself",
+            Regex("""pointerInput\([^)]*capturing""").containsMatchIn(button),
+        )
+        assertTrue(
+            "`capturing` is not read through rememberUpdatedState",
+            button.contains("rememberUpdatedState(capturing)"),
+        )
+        assertTrue(
+            "the gesture does not read the live capture state at finger-down",
+            button.contains("capturingNow.value"),
+        )
+        assertTrue(
+            "the release decision is not the pure VoicePress.release",
+            button.contains("VoicePress.release("),
+        )
+        // The cancel-on-teardown path is kept: a gesture disposed with no
+        // release must still cancel, never send.
+        assertTrue(
+            "a torn-down gesture no longer cancels",
+            button.contains("VoicePress.Release.CANCEL -> currentOnCancel.value()"),
+        )
+    }
+
+    @Test
+    fun fullScreensMicrophoneIsGatedOnThePcOfferingIt() {
+        val home = source("ui/screens/HomeScreen.kt")
+        val voiceBar = after(home, "private fun VoiceBar(")
+        assertTrue(
+            "Full screen draws its microphone for a PC that has not offered push-to-talk",
+            voiceBar.contains("if (state.voiceOffered) {"),
+        )
+        assertTrue(
+            "Full screen's microphone is enabled without the PC's own voice offer",
+            voiceBar.contains("enabled = state.voiceOffered &&"),
+        )
+    }
 }
