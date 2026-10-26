@@ -715,10 +715,11 @@ Jarvis, and therefore stops the phone from reaching anything.
 
 **What it does if Jarvis crashes.** With that switch on, the desktop app
 checks every 15 seconds on the Jarvis it started. If Jarvis has crashed, or
-has not answered for about 45 seconds, the app restarts it - at most 3 times
-in 10 minutes. After that it stops trying and shows one notification saying
-so; see "When something goes wrong", below, for what to do then. A Jarvis
-you started yourself in PowerShell is never watched or restarted.
+has not answered for about two and a half minutes, the app restarts it - at
+most 3 times in 10 minutes. After that it stops trying and shows one
+notification saying so; see "When something goes wrong", below, for what to
+do then. A Jarvis you started yourself in PowerShell is never watched or
+restarted.
 
 ### 2.6 Set up Windows Hello (a PIN is enough)
 

@@ -90,16 +90,21 @@ const REAP_TIMEOUT: Duration = Duration::from_secs(2);
 /// slow to boot, and the event stream will connect whenever it is ready.
 const STARTUP_WAIT: Duration = Duration::from_secs(25);
 /// Timeout for the port probe and the shutdown request.
-const PROBE_TIMEOUT: Duration = Duration::from_millis(1_500);
+///
+/// 5 s, not 1.5 s (owner's decision, 2026-10-26). A cold first probe costs
+/// about 3.0 s because `hello()` builds the voice sessions, so 1.5 s made a
+/// genuinely-answering backend look unreachable.
+const PROBE_TIMEOUT: Duration = Duration::from_millis(5_000);
 
 /// How often the watchdog (feasibility I98) looks at the backend it started.
 const WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
 /// Consecutive failed `/api/version` checks, on a process that has NOT
 /// exited, before it counts as **hung** rather than merely slow to answer
-/// one request. `HANG_THRESHOLD * WATCHDOG_INTERVAL` = 45s — long enough
-/// that a slow model load or a heavy turn already in flight is never
-/// mistaken for a hang.
-const HANG_THRESHOLD: u32 = 3;
+/// one request. `HANG_THRESHOLD * WATCHDOG_INTERVAL` = 150s (10 x 15s,
+/// owner's decision, 2026-10-26) — long enough that a slow model load or a
+/// heavy turn already in flight is never mistaken for a hang. The 45 s this
+/// replaced (3 x 15s) cut off a real 37-38 s answer on 2026-10-26.
+const HANG_THRESHOLD: u32 = 10;
 /// The cap feasibility idea I98 asks for in so many words: "at most 3
 /// restarts in 10 minutes, then stop and say so clearly ... never silently
 /// loop forever."
@@ -937,7 +942,7 @@ impl WatchdogState {
 ///   [`ensure_backend`]'s own comment on exactly this case, which this
 ///   function relies on to do the actual restart.)
 /// - **hung** — the process has NOT exited, but has failed to answer
-///   `/api/version` for `HANG_THRESHOLD` checks in a row (45s).
+///   `/api/version` for `HANG_THRESHOLD` checks in a row (150s).
 ///
 /// **The cap**: at most `MAX_RESTARTS` restarts in any trailing
 /// `RESTART_WINDOW`. Past it, this stops trying for the rest of this run of
@@ -1226,6 +1231,24 @@ mod tests {
         assert_eq!(w.bump_unreachable(), 3);
         w.reset_unreachable();
         assert_eq!(w.bump_unreachable(), 1);
+    }
+
+    // -- how long the watchdog waits (owner's decision, 2026-10-26) --------
+
+    /// Pins the patience itself, because the numbers ARE the fix. On
+    /// 2026-10-26 a real answer ("tell me about the Galaxy") ran 37-38 s and
+    /// was restarted mid-turn by a watchdog that only allowed 45 s; a cold
+    /// first probe costs about 3.0 s because `hello()` builds the voice
+    /// sessions, so the old 1.5 s probe also read a live backend as gone.
+    #[test]
+    fn the_watchdog_waits_150_seconds_before_calling_the_backend_hung() {
+        // A slow answer is not a hang: ten consecutive misses, one every 15 s.
+        assert_eq!(WATCHDOG_INTERVAL, Duration::from_secs(15));
+        assert_eq!(HANG_THRESHOLD, 10);
+        let worst_case = WATCHDOG_INTERVAL * HANG_THRESHOLD;
+        assert_eq!(worst_case, Duration::from_secs(150));
+        // And one probe gets 5 s, not 1.5 s.
+        assert_eq!(PROBE_TIMEOUT, Duration::from_millis(5_000));
     }
 }
 
