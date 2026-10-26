@@ -221,7 +221,13 @@ object GalaxyPicture {
         val namesByFact = HashMap<Long, MutableList<String>>()
         for (e in kept) {
             for (f in e.factIds) {
-                namesByFact.getOrPut(f) { ArrayList() }.add(e.id)
+                // One name counts ONCE per fact, however many times that id is
+                // repeated on it - the desktop's buildEntityGraph does the same
+                // (`if (!names.includes(n.id)) names.push(n.id)`). Without
+                // this, a repeated id would make a name its own partner and
+                // inflate both the share count and the dot's size.
+                val names = namesByFact.getOrPut(f) { ArrayList() }
+                if (e.id !in names) names.add(e.id)
             }
         }
         val shared = LinkedHashMap<Pair<String, String>, Int>()

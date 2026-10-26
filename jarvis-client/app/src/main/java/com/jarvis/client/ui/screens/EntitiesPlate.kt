@@ -111,6 +111,14 @@ internal fun PeopleAndThingsSection(
     var missing by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
     var openId by remember { mutableStateOf<String?>(null) }
+    // Whether the name on screen was opened from a dot of the PICTURE. The
+    // picture draws every name, while a kind chip or the search narrows the
+    // list below it (the picture is not filtered - the owner asked to see the
+    // Galaxy, not his filter). So a picture-opened name has its connections
+    // read from the UNFILTERED list: the dot's "shares facts with N names" and
+    // the panel's "Shares facts with" line must say the same number, and a
+    // filter must not silently drop a connection the dot promised.
+    var openedFromPicture by remember { mutableStateOf(false) }
     // A1 (2026-10-21): the kind chips, the search box and the as-of chips.
     // Every one of them is a VIEW of the one list this plate already reads: the
     // chip and the search filter in memory, and the as-of chips narrow each
@@ -211,7 +219,10 @@ internal fun PeopleAndThingsSection(
             if (asOfEpoch == null && !band.isNullOrEmpty()) {
                 Kicker(Entities.GALAXY_TITLE)
                 Gap(2)
-                GalaxyPicture(band, onOpen = { openId = it })
+                GalaxyPicture(band, onOpen = {
+                    openedFromPicture = true
+                    openId = it
+                })
                 Gap(8)
                 GalaxyBand(band)
                 Gap(8)
@@ -300,7 +311,10 @@ internal fun PeopleAndThingsSection(
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
                 open != null -> {
-                    Quiet(Entities.BACK, color = chrome.textMid, onClick = { openId = null })
+                    Quiet(Entities.BACK, color = chrome.textMid, onClick = {
+                        openedFromPicture = false
+                        openId = null
+                    })
                     if (asOf) {
                         val asOfOpen = shown.firstOrNull { it.id == open.id }
                         if (asOfOpen == null) {
@@ -316,7 +330,12 @@ internal fun PeopleAndThingsSection(
                             )
                         }
                     } else {
-                        EntityFacts(open, shown, perFact)
+                        // A dot promised "shares facts with N names" when it was
+                        // tapped; keep that promise by reading the connections
+                        // over every name, not over the filtered list (a list
+                        // row opens against what the list is showing, as it
+                        // always did).
+                        EntityFacts(open, if (openedFromPicture) all.orEmpty() else shown, perFact)
                     }
                 }
                 else -> {
@@ -339,7 +358,10 @@ internal fun PeopleAndThingsSection(
                             Quiet(
                                 if (asOf) Entities.asOfRowLine(e, asOfDate) else Entities.rowLine(e),
                                 color = chrome.textHi,
-                                onClick = { openId = e.id },
+                                onClick = {
+                                    openedFromPicture = false
+                                    openId = e.id
+                                },
                             )
                             if (!asOf) {
                                 Entities.sharesLine(shares[e.id] ?: 0)?.let {

@@ -46,6 +46,13 @@ import kotlin.math.sqrt
  * a past as-of date hides it with the band (whose counts are then that date's),
  * and it adds no control, write, route, drag or animation of its own.
  *
+ * Three more close the gaps a mutation review found: the ranking's three
+ * tie-breaks are each the only answer for a pair built so the id, the input
+ * order and the case-insensitive comparison all point the other way; a fact id
+ * repeated on one name counts once (the desktop's `buildEntityGraph` rule); and
+ * a name opened from a dot reads its connections over the unfiltered list, so
+ * the number the dot announced is the number the panel shows.
+ *
  * NOT-TESTABLE here (no emulator): what the picture actually looks like on a
  * phone, and how a tap feels. Those stay field-test rows - never a pass.
  */
@@ -501,18 +508,24 @@ class GalaxyPictureTest {
         assertTrue("the band is outside the as-of guard", block.contains("GalaxyBand(band)"))
 
         // 4. Exactly one call site, so no second picture can be added outside
-        // the guarded branch later.
-        assertEquals(1, Regex("GalaxyPicture\\(band").findAll(plate).count())
+        // the guarded branch later. Counted over every `GalaxyPicture(` call,
+        // not just the one that passes `band`: a second call with any other
+        // list would draw a second picture around the gate.
+        assertEquals(1, Regex("GalaxyPicture\\(").findAll(plate).count())
 
         // 5. A tap opens the name's EXISTING facts/connections panel - the same
         // `openId` the list rows set - instead of a new screen or a new card.
         assertTrue(
             "a dot does not open the name's existing facts view",
-            plate.contains("GalaxyPicture(band, onOpen = { openId = it })"),
+            plate.contains("GalaxyPicture(band, onOpen = {"),
+        )
+        assertTrue(
+            "a dot does not set the same openId the list rows set",
+            plate.contains("openId = it"),
         )
         assertTrue(
             "the plate no longer draws the existing facts panel for the opened name",
-            plate.contains("EntityFacts(open, shown, perFact)"),
+            plate.contains("EntityFacts(open,"),
         )
     }
 
@@ -571,6 +584,135 @@ class GalaxyPictureTest {
         assertTrue(
             "the picture hides names without saying so",
             plate.contains("Entities.showingLine(picture.dots.size, picture.total)"),
+        )
+    }
+
+    // ------------------------------------------- the ranking's tie-breaks ---
+
+    /**
+     * The desktop's ranking ends `facts, newest fact id, name A-Z, entity id`,
+     * and the last three are what this test exists for: the `names` fixture case
+     * has no ties at all, and a port that dropped the tie-breaks would still
+     * match it. Every pair below is arranged so that the tie-break being tested
+     * is the ONLY rule that gives the expected answer (the ids, the input order
+     * or the case-insensitive comparison all point the other way), so deleting
+     * one `.thenBy` line fails here - found by the Lead's mutation review.
+     */
+    @Test
+    fun theRankingTieBreaksArePinnedNotAccidental() {
+        // 1. Equal facts and equal newest fact id: the NAME decides, A-Z and
+        // case-insensitively first ("apple" before "Zed"), whatever order the
+        // PC sent. The ids sort the other way, so the id cannot stand in for it.
+        val zed = Entities.Entity("1", "Zed", "person", listOf(1L))
+        val apple = Entities.Entity("9", "apple", "person", listOf(1L))
+        assertEquals(
+            listOf("apple", "Zed"),
+            GalaxyPicture.ordered(listOf(zed, apple)).map { it.name },
+        )
+        assertEquals(
+            listOf("apple", "Zed"),
+            GalaxyPicture.ordered(listOf(apple, zed)).map { it.name },
+        )
+
+        // 2. Names equal but for case: the exact name breaks it ("Amy" before
+        // "amy"), and the ids sort the other way again.
+        val lower = Entities.Entity("1", "amy", "person", listOf(5L))
+        val upper = Entities.Entity("9", "Amy", "person", listOf(5L))
+        assertEquals(
+            listOf("Amy", "amy"),
+            GalaxyPicture.ordered(listOf(lower, upper)).map { it.name },
+        )
+        assertEquals(
+            listOf("Amy", "amy"),
+            GalaxyPicture.ordered(listOf(upper, lower)).map { it.name },
+        )
+
+        // 3. Facts, newest fact id and name all equal: the numeric entity id
+        // decides - the last tie-break, so the order never falls back to the
+        // order the PC happened to send. Sent both ways on purpose.
+        val nine = Entities.Entity("9", "Same", "person", listOf(7L))
+        val two = Entities.Entity("2", "Same", "person", listOf(7L))
+        assertEquals(
+            listOf("2", "9"),
+            GalaxyPicture.ordered(listOf(nine, two)).map { it.id },
+        )
+        assertEquals(
+            listOf("2", "9"),
+            GalaxyPicture.ordered(listOf(two, nine)).map { it.id },
+        )
+
+        // The same order is what the picture actually uses: dots, radii and
+        // positions all come from `ordered`, not from the PC's order.
+        assertEquals(
+            listOf("apple", "Zed"),
+            GalaxyPicture.build(listOf(zed, apple)).dots.map { it.name },
+        )
+    }
+
+    // ------------------------------------------------- repeated fact ids ---
+
+    @Test
+    fun aRepeatedFactIdOnOneNameJoinsNothingTwice() {
+        // The app's parser de-duplicates fact ids, but this is the pure picture
+        // code, and the desktop's `buildEntityGraph` counts a name ONCE per
+        // fact (`if (!names.includes(n.id)) names.push(n.id)`). A repeated id
+        // must not make a name its own partner, and must not inflate a line's
+        // strength or a dot's shared count.
+        val repeated = Entities.Entity("a", "Ana", "person", listOf(7L, 7L))
+        val once = Entities.Entity("b", "Ben", "person", listOf(7L))
+        val picture = GalaxyPicture.build(listOf(repeated, once))
+
+        assertEquals("a repeated fact made a second line", 1, picture.edges.size)
+        val edge = picture.edges.first()
+        assertEquals("a", edge.source)
+        assertEquals("b", edge.target)
+        assertEquals("the repeated fact must count once", 1, edge.shared)
+        assertTrue(
+            "a name was made its own partner",
+            picture.edges.none { it.source == it.target },
+        )
+        assertEquals(1, picture.dots.first { it.id == "a" }.shared)
+        assertEquals(1, picture.dots.first { it.id == "b" }.shared)
+    }
+
+    // ------------------------- a name opened from a dot, with a filter on ---
+
+    @Test
+    fun aPictureOpenedNameKeepsTheDotsConnectionPromise() {
+        val plate = repoFile(main + "ui/screens/EntitiesPlate.kt").readText()
+
+        // The picture draws every name; a kind chip or the search narrows the
+        // LIST below it. A name opened from a dot must keep the number the dot
+        // announced ("shares facts with N names"), so its connections are read
+        // over the unfiltered list - otherwise the panel could show fewer
+        // connections than the dot promised, and a filter could drop one.
+        assertTrue(
+            "the plate does not remember that a dot opened the name",
+            plate.contains("var openedFromPicture by remember"),
+        )
+        assertTrue(
+            "a picture-opened name reads its connections from the filtered list",
+            plate.contains("if (openedFromPicture) all.orEmpty() else shown"),
+        )
+        assertTrue(
+            "a dot does not mark the name it opened",
+            plate.contains("openedFromPicture = true"),
+        )
+        assertTrue(
+            "opening a list row does not clear the picture-opened mark",
+            plate.contains("openedFromPicture = false"),
+        )
+
+        // The hint must not promise that a filtered list still SHOWS every
+        // name: it says the list HOLDS every name and that a filter can narrow
+        // it - which is true at every moment.
+        assertFalse(
+            "the picture hint promises a filtered list shows every name",
+            Entities.PICTURE_HINT.contains("Every name is also in the list below"),
+        )
+        assertTrue(
+            "the picture hint no longer says where the names are",
+            Entities.PICTURE_HINT.contains("list below holds every name"),
         )
     }
 

@@ -30,9 +30,10 @@ import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 
-/** How tall the picture is. A square-ish picture on a thumb-width plate: tall
- *  enough for a 48-name halo to stay apart, short enough to leave the band and
- *  the list reachable without scrolling to them. */
+/** How tall the picture is: a square-ish picture on a thumb-width plate, tall
+ *  enough for a 48-name halo to stay legible. Whether the band and the list
+ *  need a scroll on a given phone is a field-test question, not a promise made
+ *  here. */
 private val PICTURE_HEIGHT = 264.dp
 
 /** Air between the outermost dot and the plate's own edge. */
@@ -69,7 +70,8 @@ private val DOT_TARGET = 48.dp
  * the caption says "Showing 48 of 312" when it does.
  *
  * **TalkBack.** No name is drawn as text on the canvas - at thumb size a 32-name
- * halo is about 21dp between neighbours, where labels would collide into an
+ * halo is about 21 layout units apart (roughly 18dp after the fit on the
+ * 264dp-tall picture as it is sized here), where labels would collide into an
  * unreadable smear. Instead every dot has a real semantics node over it that
  * announces the same line the band uses ([Entities.galaxyNameLine]) and opens
  * the name when double-tapped, so the picture is not a surface only a sighted

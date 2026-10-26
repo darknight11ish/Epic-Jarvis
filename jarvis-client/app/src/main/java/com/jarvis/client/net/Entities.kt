@@ -463,7 +463,11 @@ object Entities {
     // picture's graph is [GalaxyPicture], worked out from the same
     // /api/memory/entities answer this list already holds (no new route).
     const val PICTURE = "The Galaxy picture"
-    const val PICTURE_HINT = "Tap a dot to open that name. Every name is also in the list below."
+    // "The list below holds every name" is true; "is also in the list below
+    // (visible)" is not while a kind chip or the search narrows it, so the
+    // hint says which is which. The picture itself is never filtered.
+    const val PICTURE_HINT =
+        "Tap a dot to open that name. The list below holds every name; a filter or search can narrow it."
     const val OPEN_NAME = "Open {name}"
 
     /** What TalkBack hears for the whole picture: what it is, how much it

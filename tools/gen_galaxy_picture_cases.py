@@ -82,12 +82,20 @@ def case_cap() -> dict:
 
 
 def case_thirteen() -> dict:
-    """Thirteen names in ONE fact: a list, and the desktop's rule joins nothing."""
+    """Thirteen names in ONE fact: a list, and the desktop's rule joins nothing.
+
+    Deliberately hostile to a lazy port: every name ties on facts and on the
+    newest fact id, the NAMES sort A-Z while the IDS sort the other way, and
+    the list is sent in reverse. So this case is only reproduced by the
+    desktop's name tie-break - a port that quietly relies on the input order,
+    or on the entity id, cannot match it. That is what makes it the fixture's
+    pin for `orderedEntities`' `a.label.localeCompare(b.label)` line.
+    """
     return {
         "name": "thirteen",
         "entities": [
-            {"id": str(i), "name": "Many %02d" % i, "kind": "person", "fact_ids": [7000]}
-            for i in range(1, 14)
+            {"id": str(100 - i), "name": "Many %02d" % i, "kind": "person", "fact_ids": [7000]}
+            for i in range(13, 0, -1)
         ],
     }
 
