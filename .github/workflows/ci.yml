@@ -255,6 +255,13 @@ jobs:
       # is the version requirements.lock pins for Python 3.12 and the only
       # release that fixes the 24 advisories Pillow 12.3.0 carried (2026-10-21).
       - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0
+      # Fail fast (2026-10-25): this generator check used to sit after the
+      # suites, in the "Job list" step, so a stale backend/tasks.patch was
+      # reported only after ~35 minutes of suites. It needs nothing from those
+      # suites and nothing from the owner's PC, so it runs before them; the
+      # two contract checks that shared its step stay where they are.
+      - name: Task patch is what its generator builds (fail fast)
+        run: python tools/gen_tasks_patch.py --check
       - name: Backend suites (the ones that need no file from the owner's PC)
         # The FAILING SUITE NAMES are the useful part of a red run, and they
         # were only in a thirteen-minute log - which needs a signed-in browser
@@ -375,7 +382,6 @@ jobs:
       - name: Job list - both apps' contract matches jarvis_tasks.py
         run: |
           python tools/gen_tasks_cases.py --check
-          python tools/gen_tasks_patch.py --check
           node jarvis-desktop/tests/job-list.mjs
       # picture-card.patch is anchored on the owner's own lines just before the
       # socket is built, and its generator reads that anchor back out of
