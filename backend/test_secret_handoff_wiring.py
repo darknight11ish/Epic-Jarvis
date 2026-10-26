@@ -210,6 +210,47 @@ def t_a_non_password_target_cannot_raise_a_card():
           "secret" not in json.dumps(h.sent[1]).lower(), h.sent)
 
 
+def t_the_create_refusal_names_the_inner_reason_but_never_the_body():
+    """A host caller must be able to tell "nothing is focused" from "the host
+    could not measure at all" - the difference that hid a per-thread COM bug on
+    2026-10-26. The reason is a safe E_* code (or the exception type), and the
+    refusal still never echoes the request body."""
+    reset()
+    saved = U.secret_handoff_focused_descriptor
+    U.secret_handoff_focused_descriptor = lambda: (_ for _ in ()).throw(
+        U.UiaMeasurementError("E_UIA_READ_FAIL",
+                              "the focused control could not be read (OSError)"))
+    try:
+        h, reads = post(W.CREATE_PATH, {"purpose": "raise it"})
+    finally:
+        U.secret_handoff_focused_descriptor = saved
+    body = json.dumps(h.sent[1]).lower() if h.sent else ""
+    check("create: the refusal carries the safe reason code",
+          h.sent and h.sent[0] == 409
+          and isinstance(h.sent[1], dict)
+          and h.sent[1].get("reason_code") == "E_UIA_READ_FAIL", h.sent)
+    check("create: ... and the inner sentence, never the request body",
+          "could not be read" in body and "purpose" not in body
+          and "secret" not in body, h.sent)
+
+
+def t_the_create_refusal_falls_back_to_the_exception_type():
+    """A failure with no reason code (e.g. the engine's own RuntimeError) still
+    gives the caller a machine-readable tag rather than nothing."""
+    reset()
+    saved = U.secret_handoff_focused_descriptor
+    U.secret_handoff_focused_descriptor = lambda: (_ for _ in ()).throw(
+        RuntimeError("the focused control is not password-masked"))
+    try:
+        h, reads = post(W.CREATE_PATH, {"purpose": "x"})
+    finally:
+        U.secret_handoff_focused_descriptor = saved
+    check("create: an exception with no reason code still names its type",
+          h.sent and h.sent[0] == 409
+          and isinstance(h.sent[1], dict)
+          and h.sent[1].get("reason_code") == "RuntimeError", h.sent)
+
+
 def t_create_returns_the_two_boxes_and_no_secret():
     reset()
     saved = U.secret_handoff_focused_descriptor
