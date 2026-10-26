@@ -2229,6 +2229,14 @@ $SHIPPED = @(
 # before (backend/_where.py's SHIPPED list has the same entry, and
 # backend/test_shipped_modules.py fails if the two disagree).
 'jarvis_private_chat.py'
+# The offline product-check engine, slice 1 (2026-10-25, the owner's
+# product-research request; docs/DESIGN-PRODUCT-RESEARCH.md): tolerant review
+# records, evidence-only signals, validation of the local model's aspects and
+# quotes, and a reasons-based report. PURE - no network, no subprocess, no
+# route, no tool and no app surface; nothing imports it yet, so a backend
+# without it runs exactly as before (backend/_where.py's SHIPPED list has the
+# same entry, and backend/test_shipped_modules.py fails if the two disagree).
+'jarvis_product_research.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
