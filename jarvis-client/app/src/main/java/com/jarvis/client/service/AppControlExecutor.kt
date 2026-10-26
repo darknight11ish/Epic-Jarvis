@@ -23,7 +23,8 @@ import kotlinx.coroutines.withContext
  *
  * NOTHING about a screen or typed text is logged. A successful [Reply.Done]
  * means "the approved action was performed", never a claim about what the app
- * then did.
+ * then did. A refusal may carry a stable code (`ui_tree_blank`,
+ * `text_not_taken`) beside its plain sentence.
  */
 object AppControlExecutor {
 
@@ -36,7 +37,7 @@ object AppControlExecutor {
         data class Stopped(val sentence: String) : Reply
 
         /** Nothing ran, and the reason is one of the fixed refusals. */
-        data class Refused(val sentence: String) : Reply
+        data class Refused(val sentence: String, val code: String = "") : Reply
     }
 
     /** Asked of every poll; set by [stop] and never cleared, so a stop is final for that run. */
@@ -62,9 +63,16 @@ object AppControlExecutor {
         val store = AppControlStore(context)
         val service = JarvisAccessibilityService.instance()
 
-        // The phone's own checks, before anything is read or sent.
-        val foreground = withContext(Dispatchers.Main.immediate) {
-            service?.snapshot()?.app.orEmpty()
+        // The phone's own checks, before anything is read or sent. ONE read of
+        // the screen answers both "which app is in front" and "is there
+        // anything readable on it", so a blank screen is named as such instead
+        // of being sent to the PC as an empty one.
+        val read = withContext(Dispatchers.Main.immediate) { service?.readScreen() }
+        val unreadable = read as? JarvisAccessibilityService.Read.Unreadable
+        val foreground = when (read) {
+            is JarvisAccessibilityService.Read.Seen -> read.snapshot.app
+            is JarvisAccessibilityService.Read.Unreadable -> read.app
+            null -> ""
         }
         val refusal = AppControl.whyNotAllowed(
             optionOn = store.optionOn(),
@@ -74,6 +82,11 @@ object AppControlExecutor {
             stale = JarvisRuntime.stale.value,
             serviceConnected = service != null,
         )
+        // A connected service that cannot read the screen is not "no service":
+        // say the honest thing about the screen instead.
+        if (refusal == AppControl.Why.NO_SERVICE && unreadable != null) {
+            return Reply.Refused(unreadable.sentence, unreadable.code)
+        }
         if (refusal != null) return Reply.Refused(AppControl.said(refusal))
         if (!AppControl.ACTIONS.contains(plan.action)) {
             return Reply.Refused(AppControl.said(AppControl.Why.VERB))
@@ -92,8 +105,12 @@ object AppControlExecutor {
             return Reply.Refused(AppControl.said(AppControl.Why.PASSWORD))
         }
 
-        val snapshot = withContext(Dispatchers.Main.immediate) { service?.snapshot() }
-            ?: return Reply.Refused(AppControl.SNAPSHOT_EMPTY)
+        val snapshot = when (read) {
+            is JarvisAccessibilityService.Read.Seen -> read.snapshot
+            null -> return Reply.Refused(AppControl.SNAPSHOT_EMPTY)
+            is JarvisAccessibilityService.Read.Unreadable ->
+                return Reply.Refused(read.sentence, read.code)
+        }
         val app = snapshot.app
         if (!store.isAllowed(app)) return Reply.Refused(AppControl.said(AppControl.Why.NOT_LISTED))
         val appName = store.entries().firstOrNull { it.packageName == app }?.label ?: store.labelOf(app)
@@ -137,21 +154,36 @@ object AppControlExecutor {
         if (wantText.isEmpty()) {
             return Reply.Refused("Type what you want Jarvis to do on this screen first.")
         }
-        // The phone's own checks, before anything is read or sent.
-        val foreground = withContext(Dispatchers.Main.immediate) {
-            service?.snapshot()?.app.orEmpty()
+        // The phone's own checks, before anything is read or sent. As in
+        // [start], ONE read answers both the app and "is there anything
+        // readable here", so a blank screen is named rather than planned from.
+        val read = withContext(Dispatchers.Main.immediate) { service?.readScreen() }
+        val unreadable = read as? JarvisAccessibilityService.Read.Unreadable
+        val foreground = when (read) {
+            is JarvisAccessibilityService.Read.Seen -> read.snapshot.app
+            is JarvisAccessibilityService.Read.Unreadable -> read.app
+            null -> ""
         }
-        AppControl.whyNotAllowed(
+        val refusal = AppControl.whyNotAllowed(
             optionOn = store.optionOn(),
             android = store.androidState(),
             allowed = store.entries(),
             foreground = foreground,
             stale = JarvisRuntime.stale.value,
             serviceConnected = service != null,
-        )?.let { return Reply.Refused(AppControl.said(it)) }
+        )
+        // A connected service that cannot read the screen is not "no service".
+        if (refusal == AppControl.Why.NO_SERVICE && unreadable != null) {
+            return Reply.Refused(unreadable.sentence, unreadable.code)
+        }
+        refusal?.let { return Reply.Refused(AppControl.said(it)) }
 
-        val snapshot = withContext(Dispatchers.Main.immediate) { service?.snapshot() }
-            ?: return Reply.Refused(AppControl.SNAPSHOT_EMPTY)
+        val snapshot = when (read) {
+            is JarvisAccessibilityService.Read.Seen -> read.snapshot
+            null -> return Reply.Refused(AppControl.SNAPSHOT_EMPTY)
+            is JarvisAccessibilityService.Read.Unreadable ->
+                return Reply.Refused(read.sentence, read.code)
+        }
         val app = snapshot.app
         if (app.isBlank()) return Reply.Refused(AppControl.SNAPSHOT_EMPTY)
         val body = AppControl.planBody(store.entries(), wantText, snapshot)
@@ -201,21 +233,28 @@ object AppControlExecutor {
                 )
             }
             delay(POLL_MS)
-            val fresh = withContext(Dispatchers.Main.immediate) { service?.snapshot() }
-            val (stepStatus, stepBody) = if (fresh == null) {
-                // The screen went away (locked, another window): ask without a snapshot.
+            val fresh = withContext(Dispatchers.Main.immediate) { service?.readScreen() }
+            val freshSnapshot = (fresh as? JarvisAccessibilityService.Read.Seen)?.snapshot
+            val (stepStatus, stepBody) = if (freshSnapshot == null) {
+                // The screen went away (locked, another window, or nothing
+                // readable on it): ask without a snapshot.
                 0 to null
             } else {
-                JarvisRuntime.api.appControlStep(AppControl.stepBody(runId, fresh))
+                JarvisRuntime.api.appControlStep(AppControl.stepBody(runId, freshSnapshot))
             }
             when (val reply = AppControl.parseStep(stepStatus, stepBody)) {
                 AppControl.StepReply.Pending -> continue
                 AppControl.StepReply.RouteMissing -> return Reply.Refused(AppControl.NO_ROUTE)
                 AppControl.StepReply.Unknown -> {
-                    if (fresh == null) {
-                        // No snapshot to send: treat as a changed screen and stop.
+                    if (freshSnapshot == null) {
+                        // No snapshot to send: the screen is not the one the card
+                        // named, so stop - naming a blank screen as blank.
                         bestEffortStop(runId)
-                        return Reply.Stopped(AppControl.said(AppControl.Why.TARGET_CHANGED))
+                        val unreadable = fresh as? JarvisAccessibilityService.Read.Unreadable
+                        return Reply.Stopped(
+                            unreadable?.sentence
+                                ?: AppControl.said(AppControl.Why.TARGET_CHANGED),
+                        )
                     }
                     continue
                 }
@@ -249,7 +288,7 @@ object AppControlExecutor {
                         }
                         is JarvisAccessibilityService.Outcome.Refused -> {
                             reportResult(runId, failed = true)
-                            return Reply.Refused(outcome.sentence)
+                            return Reply.Refused(outcome.sentence, outcome.code)
                         }
                     }
                 }
