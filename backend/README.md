@@ -417,9 +417,16 @@ somewhere else.
 suites look in their own folder, which is right in the dev container — the
 modules are symlinked in there — and wrong everywhere else. CI runs them
 with `backend/run_suites.py`, against a copy of every module this repository
-ships; the suites that need your own `jarvis_hud.py`, `jarvis_gate.py` or
-`jarvis_extract.py` are skipped there, by name, so your PC is the only place
-those run.
+ships; the suites that need your own `jarvis_hud.py`, `jarvis_gate.py`,
+`jarvis_extract.py` or `jarvis_models.py` are skipped there, by name, so your
+PC is the only place those run.
+
+Four suites that open a real, VISIBLE browser window (`test_chatbot_sites.py`,
+`test_chatbot_gemini.py`, `test_handoff.py`, `test_support_widget.py`) are a
+second kind of skip: they are skipped by name, with the reason, on a default
+run unless `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1` is set, and a skip is never
+a pass. CI sets that opt-in so their code-only checks still run there (no CI
+runner has Playwright installed, so their browser halves skip as before).
 
 **The runner is hermetic by default (2026-10-21, Ruling 11).** `backend/run_suites.py`
 now **ignores the ambient `JARVIS_BACKEND`** unless it is asked for explicitly: a plain run
