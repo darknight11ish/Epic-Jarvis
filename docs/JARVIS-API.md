@@ -398,8 +398,9 @@ a client:
   rather than being waited out. (A queue that cannot be read is not treated as
   a card that went away; the prompt then ends at its deadline, and the read
   after it refuses the approval.) The wait for the one-prompt-at-a-time lock is
-  bounded too - a whole prompt plus the child's ten seconds at most - and a
-  card that never gets its turn is a 409, not a request that hangs. A clean
+  bounded too - a whole prompt, the ten seconds its child gets to answer after
+  its own deadline, and the cancel that follows, thirty seconds of slack in all -
+  and a card that never gets its turn is a 409, not a request that hangs. A clean
   backend shutdown asks a live prompt to close (`atexit`, through the child's
   stdin); a hard kill of the backend cannot, and the dialog then ends only at
   its deadline. A phone approval, or a card that is not risky, is not held.

@@ -182,11 +182,11 @@ _PROMPT_MAX = 180.0
 
 #: The ceiling on how long a request waits for the one-prompt-at-a-time lock
 #: before it is refused (2026-10-26 review). The prompt in front of it can last
-#: `_PROMPT_MAX`, and its child gets ten seconds to answer after its own
-#: deadline, so a whole prompt plus that slack is the longest honest wait for a
-#: card with no deadline of its own (a card WITH one waits only its own time -
-#: it cannot be prompted after it). `_PROMPT.acquire(-1)` waited for ever: one
-#: child that never answered held every later approval until the backend was
+#: `_PROMPT_MAX`; its child then gets ten seconds to answer after its own
+#: deadline (`_verify_windows`'s `proc.wait`), and the cancel that follows gets
+#: two more - so a whole prompt plus thirty seconds covers the worst legitimate
+#: hold with slack to spare. `_PROMPT.acquire(-1)` waited for ever: one child
+#: that never answered held every later approval until the backend was
 #: restarted. A card that has not had its turn is refused with the same 409 as
 #: one that ran out.
 _PROMPT_WAIT_MAX = _PROMPT_MAX + 30.0
@@ -197,6 +197,20 @@ _PROMPT_WAIT_MAX = _PROMPT_MAX + 30.0
 #: dialog is gone a moment after its card is, and cheap enough that the poll
 #: costs nothing: one queue read four times a second, only while a prompt is up.
 _WATCH_INTERVAL = 0.25
+
+
+def _wait_for_prompt(left: Optional[float]) -> float:
+    """How long a request may wait for the one-prompt-at-a-time lock.
+
+    A card with no deadline waits the whole `_PROMPT_WAIT_MAX`; a card with one
+    waits its own time left, because it can never be prompted after that - and
+    never more than `_PROMPT_WAIT_MAX`, which is the worst legitimate hold of
+    the prompt in front (2026-10-26 review: the cap used to be `_PROMPT_MAX`,
+    30 s shorter than the hold it was waiting behind, so a card could be
+    refused just as its turn arrived).
+    """
+    return _PROMPT_WAIT_MAX if left is None else min(left, _PROMPT_WAIT_MAX)
+
 
 # ---------------------------------------------------------------------------
 # Which approvals are risky - ONE rule, three places
@@ -752,8 +766,13 @@ class _LivePrompt:
     closes, and the child asks Windows to close the dialog.
     """
 
-    def __init__(self, proc):
+    def __init__(self, proc, token=None):
         self.proc = proc
+        #: Which approval raised this prompt. `None` when the prompt was not
+        #: raised by `approve_check` (a hand-run, or a test's stand-in). The
+        #: watcher matches on this so it can only ever cancel its OWN prompt
+        #: (2026-10-26 review).
+        self.token = token
         self.stop = threading.Event()
 
     def say(self, ask: dict) -> bool:
@@ -819,6 +838,38 @@ def _cancel_live_prompts() -> int:
     return len(live)
 
 
+#: Thread-local token for the approval that is raising a prompt right now.
+#: `approve_check` sets it around its `verify` call; `_verify_windows` reads it
+#: and tags the live prompt with it. A thread-local, not a module global,
+#: because the token belongs to one request (2026-10-26 review).
+_CURRENT_PROMPT = threading.local()
+
+
+def _prompt_token() -> Optional[object]:
+    """The token of the prompt this thread is raising, or None."""
+    return getattr(_CURRENT_PROMPT, "token", None)
+
+
+def _cancel_prompts_for(token) -> int:
+    """Ask only the prompts raised for ONE approval to close. Returns how many.
+
+    `_cancel_live_prompts` is for shutdown: everything closes. This is for the
+    card watcher, whose queue read can outlive `_PromptWatch.stop()`'s
+    two-second join - so by the time it reports "gone", the prompt lock may have
+    been released and the NEXT card's prompt may be the one on screen.
+    Cancelling by token means a stale watcher can only close the prompt it was
+    made for (2026-10-26 review). A token of None cancels nothing: an untagged
+    prompt was not raised by `approve_check`, so no watcher owns it.
+    """
+    if token is None:
+        return 0
+    with _LIVE_LOCK:
+        live = [p for p in _LIVE_PROMPTS if getattr(p, "token", None) is token]
+    for prompt in live:
+        prompt.cancel()
+    return len(live)
+
+
 #: The atexit hook itself, kept in a name so a test can check that importing
 #: this module really registers it.
 _SHUTDOWN_HOOK = atexit.register(_cancel_live_prompts)
@@ -871,7 +922,18 @@ def _verify_windows(message: str, timeout: float) -> str:
     child's death is not one (the 2026-10-26 measurement found the Windows
     dialog survives the process that asked for it). A timeout asks the child
     to cancel, gives it a moment, and only then kills it.
+
+    The prompt is tagged with the token of the approval raising it
+    (`_prompt_token`), so its watcher can cancel this prompt and no other.
     """
+    # THE PROMPT'S LIFETIME IS CAPPED HERE TOO (2026-10-26 review). The caller
+    # already passes at most `_PROMPT_MAX` and the child clamps what it is
+    # given; this is the third place, so no future caller can hand Windows a
+    # longer dialog than the documented bound.
+    try:
+        seconds = min(max(1.0, float(timeout)), _PROMPT_MAX)
+    except (TypeError, ValueError, OverflowError):
+        seconds = _PROMPT_MAX
     try:
         proc = _SPAWN(
             [sys.executable, "-I", str(Path(__file__).resolve()), "--hello"],
@@ -883,14 +945,14 @@ def _verify_windows(message: str, timeout: float) -> str:
         )
     except (OSError, subprocess.SubprocessError, ValueError):
         return FAILED_
-    live = _LivePrompt(proc)
+    live = _LivePrompt(proc, token=_prompt_token())
     with _LIVE_LOCK:
         _LIVE_PROMPTS.add(live)
     try:
-        if not live.say({"message": message, "timeout": float(timeout)}):
+        if not live.say({"message": message, "timeout": seconds}):
             return FAILED_
         try:
-            proc.wait(timeout=float(timeout) + 10.0)
+            proc.wait(timeout=seconds + 10.0)
         except subprocess.TimeoutExpired:
             live.cancel()               # a kill cannot close the prompt
             try:
@@ -1316,13 +1378,18 @@ class _PromptWatch:
     before it opened: let the card be denied, withdrawn or expire while the
     prompt was up, and the dialog stayed for the rest of that number - up to
     three minutes. The prompt is the child process's, and
-    `_cancel_live_prompts` is what asks it to close, so the watcher is a poll
-    of the card plus that same cancel.
+    `_cancel_prompts_for` is what asks THIS one to close, so the watcher is a
+    poll of the card plus that same cancel.
 
     Run in a thread from `approve_check`, which holds `_PROMPT` for as long as
-    its prompt is up - so every live prompt is this one, and asking them all
-    to close cannot touch another card's. A prompt that is already over when
-    the watcher looks is harmless: nothing is left in `_LIVE_PROMPTS`.
+    its prompt is up. Asking every live prompt to close would be safe while
+    that lock is held - but `stop()` joins for only two seconds, and a queue
+    read can outlive it. The lock is then released and the NEXT card's prompt
+    can be live when the stale watcher's read finally returns, so the watcher
+    is given its own approval's cancel (`cancel`, token-matched) and can never
+    close another card's prompt (2026-10-26 review). A prompt that is already
+    over when the watcher looks is harmless: the token matches nothing left in
+    `_LIVE_PROMPTS`.
 
     It cancels on what the QUEUE says, never on a read that failed: a locked
     database must not close a prompt the owner is looking at, and a watcher
@@ -1331,10 +1398,14 @@ class _PromptWatch:
     409 on it), so a queue this module cannot read still fails closed.
     """
 
-    def __init__(self, pending, request_id, interval: float = _WATCH_INTERVAL):
+    def __init__(self, pending, request_id, interval: float = _WATCH_INTERVAL,
+                 cancel: Optional[Callable[[], int]] = None):
         self.pending = pending
         self.request_id = request_id
         self.interval = interval
+        #: What closes the prompt this watcher owns. Default is the
+        #: shutdown-wide cancel; `approve_check` passes the token-scoped one.
+        self.cancel = cancel or _cancel_live_prompts
         self.done = threading.Event()      # the prompt is over
         self.gone = threading.Event()      # the card stopped waiting
         self.reads = 0
@@ -1348,9 +1419,11 @@ class _PromptWatch:
     def stop(self) -> None:
         """The prompt is over. Never leaves a thread behind that matters: the
         poll is a daemon, and a queue read that hangs is why the join is
-        bounded."""
+        bounded. A thread that never started is not joined (that would raise),
+        which keeps the call safe from any `start()` failure."""
         self.done.set()
-        self._thread.join(timeout=2.0)
+        if self._thread.ident is not None:
+            self._thread.join(timeout=2.0)
 
     def _still_waiting(self) -> bool:
         """True unless the card has definitely stopped waiting.
@@ -1374,7 +1447,7 @@ class _PromptWatch:
             if self.gone.is_set():
                 # Every pass, not once: the first look can beat the child
                 # process into _LIVE_PROMPTS, and the next still finds it.
-                _cancel_live_prompts()
+                self.cancel()
 
 
 def _signed_check(body, row, device) -> Optional[tuple]:
@@ -1458,12 +1531,12 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         # `acquire(-1)` - for ever - so one child that never answered held every
         # later approval until the backend was restarted. A card WITH a deadline
         # can never be prompted after it, so its own number is the whole useful
-        # wait; a card with no deadline waits at most a whole prompt plus the
-        # ten seconds its child gets to answer after its own deadline. Either
-        # way it is never more than _PROMPT_WAIT_MAX, and the answer on timeout
-        # is the same 409 both apps read as "no longer waiting".
-        wait = _PROMPT_WAIT_MAX if left is None else min(left, _PROMPT_MAX, _PROMPT_WAIT_MAX)
-        if not _PROMPT.acquire(timeout=wait):
+        # wait; a card with no deadline waits the worst legitimate hold of the
+        # prompt in front, `_PROMPT_WAIT_MAX` (`_wait_for_prompt`). The cap is
+        # `_PROMPT_WAIT_MAX`, NOT `_PROMPT_MAX`: the prompt in front can last up
+        # to the cap plus its child's answer time, so capping the wait 30 s
+        # shorter refused a card just as its turn arrived (2026-10-26 review).
+        if not _PROMPT.acquire(timeout=_wait_for_prompt(left)):
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
         try:
             # THE WAIT FOR THE PROMPT CAN BE LONGER THAN THE CARD HAS LEFT.
@@ -1494,19 +1567,30 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
             # the one read before the wait.
             action = live.get("action")
             # The prompt gets a concrete number of seconds either way, and it
-            # is never more than the card has left or _PROMPT_MAX. The prompt's
-            # only cancel WAS its own deadline, and that is still the bound a
-            # hard kill leaves; what the watcher below adds is that a card that
-            # stops waiting closes the dialog within a quarter of a second
-            # instead of being waited out. Three minutes is long enough to
-            # reach the PC and confirm. A card with no deadline still waits
-            # afterwards - the owner can press Approve again - so this bounds
-            # the dialog, not the decision.
+            # is never more than the card has left or _PROMPT_MAX. That number
+            # is what Windows is told, so it is the dialog's lifetime - the
+            # hard-kill bound as well as the ordinary one; what the watcher
+            # below adds is that a card which stops waiting closes the dialog
+            # within a quarter of a second instead of being waited out. Three
+            # minutes is long enough to reach the PC and confirm. A card with
+            # no deadline still waits afterwards - the owner can press Approve
+            # again - so this bounds the dialog, not the decision.
             left = min(left, _PROMPT_MAX) if left is not None else _PROMPT_MAX
-            watch = _PromptWatch(pending, request_id).start()
+            # THE WATCHER MAY ONLY CLOSE ITS OWN PROMPT (2026-10-26 review):
+            # `stop()` joins for two seconds, and a queue read slower than that
+            # outlives it - the lock is then released and the next card's
+            # prompt can be the one on screen. `token` tags the live prompt
+            # this call raises (`_prompt_token` is read by `_verify_windows`),
+            # and `_cancel_prompts_for` matches only that token.
+            token = object()
+            watch = _PromptWatch(pending, request_id,
+                                 cancel=lambda: _cancel_prompts_for(token))
+            _CURRENT_PROMPT.token = token
             try:
+                watch.start()
                 outcome = verify(approval_message(live), max(1.0, left))
             finally:
+                _CURRENT_PROMPT.token = None
                 watch.stop()
         finally:
             _PROMPT.release()

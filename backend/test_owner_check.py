@@ -609,9 +609,26 @@ def t_no_prompt_may_stay_up_longer_than_three_minutes():
     row = _risky_row("m1", expires_in=900)
     v = Verifier("confirmed")
     got = _run({"id": "m1"}, lambda: [row], v)
-    check("the cap is three minutes, and it is what the prompt is given",
-          bool(v.asked) and OC._PROMPT_MAX == 180 and v.asked[0][1] == OC._PROMPT_MAX,
-          (OC._PROMPT_MAX, v.asked))
+    check("the prompt is really given 180 s - a literal, not one constant "
+          "compared with itself",
+          bool(v.asked) and v.asked[0][1] == 180, v.asked)
+    check("...and the cap constant itself is pinned at three minutes",
+          OC._PROMPT_MAX == 180, OC._PROMPT_MAX)
+    # The cap is applied where the child is spawned too, so a future caller
+    # that passes 900 cannot hand Windows a quarter-hour dialog. Proved on a
+    # FAKE child that answers at once: no process starts, no dialog appears.
+    fake = FakeChild("confirmed")
+    fake.answered.set()
+    real_spawn = OC._SPAWN
+    OC._SPAWN = lambda *a, **k: fake
+    try:
+        out = OC._verify_windows("a card", 900)
+    finally:
+        OC._SPAWN = real_spawn
+    asked = [line for line in fake.written if "timeout" in line]
+    check("a caller that asks for 900 s still gives Windows 180 s",
+          out == "confirmed" and bool(asked)
+          and json.loads(asked[0]).get("timeout") == 180, (out, fake.written))
     v150 = Verifier("confirmed")
     got150 = _run({"id": "m2"}, lambda: [_risky_row("m2", expires_in=150)], v150)
     check("a card with 150 s left is unchanged (the smaller number wins)",
@@ -629,7 +646,18 @@ def t_a_card_that_stops_waiting_while_the_prompt_is_up_closes_it():
 
     Proved through the real child path (`_verify_windows`) on a FAKE child
     process: `_SPAWN` is replaced, so nothing starts and no dialog appears."""
-    check("the watcher looks four times a second, as the findings asked",
+    # Measured, not read off the constant: start a watcher on a card that stays
+    # waiting and count its polls over a second.
+    poll_rows = [_risky_row("pc1", expires_in=150)]
+    w = OC._PromptWatch(lambda: list(poll_rows), "pc1").start()
+    time.sleep(1.0)
+    polls = w.reads
+    poll_rows.clear()
+    w.gone.wait(5)
+    w.stop()
+    check("the watcher really looks about four times a second (measured)",
+          2 <= polls <= 6, polls)
+    check("...with a quarter of a second as the interval it uses",
           OC._WATCH_INTERVAL == 0.25, OC._WATCH_INTERVAL)
 
     row = _risky_row("wd1", expires_in=900)
@@ -705,11 +733,69 @@ def t_the_watcher_leaves_a_card_that_is_still_waiting_alone():
           not watch.gone.is_set() and fresh.cancels == 0, fresh.cancels)
 
 
+def t_a_stale_watcher_closes_only_its_own_prompt():
+    """`stop()` joins for two seconds; a queue read can outlive that. By the
+    time the stale read returns the prompt lock is released, so the NEXT card's
+    prompt can be the one on screen - and a global cancel would close it
+    (2026-10-26 review). The watcher is token-scoped, so it cannot.
+
+    No prompt is raised: `_LIVE_PROMPTS` holds two stand-ins and the queue is a
+    function, so no child process, no dialog and no database are involved."""
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_pending():
+        entered.set()
+        release.wait(10)
+        return []                  # by now THIS watcher's card really is gone
+
+    class Live:
+        def __init__(self, token):
+            self.token = token
+            self.cancels = 0
+
+        def cancel(self):
+            self.cancels += 1
+
+    mine_token = object()
+    mine, next_card = Live(mine_token), Live(object())
+    with OC._LIVE_LOCK:
+        OC._LIVE_PROMPTS.add(mine)
+    watch = OC._PromptWatch(slow_pending, "s1", interval=0.01,
+                            cancel=lambda: OC._cancel_prompts_for(mine_token)).start()
+    try:
+        check("the slow queue read started", entered.wait(5))
+        watch.stop()               # two-second join, and the read is slower
+        check("the watcher thread really can outlive stop()",
+              watch._thread.is_alive(), watch._thread.is_alive())
+        with OC._LIVE_LOCK:        # the next card's prompt is live by now
+            OC._LIVE_PROMPTS.add(next_card)
+        release.set()
+        watch._thread.join(5)
+        check("the stale watcher closes the prompt it was made for",
+              mine.cancels >= 1, mine.cancels)
+        check("...and never the NEXT card's prompt, which is the whole point",
+              next_card.cancels == 0, next_card.cancels)
+    finally:
+        release.set()
+        watch.stop()
+        with OC._LIVE_LOCK:
+            OC._LIVE_PROMPTS.discard(mine)
+            OC._LIVE_PROMPTS.discard(next_card)
+
+
 def t_a_wait_for_the_prompt_is_bounded_and_refuses_after_it():
     """`_PROMPT.acquire(-1)` waited for ever: one child that never answered
-    held every later approval until the backend restarted. The wait is now a
-    whole prompt plus the child's ten seconds, and a card that never gets its
-    turn is a 409 (2026-10-26 review)."""
+    held every later approval until the backend restarted. The wait is now
+    bounded by `_PROMPT_WAIT_MAX` (a whole prompt, the ten seconds its child
+    gets to answer, and the cancel that follows - thirty seconds of slack in
+    all), and a card that never gets its turn is a 409 (2026-10-26 review)."""
+    check("a card with no deadline waits the whole worst-case hold",
+          OC._wait_for_prompt(None) == OC._PROMPT_WAIT_MAX, OC._wait_for_prompt(None))
+    check("a card with 150 s waits its own 150 s",
+          OC._wait_for_prompt(150) == 150, OC._wait_for_prompt(150))
+    check("a 900 s card waits the whole hold, NOT the 30 s shorter prompt cap "
+          "(the bug this fixes)",
+          OC._wait_for_prompt(900) == OC._PROMPT_WAIT_MAX, OC._wait_for_prompt(900))
     row = _risky_row("bw1", expires_in=900)
     v = Verifier(RuntimeError("no prompt when the wait ran out"))
     saved = OC._PROMPT_WAIT_MAX
@@ -722,7 +808,7 @@ def t_a_wait_for_the_prompt_is_bounded_and_refuses_after_it():
     finally:
         OC._PROMPT.release()
         OC._PROMPT_WAIT_MAX = saved
-    check("the wait is a whole prompt plus the child's ten seconds",
+    check("the whole-hold ceiling is the prompt cap plus thirty seconds of slack",
           saved == OC._PROMPT_MAX + 30.0, saved)
     check("a request that never gets its turn is refused, not left hanging",
           got is not None and got[0] == 409 and got[1]["owner_check"] == "gone"
@@ -734,20 +820,28 @@ def t_the_live_row_is_checked_again_after_the_wait():
     """A same-id action can change while the prompt queues (the gate raises a
     fresh card under the same id for some actions). The label and the stamp
     must be the LIVE row's, not the row read before the wait (2026-10-26
-    review)."""
+    review).
+
+    Each scenario gets its OWN read counter: a shared one (as this test first
+    had) would hand the second scenario's first read the row under test, so the
+    pre-wait guard would refuse it and the post-wait re-check would never be
+    exercised - the test would pass on the unfixed code."""
     before = _risky_row("lr1", expires_in=900)
     after = _risky_row("lr1", expires_in=900, action="send_email")
     after["notice"] = dict(after["notice"], title="Jarvis wants to send an email")
-    reads = []
 
-    def second_is(row):
+    def labelled_first_then(row):
+        """The pre-wait read sees `before`; every later read sees `row`."""
+        reads = []
+
         def pending():
             reads.append(1)
             return [before] if len(reads) == 1 else [row]
-        return pending
+        return pending, reads
 
+    pending, reads = labelled_first_then(after)
     v = Verifier("confirmed")
-    got = _run({"id": "lr1"}, second_is(after), v)
+    got = _run({"id": "lr1"}, pending, v)
     check("a labelled action that changed under the same id still prompts",
           got is None and len(v.asked) == 1, (got, v.asked))
     check("...with the LIVE row's title, not the one read before the wait",
@@ -757,10 +851,14 @@ def t_the_live_row_is_checked_again_after_the_wait():
     check("...not for the action read before the wait",
           OC.take_stamp("lr1", before["action"]) is False)
 
+    pending, reads = labelled_first_then(_unlabelled_row("lr1", expires_in=900))
     v = Verifier(RuntimeError("no prompt for a row with no written words"))
-    got = _run({"id": "lr1"}, second_is(_unlabelled_row("lr1", expires_in=900)), v)
+    got = _run({"id": "lr1"}, pending, v)
     check("an action that LOST its written words is refused before the prompt",
           got is not None and got[0] == 403 and got[1]["owner_check"] == "unlabelled", got)
+    check("...refused on the SECOND read (the one after the wait), which is the "
+          "re-check this test exists for",
+          len(reads) == 2, (len(reads), got))
     check("...the verifier was never called", not v.asked, v.asked)
     check("...and nothing was stamped", not OC.take_stamp("lr1", before["action"]))
 
