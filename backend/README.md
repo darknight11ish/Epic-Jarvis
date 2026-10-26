@@ -19583,8 +19583,11 @@ halves are file edits, not hunks: an absent `expires_in` is asked of
 to answer 409 GONE for a card the gate was still waiting on), the Windows Hello
 prompt is bounded by the smaller of the card's time left and 180 s (capped
 2026-10-26; the dialog is Windows's, so that number is how long it can stay up
-when the backend is killed outright), and the re-read after the prompt still
-refuses a card that is no longer the live one.
+when the backend is killed outright), a watcher asks the child to close within a
+quarter of a second when the card is denied, withdrawn or expires while the
+dialog is up, the request that queues for the prompt has a bounded wait
+(`_PROMPT_WAIT_MAX`) instead of waiting for ever, and the re-read after the
+prompt still refuses a card that is no longer the live one.
 
 **Test it.** `backend/test_gate_no_expiry.py` — 10 tests / 170 checks, built the
 way this repository tests a gate patch: apply `no-expiry-cards.patch` to

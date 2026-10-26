@@ -180,6 +180,24 @@ DEFAULT_TIME_LEFT = 900.0
 #: again.
 _PROMPT_MAX = 180.0
 
+#: The ceiling on how long a request waits for the one-prompt-at-a-time lock
+#: before it is refused (2026-10-26 review). The prompt in front of it can last
+#: `_PROMPT_MAX`, and its child gets ten seconds to answer after its own
+#: deadline, so a whole prompt plus that slack is the longest honest wait for a
+#: card with no deadline of its own (a card WITH one waits only its own time -
+#: it cannot be prompted after it). `_PROMPT.acquire(-1)` waited for ever: one
+#: child that never answered held every later approval until the backend was
+#: restarted. A card that has not had its turn is refused with the same 409 as
+#: one that ran out.
+_PROMPT_WAIT_MAX = _PROMPT_MAX + 30.0
+
+#: How often the card is asked whether it is still waiting while its prompt is
+#: open (2026-10-26 review; .dsh-scratch/WINDOWS-HELLO-2026-10-26/FINDINGS.md
+#: section 5 B asks for 0.25 s). A quarter of a second is fast enough that the
+#: dialog is gone a moment after its card is, and cheap enough that the poll
+#: costs nothing: one queue read four times a second, only while a prompt is up.
+_WATCH_INTERVAL = 0.25
+
 # ---------------------------------------------------------------------------
 # Which approvals are risky - ONE rule, three places
 # ---------------------------------------------------------------------------
@@ -1016,6 +1034,35 @@ def _wait_async(status_of, cancel, value_of, stop, deadline, *,
     return value_of()
 
 
+def _hello_ask(line: str) -> tuple:
+    """The one line the `--hello` child reads first, as (message, seconds).
+
+    Split out of the `__main__` block so the rule can be tested with no
+    process and no prompt. An EMPTY line is not `{}`: the old code read it as
+    a request with no timeout, and the 900 s default then let a child that had
+    been asked nothing raise a quarter-hour dialog - the one path with no card
+    at all, and exactly the lifetime this module exists to bound (2026-10-26
+    review). It raises instead, and the caller answers "failed" before it ever
+    gets near Windows.
+
+    The seconds are clamped to `_PROMPT_MAX` HERE, in the child, because the
+    dialog's lifetime is decided here: the child must not depend on the parent
+    having done its arithmetic.
+    """
+    text = str(line or "").strip()
+    if not text:
+        raise ValueError("--hello: no question on stdin")
+    ask = json.loads(text)
+    if not isinstance(ask, dict):
+        raise ValueError("--hello: the question is not an object")
+    try:
+        asked = float(ask.get("timeout") or DEFAULT_TIME_LEFT)
+    except (TypeError, ValueError, OverflowError):
+        asked = DEFAULT_TIME_LEFT
+    seconds = min(max(1.0, asked), _PROMPT_MAX)
+    return str(ask.get("message") or "Approve a Jarvis action"), seconds
+
+
 def _hello_child(message: str, timeout: float,
                  should_stop: Optional[threading.Event] = None) -> str:  # pragma: no cover - Windows only
     """The check itself, in the child process. Windows only.
@@ -1261,6 +1308,75 @@ def _pending_rows() -> list:
     return list(jarvis_gate.pending())
 
 
+class _PromptWatch:
+    """Watches one card while its prompt is open, and closes the prompt when
+    the card stops waiting (2026-10-26 review).
+
+    Before this, the dialog's only bound was the number of seconds chosen
+    before it opened: let the card be denied, withdrawn or expire while the
+    prompt was up, and the dialog stayed for the rest of that number - up to
+    three minutes. The prompt is the child process's, and
+    `_cancel_live_prompts` is what asks it to close, so the watcher is a poll
+    of the card plus that same cancel.
+
+    Run in a thread from `approve_check`, which holds `_PROMPT` for as long as
+    its prompt is up - so every live prompt is this one, and asking them all
+    to close cannot touch another card's. A prompt that is already over when
+    the watcher looks is harmless: nothing is left in `_LIVE_PROMPTS`.
+
+    It cancels on what the QUEUE says, never on a read that failed: a locked
+    database must not close a prompt the owner is looking at, and a watcher
+    bug must not close every prompt. Either way nothing can be approved
+    without the read that follows the prompt (`approve_check` answers 503 or
+    409 on it), so a queue this module cannot read still fails closed.
+    """
+
+    def __init__(self, pending, request_id, interval: float = _WATCH_INTERVAL):
+        self.pending = pending
+        self.request_id = request_id
+        self.interval = interval
+        self.done = threading.Event()      # the prompt is over
+        self.gone = threading.Event()      # the card stopped waiting
+        self.reads = 0
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="jarvis-prompt-watch")
+
+    def start(self) -> "_PromptWatch":
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        """The prompt is over. Never leaves a thread behind that matters: the
+        poll is a daemon, and a queue read that hangs is why the join is
+        bounded."""
+        self.done.set()
+        self._thread.join(timeout=2.0)
+
+    def _still_waiting(self) -> bool:
+        """True unless the card has definitely stopped waiting.
+
+        A queue that cannot be read is NOT "gone": the prompt then ends at its
+        own deadline, as it did before this watcher existed, and the read after
+        it answers 503 - so nothing is approved either way.
+        """
+        try:
+            row = _find(self.pending(), self.request_id)
+        except Exception:
+            return True
+        left = _time_left(row) if row is not None else None
+        return row is not None and (left is None or left > 0)
+
+    def _run(self) -> None:
+        while not self.done.wait(self.interval):
+            self.reads += 1
+            if not self._still_waiting():
+                self.gone.set()
+            if self.gone.is_set():
+                # Every pass, not once: the first look can beat the child
+                # process into _LIVE_PROMPTS, and the next still finds it.
+                _cancel_live_prompts()
+
+
 def _signed_check(body, row, device) -> Optional[tuple]:
     """Phase 2 (docs/PAIRING-DESIGN.md 11.4): a RISKY card approved from
     another device with a DEVICE key must carry a valid signature from that
@@ -1338,9 +1454,16 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         # that says this is still the live card.
         if left is not None and left <= 0:
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
-        # -1 is "block until it is free" (`threading.Lock.acquire`'s own
-        # spelling); None would mean the same here but reads like "no wait".
-        if not _PROMPT.acquire(timeout=left if left is not None else -1):
+        # THE WAIT FOR THE PROMPT IS BOUNDED (2026-10-26 review). It used to be
+        # `acquire(-1)` - for ever - so one child that never answered held every
+        # later approval until the backend was restarted. A card WITH a deadline
+        # can never be prompted after it, so its own number is the whole useful
+        # wait; a card with no deadline waits at most a whole prompt plus the
+        # ten seconds its child gets to answer after its own deadline. Either
+        # way it is never more than _PROMPT_WAIT_MAX, and the answer on timeout
+        # is the same 409 both apps read as "no longer waiting".
+        wait = _PROMPT_WAIT_MAX if left is None else min(left, _PROMPT_MAX, _PROMPT_WAIT_MAX)
+        if not _PROMPT.acquire(timeout=wait):
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
         try:
             # THE WAIT FOR THE PROMPT CAN BE LONGER THAN THE CARD HAS LEFT.
@@ -1358,18 +1481,41 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
             left = _time_left(live) if live is not None else None
             if live is None or (left is not None and left <= 0):
                 return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
+            # The label was checked before the wait, on the row as it was then.
+            # A same-id action can change while the prompt queues (the gate
+            # raises a fresh card under the same id for some actions), and
+            # this is the row whose title the prompt would name - so it is
+            # this row's action that must have written words (2026-10-26
+            # review).
+            if not has_written_title(live.get("action")):
+                return 403, {"ok": False, "error": UNLABELLED, "owner_check": "unlabelled"}
+            # ...and it is this row's action the approval is stamped for: the
+            # gate asks for the stamp of the card that is on screen, not of
+            # the one read before the wait.
+            action = live.get("action")
             # The prompt gets a concrete number of seconds either way, and it
             # is never more than the card has left or _PROMPT_MAX. The prompt's
-            # only cancel is its own deadline, so that number IS how long the
-            # dialog can stay up; three minutes is enough to reach the PC and
-            # confirm, and short enough that a queued prompt cannot sit on
-            # screen for a quarter of an hour. A card with no deadline still
-            # waits afterwards - the owner can press Approve again - so this
-            # bounds the dialog, not the decision.
+            # only cancel WAS its own deadline, and that is still the bound a
+            # hard kill leaves; what the watcher below adds is that a card that
+            # stops waiting closes the dialog within a quarter of a second
+            # instead of being waited out. Three minutes is long enough to
+            # reach the PC and confirm. A card with no deadline still waits
+            # afterwards - the owner can press Approve again - so this bounds
+            # the dialog, not the decision.
             left = min(left, _PROMPT_MAX) if left is not None else _PROMPT_MAX
-            outcome = verify(approval_message(live), max(1.0, left))
+            watch = _PromptWatch(pending, request_id).start()
+            try:
+                outcome = verify(approval_message(live), max(1.0, left))
+            finally:
+                watch.stop()
         finally:
             _PROMPT.release()
+        # The prompt was closed by the watcher, not answered by the owner: the
+        # card stopped waiting under it. Answer the 409 both apps read as "no
+        # longer waiting", not "the owner dismissed the prompt", which would be
+        # false (2026-10-26 review).
+        if watch.gone.is_set():
+            return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
         if outcome == UNAVAILABLE:
             return 403, {"ok": False, "error": NOT_SET_UP, "owner_check": "not_set_up"}
         if outcome == CANCELLED_:
@@ -1468,13 +1614,14 @@ if __name__ == "__main__":
             # ONE line, not read-to-EOF: the pipe stays open after it, and a
             # later "cancel" line (or the pipe closing) is how the backend
             # says "close the prompt" - see _watch_for_stop.
-            ask = json.loads(sys.stdin.readline() or "{}")
+            # `_hello_ask` is what that line may say: an empty one is refused
+            # rather than read as "{}", and the seconds are clamped to
+            # _PROMPT_MAX in the child itself (2026-10-26 review).
+            message, seconds = _hello_ask(sys.stdin.readline())
             stop = threading.Event()
             threading.Thread(target=_watch_for_stop, args=(sys.stdin, stop),
                              daemon=True).start()
-            said = _hello_child(str(ask.get("message") or "Approve a Jarvis action"),
-                                float(ask.get("timeout") or DEFAULT_TIME_LEFT),
-                                should_stop=stop)
+            said = _hello_child(message, seconds, should_stop=stop)
         except Exception:
             said = FAILED_
         print(json.dumps({"outcome": said if said in OUTCOMES else FAILED_}))
