@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "36aa57c6af6fae4f0d96e06ca1d5d8b0e85c4b8424fbd698c7d25b7f516b970f",
+  "source_sha256": "5d77d6db5aa81fbfd44368d5220dfd1f78c928671bad35babbc95d23fdc863b8",
   "feature_count": 139,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -281,13 +281,13 @@ export const FEATURE_DIRECTORY = {
     },
     {
       "id": "temporary-chat",
-      "title": "Temporary chat",
+      "title": "Incognito chat",
       "group": "Talking",
       "surface": "both",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "status": "not-a-setting",
       "label_note": "",
-      "example": "start a temporary chat",
+      "example": "start an incognito chat",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",

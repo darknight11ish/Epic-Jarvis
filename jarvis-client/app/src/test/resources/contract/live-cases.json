@@ -34,7 +34,7 @@
     "not_for_me": "(not for Jarvis)",
     "trouble": "Heard you, but the words couldn't be made out - say it again",
     "busy_mic": "Jarvis Live is already listening - just talk",
-    "temporary_on": "Temporary is on - this Live session will not be kept in History."
+    "temporary_on": "Incognito is on - this Live session will not be kept in History."
   },
   "device_words": {
     "desktop": "PC",
@@ -225,7 +225,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -313,7 +313,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -401,7 +401,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -489,7 +489,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -577,7 +577,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -665,7 +665,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -753,7 +753,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -841,7 +841,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -929,7 +929,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1017,7 +1017,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1105,7 +1105,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1193,7 +1193,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1281,7 +1281,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1369,7 +1369,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1457,7 +1457,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1545,7 +1545,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1633,7 +1633,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1721,7 +1721,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1809,7 +1809,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1897,7 +1897,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1985,7 +1985,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -2073,7 +2073,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -2161,7 +2161,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -2249,7 +2249,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -2337,7 +2337,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -2425,7 +2425,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -2513,7 +2513,7 @@
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
         "busy_mic": "Jarvis Live is already listening - just talk",
-        "temporary_on": "Temporary is on - this Live session will not be kept in History."
+        "temporary_on": "Incognito is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {

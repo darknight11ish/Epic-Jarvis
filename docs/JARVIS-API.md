@@ -4504,12 +4504,12 @@ both apps read the same generated fixtures):
   clear yes or no, adds nothing - the apps never guess. One line after the
   others ("Carrying on ..."), the same words on both apps
   (`continuedHistoryLine`). Not said for "Move it here" (Live's own chat).
-- **Live says when Temporary is on.** "Temporary is on - this Live session
+- **Live says when Incognito is on.** "Incognito is on - this Live session
   will not be kept in History." (`jarvis_live.SEEN["temporary_on"]`, in the
   status's `seen` table, so the apps' shared `live-cases.json` holds it).
-  Phone: a line on the Live screen while Temporary is on, before Live starts
+  Phone: a line on the Live screen while Incognito is on, before Live starts
   as well as during it. Desktop: a line in the Jarvis bar's Live strip while
-  Live is on here and Temporary is on. Nothing changes what Temporary does.
+  Live is on here and Incognito is on. Nothing changes what Incognito does.
 
 **Not built** (waiting on the owner or the second card): renaming, pinning,
 archiving, branching, editing and resending, wider chat-word search; larger

@@ -259,9 +259,9 @@
   {
     "id": "temporary-chat",
     "group": "Talking",
-    "title": "Temporary chat",
+    "title": "Incognito chat",
     "what": "A chat where nothing is kept and nothing you have saved is used.",
-    "where": "Temporary chat in the Jarvis bar. Games and role-play use it automatically.",
+    "where": "Incognito chat in the Jarvis bar. Games and role-play use it automatically.",
     "asks": "No card.",
     "limit": "Only on a PC that has it. It also learns nothing from what you say there - no fact is saved, even with a \"Remember:\".",
     "surface": "both",
@@ -1966,7 +1966,7 @@
     "what": "The larger always-there window, with its own chat box.",
     "where": "Tray menu, Show the HUD window. Its box opens the Jarvis bar for anything more.",
     "asks": "No card.",
-    "limit": "The HUD's own chat box has no Temporary chat, no New conversation and no crisis panel.",
+    "limit": "The HUD's own chat box has no Incognito chat, no New conversation and no crisis panel.",
     "surface": "desktop",
     "covers": [
       "settings.hud-window",
