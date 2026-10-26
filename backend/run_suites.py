@@ -52,6 +52,19 @@ a second list to keep in step.
 The skip list is explicit, not guessed from a failure: a suite that is not in
 it and fails is a failure, and a suite in it whose files ARE present runs.
 
+AND FOUR SUITES ARE NOT RUN AT ALL UNLESS ASKED (2026-10-26).
+`test_chatbot_sites.py`, `test_chatbot_gemini.py`, `test_handoff.py` and
+`test_support_widget.py` each start a real, VISIBLE browser window on whatever
+machine runs them - all four drive `jarvis_chatbot_web`'s one `headless=False`
+launch. On the owner's PC, where Playwright is installed, a plain run of this
+file put Chromium windows on his screen one after another ("the browser keeps
+opening and closing rapidly"), and the suite's own "is Playwright installed?"
+check could never stop it. The default run now prints each of them as `skip`
+with its reason and starts none of them. Set
+`JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1` to run them; each suite reads the same
+variable itself, so the runner and the suites cannot disagree, and either
+layer alone is enough to stop a window.
+
     python3 backend/run_suites.py --jobs 14
 
 `--jobs N` runs N suites at once. **The default is 1, and CI uses the
@@ -160,6 +173,43 @@ NEEDS_OWNER = {
 # must name one, so the list cannot be used to skip a suite that could run.
 OWNER_FILES = {"jarvis_hud.py", "jarvis_gate.py", "jarvis_extract.py", "jarvis_models.py",
                "jarvis_skills.py"}
+
+#: THE FOUR SUITES THAT PUT A REAL, VISIBLE BROWSER WINDOW ON THE SCREEN.
+#: Measured on the owner's PC, 2026-10-26: a plain `python -B backend/run_suites.py`
+#: ran test_chatbot_sites.py, and Playwright opened a real Chromium window for
+#: every site profile (`chatgpt-profile10` and the rest, under a temp folder),
+#: so the owner saw "the browser keeps opening and closing rapidly". Playwright
+#: being INSTALLED is the normal state on that PC, so a suite's own "is
+#: Playwright installed?" check could never be the guard. Every suite below
+#: imports `jarvis_chatbot_web`, whose one `headless=False` launch
+#: (jarvis_chatbot_web.py:620) is the only visible launch in the backend -
+#: `test_browser_test_guard.py` fails if this list and the suites that import
+#: that module ever disagree.
+#:
+#: A DEFAULT RUN DOES NOT RUN THEM. Each is skipped by name, with the reason,
+#: unless VISIBLE_BROWSER_ENV=1. That is the second, independent layer: each
+#: suite also reads the same variable itself and prints one SKIPPED sentence
+#: before it starts anything, so a bug in either layer cannot put a window on
+#: the owner's screen. A skip is printed as `skip` and counted separately, and
+#: is never a pass.
+VISIBLE_BROWSER_ENV = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+VISIBLE_BROWSER_SUITES = {
+    "test_chatbot_gemini.py": "it opens a real, VISIBLE browser window (Gemini)",
+    "test_chatbot_sites.py": "it opens a real, VISIBLE browser window per chatbot site",
+    "test_handoff.py": "it opens a real, VISIBLE browser window (the hand-off page)",
+    "test_support_widget.py": "it opens a real, VISIBLE browser window (a support chat)",
+}
+
+
+def visible_browser_opted_in(env=None) -> bool:
+    """True only when the operator has explicitly asked for a visible window.
+
+    Exactly "1", the same rule every guarded suite reads, so the runner and the
+    suites cannot disagree about what an opt-in is. `env` is for a caller with
+    its own mapping; it defaults to os.environ.
+    """
+    env = os.environ if env is None else env
+    return str(env.get(VISIBLE_BROWSER_ENV) or "").strip() == "1"
 
 
 CONFIG_NAME = "jarvis-framework.toml"
@@ -997,6 +1047,12 @@ def _suite_job(s: Path, backend: Path, env: dict) -> dict:
     failure block. The caller owns the printing. The result carries exactly
     the same four things a single-worker run printed, so the two paths cannot
     disagree about what a suite means."""
+    if s.name in VISIBLE_BROWSER_SUITES and not visible_browser_opted_in(env):
+        return {"name": s.name, "status": "skip",
+                "counts": {"passed": 0, "skipped": 0, "failed": 0},
+                "line": (f"skip  {s.name:<34} {VISIBLE_BROWSER_SUITES[s.name]}; "
+                         f"set {VISIBLE_BROWSER_ENV}=1 to run it"),
+                "echo": [], "tail": []}
     need = NEEDS_OWNER.get(s.name, ())
     absent = [f for f in need if not (backend / f).is_file()]
     if absent:
@@ -1139,6 +1195,9 @@ def _sweep(root: Path, only=(), jobs: int = 1,
     names = {s.name for s in suites}
     unknown = [n for n in only if n not in {s.name for s in known}]
     stale = [] if only else sorted(set(NEEDS_OWNER) - names)
+    # The visible-browser list is permanent, not "whatever was selected": a
+    # renamed or deleted suite must be caught even by `run_suites.py test_x.py`.
+    stale_visible = sorted(set(VISIBLE_BROWSER_SUITES) - {s.name for s in known})
     passed, failed, skipped = [], [], []
     # The checks inside the suites that ran, summed from what each suite
     # reported. A suite that exits 0 having skipped every check it has is still
@@ -1150,10 +1209,17 @@ def _sweep(root: Path, only=(), jobs: int = 1,
     if stale:
         print(f"FAIL  run_suites.py lists suites that do not exist: {stale}")
         failed += stale
+    if stale_visible:
+        print(f"FAIL  run_suites.py's visible-browser skip list names suites that do not "
+              f"exist: {stale_visible}")
+        failed += stale_visible
     no_owner = sorted(k for k, v in NEEDS_OWNER.items() if not set(v) & OWNER_FILES)
     if no_owner:
         print(f"FAIL  run_suites.py skips suites that need nothing from the owner's PC: {no_owner}")
         failed += no_owner
+    if visible_browser_opted_in() and any(s.name in VISIBLE_BROWSER_SUITES for s in suites):
+        print(f"[run_suites] VISIBLE BROWSER TESTS ON ({VISIBLE_BROWSER_ENV}=1): real "
+              f"windows will open on this screen")
     base = dict(os.environ, JARVIS_BACKEND=str(backend),
                 PYTHONDONTWRITEBYTECODE="1")
     if jobs == 1:
@@ -1182,8 +1248,8 @@ def _sweep(root: Path, only=(), jobs: int = 1,
     print(f"\n{ran['passed']} passed, {ran['skipped']} skipped, {ran['failed']} failed")
     if ran["skipped"] or skipped:
         print(f"      (a skip is a check that could not run here: {ran['skipped']} inside the "
-              f"suites above, {len(skipped)} whole suite(s) that need files which live only on "
-              f"the owner's PC)")
+              f"suites above, {len(skipped)} whole suite(s) skipped by name - each line above "
+              f"says why)")
     if failed:
         shown = sorted(failed) if jobs > 1 else failed
         print("failed: " + ", ".join(shown))

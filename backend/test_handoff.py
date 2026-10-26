@@ -24,6 +24,12 @@ paused-at-owner-page state"), in code and in behaviour:
     when there is no screen - skipped when neither is here): a real JPEG of
     the one page, the owner's tap reaching a checkbox, typing reaching a box,
     and a tap that takes the page to another host ending the hand-off.
+
+NOTHING RUNS WITHOUT AN EXPLICIT OPT-IN (2026-10-26). That real browser is a
+VISIBLE window, so unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set this
+suite prints one SKIPPED sentence and exits 0 - no browser, no check. The same
+rule and the same variable are in the other three visible-window suites, and
+backend/run_suites.py skips all four by name unless the variable is set.
 """
 from __future__ import annotations
 
@@ -869,11 +875,40 @@ def t_real_browser(a):
           code == 410 and out.get("ended") == "left", (code, out))
 
 
+#: The ONE switch that lets this file start its real, VISIBLE browser window.
+#: Same name and same rule as the other three visible-window suites and as
+#: backend/run_suites.py's skip list: exactly "1", anything else fails closed.
+#: See test_chatbot_sites.py's VISIBLE_BROWSER_ENV for the measured history.
+VISIBLE_BROWSER_ENV = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+
+SKIPPED_VISIBLE_BROWSER = (
+    f"SKIPPED  test_handoff.py - this suite starts a real, VISIBLE browser "
+    f"window, and {VISIBLE_BROWSER_ENV}=1 is not set. It did NOT run, and it did "
+    f"NOT pass. Set {VISIBLE_BROWSER_ENV}=1 to run it by hand.")
+
+
+def visible_browser_tests_allowed(env=None) -> bool:
+    """True only when the operator has explicitly asked for a visible window.
+
+    Exactly "1", and anything else ("yes", "true", "0", empty) fails closed -
+    a half-typed opt-in must never put a browser on the owner's screen. `env`
+    is for a caller with its own mapping; it defaults to os.environ.
+    """
+    env = os.environ if env is None else env
+    return str(env.get(VISIBLE_BROWSER_ENV) or "").strip() == "1"
+
+
 def main():
     xvfb = None
     served = False
     a = None
     try:
+        # THE GUARD, AND IT IS FIRST: no code check, no fake page and no
+        # a.open() runs without the explicit opt-in. The finally below still
+        # runs, so the import-time temp folder is removed on this path.
+        if not visible_browser_tests_allowed():
+            print(SKIPPED_VISIBLE_BROWSER)
+            return 0
         for fn in (t_code, t_nothing_offered_unless_paused_at_an_owner_page, t_a_whole_hand_off,
                    t_ends, t_support_chat, t_nothing_on_disk_and_nothing_in_a_log,
                    t_routes_are_gated, t_routes, t_words, t_event):

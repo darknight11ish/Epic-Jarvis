@@ -50,6 +50,13 @@ What it proves:
     fingerprint-spoofing of its own for the visible real browser, launches a
     visible window, and clicks only the message box and the send button.
 
+NOTHING RUNS WITHOUT AN EXPLICIT OPT-IN (2026-10-26). This file starts a real,
+VISIBLE browser window, so unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set
+it prints one SKIPPED sentence and exits 0 - no browser, no check. The same
+rule and the same variable are in the other three visible-window suites
+(test_chatbot_sites.py, test_handoff.py, test_support_widget.py), and
+backend/run_suites.py skips all four by name unless the variable is set.
+
 SKIPS (exit 0) when Playwright is not installed or no Chromium can be
 started (it is an optional dependency). Here, with a browser already
 downloaded somewhere, point Playwright at it:
@@ -911,15 +918,44 @@ def _screen():
     return p, ""
 
 
+#: The ONE switch that lets this file start its real, VISIBLE browser window.
+#: Same name and same rule as the other three visible-window suites and as
+#: backend/run_suites.py's skip list: exactly "1", anything else fails closed.
+#: See test_chatbot_sites.py's VISIBLE_BROWSER_ENV for the measured history.
+VISIBLE_BROWSER_ENV = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+
+SKIPPED_VISIBLE_BROWSER = (
+    f"SKIPPED  test_chatbot_gemini.py - this suite starts a real, VISIBLE browser "
+    f"window, and {VISIBLE_BROWSER_ENV}=1 is not set. It did NOT run, and it did "
+    f"NOT pass. Set {VISIBLE_BROWSER_ENV}=1 to run it by hand.")
+
+
+def visible_browser_tests_allowed(env=None) -> bool:
+    """True only when the operator has explicitly asked for a visible window.
+
+    Exactly "1", and anything else ("yes", "true", "0", empty) fails closed -
+    a half-typed opt-in must never put a browser on the owner's screen. `env`
+    is for a caller with its own mapping; it defaults to os.environ.
+    """
+    env = os.environ if env is None else env
+    return str(env.get(VISIBLE_BROWSER_ENV) or "").strip() == "1"
+
+
 def main():
-    code_only = [t_still_true_no_proxy_no_captcha_solving_code, t_registry_and_ready, t_shipped_and_listed]
-    browser = [t_full_turn, t_waits_for_the_message_box, t_a_new_chat_gets_its_own_address,
-               t_another_chat_during_the_first_reply, t_waits_for_stop_button, t_needs_owner_pages,
-               t_captcha_after_send, t_never_goes_elsewhere, t_close, t_through_the_driver,
-               t_sign_in_helper, t_self_check]
     xvfb = None
     served = [False]
     try:
+        # THE GUARD, AND IT IS FIRST: no code check, no fake page and no
+        # adapter.open() runs without the explicit opt-in. The finally below
+        # still runs, so the import-time temp folder is removed on this path.
+        if not visible_browser_tests_allowed():
+            print(SKIPPED_VISIBLE_BROWSER)
+            return 0
+        code_only = [t_still_true_no_proxy_no_captcha_solving_code, t_registry_and_ready, t_shipped_and_listed]
+        browser = [t_full_turn, t_waits_for_the_message_box, t_a_new_chat_gets_its_own_address,
+                   t_another_chat_during_the_first_reply, t_waits_for_stop_button, t_needs_owner_pages,
+                   t_captcha_after_send, t_never_goes_elsewhere, t_close, t_through_the_driver,
+                   t_sign_in_helper, t_self_check]
         for fn in code_only:
             print(f"--- {fn.__name__} ---")
             try:

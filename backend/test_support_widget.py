@@ -38,6 +38,12 @@ over this module (no proxy, no captcha solving, no spoofing of its own, no
 launch or address-opening of its own,
 three click places, every send selector names send or submit).
 
+NOTHING RUNS WITHOUT AN EXPLICIT OPT-IN (2026-10-26). This suite starts a
+real, VISIBLE browser window, so unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1
+is set it prints one SKIPPED sentence and exits 0 - no browser, no check. The
+same rule and the same variable are in the other three visible-window suites,
+and backend/run_suites.py skips all four by name unless the variable is set.
+
 SKIPS the browser half (exit 0) when Playwright or a browser is missing.
 On Linux with no screen it starts Xvfb: the window is never headless.
 """
@@ -650,9 +656,38 @@ def _run(fn):
         check(f"{fn.__name__} ran without crashing", False, repr(exc))
 
 
+#: The ONE switch that lets this file start its real, VISIBLE browser window.
+#: Same name and same rule as the other three visible-window suites and as
+#: backend/run_suites.py's skip list: exactly "1", anything else fails closed.
+#: See test_chatbot_sites.py's VISIBLE_BROWSER_ENV for the measured history.
+VISIBLE_BROWSER_ENV = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+
+SKIPPED_VISIBLE_BROWSER = (
+    f"SKIPPED  test_support_widget.py - this suite starts a real, VISIBLE browser "
+    f"window, and {VISIBLE_BROWSER_ENV}=1 is not set. It did NOT run, and it did "
+    f"NOT pass. Set {VISIBLE_BROWSER_ENV}=1 to run it by hand.")
+
+
+def visible_browser_tests_allowed(env=None) -> bool:
+    """True only when the operator has explicitly asked for a visible window.
+
+    Exactly "1", and anything else ("yes", "true", "0", empty) fails closed -
+    a half-typed opt-in must never put a browser on the owner's screen. `env`
+    is for a caller with its own mapping; it defaults to os.environ.
+    """
+    env = os.environ if env is None else env
+    return str(env.get(VISIBLE_BROWSER_ENV) or "").strip() == "1"
+
+
 def main():
     xvfb = None
     try:
+        # THE GUARD, AND IT IS FIRST: no code check, no fake page and no
+        # probe.open() runs without the explicit opt-in. The finally below
+        # still runs, so the import-time temp folder is removed on this path.
+        if not visible_browser_tests_allowed():
+            print(SKIPPED_VISIBLE_BROWSER)
+            return 0
         _run(t_still_true_no_proxy_no_captcha_solving)
         skip = ""
         if not W.playwright_installed():
