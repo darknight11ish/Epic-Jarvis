@@ -171,6 +171,62 @@ def chat_lane(url="http://127.0.0.1:11436"):
             os.environ["OLLAMA_URL"] = saved_env
 
 
+@contextlib.contextmanager
+def hud_model(name="jarvis-primary"):
+    """A fake `jarvis_hud` whose `_extract_model()` is the CHAT's own resolver.
+
+    The module asks this resolver for the model NAME, so a test can say what the
+    chat lane is running without a live backend. `name=None` means the module
+    cannot be imported at all. Every module and environment variable it touches
+    is restored afterwards, so no other test inherits the fake (the same shape
+    as `chat_lane`).
+    """
+    saved_hud = sys.modules.get("jarvis_hud")
+    saved_env = {key: os.environ.get(key) for key in
+                 ("JARVIS_PERSONALITY_MODEL", "JARVIS_LOCAL_MODEL", "JARVIS_MODEL")}
+    for key in saved_env:
+        os.environ.pop(key, None)
+    if name is None:
+        sys.modules.pop("jarvis_hud", None)
+    else:
+        fake = types.ModuleType("jarvis_hud")
+        fake._extract_model = lambda: name
+        sys.modules["jarvis_hud"] = fake
+    try:
+        yield
+    finally:
+        if saved_hud is None:
+            sys.modules.pop("jarvis_hud", None)
+        else:
+            sys.modules["jarvis_hud"] = saved_hud
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+@contextlib.contextmanager
+def pinned_model(name):
+    """A fake `jarvis_models` whose `current_model()` returns this name.
+
+    `jarvis_models` is not in this checkout, so the import inside `_model_name`
+    normally fails; this fake stands in for the owner's pinned model, and is
+    restored afterwards like every other fake.
+    """
+    saved = sys.modules.get("jarvis_models")
+    fake = types.ModuleType("jarvis_models")
+    fake.current_model = lambda: name
+    sys.modules["jarvis_models"] = fake
+    try:
+        yield
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_models", None)
+        else:
+            sys.modules["jarvis_models"] = saved
+
+
 CREATED_BRIEFS = []
 
 
@@ -672,6 +728,80 @@ def t_the_request_goes_to_the_chat_lane_and_names_the_chat_context():
         check("...and the model is still named",
               (seen.get("body") or {}).get("model") == C._model_name(),
               seen.get("body"))
+
+
+def t_the_draft_asks_the_chat_lane_s_own_model_name():
+    """The second name that matters: a draft must not ask a base model.
+
+    The defect this pins: the draft fell back to qwen3.5:9b while the chat lane
+    runs jarvis-primary. A fake `jarvis_hud._extract_model()` answers as the
+    chat's own resolver, and a fake `urlopen` records the parsed body, so the
+    check is on what would really be sent - `options.num_ctx` alone cannot stop
+    a differently-named model from being loaded and evicting the chat's own.
+    """
+    with hud_model("jarvis-primary"):
+        check("the chat's own resolver supplies the draft's model name",
+              C._model_name() == "jarvis-primary", C._model_name())
+        check("...which is not the base model's name",
+              C._model_name() != "qwen3.5:9b", C._model_name())
+        seen = {}
+        real = C.urllib.request.urlopen
+
+        def fake(request, timeout=None):
+            seen["body"] = json.loads(request.data.decode("utf-8"))
+            return _Answer()
+
+        C.urllib.request.urlopen = fake
+        try:
+            C._ask("hi")
+        finally:
+            C.urllib.request.urlopen = real
+        check("the request body asks for the chat's own model, not another",
+              (seen.get("body") or {}).get("model") == "jarvis-primary",
+              seen.get("body"))
+
+
+def t_the_override_and_the_argument_win_over_the_chat_resolver():
+    """A deliberate override for this feature, and a caller's explicit choice."""
+    with hud_model("jarvis-primary"):
+        saved = os.environ.get("JARVIS_PERSONALITY_MODEL")
+        try:
+            os.environ["JARVIS_PERSONALITY_MODEL"] = "personality-tuned:latest"
+            check("JARVIS_PERSONALITY_MODEL beats the chat's resolver",
+                  C._model_name() == "personality-tuned:latest", C._model_name())
+            check("an explicit model argument beats the override and the resolver",
+                  C._model_name("explicit:7b") == "explicit:7b",
+                  C._model_name("explicit:7b"))
+        finally:
+            if saved is None:
+                os.environ.pop("JARVIS_PERSONALITY_MODEL", None)
+            else:
+                os.environ["JARVIS_PERSONALITY_MODEL"] = saved
+
+
+def t_with_no_hud_the_pinned_model_is_used_and_qwen35_is_never_the_fallback():
+    """No `jarvis_hud`: the owner's pinned model, then the named fallback.
+
+    The last check is the defect itself - the fallback used to be the BASE model
+    qwen3.5:9b, which is pulled on this PC and would evict the chat's model.
+    """
+    with hud_model(None):
+        with pinned_model("pinned-model:latest"):
+            check("with no HUD, the owner's pinned model is used",
+                  C._model_name() == "pinned-model:latest", C._model_name())
+        saved_bot = sys.modules.get("jarvis_chatbot")
+        sys.modules["jarvis_chatbot"] = None
+        try:
+            check("with nothing able to say, the fallback is the chat's own default",
+                  C._model_name() == C.DEFAULT_MODEL == "jarvis-primary",
+                  C._model_name())
+            check("...and the base model qwen3.5:9b is not the fallback",
+                  C.DEFAULT_MODEL != "qwen3.5:9b", C.DEFAULT_MODEL)
+        finally:
+            if saved_bot is None:
+                sys.modules.pop("jarvis_chatbot", None)
+            else:
+                sys.modules["jarvis_chatbot"] = saved_bot
 
 
 def t_a_dead_model_never_raises():

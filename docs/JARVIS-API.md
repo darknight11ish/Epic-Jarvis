@@ -7233,13 +7233,20 @@ It never invents a personality, and it never shows a field it did not validate.
 **What it does not do.** It drafts FIELDS (a name, a line, an example, a base
 preset and dials), never a finished system prompt, so a personality made this
 way cannot add an instruction about tools, approval, permissions, memory or
-safety. It never leaves the PC: the model address is the chat lane's own,
-resolved by `jarvis_model_lanes._hud_ollama_url()` (11436 on the owner's PC),
-and `_loopback_url()` refuses any host that is not loopback - so no environment
-variable can point it at another machine. The request names `options.num_ctx`
-at the chat's own context size (16,384, `jarvis_chatbot`'s
+safety. It never leaves the PC, and it asks the CHAT's own model: the address
+is the chat lane's own, resolved by `jarvis_model_lanes._hud_ollama_url()`
+(11436 on the owner's PC), and `_loopback_url()` refuses any host that is not
+loopback - so no environment variable can point it at another machine - while
+the NAME is resolved by the HUD's own resolver,
+`jarvis_hud._extract_model()` (the same function the chat lane uses;
+`JARVIS_PERSONALITY_MODEL` is the one deliberate override for this feature),
+never a copied name like the base `qwen3.5:9b` that used to be the fallback.
+The chat lane runs `jarvis-primary:latest` (`/api/ps`, measured 2026-10-25), so
+naming another model would load it and evict the chat's own. The request names
+`options.num_ctx` at the chat's own context size (16,384, `jarvis_chatbot`'s
 `ONE_CARD_NUM_CTX`), so drafting cannot make Ollama reload the model at its
-small default. The only new state on disk is the pending drafts in
+small default - and with the chat's own name, it cannot load a different model
+at all. The only new state on disk is the pending drafts in
 `~/.openjarvis/personality-drafts.json` (beside `manner.json`): one per
 conversation, a bounded number at once (six), each expiring after two hours;
 the saved personality itself goes to `manner.json`, not there. The unanswered

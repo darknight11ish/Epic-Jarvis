@@ -76,9 +76,10 @@ belongs to a conversation id, and a conversation without a real id never
 remembers it.
 
 Standard library only. No module is imported at import time except the
-standard library; `jarvis_manner`, `jarvis_model_lanes` and `jarvis_chatbot` are
-imported inside the functions that need them, wrapped, so a backend without one
-of them still answers (with the named fallbacks) rather than failing to load.
+standard library; `jarvis_manner`, `jarvis_model_lanes`, `jarvis_hud`,
+`jarvis_models` and `jarvis_chatbot` are imported inside the functions that need
+them, wrapped, so a backend without one of them still answers (with the named
+fallbacks) rather than failing to load.
 """
 from __future__ import annotations
 
@@ -113,7 +114,16 @@ CHAT_NUM_CTX = 16384
 #: point is that the owner's own description stays on the machine.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0.0.0.0"})
 
-DEFAULT_MODEL = "qwen3.5:9b"
+#: The model name the draft asks for when NOTHING else can say - the chat's own
+#: default (`jarvis_chatbot.MAIN_MODEL_DEFAULT`), kept here as a literal so this
+#: module never imports the chatbot just to read a name. qwen3.5:9b used to be
+#: this fallback, and that was the wrong answer: it is a DIFFERENT base model
+#: (also pulled on this PC), while the CHAT lane runs jarvis-primary:latest -
+#: measured 2026-10-25, `GET http://127.0.0.1:11436/api/ps` reported
+#: `jarvis-primary:latest` with `context_length: 16384`. Asking qwen3.5:9b
+#: loads a second model and evicts the chat's own from the card, which
+#: `options.num_ctx` alone cannot prevent; asking the chat's own NAME can.
+DEFAULT_MODEL = "jarvis-primary"
 
 #: The draft file, beside manner.json in the config folder.
 DRAFT_FILE = "personality-drafts.json"
@@ -339,8 +349,62 @@ def _num_ctx() -> int:
 
 
 def _model_name(model: Optional[str] = None) -> str:
-    return str(model or os.environ.get("JARVIS_PERSONALITY_MODEL")
-               or os.environ.get("JARVIS_MODEL") or DEFAULT_MODEL).strip()
+    """The model NAME the CHAT lane is running - from the resolver that owns it.
+
+    The order, and why it is this order:
+
+      1. an explicit `model` argument (the caller's choice, and the test seam);
+      2. `JARVIS_PERSONALITY_MODEL` - a deliberate override for this feature;
+      3. `jarvis_hud._extract_model()` - the CHAT's own resolver, asked the same
+         way `_hud_lane_url()` asks `jarvis_model_lanes._hud_ollama_url()`: the
+         module that owns the answer gives it, and no copy is kept here;
+      4. `JARVIS_LOCAL_MODEL`, the variable `_extract_model()` reads first;
+      5. `jarvis_models.current_model()` - the model switched from the HUD;
+      6. `jarvis_chatbot.MAIN_MODEL_DEFAULT` - the chat's own default;
+      7. `JARVIS_MODEL`, kept for an environment that already set it;
+      8. `DEFAULT_MODEL`, the named last-resort fallback ("jarvis-primary").
+
+    A SECOND NAME HERE IS NOT HARMLESS. `options.num_ctx` cannot stop a
+    `POST /api/generate` that names another model from loading it: the request
+    loads the model it names and evicts the chat's own from the card, so the
+    next chat turn reloads it (the accident `jarvis_hud._extract_model`'s own
+    docstring describes). qwen3.5:9b is a real base model and is pulled on this
+    PC, so the old fallback would have won silently - the CHAT lane runs
+    jarvis-primary:latest (`/api/ps`, 2026-10-25). Ask the chat's name.
+    """
+    explicit = str(model or "").strip()
+    if explicit:
+        return explicit
+    override = str(os.environ.get("JARVIS_PERSONALITY_MODEL") or "").strip()
+    if override:
+        return override
+    try:
+        import jarvis_hud
+        resolver = getattr(jarvis_hud, "_extract_model", None)
+        if callable(resolver):
+            name = str(resolver() or "").strip()
+            if name:
+                return name
+    except Exception:                                          # noqa: BLE001
+        pass
+    local = str(os.environ.get("JARVIS_LOCAL_MODEL") or "").strip()
+    if local:
+        return local
+    try:
+        import jarvis_models
+        name = str(jarvis_models.current_model() or "").strip()
+        if name:
+            return name
+    except Exception:                                          # noqa: BLE001
+        pass
+    try:
+        import jarvis_chatbot
+        name = str(getattr(jarvis_chatbot, "MAIN_MODEL_DEFAULT", "") or "").strip()
+        if name:
+            return name
+    except Exception:                                          # noqa: BLE001
+        pass
+    return str(os.environ.get("JARVIS_MODEL") or "").strip() or DEFAULT_MODEL
 
 
 def _ask(prompt: str, *, model: Optional[str] = None, url: Optional[str] = None,
