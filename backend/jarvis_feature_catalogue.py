@@ -3,7 +3,7 @@
 The owner's feature list, as data: 139 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 c31ac2ae5003407418b45e59f5a3fdfe216acfdf420b6e99645250491a4a450e); the apps' Features pages read their own
+`features/features.json` (sha256 04fc281d46e64413f35f46fa7a7f6276eee0939b2870c21591569e72dcc84896); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "c31ac2ae5003407418b45e59f5a3fdfe216acfdf420b6e99645250491a4a450e"
+SOURCE_SHA256 = "04fc281d46e64413f35f46fa7a7f6276eee0939b2870c21591569e72dcc84896"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -200,9 +200,9 @@ FEATURES = (
     {
         "id": "temporary-chat",
         "group": "Talking",
-        "title": "Temporary chat",
+        "title": "Incognito chat",
         "what": "A chat where nothing is kept and nothing you have saved is used.",
-        "where": "Temporary chat in the Jarvis bar. Games and role-play use it automatically.",
+        "where": "Incognito chat in the Jarvis bar. Games and role-play use it automatically.",
         "asks": "No card.",
         "limit": "Only on a PC that has it. It also learns nothing from what you say there - no fact is saved, even with a \"Remember:\".",
         "surface": "both",
@@ -1312,7 +1312,7 @@ FEATURES = (
         "what": "The larger always-there window, with its own chat box.",
         "where": "Tray menu, Show the HUD window. Its box opens the Jarvis bar for anything more.",
         "asks": "No card.",
-        "limit": "The HUD's own chat box has no Temporary chat, no New conversation and no crisis panel.",
+        "limit": "The HUD's own chat box has no Incognito chat, no New conversation and no crisis panel.",
         "surface": "desktop",
         "covers": ["settings.hud-window", "pc-at-a-glance"],
     },

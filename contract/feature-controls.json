@@ -909,31 +909,31 @@
     },
     {
       "id": "temporary-chat",
-      "name": "Temporary chat",
+      "name": "Incognito chat",
       "group": "Talking",
       "surface": "both",
-      "where": "Temporary chat in the Jarvis bar. Games and role-play use it automatically.",
+      "where": "Incognito chat in the Jarvis bar. Games and role-play use it automatically.",
       "control": {
         "type": "refused",
         "setting_keys": [],
-        "turn_on": "turn on Temporary chat",
-        "turn_off": "turn off Temporary chat",
+        "turn_on": "turn on Incognito chat",
+        "turn_off": "turn off Incognito chat",
         "adjust": [],
         "intent": "feature_switch_refused"
       },
       "desktop": {
         "section": null,
-        "location": "Temporary chat in the Jarvis bar.",
+        "location": "Incognito chat in the Jarvis bar.",
         "search": [
-          "Temporary chat"
+          "Incognito chat"
         ],
         "found": true
       },
       "phone": {
         "section": null,
-        "location": "Temporary chat in the Jarvis bar.",
+        "location": "Incognito chat in the Jarvis bar.",
         "search": [
-          "temporary chat"
+          "incognito chat"
         ],
         "found": false
       },
@@ -942,7 +942,7 @@
       "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
-        "example_phrase": "start a temporary chat",
+        "example_phrase": "start an incognito chat",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {

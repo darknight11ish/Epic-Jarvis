@@ -373,7 +373,7 @@ if (K) {
   });
 
   await check("Temporary is on: the strip says this Live session will not be kept, and only while it is on", async () => {
-    assert.equal(R.SEEN.temporary_on, "Temporary is on - this Live session will not be kept in History.");
+    assert.equal(R.SEEN.temporary_on, "Incognito is on - this Live session will not be kept in History.");
     const page = await bar([]);
     // A PC that can hold a temporary chat (the fake bridge's switch).
     await page.evaluate(() => { window.__temporaryOk = true; });
