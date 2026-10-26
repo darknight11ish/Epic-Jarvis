@@ -25147,10 +25147,14 @@ server has BOTH `private-chat.patch`'s `_private_chat` and the shipped
 `capabilities.temporary_chat`. A server with the patch and no module reports
 false, so an app sends nothing rather than believing a half-gate.
 
-**Deliberately not built in Slice 1:** neither app sends the flag yet, there
-is no UI toggle or marker, and the private turn answers with the model alone
-(no stored memory, no writing samples, no tools). Slice 2 is the apps' half;
-the backend contract above is already the one they will read.
+**Desktop Slice 2 (2026-10-26):** the desktop chat window now has a Private chip
+beside Incognito. It sends ONLY `"private": true` (never `temporary` too - the
+server implies that half), starts a new conversation when it is turned on or
+off, and refuses to offer the mode when `/api/version` does not advertise
+`capabilities.private_chat`; the Rust command fails closed with an honest
+sentence and sends nothing. The private turn answers with the model alone (no
+stored memory, no writing samples, no tools). The phone deliberately sends no
+flag: its private mode is Incognito, and this half is desktop-only.
 
 **Tests.** `backend/test_private_chat.py`: the gate module's strict reading and
 fail-closed `persist()`; the fast path refusing every mutating sentence before

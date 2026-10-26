@@ -2087,14 +2087,42 @@ pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, Str
 /// nothing kept. It is sent only to a PC whose `/api/version` says it has
 /// one; otherwise nothing is sent and the answer is [`TEMPORARY_UNAVAILABLE`].
 ///
+/// `private: true` (the owner-approved desktop Private toggle, 2026-10-26;
+/// JARVIS-API.md section 156) asks for a private chat: a temporary chat plus
+/// a strict zero-write, no-tool promise. The server implies the temporary
+/// half, so the body carries `private` and never `temporary` too. It is sent
+/// only to a PC whose `/api/version` advertises `capabilities.private_chat`;
+/// otherwise nothing is sent and the answer is [`PRIVATE_UNAVAILABLE`].
+///
 /// `cloud_yes: true` (the owner's yes to "Try the cloud model" for THIS one
 /// question - jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
 /// "`offer` in `X-Jarvis-Route`"; backend/cloud-say-yes.patch): never sent
 /// as `false`, the same rule `temporary` already follows.
 ///
-/// Nine arguments, two over clippy's line: each is a field main.js already
+/// Ten arguments, three over clippy's line: each is a field main.js already
 /// names at the top level of the call (the tests read them there), and
 /// folding some into a struct would change that call's shape for nothing.
+/// Adds the one chat-mode flag the turn needs: `private`, else `temporary`,
+/// else nothing - plus `cloud_yes` when the owner allowed it for this one
+/// question. `private` implies temporary on the server, so a private body
+/// must never carry `temporary` too; writing the flags here keeps that rule
+/// in one place and lets a unit test prove it without an AppHandle.
+pub(crate) fn add_chat_mode_flags(
+    body: &mut serde_json::Map<String, serde_json::Value>,
+    temporary: bool,
+    private: bool,
+    cloud_yes: bool,
+) {
+    if private {
+        body.insert("private".into(), serde_json::json!(true));
+    } else if temporary {
+        body.insert("temporary".into(), serde_json::json!(true));
+    }
+    if cloud_yes {
+        body.insert("cloud_yes".into(), serde_json::json!(true));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn stream_chat(
@@ -2105,6 +2133,7 @@ pub async fn stream_chat(
     conversation_id: Option<String>,
     device: Option<String>,
     temporary: Option<bool>,
+    private: Option<bool>,
     cloud_yes: Option<bool>,
     on_event: Channel<String>,
 ) -> Result<(), String> {
@@ -2112,13 +2141,30 @@ pub async fn stream_chat(
     let base = jarvis_base(&app);
     let headers = jarvis_headers(&app)?;
     let temporary = temporary == Some(true);
+    let private = private == Some(true);
     let cloud_yes = cloud_yes == Some(true);
-    // A temporary chat is sent only to a PC that says it has one - an older
-    // PC would ignore the flag and use, learn from and keep the chat. Asked
-    // before every temporary question, not once: the backend can be updated
-    // (or rolled back) while this window is open. Stop during the check
-    // stops it, like Stop during the answer.
-    if temporary {
+    // A mode is sent only to a PC that says it has it - an older PC would
+    // ignore the flag and use, learn from and keep the chat (or, for private,
+    // run a tool and write to disk). Asked before every question, not once:
+    // the backend can be updated (or rolled back) while this window is open.
+    // Stop during the check stops it, like Stop during the answer. Private
+    // wins if a caller somehow sends both, so the stricter mode is the one
+    // enforced and the body never carries `temporary` too.
+    if private {
+        let supported = tokio::select! {
+            result = private_chat_supported(&app) => result,
+            _ = cancel.notified() => {
+                app.state::<ChatState>().finish(&cancel);
+                return Ok(());
+            }
+        };
+        if supported != Ok(true) {
+            app.state::<ChatState>().finish(&cancel);
+            return Err(supported
+                .err()
+                .unwrap_or_else(|| PRIVATE_UNAVAILABLE.to_string()));
+        }
+    } else if temporary {
         let supported = tokio::select! {
             result = temporary_chat_supported(&app) => result,
             _ = cancel.notified() => {
@@ -2142,12 +2188,7 @@ pub async fn stream_chat(
     });
     if let Some(body) = payload.as_object_mut() {
         body.extend(chat_extras(conversation_id.as_deref(), device.as_deref()));
-        if temporary {
-            body.insert("temporary".into(), serde_json::json!(true));
-        }
-        if cloud_yes {
-            body.insert("cloud_yes".into(), serde_json::json!(true));
-        }
+        add_chat_mode_flags(body, temporary, private, cloud_yes);
     }
 
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
@@ -2307,10 +2348,11 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
     if let Some(n) = route.get("injected_sensitive").and_then(|v| v.as_u64()) {
         out.insert("injected_sensitive".to_string(), serde_json::json!(n));
     }
-    // temporary-chat.patch (the owner's decision, 2026-09-25): whether the PC
-    // really treated this as a temporary chat, and whether the question was
+    // temporary-chat.patch / private-chat.patch: whether the PC really
+    // treated this as a temporary or private chat (private-chat.patch writes
+    // `private: true` on every private answer), and whether the question was
     // a "Remember:" it did not act on. Booleans only.
-    for key in ["temporary", "remember_off"] {
+    for key in ["temporary", "private", "remember_off"] {
         if let Some(b) = route.get(key).and_then(|v| v.as_bool()) {
             out.insert(key.to_string(), serde_json::json!(b));
         }
@@ -4659,6 +4701,51 @@ async fn temporary_chat_supported(app: &AppHandle) -> Result<bool, String> {
 #[tauri::command]
 pub async fn temporary_chat_available(app: AppHandle) -> Result<bool, String> {
     temporary_chat_supported(&app).await
+}
+
+/// What the quickbar says when the owner turns on a private chat and the PC's
+/// backend has no such thing (JARVIS-API.md section 156). Nothing is sent.
+pub(crate) const PRIVATE_UNAVAILABLE: &str = "Private chat isn't available on this PC's \
+     version of Jarvis, so nothing was sent. Run apply-patches.ps1 on the PC to update it.";
+
+/// Whether `GET /api/version`'s answer says the running server has a private
+/// chat: `capabilities.private_chat` present, read the strict way the
+/// temporary capability is. Anything else - an older server, an unreadable
+/// answer, an error status - is "no": a private turn that is not one would
+/// run tools and write to disk.
+pub(crate) fn private_chat_in_version(status: u16, body: &str) -> bool {
+    (200..300).contains(&status)
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| {
+                v.get("capabilities")
+                    .and_then(|c| c.get("private_chat"))
+                    .cloned()
+            })
+            // Stricter than `capability_present`: a private turn is a write
+            // promise, so ONLY JSON `true` counts; a name-shaped or garbage
+            // string is not a capability this app may trust.
+            .is_some_and(|v| v.as_bool() == Some(true))
+}
+
+async fn private_chat_supported(app: &AppHandle) -> Result<bool, String> {
+    let base = jarvis_base(app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}/api/version"))
+        .headers(jarvis_headers(app)?)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    Ok(private_chat_in_version(status, &body))
+}
+
+/// Can this PC hold a private chat? The quickbar asks when the owner turns one
+/// on, and says [`PRIVATE_UNAVAILABLE`] rather than pretend. Read only.
+#[tauri::command]
+pub async fn private_chat_available(app: AppHandle) -> Result<bool, String> {
+    private_chat_supported(&app).await
 }
 
 /// What the Jarvis server says it supports: `GET /api/version`'s
@@ -7108,6 +7195,63 @@ mod turn_tests {
             assert!(!has(status, body), "{status} {body}");
         }
         assert!(super::TEMPORARY_UNAVAILABLE.contains("isn't available"));
+    }
+
+    /// Only a server that says it has a private chat gets one.
+    #[test]
+    fn a_private_chat_needs_the_capability() {
+        use super::private_chat_in_version as has;
+        assert!(has(200, r#"{"capabilities": {"private_chat": true}}"#));
+        for (status, body) in [
+            (200, r#"{"capabilities": {"private_chat": false}}"#),
+            (200, r#"{"capabilities": {"temporary_chat": true}}"#),
+            (200, r#"{"capabilities": {"private_chat": "true"}}"#),
+            (200, r#"{"capabilities": {"private_chat": "garbage"}}"#),
+            (200, r#"{"capabilities": {"private_chat": 1}}"#),
+            (200, r#"{"api": 1}"#),
+            (200, ""),
+            (200, "not json"),
+            (503, r#"{"capabilities": {"private_chat": true}}"#),
+        ] {
+            assert!(!has(status, body), "{status} {body}");
+        }
+        assert!(super::PRIVATE_UNAVAILABLE.contains("isn't available"));
+        assert!(super::PRIVATE_UNAVAILABLE.contains("nothing was sent"));
+    }
+
+    /// A private body carries `private: true` and NEVER `temporary: true`
+    /// (the server implies the temporary half); a temporary body carries only
+    /// its own flag; the cloud yes rides beside either.
+    #[test]
+    fn chat_mode_flags_send_private_only_when_private() {
+        let mut private = serde_json::Map::new();
+        super::add_chat_mode_flags(&mut private, true, true, false);
+        assert_eq!(private["private"], serde_json::json!(true));
+        assert!(!private.contains_key("temporary"), "{private:?}");
+
+        let mut temporary = serde_json::Map::new();
+        super::add_chat_mode_flags(&mut temporary, true, false, true);
+        assert_eq!(temporary["temporary"], serde_json::json!(true));
+        assert!(!temporary.contains_key("private"), "{temporary:?}");
+        assert_eq!(temporary["cloud_yes"], serde_json::json!(true));
+
+        let mut ordinary = serde_json::Map::new();
+        super::add_chat_mode_flags(&mut ordinary, false, false, false);
+        assert!(ordinary.is_empty(), "{ordinary:?}");
+    }
+
+    /// The app may know the PC treated the turn as private: the header's
+    /// `private: true` reaches the page; a non-boolean does not.
+    #[test]
+    fn the_route_line_carries_private() {
+        let line =
+            super::route_line_from_header(r#"{"lane": "x", "temporary": true, "private": true}"#)
+                .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["private"], serde_json::json!(true));
+        assert_eq!(got["temporary"], serde_json::json!(true));
+        let odd = super::route_line_from_header(r#"{"lane": "x", "private": "yes"}"#).unwrap();
+        assert!(!odd.contains("private"), "{odd}");
     }
 
     /// A turn the second graphics card answered. `chat-stream-cases.json` has

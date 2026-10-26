@@ -216,6 +216,7 @@ import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./no
 import { nextSpeechPiece } from "./speech-pieces.js";
 // Temporary chat and "Used in this answer" (2026-09-25) - answer-memory.js.
 import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
+import { CONTINUED_PRIVATE_OFF, PRIVATE_ENDED, createPrivateToggle } from "./private-chat.js";
 // One card on every screen, and what a spoken question hears about a card
 // (the creativity audit, 2026-09-25) - card-words.js.
 import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
@@ -381,6 +382,10 @@ const dom = {
   lockdownStrip: $("lockdown-strip"),
   temporaryLine: $("temporary-line"),
   temporaryRefused: $("temporary-refused"),
+  private: $("private"),
+  privateStrip: $("private-strip"),
+  privateLine: $("private-line"),
+  privateRefused: $("private-refused"),
   answerUsed: $("answer-used"),
   answerUsedLine: $("answer-used-line"),
   answerUsedList: $("answer-used-list"),
@@ -794,11 +799,43 @@ const temporaryChat = createTemporaryToggle({
   },
   busy: () => Boolean(state.inFlight || state.abort),
   announce,
+  // The two modes cannot both be on: turning one on quiets the other without
+  // a second restart or announcement (the new conversation starts once, below).
+  onTurnOn: () => privateChat.offQuietly(),
   onChange: () => {
     // Live's strip says "Temporary is on" while it is (paintLive).
     paintLive();
     syncWindowHeight();
   },
+});
+
+/**
+ * Private chat (owner-approved 2026-10-26): the toggle and its marker strip.
+ * A private turn is a temporary chat plus a strict zero-write promise; the PC
+ * must advertise capabilities.private_chat, or this stays off and says why.
+ * Turning it on/off starts a new conversation, like Temporary, and the two
+ * modes turn each other off. main.js resets it when a chat ends.
+ */
+const privateChat = createPrivateToggle({
+  button: dom.private,
+  strip: dom.privateStrip,
+  line: dom.privateLine,
+  refused: dom.privateRefused,
+  root: dom.shell,
+  check: () => (IS_TAURI ? invokeStrict("private_chat_available") : Promise.resolve(false)),
+  restart: () => {
+    state.turnQuestion = null;
+    // The toggle has already flipped: the chat that ends here was the other kind.
+    const wasPrivate = !privateChat.on;
+    closeCard({ wasPrivate, quiet: true, resetPrivate: false });
+    state.conversation = [];
+    state.thread = [];
+    focusInput();
+  },
+  busy: () => Boolean(state.inFlight || state.abort),
+  announce,
+  onTurnOn: () => temporaryChat.offQuietly(),
+  onChange: () => syncWindowHeight(),
 });
 
 /**
@@ -1233,7 +1270,8 @@ function syncPrimer() {
 }
 
 /** Collapses the card and clears everything it was showing. */
-function closeCard({ wasTemporary = temporaryChat.on, quiet = false } = {}) {
+function closeCard({ wasTemporary = temporaryChat.on, wasPrivate = privateChat.on,
+  quiet = false, resetPrivate = true } = {}) {
   dom.card.hidden = true;
   paintYouLine("");
   dom.answer.innerHTML = "";
@@ -1253,6 +1291,7 @@ function closeCard({ wasTemporary = temporaryChat.on, quiet = false } = {}) {
   // A game is a temporary chat the PC made by itself: nothing of it was kept
   // either (the second chat audit, 2026-09-28, desktop B3).
   const endedTemporary = wasTemporary || state.gameChat;
+  const endedPrivate = wasPrivate;
   state.conversation = [];
   state.thread = [];
   state.gameChat = false;
@@ -1276,7 +1315,7 @@ function closeCard({ wasTemporary = temporaryChat.on, quiet = false } = {}) {
   // ending is said to a screen reader too (the second chat audit,
   // 2026-09-28, desktop B3 and C3).
   if (dom.chatEndedNote && hadChat) {
-    const line = endedTemporary ? ENDED_TEMPORARY : ENDED_SAVED;
+    const line = endedPrivate ? PRIVATE_ENDED : endedTemporary ? ENDED_TEMPORARY : ENDED_SAVED;
     dom.chatEndedNote.hidden = false;
     dom.chatEndedNote.textContent = line;
     if (!quiet) announce(line);
@@ -1288,6 +1327,11 @@ function closeCard({ wasTemporary = temporaryChat.on, quiet = false } = {}) {
   renderPreviousAnswer();
   syncNewConversation();
   answerMemory.clear();
+  // A chat ending turns Private off (the owner can turn it on again for the
+  // next one); a toggle's own restart passes resetPrivate=false so the mode
+  // the owner just chose survives that restart.
+  if (resetPrivate) privateChat.offQuietly();
+  else privateChat.paint(true);
   temporaryChat.paint(true);
   paint({ immediate: true });
 }
@@ -1426,6 +1470,7 @@ function startFreshQuietly(line, { carryOn = null } = {}) {
   state.previousAnswer = null;
   state.gameChat = false;
   temporaryChat.setGame(false);
+  privateChat.offQuietly();
   renderPreviousAnswer();
   syncNewConversation();
   hideCarryOn();
@@ -1479,6 +1524,11 @@ async function continueChat(id, { moved = false } = {}) {
     await temporaryChat.toggle();
     tempOff = !temporaryChat.on;
   }
+  let privateOff = false;
+  if (privateChat.on) {
+    privateChat.offQuietly();
+    privateOff = true;
+  }
   closeCard({ quiet: true });
   state.conversation = kept;
   state.thread = kept.slice();
@@ -1493,6 +1543,7 @@ async function continueChat(id, { moved = false } = {}) {
   if (trimmed) lines.push(continuedTrimmed(trimmedCount));
   if (conv && conv.tainted === true) lines.push(CONTINUED_TAINTED);
   if (tempOff) lines.push(CONTINUED_TEMPORARY_OFF);
+  if (privateOff) lines.push(CONTINUED_PRIVATE_OFF);
   // History off (or unable to keep anything): the chat can be read and
   // carried on, but what is said now is not kept (the owner, 2026-09-29).
   // Not for "Move it here": that says where the chat went, not that it was
@@ -3797,6 +3848,7 @@ async function streamViaFetch(payload) {
         conversation_id: payload.conversationId,
         device: payload.device,
         ...(payload.temporary ? { temporary: true } : {}),
+        ...(payload.private ? { private: true } : {}),
       }),
       signal: controller.signal,
     });
@@ -3965,7 +4017,7 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
   if (!liveOnHere() && idleExpired(state.lastTurnAt, Date.now(), state.conversation.length > 0, idleWaitMs)) {
     // A temporary chat or a game was never kept, so there is no "last one in
     // History" to point to or carry on (the second chat audit, desktop C2).
-    const kept = !(temporaryChat.on || state.gameChat);
+    const kept = !(temporaryChat.on || privateChat.on || state.gameChat);
     const ended = state.conversationId;
     startFreshQuietly(kept ? IDLE_NEW_LINE : IDLE_NEW_LINE_TEMPORARY,
       { carryOn: kept ? ended : null });
@@ -4134,6 +4186,10 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
     // A temporary chat (section 18.1): no memory used, nothing learned,
     // nothing kept. stream_chat sends it only to a PC that has one.
     temporary: temporaryChat.on,
+    // A private turn is sent as ONLY `private: true` (the server implies the
+    // temporary half); the two modes are mutually exclusive in the UI, and
+    // stream_chat refuses a private turn on a PC without the capability.
+    private: privateChat.on,
     // The owner's yes to "Try the cloud model" for THIS one question
     // (backend/cloud-say-yes.patch). stream_chat forwards it only when
     // true, the same rule it already follows for `temporary`.
@@ -4155,8 +4211,9 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
   }
   // What this answer used, and what the PC said about a temporary one,
   // start from nothing (answer-memory.js).
-  answerMemory.begin(temporaryChat.on);
+  answerMemory.begin(temporaryChat.on, privateChat.on);
   temporaryChat.paint(false);
+  privateChat.paint(false);
 
   if (IS_TAURI) {
     await streamViaBackend(payload);
@@ -5732,6 +5789,7 @@ for (const b of [dom.earlierChats, dom.earlierChatsPrimer]) {
   }
 }
 if (dom.temporary) dom.temporary.addEventListener("click", () => temporaryChat.toggle());
+if (dom.private) dom.private.addEventListener("click", () => privateChat.toggle());
 
 dom.copy.addEventListener("click", async () => {
   const text = state.buffer.trim();

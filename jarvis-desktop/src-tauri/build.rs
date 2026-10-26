@@ -133,6 +133,8 @@ fn main() {
             "memory_used",
             // Can this PC hold a temporary chat? A read. The quickbar.
             "temporary_chat_available",
+            // Can this PC hold a private chat? A read. The quickbar.
+            "private_chat_available",
             // Chat history on the PC (JARVIS-API.md section 18): list, open
             // one read-only, delete ONE, and the two settings. Brain only.
             "brain_history_list",

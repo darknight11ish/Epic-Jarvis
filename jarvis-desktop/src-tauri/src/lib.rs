@@ -926,6 +926,7 @@ pub fn run() {
             // that will want them; they are simply not exposed until then.
             commands::stream_chat,
             commands::temporary_chat_available,
+            commands::private_chat_available,
             commands::cancel_chat,
             commands::decide_approval,
             commands::notify_user,

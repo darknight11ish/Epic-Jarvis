@@ -51,6 +51,7 @@ import {
   usedLine,
 } from "./memory-used.js";
 import { whenLine } from "./history-view.js";
+import { PRIVATE_NOT_CONFIRMED } from "./private-chat.js";
 import {
   eraseAlsoChatNamedConfirm,
   ERASED_NO_CHAT,
@@ -101,7 +102,7 @@ const TURN_ID_RX = /^[0-9a-f]{32}$/;
  * the other; `busy()` is true while an answer is arriving.
  */
 export function createTemporaryToggle({ button, strip, line, refused, root, check, restart,
-  busy, announce, onChange }) {
+  busy, announce, onChange, onTurnOn }) {
   const t = {
     on: false,
     /** The PC made this conversation temporary by itself: a game or
@@ -112,6 +113,13 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
     setGame(value) {
       t.game = Boolean(value);
       t.paint(t.game ? false : true);
+    },
+    /** Turn off without a restart, an announcement or a chat-ended note. */
+    offQuietly() {
+      if (!t.on) return;
+      t.on = false;
+      refused.hidden = true;
+      t.paint(true);
     },
     async toggle() {
       if (t.checking || busy()) return;
@@ -144,6 +152,7 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
         onChange();
         return;
       }
+      onTurnOn?.();
       t.on = true;
       refused.hidden = true;
       restart();
@@ -193,6 +202,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     ids: [],
     count: 0,
     sentTemporary: false,
+    sentPrivate: false,
     game: false,
     route: null,
     done: false,
@@ -246,8 +256,13 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
 
   function paintNote() {
     const lines = [];
-    const outcome = temporaryOutcome(a.sentTemporary, a.route);
+    // A private answer is a temporary one by implication; the PC's own
+    // `private: true` is the fact this app believes, never the flag it sent.
+    const outcome = a.sentPrivate ? "" : temporaryOutcome(a.sentTemporary, a.route);
     if (a.done && outcome === "unconfirmed") lines.push(TEMPORARY_NOT_CONFIRMED);
+    if (a.done && a.sentPrivate && !(a.route && a.route.private === true)) {
+      lines.push(PRIVATE_NOT_CONFIRMED);
+    }
     if (outcome === "game") lines.push(GAME_TEMPORARY);
     if (a.route && a.route.remember_off === true) lines.push(REMEMBER_OFF);
     // Topic controls: how many facts the owner's topic settings kept out of
@@ -264,7 +279,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
 
   function paintLine() {
     // Only on a finished answer, and never on a temporary one: it used none.
-    const show = a.done && a.ids.length > 0 && !a.sentTemporary;
+    const show = a.done && a.ids.length > 0 && !a.sentTemporary && !a.sentPrivate;
     box.hidden = !show;
     if (!show) return;
     lineButton.textContent = usedLine(a.count);
@@ -445,7 +460,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     // Never on a temporary answer: nothing was recorded for one to read
     // back (jarvis_sources.record is never reached - jarvis_agent's own
     // tool loop still ran, but a temporary chat's turn_id is not kept).
-    const show = a.done && !a.sentTemporary && has;
+    const show = a.done && !a.sentTemporary && !a.sentPrivate && has;
     src.box.hidden = !show;
     if (!show) return;
     if (src.lineButton) {
@@ -539,9 +554,10 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
   }
 
   return {
-    begin(sentTemporary) {
+    begin(sentTemporary, sentPrivate = false) {
       clear();
       a.sentTemporary = Boolean(sentTemporary);
+      a.sentPrivate = Boolean(sentPrivate);
     },
     route(route) {
       a.route = route && typeof route === "object" ? route : null;
@@ -565,13 +581,14 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
       // Fetched once, quietly, right as the answer finishes - there is no
       // cheap count to gate this on first (see memory-used.js). Never on a
       // temporary answer: nothing was recorded to read back for one.
-      if (a.done && a.turnId && !a.sentTemporary) loadSources();
+      if (a.done && a.turnId && !a.sentTemporary && !a.sentPrivate) loadSources();
       else paintSourcesLine();
       onChange();
     },
     clear() {
       clear();
       a.sentTemporary = false;
+      a.sentPrivate = false;
       onChange();
     },
     linkChanged() {
