@@ -182,8 +182,16 @@ def t_owner_login_seam():
           isinstance(raised, CAP.OwnerLoginRequired)
           and "owner" in str(raised).lower()
           and "password" in str(raised).lower(), raised)
+    tree = ast.parse(inspect.getsource(CAP))
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+    browser_api = {"playwright", "selenium", "webbrowser", "chromium", "launch"}
     check("the login seam never opens a browser by itself",
-          "does not" not in str(raised).lower() or True)
+          not (names & browser_api), sorted(names & browser_api))
     try:
         CAP.open_owner_login(object())
         raised2 = None
@@ -246,8 +254,8 @@ def t_source_imports_and_calls_are_clean():
                 roots.add(alias.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom) and node.module:
             roots.add(node.module.split(".")[0])
-    check("the module imports only re and the read half (plus __future__)",
-          roots == {"__future__", "re", "jarvis_product_read"}, sorted(roots))
+    check("the module imports only the read half (plus __future__)",
+          roots == {"__future__", "jarvis_product_read"}, sorted(roots))
     forbidden_roots = {"socket", "urllib", "http", "requests", "subprocess", "os",
                        "pathlib", "playwright", "selenium", "webbrowser"}
     check("it imports no network, browser, storage or process module",

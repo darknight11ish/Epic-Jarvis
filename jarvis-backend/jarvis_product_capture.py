@@ -40,15 +40,18 @@ exercised: this module's tests use fixture HTML only and never open a window or
 make a network call. The real driver, the persistent browser profile and the
 owner's login are NOT-TESTABLE in this development container.
 
-Standard library only plus the project's own read module: `re`,
-`jarvis_product_read`. No network, no browser import, no subprocess, no file is
-read or written, and nothing here logs.
+Only the project's own read module: `jarvis_product_read`. No network, no browser
+import, no subprocess, no file is read or written, and nothing here logs.
+
+One honest limit about the classification: a product page that carries a sign-in
+form anywhere in its HTML (a password field, or the sign-in phrases) is refused
+as `owner_login_required` before the read half looks at it, because the login
+check runs first. That is the conservative choice - a page that wants a sign-in
+is not read - and it means a product page with a sign-in modal is refused too.
 
     py -3 -B backend/test_product_capture.py
 """
 from __future__ import annotations
-
-import re
 
 import jarvis_product_read as READ
 
@@ -111,8 +114,6 @@ _CHALLENGE_MARKERS = (
     "type the characters you see",
     "not a robot",
 )
-
-_TAG = re.compile(r"<[^>]+>", re.S)
 
 
 class CaptureUnavailable(RuntimeError):
