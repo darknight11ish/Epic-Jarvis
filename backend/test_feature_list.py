@@ -25,6 +25,14 @@ byte-identical, the same rule `test_base_matches_repo.py` applies to the
 backend copies - two copies that drift mean the two apps disagree about what
 Jarvis does, in the owner's own words.
 
+And it proves the TEACHING claim is tested, not just made (rule 7, 2026-10-25).
+A feature row can name a lesson that never mentions it, and every other rule
+here stayed green while it did: "Save a draft to your Drafts folder" was taught
+by a lesson containing no "draft". Every taught row now carries `must_mention`,
+the suite proves a made-up row whose lesson lacks its word FAILS and that the
+real list passes, and `TEACHING_GAP` records the rows whose lesson genuinely
+does not teach them yet - one line each, self-emptying.
+
 Needs nothing from the owner's PC; runs anywhere, including CI (it is picked up
 by backend/run_suites.py like every other test_*.py).
 """
@@ -223,12 +231,112 @@ def t_a_one_sided_claim_carries_its_reason():
           C.pending_problems(real))
 
 
+def t_a_taught_row_must_name_words_its_lesson_uses():
+    """Rule 7: a row that names a lesson must name a word that lesson really uses.
+
+    THE HOLE (2026-10-25). Rules 2 and 6 kept the list true about the code and
+    kept every lesson tied to a row, but nothing compared the row's subject with
+    the lesson's text. So "Save a draft to your Drafts folder" could name
+    `home-calendar-email` - a lesson with no "draft" in it - and the checker
+    said "every feature is taught". This is the self-proof: a made-up row whose
+    made-up lesson does not contain its word must FAIL, naming all three, and
+    the real list must pass. A check that cannot fail proves nothing, which is
+    why the pass case is a CONTROL at the end and the fail case is the point.
+
+    The three ways in are all proved, because each is a way to get round the
+    rule rather than through it: writing no `must_mention` at all, writing a
+    word the lesson does not use, and leaving the field on a row that no lesson
+    teaches.
+    """
+    # A made-up lesson and row, so the proof needs no edit to the real
+    # catalogue and cannot pass because of what the real files happen to say.
+    fake = ({"id": "fake-lesson", "title": "A made-up lesson",
+             "steps": ({"title": "It does a thing",
+                        "body": "It reads the thing and says what it found."},)},
+            {"id": "other-lesson", "title": "A second made-up lesson",
+             "steps": ({"title": "Something else entirely",
+                        "body": "This one talks about a different subject."},)})
+
+    def row(**over):
+        base = {"id": "fake-feature", "group": "Talking", "title": "t",
+                "what": "w", "where": "w", "asks": "a", "limit": "",
+                "surface": "both", "covers": ["fake-lesson"],
+                "must_mention": ["thing"]}
+        base.update(over)
+        return base
+
+    good = C.keyword_problems([row()], catalogue=fake, gaps={})
+    check("a row whose keyword is really in its lesson passes", good == [], good)
+
+    # 1. The bite: the lesson does not contain the word.
+    bad = C.keyword_problems([row(must_mention=["nonsense"])], catalogue=fake, gaps={})
+    check("a synthetic row whose lesson lacks its keyword FAILS", len(bad) == 1, bad)
+    check("  ...and the line names the feature, the lesson and the missing word",
+          bool(bad) and "fake-feature" in bad[0] and "fake-lesson" in bad[0]
+          and "nonsense" in bad[0], bad)
+
+    # 2. The gate cannot be skipped by writing nothing.
+    silent = C.keyword_problems([row(must_mention=None)], catalogue=fake, gaps={})
+    check("a taught row with no `must_mention` FAILS (the gate is not skippable)",
+          len(silent) == 1 and "no `must_mention`" in silent[0], silent)
+
+    # 3. And the field cannot be left behind when a lesson stops teaching a row.
+    stale = C.keyword_problems(
+        [row(covers=[])], catalogue=fake, gaps={})
+    check("`must_mention` on a row no lesson teaches FAILS (a stale field)",
+          len(stale) == 1 and "delete the field" in stale[0], stale)
+
+    # 4. Shape: short, lowercase, plain words.
+    check("more than three words is refused",
+          any("must hold 1 to 3" in b for b in C.keyword_problems(
+              [row(must_mention=["it", "reads", "the", "thing"])],
+              catalogue=fake, gaps={})))
+    check("a capital letter is refused (the check is case-insensitive anyway)",
+          any("write it lowercase" in b for b in C.keyword_problems(
+              [row(must_mention=["Thing"])], catalogue=fake, gaps={})))
+    check("an empty list is refused",
+          any("must hold 1 to 3" in b for b in C.keyword_problems(
+              [row(must_mention=[])], catalogue=fake, gaps={})))
+
+    # 5. The recorded gap is a work list, not a silence: it empties itself.
+    gap = {"fake-feature": ("fake-lesson", "the lesson never says it")}
+    check("a recorded gap stands in for the words",
+          C.keyword_problems([row(must_mention=None)], catalogue=fake, gaps=gap) == [])
+    closed = C.keyword_problems([row()], catalogue=fake, gaps=gap)
+    check("a row that gains keywords FAILS until its gap line is deleted",
+          len(closed) == 1 and "delete the gap line" in closed[0], closed)
+    wrong_lesson = C.keyword_problems(
+        [row(must_mention=None)], catalogue=fake,
+        gaps={"fake-feature": ("other-lesson", "why")})
+    check("a gap line naming a lesson the row does not name FAILS",
+          any("does not name that lesson" in b for b in wrong_lesson), wrong_lesson)
+    no_reason = C.keyword_problems(
+        [row(must_mention=None)], catalogue=fake,
+        gaps={"fake-feature": ("fake-lesson", "  ")})
+    check("a gap line with no reason FAILS",
+          any("has no reason" in b for b in no_reason), no_reason)
+
+    # CONTROL, and the one that matters most: the real list passes the very
+    # check that just failed three different ways on made-up input.
+    real = C.keyword_problems(C.entries())
+    check("CONTROL: the committed list passes rule 7 - every real keyword is in "
+          "the lesson its row names", real == [], real)
+    taught = [e for e in C.entries() if any(c in set(C.lesson_ids())
+                                            for c in e.get("covers") or [])]
+    check("CONTROL: every taught row is either keyworded or a recorded gap",
+          all(e.get("must_mention") is not None or e["id"] in C.TEACHING_GAP
+              for e in taught), len(taught))
+    check("every TEACHING_GAP line names a real feature row",
+          all(any(x.get("id") == fid for x in C.entries()) for fid in C.TEACHING_GAP))
+
+
 if __name__ == "__main__":
     for fn in (t_the_list_is_complete_and_true,
                t_the_check_is_sensitive_both_directions,
                t_every_copy_is_the_same_file,
                t_every_lesson_is_claimed_by_a_feature_row,
-               t_a_one_sided_claim_carries_its_reason):
+               t_a_one_sided_claim_carries_its_reason,
+               t_a_taught_row_must_name_words_its_lesson_uses):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -60,6 +60,23 @@ it checks **both directions**:
    a non-empty `what`, `where` and `asks`. A removed feature cannot linger as a
    lie on the page.
 
+It also holds the **teaching** side (rules 6 and 7), because "the page lists the
+feature" and "the lesson teaches it" are two different claims:
+
+* every lesson in `backend/jarvis_tutorials.py` is named by a feature row, or
+  exempt in `LESSON_UNCOVERED` with the reason it is deliberately not a
+  feature. A lesson whose row was removed fails, and so does a feature with no
+  lesson and no written reason (`docs/EDUCATION-TAB-DESIGN.md` section 8).
+* every taught row says which words its lesson really uses. `must_mention`
+  holds 1-3 lowercase words or short phrases, and each one must occur, whole
+  word and case-insensitively, in the step `title`+`body` text of the lessons
+  that row names. A row that names a lesson which never mentions the feature
+  now fails, naming the feature, the lesson and the missing word. The rows
+  whose lesson genuinely does not teach them YET are recorded in
+  `TEACHING_GAP`, one line each saying what that lesson leaves out — a work
+  list for the teaching side, never a silence: a row that gains `must_mention`
+  fails until its gap line is deleted.
+
 Run through `backend/run_suites.py test_feature_list.py` so it runs in CI with
 the other Python suites.
 
@@ -93,3 +110,13 @@ what keeps "curated" from meaning "incomplete". The two apps' entries are
 written once in the shared file, so the phone and the PC can never disagree
 about what a feature does — which is the same guarantee the shared contract
 fixtures already give for cards.
+
+Rule 7 has its own version of that limit, and it is worth saying plainly: the
+checker can see that a word OCCURS in a lesson, and it cannot see that the word
+is the RIGHT word. `["card"]` occurs in 28 of the 36 lessons, so a row could
+satisfy the letter of the rule with a word that proves nothing. Two things keep
+that honest: the list is 1-3 plain words a person reads in the diff, and a row
+whose lesson does not teach it at all is recorded in `TEACHING_GAP` instead of
+being given a nearby word. That list is the measured answer to "what does this
+gate still not know" — 14 rows on 2026-10-25, each naming what its lesson leaves
+out.

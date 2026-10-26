@@ -57,6 +57,42 @@ BOTH DIRECTIONS, which is the whole point:
      deleted, or one that a row now claims). A tutorial the list no longer
      points at is a feature the page has stopped telling the owner about.
 
+  7. A TAUGHT ENTRY NAMES WORDS ITS OWN LESSON REALLY USES. Rule 6 asks whether
+     every feature HAS a lesson and every lesson a feature; it could not see
+     the lie left over: a row that names a lesson which never mentions the
+     feature. The row "Save a draft to your Drafts folder" can name
+     `home-calendar-email` and pass every rule above while that lesson's steps
+     never say "draft" - so "it is taught" was a claim nothing tested. Every
+     taught row now carries `must_mention`: 1-3 lowercase words or short
+     phrases that must occur, whole-word and case-insensitively, in the step
+     `title`+`body` text of the lessons that row names. A missing word FAILS,
+     naming the feature, the lesson(s) and the word. So does a taught row with
+     no `must_mention` (the gate cannot be skipped) and a `must_mention` on a
+     row no lesson teaches (a stale field).
+
+WHAT RULE 7 CANNOT JUDGE, AND WHAT IT DOES ABOUT THAT
+
+It can see that a word OCCURS. It cannot see that the word is the right word:
+`["card"]` appears in 28 of the 36 lessons (measured 2026-10-25), so on its own
+it would prove nothing. Two things keep that honest rather than pretending a
+checker can judge meaning:
+
+  * the list is read by a person in a diff, which is why it is 1-3 short plain
+    words and not a score, and why `surface_reason`'s precedent applies -
+    "only its SHAPE can be checked; the sentence has to exist for a person to
+    read" is the same limit one rule over; and
+  * `TEACHING_GAP` below is where a row is recorded when its lesson genuinely
+    does not teach it, so no row can pass by carrying a word that happens to be
+    nearby. That list is the honest answer to "what does this gate still not
+    know", and it empties itself: a row that gains `must_mention` fails until
+    its gap line is deleted.
+
+The 14 rows in `TEACHING_GAP` were measured on 2026-10-25 by searching each
+row's lesson text for the feature's own subject - "draft", "archive",
+"captcha", "github", "version", "camera", "rush", "app lock", "update" - and
+finding none of them. They are a work list for the teaching side, not a
+silence: each line names the lesson and what it leaves out.
+
 WHAT `surface` IS NOT CHECKED AGAINST, AND WHY NOT (2026-10-16)
 
 `surface` is only required to be one of `("desktop", "phone", "both")` - never
@@ -121,6 +157,7 @@ never presses it directly. It is deliberately as small as the truth allows.
 Run through `backend/run_suites.py test_feature_list.py`, which is how CI runs
 it with the other Python suites.
 """
+import ast
 import json
 import re
 import sys
@@ -276,22 +313,133 @@ LESSON_EXEMPT = {
 #: entry must carry the sentence saying which rule.
 LESSON_UNCOVERED = {}
 
+#: Rule 7's honest limit, written down rather than hidden: the rows whose lesson
+#: does NOT teach the feature, so there is no word to name. Each entry is
+#: `feature id -> (lesson id the row names, what that lesson leaves out)`.
+#:
+#: **This list is a work list for the teaching side, not an exemption for this
+#: list.** Every entry was measured on 2026-10-25 by searching the row's own
+#: lesson text for the feature's subject words and finding none: `home-calendar-email`
+#: has no "draft", no "archive", no "trash" and no "tidy"; `when-something-is-wrong`
+#: has no "rush", no "latch" and no "banner"; `limits-and-notes` has no "update",
+#: "version" or "release". The alternative - giving those rows a word that does
+#: occur nearby, like "email" or "card" - would have made the gate green while
+#: proving exactly nothing, which is the failure this rule was added to stop.
+#:
+#: It empties itself the way every other list here does. A gap line FAILS when
+#: the row gains `must_mention` ("delete the line - the row has words now"),
+#: when the row stops naming the lesson, when the feature row is gone, and when
+#: the reason is empty. Closing a gap is therefore two edits in one commit: the
+#: lesson step, then the deletion of its line here.
+TEACHING_GAP = {
+    "talk-to-type": (
+        "how-it-talks",
+        "teaches personality, voice, interrupting, the voice print and the "
+        "prompt coach - nothing about holding a key to type what you say"),
+    "about": (
+        "intro",
+        "teaches what Jarvis is and the five rules it will not break; the About "
+        "page's own subject - the version, the licences and the credits - is in "
+        "no step"),
+    "photo-reminder": (
+        "screens-and-pictures",
+        "teaches looking, watching, what is kept and asking for a picture; "
+        "nothing reads dates off a photo and offers a reminder"),
+    "live-camera": (
+        "phone-live",
+        "teaches the Live conversation, the tile, the headset and the controls; "
+        "the word camera appears in no step (and the row itself says the "
+        "feature is not built yet)"),
+    "github-watchlist": (
+        "work-and-attention",
+        "neither lesson it names contains 'github', 'watch' or 'topic' - the "
+        "feature is named by its registry ids only"),
+    "email-drafts": (
+        "home-calendar-email",
+        "teaches reading email and sending it, one card per email; saving a "
+        "DRAFT to the owner's Drafts folder is in no step"),
+    "inbox-tidy": (
+        "home-calendar-email",
+        "teaches reading and sending; no step mentions archiving, starring, "
+        "marking read, Trash or tidying"),
+    "news-and-page-watches": (
+        "work-and-attention",
+        "the only 'news' in either lesson is the morning briefing's own line; "
+        "feeds and watched pages are in no step"),
+    "updates": (
+        "limits-and-notes",
+        "teaches limits, starting Jarvis, logs and crash notes; no step "
+        "mentions an update, a version or a release page"),
+    "tool-updates": (
+        "model-page",
+        "the only 'tool' is 'a tool that is not installed' under what the "
+        "backend supports; checking a package is out of date is in no step"),
+    "app-lock": (
+        "phone-limits",
+        "neither lesson it names mentions App lock, a fingerprint, a PIN or "
+        "hidden memory lists - the nearest sentence lives in the sibling "
+        "lesson phone-stays-on-pc, which this row does not name"),
+    "captcha-handoff": (
+        "phone-approvals",
+        "teaches deciding a card on the phone; no step mentions a captcha, a "
+        "solve-it-here hand-off or a stuck browser window"),
+    "stale-link": (
+        "when-something-is-wrong",
+        "teaches the error ring, 'not connected', the slow model, stopping and "
+        "crisis help; the stale event stream and the block on acting are in no "
+        "step"),
+    "rush-latch": (
+        "when-something-is-wrong",
+        "no step mentions the rush-latch banner, outside text trying to hurry "
+        "an approval, or the fact that no control clears it"),
+}
 
-def lesson_ids() -> list:
-    """Every tutorial id the catalogue really defines, in file order.
+#: Rule 7: how a `must_mention` list is judged. Only its SHAPE, plus whether
+#: the words occur - no checker can tell whether a word is a good choice, which
+#: is why the list is short enough to read in a diff and why TEACHING_GAP
+#: exists for the rows where no honest word exists.
+KEYWORDS_MIN = 1
+KEYWORDS_MAX = 3
+_KEYWORD_SHAPE = re.compile(r"^[a-z0-9][a-z0-9' -]*$")
 
-    Read from the source rather than by importing the module: this checker runs
-    in CI beside every other one and must not need the backend's runtime (the
-    module imports `jarvis_framework` when it is there). The pattern is the same
-    shape `tools/check_tutorial_places.py` reads the same file with.
+
+def catalogue_lessons() -> tuple:
+    """Every lesson the catalogue really defines, as data, in file order.
+
+    Read as a Python LITERAL rather than by importing the module: this checker
+    runs in CI beside every other one and must not need the backend's runtime
+    (the module imports `jarvis_framework` when it is there). `ast.literal_eval`
+    refuses anything that is not plain data, so a catalogue that stops being a
+    tuple of dicts fails loudly here instead of being guessed at - the same
+    "refuse to guess" the parses below already follow.
     """
     text = TUTORIALS_PY.read_text(encoding="utf-8")
     start = text.index("CATALOGUE = (")
-    block = text[start:text.index("\n)\n", start)]
-    ids = re.findall(r'^\s{8}"id": "([a-z0-9-]+)",$', block, re.MULTILINE)
-    if len(ids) < 20:
-        raise AssertionError(f"read only {len(ids)} lesson ids from jarvis_tutorials.py - the parse broke")
-    return ids
+    opened = text.index("(", start)
+    closed = text.index("\n)\n", start) + 2
+    got = ast.literal_eval(text[opened:closed])
+    if not isinstance(got, tuple) or len(got) < 20:
+        raise AssertionError(
+            f"read {len(got) if isinstance(got, tuple) else type(got).__name__} "
+            "lessons from jarvis_tutorials.py - the parse broke")
+    return got
+
+
+def lesson_ids() -> list:
+    """Every tutorial id the catalogue really defines, in file order."""
+    return [lesson["id"] for lesson in catalogue_lessons()]
+
+
+def lesson_text(lesson: dict) -> str:
+    """The words a lesson teaches with: every step's `title` and `body`.
+
+    `where` is deliberately NOT read. It names a place in an app ("Settings →
+    Voice"), and a row could then match a keyword against a place-name while the
+    lesson itself taught nothing - the same false comfort rule 7 exists to
+    remove. A row's `must_mention` has to be earned by a sentence, not by a
+    breadcrumb.
+    """
+    return "\n".join(f"{step['title']}\n{step['body']}" for step in lesson["steps"])
 
 
 def source_bytes() -> bytes:
@@ -534,6 +682,129 @@ def lesson_problems(got: list, lessons=None, exempt=None) -> list:
     return bad
 
 
+def keyword_present(word: str, text: str) -> bool:
+    """Does this word or phrase occur in `text`, whole-word, case-insensitively?
+
+    The phrase is split and escaped word by word on purpose: `re.escape` escapes
+    the SPACE itself in Python 3.7+ ("\\ "), so escaping "talk button" whole and
+    then replacing spaces with `\\s+` finds nothing at all - measured the hard
+    way while writing this rule. Lowercasing both sides is the "case-insensitive"
+    half; the `(?<![a-z0-9])` guards are the "whole word" half, so "card" does
+    not match "cards" (a row that claims "card" must be answered by a step that
+    says "card").
+    """
+    parts = [re.escape(part) for part in str(word).lower().split()]
+    if not parts:
+        return False
+    pattern = r"(?<![a-z0-9])" + r"\s+".join(parts) + r"(?![a-z0-9])"
+    return re.search(pattern, " ".join(text.lower().split())) is not None
+
+
+def keyword_shape_problems(fid: str, words) -> list:
+    """Rule 7's shape half: a list of 1-3 lowercase words or short phrases."""
+    bad = []
+    if not isinstance(words, list):
+        return [f"{fid}: `must_mention` must be a list of "
+                f"{KEYWORDS_MIN}-{KEYWORDS_MAX} lowercase words or short phrases"]
+    if not KEYWORDS_MIN <= len(words) <= KEYWORDS_MAX:
+        bad.append(f"{fid}: `must_mention` holds {len(words)} word(s) - it must hold "
+                   f"{KEYWORDS_MIN} to {KEYWORDS_MAX} (a short list a person can read "
+                   "in a diff, not a word cloud)")
+    for word in words:
+        if not isinstance(word, str) or not word.strip():
+            bad.append(f"{fid}: `must_mention` holds {word!r}, which is not a word")
+        elif word != word.lower():
+            bad.append(f"{fid}: `must_mention` says {word!r} - write it lowercase "
+                       "(the check is case-insensitive, so the capital proves nothing)")
+        elif not _KEYWORD_SHAPE.match(word) or "  " in word or word != word.strip():
+            bad.append(f"{fid}: `must_mention` says {word!r} - that is not a plain "
+                       "word or short phrase (lowercase letters, digits, spaces, "
+                       "hyphens and apostrophes only)")
+    return bad
+
+
+def keyword_problems(got: list, catalogue=None, gaps=None) -> list:
+    """Rule 7: a taught entry names words its own lesson really uses.
+
+    THE HOLE THIS CLOSES. Rules 2 and 6 keep the LIST true about the code, and
+    rule 6 keeps a lesson tied to a row - but nothing compared the two texts. A
+    row could name a lesson that never mentions it and every rule stayed green
+    ("Save a draft to your Drafts folder" taught by a lesson with no "draft" in
+    it). The row then tells the owner he can read how to do something when the
+    lesson, which he is about to read, does not say it.
+
+    THE THREE WAYS IT BITES, all of them on purpose:
+
+      * a keyword that is absent from every lesson the row names FAILS, naming
+        the feature, the lesson(s) and the missing word, so the fix is one line
+        in one of two files and the message says which;
+      * a TAUGHT row with no `must_mention` FAILS, because otherwise the whole
+        rule is skippable by writing nothing - the gate-every-feature half of
+        docs/EDUCATION-TAB-DESIGN.md section 8, applied to the words;
+      * `must_mention` on a row that no lesson teaches FAILS, because that is a
+        field left behind by a lesson that moved - the same "a stale exemption
+        fails" shape as INTERNAL, REASON_PENDING and LESSON_UNCOVERED.
+
+    TEACHING_GAP is the one recorded exception, and it is not a silence: see its
+    own comment for why 14 rows have no honest word and what happens when a
+    lesson finally teaches one of them.
+
+    `catalogue` and `gaps` are injectable so the suite can prove the rule bites
+    on made-up lessons and rows without editing `jarvis_tutorials.py` or the
+    real list - the same shape `lesson_problems` already has.
+    """
+    lessons = {lesson["id"]: lesson
+               for lesson in (catalogue if catalogue is not None
+                              else catalogue_lessons())}
+    gap_map = dict(TEACHING_GAP if gaps is None else gaps)
+    bad = []
+    for e in got:
+        if not isinstance(e, dict):
+            continue
+        fid = e.get("id")
+        taught = [c for c in (e.get("covers") or []) if c in lessons]
+        words = e.get("must_mention")
+        if words is None:
+            if taught and fid not in gap_map:
+                bad.append(
+                    f"{fid}: names the lesson(s) {', '.join(taught)} but has no "
+                    "`must_mention` - add 1-3 words those steps really use, or "
+                    "record in TEACHING_GAP what the lesson leaves out")
+            continue
+        bad.extend(keyword_shape_problems(fid, words))
+        if not taught:
+            bad.append(
+                f"{fid}: has `must_mention` but no lesson teaches it - delete the "
+                "field (an exempt row has no lesson text to check a word against)")
+            continue
+        haystack = "\n".join(lesson_text(lessons[c]) for c in taught)
+        for word in words if isinstance(words, list) else []:
+            if isinstance(word, str) and word.strip() and not keyword_present(word, haystack):
+                bad.append(
+                    f"{fid}: `must_mention` says {word!r}, which is in none of the "
+                    f"lesson(s) it names ({', '.join(taught)}) - use a word those "
+                    "steps really use, or fix the lesson, not this list")
+    for fid, entry in gap_map.items():
+        lesson_id, why = entry if isinstance(entry, tuple) and len(entry) == 2 else (None, None)
+        row = next((e for e in got if isinstance(e, dict) and e.get("id") == fid), None)
+        if row is None:
+            bad.append(f"TEACHING_GAP lists `{fid}`, which is not a feature row any "
+                       "more - delete the line")
+            continue
+        if not str(why or "").strip():
+            bad.append(f"TEACHING_GAP `{fid}` has no reason - say what the lesson leaves out")
+        if lesson_id not in lessons:
+            bad.append(f"TEACHING_GAP `{fid}` names `{lesson_id}`, which is not a lesson "
+                       "in jarvis_tutorials.py - name the lesson that should teach it")
+        elif lesson_id not in (row.get("covers") or []):
+            bad.append(f"TEACHING_GAP `{fid}` names `{lesson_id}`, but the row does not "
+                       "name that lesson in `covers` - name one it does")
+        if row.get("must_mention") is not None:
+            bad.append(f"TEACHING_GAP `{fid}` is recorded as a gap, but the row has "
+                       "`must_mention` now - delete the gap line (the lesson teaches it)")
+    return bad
+
+
 def uncovered(got: list, known: dict) -> list:
     """Rule 1: an id nobody listed - a feature added without being written down."""
     covered = set()
@@ -587,13 +858,16 @@ def problems() -> list:
     known = known_ids()
     return (field_problems(got) + phantom_covers(got, known) + uncovered(got, known)
             + internal_problems(known) + copy_problems() + teaching_problems(got, known)
-            + lesson_problems(got) + pending_problems(got))
+            + lesson_problems(got) + pending_problems(got) + keyword_problems(got))
 
 
 def main() -> int:
     got = entries()
     known = known_ids()
     lessons = set(lesson_ids())
+    keyworded = sum(1 for e in got if isinstance(e, dict) and e.get("must_mention") is not None)
+    total_words = sum(len(e["must_mention"]) for e in got if isinstance(e, dict)
+                      and e.get("must_mention"))
     checks = [
         (f"{len(got)} entries, each with what / where / asks / limit / surface, and a "
          f"`surface_reason` where it claims the other app lacks it",
@@ -611,6 +885,9 @@ def main() -> int:
         (f"every one of the {len(lessons)} lessons is named by a feature row or in "
          f"LESSON_UNCOVERED ({len(LESSON_UNCOVERED)} exempt) - reverse completeness",
          lesson_problems(got)),
+        (f"every taught feature names words its lesson really uses - {keyworded} with "
+         f"`must_mention`, {len(TEACHING_GAP)} recorded as a teaching gap",
+         keyword_problems(got)),
     ]
     failed = 0
     for name, bad in checks:
@@ -634,6 +911,12 @@ def main() -> int:
     print(f"{taught} of {len(got)} features are taught by a lesson; "
           f"{len(LESSON_EXEMPT)} are exempt with a reason; "
           f"{len(by_lesson)} of the {len(lessons)} lessons are named by a feature")
+    print(f"{keyworded} of those {taught} taught features name words their lesson really "
+          f"uses ({total_words} words in all); {len(TEACHING_GAP)} are recorded in "
+          "TEACHING_GAP as lessons that do not teach their row")
+    if TEACHING_GAP:
+        print("teaching gaps (a work list for the lessons, not a pass): "
+              + ", ".join(sorted(TEACHING_GAP)))
     unclaimed = sorted(lessons - set(by_lesson) - set(LESSON_UNCOVERED))
     if unclaimed:
         print("lessons no feature names (FAILED above, listed so the fix is one line each): "
