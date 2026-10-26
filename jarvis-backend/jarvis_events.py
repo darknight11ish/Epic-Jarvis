@@ -855,6 +855,13 @@ def _capability_probe() -> dict:
         # appearance: both apps refuse to offer it - rather than send the
         # flag to a PC that would ignore it - unless this is true.
         "temporary_chat": _hud_has("_temporary_chat"),
+        # A private chat (`"private": true` on /api/chat): strictly reads-only,
+        # zero writes to any disk store, one refusal sentence for any request
+        # to change something (private-chat.patch; the architect's H10 ruling
+        # of 2026-10-25). Asked of the running server, like temporary_chat:
+        # an app must not offer the mode on a PC that would ignore the flag -
+        # the owner would believe the chat was private when it was not.
+        "private_chat": _hud_has("_private_chat"),
         # The count-only retrieval trace (retrieve-count.patch; the owner's
         # decision of 2026-10-08, "Just the number"). True once the running
         # server answers `count=1` on GET /api/retrieve with counts and no

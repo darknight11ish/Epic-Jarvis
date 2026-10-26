@@ -6439,17 +6439,32 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
 
 def answer(text, *, sched=None, now: Optional[float] = None,
            conversation: Optional[str] = None, seen: Optional[float] = None,
-           temporary: bool = False, peer=None, local=None, messages=None) -> Optional[Result]:
+           temporary: bool = False, private: bool = False, peer=None, local=None,
+           messages=None) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
     in it; `seen`: when the owner last talked to Jarvis before this turn;
-    `temporary`: a temporary chat (2026-09-27's "from now on ..."); `peer`/
+    `temporary`: a temporary chat (2026-09-27's "from now on ..."); `private`:
+    a PRIVATE chat (the architect's H10 ruling, 2026-10-25) - strictly
+    reads-only. No state-changing answer runs for it: a mutating intent gets
+    back the one refusal sentence BEFORE anything is changed or receipted, and
+    a read-only intent goes to the model instead, so this path opens no
+    scheduler and writes nothing. An ordinary chat is untouched. `peer`/
     `local`: the request's own address, for a setting on jarvis_owner_check.
     PC_ONLY_ACTIONS (jarvis_settings_registry.py, 2026-09-27)."""
     now = time.time() if now is None else now
     intent = match(text, now)
     if intent is None:
         return None
+    if private:
+        # private-chat.patch: the whole fast path is OFF in a private chat.
+        # Refuse, in words, before a single state change or undo receipt -
+        # and do not guess at what a read-only intent may write along the way:
+        # hand it to the model like any ordinary question instead.
+        if intent.name in READ_ONLY_INTENTS:
+            return None
+        import jarvis_private_chat
+        return Result(jarvis_private_chat.REFUSAL, intent.name, private=True)
     if sched is None:
         import jarvis_schedule
         sched = jarvis_schedule.get()
@@ -6606,7 +6621,7 @@ def _touch(now: Optional[float]) -> Optional[float]:
 
 
 def answer_turn(body, *, sched=None, now: Optional[float] = None,
-                peer=None, local=None) -> Optional[Result]:
+                peer=None, local=None, private: Optional[bool] = None) -> Optional[Result]:
     """For /api/chat: the fast path's answer to this turn, or None. Every
     chat request counts as the owner being here ("what did I miss?" asks
     since the one before), whoever's words it carries. `peer`/`local`: the
@@ -6622,7 +6637,14 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     real address; a caller that omits it (an older test, a script) gets
     that function's own default, not a stricter or looser one made up
     here."""
-    seen = _touch(now) if isinstance(body, dict) and body.get("messages") else None
+    # private-chat.patch: a private turn must not even write the "owner was
+    # here" touch (jarvis_briefing) or drop this conversation's undo record,
+    # so both are skipped below. `private` is derived from the body when the
+    # caller did not say (an older hud ignores the flag; enforcing it here
+    # anyway is the fail-safe direction), and only JSON `true` counts.
+    private = _private_body(body) if private is None else bool(private)
+    seen = None if private else (
+        _touch(now) if isinstance(body, dict) and body.get("messages") else None)
     conversation = conversation_of(body)
     # "temporary": true (temporary-chat.patch) - the same one-line check
     # jarvis_hud.py's own _temporary_chat(body) makes; needed here for
@@ -6632,9 +6654,10 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     text = newest_own_words(body)
     res = None if text is None else answer(text, sched=sched, now=now,
                                            conversation=conversation, seen=seen,
-                                           temporary=temporary, peer=peer, local=local,
+                                           temporary=temporary, private=private,
+                                           peer=peer, local=local,
                                            messages=body.get("messages"))
-    if res is None and conversation:
+    if res is None and conversation and not private:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.
         _forget_set(sched, conversation)
@@ -6652,6 +6675,18 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     return res
 
 
+def _private_body(body) -> bool:
+    """private-chat.patch: is this request a private chat? One strict reading
+    in one place (jarvis_private_chat.is_private: JSON `true`, nothing else).
+    A backend without the module has no private mode and behaves exactly as
+    before this patch - the flag is ignored, never an error."""
+    try:
+        import jarvis_private_chat
+        return bool(jarvis_private_chat.is_private(body))
+    except Exception:
+        return False
+
+
 def _temporary_body(body) -> bool:
     """Is this request a temporary chat? `temporary: true`, or a game or
     role-play the PC has seen in this conversation - the same test the chat
@@ -6660,6 +6695,12 @@ def _temporary_body(body) -> bool:
     passport" was answered from saved memory and "from now on, be plainer"
     was written to manner.json for good (the second chat audit,
     2026-09-28, finding 7, reproduced). Without jarvis_intake: the flag."""
+    if _private_body(body):
+        # private-chat.patch: a private chat IS a temporary chat for memory,
+        # history and learning - plus it refuses every write and every action
+        # (the refusal gate in answer() above). Same meaning as
+        # jarvis_hud._temporary_chat's own private branch.
+        return True
     try:
         import jarvis_intake
         return bool(jarvis_intake.temporary_body(body))

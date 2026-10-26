@@ -843,7 +843,15 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # plugin-loader.patch: the active-lane helper, the four chat call sites
                                 # and the install block that wires POST /api/work/apply. No gate list,
                                 # no tier row, no _RISK row, no line this patch writes.
-                                "presets.patch"}
+                                "presets.patch",
+                                # private-chat.patch (2026-10-25) is appended after setup.patch and
+                                # immediately before plugin-loader.patch: it touches ONLY jarvis_hud.py,
+                                # and none of the lines devices.patch wrote - no gate list entry, no tier
+                                # row, no _RISK row and no _TOOL_ACTIONS line. It rewrites the chat turn's
+                                # write sites (the finally's chat-log condition, the feedback/speed/
+                                # audit/sources guards), none of which is a devices line; the
+                                # later_rewriting() half below proves the other half.
+                                "private-chat.patch"}
           and not _stack.later_rewriting("devices.patch", DEVICES_TIER_LINE)
           and not _stack.later_rewriting("devices.patch", DEVICES_RISK_LINE), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

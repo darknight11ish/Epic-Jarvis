@@ -3167,6 +3167,12 @@ kind and counts. A phone screen, a desktop panel, a backup toggle and a
 biometric lock screen are named follow-ups, not things this slice pretends to
 have.
 
+**Private chat (2026-10-25) is backend-only in Slice 1.** The server accepts
+`"private": true` on `POST /api/chat` and treats the turn as strictly
+reads-only (JARVIS-API §156), but neither client sends it yet: there is no
+toggle and no marker in either app, so there is nothing one-sided to record
+here. When the apps' half lands it lands in both.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

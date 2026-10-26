@@ -24963,3 +24963,57 @@ gets a `problem` instead of a card; brokerage/wire/third-party refusals from
 `check_outright_refusal`, `run_steps` and `plan()`; spending and document
 provenance present and withheld; the three-item walk splits 1 prep + 2 cards
 and the report withholds under lock.
+
+## 156. A private chat: reads-only, and nothing reaches the disk (backend Slice 1, added 2026-10-25)
+
+The architect's H10 ruling (2026-10-25, design A): a **private chat** is a
+temporary chat plus a strict zero-write promise. A request to `POST /api/chat`
+carrying `"private": true` (JSON `true` and nothing else - the same strict
+reading `temporary` gets in §18.1) implies `temporary: true` for memory and
+history, and additionally:
+
+- **writes nothing to disk.** Every writer a chat turn can reach is refused:
+  `chat-history.db` (the row AND `jarvis_chat_log`'s own housekeeping - the
+  module is not called at all), `memory.db` and the background learner,
+  `feedback.db`'s turn row, `speed.jsonl`, the route-audit line
+  (`~/.openjarvis/logs/jarvis-<date>.jsonl`), `hud-budget.json`,
+  `approvals.db`, `receipts.db`, the answer-sources row and the device's
+  `last_seen`. The device sighting is written by the token check before the
+  body is read, so it is held for the length of the request and dropped when
+  the body says private (`jarvis_devices.hold_seen` / `drop_seen`).
+- **runs no tool and no mutating fast-path answer.** The tool list the turn
+  offers is emptied, and `jarvis_quick.answer()` refuses a state-changing
+  sentence BEFORE running it - so no reminder, timer, setting, personality,
+  goal, note or receipt is touched. A private chat reads, searches and
+  answers from the model; it does not act.
+- **answers a request to act with one sentence**: "A private chat can read,
+  search, and answer, but it doesn't change settings, save items, or run
+  actions — switch back to a normal chat to do that." (the sentence has one
+  copy, in the shipped `jarvis_private_chat.py`).
+- **the RAM-only parts stay RAM-only**: the live-turn registry is not called
+  either, so a private turn leaves no hash and no marker - there is nothing
+  on disk to correlate.
+
+`X-Jarvis-Route` carries **`"private": true`** on every private answer (with
+the temporary keys when memory is not Jarvis's own upstream's), so an app can
+prove the PC treated the turn as private. `GET /api/version`'s
+`capabilities.private_chat` is true only when the running server has
+`private-chat.patch` and its shipped `jarvis_private_chat.py` - asked of the
+server by name, exactly like `capabilities.temporary_chat`; an app must send
+nothing unless it is true.
+
+**Deliberately not built in Slice 1:** neither app sends the flag yet, there
+is no UI toggle or marker, and the private turn answers with the model alone
+(no memory, no tools). Slice 2 is the apps' half; the backend contract above
+is already the one they will read.
+
+**Tests.** `backend/test_private_chat.py`: the gate module's strict reading
+and fail-closed `persist()`; the fast path refusing every mutating sentence
+before the scheduler is asked anything, and a read-only one going to the
+model; the real hud guard blocks lifted from the installed file and run
+against writing stubs - a private read turn and two private action turns
+write nothing, the positive control writes with `private: false`, and a
+writer that would raise is never called (fail-closed); the device `last_seen`
+hold / commit / drop; the patch applying to the published base and reversing
+out of it; the module's SHIPPED and twin delivery; and
+`capabilities.private_chat` false on an older server, true on this one.
