@@ -44,6 +44,11 @@ fn main() {
             // Brain uses, held on a stale link, no card. HUD window only.
             "hud_schedule_add",
             "hud_schedule_act",
+            // The HUD owner-secret hand-off card (2026-10-26): fill or cancel
+            // ONE card with the token added in Rust. The page holds none and
+            // its own POSTs stay refused; hud_proxy.rs owns the read.
+            "hud_secret_handoff_fill",
+            "hud_secret_handoff_cancel",
             // App lock and the widget: is the lock on, and "Approve in the
             // Jarvis bar" (apps security audit M3).
             "get_app_lock",

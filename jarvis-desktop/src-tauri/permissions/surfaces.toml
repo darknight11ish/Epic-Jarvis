@@ -235,6 +235,11 @@ permissions = [
   # Two yes/no answers - App lock and "Hide memory lists" - so the HUD's
   # face never nods at a saved fact while either is on (face-moments.js).
   "allow-get-lock-flags",
+  # The owner-secret hand-off card (2026-10-26): fill or cancel ONE card. The
+  # secret is typed by the owner into the page and crosses Rust once; it is
+  # never logged, and the host-only backend route does the typing.
+  "allow-hud-secret-handoff-fill",
+  "allow-hud-secret-handoff-cancel",
 ]
 
 # The daily brief and the interruption budget. Granted to the quickbar alone,

@@ -810,7 +810,7 @@ html.hud-window-hidden *::after{
 #secret-handoff .sh-field span{ font-size:12px; color:var(--text-muted); }
 #secret-handoff .sh-field input{
   border:1px solid var(--border-strong); border-radius:7px; padding:8px 10px;
-  background:var(--bg); color:var(--text); font:13px/1.2 "IBM Plex Mono",monospace;
+  background:var(--surface-1); color:var(--text); font:13px/1.2 "IBM Plex Mono",monospace;
 }
 #secret-handoff .sh-btns{ display:flex; gap:8px; }
 #secret-handoff .sh-btns button{
@@ -5029,6 +5029,14 @@ function apprTick(){
  * password to the host-only route. The secret is never logged, never put in
  * the DOM after submit (the input is cleared) and never sent to the model. */
 const SH = { inflight:false, pollTimer:null };
+function shInvoke(name, args){
+  const tauri = window.__TAURI__;
+  const fn = tauri && tauri.core && tauri.core.invoke;
+  if(typeof fn !== "function") {
+    return Promise.reject(new Error("This needs the Jarvis desktop window."));
+  }
+  return fn(name, args);
+}
 function shCards(){ return (window.__shCards || []); }
 function shPaint(){
   const box = document.getElementById("secret-handoff");
@@ -5075,22 +5083,19 @@ async function shType(){
   const btn = document.getElementById("sh-type");
   if(btn) btn.disabled = true;
   try{
-    const r = await jfetch("/api/secret-handoff/fill", {
-      method:"POST", cache:"no-store",
-      headers:{"X-Jarvis-Client":"hud", "Content-Type":"application/json"},
-      body:JSON.stringify({handoff_id:card.handoff_id, secret:secret})});
-    let out = {};
-    try{ out = await r.json(); }catch(e){ out = {}; }
+    // The page holds NO token (audit M2): Rust makes this POST and adds the
+    // token itself (`hud_secret_handoff_fill`). The value is not logged.
+    await shInvoke("hud_secret_handoff_fill",
+                   {handoffId: card.handoff_id, secret: secret});
     // Clear the box BEFORE any repaint or message, and never echo the value.
     shClearSecret();
     window.__shCards = [];
     shPaint();
-    shStatus(r.ok ? "Typed into the checked target." :
-      String((out && out.error) || "The secret was not typed."));
+    shStatus("Typed into the checked target.");
     setTimeout(shPoll, 300);
   }catch(e){
     shClearSecret();
-    shStatus("The secret was not typed (the PC did not answer).");
+    shStatus(String((e && e.message) || "The secret was not typed."));
   }finally{ if(btn) btn.disabled = false; }
 }
 async function shCancel(){
@@ -5100,10 +5105,7 @@ async function shCancel(){
   shPaint();
   if(!card) return;
   try{
-    await jfetch("/api/secret-handoff/cancel", {
-      method:"POST", cache:"no-store",
-      headers:{"X-Jarvis-Client":"hud", "Content-Type":"application/json"},
-      body:JSON.stringify({handoff_id:card.handoff_id})});
+    await shInvoke("hud_secret_handoff_cancel", {handoffId: card.handoff_id});
   }catch(e){}
   setTimeout(shPoll, 300);
 }

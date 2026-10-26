@@ -25205,6 +25205,17 @@ Both POST routes refuse a non-loopback caller **before the body is read** (403
 with a plain sentence), and origin/token are checked before that. The body
 reader is the server's own; no route logs, stores or returns the request body.
 
+**The HUD card holds no token, and its writes go through the shell.** The page
+never receives the pairing token (apps security audit M2): the pending read is
+one more entry on hud_proxy.rs's fixed GET list (GET /api/secret-handoff/pending),
+and Fill and Cancel are two Rust commands - hud_secret_handoff_fill and
+hud_secret_handoff_cancel - granted to the HUD window through the hud-link
+permission set and registered in uild.rs's command list. They add the token
+in Rust, validate the card id shape before sending, never log or include the
+secret in an error, and POST the two host-only routes above; the bootstrap
+fetch shim still refuses the page's own POSTs, exactly like every other HUD
+write. Nothing about this weakens the rule: the page gets no token.
+
 **What the fill does, in order.** The taint is marked by the engine BEFORE the
 first character is typed (so a typing failure still leaves the target
 read-locked); typing goes through `jarvis_ui_control.secret_handoff_type`,

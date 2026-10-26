@@ -46,6 +46,7 @@ pub mod hotkeys;
 pub mod hud_layout;
 pub mod hud_proxy;
 pub mod hud_schedule;
+pub mod hud_secret_handoff;
 pub mod limits;
 pub mod live;
 pub mod lock;
@@ -947,6 +948,11 @@ pub fn run() {
             // routes the Brain uses, held on a stale link. HUD window only.
             hud_schedule::hud_schedule_add,
             hud_schedule::hud_schedule_act,
+            // The HUD owner-secret hand-off card (2026-10-26): fill or cancel
+            // ONE card with the token added in Rust. The page holds none and
+            // its own POSTs stay refused; hud_proxy.rs still owns the read.
+            hud_secret_handoff::hud_secret_handoff_fill,
+            hud_secret_handoff::hud_secret_handoff_cancel,
             // App lock and the widget (apps security audit M3).
             commands::get_app_lock,
             // The two lock switches, for the faces' fact nod (face-moments.js).

@@ -1985,7 +1985,11 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
     ["allow-hud-get", "allow-hud-chat", "allow-hud-chat-cancel", "allow-mark-answer",
       // Two yes/no answers (App lock, "Hide memory lists"): its face never
       // nods at a saved fact while either is on (face-moments.js).
-      "allow-get-lock-flags"]);
+      "allow-get-lock-flags",
+      // The owner-secret hand-off card (2026-10-26): fill or cancel ONE card
+      // with the token added in Rust; the page holds none.
+      "allow-hud-secret-handoff-fill",
+      "allow-hud-secret-handoff-cancel"]);
   // And the preset grant holds exactly the contract read and the BAR'S ONE
   // apply: no model switch, no lane start, no approval command beside them.
   const hudPresets = surfaces.slice(surfaces.indexOf('identifier = "focus-presets"'));
