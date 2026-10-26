@@ -480,7 +480,7 @@ SECTIONS: tuple = (
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
             app="desktop"),
     # "All features and abilities" (2026-10-22, #749): the phone's directory of the
-    # 139 features. PHONE ONLY, and the reason is the same one the desktop page
+    # 140 features. PHONE ONLY, and the reason is the same one the desktop page
     # gives: the desktop's own directory card has NO `<section class="card" id>`
     # (settings.html says so beside the card - it is a generated, read-only index,
     # not a settings section, and it calls nothing). The phone's directory is a

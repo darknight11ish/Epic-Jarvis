@@ -11,7 +11,7 @@ current state directly". The feature list existed all along -
 no chat path read it.
 
 WHAT THIS PROVES
-  1. THE FACTS ARE THE LIST'S OWN. Every one of the 139 rows is found by its id,
+  1. THE FACTS ARE THE LIST'S OWN. Every one of the 140 rows is found by its id,
      and the answer's facts equal the JSON word for word (groups, what, where,
      asks, limit, surface, covers) - nothing is reworded into the facts, and
      the generated copy the PC carries is current (`tools/
@@ -177,7 +177,7 @@ def t_every_row_is_looked_up_and_its_facts_equal_the_json():
             bad.append((row["id"], "words lost limit", row["limit"][:40]))
         if not row.get("limit") and "gives no limit" not in out["words"]:
             bad.append((row["id"], "empty limit not said", ""))
-    check("every one of the 139 rows is found by id, with facts equal to the JSON",
+    check("every one of the 140 rows is found by id, with facts equal to the JSON",
           not bad, bad[:6])
     # A row whose words are not the list's is a reworded fact. Each answer is
     # assembled from the row the module's own `features()` returns; prove the

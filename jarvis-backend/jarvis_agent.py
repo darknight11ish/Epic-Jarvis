@@ -10144,7 +10144,7 @@ def _schedule_refusal_line(text: str, steps: list) -> str:
 #       searched your notes".
 #     * D1c - "The available features are: - Code reviewer - Drafting assistant
 #       - Researcher - Summariser" with no feature_guide step. None of those four
-#       names appears anywhere in the guide's own 139 rows.
+#       names appears anywhere in the guide's own 140 rows.
 #     * D5 - "I cannot switch on that setting, sir. It is not available to me."
 #       when the owner's own words name a setting the settings registry really
 #       has. A9's "banana mode" resolves to nothing, and is left alone: the

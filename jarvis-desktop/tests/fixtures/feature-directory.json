@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "c4ff7365ba0aaf56aeb1c5e1245c78e86bad2f3ae35b55049e4569330345f94b",
-  "feature_count": 139,
+  "source_sha256": "9ecf831748e2c4d1ccc82e5ca32445849cf192480d7ed2ba1e0979cac24f4794",
+  "feature_count": 140,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
     "Settings-Only (By Design — Security Boundary)",
@@ -283,6 +283,22 @@
       "status": "not-a-setting",
       "label_note": "",
       "example": "start an incognito chat",
+      "example_ok": true,
+      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
+      "where_desktop": "All features and abilities",
+      "where_phone": "All features and abilities",
+      "note": "",
+      "not_a_control": true
+    },
+    {
+      "id": "private-chat",
+      "title": "Private chat",
+      "group": "Talking",
+      "surface": "desktop",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "status": "not-a-setting",
+      "label_note": "",
+      "example": "turn on Private chat",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",

@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 139,
+  "feature_count": 140,
   "features": [
     {
       "id": "typing",
@@ -943,6 +943,57 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "start an incognito chat",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "private-chat",
+      "name": "Private chat",
+      "group": "Talking",
+      "surface": "desktop",
+      "where": "The Private chip beside Incognito in the Jarvis bar. Turning it on or off starts a new conversation, so a private chat and a normal one never mix.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Private chat",
+        "turn_off": "turn off Private chat",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "The Private chip beside Incognito in the Jarvis bar.",
+        "search": [
+          "Private chat"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "No Private chip on the phone: its private mode is Incognito.",
+        "search": [
+          "incognito chat"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Private chat",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
@@ -11442,7 +11493,7 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 69
+      "not-a-setting": 70
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 30,
@@ -11462,8 +11513,8 @@
     "Switchable / Adjustable (Typed & Settings)": 40,
     "Settings-Only (By Design — Security Boundary)": 2,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
-    "Command-Only (Runs When You Ask — No Switch Needed)": 69,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 70,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12
   },
-  "label_count_note": "Owner-approved 2026-10-23 counts: 40 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 69 Command-Only, 12 Always-On (139 total). Changes from the 2026-10-22 42/2/13/70/12: picture-mode moved to Switchable/Adjustable (ADJ-Q1); calendar, phone-notifications and phone-watch moved to PC-Only (ADJ-Q1)."
+  "label_count_note": "Owner-approved 2026-10-23 counts, plus the desktop Private chat row added 2026-10-26: 40 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 70 Command-Only, 12 Always-On (140 total). Changes from the 2026-10-22 mix (42/2/13/70/12): picture-mode moved to Switchable/Adjustable (ADJ-Q1); calendar, phone-notifications and phone-watch moved to PC-Only (ADJ-Q1); private-chat added as Command-Only (2026-10-26)."
 }

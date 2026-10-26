@@ -9,7 +9,7 @@ is the missing read half - and it only ever reports facts that are written
 down, never a guess:
 
   * WHAT a feature is, and WHERE it is switched on, come VERBATIM from the
-    owner's own feature list (`features/features.json`, 139 rows). The list is
+    owner's own feature list (`features/features.json`, 140 rows). The list is
     turned into a shipped Python module by `tools/gen_feature_guide_catalogue.py`
     because features.json itself lives in this repository and is NOT copied to
     the backend folder the PC runs - a module cannot read a file that is not
@@ -957,6 +957,7 @@ NO_COMMAND_REASON = {
     "talk-to-type": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "chat-thread": ('app-local', "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.", 'setup-ui'),
     "temporary-chat": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    "private-chat": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "history-search": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "coming-up": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "today": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
@@ -1697,7 +1698,7 @@ def ability_row(row: dict) -> dict:
 
 
 def abilities_directory() -> list:
-    """All 139 features with the five plain labels - the data both apps'
+    """All 140 features with the five plain labels - the data both apps'
     "All features & abilities" Settings directory and search are built from
     (Gemini Q2b/Q8; the UI itself is setup-ui's and Session B's)."""
     return [ability_row(row) for row in features()]
