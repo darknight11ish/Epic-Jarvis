@@ -3522,6 +3522,19 @@ calls, holds no lock while it waits and loads no model.
     copies; restoring them removes the sixteen new files (only while their
     sha256 still matches what was deployed) and needs one backend restart.
 
+## 2026-10-25 — A personality can be made by talking to Jarvis
+
+  * **What was decided.** The owner asked for "make your own personality"
+    (2026-10-25): chat co-creation first, the Settings "Draft it for me"
+    button as the later slice.
+  * **What it costs.** Wording only and cardless, drafted on the loopback
+    model so nothing leaves the PC, and saved through
+    `jarvis_manner.save_user_personality()` with the same caps and the same
+    20-personality limit the form enforces.
+  * **Both apps, by construction.** The PC reads the phrase out of the existing
+    chat request, so the desktop and the phone both get it; the Settings editor
+    stays the desktop's.
+
 ## 2026-10-25 — The 2026-10-21 approval of the Python lock floor 3.10 -> 3.11 is on the record
 
   * **What the owner approved, and where it was written down.** On 2026-10-21

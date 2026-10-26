@@ -412,6 +412,11 @@ SHIPPED = (
     "jarvis_reach.py",
     "jarvis_owner_check.py",
     "jarvis_manner.py",
+    # Chat co-creation of a personality (2026-10-25): "make me a personality
+    # like ..." drafts it with the LOCAL model inside the conversation and
+    # "save it" stores it through jarvis_manner's own save path. Called from
+    # jarvis_quick.py's chat fast path; no route of its own, no patch.
+    "jarvis_personality_creator.py",
     "jarvis_card_words.py",
     # The approval card's short summary and the "Start short" / "Always show
     # everything" choice (the owner's request of 2026-10-09, card-prefs.patch):

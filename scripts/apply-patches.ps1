@@ -1753,6 +1753,7 @@ $SHIPPED = @(
     'jarvis_reach.py'            # reach.patch: "What Jarvis can reach", written from the settings, never by the model
     'jarvis_owner_check.py'      # owner-check.patch: Windows Hello for risky approvals from this PC, and the approval stamp
     'jarvis_manner.py'           # manner.patch: warm and brief, or plain - the wording of answers only
+    'jarvis_personality_creator.py' # chat co-creation of a personality (2026-10-25): drafts with the LOCAL model in the conversation and saves through jarvis_manner; called from jarvis_quick.py, no patch
     'jarvis_card_words.py'       # approval-notice.patch: every approval card's plain title, and what Jarvis says aloud about a card
     'jarvis_card_summary.py'     # card-prefs.patch (the owner's request of 2026-10-09): the "Start short" / "Always show everything" choice for approval cards - GET/POST /api/card-prefs, kept in card-prefs.json so BOTH apps read the one setting. Cosmetic, so no card either way. The summary's words are jarvis_card_words.py's; this owns the preference and the "what one card shows" rule both apps follow
     # --- the tools jarvis_agent.py offers the model ---

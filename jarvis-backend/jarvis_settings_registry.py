@@ -2470,7 +2470,7 @@ CHOICE_SETTINGS: tuple = (
         ("the personality", "the persona", "jarvis's personality",
          "the character", "which personality"),
         "manner", _personality_choices, set_personality,
-        "which of the eight personalities Jarvis speaks in (no card)"),
+        "which of the nine personalities Jarvis speaks in (no card)"),
     ChoiceSetting(
         "focus_preset",
         ("the focus preset", "jarvis's preset", "the model preset",
