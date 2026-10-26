@@ -32,11 +32,24 @@ User-Agent. No account, key or address of the owner is ever in a request.
 HOW THE LOCK IS MADE (by hand, when a package changes or once a month):
 
     uv pip compile backend/requirements.txt --universal --generate-hashes \\
-        --python-version 3.10 --exclude-newer <7 days ago, e.g. 2026-09-19T00:00:00Z> \\
+        --python-version 3.11 --exclude-newer <7 days ago, e.g. 2026-09-19T00:00:00Z> \\
+        --exclude-newer-package markitdown=2026-09-26T00:00:00Z \\
+        --exclude-newer-package pillow=2026-10-21T00:00:00Z \\
+        --exclude-newer-package rapidocr=2026-10-13T00:00:00Z \\
+        --exclude-newer-package certifi=2026-10-20T03:00:00Z \\
+        --exclude-newer-package filelock=2026-10-17T17:00:00Z \\
         --no-header -o backend/requirements.lock
 
+`--python-version 3.11` is the lock's floor, not a preference: pillow 13 has
+no Python 3.10 build, so a resolution for 3.10 is unsatisfiable, and the lock
+no longer covers 3.10 (backend/requirements.lock's header has the whole
+story).
+
 `--exclude-newer` is the 7-day wait: a release younger than a week is not
-picked, so a hijacked release has time to be noticed and pulled first.
+picked, so a hijacked release has time to be noticed and pulled first. The
+five `--exclude-newer-package` dates are one-package exceptions to it, kept
+in the lock's header with the reason for each; they are part of the recipe,
+not a licence to skip the wait generally.
 """
 from __future__ import annotations
 

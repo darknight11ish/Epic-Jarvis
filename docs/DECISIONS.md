@@ -3521,3 +3521,36 @@ calls, holds no lock while it waits and loads no model.
     deploy, and the two replaced files have `*.before-browser-face-2026-10-25`
     copies; restoring them removes the sixteen new files (only while their
     sha256 still matches what was deployed) and needs one backend restart.
+
+## 2026-10-25 — The 2026-10-21 approval of the Python lock floor 3.10 -> 3.11 is on the record
+
+  * **What the owner approved, and where it was written down.** On 2026-10-21
+    the owner approved three dependency rulings; the approval is recorded in
+    that day's rulings document
+    (`deepseek_rulings_split_deploy_notion_voice_2026_10_21.md`, Ruling 11.4,
+    Guard 4, lines 75-77 of the copy in the owner's `Downloads` folder). That
+    document is outside this repository, so its words are quoted here rather
+    than left behind a path: "The owner's 3 dependency rulings for Session B
+    (`Pillow 13` one-package exception, Python lock floor `3.10 -> 3.11`, and
+    naming `tokenizers` + `huggingface-hub` in `backend/requirements.txt`) are
+    recorded and approved." The first two rulings are the 2026-10-21 Pillow
+    13.0.0 change and the lock's coverage line moving to 3.11; the third named
+    `tokenizers` and `huggingface-hub` in `backend/requirements.txt`. This
+    entry closes a gap: `docs/DECISIONS.md` has carried the 2026-10-23
+    decision that the lock recipe must be fixed before filelock is bumped, but
+    not the approval of the floor move that fix depends on.
+  * **What used the ruling, in the same change.** `backend/requirements.txt`
+    no longer names `tomli`: it existed only for the Python 3.10 range the
+    lock stopped covering on 2026-10-21, and its fallback imports only fire
+    below 3.11. Both `requirements.lock` twins were then regenerated with the
+    repaired recipe at `--python-version 3.11`, and `filelock` was moved
+    4.0.0 -> 4.2.1 through it - exactly the order the 2026-10-23 decision
+    requires. Measured: every (name, version) pin the old lock carried for
+    Python 3.11 and newer is unchanged with the same PyPI file hashes, and the
+    only version that moved is filelock. The lock's own header carries the
+    exact command and the one-package exceptions.
+  * **What it does not mean.** It does not make the backend's Python code
+    3.11-only: the modules still import on 3.10, and `tomli`'s guarded
+    fallbacks are still in the code. It makes the hash-locked install say what
+    has been true since Pillow 13.0.0 was pinned - it needs Python 3.11 or
+    newer.
