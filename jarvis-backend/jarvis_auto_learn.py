@@ -697,7 +697,7 @@ _PROVENANCE_WHY = {
     # in the live-turn registry (a hash, never the words, so the
     # conversation's "read outside text" mark still works) under this
     # provenance, so nothing re-sent from it is ever saved without a card.
-    "temporary": "said in a temporary chat, which Jarvis never learns from",
+    "temporary": "said in an incognito chat, which Jarvis never learns from",
     "unknown": "not marked as typed or said by you",
 }
 

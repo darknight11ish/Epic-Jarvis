@@ -709,7 +709,7 @@ def t_quick_guards():
             "conv-g-000001")["tag_id"] == 2, r and r.reply)
         # Temporary chats are never kept.
         r = ask("label this chat Work", cid="conv-g-000001", temporary=True)
-        check("a temporary chat cannot be filed", r is not None and "temporary" in r.reply
+        check("an incognito chat cannot be filed", r is not None and "incognito" in r.reply
               and log.get("conv-g-000001")["tag_id"] == 2)
         # A chat not saved yet.
         r = ask("label this chat Work", cid="conv-g-000099")

@@ -245,7 +245,7 @@ CATALOGUE = (
         "steps": (
             {"title": "Chat history is kept, encrypted, on the PC",
              "body": "Your typed and spoken turns are kept so History works, and "
-                     "a switch turns that off. Temporary chats are not kept at "
+                     "a switch turns that off. Incognito chats are not kept at "
                      "all. Crisis chats are kept but titled \"A difficult "
                      "moment\", never with your words.",
              "where": "Brain → History"},
@@ -1152,7 +1152,7 @@ CATALOGUE = (
                      "plays its voice, and Use This Personality makes it the "
                      "one Jarvis uses. My personalities saves your own mix of "
                      "the four dials. Each chat can have its own, and a "
-                     "temporary chat keeps its choice in that chat only.",
+                     "incognito chat keeps its choice in that chat only.",
              "where": "Settings \u2192 How Jarvis talks"},
             {"title": "Jarvis's voice",
              "body": "The voice it speaks with, chosen from the ones installed "
@@ -1489,7 +1489,7 @@ CATALOGUE = (
             {"title": "Ending, and coming back",
              "body": "After Live ends, a notification offers Resume for ten "
                      "minutes, so a session ended by accident is one tap away. If "
-                     "Temporary is on, the Live screen says plainly that the "
+                     "Incognito is on, the Live screen says plainly that this Live "
                      "session will not be kept in History.",
              "where": "The notification \"Jarvis Live ended\", and the Live screen"},
         ),

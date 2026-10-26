@@ -720,7 +720,7 @@ routing - except that:
 `X-Jarvis-Route` then carries **`"temporary": true`**, `injected_facts: 0`,
 `injected_ids: []`, `injected_sensitive: 0`, `memory_side: "none"`, and
 **`"remember_off": true`** when the newest user message was a "Remember:
-..." (the apps show "Remember: is off in a temporary chat."). `temporary` is
+..." (the apps show "Remember: is off in an incognito chat."). `temporary` is
 left out when memory is Jarvis's own upstream's (`memory_side: "jarvis"`),
 which the PC cannot switch off. An app that sent `temporary: true` and gets
 no `"temporary": true` back says so - "Your PC did not confirm this was a
@@ -731,16 +731,16 @@ works: it records the answer's id and no fact.
 `GET /api/version`'s `capabilities.temporary_chat` is true only when the
 running server has the patch (asked of the server by name, like
 `appearance`). Both apps offer the mode only then, and check again before
-every temporary question; otherwise they say "Temporary chat isn't
+every temporary question; otherwise they say "Incognito isn't
 available on this PC's version of Jarvis, so nothing was sent. Run
 apply-patches.ps1 on the PC to update it." and send nothing. Turning it on
 or off needs no card - it only ever makes a turn stricter - and starts a new
 conversation in both apps, so nothing said in one kind of chat is re-sent in
 the other. Both apps: a marker for the whole chat, and on the empty chat
-"Temporary chat: Jarvis won't use or learn from your memory, and this chat
+"Incognito: Jarvis won't use or learn from your memory, and this chat
 isn't kept." Desktop: the quickbar's temporary-chat button and strip
 (`answer-memory.js`; `stream_chat` refuses to send one to a PC without it).
-Phone: "Temporary chat" above Home's chat box, "End" to leave it
+Phone: "Incognito" above Home's chat box, "End" to leave it
 (`UsedMemoriesPlate.kt` `TemporaryChatStrip`, `ChatSession.setTemporary`);
 the voice loop's questions go temporary too. The HUD page (the backend's own
 `jarvis_hud.html`) has no temporary chat.

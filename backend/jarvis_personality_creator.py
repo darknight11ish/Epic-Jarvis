@@ -185,7 +185,7 @@ CANNOT_DRAFT = ("I could not draft that just now - the local model did not answe
                 "or its answer did not fit the personality fields. Nothing was saved. "
                 "Try again, or add it by hand in Settings -> How Jarvis talks.")
 
-TEMPORARY_REFUSAL = ("I don't build personalities in a temporary chat - nothing is "
+TEMPORARY_REFUSAL = ("I don't build personalities in an incognito chat - nothing is "
                      "kept there, and a saved personality is kept for good. Ask me "
                      "again in a normal chat.")
 

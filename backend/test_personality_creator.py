@@ -612,7 +612,7 @@ def t_a_temporary_chat_is_refused_and_writes_nothing():
                        ask=ask_returns(json_reply(), calls))
         check("a temporary chat is refused in plain words", got is not None
               and got["intent"] == "personality_create_refused"
-              and "temporary" in got["reply"].lower(), got)
+              and "incognito" in got["reply"].lower(), got)
         check("...and no model was asked", calls == [])
         check("...and no draft was written", not C.pending("conv-aaaaaaaa"))
 
@@ -626,7 +626,7 @@ def t_a_temporary_turn_never_uses_a_pending_brief():
                        temporary=True, ask=ask_returns(json_reply(), calls))
         check("a temporary turn refuses the brief in plain words",
               got is not None and got["intent"] == "personality_create_refused"
-              and "temporary" in got["reply"].lower(), got)
+              and "incognito" in got["reply"].lower(), got)
         check("...asks no model and writes no draft",
               calls == [] and not C.pending("conv-aaaaaaaa"))
 
