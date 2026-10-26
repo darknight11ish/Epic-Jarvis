@@ -12,13 +12,15 @@ superlatives, wrong-variant dates) and a second set written to avoid them.
 
 The suite is pure: no browser, no network, no backend. The network spy patches
 socket/urllib at the top of one check and proves the engine never touches them;
-a second check reads the module's source and proves it imports no network,
-subprocess or shell module at all.
+a second check parses the module's own source with `ast` and proves it imports
+no network or shell module and calls no file/URL opener.
 """
 from __future__ import annotations
 
+import ast
 import copy
 import http.client
+import inspect
 import json
 import socket
 import sys
@@ -162,10 +164,20 @@ def t_schema_dates_and_flags():
            ("2026-10-01", "2026-10-01T12:30:00Z", "1 October 2026")])
     check("an unreadable date is unknown, never defaulted to today",
           PR.normalize_review({"date": "not a date"})["date"] is None)
+    check("an impossible calendar date is unknown, not accepted then crashed on",
+          all(PR.normalize_review({"date": bad})["date"] is None for bad in
+              ("2026-02-31", "31 February 2026", "2025-02-29", "2026-13-01",
+               "2026-00-10", "2026-01-00")))
+    check("a real leap day is still accepted",
+          PR.normalize_review({"date": "2024-02-29"})["date"] == "2024-02-29"
+          and PR.normalize_review({"date": "29 February 2024"})["date"] == "2024-02-29")
     check("verified and Vine are read from plain words too",
           PR.normalize_review({"verified": "unverified"})["verified"] is False
           and PR.normalize_review({"vine": "Vine Customer Review"})["vine"] is True
           and PR.normalize_review({"vine": "ordinary review"})["vine"] is False)
+    check("an explicit 'No Vine' is an absence, not a Vine label",
+          PR.normalize_review({"vine": "No Vine"})["vine"] is False
+          and PR.normalize_review({"vine": "not a Vine review"})["vine"] is False)
 
 
 def t_schema_counts_skips_and_wrapper():
@@ -279,6 +291,16 @@ def t_near_duplicates():
           == PR._minhash_signature(PR._shingles("one two three four five six seven"))
           and PR._jaccard(PR._shingles("one two three four five six seven"),
                           PR._shingles("one two three four five six seven")) == 1.0)
+    two_same = PR.normalize_reviews([
+        {"text": "one two three four five six seven eight nine ten eleven twelve thirteen"},
+        {"text": "one two three four five six seven eight nine ten eleven twelve thirteen"},
+    ])[0]
+    counted = PR.signal_near_duplicate_wording(two_same)
+    check("the pair count is the number actually compared, not every possible pair",
+          counted["counts"]["pairs_possible"] == 1
+          and counted["counts"]["pairs_shortlisted"] == 1
+          and counted["counts"]["pairs_compared"] == 1
+          and counted["counts"]["duplicate_pairs"] == 1, counted["counts"])
 
 
 def t_date_burstiness():
@@ -299,6 +321,37 @@ def t_date_burstiness():
     clean = PR.signal_date_burstiness(PR.normalize_reviews(REAL_REVIEWS)[0])
     check("spread-out dates produce no burst days", clean["counts"]["burst_days"] == 0,
           clean["counts"])
+    busy_listing = PR.signal_date_burstiness(PR.normalize_reviews([
+        {"date": "2026-10-19", "text": "A body with several words for the sample."},
+        {"date": "2026-10-20", "text": "A body with several words for the sample."},
+        {"date": "2026-10-20", "text": "A body with several words for the sample."},
+        {"date": "2026-10-20", "text": "A body with several words for the sample."},
+        {"date": "2026-10-20", "text": "A body with several words for the sample."},
+    ])[0], listing={"review_count": 1250, "first_available": "2026-10-19"})
+    check("a listing averaging 625 reviews a day does not flag a four-review day",
+          busy_listing["counts"]["baseline_per_day"] == 625.0
+          and busy_listing["counts"]["burst_days"] == 0, busy_listing["counts"])
+    genuine = PR.signal_date_burstiness(PR.normalize_reviews([
+        {"date": "2026-05-01"}, {"date": "2026-05-02"}, {"date": "2026-05-03"},
+        {"date": "2026-05-04"}, {"date": "2026-05-05"}, {"date": "2026-05-06"},
+        {"date": "2026-10-20"}, {"date": "2026-10-20"}, {"date": "2026-10-20"},
+        {"date": "2026-10-20"}, {"date": "2026-10-20"}, {"date": "2026-10-20"},
+    ])[0], listing={"review_count": 30, "first_available": "2025-01-01"})
+    check("a real burst on a quiet listing is flagged, using the stated baseline",
+          genuine["counts"]["baseline_source"] == "listing"
+          and genuine["counts"]["burst_days"] >= 1
+          and genuine["counts"]["reviews_on_burst_days"] == 6, genuine["counts"])
+    invalid_only = [{"index": 0, "reviewer": "Reviewer 1", "date": "2026-02-31",
+                     "rating": None, "verified": None, "vine": None,
+                     "title": "", "text": "", "helpful": None, "variant": None}]
+    try:
+        invalid_signal = PR.signal_date_burstiness(invalid_only)
+        invalid_raised = None
+    except Exception as exc:  # pragma: no cover - the bite is the exception path
+        invalid_signal, invalid_raised = None, exc
+    check("an invalid date given straight to the signal cannot crash it",
+          invalid_raised is None and invalid_signal["available"] is False
+          and invalid_signal["counts"]["invalid_dates"] == 1, invalid_raised)
 
 
 def t_rating_histogram():
@@ -412,17 +465,19 @@ def t_what_buyers_agree_and_complain_about():
         ],
     }
     report = _report(model=model)
-    check("positive aspects are what buyers agree on, negative/mixed are complaints",
+    check("positive aspects are agreements, negative are complaints, mixed are their own list",
           [entry["aspect"] for entry in report["aspects"]["agreed"]] == ["battery life"]
-          and sorted(entry["aspect"] for entry in report["aspects"]["complained"]) ==
-          ["charging port", "strap"], report["aspects"])
+          and [entry["aspect"] for entry in report["aspects"]["complained"]] == ["charging port"]
+          and [entry["aspect"] for entry in report["aspects"]["mixed"]] == ["strap"],
+          report["aspects"])
     check("every accepted aspect carries a validated quote and a word-match count",
           all(entry["quotes"] and isinstance(entry["mentioned_in"], int)
               and entry["of"] == 6 for entry in report["aspects"]["agreed"]))
-    check("the plain-words sections say agree/complain and keep the caveat first",
+    check("the plain words label a mixed stance Mixed, not Complain",
           report["plain_words"]["sample"][0] == PR.SAMPLE_CAVEAT
           and any(line.startswith("Agree:") for line in report["plain_words"]["agreed"])
-          and any(line.startswith("Complain:") for line in report["plain_words"]["complained"]))
+          and any(line.startswith("Complain:") for line in report["plain_words"]["complained"])
+          and any(line.startswith("Mixed:") for line in report["plain_words"]["mixed"]))
 
 
 def t_no_aspects_without_a_model():
@@ -465,19 +520,32 @@ def t_no_numeric_trust_score_anywhere():
     banned = ("score", "probability", "confidence", "trust")
 
     def walk(obj, path=""):
+        """Banned words anywhere in a path, and any NUMBER whose path is
+        about a trust/score/probability/confidence or the verdict. A string
+        that merely contains a banned word is not a score, so this looks at
+        keys and numeric leaves, not at prose."""
         found = []
         if isinstance(obj, dict):
             for key, value in obj.items():
-                if any(word in str(key).lower() for word in banned):
-                    found.append(f"{path}/{key}")
-                found.extend(walk(value, f"{path}/{key}"))
+                key_path = f"{path}/{key}"
+                lowered = str(key).lower()
+                if any(word in lowered for word in banned):
+                    found.append(key_path)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    if any(word in key_path.lower() for word in banned + ("verdict",)):
+                        found.append(f"{key_path}={value}")
+                found.extend(walk(value, key_path))
         elif isinstance(obj, list):
             for position, value in enumerate(obj):
                 found.extend(walk(value, f"{path}[{position}]"))
         return found
 
-    check("the report never carries a numeric trust/score/probability key",
-          walk(report) == [] and "trust_score" not in json.dumps(report), walk(report))
+    found = walk(report)
+    check("the whole report JSON has no trust/score key and no numeric value on a trust path",
+          found == [] and "trust_score" not in json.dumps(report), found)
+    poisoned = {"verdict": {"trust_score": 0.93}, "signal": {"confidence": 0.5}}
+    check("... and the scan really does bite on a numeric score under a benign name",
+          walk(poisoned) != [], walk(poisoned))
     check("the verdict is a rule summary with no numeric fields",
           isinstance(report["verdict"]["words"], str)
           and isinstance(report["verdict"]["reasons"], list)
@@ -523,6 +591,16 @@ def t_quote_validator_bites():
         "The battery runs for around nine hours", reviews))
     check("an empty quote is NOT accepted", not PR.quote_is_real("   ", reviews))
     check("a reviewer's name is never a quote source", not PR.quote_is_real("Jane Doe", reviews))
+    boundary = PR.normalize_reviews([{
+        "rating": 4, "title": "Great",
+        "text": "battery lasts about nine hours and the fit is good"}])[0][0]
+    check("a quote spanning the title and body boundary is NOT accepted",
+          not PR.quote_is_real("Great battery", [boundary]))
+    check("the same words inside one field ARE accepted",
+          PR.quote_is_real("battery lasts about", [boundary])
+          and PR.quote_is_real("Great", [boundary]) is False)
+    check("a one-character or four-character fragment is not a quote",
+          not PR.quote_is_real("G", reviews) and not PR.quote_is_real("Good", reviews))
 
 
 def t_model_output_validation_drops_invented_quotes():
@@ -623,18 +701,39 @@ def t_network_spy():
 FAKE_FOR_NETWORK = [{"rating": 5, "text": "The battery lasts 9 hours and the fit is good."}]
 
 
-def t_module_has_no_network_or_executor_in_its_namespace():
-    # Runtime check, not a source-text pin: the module object's namespace
-    # cannot hold a network or executor module unless it imported one, and the
-    # only modules in it are the three the engine's docstring names.
-    forbidden = ("socket", "urllib", "http", "requests", "subprocess", "os")
-    present = [name for name in forbidden if name in vars(PR)]
-    check("the module's namespace holds no network, subprocess or shell module",
-          present == [], present)
-    imported = sorted({value.__name__ for value in vars(PR).values()
-                       if type(value).__name__ == "module"})
-    check("the only modules it imports are the standard-library ones its docstring names",
-          imported == ["hashlib", "json", "re"], imported)
+def t_module_source_imports_and_calls_are_clean():
+    # The stronger check the design claims: parse the module's OWN source and
+    # look at every import and every call. A read_text() pin would go red on a
+    # rename; this AST walk asks the question the claim is about.
+    tree = ast.parse(inspect.getsource(PR))
+    roots = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                roots.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            roots.add(node.module.split(".")[0])
+    check("the engine source imports only datetime, hashlib, json, re and collections",
+          roots == {"__future__", "datetime", "hashlib", "json", "re", "collections"},
+          sorted(roots))
+    forbidden_roots = {"socket", "urllib", "http", "requests", "subprocess", "os",
+                       "pathlib", "playwright", "selenium", "webbrowser"}
+    check("the source imports no network, browser, storage or process module",
+          not (roots & forbidden_roots), sorted(roots & forbidden_roots))
+    calls = {node.func.id for node in ast.walk(tree)
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+    forbidden_calls = {"open", "urlopen", "system", "popen", "exec", "eval", "compile"}
+    check("the source calls no file/URL opener and no shell",
+          not (calls & forbidden_calls), sorted(calls & forbidden_calls))
+    # Prove the scan would catch a forbidden import/call, not just pass silently.
+    bad_tree = ast.parse("import socket\nsocket.socket()\nopen('x')")
+    bad_roots = {alias.name.split(".")[0] for node in ast.walk(bad_tree)
+                 if isinstance(node, ast.Import) for alias in node.names}
+    bad_calls = {node.func.id for node in ast.walk(bad_tree)
+                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+    check("... and the same scan would fail on a forbidden import or call",
+          bool(bad_roots & forbidden_roots) and bool(bad_calls & forbidden_calls),
+          (bad_roots, bad_calls))
 
 
 # ---------------------------------------------------------------------------
@@ -665,6 +764,74 @@ def t_known_patterned_fixture_is_flagged_with_reasons():
 #   Runner
 # ---------------------------------------------------------------------------
 
+
+
+def t_invalid_dates_never_crash_the_report():
+    bad_dates = ("2026-02-31", "31 February 2026", "2025-02-29", "2026-13-01",
+                 "2026-00-10", "2026-01-00")
+    bad_reviews = [
+        {"rating": 5, "date": raw,
+         "title": "Title with a date", "text": "Body text with enough words to read."}
+        for raw in bad_dates
+    ]
+    try:
+        report = PR.build_report(bad_reviews)
+        raised = None
+    except Exception as exc:  # pragma: no cover - the bite is the exception path
+        report, raised = None, exc
+    check("a report full of impossible dates builds instead of raising", raised is None, raised)
+    check("every impossible date is counted unknown, not dated",
+          report is not None and report["sample"]["dated"] == 0
+          and report["signals"]["date_burstiness"]["available"] is False,
+          report and report["sample"])
+    check("the impossible-date report still carries the caveat and what could not be checked",
+          report is not None and report["sample"]["caveat"] and report["could_not_check"])
+    leap = PR.build_report([
+        {"rating": 5, "date": "2024-02-29",
+         "title": "A real leap day", "text": "Body text with enough words to read."},
+        {"rating": 4, "date": "2024-03-01",
+         "title": "Another day", "text": "Body text with enough words to read."},
+        {"rating": 3, "date": "2024-03-02",
+         "title": "And another", "text": "Body text with enough words to read."},
+        {"rating": 2, "date": "2024-03-03",
+         "title": "Still another", "text": "Body text with enough words to read."},
+        {"rating": 4, "date": "2024-03-04",
+         "title": "One more day", "text": "Body text with enough words to read."},
+    ])
+    check("a real leap day is dated, not discarded", leap["sample"]["dated"] == 5,
+          leap["sample"])
+
+
+def t_short_and_cross_field_quotes_are_dropped():
+    reviews = PR.normalize_reviews([{
+        "rating": 4, "title": "Great",
+        "text": "battery lasts about nine hours and the fit is good"}])[0]
+    validated = PR.validate_model_output({
+        "aspects": [
+            {"aspect": "battery life", "stance": "positive",
+             "quotes": ["Great battery", "battery lasts about nine hours"]},
+            {"aspect": "tiny quote", "stance": "positive", "quotes": ["G"]},
+        ],
+    }, reviews)
+    check("a cross-field quote and a one-character quote are both dropped and counted",
+          validated["quotes_dropped"] == 2 and validated["quotes_accepted"] == 1, validated)
+    check("the one real quote keeps its aspect; the short-only aspect is dropped",
+          len(validated["aspects"]) == 1 and validated["aspects_dropped"] == 1
+          and validated["aspects"][0]["quotes"] == ["battery lasts about nine hours"])
+
+
+def t_with_text_counts_bodies_only():
+    title_only = [{"rating": 4, "title": f"Title number {i}"} for i in range(6)]
+    report = _report(title_only)
+    check("title-only reviews do not count as having review text",
+          report["sample"]["with_text"] == 0
+          and "have review text" in report["plain_words"]["headline"], report["sample"])
+    with_bodies = [{"rating": 4, "title": f"Title number {i}",
+                    "text": "A body with several real words in it."} for i in range(6)]
+    report2 = _report(with_bodies)
+    check("a body counts for with_text; six bodies means six",
+          report2["sample"]["with_text"] == 6, report2["sample"])
+
 TESTS = (
     t_schema_reads_what_it_can,
     t_schema_tolerates_missing_and_bad_fields,
@@ -693,7 +860,10 @@ TESTS = (
     t_model_output_validation_drops_invented_quotes,
     t_aspect_validation_appears_in_the_report,
     t_network_spy,
-    t_module_has_no_network_or_executor_in_its_namespace,
+    t_module_source_imports_and_calls_are_clean,
+    t_invalid_dates_never_crash_the_report,
+    t_short_and_cross_field_quotes_are_dropped,
+    t_with_text_counts_bodies_only,
     t_known_clean_fixture_is_not_flagged,
     t_known_patterned_fixture_is_flagged_with_reasons,
 )

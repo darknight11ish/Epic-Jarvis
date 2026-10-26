@@ -2,13 +2,13 @@
 the reviews a person could see, show the patterns that are actually
 observable, and say plainly what could not be checked.
 
-SLICE 1 OF THE FEATURE, AND WHAT IT IS NOT
-This is the analysis half only (docs/DESIGN-PRODUCT-RESEARCH.md; the design
+WHAT THIS IS
+This is the analysis engine (docs/DESIGN-PRODUCT-RESEARCH.md; the design
 contract is the owner's product-research document, revision 2). It has no
 route, no chat tool, no card, no Settings row, no app surface and no network
-of any kind: it takes a list of review records somebody else extracted from a
-page (the screen read or pasted text, in a later slice) and returns a report
-as plain Python data. Nothing here fetches, stores, logs or learns anything.
+of any kind: it takes a list of review records, or the page hand-off from
+`jarvis_product_read.py`, and returns a report as plain Python data. Nothing
+here fetches, stores, logs or learns anything.
 
 WHY THE REPORT IS REASONS, NOT A VERDICT ABOUT EACH REVIEW
 The research in the design contract is unambiguous: individual review
@@ -30,9 +30,10 @@ WHAT THE LOCAL MODEL MAY ADD, AND HOW IT IS CHECKED
 The local model does only the reading: aspect-level agreement/complaint labels
 with quotes, a short reason per review it suggests setting aside, and what it
 could not check. `MODEL_CONTRACT` is the exact JSON shape it is asked to fill.
-Every proposed quote is validated in code as a real substring of a review
-after whitespace normalisation; an invented quote is dropped and counted, and
-an aspect left with no real quote is dropped too. The engine never accepts a
+Every proposed quote must be at least 8 characters and match ONE review's
+title OR its body exactly after whitespace normalisation; a quote that spans
+the two fields, is shorter, or was invented is dropped and counted, and an
+aspect left with no real quote is dropped too. The engine never accepts a
 model's numeric trust score, because the contract asks for none.
 
 WHY THE TOLERANT REVIEW RECORD
@@ -50,19 +51,20 @@ Shares and counts are plain arithmetic about the sample; the verdict is a
 small set of named rules with the reasons that fired, plus what would change
 it. "Not enough trustworthy data" is a first-class outcome, not an error.
 
-STANDARD LIBRARY ONLY: `hashlib`, `json`, `re` and `collections`. No network,
-no subprocess, no dependency, no file is read or written.
+STANDARD LIBRARY ONLY: `datetime`, `hashlib`, `json`, `re` and `collections`.
+No network, no subprocess, no dependency, no file is read or written.
 
     py -3 -B backend/test_product_research.py
 """
 from __future__ import annotations
 
+import datetime as _dt
 import hashlib
 import json
 import re
 from collections import Counter, defaultdict
 
-VERSION = 1
+VERSION = 2
 
 # ---------------------------------------------------------------------------
 #   Words and thresholds, named so the report and the tests can quote them
@@ -81,6 +83,10 @@ SAMPLE_CAVEAT = (
 MIN_REVIEWS = 5
 MIN_TEXT_WORDS_TOTAL = 80
 
+#: A quote shorter than this is not a quote: the model is asked for a real
+#: phrase from the review, and a one-word fragment proves nothing.
+MIN_QUOTE_CHARS = 8
+
 #: A review needs this many words to be compared for near-duplicate wording:
 #: short genuine reviews repeat common phrases and would form false groups.
 MIN_WORDS_FOR_DUPLICATES = 12
@@ -95,8 +101,11 @@ EXCLAMATION_PER_100_FLAG = 5.0
 FIRST_PERSON_PER_100_FLAG = 8.0
 
 #: A day is a "burst day" when it has at least this many reviews AND at least
-#: this multiple of the median day in the sample. Both must hold, so a quiet
-#: sample with four reviews on one day is not automatically a burst.
+#: this multiple of the baseline the report states (a listing's own per-day
+#: average when supplied, otherwise the sample's average without that day).
+#: Both must hold, so a quiet sample with four reviews on one day is not
+#: automatically a burst, and a listing that averages thousands of reviews a
+#: day does not flag a four-review day.
 BURST_MIN_DAY_REVIEWS = 4
 BURST_RATE_MULTIPLE = 3.0
 BURST_WINDOW_DAYS = 7
@@ -236,12 +245,22 @@ def _clean_text(raw, cap: int) -> str:
     return text[:cap]
 
 
+def _valid_date(year: int, month: int, day: int) -> bool:
+    """True only for a real calendar date (2026-02-31 is not one)."""
+    try:
+        _dt.date(year, month, day)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 def _parse_date(raw):
     """A review date as YYYY-MM-DD, or None.
 
     A page may show a full timestamp, a date, or a human date. The tolerant
-    rule accepts the ISO forms and a few common written forms; anything else is
-    unknown, and the report counts unknown dates instead of guessing one."""
+    rule accepts the ISO forms and a few common written forms, but the day must
+    exist in that month: "2026-02-31" and "31 February 2026" are unknown, not
+    guessed dates. Anything unreadable is counted as unknown."""
     if raw is None:
         return None
     text = normalize_whitespace(raw)
@@ -251,13 +270,13 @@ def _parse_date(raw):
     if m:
         try:
             year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
-            if 1900 <= year <= 2100 and 1 <= month <= 12 and 1 <= day <= 31:
-                return f"{year:04d}-{month:02d}-{day:02d}"
         except ValueError:
             return None
+        if (1900 <= year <= 2100 and _valid_date(year, month, day)):
+            return f"{year:04d}-{month:02d}-{day:02d}"
+        return None
     for fmt in ("%d %B %Y", "%B %d, %Y", "%d %b %Y", "%b %d, %Y", "%Y/%m/%d"):
         try:
-            import datetime as _dt
             return _dt.datetime.strptime(text, fmt).date().isoformat()
         except ValueError:
             continue
@@ -286,7 +305,10 @@ def _parse_bool(raw):
 
 def _parse_vine(raw):
     """True when the Vine badge is present, False when it is explicitly
-    absent from a record that carries the badge field, None when unknown."""
+    absent from a record that carries the badge field, None when unknown.
+
+    "No Vine" is an explicit absence, not a Vine label: a page that says the
+    review is not Vine must not inflate the Vine share."""
     if raw is True or raw is False:
         return raw
     if raw is None:
@@ -294,6 +316,10 @@ def _parse_vine(raw):
     text = normalize_whitespace(raw).lower()
     if not text:
         return None
+    if text in ("false", "no", "none"):
+        return False
+    if "no vine" in text or "not vine" in text or "not a vine" in text:
+        return False
     return "vine" in text
 
 
@@ -380,9 +406,21 @@ def normalize_reviews(raw) -> tuple:
     return records, skipped
 
 
+def review_title(record: dict) -> str:
+    """The review's title, whitespace-normalised, on its own."""
+    return normalize_whitespace(record.get("title") or "")
+
+
+def review_body(record: dict) -> str:
+    """The review's body text, whitespace-normalised, on its own. A title is
+    not a body: `with_text` and the quote validator treat them separately."""
+    return normalize_whitespace(record.get("text") or "")
+
+
 def review_text(record: dict) -> str:
-    """A review's title and text, whitespace-normalised, as one string."""
-    return normalize_whitespace(f"{record.get('title') or ''} {record.get('text') or ''}")
+    """A review's title and text joined for display and word matching (never
+    for the quote validator, which checks each field on its own)."""
+    return normalize_whitespace(f"{review_title(record)} {review_body(record)}")
 
 
 def _snippet(record: dict, cap: int = SNIPPET_CHARS) -> str:
@@ -624,12 +662,16 @@ def signal_near_duplicate_wording(reviews) -> dict:
     shingle_sets = [_shingles(review_text(r)) for r in eligible]
     signatures = [_minhash_signature(s) for s in shingle_sets]
     pairs = []
+    pairs_shortlisted = 0
+    pairs_compared = 0
     for i in range(len(eligible)):
         for j in range(i + 1, len(eligible)):
             # Shortlist only: the exact Jaccard decides every pair.
             shared_positions = sum(1 for a, b in zip(signatures[i], signatures[j]) if a == b)
             if shared_positions < 2:
                 continue
+            pairs_shortlisted += 1
+            pairs_compared += 1
             similarity = _jaccard(shingle_sets[i], shingle_sets[j])
             if similarity >= DUPLICATE_JACCARD:
                 pairs.append((i, j, similarity))
@@ -672,7 +714,9 @@ def signal_near_duplicate_wording(reviews) -> dict:
     counts = {
         "reviews": len(reviews),
         "reviews_compared": len(eligible),
-        "pairs_compared": len(eligible) * (len(eligible) - 1) // 2,
+        "pairs_possible": len(eligible) * (len(eligible) - 1) // 2,
+        "pairs_shortlisted": pairs_shortlisted,
+        "pairs_compared": pairs_compared,
         "duplicate_pairs": len(pairs),
         "duplicate_groups": len(groups),
         "reviews_flagged": len(flagged),
@@ -706,38 +750,46 @@ def _median(values):
 
 
 def signal_date_burstiness(reviews, *, listing=None) -> dict:
-    """Reviews per day against the listing's own baseline.
+    """Reviews per day against the baseline the flags actually use.
 
     The evidence is simple arithmetic: how many days the dated reviews cover,
     the busiest day, the busiest 7-day window, and how far the busiest day is
-    from the median day. With a listing review count and a known first date,
-    the baseline rate is the listing's own average; otherwise it is this
-    sample's own average, and the report says which. A genuine launch can
-    produce a real spike, so a burst is never a verdict."""
-    dated = [r for r in reviews if r["date"]]
+    from the baseline. That baseline is the listing's own per-day average when
+    a review count and first date are supplied; otherwise it is the sample's
+    average WITHOUT the day being tested, so one busy day cannot hide itself.
+    A day is flagged only when it has at least 4 reviews AND at least 3x that
+    baseline -- so a listing that averages thousands of reviews a day does not
+    flag a four-review day. A genuine launch can still create a real spike, so
+    a burst is never a verdict."""
+    dated = []
+    invalid_dates = 0
+    for record in reviews:
+        if not record["date"]:
+            continue
+        if _safe_ordinal(record["date"]) is None:
+            invalid_dates += 1
+        else:
+            dated.append(record)
     counts = {
         "reviews": len(reviews),
         "dated": len(dated),
-        "undated": len(reviews) - len(dated),
+        "undated": len(reviews) - len(dated) - invalid_dates,
+        "invalid_dates": invalid_dates,
     }
     thresholds = {"min_dated": 3, "burst_min_day_reviews": BURST_MIN_DAY_REVIEWS,
                   "burst_rate_multiple": BURST_RATE_MULTIPLE,
                   "window_days": BURST_WINDOW_DAYS}
     if len(dated) < 3:
         return _evidence("date_burstiness", available=False,
-                         why="fewer than 3 readable reviews carry a date",
+                         why="fewer than 3 readable reviews carry a real date",
                          counts=counts, thresholds=thresholds)
     by_day = Counter(r["date"] for r in dated)
     days = sorted(by_day)
-    first = days[0]
-    last = days[-1]
-    span_days = max(1, _date_ordinal(last) - _date_ordinal(first) + 1)
-    daily_counts = [by_day[d] for d in days]
+    first, last = days[0], days[-1]
+    span_days = max(1, _safe_ordinal(last) - _safe_ordinal(first) + 1)
     busiest_day = max(days, key=lambda d: (by_day[d], d))
     busiest_count = by_day[busiest_day]
-    median_day = _median(daily_counts)
     mean_day = len(dated) / span_days
-    # Busiest 7-day window: count every dated review inside [start, start+6].
     window_start, window_count = None, 0
     for start in days:
         end = _date_add(start, BURST_WINDOW_DAYS - 1)
@@ -750,56 +802,73 @@ def signal_date_burstiness(reviews, *, listing=None) -> dict:
     if isinstance(listing.get("review_count"), int) and listing["review_count"] > 0 \
             and listing.get("first_available"):
         first_available = _parse_date(listing.get("first_available"))
-        if first_available:
-            baseline_days = max(1, _date_ordinal(last) - _date_ordinal(first_available) + 1)
+        first_ordinal = _safe_ordinal(first_available) if first_available else None
+        if first_ordinal is not None:
+            baseline_days = max(1, _safe_ordinal(last) - first_ordinal + 1)
             baseline = {"source": "listing", "reviews": int(listing["review_count"]),
                         "days": baseline_days,
                         "per_day": _round(int(listing["review_count"]) / baseline_days)}
-    counts.update({
-        "days_covered": span_days,
-        "max_same_day": busiest_count,
-        "busiest_day": busiest_day,
-        "max_in_window": window_count,
-        "window_start": window_start,
-        "median_per_active_day": _round(median_day),
-        "mean_per_day": _round(mean_day),
-        "listing_review_count": baseline.get("reviews") if baseline["source"] == "listing" else None,
-        "baseline_per_day": baseline.get("per_day"),
-    })
     flags = []
     burst_days = []
+    busiest_base = 0.0
+    busiest_threshold = 0.0
     for day in days:
-        if by_day[day] >= BURST_MIN_DAY_REVIEWS and \
-                (median_day <= 0 or by_day[day] >= median_day * BURST_RATE_MULTIPLE):
+        if baseline["source"] == "listing":
+            day_base = float(baseline["per_day"] or 0.0)
+        else:
+            others = len(dated) - by_day[day]
+            day_base = others / max(1, span_days - 1)
+        threshold = max(float(BURST_MIN_DAY_REVIEWS), day_base * BURST_RATE_MULTIPLE)
+        if day == busiest_day:
+            busiest_base = day_base
+            busiest_threshold = threshold
+        if by_day[day] >= BURST_MIN_DAY_REVIEWS and by_day[day] >= threshold:
             burst_days.append(day)
             for record in dated:
                 if record["date"] == day:
                     flags.append({"index": record["index"],
                                   "reason": f"posted on {day}, a day with {by_day[day]} "
                                             f"of the {len(dated)} dated reviews"})
-    counts["burst_days"] = len(burst_days)
-    counts["reviews_on_burst_days"] = sum(by_day[d] for d in burst_days)
+    counts.update({
+        "days_covered": span_days,
+        "max_same_day": busiest_count,
+        "busiest_day": busiest_day,
+        "max_in_window": window_count,
+        "window_start": window_start,
+        "mean_per_day": _round(mean_day),
+        "baseline_source": baseline["source"],
+        "baseline_per_day": baseline["per_day"],
+        "baseline_used_for_busiest_day": _round(busiest_base),
+        "flag_threshold_for_busiest_day": _round(busiest_threshold),
+        "listing_review_count": baseline.get("reviews") if baseline["source"] == "listing" else None,
+        "burst_days": len(burst_days),
+        "reviews_on_burst_days": sum(by_day[d] for d in burst_days),
+    })
     examples = [{"day": day, "reviews": by_day[day], "why": "burst day"}
                 for day in sorted(burst_days, key=lambda d: (-by_day[d], d))[:EXAMPLES_PER_SIGNAL]]
-    note = ("A burst is a pattern to look at: a genuine launch can create one, and this says "
-            "nothing about any single review.")
+    note = ("The flag compares each day with the baseline in the counts: the listing's per-day "
+            "average when supplied, otherwise the sample's average without that day. A day must "
+            "have at least 4 reviews and at least 3x the baseline, so a genuine launch can still "
+            "create a real spike; a burst says nothing about any single review.")
     if baseline["source"] == "listing":
-        note += (" The baseline is the listing's own review count over the days from its first "
-                 "available date to the newest dated review.")
+        note += (" The baseline here is the listing's own review count over the days from its "
+                 "first available date to the newest dated review.")
     else:
-        note += (" No listing baseline was passed in, so the baseline is this sample's own "
-                 "average over its dated range.")
+        note += (" No listing baseline was passed in, so each day is compared with the sample's "
+                 "average over its dated range without that day.")
     return _evidence("date_burstiness", counts=counts, thresholds=thresholds,
                      examples=examples, flags=_dedupe_flags(flags), note=note)
 
 
-def _date_ordinal(day: str) -> int:
-    import datetime as _dt
-    return _dt.date.fromisoformat(day).toordinal()
+def _safe_ordinal(day):
+    """The date's ordinal, or None when the value is not a real calendar date."""
+    try:
+        return _dt.date.fromisoformat(str(day)).toordinal()
+    except (TypeError, ValueError):
+        return None
 
 
 def _date_add(day: str, days: int) -> str:
-    import datetime as _dt
     return (_dt.date.fromisoformat(day) + _dt.timedelta(days=days)).isoformat()
 
 
@@ -1078,7 +1147,9 @@ MODEL_CONTRACT = {
         "could_not_check": ["one short plain sentence each, ≤200 characters"],
     },
     "rules": [
-        "Every quote must be copied exactly from a review; a paraphrase is not a quote.",
+        "Every quote must be copied exactly from one review's title or text; a paraphrase or a "
+        "phrase joined across the title and body is not a quote, and a quote must be at least "
+        "8 characters.",
         "Do not call a review fake; say what you noticed and leave the judgement to the owner.",
         "Do not include a score, a probability or a trust number.",
         "Keep each aspect label short and plain; one aspect per line.",
@@ -1090,17 +1161,25 @@ MODEL_STANCES = ("positive", "negative", "mixed")
 
 
 def quote_is_real(quote, reviews) -> bool:
-    """True only when the quote is a real substring of some review's title or
-    text after whitespace normalisation (case and punctuation must match)."""
+    """True only when the quote is a real substring of ONE review's title OR
+    body after whitespace normalisation (case and punctuation must match), and
+    long enough to be a meaningful quote.
+
+    The title and body are checked separately on purpose: joining them would
+    accept an invented phrase made from the end of the title and the start of
+    the body."""
     wanted = normalize_whitespace(quote)
-    if not wanted:
+    if len(wanted) < MIN_QUOTE_CHARS:
         return False
-    return any(wanted in review_text(record) for record in reviews)
+    for record in reviews:
+        if wanted in review_title(record) or wanted in review_body(record):
+            return True
+    return False
 
 
 def _valid_quote(quote, reviews) -> str:
     text = normalize_whitespace(quote)
-    if not text or len(text) > 300:
+    if not text or len(text) < MIN_QUOTE_CHARS or len(text) > 300:
         return ""
     return text if quote_is_real(text, reviews) else ""
 
@@ -1178,9 +1257,10 @@ def validate_model_output(model, reviews) -> dict:
             proposed_quote = _clean_text(proposed.get("quote"), 300)
             if proposed_quote:
                 target = by_index[index]
-                if normalize_whitespace(proposed_quote) in review_text(target):
+                checked = _valid_quote(proposed_quote, [target])
+                if checked:
                     result["quotes_accepted"] += 1
-                    quote = normalize_whitespace(proposed_quote)
+                    quote = checked
                 else:
                     result["quotes_dropped"] += 1
                     quote = ""
@@ -1259,16 +1339,17 @@ def collect_flags(reviews, signals, validated) -> list:
 # ---------------------------------------------------------------------------
 
 def _enough_data(reviews, signals) -> bool:
-    """Enough readable reviews and real words to summarise honestly."""
-    words = sum(_word_count(review_text(r)) for r in reviews)
+    """Enough readable reviews and real body words to summarise honestly.
+    A title alone is not review text, so title-only records do not count."""
+    words = sum(_word_count(review_body(r)) for r in reviews)
     return len(reviews) >= MIN_REVIEWS and words >= MIN_TEXT_WORDS_TOTAL
 
 
 def _aspects_section(validated, reviews) -> dict:
     if not validated.get("used"):
         return {"available": False, "why": validated.get("why") or "no model output",
-                "agreed": [], "complained": []}
-    agreed, complained = [], []
+                "agreed": [], "complained": [], "mixed": []}
+    agreed, complained, mixed = [], [], []
     for aspect in validated.get("aspects", []):
         entry = {
             "aspect": aspect["aspect"],
@@ -1277,8 +1358,14 @@ def _aspects_section(validated, reviews) -> dict:
             "mentioned_in": aspect_mentions(reviews, aspect["aspect"], aspect["quotes"]),
             "of": len(reviews),
         }
-        (agreed if aspect["stance"] == "positive" else complained).append(entry)
-    return {"available": True, "why": "", "agreed": agreed, "complained": complained}
+        if aspect["stance"] == "positive":
+            agreed.append(entry)
+        elif aspect["stance"] == "negative":
+            complained.append(entry)
+        else:
+            mixed.append(entry)
+    return {"available": True, "why": "", "agreed": agreed,
+            "complained": complained, "mixed": mixed}
 
 
 def _verdict(reviews, signals, flags, enough, aspects) -> dict:
@@ -1359,7 +1446,7 @@ def _plain_words(report) -> dict:
     counts = sample
     headline = (f"Read {counts['readable']} review(s)"
                 + (f" out of {counts['raw']} supplied" if counts["skipped"] else "")
-                + f". {counts['with_text']} have text, {counts['dated']} have dates, "
+                + f". {counts['with_text']} have review text, {counts['dated']} have dates, "
                   f"{counts['verified_known']} say whether the purchase was verified, and "
                   f"{counts['vine_known']} say whether a Vine label is present.")
     sample_lines = [SAMPLE_CAVEAT, headline]
@@ -1372,6 +1459,11 @@ def _plain_words(report) -> dict:
     for entry in report["aspects"]["complained"]:
         aspect_lines.append(
             f"Complain: {entry['aspect']} - {entry['mentioned_in']} of {entry['of']} readable "
+            f"reviews mention it (word match). Quoted: "
+            + " | ".join(f'"{_snippet_text(q, 140)}"' for q in entry["quotes"]))
+    for entry in report["aspects"]["mixed"]:
+        aspect_lines.append(
+            f"Mixed: {entry['aspect']} - {entry['mentioned_in']} of {entry['of']} readable "
             f"reviews mention it (word match). Quoted: "
             + " | ".join(f'"{_snippet_text(q, 140)}"' for q in entry["quotes"]))
     if not report["aspects"]["available"]:
@@ -1389,6 +1481,9 @@ def _plain_words(report) -> dict:
         "complained": [line for line in aspect_lines if line.startswith("Complain:")]
         or (["Not checked: " + report["aspects"]["why"]] if not report["aspects"]["available"]
             else ["No complaint reached the model's reading."]),
+        "mixed": [line for line in aspect_lines if line.startswith("Mixed:")]
+        or (["Not checked: " + report["aspects"]["why"]] if not report["aspects"]["available"]
+            else ["No mixed aspect reached the model's reading."]),
         "set_aside": set_aside,
         "verdict": [report["verdict"]["words"]]
         + [f"What would change this: {item}" for item in report["verdict"]["what_would_change_it"]],
@@ -1415,7 +1510,7 @@ def build_report(raw_reviews, *, listing=None, product=None, model=None) -> dict
     aspects = _aspects_section(validated, reviews)
     enough = _enough_data(reviews, signals)
     verdict = _verdict(reviews, signals, flags, enough, aspects)
-    with_text = sum(1 for r in reviews if review_text(r))
+    with_text = sum(1 for r in reviews if review_body(r))
     sample = {
         "caveat": SAMPLE_CAVEAT,
         "raw": len(raw_reviews) if isinstance(raw_reviews, list)

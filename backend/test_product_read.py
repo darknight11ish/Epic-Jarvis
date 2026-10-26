@@ -228,6 +228,32 @@ def t_records_pass_through_the_engine_schema():
           normalised[0])
 
 
+def t_invalid_page_dates_become_unknown():
+    check("a written impossible date is a failed read, not an ISO date",
+          READ._extract_date("31 February 2026") == ""
+          and READ._extract_date("2026-02-31") == ""
+          and READ._extract_date("29 February 2025") == "")
+    check("a real leap day is still read", READ._extract_date("29 February 2024") == "2024-02-29")
+    invalid_page = FULL_PAGE.replace("Reviewed in Testland on 2 August 2026",
+                                     "Reviewed in Testland on 31 February 2026")
+    parsed = READ.parse_product_page(invalid_page)
+    check("a page with an impossible review date hands the engine an unknown date",
+          parsed["reviews"][0]["date"] is None
+          and parsed["reviews"][0]["date_text"] == "Reviewed in Testland on 31 February 2026",
+          parsed["reviews"][0])
+    try:
+        assembled = READ.assemble_report(invalid_page)
+        raised = None
+    except Exception as exc:  # pragma: no cover - the bite is the exception path
+        assembled, raised = None, exc
+    check("assembling a report from that page does not raise on the bad date",
+          raised is None and assembled["report"]["sample"]["dated"] == 4,
+          raised)
+    check("the engine counts the impossible date as unknown, not as a crash",
+          assembled is not None and assembled["report"]["signals"]["date_burstiness"]["available"]
+          is True, assembled and assembled["report"]["sample"])
+
+
 def t_absent_fields_are_counted_not_invented():
     parsed = READ.parse_product_page(MISSING_FIELDS_PAGE)
     record = parsed["reviews"][0]
@@ -487,8 +513,9 @@ def t_imports_are_only_the_parser_re_and_the_engine():
                 roots.add(alias.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom) and node.module:
             roots.add(node.module.split(".")[0])
-    check("the module's only imports are html.parser, re and the engine module",
-          roots == {"html", "re", "jarvis_product_research", "__future__"}, sorted(roots))
+    check("the module's only imports are datetime, html.parser, re and the engine module",
+          roots == {"datetime", "html", "re", "jarvis_product_research", "__future__"},
+          sorted(roots))
     forbidden = {"socket", "urllib", "http", "requests", "subprocess", "os",
                  "pathlib", "playwright", "selenium", "webbrowser", "browser"}
     check("it imports no network, browser, storage or process module",
@@ -508,8 +535,8 @@ def t_runtime_namespace_has_no_browser_modules():
           present == [], present)
     imported = sorted({value.__name__ for value in vars(READ).values()
                        if type(value).__name__ == "module"})
-    check("the only module objects in its namespace are the engine and re",
-          imported == ["jarvis_product_research", "re"], imported)
+    check("the only module objects in its namespace are datetime, the engine and re",
+          imported == ["datetime", "jarvis_product_research", "re"], imported)
 
 
 # ---------------------------------------------------------------------------
@@ -537,6 +564,7 @@ TESTS = (
     t_unreadable_listing_values_are_none_not_guesswork,
     t_reviews_are_engine_records,
     t_records_pass_through_the_engine_schema,
+    t_invalid_page_dates_become_unknown,
     t_absent_fields_are_counted_not_invented,
     t_full_page_has_no_warnings,
     t_challenge_page_bite,

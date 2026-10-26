@@ -52,13 +52,15 @@ crawler. The capture lives in a later, explicitly carded slice that reads the
 page from the owner's own browser. This module names that seam so the wiring
 cannot silently "just fetch it".
 
-STANDARD LIBRARY ONLY: `html.parser`, `re`, and the project's engine module. No
-`json`, no `open()`, no socket, no subprocess, no browser automation library.
+STANDARD LIBRARY ONLY: `datetime`, `html.parser`, `re`, and the project's
+engine module. No `json`, no `open()`, no socket, no subprocess, no browser
+automation library.
 
     py -3 -B backend/test_product_read.py
 """
 from __future__ import annotations
 
+import datetime as _dt
 import re
 from html.parser import HTMLParser
 
@@ -232,7 +234,10 @@ def _extract_date(raw) -> str:
             else:
                 month_name, day, year = groups[0].lower(), int(groups[1]), int(groups[2])
                 month = _MONTHS.get(month_name)
-            if month and 1 <= day <= 31 and 1900 <= year <= 2100:
+            if month and 1900 <= year <= 2100:
+                # The day must exist in that month: "31 February 2026" is a
+                # failed read, not a date the engine should be handed.
+                _dt.date(year, month, day)
                 return f"{year:04d}-{month:02d}-{day:02d}"
         except (TypeError, ValueError):
             continue
