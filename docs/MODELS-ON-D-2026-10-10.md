@@ -170,17 +170,23 @@ stating **its size on disk, what it is for, which card it uses, and what it
 leaves free**, before anything is chosen. A tier that will not fit says why, and
 the next one down is offered; nothing is changed quietly.
 
-`may_download()` is the single gate every download passes: **never a silent
-download**, and **never one that would leave less than 25 GB free**. The test
-for that is built from 2026-10-10's evidence — a 12.85 GB download that would
-leave 17 GB free is refused, and the refusal says why, names the drive and says
-what to do instead. The `Generous` tier carries the owner's opt-in fiction model
-with its measured cost on the label (TruthfulQA −5.8 to −6.9 points, MMLU about
-noise, an older build), never as the everyday assistant and never as a default.
+`may_download()` was built to be the single gate every download passes:
+**never a silent download**, and **never one that would leave less than 25 GB
+free**. The test for that is built from 2026-10-10's evidence — a 12.85 GB
+download that would leave 17 GB free is refused, and the refusal says why,
+names the drive and says what to do instead. The `Generous` tier carries the
+owner's opt-in fiction model with its measured cost on the label (TruthfulQA
+−5.8 to −6.9 points, MMLU about noise, an older build), never as the everyday
+assistant and never as a default.
 
-This is folded into the **work-setups** work rather than built as a second
-chooser: `jarvis_storage` supplies the space facts, the setups decide what is
-installed.
+**But nothing calls it yet** (checked 2026-10-26 against `origin/main` at
+`7acd7db54`): `jarvis_storage.may_download()` has no caller in this repository
+outside its own test, so the model-download/install path is **not** gated by it
+today. Read the paragraph above as the design of the gate, not as a description
+of a live check; wiring it into that path is an open gap. This was meant to be
+folded into the **work-setups** work rather than built as a second chooser:
+`jarvis_storage` supplies the space facts and the setups decide what is
+installed - once a setup actually calls the gate.
 
 ---
 

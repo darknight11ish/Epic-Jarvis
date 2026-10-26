@@ -3,7 +3,7 @@
 The owner's feature list, as data: 139 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 04fc281d46e64413f35f46fa7a7f6276eee0939b2870c21591569e72dcc84896); the apps' Features pages read their own
+`features/features.json` (sha256 02a455842fa8f8739d28b2f50861f9a159a6d1a20f5e4279d9ca1402ec12ccd2); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "04fc281d46e64413f35f46fa7a7f6276eee0939b2870c21591569e72dcc84896"
+SOURCE_SHA256 = "02a455842fa8f8739d28b2f50861f9a159a6d1a20f5e4279d9ca1402ec12ccd2"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -315,7 +315,7 @@ FEATURES = (
         "where": "Brain, Memory.",
         "asks": "No card.",
         "limit": "The lists hide while \"Hide memory lists and chat history\" is on.",
-        "surface": "desktop",
+        "surface": "both",
         "covers": ["brain.tab.memory", "memory"],
     },
     {
@@ -459,7 +459,7 @@ FEATURES = (
         "where": "Brain, Memory, Bring in old chats.",
         "asks": "It only proposes: every fact it finds waits for its own yes.",
         "limit": "Imported text is outside text - it is never learned from.",
-        "surface": "desktop",
+        "surface": "both",
         "covers": ["brain.memory.history-import", "memory-lists"],
     },
     {
@@ -1192,7 +1192,7 @@ FEATURES = (
         "where": "Brain, Work.",
         "asks": "No card.",
         "limit": "",
-        "surface": "desktop",
+        "surface": "both",
         "covers": ["brain.tab.work", "work-and-attention"],
     },
     {
