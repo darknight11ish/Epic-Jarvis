@@ -64,6 +64,7 @@ window" form, which only the Windows API itself offers.
 """
 from __future__ import annotations
 
+import atexit
 import hashlib
 import hmac
 import io
@@ -102,6 +103,10 @@ GONE = ("This request stopped waiting while Windows Hello was open (it ran out o
         "time or was answered), so it was not approved")
 QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell "
                     "whether this approval needs Windows Hello. Nothing was approved")
+#: The action has no written words of its own, so a prompt could only quote a
+#: name nobody described: refused before any prompt appears (2026-10-26).
+UNLABELLED = ("Jarvis has no written words for this action yet, so it will not ask "
+              "you to confirm it. Nothing was approved")
 
 #: Cards that are approved on THIS PC only, and always with Windows Hello,
 #: whatever their risk says: loosening "What asks first" (jarvis_asks_first.
@@ -163,6 +168,18 @@ PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so not
 #: `expires_in` (a backend without approval-expiry.patch).
 DEFAULT_TIME_LEFT = 900.0
 
+#: The longest a Windows Hello prompt may stay up, however much time its card
+#: has left (2026-10-26). The prompt's only cancellation is its own deadline -
+#: the visible dialog belongs to Windows, and killing the process that asked
+#: for it does not close it (measured: .dsh-scratch/WINDOWS-HELLO-2026-10-26/
+#: FINDINGS.md section 3) - so the number given here IS its lifetime. Three
+#: minutes is long enough to reach the PC and confirm, and short enough that a
+#: prompt queued behind another one cannot sit on screen for a quarter of an
+#: hour because its card happened to have that long. The card is not used up
+#: by a prompt that closes: it keeps waiting, and Approve can be pressed
+#: again.
+_PROMPT_MAX = 180.0
+
 # ---------------------------------------------------------------------------
 # Which approvals are risky - ONE rule, three places
 # ---------------------------------------------------------------------------
@@ -217,6 +234,26 @@ def approval_message(row: Optional[dict]) -> str:
     risk = row.get("risk") if isinstance(row.get("risk"), dict) else {}
     why = str(risk.get("why") or "").strip() or "Check the card before you confirm."
     return f"{title}\n{why}"[:300]
+
+
+def has_written_title(action) -> bool:
+    """True when jarvis_card_words has words somebody WROTE for `action`.
+
+    `approval_message` can always build a readable line, because the card's
+    own title is there - but for an action with no phrase in the card words,
+    that title is a name Jarvis quotes back (`title_for`'s fallback), not a
+    description of anything. A prompt showing only that asks the owner to
+    confirm a blank, so `approve_check` refuses before the prompt appears
+    (2026-10-26).
+
+    A missing words module answers False, and that is on purpose: if this
+    process cannot read the written words, it cannot prove a card has any.
+    """
+    try:
+        import jarvis_card_words
+        return bool(jarvis_card_words.has_written_title(action))
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -687,6 +724,88 @@ _VERIFIER: Optional[Callable[[str, float], str]] = None
 _PROMPT = threading.Lock()
 
 
+class _LivePrompt:
+    """One Windows Hello child process that is still waiting for an answer.
+
+    The child watches its own stdin (`_watch_for_stop`): a "cancel" line, or
+    the pipe closing, makes it cancel the Windows prompt instead of waiting
+    out its deadline. Keeping this end of the pipe open is therefore what
+    ties the prompt to the backend - when the backend goes away, the pipe
+    closes, and the child asks Windows to close the dialog.
+    """
+
+    def __init__(self, proc):
+        self.proc = proc
+        self.stop = threading.Event()
+
+    def say(self, ask: dict) -> bool:
+        """Send the one JSON line the child reads first. False if it cannot."""
+        try:
+            self.proc.stdin.write(json.dumps(ask) + "\n")
+            self.proc.stdin.flush()
+            return True
+        except (OSError, ValueError, AttributeError):
+            return False
+
+    def cancel(self) -> None:
+        """Ask the child to close the prompt, then close its pipe.
+
+        Closing is the same request as the line (the child treats the end of
+        the pipe as "the backend is going away"), so a lost line still stops
+        it. Never raises.
+        """
+        self.stop.set()
+        stdin = getattr(self.proc, "stdin", None)
+        if stdin is None:
+            return
+        try:
+            if not stdin.closed:
+                stdin.write("cancel\n")
+                stdin.flush()
+        except Exception:
+            pass
+        try:
+            stdin.close()
+        except Exception:
+            pass
+
+    def close(self) -> None:
+        """Close this end of the pipe once the prompt is over."""
+        stdin = getattr(self.proc, "stdin", None)
+        try:
+            if stdin is not None and not stdin.closed:
+                stdin.close()
+        except Exception:
+            pass
+
+
+_LIVE_PROMPTS: set = set()
+_LIVE_LOCK = threading.Lock()
+
+
+def _cancel_live_prompts() -> int:
+    """Ask every prompt still open to close. Returns how many were asked.
+
+    Registered with `atexit` at import, which is this project's pattern for
+    work that must happen on the way out (`jarvis_hud._release_gpu`, and
+    several other modules). It covers a clean backend shutdown:
+    /api/shutdown, Ctrl-C, a normal exit. It cannot cover a hard kill of the
+    process - the desktop's job object, Task Manager - because no Python runs
+    then, so a prompt in that case still ends only at its own deadline. That
+    limit is real and is written down in the PR, not hidden here.
+    """
+    with _LIVE_LOCK:
+        live = list(_LIVE_PROMPTS)
+    for prompt in live:
+        prompt.cancel()
+    return len(live)
+
+
+#: The atexit hook itself, kept in a name so a test can check that importing
+#: this module really registers it.
+_SHUTDOWN_HOOK = atexit.register(_cancel_live_prompts)
+
+
 def set_verifier(fn: Optional[Callable[[str, float], str]]) -> None:
     """Replace the Windows Hello call (tests). None puts the real one back."""
     global _VERIFIER
@@ -716,24 +835,65 @@ def _child_env() -> dict:
         return {k: v for k, v in os.environ.items() if k.upper() in keep}
 
 
+#: How the Windows Hello child process is started. A name of its own so a test
+#: can stand a FAKE child in its place: the real one raises a real prompt, and
+#: no test may do that.
+_SPAWN = subprocess.Popen
+
+
 def _verify_windows(message: str, timeout: float) -> str:
     """Runs the check in a child process (this file, `--hello`). A mistake in
     the Windows calls can then end only the child - read as "failed", so the
     approval is refused - never the backend. The message goes in on stdin,
-    never on a command line other programs can list."""
+    never on a command line other programs can list.
+
+    The child's stdin STAYS OPEN while it works: the JSON line tells it what
+    to ask, and a later "cancel" line - or this end of the pipe closing - tells
+    it to close the prompt. That is the cancellation the backend controls; the
+    child's death is not one (the 2026-10-26 measurement found the Windows
+    dialog survives the process that asked for it). A timeout asks the child
+    to cancel, gives it a moment, and only then kills it.
+    """
     try:
-        r = subprocess.run(
+        proc = _SPAWN(
             [sys.executable, "-I", str(Path(__file__).resolve()), "--hello"],
-            input=json.dumps({"message": message, "timeout": float(timeout)}),
-            capture_output=True, text=True, timeout=float(timeout) + 10.0,
-            env=_child_env(),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, env=_child_env(),
             # CREATE_NO_WINDOW: no console flashes up. The check's own small
             # window, and Windows Hello's prompt, are not affected.
             creationflags=0x08000000,
         )
     except (OSError, subprocess.SubprocessError, ValueError):
         return FAILED_
-    return parse_child_answer(r.returncode, r.stdout)
+    live = _LivePrompt(proc)
+    with _LIVE_LOCK:
+        _LIVE_PROMPTS.add(live)
+    try:
+        if not live.say({"message": message, "timeout": float(timeout)}):
+            return FAILED_
+        try:
+            proc.wait(timeout=float(timeout) + 10.0)
+        except subprocess.TimeoutExpired:
+            live.cancel()               # a kill cannot close the prompt
+            try:
+                proc.wait(timeout=2.0)
+            except (subprocess.TimeoutExpired, OSError, ValueError):
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+            return FAILED_
+        except (OSError, ValueError):
+            return FAILED_
+        try:
+            out = proc.stdout.read() if proc.stdout is not None else ""
+        except (OSError, ValueError):
+            out = ""
+        return parse_child_answer(proc.returncode, out)
+    finally:
+        with _LIVE_LOCK:
+            _LIVE_PROMPTS.discard(live)
+        live.close()
 
 
 def parse_child_answer(returncode: int, stdout: str) -> str:
@@ -795,7 +955,69 @@ IID_ASYNC_INFO = uuid.UUID("00000036-0000-0000-c000-000000000046")  # IAsyncInfo
 CLASS_NAME = "Windows.Security.Credentials.UI.UserConsentVerifier"
 
 
-def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Windows only
+class _Stopped(Exception):
+    """The backend is going away, so the prompt was told to cancel: unwind."""
+
+
+def _watch_for_stop(stream, stop: threading.Event) -> None:
+    """Set `stop` when the parent writes "cancel" or closes its end of the pipe.
+
+    Run in a thread in the child. The pipe is the only honest lifetime tie the
+    prompt has: when the backend exits, cleanly or by its handles being
+    closed, the pipe ends and this notices. A "cancel" line says the same
+    thing while the backend is still alive.
+    """
+    try:
+        for line in stream:
+            if str(line).strip().lower() == "cancel":
+                break
+    except Exception:
+        pass
+    stop.set()
+
+
+#: What `_wait_async` returns when the stop flag cancelled the wait.
+_STOPPED = object()
+
+
+def _wait_async(status_of, cancel, value_of, stop, deadline, *,
+                clock=time.monotonic, tick=None):
+    """Wait for one Windows async operation to finish, or cancel it.
+
+    `status_of()` is the operation's own status: 0 started, 1 completed,
+    2 cancelled, 3 error, None when it cannot be read. `cancel()` asks
+    Windows to close the prompt. `value_of()` reads the finished result.
+    Returns the result, None when the wait ended without one, or `_STOPPED`
+    when `stop` was set - the caller turns that into "cancelled".
+
+    Split out of `_hello_child` so the rule can be tested with no Windows and
+    no prompt at all: the loop body is the part that decides, and a fake
+    operation can show that `cancel` is called exactly when the flag is set
+    or the deadline has passed. `tick()` runs once per pass; the real one
+    dispatches Windows messages and sleeps a moment, and a test passes its own
+    so it never waits.
+    """
+    while True:
+        status = status_of()
+        if status is None:
+            return None
+        if status != 0:                       # 0 Started
+            break
+        if stop is not None and stop.is_set():
+            cancel()
+            return _STOPPED
+        if clock() > deadline:
+            cancel()
+            return None
+        if tick is not None:
+            tick()
+    if status != 1:                           # 1 Completed; 2 Canceled, 3 Error
+        return None
+    return value_of()
+
+
+def _hello_child(message: str, timeout: float,
+                 should_stop: Optional[threading.Event] = None) -> str:  # pragma: no cover - Windows only
     """The check itself, in the child process. Windows only.
 
     The desktop's lock.rs `hello::verify`, in Python: availability first,
@@ -804,6 +1026,10 @@ def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Win
     falling back to the plain prompt if Windows refuses that form. At most
     two tries, and only for temporary failures: a dismissed prompt is an
     answer and is never asked again.
+
+    `should_stop` is the backend's cancellation: when it is set the prompt is
+    cancelled and the answer is "cancelled", rather than waiting out the
+    deadline. `_watch_for_stop` is what sets it.
     """
     import ctypes
     from ctypes import wintypes
@@ -869,24 +1095,31 @@ def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Win
         iid = guid(IID_ASYNC_INFO)
         if method(op, 0, ctypes.POINTER(GUID), ctypes.POINTER(vp))(op, ctypes.byref(iid), ctypes.byref(info)) < 0:
             return None
-        try:
-            status = ctypes.c_int(0)
-            while True:
-                if method(info, 7, ctypes.POINTER(ctypes.c_int))(info, ctypes.byref(status)) < 0:
-                    return None
-                if status.value != 0:            # 0 Started
-                    break
-                if time.monotonic() > deadline:
-                    method(info, 9)(info)        # Cancel: the prompt closes
-                    return None
-                pump()
-                time.sleep(0.05)
-            if status.value != 1:                # 1 Completed; 2 Canceled, 3 Error
+        status = ctypes.c_int(0)
+
+        def status_of() -> Optional[int]:
+            if method(info, 7, ctypes.POINTER(ctypes.c_int))(info, ctypes.byref(status)) < 0:
                 return None
+            return status.value
+
+        def cancel() -> None:
+            method(info, 9)(info)            # Cancel: the prompt closes
+
+        def value_of() -> Optional[int]:
             value = ctypes.c_int32(0)
             if method(op, 8, ctypes.POINTER(ctypes.c_int32))(op, ctypes.byref(value)) < 0:
                 return None
             return value.value
+
+        def tick() -> None:
+            pump()
+            time.sleep(0.05)
+
+        try:
+            got = _wait_async(status_of, cancel, value_of, should_stop, deadline, tick=tick)
+            if got is _STOPPED:
+                raise _Stopped()
+            return got
         finally:
             release(info)
 
@@ -950,6 +1183,8 @@ def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Win
             if time.monotonic() > deadline:
                 break
         return FAILED_
+    except _Stopped:
+        return CANCELLED_
     finally:
         if hwnd:
             user32.DestroyWindow(hwnd)
@@ -1087,6 +1322,14 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         if refused is not None:
             return refused
     if (is_risky(row) or action in PC_ONLY_ACTIONS) and here:
+        # A prompt may only ask about something Jarvis can NAME. An action with
+        # no written words gets a title made up from its own name
+        # (`jarvis_card_words.FALLBACK`), which reads fine but describes
+        # nothing - so the owner would be asked to confirm a blank. Refused
+        # here, before any prompt is shown (2026-10-26). Fail closed: if the
+        # words module cannot be read, no card can prove it has written words.
+        if not has_written_title(action):
+            return 403, {"ok": False, "error": UNLABELLED, "owner_check": "unlabelled"}
         left = _time_left(row)
         # `left` is None for a card with no deadline at all (jarvis_gate.
         # APPROVAL_NEVER_EXPIRES). Such a card has no moment to be late for,
@@ -1100,15 +1343,31 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         if not _PROMPT.acquire(timeout=left if left is not None else -1):
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
         try:
-            # The prompt gets a concrete number of seconds either way. For a
-            # card with no deadline there is nothing to pass but the shipped
-            # timeout, so the Windows Hello dialog is bounded (a dialog left
-            # open for ever is a dialog nobody can answer) while the DECISION
-            # is not: the card is still waiting afterwards, and the owner can
-            # try again as many times as they like.
-            outcome = verify(approval_message(row),
-                             max(1.0, left if left is not None
-                                 else DEFAULT_TIME_LEFT))
+            # THE WAIT FOR THE PROMPT CAN BE LONGER THAN THE CARD HAS LEFT.
+            # `left` above was read before that wait, and another prompt may
+            # have held this one for minutes. So the card is read AGAIN now
+            # that the prompt is ours, and the number that counts is the one
+            # from this second read: a prompt that opens as its card expires,
+            # or after it has, is the measured defect this closes (2026-10-26,
+            # .dsh-scratch/WINDOWS-HELLO-2026-10-26/FINDINGS.md section 3).
+            try:
+                live = _find(pending(), request_id)
+            except Exception:
+                return 503, {"ok": False, "error": QUEUE_UNREADABLE,
+                             "owner_check": "unreadable"}
+            left = _time_left(live) if live is not None else None
+            if live is None or (left is not None and left <= 0):
+                return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
+            # The prompt gets a concrete number of seconds either way, and it
+            # is never more than the card has left or _PROMPT_MAX. The prompt's
+            # only cancel is its own deadline, so that number IS how long the
+            # dialog can stay up; three minutes is enough to reach the PC and
+            # confirm, and short enough that a queued prompt cannot sit on
+            # screen for a quarter of an hour. A card with no deadline still
+            # waits afterwards - the owner can press Approve again - so this
+            # bounds the dialog, not the decision.
+            left = min(left, _PROMPT_MAX) if left is not None else _PROMPT_MAX
+            outcome = verify(approval_message(live), max(1.0, left))
         finally:
             _PROMPT.release()
         if outcome == UNAVAILABLE:
@@ -1206,9 +1465,16 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 if __name__ == "__main__":
     if "--hello" in sys.argv:
         try:
-            ask = json.loads(sys.stdin.read() or "{}")
+            # ONE line, not read-to-EOF: the pipe stays open after it, and a
+            # later "cancel" line (or the pipe closing) is how the backend
+            # says "close the prompt" - see _watch_for_stop.
+            ask = json.loads(sys.stdin.readline() or "{}")
+            stop = threading.Event()
+            threading.Thread(target=_watch_for_stop, args=(sys.stdin, stop),
+                             daemon=True).start()
             said = _hello_child(str(ask.get("message") or "Approve a Jarvis action"),
-                                float(ask.get("timeout") or DEFAULT_TIME_LEFT))
+                                float(ask.get("timeout") or DEFAULT_TIME_LEFT),
+                                should_stop=stop)
         except Exception:
             said = FAILED_
         print(json.dumps({"outcome": said if said in OUTCOMES else FAILED_}))

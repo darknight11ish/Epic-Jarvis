@@ -19581,7 +19581,9 @@ listening. Nothing runs without a person: waiting is not approving.
 halves are file edits, not hunks: an absent `expires_in` is asked of
 `jarvis_gate.timeout_for()` rather than read as "the shipped timeout" (which used
 to answer 409 GONE for a card the gate was still waiting on), the Windows Hello
-prompt is still bounded by that timeout, and the re-read after the prompt still
+prompt is bounded by the smaller of the card's time left and 180 s (capped
+2026-10-26; the dialog is Windows's, so that number is how long it can stay up
+when the backend is killed outright), and the re-read after the prompt still
 refuses a card that is no longer the live one.
 
 **Test it.** `backend/test_gate_no_expiry.py` — 10 tests / 170 checks, built the

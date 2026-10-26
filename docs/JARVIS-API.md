@@ -384,10 +384,17 @@ a client:
   connection: loopback, a sender address equal to the address it arrived at
   (the PC calling its own Tailscale address), or one of the PC's own
   addresses; anything that cannot be placed counts as the PC. The request
-  stays open while the prompt is up, at most the card's own window (the
-  shipped 900 when it has one; the Windows Hello prompt itself is bounded by
-  that same number even for the four cards with no deadline). A
-  phone approval, or a card that is not risky, is not held.
+  stays open while the prompt is up. The prompt's seconds are read **again**
+  after the one-prompt-at-a-time wait, so a queued card gets what it has left
+  by its turn rather than what it had when it joined; they are never more
+  than the card's own window (the shipped 900 when it has one) and are
+  capped at **180 s** - if the backend dies outright, the dialog's own
+  deadline is the only thing that closes it, so 180 s is how long it can stay
+  up even for the four cards with no deadline. A card that has run out by its
+  turn is a 409 and no prompt. A clean backend shutdown asks a live prompt to
+  close (`atexit`, through the child's stdin); a hard kill of the backend
+  cannot, and the dialog then ends only at its deadline. A phone approval, or
+  a card that is not risky, is not held.
 - **The answers it can give instead of the owner's handler's:**
 
   | Status | Body | Means |
@@ -395,7 +402,8 @@ a client:
   | 403 | `{"ok": false, "owner_check": "not_set_up", "error": "Windows Hello is not set up on this PC, ..."}` | No Windows Hello on the PC: "no lock, no risky approval". |
   | 403 | `{"ok": false, "owner_check": "cancelled", "error": "..."}` | The owner dismissed the prompt. |
   | 403 | `{"ok": false, "owner_check": "failed", "error": "..."}` | The prompt could not be shown just now. |
-  | 409 | `{"ok": false, "owner_check": "gone", "error": "This request stopped waiting while Windows Hello was open ..."}` | It ran out of time or was answered while the prompt was open. Both apps read a 409 as "no longer waiting". |
+  | 403 | `{"ok": false, "owner_check": "unlabelled", "error": "Jarvis has no written words for this action yet, ..."}` | The action has no written title (`jarvis_card_words.has_written_title`), so a prompt could only quote a name back. Refused before any prompt is shown; nothing is approved. |
+  | 409 | `{"ok": false, "owner_check": "gone", "error": "This request stopped waiting while Windows Hello was open ..."}` | It ran out of time or was answered while the prompt was open, or it had already run out when its turn for the prompt came. Both apps read a 409 as "no longer waiting". |
   | 503 | `{"ok": false, "owner_check": "unreadable", "error": "..."}` | The queue could not be read, so nothing was approved. |
 
   The desktop shows a 403/503 `error` as it is (`owner_check_refusal`,
