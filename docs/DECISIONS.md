@@ -3571,13 +3571,22 @@ calls, holds no lock while it waits and loads no model.
     feedback, speed, the route audit, approvals, receipts, the device's
     last_seen) are each gated, and the gate is fail-closed: a missing or
     broken module still refuses the private turn rather than making it
-    ordinary. The test suite carries an explicit eight-store table.
+    ordinary. The test suite carries an explicit eight-store table. The agent
+    turn itself enforces the tool half: it is handed `private: true`, empties
+    its own tool list (the owner's framework file cannot re-enable one),
+    refuses any tool call instead of dispatching it, skips the tool-chain audit
+    recorder and the next_time/energy writes - so the settings and schedule
+    shortcuts, which bypass the approval gate by design, cannot run.
   * **What is NOT built.** Neither app sends the flag and neither has a toggle
     or marker; Slice 2 is the apps' half. Nothing here is a live deploy.
-  * **The cost, measured.** One shipped module, one 13-hunk hud patch, and two
-    hunks that read the owner's own HUD text (the body-parse block and the
-    route-audit line), recorded in `backend/_stack.py`'s RATCHET (56 -> 58) and
-    in `tools/check_patch_original_text.py`'s pin table (2 hunks / 13 lines).
-    The first independent review's findings are recorded in the PR: fail-closed
-    gate, the wrapper drop-on-failure, the explicit deny-all approval gate, the
+  * **The cost, measured.** One shipped module, one 13-hunk hud patch, four
+    shipped-module twins changed besides the module (jarvis_quick, jarvis_devices,
+    jarvis_agent, rebuilt/jarvis_events), and two hunks that read the owner's
+    own HUD text (the body-parse block and the route-audit line), recorded in
+    `backend/_stack.py`'s RATCHET (56 -> 58) and in
+    `tools/check_patch_original_text.py`'s pin table (2 hunks / 13 lines). The
+    two independent reviews' findings are recorded in the PR: fail-closed gate,
+    the wrapper drop-on-failure, the explicit deny-all approval gate, the agent
+    turning its own tool list off (the framework file had overridden the config
+    the first version emptied), the tool-chain/next_time/energy writes, the
     eight-store table and the corrected wording.

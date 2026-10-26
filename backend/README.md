@@ -19615,14 +19615,21 @@ empties the tool list and switches the budget write off, the header says
 the speed record, route audit, feedback turn, answer-sources row and the
 finally's chat-log and learner calls are gated.
 `jarvis_quick.py` refuses every mutating intent of its own, `jarvis_devices.py`
-gained the sighting hold, and `rebuilt/jarvis_events.py` advertises
-`capabilities.private_chat`. All three are shipped modules, so the two-file
-rule applies to each.
+gained the sighting hold, `jarvis_agent.py` gained the `private` flag (the
+agent itself empties the tool list, so the owner's framework file cannot
+re-enable one; it refuses any tool call instead of dispatching it, skips the
+end-of-turn chain recorder and the next_time/energy writes), and
+`rebuilt/jarvis_events.py` advertises `capabilities.private_chat` only when
+both the patch and the shipped module are there. All four are shipped modules,
+so the two-file rule applies to each.
 
 `backend/test_private_chat.py` is the proof, including the patch applying to
 the published base and reversing out of it and the fail-closed missing-gate
-case. Its two hunks that read the owner's own HUD text (the body-parse flag
-read and the route-audit line, four lines under `budget.spend()`) are
-recorded in `_stack.py`'s RATCHET (56 -> 58) and in
+case, and it joins a driven agent turn with a framework file naming tools.
+Its two hunks that read the owner's own HUD text (the body-parse flag read and
+the route-audit line, four lines under `budget.spend()`) are recorded in
+`_stack.py`'s RATCHET (56 -> 58) and in
 `tools/check_patch_original_text.py`'s pin table (2 hunks / 13 lines). It sits
-immediately BEFORE `plugin-loader.patch`, which must stay last of all.
+immediately BEFORE `plugin-loader.patch`, which must stay last of all, and the
+suite also checks it applies to the owner's live `jarvis_hud.py` copy when one
+is present.

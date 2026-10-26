@@ -301,14 +301,14 @@ def _ast_call(src, name=None, attr=None):
 
 
 def _ast_gate_wiring(src):
-    """Is the tool loop handed `gate_check: _private_gate`?"""
+    """Is the tool loop handed `gate_check: _private_gate` AND `private: True`?"""
     for node in ast.walk(ast.parse(src)):
         if not isinstance(node, ast.Dict):
             continue
-        for key, value in zip(node.keys, node.values):
-            if (isinstance(key, ast.Constant) and key.value == "gate_check"
-                    and isinstance(value, ast.Name) and value.id == "_private_gate"):
-                return True
+        keys = {k.value for k in node.keys if isinstance(k, ast.Constant)}
+        values = {v.id for v in node.values if isinstance(v, ast.Name)}
+        if {"gate_check", "private"} <= keys and "_private_gate" in values:
+            return True
     return False
 
 
@@ -444,13 +444,19 @@ def _run_guard(src, start, stop, body, helpers, *, writer, extra=None):
 
 
 class _Writer:
-    """A writing stub with a `.calls` list; `raises=True` makes it explode."""
+    """A writing stub with a `.calls` list; `raises=True` makes it explode.
+
+    `env()` installs the stub at most once, so `_guard_clean`/`_run_guard` can
+    call it without a second call capturing the first stub as `_real` and
+    restoring THAT instead of the real module (which is how an earlier version
+    of this suite leaked a `jarvis_framework` stub into the agent test)."""
 
     def __init__(self, name, attr, *, raises=False):
         self.calls = []
         self.name = name
         self.attr = attr
         self.raises = raises
+        self._installed = False
 
     def _rec(self, *a, **k):
         self.calls.append((a, k))
@@ -459,13 +465,18 @@ class _Writer:
         return {"recorded": True, "id": "0" * 32}
 
     def env(self):
-        module = _stub(self.name, **{self.attr: self._rec})
-        real = _install(self.name, module)
-        self._real = real
-        return {"jarvis_framework": module} if self.name == "jarvis_framework" else {}
+        if not self._installed:
+            module = _stub(self.name, **{self.attr: self._rec})
+            self._module = module
+            self._real = _install(self.name, module)
+            self._installed = True
+        return {"jarvis_framework": self._module} if self.name == "jarvis_framework" else {}
 
     def restore(self):
+        if not self._installed:
+            return
         _uninstall(self.name, self._real)
+        self._installed = False
 
 
 AUDIT = ('        if GATING and _persist_ok("route_audit", body):',
@@ -763,6 +774,28 @@ def t_the_patch_applies():
                   _ast_persist(patched, kind))
     finally:
         shutil.rmtree(d, ignore_errors=True)
+    # The file apply-patches.ps1 really patches on the owner's PC. Desk-only:
+    # CI has no live install, and there this prints `skip`, never a pass.
+    live = Path(r"C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\jarvis_hud.py")
+    if not live.is_file():
+        skip("no live jarvis_hud.py on this box; the live-apply rehearsal is desk-only")
+        return
+    d = Path(tempfile.mkdtemp(prefix="jarvis-private-live-"))
+    try:
+        shutil.copy(live, d / "jarvis_hud.py")
+        shutil.copy(HERE / "private-chat.patch", d / "p.patch")
+        r = subprocess.run([git, "apply", "--check", "p.patch"], cwd=d,
+                           capture_output=True, text=True)
+        check("the patch applies to the OWNER'S LIVE jarvis_hud.py (not only the base)",
+              r.returncode == 0, r.stderr.strip())
+        if r.returncode == 0:
+            subprocess.run([git, "apply", "p.patch"], cwd=d, capture_output=True, text=True)
+            r = subprocess.run([sys.executable, "-m", "py_compile", "jarvis_hud.py"],
+                               cwd=d, capture_output=True, text=True)
+            check("... and the patched live file still compiles", r.returncode == 0,
+                  r.stderr.strip())
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def t_the_delivery():
@@ -802,6 +835,161 @@ def t_the_capability():
             _uninstall("jarvis_private_chat", real_priv)
     finally:
         _uninstall("jarvis_hud", real)
+
+
+def _wire_events(response):
+    """A scripted whole response as the events _ollama_wire.stream() turns
+    into Ollama's real SSE body."""
+    msg = ((response.get("choices") or [{}])[0].get("message")) or {}
+    events = []
+    text = msg.get("content") or ""
+    if text:
+        events.append(("content", text))
+    calls = msg.get("tool_calls") or []
+    if calls:
+        events.append(("tool_calls", [
+            {"id": c.get("id"), "name": c["function"]["name"],
+             "arguments": c["function"].get("arguments")} for c in calls]))
+    events.append(("done", "stop"))
+    return events
+
+
+class _NoRealIO:
+    """No request may leave this process during the driven turn."""
+
+    def __init__(self, agent):
+        self.agent = agent
+
+    def __enter__(self):
+        import jarvis_agent as AG
+        self.real = (AG._post, AG._open_stream, AG._get_json)
+        def boom(*_a, **_k):
+            raise AssertionError("a real HTTP request ran")
+        AG._post = AG._open_stream = boom
+        def no_lookup(*_a, **_k):
+            raise OSError("no network in this test")
+        AG._get_json = no_lookup
+        AG._CTX_CACHE.clear()
+        AG._TOOLS_CACHE.clear()
+        return self
+
+    def __exit__(self, *_a):
+        import jarvis_agent as AG
+        AG._post, AG._open_stream, AG._get_json = self.real
+        return False
+
+
+def t_the_agent_runs_no_tool_in_a_private_chat():
+    """The re-review's blocker: the hud's tool list comes from the owner's
+    framework file, so emptying the legacy config was not enough. This drives
+    the real agent turn with that file naming tools, a scripted model that
+    asks for `change_setting` (which normally BYPASSES the gate), and proves
+    the private flag empties the offer, dispatches nothing, raises no card,
+    writes no chain line and no energy row - while the same turn without the
+    flag does each of those."""
+    try:
+        # the ten rebuilt modules live in backend/rebuilt/ in a raw checkout and
+        # are flattened BESIDE jarvis_hud.py on a real install; test_agent.py
+        # does the same so the turn sees the shipped framework reader.
+        sys.path.insert(0, str(REPO / "backend" / "rebuilt"))
+        import jarvis_agent as AG
+        import jarvis_framework as FW
+        import _ollama_wire as W
+    except ImportError as exc:
+        return skip(f"the agent harness is not importable here: {exc}")
+    # 1. THE TRAP, reproduced: the framework file wins over an empty config.
+    real_load = FW.load_framework
+    FW.load_framework = lambda: {"tools": {"enabled": ["calculator", "change_setting"]}}
+    try:
+        resolved = AG.enabled_tools_for_turn({"tools": {"enabled": []}})
+    finally:
+        FW.load_framework = real_load
+    check("the owner's framework file overrides an emptied legacy config (the leak)",
+          resolved == {"calculator", "change_setting"}, resolved)
+
+    def turn(private):
+        dispatch, cards, chains, energy, requests = [], [], [], [], []
+        real_settings, real_schedule = AG._settings_call, AG._schedule_call
+        real_chain = AG._record_chain
+        real_calc = AG.TOOLS["calculator"].execute
+        real_energy = sys.modules.get("jarvis_energy")
+        def settings_spy(args, call, convo, steps, say_step, watch=None):
+            dispatch.append("settings")
+            steps.append({"tool": "change_setting", "ran": True, "ok": True,
+                          "outcome": "ran"})
+        AG._settings_call = settings_spy
+        AG._schedule_call = lambda *a, **k: dispatch.append("schedule")
+        AG._record_chain = lambda steps: chains.append(list(steps))
+        AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True,
+                                                                   "value": 4}
+        sys.modules["jarvis_energy"] = _stub("jarvis_energy",
+                                            record=lambda *a, **k: energy.append(1))
+        try:
+            # A tool that does NOT go through the gate (change_setting: the
+            # settings shortcut is the one the first review found reachable)
+            # for the private turn; a real, gate-checked tool for the control.
+            tool_name = "change_setting" if private else "calculator"
+            tool_args = {"key": "x"} if private else {"expression": "2+2"}
+            responses = [
+                {"choices": [{"message": {"role": "assistant", "content": "",
+                                          "tool_calls": [{"id": "c1", "function": {
+                                              "name": tool_name,
+                                              "arguments": json.dumps(tool_args)}}]}}]},
+                {"choices": [{"message": {"role": "assistant",
+                                          "content": "Answered without the tool."}}]},
+            ]
+            it = iter(responses)
+            def opener(url, payload):
+                requests.append(payload)
+                return W.FakeResponse(W.stream(_wire_events(next(it))))
+            def gate(action, detail, prompt=""):
+                cards.append((action, detail, prompt))
+                class _Ok:
+                    allowed = True
+                    reason = "approved"
+                    tier = "ask"
+                    outcome = "approved"
+                    request_id = "r1"
+                return _Ok()
+            streamed = []
+            with _NoRealIO(AG):
+                out = AG.run_local_turn(
+                    [{"role": "user", "content": "use the tool"}], "qwen3:8b",
+                    ollama_url="http://127.0.0.1:11434", stream_out=streamed.append,
+                    enabled_tools={"calculator", "change_setting"}, gate_check=gate,
+                    open_stream=opener, private=private, context_length=16384,
+                    model_waking=lambda url, model: False)
+        finally:
+            AG._settings_call, AG._schedule_call = real_settings, real_schedule
+            AG._record_chain = real_chain
+            AG.TOOLS["calculator"].execute = real_calc
+            _uninstall("jarvis_energy", real_energy)
+        return {"dispatch": dispatch, "cards": cards, "chains": chains,
+                "energy": energy, "requests": requests, "out": out}
+
+    private = turn(True)
+    check("private turn: the tool offer is empty whatever the framework file says",
+          all(not (payload or {}).get("tools") for payload in private["requests"]),
+          [p.get("tools") for p in private["requests"]])
+    check("private turn: the settings shortcut was never dispatched",
+          private["dispatch"] == [], private["dispatch"])
+    check("private turn: the gate was never asked (so no card and no approvals row)",
+          private["cards"] == [], private["cards"])
+    check("private turn: no end-of-turn chain line was recorded",
+          private["chains"] == [], private["chains"])
+    check("private turn: no energy row was written", private["energy"] == [],
+          private["energy"])
+    check("private turn: the answer is the model's own, and no tool ran",
+          private["out"].get("tools_ran") == [], private["out"].get("tools_ran"))
+    ordinary = turn(False)
+    check("CONTROL ordinary turn: the offered tool runs and the gate is asked",
+          len(ordinary["cards"]) == 1
+          and "calculator" in (ordinary["out"].get("tools_ran") or []),
+          (ordinary["cards"], ordinary["out"].get("tools_ran")))
+    check("CONTROL ordinary turn: the default chain recorder gets the step",
+          len(ordinary["chains"]) == 1, ordinary["chains"])
+    check("CONTROL ordinary turn: the energy row is written",
+          len(ordinary["energy"]) == 1, ordinary["energy"])
 
 
 def t_zz_the_eight_store_table():

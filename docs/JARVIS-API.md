@@ -24985,14 +24985,23 @@ history, and additionally:
   is written by the token check before the body is read, so it is held for the
   length of the request and dropped as soon as the body says private; if the
   request fails before that drop, the wrapper drops it too, so a failed private
-  request writes no sighting either.
-- **runs no tool.** The tool list the turn offers is emptied, AND the turn's
-  approval gate refuses anything the model still asks for - without raising a
-  card - so no tool can run, no `approvals.db` row is written and no undo
-  receipt from a tool-based action can be produced. `jarvis_quick.answer()`
-  refuses a state-changing fast-path command BEFORE running it, so no reminder,
-  timer, setting, personality, goal or note is touched and no cardless receipt
-  is written. A private chat reads, searches and answers from the model; it
+  request writes no sighting either. In the agent turn, `private` also switches
+  off the end-of-turn tool-chain audit line (`jarvis_skill_discovery`) and the
+  `jarvis_next_time` brought-up mark and `jarvis_energy` row.
+- **runs no tool.** The hud tells the agent the turn is private (the
+  `private: true` handed in beside the deny-all gate), and the agent enforces
+  it where every local turn passes: it empties the tool list ITSELF - the
+  owner's own `jarvis-framework.toml` cannot re-enable one, which is why the
+  flag is not merely a config the agent might ignore - offers no tool to the
+  model, and answers any tool call that still arrives with a refusal instead
+  of dispatching it. That last point matters because the settings and schedule
+  shortcuts deliberately bypass the approval gate: in a private chat they are
+  never reached, so `change_setting` cannot run and no setting can change; no
+  tool runs, no `approvals.db` row is written and no undo receipt from a
+  tool-based action can be produced. `jarvis_quick.answer()` refuses a
+  state-changing fast-path command BEFORE running it, so no reminder, timer,
+  setting, personality, goal or note is touched and no cardless receipt is
+  written either. A private chat reads, searches and answers from the model; it
   does not act.
 - **answers a mutating FAST-PATH command with one sentence**: "A private chat
   can read, search, and answer, but it doesn't change settings, save items, or
@@ -25029,8 +25038,13 @@ stubs, plus an **eight-store table** naming each store above and the evidence
 for it; a private read turn and two private action turns (a cardless fast-path
 command and a carded tool request) write nothing, the positive control writes
 with `private: false`, and a writer that would raise is never called
-(fail-closed); the device `last_seen` hold / commit / drop-on-failure driven
-through the real devices wrapper; the missing/broken-gate case (private stays
-refused and the capability reports false); the patch applying to the published
-base and reversing out of it; and the module's SHIPPED and twin delivery.
-A dated entry in `docs/DECISIONS.md` records the ruling.
+(fail-closed); a **driven agent turn with the owner's framework file naming
+tools**, whose scripted model asks for `change_setting` - the settings
+shortcut that bypasses the gate - proving the offer is empty, nothing is
+dispatched, no card is asked, no chain line and no energy row is written, and
+the same turn without the flag does each of those; the device `last_seen`
+hold / commit / drop-on-failure driven through the real devices wrapper; the
+missing/broken-gate case (private stays refused and the capability reports
+false); the patch applying to the published base AND to the owner's live
+`jarvis_hud.py`, and reversing out of it; and the module's SHIPPED and twin
+delivery. A dated entry in `docs/DECISIONS.md` records the ruling.

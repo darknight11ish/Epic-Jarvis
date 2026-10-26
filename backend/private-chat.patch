@@ -100,19 +100,22 @@
              except Exception:
                  pass
              # second-card-suggest.patch: remember a crisis turn's id (in
-@@ -5455,6 +5489,11 @@
+@@ -5455,6 +5489,14 @@
                          # that knows the argument.
                          **({"lane_choice": _lane2}
                             if hasattr(jarvis_agent, "choose_lane") else {}),
-+                        # private-chat.patch: a private turn's gate refuses
-+                        # everything, so a tool the model still asked for can
-+                        # neither run nor raise an approvals row or a receipt.
-+                        # No card is shown; the tool loop gets the sentence.
-+                        **({"gate_check": _private_gate} if _private else {}),
++                        # private-chat.patch: a private turn is told to the
++                        # agent itself - it runs no tool whatever the hud's
++                        # tool list resolved to, records no chain line and
++                        # writes nothing at the end - and its gate refuses
++                        # anything else, so no approvals row, no receipt and no
++                        # card. The model is answered without the tool.
++                        **({"gate_check": _private_gate, "private": True}
++                           if _private else {}),
                          # The same doorbell every other capability uses to
                          # say what it is doing while it does it - see
                          # jarvis_ui_control.py/jarvis_android_control.py's
-@@ -5487,10 +5526,13 @@
+@@ -5487,10 +5529,13 @@
                      # and chat works exactly as before this patch.
                      try:
                          import jarvis_sources
@@ -130,7 +133,7 @@
                      except Exception:
                          pass
                      # second-card-suggest.patch: jarvis_agent's own crisis
-@@ -5725,8 +5767,12 @@
+@@ -5725,8 +5770,12 @@
              # reproduced against the real jarvis_chat_log.py).
              try:
                  import jarvis_chat_log
@@ -145,7 +148,7 @@
                      jarvis_chat_log.record_turn(
                          (dict(body, temporary=True) if _temporary_chat(body) else body),
                          lane=str(route_header.get("lane") or lane),
-@@ -5929,7 +5975,7 @@
+@@ -5929,7 +5978,7 @@
  # and so does "screen" (a question about the owner's screen, JARVIS-API section
  # 62: jarvis_agent reads it off the request as the app sent it - it never
  # reaches a model).
@@ -154,7 +157,7 @@
  
  _NO_CHAT_LOG = {
      "available": False,
-@@ -5968,7 +6014,101 @@
+@@ -5968,7 +6017,101 @@
  # capabilities.temporary_chat asks the running server for this function by
  # name (jarvis_events._hud_has), so an app offers the mode only on a PC that
  # has it.
