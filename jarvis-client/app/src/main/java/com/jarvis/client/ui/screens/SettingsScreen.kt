@@ -199,7 +199,7 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
     "setup-questionnaire" to 30,
     // "All features and abilities" (2026-10-22): the searchable directory of
-    // all 139 features. A row added at the end moves no other number.
+    // all 140 features. A row added at the end moves no other number.
     "all-features" to 31,
 )
 
@@ -792,7 +792,7 @@ fun SettingsScreen(
             }
 
             // "All features and abilities" (2026-10-22): the phone directory of
-            // all 139 features in the PC's own five labels (FeatureDirectory.kt
+            // all 140 features in the PC's own five labels (FeatureDirectory.kt
             // is generated from contract/feature-controls.json;
             // FeatureDirectoryPlate draws and searches it). The `drawn` guard is
             // what every searchable row carries: a search hides the other cards

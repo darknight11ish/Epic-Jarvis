@@ -1474,7 +1474,7 @@ def t_what_is_not_a_search_claim_is_left_alone():
 
 def t_an_invented_feature_list_is_corrected():
     """D1c, A7a word for word: four features that appear nowhere in the guide's
-    own 139 rows, and no feature_guide step behind them."""
+    own 140 rows, and no feature_guide step behind them."""
     said = ("Sir, the Prompt Coach feature is not available on this machine. The "
             "available features are: - Code reviewer - Drafting assistant - "
             "Researcher - Summariser")
