@@ -3,7 +3,7 @@
 The owner's feature list, as data: 139 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 397342c13f5e15266fa54e1d5ef8b856309cc2a62fe86036571b96d35959c67c); the apps' Features pages read their own
+`features/features.json` (sha256 c31ac2ae5003407418b45e59f5a3fdfe216acfdf420b6e99645250491a4a450e); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "397342c13f5e15266fa54e1d5ef8b856309cc2a62fe86036571b96d35959c67c"
+SOURCE_SHA256 = "c31ac2ae5003407418b45e59f5a3fdfe216acfdf420b6e99645250491a4a450e"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
