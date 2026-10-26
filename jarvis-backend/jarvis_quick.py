@@ -3281,6 +3281,48 @@ _P_QUERY = re.compile(
     r"|what\s+personalities\s+do\s+you\s+have"
     r"|(?:list|show)\s+(?:me\s+)?(?:your\s+)?(?:personalities|personality\s+presets)")
 
+#: "describe your personalities", "explain your personalities", "tell me about
+#: your personalities", "what does each personality do", "what are your
+#: personalities like" - ALL of them (2026-10-26). One line per preset, every
+#: word from that preset's own `description`: the catalogue already says what
+#: each one is, so nothing is invented here.
+#:
+#: Tried BEFORE the one-preset forms below, deliberately: "tell me about your
+#: personalities" also fits "tell me about <name>", and it must be the list,
+#: not a name that resolves to nothing. "What personality are you using?" and
+#: "what personalities do you have?" stay with `_P_QUERY` above, unchanged.
+_P_DESCRIBE_ALL = re.compile(
+    r"(?:describe|explain|tell\s+me\s+about)\s+(?:all\s+(?:of\s+)?)?(?:your\s+|the\s+)?"
+    r"(?:nine\s+)?(?:personalities|personality\s+presets|personas|characters|presets)"
+    r"|(?:what|which)\s+(?:does|do)\s+each\s+(?:personality|persona|preset|character)\s+do"
+    r"|what\s+(?:are|is)\s+(?:your|the)\s+(?:nine\s+)?(?:personalities|personas|presets)"
+    r"\s+(?:like|for)"
+    r"|what\s+(?:do|does)\s+(?:all\s+(?:of\s+)?)?(?:your|the)\s+(?:nine\s+)?"
+    r"(?:personalities|personas|presets)\s+do")
+
+#: "what does the Classic Butler personality do", "what is the Classic Butler
+#: personality", "describe the butler personality", "tell me about TARS",
+#: "what is TARS like" - ONE preset (2026-10-26), resolved through
+#: `jarvis_manner.normalize_personality_id()`, so titles, aliases and the
+#: owner's own saved names all work. A name that resolves to nothing returns
+#: None and the sentence stays with the model: "what does it do" and "tell me
+#: about yourself" are ordinary questions, not personality ones.
+#:
+#: Deliberately NOT a bare "what is <name>": several aliases are ordinary words
+#: ("brief", "normal", "quiet"), so that form would take "what is normal" from
+#: the model. Every question here names the preset by its title or with the
+#: word "personality" after it, which no ordinary sentence does.
+_P_DESCRIBE_ONE = (
+    re.compile(r"(?:what|which)\s+(?:does|do|can)\s+(?P<who>.+?)\s+do"),
+    re.compile(r"what(?:'s|\s+is)\s+(?P<who>.+?)\s+(?:personality|persona|preset|character)"),
+    re.compile(r"what(?:'s|\s+is)\s+(?P<who>.+?)\s+like"),
+    re.compile(r"describe\s+(?P<who>.+)"),
+    re.compile(r"tell\s+me\s+about\s+(?P<who>.+)"),
+)
+
+#: The noun a question can hang on a name: "the butler PERSONALITY".
+_DESCRIBE_TAIL = re.compile(r"\s+(?:personality|persona|preset|character|mode)$")
+
 #: "be more ..." words -> what they mean: a whole preset where the blueprint
 #: treats it as one, a dial where it is really one of the four.
 _BE_MORE_PRESET = {
@@ -3330,12 +3372,47 @@ def _personality_dial(name: str, value) -> Optional[Intent]:
     return Intent("personality_dial", {"name": name, "value": value})
 
 
+def _personality_named(words: str) -> Optional[str]:
+    """The preset id `words` names, or None when it names none of them.
+
+    The same resolver the switch uses - every built-in id, title and alias,
+    plus the owner's own saved personalities by id or name - so what this
+    answers about is exactly what "switch to ..." would switch to."""
+    name = _DESCRIBE_TAIL.sub("", _clean_tail(words))
+    try:
+        import jarvis_manner
+        return jarvis_manner.normalize_personality_id(name)
+    except Exception:
+        return None
+
+
+def _personality_describe(s: str) -> Optional[Intent]:
+    """"describe your personalities" / "what does the Classic Butler do": the
+    question forms about what a preset IS, answered from the preset's own
+    `description`. Read-only, cardless and never the model - and None when the
+    sentence names nothing known, so "what does it do" and "tell me about
+    yourself" stay ordinary questions."""
+    if _P_DESCRIBE_ALL.fullmatch(s):
+        return Intent("personality_describe")
+    for pattern in _P_DESCRIBE_ONE:
+        m = pattern.fullmatch(s)
+        if m:
+            pid = _personality_named(m.group("who"))
+            if pid:
+                return Intent("personality_describe", {"personality": pid})
+    return None
+
+
 def _personality(s: str) -> Optional[Intent]:
     """"Switch personality to Classic Butler", "talk to me like TARS",
-    "be more sarcastic", "set humour to dry", "call me sir", and the question
-    forms. Whole sentences only, like the rest of this grammar."""
+    "be more sarcastic", "set humour to dry", "call me sir", the question
+    forms, and (2026-10-26) "what does each one do" / "tell me about TARS".
+    Whole sentences only, like the rest of this grammar."""
     if _P_QUERY.search(s):
         return Intent("personality_status")
+    got = _personality_describe(s)
+    if got is not None:
+        return got
     for pattern in (_P_SWITCH, _P_SWITCH_MODE, _P_TALK_LIKE, _P_ACT_LIKE):
         m = pattern.fullmatch(s)
         if m:
@@ -5357,6 +5434,46 @@ def _run_personality_status() -> Result:
     return Result(_personality_words(), "personality_status")
 
 
+PERSONALITY_MISSING = ("Your PC's Jarvis does not have personality presets yet - run "
+                       "apply-patches.ps1 on the PC.")
+
+
+def _personality_description_words(active: dict) -> str:
+    """One preset described in its own words: its title, the `description` the
+    contract already carries, and the sentence that switches to it. Nothing
+    here is new copy - the description IS the preset's."""
+    title = str(active.get("title") or active.get("id") or "")
+    line = str(active.get("description") or "").strip()
+    said = f"{title} - {line}" if line else title
+    return said.rstrip() + f' Say "switch to {title}" to use it.'
+
+
+def _run_personality_describe(f: dict) -> Result:
+    """"describe the butler personality" / "what does each personality do":
+    what a preset IS, in its own `description` - a question, so cardless, read
+    only, and never the model (the same shape as "what personality are you
+    using?"). One preset by title, alias or saved name; with no name, all nine
+    in contract order plus the dials and how to make one of your own.
+    The active preset is deliberately not repeated here: the status answer
+    already says which one that is."""
+    n = "personality_describe"
+    try:
+        import jarvis_manner
+    except Exception:
+        return Result(PERSONALITY_MISSING, n)
+    pid = f.get("personality")
+    if pid:
+        active = jarvis_manner.preset(pid)
+        if active is None:
+            return Result(_personality_words(), n)
+        return Result(_personality_description_words(active), n)
+    lines = [f"- {p['title']} - {p['description']}" for p in jarvis_manner._BUILTIN]
+    return Result("Here's what each personality does:\n" + "\n".join(lines) + "\n"
+                  "On top of the one you pick, four dials tune the wording - humour, answer "
+                  "length, formality and how I address you - and you can make your own by "
+                  'saying "make me a personality that ...".', n)
+
+
 def _timer_confirmation(seconds, text: str = "") -> str:
     """The sentence a set timer gets: the active personality's own reflex line
     when one is chosen, the old sentence otherwise. A number in the line is
@@ -6054,6 +6171,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_personality_dial(f)
     if n == "personality_status":
         return _run_personality_status()
+    if n == "personality_describe":
+        return _run_personality_describe(f)
     if n in ("thinking_set", "thinking_from_now_on"):
         return _run_thinking_set(f, temporary)
     if n == "thinking_when":
@@ -6484,7 +6603,7 @@ READ_ONLY_INTENTS = frozenset({
     "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",
     "open_app", "open_chat", "pc_help", "personality_create",
     "personality_create_failed", "personality_create_help",
-    "personality_create_refused", "personality_refine",
+    "personality_create_refused", "personality_describe", "personality_refine",
     "personality_refine_failed", "personality_show", "personality_show_missing",
     "personality_status", "project_log",
     "reach_list", "sayable_help", "screen_status", "search_explain", "settings_choice_bad",
