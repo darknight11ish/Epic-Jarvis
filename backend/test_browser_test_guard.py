@@ -36,11 +36,27 @@ WHAT IT PINS, with no browser started anywhere:
      `_suite_job()` returns `skip` for each while the opt-in is unset - a
      default full run never executes them at all. That is the second,
      independent layer; the skip line carries the opt-in's name.
-  4. THE SET IS COMPLETE AND THE NAME IS ONE. The four names are exactly the
-     backend suites that import `jarvis_chatbot_web`, so a new suite that
+  4. THE SET IS COMPLETE, AND ONLY FOR THIS MODULE. The four names are exactly
+     the backend suites that import `jarvis_chatbot_web`, so a new suite that
      drives that window fails here until it is guarded too; all five files
      assign the same opt-in value; and the runner's reader fails closed - only
-     "1" is an opt-in, never "yes", "true" or "0".
+     "1" is an opt-in, never "yes", "true" or "0". THE COMPLETENESS PIN IS NOT
+     A BACKEND-WIDE GUARANTEE: `jarvis_browser_control.py` also has a visible
+     launch by default (`_HEADLESS = False`, :1284/:1460), and a new suite that
+     drives IT visibly would not be caught here.
+  5. THE CODE-ONLY HALVES STILL RUN IN CI. Both CI backend jobs carry
+     `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"`; no runner installs a Playwright
+     browser, so each suite runs its code checks and its real-browser half
+     prints `SKIP the real-browser half: playwright is not installed` and exits
+     0 - the pre-guard behaviour, 441 checks in all. This file also pins that
+     each suite still has that browser-half gate, so the opt-in cannot silently
+     turn a CI run into a browser launch.
+  6. THE CLI CANNOT START THE FLEET BY ACCIDENT. `run_suites.py --help` prints
+     the usage and exits 0 without staging or running; a path-shaped or unknown
+     argument (`backend/test_x.py`, a typo) fails and names the bare form
+     (`test_x.py`) instead of being silently dropped and running everything.
+     Both are measured traps from 2026-10-26: two agents typed the path form
+     and started the whole fleet.
 
 No Playwright is imported, no browser process is started, no page is served.
 Every source check walks `ast` nodes instead of comparing source text, because
@@ -53,6 +69,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -69,6 +86,10 @@ PASSED, FAILED, SKIPPED = [], [], []
 
 #: The one opt-in, as every file must spell it.
 OPT_IN = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+
+#: The workflow whose two backend jobs run the suites on a machine with no
+#: Playwright browser, and must therefore carry the opt-in.
+CI_YML = HERE.parent / ".github" / "workflows" / "ci.yml"
 
 #: Every backend suite that drives jarvis_chatbot_web's visible window.
 GUARDED = ("test_chatbot_gemini.py", "test_chatbot_sites.py",
@@ -239,6 +260,25 @@ def _reads_the_opt_in(tree) -> bool:
         for n in ast.walk(helper))
 
 
+def _browser_half_self_skips(tree) -> bool:
+    """main() runs the code checks, then skips the real-browser half.
+
+    That gate is what makes the CI opt-in safe: a runner has no Playwright
+    browser, so the suite's code-only half runs and the browser half prints
+    "SKIP the real-browser half: <why>" and exits 0, exactly as before the
+    guard. Structural (`ast`), never a source-text pin.
+    """
+    main, _body, _guard = _main_and_guard(tree)
+    if main is None:
+        return False
+    calls = {n.func.attr for n in ast.walk(main)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    words = [n.value for n in ast.walk(main)
+             if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+    return ("playwright_installed" in calls
+            and any("real-browser half" in word for word in words))
+
+
 def t_each_guarded_suite_is_guarded():
     for name in GUARDED:
         path = HERE / name
@@ -253,6 +293,9 @@ def t_each_guarded_suite_is_guarded():
         problems = _guard_problems(tree)
         check(f"{name}: every browser launch is behind a first-statement guard "
               f"that prints SKIPPED and returns 0", not problems, "; ".join(problems))
+        check(f"{name}: with the opt-in set the code checks run, and the "
+              f"real-browser half self-skips when Playwright is missing",
+              _browser_half_self_skips(tree))
         if name == "test_chatbot_sites.py":
             SITES_GUARDED[0] = not problems
 
@@ -367,7 +410,9 @@ def t_the_guarded_set_is_complete():
         if found:
             importers.add(path.name)
     check("the guarded list is exactly the backend suites that import "
-          "jarvis_chatbot_web (the module with the one visible launch)",
+          "jarvis_chatbot_web - the module whose visible launch THESE FOUR "
+          "reach (not a backend-wide guarantee: jarvis_browser_control.py has "
+          "its own visible default and is not covered)",
           importers == set(GUARDED), sorted(importers))
 
 
@@ -386,12 +431,108 @@ def t_one_opt_in_name_and_it_fails_closed():
         check(f"it fails closed on {value!r}", opted({OPT_IN: value}) is False, value)
 
 
+# ---------------------------------------------------------------------------
+#   5. CI keeps the code-only halves, and still has no browser to open
+# ---------------------------------------------------------------------------
+
+def _job_block(text: str, name: str) -> str:
+    """One job's lines in ci.yml, from `  <name>:` to the next `  <job>:`.
+
+    A tiny reader instead of a YAML import: `pyyaml` is installed in CI but not
+    on the owner's PC, and this must run in the required backend job without a
+    new dependency. Indentation is the structure: job keys sit at two spaces,
+    a job's own keys at four.
+    """
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines)
+                  if line.rstrip() == f"  {name}:"), None)
+    if start is None:
+        return ""
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if re.match(r"^  [A-Za-z0-9_-]+:\s*$", lines[i]):
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def t_ci_keeps_the_code_only_checks():
+    if not CI_YML.is_file():
+        check("ci.yml is where this test expects it", False, str(CI_YML))
+        return
+    text = CI_YML.read_text(encoding="utf-8")
+    for job in ("backend", "backend-windows"):
+        block = _job_block(text, job)
+        check(f"ci.yml has the `{job}` job", bool(block), job)
+        check(f"ci.yml's `{job}` job carries the opt-in, so the four suites' "
+              f"code-only checks still run on a runner with no Playwright browser",
+              bool(re.search(r'JARVIS_ALLOW_VISIBLE_BROWSER_TESTS:\s*["\']1["\']',
+                             block)), block[:500])
+    # The Windows job names the four directly (the runner layer does not apply
+    # there). Quoted entries only: the comment above its `env:` names them too.
+    windows = _job_block(text, "backend-windows")
+    for suite in GUARDED:
+        check(f"ci.yml's `backend-windows` job still runs {suite} by name",
+              f"'{suite}'" in windows)
+
+
+# ---------------------------------------------------------------------------
+#   6. The CLI cannot start the whole fleet by accident
+# ---------------------------------------------------------------------------
+
+def _runner(args, timeout=300):
+    """Run the real runner's command line, with the opt-in removed."""
+    env = dict(os.environ)
+    env.pop(OPT_IN, None)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return subprocess.run(
+        [sys.executable, "-B", str(HERE / "run_suites.py"), *args],
+        cwd=HERE, env=env, capture_output=True, text=True, timeout=timeout,
+        encoding="utf-8", errors="replace")
+
+
+def t_the_cli_cannot_start_the_fleet_by_accident():
+    help_run = _runner(["--help"], timeout=120)
+    out = (help_run.stdout or "") + (help_run.stderr or "")
+    check("--help exits 0", help_run.returncode == 0,
+          (help_run.returncode, out[-600:]))
+    check("--help prints a short usage, the bare suite form and the options",
+          "usage: run_suites.py" in out and "test_ui_control.py" in out
+          and "--jobs" in out and OPT_IN in out, out[-900:])
+    check("--help runs nothing: no backend staged, no suite summary",
+          "backend:" not in out and " passed, " not in out and "ok    " not in out,
+          out[-900:])
+
+    path_run = _runner(["backend/test_ui_control.py"], timeout=120)
+    out = (path_run.stdout or "") + (path_run.stderr or "")
+    check("a PATH-shaped argument is refused, never silently ignored",
+          path_run.returncode != 0, (path_run.returncode, out[-600:]))
+    check("... and the message names the bare form to type instead",
+          "test_ui_control.py" in out and "path, not a suite name" in out, out)
+    check("... before anything is staged or run",
+          "backend:" not in out and " passed, " not in out and "ok    " not in out,
+          out[-900:])
+
+    typo_run = _runner(["test_no_suite_is_named_this.py"], timeout=300)
+    out = (typo_run.stdout or "") + (typo_run.stderr or "")
+    check("an unknown bare suite name is a failure, never the whole fleet",
+          typo_run.returncode != 0, (typo_run.returncode, out[-600:]))
+    check("... it names the typo and the bare form to use",
+          "no suite here is named" in out and "test_no_suite_is_named_this.py" in out
+          and "bare file name" in out, out[-900:])
+    check("... and not one suite ran",
+          "ok    " not in out and "skip  " not in out, out[-900:])
+
+
 def main():
     for fn in (t_each_guarded_suite_is_guarded,
                t_the_suite_refuses_end_to_end,
                t_the_runner_skips_them_by_name,
                t_the_guarded_set_is_complete,
-               t_one_opt_in_name_and_it_fails_closed):
+               t_one_opt_in_name_and_it_fails_closed,
+               t_ci_keeps_the_code_only_checks,
+               t_the_cli_cannot_start_the_fleet_by_accident):
         print(f"--- {fn.__name__} ---")
         try:
             fn()

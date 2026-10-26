@@ -34,6 +34,13 @@ its files are really not there, whichever backend is used.
    python3 backend/run_suites.py                       # throwaway copy (default)
    python3 backend/run_suites.py --backend-path "C:/Users/you/Documents/jarvis-backend"
    python3 backend/run_suites.py --use-env-backend     # whatever JARVIS_BACKEND says
+   python3 backend/run_suites.py --help                # what it accepts; runs nothing
+
+A suite named on the command line is a BARE file name (`test_ui_control.py`).
+A path (`backend/test_ui_control.py`) is refused with the valid form and a
+non-zero exit, never silently ignored - the runner used to drop it and run the
+whole fleet instead, which two agents hit on 2026-10-26. `--help` is read
+before the update lock and before anything is staged.
 
 THE OWNER'S STATE IS LEFT ALONE. The suites run real code that writes -
 the audit log, approval queues, switch files - so each run gets a temporary
@@ -182,9 +189,20 @@ OWNER_FILES = {"jarvis_hud.py", "jarvis_gate.py", "jarvis_extract.py", "jarvis_m
 #: being INSTALLED is the normal state on that PC, so a suite's own "is
 #: Playwright installed?" check could never be the guard. Every suite below
 #: imports `jarvis_chatbot_web`, whose one `headless=False` launch
-#: (jarvis_chatbot_web.py:620) is the only visible launch in the backend -
-#: `test_browser_test_guard.py` fails if this list and the suites that import
-#: that module ever disagree.
+#: (jarvis_chatbot_web.py:620) is the visible launch THESE FOUR reach.
+#:
+#: THAT IS NOT A BACKEND-WIDE CLAIM, and it must not be read as one.
+#: `jarvis_browser_control.py` has its own visible launch by default too:
+#: `_HEADLESS = False` (:1284) and `launch(headless=_HEADLESS, ...)` (:1460),
+#: with the comment at :1273-1284 saying the default "stays a visible window".
+#: No current default-run suite reaches it with a real page - its one live
+#: suite switches it off (test_browser_control_live.py:139, `B._HEADLESS =
+#: True`) and the other suites fake the page - but the completeness pin in
+#: `test_browser_test_guard.py` covers only direct importers of
+#: `jarvis_chatbot_web`, so a NEW suite that drives `jarvis_browser_control`
+#: visibly would not be caught by it. This list is the four that open a window
+#: in the default run today, not every visible-browser suite the backend could
+#: ever have.
 #:
 #: A DEFAULT RUN DOES NOT RUN THEM. Each is skipped by name, with the reason,
 #: unless VISIBLE_BROWSER_ENV=1. That is the second, independent layer: each
@@ -882,6 +900,65 @@ USE_ENV_BACKEND_FLAG = "--use-env-backend"
 #: relying on any environment variable. What the updater uses, so the update's
 #: own proof run can never be redirected by an ambient variable either.
 BACKEND_PATH_FLAG = "--backend-path"
+#: The patcher's own subcommand: print the environment its suite loop needs.
+STATE_ENV_FLAG = "--state-env"
+
+#: `--help` prints exactly this and exits 0, before the update lock is read and
+#: before anything is staged. Deliberately short.
+USAGE = """\
+usage: run_suites.py [test_name.py ...] [options]
+
+  (no names)            run every backend suite
+  test_ui_control.py    run exactly the suite(s) named - BARE file names only
+  --help                print this and exit 0
+
+options:
+  --jobs N              run N suites at once (default 1, what CI uses)
+  --backend-path DIR    run against the backend folder DIR
+  --use-env-backend     run against whatever JARVIS_BACKEND names
+  --ignore-update-lock  run even while a backend update holds the lock
+  --state-env DIR       print the suite-state environment for DIR
+
+A path is not a suite name: `backend/test_x.py` is refused, not ignored.
+The four suites that open a real, VISIBLE browser window are skipped, with
+their reason, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set.
+"""
+
+
+def suite_arguments(args) -> tuple:
+    """The BARE suite names on the command line; anything else is a UsageError.
+
+    WHY (measured 2026-10-26, twice in one day). This runner used to keep every
+    argument that started with "test_" and silently DROP the rest, so
+    `run_suites.py backend/test_x.py` - the spelling a person or an agent
+    reaches for - named no suite and ran the WHOLE fleet instead. Two agents
+    started the full sweep by accident that day. A typo must stop the run, not
+    widen it, so a path or an unknown flag is refused before the backend is
+    even staged.
+    """
+    names = []
+    for arg in args:
+        if arg.startswith("-"):
+            raise UsageError(
+                f"{arg} is not an option this runner knows (a suite is named by "
+                f"its bare file name, e.g. test_ui_control.py). No suite was run.")
+        if "/" in arg or "\\" in arg:
+            bare = arg.replace("\\", "/").rsplit("/", 1)[-1]
+            hint = (bare if bare.startswith("test_") and bare.endswith(".py")
+                    else "test_ui_control.py")
+            raise UsageError(
+                f"{arg} is a path, not a suite name. Name the suite by its bare "
+                f"file name instead, e.g. {hint}. No suite was run.")
+        if arg.startswith("test_") and not arg.endswith(".py"):
+            raise UsageError(
+                f"{arg} is not a suite file name - add .py, e.g. {arg}.py. "
+                f"No suite was run.")
+        if not arg.startswith("test_") or not arg.endswith(".py"):
+            raise UsageError(
+                f"{arg} is not a suite name. Name a suite by its bare file name, "
+                f"e.g. test_ui_control.py. No suite was run.")
+        names.append(arg)
+    return tuple(names)
 
 
 class UsageError(ValueError):
@@ -1204,7 +1281,8 @@ def _sweep(root: Path, only=(), jobs: int = 1,
     # "ok" here - the numbers beside it are what say so.
     ran = {"passed": 0, "skipped": 0, "failed": 0}
     if unknown:
-        print(f"FAIL  no suite here is named: {', '.join(unknown)}")
+        print(f"FAIL  no suite here is named: {', '.join(unknown)}  "
+              f"(a suite is named by its bare file name, e.g. test_ui_control.py)")
         failed += unknown
     if stale:
         print(f"FAIL  run_suites.py lists suites that do not exist: {stale}")
@@ -1218,8 +1296,9 @@ def _sweep(root: Path, only=(), jobs: int = 1,
         print(f"FAIL  run_suites.py skips suites that need nothing from the owner's PC: {no_owner}")
         failed += no_owner
     if visible_browser_opted_in() and any(s.name in VISIBLE_BROWSER_SUITES for s in suites):
-        print(f"[run_suites] VISIBLE BROWSER TESTS ON ({VISIBLE_BROWSER_ENV}=1): real "
-              f"windows will open on this screen")
+        print(f"[run_suites] VISIBLE BROWSER TESTS ON ({VISIBLE_BROWSER_ENV}=1): the "
+              f"browser halves may open real windows on this screen (they still skip "
+              f"when Playwright or a browser is not installed)")
     base = dict(os.environ, JARVIS_BACKEND=str(backend),
                 PYTHONDONTWRITEBYTECODE="1")
     if jobs == 1:
@@ -1299,6 +1378,12 @@ def state_env(where: str) -> int:
 
 if __name__ == "__main__":
     args = list(sys.argv[1:])
+    if any(arg in ("-h", "--help") for arg in args):
+        # FIRST, and before the update lock is read or anything is staged:
+        # asking what the runner does must never run the fleet (measured trap,
+        # 2026-10-26 - `--help` was silently ignored and every suite ran).
+        print(USAGE)
+        sys.exit(0)
     jobs = 1
     ignore_update_lock = False
     use_env_backend = False
@@ -1331,10 +1416,30 @@ if __name__ == "__main__":
                   file=sys.stderr)
             sys.exit(2)
         del args[at:at + 2]
-    if len(args) == 2 and args[0] == "--state-env":
-        sys.exit(state_env(args[1]))
+    if STATE_ENV_FLAG in args:
+        at = args.index(STATE_ENV_FLAG)
+        try:
+            state_where = args[at + 1]
+        except IndexError:
+            print(f"FAIL  {STATE_ENV_FLAG} needs a folder, e.g. "
+                  f'{STATE_ENV_FLAG} "C:\\Temp\\suite-state"', file=sys.stderr)
+            sys.exit(2)
+        del args[at:at + 2]
+        if args:
+            print(f"FAIL  {STATE_ENV_FLAG} takes one folder and no suite names; "
+                  f"unexpected: {' '.join(args)}", file=sys.stderr)
+            sys.exit(2)
+        sys.exit(state_env(state_where))
+    # A TYPO MUST STOP THE RUN, NOT WIDEN IT. A path-shaped or unknown argument
+    # is refused here, before any staging, so the fleet cannot start by
+    # accident (see `suite_arguments`).
     try:
-        sys.exit(main(tuple(a for a in args if a.startswith("test_")),
+        only = suite_arguments(args)
+    except UsageError as exc:
+        print(f"FAIL  {exc}", file=sys.stderr)
+        sys.exit(2)
+    try:
+        sys.exit(main(only,
                       max(1, jobs), ignore_update_lock=ignore_update_lock,
                       use_env_backend=use_env_backend,
                       backend_path=backend_path))

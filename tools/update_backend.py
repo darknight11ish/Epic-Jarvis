@@ -131,6 +131,15 @@ SUITES_REL = Path("backend") / "run_suites.py"
 WHERE_REL = Path("backend") / "_where.py"
 BASE_REL = Path("jarvis-backend")
 
+#: The opt-in the four visible-browser suites and run_suites.py share. It is
+#: named in the skip note so an intentional opt-out is never described as a
+#: file the owner's PC is missing (the opposite of what is really going on).
+VISIBLE_BROWSER_ENV = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+#: How run_suites.py phrases that reason on its `skip` line. Matched, never
+#: imported: this tool must not import the runner (and its `_where`) to read a
+#: sentence, and the runner's own suite pins the wording it prints.
+VISIBLE_BROWSER_SKIP_WORDS = "VISIBLE browser window"
+
 #: How a shell is looked for. An indirection (not a direct `shutil.which` call
 #: inside `shell_choice`) so the suite can drive every update flow on a machine
 #: with no PowerShell at all - it supplies a fake name here, exactly as it
@@ -1404,6 +1413,13 @@ def suite_result(exit_code, lines) -> dict:
     `ambiguous` is the honest third state the caller must treat as a failure:
     a run that printed no summary, or a worker that could not be watched, did
     not prove anything - the project's BLOCKED-is-never-a-pass rule.
+
+    A WHOLE-SUITE SKIP HAS TWO REASONS, and they are kept apart. Most skips
+    mean a file this PC does not have. The four visible-browser suites are
+    skipped by `run_suites.py` even on the owner's PC because running them
+    would open real browser windows: their skip line says "VISIBLE browser
+    window" and names the opt-in. Those are therefore listed separately, so
+    the caller never tells the owner he is missing a file he is not missing.
     """
     failed_names = []
     for line in lines:
@@ -1411,10 +1427,13 @@ def suite_result(exit_code, lines) -> dict:
         if match is not None:
             failed_names.append(match.group(1))
     skipped_suites = []
+    visible_browser_suites = []
     for line in lines:
         match = re.match(r"^skip\s+(\S+)", line)
         if match is not None:
             skipped_suites.append(match.group(1))
+            if VISIBLE_BROWSER_SKIP_WORDS in line:
+                visible_browser_suites.append(match.group(1))
     summary = None
     for line in reversed(lines):
         got = parse_summary(line)
@@ -1429,6 +1448,7 @@ def suite_result(exit_code, lines) -> dict:
         "failed": failed,
         "failed_names": failed_names,
         "skipped_suites": skipped_suites,
+        "visible_browser_suites": visible_browser_suites,
         "ambiguous": ambiguous,
         "unproven": unproven,
         "summary": summary,
@@ -1855,9 +1875,23 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
         if unproven:
             say("DONE - no problems, but NOT fully proven (see below)")
             if result["skipped_suites"]:
-                say(f"  note: {len(result['skipped_suites'])} suite(s) need files that "
-                    "live only on the owner's PC and were skipped: "
-                    + ", ".join(result["skipped_suites"][:5]))
+                # TWO REASONS, SAID SEPARATELY (2026-10-26). A suite skipped
+                # because it would open a real, VISIBLE browser window is not a
+                # suite waiting for a file the owner's PC does not have - the
+                # old single sentence said that about all four and was false.
+                skipped = result["skipped_suites"]
+                visible = [n for n in skipped
+                           if n in result.get("visible_browser_suites", ())]
+                others = [n for n in skipped if n not in visible]
+                if visible:
+                    say(f"  note: {len(visible)} suite(s) open a real, VISIBLE browser "
+                        f"window on this screen and were skipped: "
+                        + ", ".join(visible[:5])
+                        + f". Set {VISIBLE_BROWSER_ENV}=1 to run them.")
+                if others:
+                    say(f"  note: {len(others)} suite(s) need files that live only on "
+                        "the owner's PC and were skipped: "
+                        + ", ".join(others[:5]))
             say("  note: The checks were not all run to the end, so this update is "
                 "applied but NOT proven.")
         else:

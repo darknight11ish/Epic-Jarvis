@@ -189,6 +189,14 @@ SKIP_SUITE = "print('ok    a real check')\nprint('ok    SKIP - no such package h
 SKIP_SUMMARY_SUITE = "print('1 passed, 0 failed, 3 skipped')\n"
 FAIL_SUITE = "print('FAIL  a check')\nraise SystemExit(1)\n"
 
+#: One suite that skips itself on purpose: it would open a real, VISIBLE
+#: browser window. Its own sentence is what the patcher must read (#861
+#: review), so the note says that instead of "a file or a package is missing".
+VISIBLE_SKIP_SUITE = (
+    "print('ok    a real check')\n"
+    'print("SKIPPED  test_visible.py - this suite starts real, VISIBLE browser '
+    'windows, and JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is not set.")\n')
+
 # A failing suite whose REASON is near the TOP, with far more passing lines
 # after it than the old tail-only view kept. This is the exact shape that hid
 # the owner's 2026-10-05 test_gate_push.py failure: the `FAIL` line and its
@@ -671,6 +679,30 @@ def t_mini_test_suites_summary():
     check("suites: a failing suite -> exit 1, DONE WITH PROBLEMS, named",
           code == 1 and "DONE WITH PROBLEMS" in out and "test_bad.py" in out and "patched and proven" not in out,
           out[-700:])
+
+
+def t_a_visible_browser_skip_has_its_own_reason():
+    """A deliberate opt-out is not a missing file (review of #861, 2026-10-26).
+
+    Four suites skip themselves unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is
+    set, because on the owner's PC they open real Chromium windows. Their skip
+    used to be reported with the generic "a backend file, a Python package or a
+    machine feature ... is not there" - all three false. The note must name the
+    visible window and the opt-in, while still never claiming "proven".
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "v", suites={"test_plain.py": PASS_SUITE,
+                                        "test_visible.py": VISIBLE_SKIP_SUITE})
+    be = tmp / "v-be"
+    build_backend(be)
+    code, out = run(root / "scripts" / "apply-patches.ps1", be, "-SkipPackages")
+    check("a visible-browser skip still exits 0 and is NEVER 'proven'",
+          code == 0 and "patched and proven" not in out, out[-900:])
+    check("... the suite is named with its real reason and the opt-in that runs it",
+          "test_visible.py" in out and "VISIBLE browser window" in out
+          and "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1" in out, out[-900:])
+    check("... and the note does NOT claim a missing backend file or package",
+          "a skip here usually means" not in out, out[-900:])
 
 
 def t_a_failing_suites_reason_is_printed():
@@ -1960,6 +1992,7 @@ def main():
                t_the_running_rule_itself, t_both_scripts_share_one_running_rule,
                t_the_throwaway_folders_cannot_collide_with_another_run,
                t_mini_test_suites_summary, t_a_failing_suites_reason_is_printed,
+               t_a_visible_browser_skip_has_its_own_reason,
                t_mini_problems_end_red,
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,
                t_mini_revert_ends_plainly, t_mini_state_json_classifies_every_patch,

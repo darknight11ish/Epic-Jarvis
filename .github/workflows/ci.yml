@@ -221,6 +221,21 @@ jobs:
     # came within five minutes of the cap. 60 gives the real work room without
     # hiding a genuine hang.
     timeout-minutes: 60
+    # KEEP THE CODE-ONLY CHECKS IN CI (review of #861, 2026-10-26). The four
+    # suites that drive jarvis_chatbot_web's visible browser -
+    # test_chatbot_sites.py, test_chatbot_gemini.py, test_handoff.py and
+    # test_support_widget.py - refuse to start unless this is set, because on
+    # the owner's PC they open real Chromium windows. A CI runner has no
+    # Playwright browsers installed (this job does not install the package
+    # either), so with the opt-in set they run their CODE-ONLY halves and their
+    # browser halves print "SKIP the real-browser half: playwright is not
+    # installed" and exit 0 - exactly what they did before the guard. That is
+    # 441 checks (test_chatbot_sites 293, test_handoff 109, test_chatbot_gemini
+    # 29, test_support_widget 10, measured with browsers disabled by the #861
+    # review). Without this line the required backend job would silently lose
+    # all 441.
+    env:
+      JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -561,6 +576,17 @@ jobs:
     # job above was CANCELLED at 45 minutes with every test still passing, so
     # this ceiling is deliberately generous rather than tight.
     timeout-minutes: 90
+    # SAME REASON AS THE `backend` JOB, and it matters more here: this job runs
+    # the four guarded suites DIRECTLY by name in the list below, not through
+    # run_suites.py, so the runner's layer-2 skip does not apply. Without the
+    # opt-in each would print one SKIPPED line and exit 0, and this job's
+    # exit-code-only ending ("Every backend suite in this job passed on
+    # Windows.") would still be printed - a whole-suite skip counted as a pass
+    # at job level, which is the finding the #861 review made. No Playwright
+    # browser is installed on a runner, so with it set only their code-only
+    # halves run and the browser halves skip exactly as before.
+    env:
+      JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"
     defaults:
       run:
         # The suites are run from backend/, which is where a person runs them
