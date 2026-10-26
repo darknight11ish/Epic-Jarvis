@@ -492,7 +492,7 @@ object ChatHistory {
     const val CONTINUED_NOTHING =
         "None of its answers were kept, so Jarvis has nothing to read back. New questions are still " +
             "filed with this chat."
-    const val CONTINUED_TEMPORARY_OFF = "Temporary chat is off: a continued chat is kept."
+    const val CONTINUED_TEMPORARY_OFF = "Incognito is off: a continued chat is kept."
 
     /**
      * Chat history is off, or cannot keep anything right now: what was said in

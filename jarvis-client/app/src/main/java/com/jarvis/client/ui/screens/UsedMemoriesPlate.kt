@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
  * A temporary chat, above Home's chat box (the owner's decision, 2026-09-25;
  * [com.jarvis.client.net.TemporaryChat]).
  *
- * Off: one quiet "Temporary chat" to start one. On: the marker for the whole
+ * Off: one quiet "Incognito" to start one. On: the marker for the whole
  * chat - its name, with [TemporaryChat.LINE] while the chat is still empty
  * ([empty]) - and "End". Either way a new conversation starts. Not while an
  * answer is arriving ([enabled]): Stop is the control for that.

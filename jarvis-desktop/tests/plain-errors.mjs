@@ -120,8 +120,8 @@ await check("a failed chat's tagged facts become the plain words, the detail scr
   assert.ok(p.details.includes("HTTP 503") && !p.details.includes(secret), p.details);
   const q = fromChatFailure(ERROR_LINE_PREFIX + JSON.stringify({ network: "refused", detail: "x" }));
   assert.equal(q.kind, "jarvis_not_running");
-  // An older build's plain sentence is shown as it is.
-  assert.equal(fromChatFailure("Temporary chat isn't available.").kind, "pc_said");
+  // A plain sentence from the PC is shown as it is.
+  assert.equal(fromChatFailure("Incognito isn't available.").kind, "pc_said");
   const s = fromStreamError({ message: "The local model is not running.", code: "model_not_running" });
   assert.equal(s.says, CASES.kinds.model_not_running.says);
   assert.ok(s.details.includes("The local model is not running."));

@@ -33,8 +33,8 @@ export const SAMPLE_HINT =
   "removed before it is kept.";
 export const SWITCH_LABEL = "Write like me when drafting";
 export const SWITCH_DETAIL =
-  "Off by default. Adds a short style block to local drafts only; never to Temporary " +
-  "chat or to an external chatbot.";
+  "Off by default. Adds a short style block to local drafts only; never to Incognito " +
+  "or to an external chatbot.";
 export const FORGET_LABEL = "Forget this sample";
 export const EMPTY = "No samples yet. Paste one above to begin.";
 export const BLOCKED =

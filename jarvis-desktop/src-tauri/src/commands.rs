@@ -4553,7 +4553,7 @@ pub(crate) fn capabilities_answer(status: u16, body: &str) -> Result<serde_json:
 /// What the quickbar says when the owner turns on a temporary chat and the
 /// PC's backend has no such thing (JARVIS-API.md section 18.1). The phone
 /// says the same (`TemporaryChat.UNAVAILABLE`).
-pub(crate) const TEMPORARY_UNAVAILABLE: &str = "Temporary chat isn't available on this PC's \
+pub(crate) const TEMPORARY_UNAVAILABLE: &str = "Incognito isn't available on this PC's \
      version of Jarvis, so nothing was sent. Run apply-patches.ps1 on the PC to update it.";
 
 /// Whether `GET /api/version`'s answer says the running server has a

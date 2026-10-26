@@ -34,36 +34,36 @@ object TemporaryChat {
     const val CAPABILITY = "temporary_chat"
 
     /** The mode's name, and the one line on the empty chat - both apps. */
-    const val LABEL = "Temporary chat"
+    const val LABEL = "Incognito"
     const val LINE =
-        "Temporary chat: Jarvis won't use or learn from your memory, and this chat isn't kept."
+        "Incognito: Jarvis won't use or learn from your memory, and this chat isn't kept."
 
     /** The toggle, when off, and what ends it. */
-    const val START = "Temporary chat"
+    const val START = "Incognito"
     const val END = "End"
 
     /** Said when the owner turns it on or off (a new conversation each time). */
-    const val STARTED = "Temporary chat started. Nothing in it is remembered or kept."
-    const val ENDED = "Temporary chat ended. Your next question starts a normal chat."
+    const val STARTED = "Incognito started. Nothing in it is remembered or kept."
+    const val ENDED = "Incognito ended. Your next question starts a normal chat."
 
     /** A PC whose backend has no temporary chat. Nothing is sent. */
     const val UNAVAILABLE =
-        "Temporary chat isn't available on this PC's version of Jarvis, so nothing was sent. " +
+        "Incognito isn't available on this PC's version of Jarvis, so nothing was sent. " +
             "Run apply-patches.ps1 on the PC to update it."
 
     /** An answer to a temporary question whose route header does not confirm it. */
     const val NOT_CONFIRMED =
-        "Your PC did not confirm this was a temporary chat, so this answer may have used your " +
+        "Your PC did not confirm this was an incognito chat, so this answer may have used your " +
             "memory and the chat may be kept."
 
     /** A "Remember: ..." in a temporary chat (the route's `remember_off`). */
-    const val REMEMBER_OFF = "Remember: is off in a temporary chat."
+    const val REMEMBER_OFF = "Remember: is off in an incognito chat."
 
     /** A game or role-play the PC put in a temporary chat by itself (games-temporary.patch;
      *  the owner's decision of 2026-09-27): said under the answer, both apps (the chat
      *  audit, 2026-09-28 - it used to say nothing). */
     const val GAME =
-        "This looks like a game or role-play, so it's a temporary chat: nothing is kept or learned."
+        "This looks like a game or role-play, so it's an incognito chat: nothing is kept or learned."
 
     /** The `/api/chat` body's flag: present, and true, only for a temporary chat. */
     const val FIELD = "temporary"
