@@ -174,7 +174,7 @@ export const PROPOSALS_DETAIL =
   "created until you act on one.";
 export const PROPOSALS_OFF =
   "Said-I'd-do suggestions are off. Turning them on asks for your approval first: " +
-  "Jarvis reads your own words in recent chats (never a temporary or crisis chat).";
+  "Jarvis reads your own words in recent chats (never an incognito or crisis chat).";
 export const PROPOSALS_ON_LABEL = "Turn on (asks first)";
 export const PROPOSALS_OFF_LABEL = "Turn off";
 export const PROPOSALS_WAITING = "Waiting for your approval. Nothing has changed yet.";

@@ -419,13 +419,13 @@ UNSPOKEN_TTL_DAYS = 3
 
 UNSPOKEN_LABEL = "Said-I'd-do suggestions"
 UNSPOKEN_DETAIL = ("When this is on, the Today page offers things YOU said you would do "
-                   "(only your own words, never a temporary or crisis chat) that no reminder "
+                   "(only your own words, never an incognito or crisis chat) that no reminder "
                    "covers yet - as suggestions only. Jarvis never creates a reminder from one "
                    "without your tap. Off unless you turn it on.")
 UNSPOKEN_ON_CARD = "\n".join([
     "Turn on said-I'd-do suggestions.",
     "",
-    "Jarvis will read your own words in recent kept chats (never a temporary chat and "
+    "Jarvis will read your own words in recent kept chats (never an incognito chat and "
     "never a crisis chat, and never what Jarvis or a tool said) and offer first-person "
     "promises like \"I'll send the report tomorrow\" on the Today page as suggestions.",
     "",

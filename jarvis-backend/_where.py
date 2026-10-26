@@ -1275,6 +1275,21 @@ SHIPPED = (
     # create/pending/fill/cancel routes. No browser session, no secret storage;
     # the browser path is NOT wired (ARCHITECTURE section 8).
     "jarvis_secret_handoff_wiring.py",
+    # The offline product-check engine, slice 1 (2026-10-25, the owner's
+    # product-research request; docs/DESIGN-PRODUCT-RESEARCH.md): tolerant
+    # review records, evidence-only signals, validation of the local model's
+    # aspects/quotes and a reasons-based report. PURE - no network, no
+    # subprocess, no route, no tool and no app surface. Its own read half
+    # (jarvis_product_read.py) imports it; no route, tool or app screen calls
+    # either of them yet, so a backend without it runs exactly as before.
+    "jarvis_product_research.py",
+    # The product-check READ path, slice 2 (2026-10-26): page HTML captured
+    # from the owner's own browser -> tolerant review records in the engine's
+    # schema + honest warnings + assemble_report(). PURE - html.parser, re and
+    # the engine module only; no network, no browser import, no subprocess, no
+    # storage, no route, no tool and no app surface. Nothing imports it yet, so
+    # a backend without it runs exactly as before.
+    "jarvis_product_read.py",
 )
 
 

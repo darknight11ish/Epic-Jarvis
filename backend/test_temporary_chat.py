@@ -504,7 +504,7 @@ def t_the_chat_log_keeps_nothing():
         check("a tool that read outside text still marks the conversation (the note-write card)",
               log.conversation_tainted(CID))
         check("automatic learning makes a card of it, with the reason in words",
-              A.check_provenance(entry) == "said in a temporary chat, which Jarvis never learns from")
+              A.check_provenance(entry) == "said in an incognito chat, which Jarvis never learns from")
         normal = dict(body)
         normal.pop("temporary")
         normal["conversation_id"] = "conv-ordinary-1"

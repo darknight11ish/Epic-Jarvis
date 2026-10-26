@@ -2070,7 +2070,7 @@ $SHIPPED = @(
     # --- The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5) ---
     'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
     # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
-    'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
+    'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is BUILT as the intended ONE gate for every download - never a silent download, and never one that would leave less than 25 GB free (the night C: hit 5.7 GB free and every build on this PC broke) - but NO CALLER YET (checked 2026-10-26): the model chooser/download path does not consult it, so do not describe downloads as gated until a wiring PR makes that true. Reads no network, starts nothing, downloads nothing. The work setups were meant to use it rather than building a second chooser - no patch, no route
     # --- Ask for a picture, and keep it (2026-10-11, pictures.patch, JARVIS-API section 129) ---
     'jarvis_pictures.py'         # /api/pictures, /api/pictures/file and POST /api/pictures: a prompt the owner typed, drawn by a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a setting with named values, never guessed at), saved as a PNG in a folder on this PC (Pictures\Jarvis by default, PC-only) with a sidecar holding the prompt, the seed, the model and the settings so it can be made again. Nothing leaves the PC; no route sends a picture anywhere, so making one needs NO approval card. Nothing is deleted on a timer. The switch ("Making pictures") is OFF by default - the second card is shared with the everyday model - and with nothing configured the owner gets ONE plain sentence naming both programs to install, never a crash. Not a tool in jarvis_agent.py, so no model turn can fill in a prompt
     # --- The 30B coder, both cards (2026-10-11) ---
@@ -2254,6 +2254,24 @@ $SHIPPED = @(
 # serves the host-only create/pending/fill/cancel routes. No browser session
 # and no secret storage; the browser path is NOT wired (ARCHITECTURE section 8).
 'jarvis_secret_handoff_wiring.py'
+# The offline product-check engine, slice 1 (2026-10-25, the owner's
+# product-research request; docs/DESIGN-PRODUCT-RESEARCH.md): tolerant review
+# records, evidence-only signals, validation of the local model's aspects and
+# quotes, and a reasons-based report. PURE - no network, no subprocess, no
+# route, no tool and no app surface. Its own read half (jarvis_product_read.py)
+# imports it; no route, tool or app screen calls either of them yet, so a
+# backend without it runs exactly as before (backend/_where.py's SHIPPED list
+# has the same entry, and backend/test_shipped_modules.py fails if the two
+# disagree).
+'jarvis_product_research.py'
+# The product-check READ path, slice 2 (2026-10-26): page HTML captured from
+# the owner's own browser -> tolerant review records in the engine's schema +
+# honest warnings + assemble_report(). PURE - html.parser, re and the engine
+# module only; no network, no browser import, no subprocess, no storage, no
+# route, no tool and no app surface. Nothing imports it yet, so a backend
+# without it runs exactly as before (backend/_where.py's SHIPPED list has the
+# same entry, and backend/test_shipped_modules.py fails if the two disagree).
+'jarvis_product_read.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

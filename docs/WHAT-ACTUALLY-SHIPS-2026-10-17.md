@@ -9,8 +9,13 @@ are in [the evidence appendix](#how-this-page-was-checked).
 The short answer: most of what Jarvis does is built and reachable. A small,
 named set of working modules has no caller. Two Volume III pillars moved from
 in flight to shipped at this revision (both extend routes the apps already
-use), one is "measure first", and three have no code at all. Ten pull
-requests are open and none of them is on `main`.
+use), one is "measure first", and three have no code at all. The ten pull
+requests this revision listed as open are no longer open: nine merged and
+#554 was closed (re-checked 2026-10-26 against `origin/main` `7acd7db54`).
+
+**Re-measured 2026-10-26 against `origin/main` `7acd7db54`:** only the PR
+states this page got wrong were refreshed (#549, #550 and #556 are merged;
+#554 was closed). Every other claim keeps its `b0f2c253` measurement.
 
 This page describes the repository tree, **not** the copy of the backend that
 runs on the owner's PC. That copy lives outside this repository
@@ -163,19 +168,22 @@ approvals §3 (line 222), memory §6 (line 1214), voice §5 (line 967), decks §
 
 ## 4. Ready, not wired: the shelf
 
-Six shipped modules have no production caller today. The guide that ordered
-this page calls this the "shipped library with zero callers" queue. Two of the
-original seven were wired by pull requests that are now merged (#543 wired the
-sandbox, #544 wired the guardian); one merged module joined the shelf (#538,
-the decision lab); and two of the six are being wired right now by open pull
-requests (#549, #556), which are **not** on `main` (section 6).
+Six shipped modules had no production caller at `b0f2c253`. This 2026-10-26
+refresh re-checked the rows tied to the merged wiring PRs: `jarvis_self_improve.py`
+and `jarvis_ollama_contract.py` now have **ROUTE, NO SCREEN** status (PR #549),
+`jarvis_tool_schema.py` is called by `jarvis_agent.py` (PR #556), and
+`jarvis_hf_inspect.py` has a caller this page had measured as "own command line
+only" (`jarvis_profiles.py`). `jarvis_decision_lab.py` and the create side of
+`jarvis_task_lease.py` keep their earlier measurement. The guide that ordered
+this page calls this the "shipped library with zero callers" queue; no new
+count is asserted, because only the rows named here were re-checked.
 
 | Shelf item | What it can do, in plain words | Called today | What wiring would unlock |
 |---|---|---|---|
-| `jarvis_self_improve.py` | Reads Jarvis's own source, answers a question with real `file:line` citations, and drafts a fix; it applies nothing. | Nothing. "No route, and no client of any kind" (`backend/jarvis_self_improve.py:89`, `:113`). | A self-diagnosis the owner can ask for from an app, with an evidence trail. **Open PR #549** adds two read-only diagnostic routes. |
-| `jarvis_ollama_contract.py` | Asks the local model what it can do, then reports where Jarvis's picture of the model is wrong. It reads no version number. | Nothing. "Has no call site yet" (`scripts/apply-patches.ps1:1915`); no route (`backend/jarvis_ollama_contract.py:90`). | A PC-help row that says "Jarvis is under-using this model" instead of guessing. |
-| `jarvis_tool_schema.py` | Checks a JSON schema before it is sent to Ollama as a tool or format contract, and refuses a malformed one in plain words. | Nothing. "It has NO CALLER YET" (`scripts/apply-patches.ps1:1911`); no import outside its own test. | Safer tool calls: a bad schema is refused before the model sees it. **Open PR #556** wires this. |
-| `jarvis_hf_inspect.py` | Reads a Hugging Face repository's file listing **before** a download: what is in it, sizes, quant labels, missing pieces, and the cache a hybrid model really grows. | Only its own command line (`backend/jarvis_hf_inspect.py:399`). "No call site yet" (`apply-patches.ps1:1917`). | A warning before the owner downloads the wrong or over-large model. |
+| `jarvis_self_improve.py` | Reads Jarvis's own source, answers a question with real `file:line` citations, and drafts a fix; it applies nothing. | **ROUTE, NO SCREEN since PR #549 merged on 2026-10-26**: two read-only diagnostic routes are installed by the `plugins/ready/self-improve/` drop-in folder, but no app screen calls them yet. | A self-diagnosis the owner can ask for from an app, with an evidence trail. The routes are the backend half; the app's button is still missing. |
+| `jarvis_ollama_contract.py` | Asks the local model what it can do, then reports where Jarvis's picture of the model is wrong. It reads no version number. | **ROUTE, NO SCREEN since PR #549 merged on 2026-10-26**: `backend/jarvis_self_improve.py`'s `/api/self-improve/contract` route calls `jarvis_ollama_contract.probe()` (`backend/jarvis_self_improve.py:1429`); no app screen calls that route yet. | A PC-help row that says "Jarvis is under-using this model" instead of guessing. |
+| `jarvis_tool_schema.py` | Checks a JSON schema before it is sent to Ollama as a tool or format contract, and refuses a malformed one in plain words. | **Wired by PR #556 (merged 2026-10-26)**: `backend/jarvis_agent.py` imports it and runs the guard on the way out (`backend/jarvis_agent.py:5037`). | Safer tool calls: a bad schema is refused before the model sees it. This is an internal guard, not an app feature. |
+| `jarvis_hf_inspect.py` | Reads a Hugging Face repository's file listing **before** a download: what is in it, sizes, quant labels, missing pieces, and the cache a hybrid model really grows. | **Called by the model-profile code**: `backend/jarvis_profiles.py:52` imports it and `:193` calls `kv_bytes_per_token`; it also has its own command line (`backend/jarvis_hf_inspect.py:399`). No route or app screen. | A warning before the owner downloads the wrong or over-large model. |
 | `jarvis_decision_lab.py` | A red-team pre-mortem of one decision: the case against it, failure modes with likelihood and impact, and a deterministic 1-3-1 recommendation - no cloud lane and no second model pass. | Nothing. "This is the BACKEND SLICE, deliberately unwired: there is no route" (`backend/jarvis_decision_lab.py:95`); no import outside its own test. | A pre-mortem the owner can ask for from chat or an app before saying yes to something. |
 | `jarvis_task_lease.py` | A lease: a time-limited permission slip that names one surface, the sites or windows it may touch, the actions, a time limit and a step budget, checked step by step. | **Consumer side only.** `jarvis_browser_control.py` imports it at its one integration point (`:3277`) and checks each step (`:3345`); no production caller ever opens one - `create()` is called only by its test (`apply-patches.ps1:1913`). | A bounded browser run that does not raise one approval card per step. |
 
@@ -187,14 +195,19 @@ One more shelf item has no route at all, even though its module is reachable:
   (`backend/jarvis_decks.py:297`), `low_retrievability_topics()` (`:383`),
   `record_voice_review()` (`:1156`) and a tool name, `decks.voice_review`
   (`:251`). Nothing outside the module and its test names them, and no route
-  or app file was in the commit. Status: **READY, UNWIRED.** An open PR (#550)
-  would wire it to the phone's review screen.
+  or app file was in the commit. Status: **WIRED since PR #550 merged on
+  2026-10-26** - it added the phone's fading-card radar and the typed answer
+  the PC marks.
 
 One correction to the guide this page was built from: it says "6 unwired
 `$SHIPPED` modules", but the rows it lists name **seven** modules (one row pairs
 `jarvis_self_improve` with `jarvis_ollama_contract`), and the first revision of
-this page measured seven. At `b0f2c253` the measurement is **six**: #543 and
-#544 took two modules off the shelf, and #538 put one on it.
+this page measured seven. At `b0f2c253` the measurement was **six**: #543 and
+#544 took two modules off the shelf, and #538 put one on it. This 2026-10-26
+refresh corrects the affected rows in section 4 rather than restating a fresh
+count: #549 and #556 gave three of those rows a caller, and
+`jarvis_hf_inspect` was measured wrong at the earlier revision (`jarvis_profiles`
+already called it).
 
 **What left the shelf at this revision.** #543 made the Python sandbox a
 read-only chat tool, `run_data_script` (`backend/jarvis_agent.py:1821`), so the
@@ -228,12 +241,15 @@ feature on one app is not automatically an oversight - check that list first.
 
 ---
 
-## 6. In flight: open pull requests are not shipped
+## 6. In flight at `b0f2c253`: those pull requests have since merged
 
-Ten pull requests are open against `main` (checked with `gh pr list` on
-2026-10-18), numbered **#536, #540, #546, #549, #550 and #552-#556**. **#537 is
-not in this list: it merged at `7ddb5b8c`.** Neither are the ten PRs that
-merged between the page's first revision and this one: #538 (decision lab,
+Ten pull requests were open against `main` when this page was checked with
+`gh pr list` on 2026-10-18, numbered **#536, #540, #546, #549, #550 and
+#552-#556**. **Re-checked 2026-10-26 against `origin/main` `7acd7db54`: nine
+merged and #554 was closed** - the table below is the 2026-10-18 record, not a
+list of open work. **#537 is not in this list: it merged at `7ddb5b8c`.**
+Neither are the ten PRs that merged between the page's first revision and
+this one: #538 (decision lab,
 `df01bd0c`), #539 (README, `74eca253`), #541 (page watch, `7d72b200`), #542
 (handover, `76ee5abf`), #543 (sandbox tool, `cc76c022`), #544 (guardian hooks,
 `d47b736e`), #545 (PC doctor, `2146ae65`), #547 (this page, `ca244558`), #548
@@ -246,22 +262,24 @@ shortened.
 | #536 | `feat/clipboard-time-machine-backend` | The backend half of the clipboard time machine (its desktop half merged at `8ba40950`). |
 | #540 | `feat/personal-crm-and-pre-meeting-dossier` | A pre-meeting dossier from the owner's own local data (Pillar 16). |
 | #546 | `feat/update-modes-with-eta` | Three update paces with honest ETAs and a progress bar. |
-| #549 | `feat/self-improve-diagnostic-plugin` | Two read-only self-diagnosis routes, switched on by a drop-in folder. |
-| #550 | `feat/phone-deck-review` | A fading-card radar on the phone, and a typed answer the PC marks (the decks voice-review wiring). |
+| #549 | `feat/self-improve-diagnostic-plugin` | Two read-only self-diagnosis routes, switched on by a drop-in folder. **Merged 2026-10-26.** |
+| #550 | `feat/phone-deck-review` | A fading-card radar on the phone, and a typed answer the PC marks (the decks voice-review wiring). **Merged 2026-10-26.** |
 | #552 | `fix/update-banner-after-install` | The cached "newer build" line ends when that build is installed. |
 | #553 | `chore/deny-zbus-unmaintained-advisories` | Ignores the three unmaintained zbus advisories, with a reason. |
-| #554 | `docs/refresh-what-ships-2026-10-18` | An in-flight revision of this page. |
+| #554 | `docs/refresh-what-ships-2026-10-18` | An in-flight revision of this page. **Closed, not merged (2026-10-26).** |
 | #555 | `feat/clipboard-in-feature-list` | Puts the clipboard time machine on the feature list, with its lesson. |
-| #556 | `feat/tool-schema-sanitiser-wiring` | The tool-schema sanitiser on the way out, and validation on the way in. |
+| #556 | `feat/tool-schema-sanitiser-wiring` | The tool-schema sanitiser on the way out, and validation on the way in. **Merged 2026-10-26.** |
 
-`gh` reported all ten as `MERGEABLE` at this revision. Mergeable is not the
-same as tested or merged: the six required CI checks decide that, and they are
-read on each PR's page, not here.
+`gh` reported all ten as `MERGEABLE` at the 2026-10-18 revision. Mergeable was
+not the same as tested or merged: the six required CI checks decide that, and
+they are read on each PR's page, not here. **On 2026-10-26 all ten were merged
+except #554, which was closed.**
 
 The merged pair #543 and #544 is the shelf work section 4 used to list: the
-sandbox and the guardian are called by `main` now. The open wiring is **#549**
-(self-improve's diagnostic routes), **#556** (the tool-schema guard) and
-**#550** (the decks voice-review slice). #536 is the backend half of the
+sandbox and the guardian are called by `main` now. The wiring this page called
+open has landed: **#549** (self-improve's diagnostic routes), **#556** (the
+tool-schema guard) and **#550** (the decks voice-review slice) all merged on
+2026-10-26. #536 is the backend half of the
 clipboard whose desktop half is on `main`; the desktop files add no `/api/`
 call, so the bar they add does not depend on #536.
 
@@ -328,11 +346,10 @@ Built is not the same as on. These are the deliberate "not yet" switches.
   `docs/creativity-2026-09-25/future.md:361`). The guide that ordered this page
   says it waits for the owner's explicit answer on three privacy questions
   before anything is written.
-- **The decks voice-review slice is not owner-gated; it is just unwired.**
-  Its backend functions merged at `7ddb5b8c` and no route or screen calls them
-  (section 4). That is the ordinary "built beside the system" case, not a
-  privacy decision. An open PR (#550) would wire it to the phone's review
-  screen.
+- **The decks voice-review slice is not owner-gated, and it is now wired.**
+  Its backend functions merged at `7ddb5b8c`; PR #550 **merged on 2026-10-26**
+  and added the phone's review surface (section 4). That was the ordinary
+  "built beside the system" case, not a privacy decision.
 - **The clipboard time machine is opt-in, and only its desktop half is on
   `main`.** PR #548 merged at `8ba40950`: a RAM-only history of copied text in
   the desktop bar, forgotten on the next lock, added in desktop files that make
@@ -346,7 +363,9 @@ Built is not the same as on. These are the deliberate "not yet" switches.
 `b0f2c253`, by naming that revision in the command - not of a working checkout,
 which can be on another branch. One checkout available while the first revision
 was written reported itself 43 commits behind `origin/main` (`git status`); a
-search there would have answered a different question.
+search there would have answered a different question. **The 2026-10-26
+refresh re-read only the PR states named above**, asked of `origin/main` at
+`7acd7db54` and of `gh`; every other claim keeps its `b0f2c253` measurement.
 
 The commands (run from any checkout of this repository, after `git fetch origin`):
 
@@ -391,10 +410,10 @@ symbol names still find it.
   `scripts/apply-patches.ps1` from a clean tree, then comparing every `*.py` in
   the live folder to `origin/main:jarvis-backend/`, would confirm it.
 - **The pull requests' CI.** Only `gh`'s state, mergeability and titles were
-  read - not the six required checks on any open PR, and not the merged
-  commits' CI either. A merged commit is assumed green by the merge, not
-  checked here. #554's diff was not read at all (it is an in-flight revision of
-  this page).
+  read - not the six required checks on any PR, and not the merged commits'
+  CI either. A merged commit is assumed green by the merge, not checked here.
+  #554's diff was not read at all; it was closed without merging (2026-10-26,
+  re-checked at `7acd7db54`).
 - **Whether both apps display the new PC-doctor rows and the page-watch change
   detail.** PRs #545 and #541 changed backend payloads and the shared contract
   fixtures, not app screen code; the screens that already render those routes
