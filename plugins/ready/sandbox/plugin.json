@@ -3,5 +3,5 @@
   "summary": "the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once).",
   "module": "jarvis_sandbox_exec",
   "install": "handler",
-  "stack_order": 152
+  "stack_order": 155
 }

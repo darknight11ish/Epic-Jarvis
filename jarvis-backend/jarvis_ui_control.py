@@ -837,6 +837,13 @@ def get_window_state(pid, window_id=None, mode: str = "ax", *, windows=None, tre
         # The desktop hard denylist, by process where the descriptor names one
         # (it does on this PC now) and by title otherwise.
         return {"ok": False, "code": "denied_app", "reason": denial}
+    # A window whose owner just handed a secret into it is read-paused for the
+    # engine's taint window: the read happens AFTER the denylist, BEFORE any
+    # tree/pixel is read, and the honest refusal is the engine's own words.
+    restricted = _secret_read_guard(target.get("process_id"), target.get("window_id"),
+                                    target.get("class_name"))
+    if restricted:
+        return {"ok": False, "code": "secret_read_restricted", "reason": restricted}
 
     reader = tree or _default_tree
     try:
@@ -1669,8 +1676,21 @@ def plan(goal: str, window: str, requests: list,
         if found is not None and _masked_target(tree, found_index):
             # A password control - or any control INSIDE one - is never bound
             # to a step, whichever identifier the request used to name it.
-            unmatched.append({**r, "code": "password_control",
-                              "reason": "a password field is never targeted"})
+            # The owner-secret hand-off (2026-10-26) is the one exception: the
+            # HOST measures the masked control and raises a card for the owner,
+            # who types the secret into the host, never into the model. If the
+            # host cannot raise it (no engine/UIA), the old refusal stands.
+            raised = _secret_handoff_raise_for_plan(window, tree, found_index, r, goal)
+            if raised:
+                unmatched.append({
+                    **r, "code": "secret_handoff_raised",
+                    "reason": ("a secret hand-off card for the owner is waiting "
+                               "(the host measured the password field); the secret "
+                               "is typed by the host, never by the model"),
+                })
+            else:
+                unmatched.append({**r, "code": "password_control",
+                                  "reason": "a password field is never targeted"})
             continue
         if not found or not found.get("enabled", True):
             unmatched.append({**r, "reason": "not found" if not found
@@ -2002,6 +2022,274 @@ def _default_focused_window():
     return {"hwnd": hwnd} if hwnd > 0 else None
 
 
+# --------------------------------------------------------------------------
+#   The owner-secret hand-off: the host's measurement, never the model's text
+# --------------------------------------------------------------------------
+#
+# `jarvis_secret_handoff.py` is the rule engine; `jarvis_secret_handoff_wiring.py`
+# is the host layer. This section holds the one measurement the design names:
+# when an agent's plan asks to TYPE into a password-masked control, the host
+# reads that control with UIA (window, pid, hwnd, class, control identity,
+# IsPassword) and raises one card. The model never supplies a target field.
+#
+# The card has focus while the owner types, so the fill re-measures the STORED
+# window/control by hwnd instead of "what is focused now"; the engine's
+# control_id equality is what proves it is still the same control.
+
+
+def _secret_handoff_module():
+    try:
+        import jarvis_secret_handoff as H
+        return H
+    except Exception:
+        return None
+
+
+def _secret_handoff_wiring():
+    try:
+        import jarvis_secret_handoff_wiring as W
+        return W
+    except Exception:
+        return None
+
+
+def _secret_read_guard(pid, hwnd, window_class) -> Optional[str]:
+    """Honest taint refusal for one window, or None.
+
+    A backend without the engine (an older install) behaves exactly as before.
+    """
+    H = _secret_handoff_module()
+    if H is None:
+        return None
+    try:
+        key = H.normalize_secret_target_key(pid=int(pid), hwnd=int(hwnd),
+                                            window_class=str(window_class or ""))
+        H.require_read_allowed(key)
+    except H.SecretPageReadRestrictedError as exc:
+        return str(exc)
+    except Exception:
+        return None
+    return None
+
+
+def _secret_handoff_top(window_title):
+    auto = _uia_lib()
+    top = auto.WindowControl(searchDepth=1, Name=str(window_title))
+    if top is None or not top.Exists(maxSearchSeconds=2):
+        raise RuntimeError("the target window is not on screen any more")
+    return top
+
+
+def _secret_handoff_walk(top) -> list:
+    """The window's controls in the SAME depth-first order `_default_read`
+    walks them, so a plan's control index means the same control here."""
+    out = []
+
+    def walk(parent, depth, in_password=False):
+        if depth <= 0:
+            return
+        for c in parent.GetChildren():
+            masked = in_password
+            try:
+                masked = masked or bool(c.IsPassword)
+            except Exception:
+                pass
+            out.append({"control": c, "masked": masked})
+            walk(c, depth - 1, masked)
+
+    walk(top, _READ_DEPTH)
+    return out
+
+
+def _secret_handoff_identity(control) -> str:
+    parts = []
+    try:
+        parts.append(str(control.AutomationId or ""))
+    except Exception:
+        parts.append("")
+    try:
+        runtime = control.GetRuntimeId()
+        parts.append(",".join(str(x) for x in (runtime or [])))
+    except Exception:
+        parts.append("")
+    try:
+        parts.append(str(control.ControlTypeName or ""))
+    except Exception:
+        parts.append("")
+    return ":".join(parts)
+
+
+def _secret_handoff_descriptor_from(top, index: int) -> dict:
+    walk = _secret_handoff_walk(top)
+    if index < 0 or index >= len(walk):
+        raise RuntimeError("that password control is no longer at the same place in the window")
+    item = walk[index]
+    if not item.get("masked"):
+        raise RuntimeError("that control is not password-masked")
+    control = item["control"]
+    try:
+        pid = int(top.ProcessId)
+        hwnd = int(top.NativeWindowHandle)
+        klass = str(getattr(top, "ClassName", "") or "")
+        title = str(top.Name or "")
+    except Exception as exc:
+        raise RuntimeError(f"the target window could not be measured ({type(exc).__name__})") from exc
+    control_type = str(getattr(control, "ControlTypeName", "") or "control")
+    identity = _secret_handoff_identity(control)
+    H = _secret_handoff_module()
+    if H is None:
+        raise RuntimeError("the secret hand-off engine is not installed")
+    return {
+        "window": title, "pid": pid, "hwnd": hwnd, "window_class": klass,
+        "control_index": index, "control_type": control_type,
+        "control_id": f"uia:{pid}:{hwnd}:{index}:{control_type}:{identity}",
+        "target_key": H.normalize_secret_target_key(pid=pid, hwnd=hwnd,
+                                                    window_class=klass),
+        "display_origin": (f"{_process_name(pid) or 'this program'} (PID {pid}) - "
+                           f"{title} - {control_type} (password field)"),
+    }
+
+
+def secret_handoff_descriptor(window: str, index: int) -> dict:
+    """Measure the masked control an agent plan pointed at (host-only)."""
+    return _secret_handoff_descriptor_from(_secret_handoff_top(window), int(index))
+
+
+def secret_handoff_focused_descriptor() -> dict:
+    """Measure the password-masked control that has focus right now.
+
+    The honest fallback for a caller that really is looking at the target; not
+    used by the HUD (its own click moves focus) and not used by the plan hook
+    (that measures the control its plan named).
+    """
+    auto = _uia_lib()
+    try:
+        focused = auto.GetFocusedControl()
+    except Exception as exc:
+        raise RuntimeError(f"the focused control could not be read ({type(exc).__name__})") from exc
+    if focused is None:
+        raise RuntimeError("there is no focused control")
+    try:
+        if not bool(focused.IsPassword):
+            raise RuntimeError("the focused control is not password-masked")
+        top = focused.GetTopLevelControl()
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"the focused control could not be measured ({type(exc).__name__})") from exc
+    if top is None:
+        raise RuntimeError("the focused control has no window")
+    wanted = _secret_handoff_identity(focused)
+    for i, item in enumerate(_secret_handoff_walk(top)):
+        if item.get("masked") and _secret_handoff_identity(item["control"]) == wanted:
+            return _secret_handoff_descriptor_from(top, i)
+    raise RuntimeError("the focused password control is not in the window's read tree")
+
+
+def secret_handoff_live_snapshot(descriptor: dict) -> dict:
+    """Re-measure the STORED window/control at fill time (host-only).
+
+    Raises when the window cannot be measured at all (nothing was typed).
+    Returns is_password_field=False when the control is no longer a password
+    field, so the ENGINE - not this module - decides the void.
+    """
+    auto = _uia_lib()
+    hwnd = int(descriptor.get("hwnd") or 0)
+    try:
+        top = auto.ControlFromHandle(hwnd)
+        if top is None or not top.Exists(maxSearchSeconds=2):
+            raise RuntimeError("the target window is gone")
+        pid = int(top.ProcessId)
+        live_hwnd = int(top.NativeWindowHandle)
+        klass = str(getattr(top, "ClassName", "") or "")
+        title = str(top.Name or "")
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"the target window could not be measured ({type(exc).__name__})") from exc
+    H = _secret_handoff_module()
+    if H is None:
+        raise RuntimeError("the secret hand-off engine is not installed")
+    walk = _secret_handoff_walk(top)
+    index = int(descriptor.get("control_index") or -1)
+    masked, control_type = False, str(descriptor.get("control_type") or "control")
+    control_id = "changed"
+    expected = str(descriptor.get("control_id") or "")
+    if 0 <= index < len(walk):
+        item = walk[index]
+        control = item["control"]
+        control_type = str(getattr(control, "ControlTypeName", "") or control_type)
+        masked = bool(item.get("masked"))
+        if masked and _secret_handoff_identity(control) == expected.rsplit(":", 1)[-1]:
+            control_id = expected
+    return {
+        "target_key": H.normalize_secret_target_key(pid=pid, hwnd=live_hwnd,
+                                                    window_class=klass),
+        "display_origin": (f"{_process_name(pid) or 'this program'} (PID {pid}) - "
+                           f"{title} - {control_type} (password field)"),
+        "is_password_field": masked, "control_id": control_id,
+    }
+
+
+def secret_handoff_type(descriptor: dict, secret_value: str) -> None:
+    """Type the owner's secret into the stored password control (host-only).
+
+    Never reads the value back, never logs it; refuses a control that is no
+    longer password-masked. The value exists only in this call.
+    """
+    auto = _uia_lib()
+    hwnd = int(descriptor.get("hwnd") or 0)
+    index = int(descriptor.get("control_index") or -1)
+    try:
+        top = auto.ControlFromHandle(hwnd)
+        if top is None or not top.Exists(maxSearchSeconds=2):
+            raise RuntimeError("the target window is gone")
+        walk = _secret_handoff_walk(top)
+    except Exception as exc:
+        raise RuntimeError(f"the target window could not be measured ({type(exc).__name__})") from exc
+    if index < 0 or index >= len(walk) or not walk[index].get("masked"):
+        raise RuntimeError("the target control is no longer password-masked - nothing was typed")
+    control = walk[index]["control"]
+    try:
+        control.SetFocus()
+    except Exception as exc:
+        raise RuntimeError(f"the target control could not be focused ({type(exc).__name__})") from exc
+    control.SendKeys(escape_sendkeys(str(secret_value or "")))
+
+
+def _secret_handoff_raise_for_plan(window, tree, index, request, goal) -> Optional[dict]:
+    """Raise the card from plan(), or None to keep the old refusal.
+
+    Never raises: a host without the engine, or a window UIA cannot measure,
+    keeps today's "a password field is never targeted" refusal.
+    """
+    W = _secret_handoff_wiring()
+    if W is None:
+        return None
+    try:
+        return W.card_from_plan(window=str(window), index=int(index),
+                                purpose=(request or {}).get("why"),
+                                goal=str(goal or ""))
+    except Exception:
+        return None
+
+
+def _secret_read_refusal_for_focused() -> Optional[str]:
+    """Taint refusal for the focused window a selection read would use."""
+    try:
+        auto = _uia_lib()
+        focused = auto.GetFocusedControl()
+        if focused is None:
+            return None
+        top = focused.GetTopLevelControl()
+        if top is None:
+            return None
+        return _secret_read_guard(int(top.ProcessId), int(top.NativeWindowHandle),
+                                  str(getattr(top, "ClassName", "") or ""))
+    except Exception:
+        return None
+
+
 def _default_selection_text() -> str:
     """The focused control's selected text, through the SAME UIA library and
     lazy-import rule the rest of this module uses (`_uia_lib`).
@@ -2176,6 +2464,12 @@ def read_selection(*, front=None, selection=None, never=None, scrubber=None,
                     + str(jarvis_screen.PAUSE_WORDS.get(reason) or reason) + "), "
                     "so nothing was read.")
         return _selection_refusal(reason, said, app)
+
+    # 1b. The owner-secret hand-off taint: if the owner just typed a secret into
+    # this window, reading it back is refused with the engine's own words.
+    restricted = _secret_read_refusal_for_focused()
+    if restricted:
+        return _selection_refusal("secret_read_restricted", restricted, app)
 
     # 2. The text itself.
     reader = selection or _default_selection_text

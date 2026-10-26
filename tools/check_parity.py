@@ -108,6 +108,15 @@ ALLOWLISTS = {
 #                  API on loopback under the same /api/ prefix
 # "planned"      - on the backend, for both apps, and neither calls it yet
 CLASSIFICATION = {
+    # The owner-secret hand-off is PC-only: the owner types the secret into a
+    # card the HOST draws over a password control it measured with UI
+    # Automation, and the phone has no card to type it into and no measured
+    # window. Backend: jarvis_secret_handoff_wiring.py (secret-handoff.patch).
+    # ARCHITECTURE section 8 and JARVIS-API section 157 record the decision.
+    "/api/secret-handoff/pending": ("deliberate", "The owner-secret hand-off card is PC-only: the host measures a window with UI Automation and the owner types the secret into the PC's own card. The phone has no card and no measured target (ARCHITECTURE section 8, JARVIS-API section 157)."),
+    "/api/secret-handoff/fill": ("deliberate", "The owner-secret hand-off fill is PC-only: it types the owner's secret into a PC window the host re-measured, which a phone cannot do or watch. Desktop HUD only (ARCHITECTURE section 8)."),
+    "/api/secret-handoff/cancel": ("deliberate", "Cancelling the owner-secret hand-off card is PC-only, like the card itself: the card exists only in the desktop HUD (ARCHITECTURE section 8)."),
+
     "/api/appearance": ("ported", ""),
     # Write Like Me V2 UI slice (2026-10-20, PR #665): both apps call the same
     # three routes. Desktop: Settings -> "How Jarvis talks" -> "Write like me"

@@ -345,6 +345,25 @@ DELTA_TABLE = {
             "anchor": BEFORE_SOCKET,
         },
     },
+    # secret-handoff.patch (2026-10-26): the owner-secret hand-off card.
+    # The engine and the host layer are SHIPPED modules (copied in whole); this
+    # patch's ONE HUD hunk installs the host layer's routes at the end of the
+    # install chain, immediately before the loader block. The anchor is the
+    # loader's first line, not the socket line: in the fully deployed live HUD
+    # the loader block sits between setup.patch's block and the socket line, so
+    # the patch's own pre-image is no longer contiguous there - anchoring on
+    # the loader marker is what makes a re-deploy insert the block in exactly
+    # the place apply-patches.ps1 puts it. `hunks` is deliberately NOT set: the
+    # patch is one insertion, and a hunk's whole pre-image would not match the
+    # already-loaded live file. The probes are the block's own first line and
+    # its install call, so a second deployment is reported ALREADY_PRESENT.
+    "secret-handoff.patch": {
+        "jarvis_hud.py": {
+            "probes": ("secret-handoff.patch (2026-10-26)",
+                       "jarvis_secret_handoff_wiring.install(Handler"),
+            "anchor": PLUGIN_LOADER_MARKER,
+        },
+    },
     # The HUD fixes that no .patch carries: literal, and a REPLACE entry's old
     # block must appear in the live file exactly once (a half-applied deploy is
     # refused, never guessed at).

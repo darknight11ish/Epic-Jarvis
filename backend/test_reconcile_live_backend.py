@@ -2490,6 +2490,85 @@ def t_a_private_chat_hunk_that_shifted_is_refused():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _secret_handoff_show(repo, ref, repo_path):
+    """The fake git: this PR's patch text, nothing else."""
+    base = Path(repo_path).name
+    if base == "secret-handoff.patch":
+        return patch_text("secret-handoff.patch")
+    return b""
+
+
+def t_the_secret_handoff_delta_is_planned_and_idempotent():
+    root = tmpdir()
+    try:
+        live = make_live(root)
+        before = (live / "jarvis_hud.py").read_bytes()
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["secret-handoff.patch"], show=_secret_handoff_show,
+            repo=REPO, state_patches=[])
+        check("the secret-handoff HUD delta plans cleanly",
+              refusals == [] and len(staged) == 1 and len(deltas) == 1
+              and deltas[0].status == "insert", (refusals, deltas))
+        text = staged.get("jarvis_hud.py", "")
+        check("its install block lands immediately before the plugin-loader marker",
+              "jarvis_secret_handoff_wiring.install(Handler" in text
+              and text.index("jarvis_secret_handoff_wiring.install(Handler,")
+              < text.index(R.PLUGIN_LOADER_MARKER))
+        check("the patches' added lines are what was carried",
+              "secret-handoff.patch (2026-10-26)" in text
+              and "jarvis_secret_handoff_wiring.install(Handler" in text)
+        check("the staged HUD still compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        plan_text = repr(deltas) + json.dumps(staged, default=str)
+        check("no secret value or pairing token appears in the plan",
+              "hunter2" not in plan_text
+              and "X-Jarvis-Token" not in plan_text
+              and "JARVIS_TOKEN" not in plan_text)
+        write(live / "jarvis_hud.py", text)          # pretend the deploy applied it
+        after = (live / "jarvis_hud.py").read_bytes()
+        again, staged2, refusals2 = R.plan_deltas(
+            live, ["secret-handoff.patch"], show=_secret_handoff_show,
+            repo=REPO, state_patches=[])
+        check("a second run reports ALREADY_PRESENT and changes nothing",
+              refusals2 == [] and staged2 == {}
+              and all(d.status == "already" for d in again), (refusals2, again, staged2))
+        check("... and the live file is byte-for-byte untouched by the second run",
+              (live / "jarvis_hud.py").read_bytes() == after
+              and after != before)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_missing_or_duplicated_secret_handoff_anchor_is_refused():
+    root = tmpdir()
+    try:
+        live = make_live(root)
+        hud = live / "jarvis_hud.py"
+        original = hud.read_text(encoding="utf-8")
+        # A shifted file: the anchor is gone, so the plan must refuse, not guess.
+        write(hud, original.replace(R.PLUGIN_LOADER_MARKER, "    # some other line"))
+        shifted = hud.read_bytes()
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["secret-handoff.patch"], show=_secret_handoff_show,
+            repo=REPO, state_patches=[])
+        check("a missing anchor refuses the whole file",
+              bool(refusals) and "appears 0 time" in refusals[0] and staged == {},
+              (refusals, staged))
+        check("... and the live file is untouched", hud.read_bytes() == shifted)
+        # An ambiguous file: the anchor appears twice, so the insertion point is
+        # not decided by anything; refuse rather than pick one.
+        write(hud, original + "\n" + R.PLUGIN_LOADER_MARKER + "\n")
+        ambiguous = hud.read_bytes()
+        deltas2, staged2, refusals2 = R.plan_deltas(
+            live, ["secret-handoff.patch"], show=_secret_handoff_show,
+            repo=REPO, state_patches=[])
+        check("a duplicated anchor refuses the whole file",
+              bool(refusals2) and "appears 2 time" in refusals2[0] and staged2 == {},
+              (refusals2, staged2))
+        check("... and this live file is untouched too", hud.read_bytes() == ambiguous)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -2518,6 +2597,8 @@ def main():
                t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block,
                t_deltas_are_planned_and_refused_hermetically,
                t_an_unknown_delta_is_refused_before_writing,
+               t_the_secret_handoff_delta_is_planned_and_idempotent,
+               t_a_missing_or_duplicated_secret_handoff_anchor_is_refused,
                t_rehearsal_stops_a_broken_staged_file,
                t_shipped_sync_compares_bytes_and_preserves_lf,
                t_dry_run_plans_without_writing_or_backing_up,
