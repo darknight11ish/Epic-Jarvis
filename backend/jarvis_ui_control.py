@@ -121,6 +121,7 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Optional
 
@@ -213,6 +214,7 @@ def _default_read(window: str) -> list:
             "this only works on a real Windows desktop with that package "
             "present, or with a `read` function supplied for testing"
         ) from exc
+    ensure_uia_com_on_this_thread(auto)
     top = auto.WindowControl(searchDepth=1, Name=window)
     if not top.Exists(maxSearchSeconds=2):
         return []
@@ -284,6 +286,7 @@ def _default_act(step: Step) -> Optional[str]:
             "no `act` function was given and 'uiautomation' is not "
             "installed - see _default_read"
         ) from exc
+    ensure_uia_com_on_this_thread(auto)
     top = auto.WindowControl(searchDepth=1, Name=step.window)
     # top.Control(...) is the real search API (an instance method that
     # returns a plain Control, not a Name/AutomationId-specific subclass) -
@@ -574,12 +577,75 @@ def escape_sendkeys(text) -> str:
     return str(text or "").translate(_SENDKEYS_ESCAPES)
 
 
+#: One flag per thread: has COM been made ready in THIS thread for UI
+#: Automation? `uiautomation` is a COM client and `comtypes` only initialises
+#: the thread that imports it, so any later thread that finds the module
+#: already in `sys.modules` and calls it would otherwise fail with
+#: `OSError [WinError -2147221008] CoInitialize has not been called`. That is
+#: exactly what the live backend's HTTP request thread hit on
+#: `POST /api/secret-handoff/create` on 2026-10-26 (the route answered 409 with
+#: "the host could not verify a password-masked control"); the same call from a
+#: fresh process, where the request thread did the import itself, worked.
+_UI_THREAD_READY = threading.local()
+
+
+def ensure_uia_com_on_this_thread(auto=None) -> None:
+    """Make the calling thread ready for Windows UI Automation (COM) calls.
+
+    Every thread that calls `uiautomation` needs its own COM apartment.
+    `comtypes` (inside `uiautomation`) initialises only the thread that first
+    imports it, so the HTTP request threads and the plan hook's thread of the
+    backend must do it themselves; this does that once per thread. It uses the
+    package's own initializer (`InitializeUIAutomationInCurrentThread`) rather
+    than importing `comtypes` here, so this module keeps exactly the imports of
+    the module list.
+
+    Idempotent and cheap after the first call in a thread. It never raises:
+    when COM cannot be initialised here (a fake reader in a test, a library too
+    old to expose the initializer, a non-Windows machine), the real UIA call is
+    left to report its own reason rather than being turned into a different
+    error by this guard.
+    """
+    if getattr(_UI_THREAD_READY, "done", False):
+        return
+    module = auto if auto is not None else sys.modules.get("uiautomation")
+    starter = getattr(module, "InitializeUIAutomationInCurrentThread", None)
+    if not callable(starter):
+        return
+    try:
+        starter()
+    except OSError:
+        # This thread already has an apartment (possibly of another model) -
+        # whatever UIA it can reach is what the call will use.
+        pass
+    except Exception:
+        return
+    _UI_THREAD_READY.done = True
+
+
+class UiaMeasurementError(RuntimeError):
+    """A UIA measurement that could not be made, with a safe machine tag.
+
+    `reason_code` is one of a fixed set (`E_UIA_IMPORT`, `E_NO_FOCUSED_CONTROL`,
+    `E_NOT_PASSWORD`, `E_NO_TOP_WINDOW`, `E_NOT_IN_WINDOW_TREE`,
+    `E_UIA_READ_FAIL`) - never user text, never a window title, never a secret -
+    so a host caller can tell the branches apart without echoing anything
+    sensitive. `hresult` is the failing COM status when there was one.
+    """
+
+    def __init__(self, reason_code: str, message: str, *, hresult=None):
+        super().__init__(message)
+        self.reason_code = reason_code
+        self.hresult = hresult
+
+
 def _uia_lib():
     """The real `uiautomation` module. `sys.modules` is checked first so a test
     can put a fake in its place, the same trick the existing suite already uses
     to reach `_default_read` without a desktop."""
     mod = sys.modules.get("uiautomation")
     if mod is not None:
+        ensure_uia_com_on_this_thread(mod)
         return mod
     try:
         import uiautomation as auto  # type: ignore
@@ -589,6 +655,7 @@ def _uia_lib():
             "this only works on a real Windows desktop with that package "
             "present, or with `windows`/`tree` supplied for testing"
         ) from exc
+    ensure_uia_com_on_this_thread(auto)
     return auto
 
 
@@ -2162,28 +2229,42 @@ def secret_handoff_focused_descriptor() -> dict:
     used by the HUD (its own click moves focus) and not used by the plan hook
     (that measures the control its plan named).
     """
-    auto = _uia_lib()
+    try:
+        auto = _uia_lib()
+    except RuntimeError as exc:
+        raise UiaMeasurementError("E_UIA_IMPORT", str(exc)) from exc
     try:
         focused = auto.GetFocusedControl()
     except Exception as exc:
-        raise RuntimeError(f"the focused control could not be read ({type(exc).__name__})") from exc
+        raise UiaMeasurementError(
+            "E_UIA_READ_FAIL",
+            f"the focused control could not be read ({type(exc).__name__})",
+            hresult=getattr(exc, "hresult", None),
+        ) from exc
     if focused is None:
-        raise RuntimeError("there is no focused control")
+        raise UiaMeasurementError("E_NO_FOCUSED_CONTROL", "there is no focused control")
     try:
         if not bool(focused.IsPassword):
-            raise RuntimeError("the focused control is not password-masked")
+            raise UiaMeasurementError(
+                "E_NOT_PASSWORD", "the focused control is not password-masked")
         top = focused.GetTopLevelControl()
     except RuntimeError:
         raise
     except Exception as exc:
-        raise RuntimeError(f"the focused control could not be measured ({type(exc).__name__})") from exc
+        raise UiaMeasurementError(
+            "E_UIA_READ_FAIL",
+            f"the focused control could not be measured ({type(exc).__name__})",
+            hresult=getattr(exc, "hresult", None),
+        ) from exc
     if top is None:
-        raise RuntimeError("the focused control has no window")
+        raise UiaMeasurementError("E_NO_TOP_WINDOW", "the focused control has no window")
     wanted = _secret_handoff_identity(focused)
     for i, item in enumerate(_secret_handoff_walk(top)):
         if item.get("masked") and _secret_handoff_identity(item["control"]) == wanted:
             return _secret_handoff_descriptor_from(top, i)
-    raise RuntimeError("the focused password control is not in the window's read tree")
+    raise UiaMeasurementError(
+        "E_NOT_IN_WINDOW_TREE",
+        "the focused password control is not in the window's read tree")
 
 
 def secret_handoff_live_snapshot(descriptor: dict) -> dict:

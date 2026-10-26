@@ -331,8 +331,18 @@ def handle_post(path: str, body: dict, *, peer=None, local=None) -> tuple:
         except SecretHandoffError as exc:
             return _refusal(409, str(exc))
         except Exception as exc:  # noqa: BLE001 - measurement failure
-            return _refusal(409, "the host could not verify a password-masked "
-                                 f"control ({type(exc).__name__})")
+            # The reason is machine-readable and safe: `reason_code` is the UIA
+            # measurement's own fixed E_* tag when it has one (see
+            # `jarvis_ui_control.UiaMeasurementError`), otherwise the
+            # exception's type name. It never carries a secret or any part of
+            # the request body: this route measures before a secret exists.
+            code = str(getattr(exc, "reason_code", "") or type(exc).__name__)
+            return 409, {
+                "ok": False,
+                "reason_code": code,
+                "error": ("the host could not verify a password-masked "
+                          f"control ({code}: {exc})"),
+            }
         return 200, {"ok": True, "card": _card_view(card)}
     if path == FILL_PATH:
         hid = str(body.get("handoff_id") or "")

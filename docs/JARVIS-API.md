@@ -25209,6 +25209,15 @@ Both POST routes refuse a non-loopback caller **before the body is read** (403
 with a plain sentence), and origin/token are checked before that. The body
 reader is the server's own; no route logs, stores or returns the request body.
 
+A refused `create` (409) carries a safe `reason_code` - one of `E_UIA_IMPORT`,
+`E_NO_FOCUSED_CONTROL`, `E_NOT_PASSWORD`, `E_NO_TOP_WINDOW`,
+`E_NOT_IN_WINDOW_TREE`, `E_UIA_READ_FAIL`, or the exception's type name - and
+never a secret or any part of the request body. Windows UI Automation is a COM
+API and every thread that calls it must initialise COM itself, so the host does
+that once per thread (`jarvis_ui_control.ensure_uia_com_on_this_thread`) before
+every UIA call; without it the live backend's HTTP request threads refused every
+card with `CoInitialize has not been called` (measured 2026-10-26).
+
 **The HUD card holds no token, and its writes go through the shell.** The page
 never receives the pairing token (apps security audit M2): the pending read is
 one more entry on hud_proxy.rs's fixed GET list (GET /api/secret-handoff/pending),

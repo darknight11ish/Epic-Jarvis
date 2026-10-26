@@ -1442,6 +1442,92 @@ def t_a_type_step_focuses_first_and_refuses_a_non_editable_control():
     check("... its audit row says the step stopped", rows[0][1]["outcome"] == "stopped",
           repr(rows))
 
+def t_uia_com_is_initialized_once_per_working_thread():
+    """The hand-off route and the plan hook run on threads that did NOT import
+    `uiautomation` (the backend's HTTP request threads). COM must be made ready
+    in each of those threads - once, not per call - or the first call raises
+    OSError [WinError -2147221008] "CoInitialize has not been called", which is
+    exactly what the live backend hit on 2026-10-26."""
+    import threading as _threading
+    import types as _types
+
+    calls = []
+
+    def InitializeUIAutomationInCurrentThread():
+        calls.append(_threading.current_thread().name)
+
+    fake = _types.ModuleType("uiautomation")
+    fake.InitializeUIAutomationInCurrentThread = InitializeUIAutomationInCurrentThread
+    saved_done = getattr(U._UI_THREAD_READY, "done", None)
+    if hasattr(U._UI_THREAD_READY, "done"):
+        del U._UI_THREAD_READY.done
+    try:
+        for _ in range(3):
+            U.ensure_uia_com_on_this_thread(fake)
+        main_calls = len(calls)
+        seen_at_thread_start = []
+
+        def in_a_request_like_thread():
+            seen_at_thread_start.append(len(calls))
+            for _ in range(3):
+                U.ensure_uia_com_on_this_thread(fake)
+
+        worker = _threading.Thread(target=in_a_request_like_thread, name="request-like")
+        worker.start()
+        worker.join()
+    finally:
+        if saved_done is None:
+            if hasattr(U._UI_THREAD_READY, "done"):
+                del U._UI_THREAD_READY.done
+        else:
+            U._UI_THREAD_READY.done = saved_done
+    check("UIA: COM is initialised once in the calling thread, not per call",
+          main_calls == 1, main_calls)
+    check("UIA: ... and once more in a new request-like thread",
+          seen_at_thread_start == [1], seen_at_thread_start)
+
+
+def t_uia_com_init_failure_is_left_to_the_real_call():
+    """A thread that already has a COM apartment (or a fake reader with no
+    initializer) must not turn into a different error here: the guard is
+    silent, remembers the thread as handled, and does not retry on every
+    call."""
+    import types as _types
+
+    attempts = []
+
+    def InitializeUIAutomationInCurrentThread():
+        attempts.append(1)
+        raise OSError(-2147221008, "CoInitialize has not been called")
+
+    fake = _types.ModuleType("uiautomation")
+    fake.InitializeUIAutomationInCurrentThread = InitializeUIAutomationInCurrentThread
+    saved_done = getattr(U._UI_THREAD_READY, "done", None)
+    if hasattr(U._UI_THREAD_READY, "done"):
+        del U._UI_THREAD_READY.done
+    raised = None
+    try:
+        U.ensure_uia_com_on_this_thread(fake)
+        U.ensure_uia_com_on_this_thread(fake)
+    except Exception as exc:  # pragma: no cover - a raise here is the failure
+        raised = exc
+    finally:
+        if saved_done is None:
+            if hasattr(U._UI_THREAD_READY, "done"):
+                del U._UI_THREAD_READY.done
+        else:
+            U._UI_THREAD_READY.done = saved_done
+    check("UIA: a COM model conflict is swallowed, never raised as a new error",
+          raised is None, repr(raised))
+    check("UIA: ... and it is not retried on every call", len(attempts) == 1, attempts)
+    if hasattr(U._UI_THREAD_READY, "done"):
+        del U._UI_THREAD_READY.done
+    plain = _types.ModuleType("uiautomation")
+    U.ensure_uia_com_on_this_thread(plain)
+    check("UIA: a reader with no initializer is left alone, not marked handled",
+          getattr(U._UI_THREAD_READY, "done", False) is False)
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_control_is_treated_as_unmatched,
@@ -1471,7 +1557,9 @@ if __name__ == "__main__":
                t_the_desktop_hard_denylist_is_refused_before_a_card,
                t_a_password_control_is_never_targeted_by_name_id_or_position,
                t_the_audit_lines_carry_no_typed_text_and_no_window_tree,
-               t_a_type_step_focuses_first_and_refuses_a_non_editable_control):
+               t_a_type_step_focuses_first_and_refuses_a_non_editable_control,
+               t_uia_com_is_initialized_once_per_working_thread,
+               t_uia_com_init_failure_is_left_to_the_real_call):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
