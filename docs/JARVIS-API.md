@@ -7169,8 +7169,12 @@ after the verb are the brief:
 
 ...and close phrasings of each. With no brief after the verb, Jarvis asks for
 one line ("Tell me what it should be like - one line is enough ...") and calls
-nothing. The word "personality" must be in the sentence, so "make me a
-sandwich" is not this.
+nothing. The question is remembered in memory only, for that conversation: the
+next line the owner sends is read as the brief and drafts from it, so "a grumpy
+mechanic" does not dead-end at the general model. A question, a command or a new
+"make me a personality ..." sentence clears it; it is forgotten after ten
+minutes, and nothing about it is written to disk or survives a restart. The word
+"personality" must be in the sentence, so "make me a sandwich" is not this.
 
 **While a draft is waiting**, these are whole-sentence answers, so a pending
 draft is finished before the fast path's ordinary grammar sees the sentence:
@@ -7229,13 +7233,20 @@ It never invents a personality, and it never shows a field it did not validate.
 **What it does not do.** It drafts FIELDS (a name, a line, an example, a base
 preset and dials), never a finished system prompt, so a personality made this
 way cannot add an instruction about tools, approval, permissions, memory or
-safety. It never leaves the PC: `_loopback_url()` refuses any host that is not
-loopback, so no environment variable can point it at another machine. The only
-new state is the pending drafts in `~/.openjarvis/personality-drafts.json`
-(beside `manner.json`): one per conversation, a bounded number at once (six),
-each expiring after two hours; the saved personality itself goes to
-`manner.json`, not there. `backend/test_personality_creator.py` holds the
-phrases, the refusal, the caps, the save path and the failure wording.
+safety. It never leaves the PC: the model address is the chat lane's own,
+resolved by `jarvis_model_lanes._hud_ollama_url()` (11436 on the owner's PC),
+and `_loopback_url()` refuses any host that is not loopback - so no environment
+variable can point it at another machine. The request names `options.num_ctx`
+at the chat's own context size (16,384, `jarvis_chatbot`'s
+`ONE_CARD_NUM_CTX`), so drafting cannot make Ollama reload the model at its
+small default. The only new state on disk is the pending drafts in
+`~/.openjarvis/personality-drafts.json` (beside `manner.json`): one per
+conversation, a bounded number at once (six), each expiring after two hours;
+the saved personality itself goes to `manner.json`, not there. The unanswered
+"what should it be like" question is memory only - one per conversation, at
+most six, ten minutes, gone on restart, never written anywhere.
+`backend/test_personality_creator.py` holds the phrases, the refusal, the caps,
+the save path and the failure wording.
 
 ## 28. Stop everything (added 2026-09-25)
 

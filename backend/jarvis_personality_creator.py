@@ -11,7 +11,9 @@ refines it in their own words, and says "save it". The saved row is the same
 "My personalities" entry the Settings form writes: `jarvis_manner.py`'s
 `save_user_personality()` validates it, caps it, scrubs it and stores it in
 `manner.json`, and "switch to <name>" already finds a saved personality by
-name. Nothing new is stored beyond the draft file described below.
+name. Nothing new is stored on disk beyond the draft file described below: the
+one "tell me what it should be like" question is remembered in memory only, for
+that conversation's next message.
 
 WHY FIELDS AND NOT A FINISHED PROMPT (the one design decision that matters)
 
@@ -35,9 +37,10 @@ WHAT IT MAY NOT DO
     wording only, exactly like the Settings form and "switch to Classic
     Butler" (all cardless by the owner's 2026-10-22 decision). Saving happens
     through the same function those already use;
-  * it never leaves this PC: `_loopback_url()` refuses to use any host that is
-    not loopback, so this module cannot be pointed at another machine by an
-    environment variable;
+  * it never leaves this PC: the address is the chat lane's own, resolved by
+    `jarvis_model_lanes._hud_ollama_url()` (never a copy kept here), and
+    `_loopback_url()` refuses to use any host that is not loopback, so this
+    module cannot be pointed at another machine by an environment variable;
   * the model's reply is data, not instructions. Only a JSON object is read
     from it, field by field; if the model answers with prose, an error, or
     nothing, NOTHING is drafted or saved and the owner is told plainly;
@@ -62,23 +65,49 @@ draft is written only by the owner's own sentence, contains only the fields the
 owner was shown, and is removed the moment it is saved, dropped or expired.
 The saved personality itself lives in `manner.json`, not here.
 
+The unanswered "tell me what it should be like" question is MEMORY ONLY: one per
+conversation, at most MAX_PENDING_BRIEFS at once, forgotten after BRIEF_TTL_S,
+gone on restart, and never written to disk. The next message in that
+conversation is read as the brief the owner was asked for - so the sentence the
+question invites ("a grumpy mechanic") drafts a personality instead of
+dead-ending at the general model - unless it is a question or a new creation
+sentence, which clears the question. This is one turn of state, not a draft: it
+belongs to a conversation id, and a conversation without a real id never
+remembers it.
+
 Standard library only. No module is imported at import time except the
-standard library; `jarvis_manner` is imported inside the functions that need it,
-wrapped, so a backend without it simply answers nothing from here.
+standard library; `jarvis_manner`, `jarvis_model_lanes` and `jarvis_chatbot` are
+imported inside the functions that need them, wrapped, so a backend without one
+of them still answers (with the named fallbacks) rather than failing to load.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import threading
 import time
 import urllib.request
 from pathlib import Path
 from typing import Callable, Optional
 
-#: Where the local model lives when nothing says otherwise - the same default
-#: `jarvis_self_improve.py` and `jarvis_thinking.py` use.
+#: The LAST-RESORT loopback address, used only when neither `jarvis_hud` nor the
+#: environment can say which lane the chat is on. The lane itself is never
+#: copied here: `_hud_lane_url()` asks `jarvis_model_lanes._hud_ollama_url()`,
+#: the one resolver that reads `jarvis_hud.OLLAMA_URL`/`OLLAMA_URL` - a separate
+#: copy of that address is exactly how the desktop's health probe came to ask
+#: the wrong port (jarvis_model_lanes.py:333-348, 2026-10-13).
 DEFAULT_URL = "http://127.0.0.1:11434"
+
+#: The context the chat's own model is loaded at, named so asking cannot reload
+#: it at Ollama's small default. `jarvis_chatbot.ONE_CARD_NUM_CTX` is this
+#: repository's name for the value ("the SAME context size as chat
+#: (jarvis-primary.Modelfile's num_ctx), so asking never makes Ollama reload the
+#: model at another size", jarvis_chatbot.py:201-204); `jarvis-primary.Modelfile`
+#: line 119 sets it, and on this PC `/api/ps` reported jarvis-primary:latest at
+#: `context_length: 16384` on 2026-10-25. `_num_ctx()` prefers the module's
+#: constant and falls back to this named value when jarvis_chatbot is absent.
+CHAT_NUM_CTX = 16384
 
 #: Hosts that mean "this PC". Anything else is not used: this module's whole
 #: point is that the owner's own description stays on the machine.
@@ -97,6 +126,15 @@ DRAFT_TTL_S = 2 * 60 * 60
 #: At most this many conversations can have a pending draft at once. The owner
 #: is one person; this is a bound, not a feature.
 MAX_DRAFTS = 6
+
+#: A brief question ("tell me what it should be like") is remembered for this
+#: long. Long enough to read the question and type a line, short enough that a
+#: forgotten one cannot catch a message sent much later. It is memory only.
+BRIEF_TTL_S = 10 * 60
+
+#: At most this many conversations can hold an unanswered brief question at
+#: once - the same bound, and the same reason, as MAX_DRAFTS.
+MAX_PENDING_BRIEFS = 6
 
 #: The owner's own description of what they want. Long enough for a paragraph,
 #: short enough to stay a description rather than a document.
@@ -178,6 +216,29 @@ _LEAD = re.compile(r"(?i)^(?:it|one|something|a\s+personality|that|which|who)\s+
 _LEAD_SIMPLE = re.compile(r"(?i)^(?:like|such\s+as)\b\s*", re.I)
 _TRAILING_PUNCT = " \t\r\n.!?,;:"
 
+#: A message that is a question or another quick command is NOT the brief an
+#: unanswered "tell me what it should be like" asked for: it clears the question
+#: and falls through, so "what's the weather?" is never drafted as a personality.
+#: Deliberately narrow - a description does not have to start with a noun, so
+#: "sounds like a tired engineer" and "more formal" are still read as briefs.
+_OTHER_REQUEST = re.compile(
+    r"(?i)^(?:what(?:'s)?|who(?:'s)?|when|where|why|how|which|"
+    r"is|are|am|do|does|did|can|could|would|will|should|may|might|"
+    r"remind|schedule|set|switch|turn|open|close|play|stop|start|"
+    r"delete|remove|list|search|find|check|email|text|message|call|"
+    r"remember|cancel|forget|discard|scrap|drop|save|keep|store|show|tell)\b")
+
+
+def _is_other_request(text: str) -> bool:
+    """Is this plainly about something else, rather than a personality brief?
+
+    Used only for the one message after the brief question. Anything that is
+    not caught here is passed to the model as the brief, which is the point of
+    remembering the question at all.
+    """
+    return bool(_OTHER_REQUEST.match(text))
+
+
 _LOCK = None
 
 
@@ -190,18 +251,52 @@ def _lock():
     return _LOCK
 
 
+#: conversation key -> when the "tell me what it should be like" question was
+#: asked. MEMORY ONLY on purpose: it is one turn of state, not a draft. A
+#: restart forgets it, and nothing in this module ever writes it to disk.
+_PENDING_BRIEFS = {}
+_BRIEF_LOCK = threading.Lock()
+
+
 # --------------------------------------------------------------------------
 #   The local model, and the one seam the suite replaces
 # --------------------------------------------------------------------------
 
+def _hud_lane_url() -> str:
+    """The address the CHAT talks to, from the one resolver that owns it.
+
+    `jarvis_model_lanes._hud_ollama_url()` reads `jarvis_hud.OLLAMA_URL`
+    (the backend's own line, 11436 on the owner's PC) and only then the
+    environment's `OLLAMA_URL`; it exists precisely because a second copy of
+    the address asked the wrong port (jarvis_model_lanes.py:333-348). So this
+    module asks it instead of keeping a port of its own.
+
+    The environment fallback is for a backend without that module, and reads
+    the SAME variable `_hud_ollama_url()` would - never `OLLAMA_HOST`.
+    `OLLAMA_HOST` is Ollama's own variable, it is unset on the owner's PC, and
+    reading it here is what made the draft ask 11434 while the chat used 11436
+    (2026-10-25). "" when nothing can say; the caller then uses DEFAULT_URL.
+    """
+    try:
+        import jarvis_model_lanes
+        lane = jarvis_model_lanes._hud_ollama_url()
+        if lane:
+            return str(lane)
+    except Exception:                                          # noqa: BLE001
+        pass
+    return os.environ.get("OLLAMA_URL") or ""
+
+
 def _loopback_url(url: Optional[str] = None) -> str:
-    """`url`, or OLLAMA_HOST, or loopback - and loopback if the host is not.
+    """`url`, or the CHAT lane, or the loopback default - and the default if
+    the host is not loopback.
 
     A remote host is never refused with an exception: it simply is not used.
     Nothing in this module can be pointed at another machine by an environment
-    variable. (Same rule and same shape as jarvis_self_improve._loopback_url.)
+    variable. (Same loopback rule as jarvis_self_improve._loopback_url, but the
+    candidate list is the chat's own, not Ollama's `OLLAMA_HOST`.)
     """
-    for candidate in (url, os.environ.get("OLLAMA_HOST"), DEFAULT_URL):
+    for candidate in (url, _hud_lane_url(), DEFAULT_URL):
         text = (candidate or "").strip()
         if not text:
             continue
@@ -213,6 +308,34 @@ def _loopback_url(url: Optional[str] = None) -> str:
         if host.lower() in LOOPBACK_HOSTS:
             return text.rstrip("/")
     return DEFAULT_URL
+
+
+def _num_ctx() -> int:
+    """The context size the chat's model is loaded at - never Ollama's default.
+
+    `options.num_ctx` is always named. A `POST /api/generate` that names a model
+    and no `num_ctx` loads that model at Ollama's OWN default (2,048 when it was
+    measured on 2026-10-10/11) rather than the lane's - the accident that
+    reloaded a 196,608-token window at `-c 2048` twice and shrank it 96x
+    (jarvis_agent.py:7923-7935; the same rule jarvis_self_improve.py:729-735
+    names a floor for). Here the number is not a floor: it is EXACTLY the
+    context chat runs the model at, so a draft cannot make Ollama reload it at
+    another size. On this PC that is 16,384 - `/api/ps` reported
+    `jarvis-primary:latest` with `context_length: 16384` on 2026-10-25, and
+    jarvis_chatbot.py:201-204 names the same value for the same reason.
+
+    `jarvis_chatbot` is asked at call time (the module imports only the
+    standard library at import time); CHAT_NUM_CTX is the named fallback for a
+    backend without it, not a second live value.
+    """
+    try:
+        import jarvis_chatbot
+        value = int(getattr(jarvis_chatbot, "ONE_CARD_NUM_CTX", 0) or 0)
+        if value > 0:
+            return value
+    except Exception:                                          # noqa: BLE001
+        pass
+    return CHAT_NUM_CTX
 
 
 def _model_name(model: Optional[str] = None) -> str:
@@ -232,7 +355,8 @@ def _ask(prompt: str, *, model: Optional[str] = None, url: Optional[str] = None,
         "model": _model_name(model),
         "prompt": prompt,
         "stream": False,
-        "options": {"temperature": 0.8, "num_predict": 320},
+        "options": {"num_ctx": _num_ctx(), "temperature": 0.8,
+                    "num_predict": 320},
     }).encode("utf-8")
     try:
         request = urllib.request.Request(
@@ -463,6 +587,60 @@ def _key(conversation: Optional[str]) -> str:
     return "no-conversation"
 
 
+# --------------------------------------------------------------------------
+#   The one unanswered question - memory only, one conversation, one message
+# --------------------------------------------------------------------------
+
+def _brief_prune(now: float) -> None:
+    """Expire and bound the table. Caller holds the lock."""
+    stale = [key for key, at in _PENDING_BRIEFS.items()
+             if not isinstance(at, (int, float)) or now - float(at) > BRIEF_TTL_S]
+    for key in stale:
+        _PENDING_BRIEFS.pop(key, None)
+    if len(_PENDING_BRIEFS) > MAX_PENDING_BRIEFS:
+        keep = sorted(_PENDING_BRIEFS.items(), key=lambda kv: float(kv[1]))[-MAX_PENDING_BRIEFS:]
+        _PENDING_BRIEFS.clear()
+        _PENDING_BRIEFS.update(keep)
+
+
+def _brief_put(key: str, now: float) -> None:
+    """Remember that this conversation was just asked for a brief.
+
+    A conversation with no real id is NOT remembered: "the same conversation" is
+    exactly the guarantee this makes, and the shared "no-conversation" bucket
+    could be a different chat. It simply asks again instead.
+    """
+    if key == "no-conversation":
+        return
+    with _BRIEF_LOCK:
+        _PENDING_BRIEFS[key] = now
+        _brief_prune(now)
+
+
+def _brief_take(key: str, now: float):
+    """The time this conversation's question was asked, and forget it - or None.
+
+    Popping it is the whole usage rule: one question is answered by exactly one
+    message, whatever happens to that message.
+    """
+    with _BRIEF_LOCK:
+        _brief_prune(now)
+        return _PENDING_BRIEFS.pop(key, None)
+
+
+def _brief_drop(key: str) -> None:
+    """Forget this conversation's question without answering it."""
+    with _BRIEF_LOCK:
+        _PENDING_BRIEFS.pop(key, None)
+
+
+def _brief_clear() -> None:
+    """Forget every pending question. The suite calls this between tests; a
+    restart does the same thing, because the table is memory only."""
+    with _BRIEF_LOCK:
+        _PENDING_BRIEFS.clear()
+
+
 def _read_all() -> dict:
     try:
         doc = json.loads(_drafts_path().read_text(encoding="utf-8"))
@@ -584,11 +762,20 @@ def _create_brief(text: str) -> Optional[str]:
 def create(brief: str, *, conversation: Optional[str] = None,
            ask: Optional[Callable[[str], str]] = None,
            now: Optional[float] = None) -> dict:
-    """Draft a personality from the owner's own description. Never saves it."""
+    """Draft a personality from the owner's own description. Never saves it.
+
+    With no description it asks for one AND remembers the question in memory
+    for this conversation, so the next line the owner sends is read as the brief
+    by `handle()` instead of dead-ending at the general model. Nothing is
+    written to disk for that question.
+    """
     now = time.time() if now is None else now
+    key = _key(conversation)
     brief = " ".join(str(brief or "").split())[:MAX_BRIEF_CHARS]
     if len(brief) < 3:
+        _brief_put(key, now)
         return _reply(ASK_BRIEF, "personality_create_help")
+    _brief_drop(key)
     ask_fn = ask or _ask
     try:
         raw = ask_fn(_draft_prompt(brief))
@@ -597,7 +784,6 @@ def create(brief: str, *, conversation: Optional[str] = None,
     draft = _clean_draft(_json_object(raw) or {})
     if draft is None:
         return _reply(CANNOT_DRAFT, "personality_create_failed")
-    key = _key(conversation)
     _put(key, draft, brief, now)
     return _reply(_render(draft, opening="Here's the personality I'd save:"),
                   "personality_create")
@@ -744,19 +930,38 @@ def handle(text, *, conversation: Optional[str] = None, temporary: bool = False,
     if not text:
         return None
     now = time.time() if now is None else now
+    key = _key(conversation)
 
     brief = _create_brief(text)
     if brief is not None:
+        # A new "make me a personality ..." sentence replaces any question the
+        # owner did not answer; create() asks (and remembers) again if empty.
+        _brief_drop(key)
         if temporary:
             return _reply(TEMPORARY_REFUSAL, "personality_create_refused")
         return create(brief, conversation=conversation, ask=ask, now=now)
 
-    key = _key(conversation)
-    if _get(key, now) is None:
+    if _get(key, now) is not None:
+        try:
+            answered = _handle_followup(text, key, now, ask)
+        except Exception:                                      # noqa: BLE001
+            _brief_drop(key)
+            return _reply("I could not finish that personality change just now. "
+                          "The draft is unchanged and nothing was saved.",
+                          "personality_refine_failed")
+        if answered is not None:
+            # A whole-sentence answer or an edit is about the draft; it is not
+            # the answer to the brief question, which is now stale.
+            _brief_drop(key)
+            return answered
+
+    # The message after "tell me what it should be like" is the brief - if this
+    # conversation was asked and the line is a description rather than another
+    # question or command. Taking it here means it is used exactly once.
+    if _brief_take(key, now) is None:
         return None
-    try:
-        return _handle_followup(text, key, now, ask)
-    except Exception:                                          # noqa: BLE001
-        return _reply("I could not finish that personality change just now. "
-                      "The draft is unchanged and nothing was saved.",
-                      "personality_refine_failed")
+    if temporary:
+        return _reply(TEMPORARY_REFUSAL, "personality_create_refused")
+    if _is_other_request(text):
+        return None
+    return create(text, conversation=conversation, ask=ask, now=now)

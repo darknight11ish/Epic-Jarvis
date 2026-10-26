@@ -12,8 +12,16 @@ What is proven here, on the real modules and the real chat fast path:
 
   - the sentences: "make me a personality ..." starts a draft on every app
     (the PC answers it), and ordinary sentences are untouched;
-  - the draft: the LOCAL model is asked ONCE, only its four fields are read,
-    they are capped, and the reply the owner sees carries every field;
+  - the draft: the LOCAL model is asked ONCE, on the CHAT lane's own address
+    (`jarvis_hud.OLLAMA_URL`, 11436 here - not Ollama's 11434), and its body
+    NAMES `options.num_ctx` at the context the chat loads the model with
+    (16,384), so a draft cannot reload it at Ollama's small default;
+  - only the four fields are read from the model, they are capped, and the
+    reply the owner sees carries every field;
+  - the brief: a request with no description asks for one line and remembers
+    the question in MEMORY ONLY; the next line in that conversation is the
+    brief and drafts, while the same line in another conversation is not one,
+    a question clears it, and it expires/bounds without touching the disk;
   - refining: "make it shorter" asks the model again, "call it X" and "base it
     on the butler" are done without it, and a model that cannot answer leaves
     the draft exactly as it was;
@@ -31,6 +39,7 @@ What is proven here, on the real modules and the real chat fast path:
 
     python3 test_personality_creator.py
 """
+import contextlib
 import gc
 import json
 import os
@@ -38,6 +47,7 @@ import sys
 import tempfile
 import time
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -113,6 +123,54 @@ def ask_fails(_prompt):
     raise OSError("the local model is asleep")
 
 
+class _Answer:
+    """The part of urllib's response `C._ask` reads, and nothing else."""
+
+    def __init__(self, body=b'{"response": "{}"}'):
+        self.body = body
+
+    def read(self):
+        return self.body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+@contextlib.contextmanager
+def chat_lane(url="http://127.0.0.1:11436"):
+    """A fake `jarvis_hud` naming the lane, with `OLLAMA_URL` agreeing.
+
+    This is the seam the module resolves the lane through, so a test can say
+    where the chat is without a running backend. `url=None` means NOTHING can
+    say: both `jarvis_hud` and `OLLAMA_URL` are removed for the block. Both are
+    restored afterwards, so no other test inherits the fake.
+    """
+    saved_hud = sys.modules.get("jarvis_hud")
+    saved_env = os.environ.get("OLLAMA_URL")
+    if url is None:
+        sys.modules.pop("jarvis_hud", None)
+        os.environ.pop("OLLAMA_URL", None)
+    else:
+        fake = types.ModuleType("jarvis_hud")
+        fake.OLLAMA_URL = url
+        sys.modules["jarvis_hud"] = fake
+        os.environ["OLLAMA_URL"] = url
+    try:
+        yield
+    finally:
+        if saved_hud is None:
+            sys.modules.pop("jarvis_hud", None)
+        else:
+            sys.modules["jarvis_hud"] = saved_hud
+        if saved_env is None:
+            os.environ.pop("OLLAMA_URL", None)
+        else:
+            os.environ["OLLAMA_URL"] = saved_env
+
+
 CREATED_BRIEFS = []
 
 
@@ -157,7 +215,7 @@ def t_ordinary_sentences_are_untouched():
             check(f"untouched: {said!r}", got is None and not calls, got)
 
 
-def t_no_brief_asks_for_one_and_calls_nothing():
+def t_no_brief_asks_for_one_and_the_next_line_is_the_brief():
     with Folder():
         calls = []
         got = C.handle("make me a personality", conversation="conv-aaaaaaaa",
@@ -166,6 +224,68 @@ def t_no_brief_asks_for_one_and_calls_nothing():
               and got["intent"] == "personality_create_help"
               and "one line is enough" in got["reply"], got)
         check("...and calls no model at all", calls == [], calls)
+        check("...and writes nothing to disk for the question",
+              not (Path(os.environ["OPENJARVIS_CONFIG_DIR"]) / C.DRAFT_FILE).exists())
+        got = C.handle("a grumpy mechanic", conversation="conv-aaaaaaaa",
+                       ask=ask_returns(json_reply(), calls))
+        check("the next line in the same conversation is the brief",
+              got is not None and got["intent"] == "personality_create"
+              and "Spanner" in got["reply"], got)
+        check("...and the model was asked once, with that line",
+              len(calls) == 1 and "a grumpy mechanic" in calls[0],
+              calls[-1] if calls else None)
+        check("...and a draft now waits", C.pending("conv-aaaaaaaa"))
+
+
+def t_the_brief_question_is_one_conversation_only():
+    with Folder():
+        calls = []
+        C.handle("make me a personality", conversation="conv-aaaaaaaa",
+                 ask=ask_returns(json_reply(), calls))
+        check("the same line in a DIFFERENT conversation is not the brief",
+              C.handle("a grumpy mechanic", conversation="conv-bbbbbbbb",
+                       ask=ask_returns(json_reply(), calls)) is None)
+        check("...and no model was asked for it", calls == [])
+        got = C.handle("a grumpy mechanic", conversation="conv-aaaaaaaa",
+                       ask=ask_returns(json_reply(), calls))
+        check("...while the conversation that was asked still has its question",
+              got is not None and got["intent"] == "personality_create"
+              and len(calls) == 1, got)
+
+
+def t_a_question_clears_the_unanswered_brief_instead_of_being_drafted():
+    with Folder():
+        calls = []
+        C.handle("make me a personality", conversation="conv-aaaaaaaa",
+                 ask=ask_returns(json_reply(), calls))
+        check("a question is not taken as the brief",
+              C.handle("what's the weather?", conversation="conv-aaaaaaaa",
+                       ask=ask_returns(json_reply(), calls)) is None)
+        check("...and because it cleared the question, the next line is not either",
+              C.handle("a grumpy mechanic", conversation="conv-aaaaaaaa",
+                       ask=ask_returns(json_reply(), calls)) is None and calls == [])
+
+
+def t_the_unanswered_brief_expires_is_bounded_and_is_never_persisted():
+    with Folder():
+        now = 1_000_000.0
+        C.handle("make me a personality", conversation="conv-aaaaaaaa",
+                 ask=ask_returns(json_reply()), now=now)
+        check("an expired question does not catch a later line",
+              C.handle("a grumpy mechanic", conversation="conv-aaaaaaaa",
+                       ask=ask_returns(json_reply()),
+                       now=now + C.BRIEF_TTL_S + 1) is None)
+        for i in range(C.MAX_PENDING_BRIEFS + 3):
+            C.handle("make me a personality", conversation=f"conv-{i:08d}",
+                     ask=ask_returns(json_reply()), now=now + i)
+        check("the memory table never holds more than MAX_PENDING_BRIEFS",
+              len(C._PENDING_BRIEFS) <= C.MAX_PENDING_BRIEFS,
+              len(C._PENDING_BRIEFS))
+        check("...and the newest questions are the ones kept",
+              f"conv-{C.MAX_PENDING_BRIEFS + 2:08d}" in C._PENDING_BRIEFS,
+              sorted(C._PENDING_BRIEFS))
+        check("no unanswered question is ever written to the drafts file",
+              not (Path(os.environ["OPENJARVIS_CONFIG_DIR"]) / C.DRAFT_FILE).exists())
 
 
 def t_the_description_keeps_only_the_owner_s_words():
@@ -441,6 +561,20 @@ def t_a_temporary_chat_is_refused_and_writes_nothing():
         check("...and no draft was written", not C.pending("conv-aaaaaaaa"))
 
 
+def t_a_temporary_turn_never_uses_a_pending_brief():
+    with Folder():
+        calls = []
+        C.handle("make me a personality", conversation="conv-aaaaaaaa",
+                 ask=ask_returns(json_reply(), calls))
+        got = C.handle("a grumpy mechanic", conversation="conv-aaaaaaaa",
+                       temporary=True, ask=ask_returns(json_reply(), calls))
+        check("a temporary turn refuses the brief in plain words",
+              got is not None and got["intent"] == "personality_create_refused"
+              and "temporary" in got["reply"].lower(), got)
+        check("...asks no model and writes no draft",
+              calls == [] and not C.pending("conv-aaaaaaaa"))
+
+
 def t_two_conversations_never_see_each_other_s_draft():
     with Folder():
         _make(conversation="conv-aaaaaaaa")
@@ -479,21 +613,65 @@ def t_the_draft_expires_and_the_file_is_bounded():
 # --------------------------------------------------------------------------
 
 def t_the_model_call_can_only_go_to_this_pc():
-    check("a remote URL is replaced by loopback",
-          C._loopback_url("http://example.com:11434") == C.DEFAULT_URL,
-          C._loopback_url("http://example.com:11434"))
-    check("a loopback URL is kept",
-          C._loopback_url("http://localhost:11434").startswith("http://localhost"))
-    saved = os.environ.get("OLLAMA_HOST")
-    try:
-        os.environ["OLLAMA_HOST"] = "http://10.0.0.5:11434"
-        check("OLLAMA_HOST pointing at another machine is NOT used",
+    with chat_lane(None):
+        check("with nothing saying, the loopback default is used",
               C._loopback_url() == C.DEFAULT_URL, C._loopback_url())
-    finally:
-        if saved is None:
-            os.environ.pop("OLLAMA_HOST", None)
-        else:
-            os.environ["OLLAMA_HOST"] = saved
+        check("an explicit remote URL is replaced by loopback",
+              C._loopback_url("http://example.com:11434") == C.DEFAULT_URL,
+              C._loopback_url("http://example.com:11434"))
+        check("an explicit loopback URL is kept",
+              C._loopback_url("http://localhost:11434").startswith("http://localhost"))
+    with chat_lane("http://127.0.0.1:11436"):
+        check("the chat lane's loopback address is used",
+              C._loopback_url() == "http://127.0.0.1:11436", C._loopback_url())
+        saved = os.environ.get("OLLAMA_HOST")
+        try:
+            os.environ["OLLAMA_HOST"] = "http://127.0.0.1:11435"
+            check("OLLAMA_HOST does not choose the lane (it is unset on the PC)",
+                  C._loopback_url() == "http://127.0.0.1:11436", C._loopback_url())
+        finally:
+            if saved is None:
+                os.environ.pop("OLLAMA_HOST", None)
+            else:
+                os.environ["OLLAMA_HOST"] = saved
+    with chat_lane("http://example.com:11436"):
+        check("a chat lane on another machine is replaced by loopback",
+              C._loopback_url() == C.DEFAULT_URL, C._loopback_url())
+
+
+def t_the_request_goes_to_the_chat_lane_and_names_the_chat_context():
+    """The two things that made the draft ask 11434 at Ollama's 2048.
+
+    A fake `urlopen` records the URL and the parsed JSON body, so the check is
+    on what would really be sent - a call that merely raised could not catch a
+    missing `num_ctx` or the wrong port.
+    """
+    with chat_lane("http://127.0.0.1:11436"):
+        seen = {}
+        real = C.urllib.request.urlopen
+
+        def fake(request, timeout=None):
+            seen["url"] = request.full_url
+            seen["body"] = json.loads(request.data.decode("utf-8"))
+            return _Answer()
+
+        C.urllib.request.urlopen = fake
+        try:
+            C._ask("hi")
+        finally:
+            C.urllib.request.urlopen = real
+        check("the request goes to the chat lane, not Ollama's 11434",
+              seen.get("url") == "http://127.0.0.1:11436/api/generate",
+              seen.get("url"))
+        options = (seen.get("body") or {}).get("options") or {}
+        check("the body NAMES options.num_ctx (an unnamed one is the 2048 accident)",
+              "num_ctx" in options, seen.get("body"))
+        check("...at exactly the context the chat loads the model with",
+              options.get("num_ctx") == 16384 == C._num_ctx(),
+              options.get("num_ctx"))
+        check("...and the model is still named",
+              (seen.get("body") or {}).get("model") == C._model_name(),
+              seen.get("body"))
 
 
 def t_a_dead_model_never_raises():
@@ -584,6 +762,9 @@ def t_the_module_adds_no_route():
 def main():
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
+            # The unanswered-brief table is process memory, so one test could
+            # otherwise answer the next test's line. A restart clears it too.
+            C._brief_clear()
             try:
                 fn()
             except Exception:
