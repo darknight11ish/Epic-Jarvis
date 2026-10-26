@@ -2386,6 +2386,110 @@ def t_cli_rollback_restores_from_a_backup_folder():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   private-chat.patch: the multi-region HUD patch (2026-10-26)
+#
+# The patch that unblocked tonight's live deploy. It changes `jarvis_hud.py` in
+# 13 disjoint places, so it cannot be carried by one anchor insert: DELTA_TABLE
+# says "hunks": True and the tool replaces each hunk's pre-image block with its
+# post-image block. The published base HUD is the patch's pre-image here (the
+# same bytes the live HUD holds at those 13 places - checked read-only against
+# the real live file), so these tests use a temp fake live tree and never touch
+# the real one.
+# --------------------------------------------------------------------------
+
+PRIVATE_CHAT_BASE_HUD = REPO / "jarvis-backend" / "jarvis_hud.py"
+
+
+def hermetically_private_chat_live(root: Path) -> Path:
+    """A temp live folder whose HUD is the published base (the patch's pre-image)."""
+    live = root / "private-chat-live"
+    live.mkdir(parents=True, exist_ok=True)
+    write(live / "jarvis_hud.py", PRIVATE_CHAT_BASE_HUD.read_text(encoding="utf-8"))
+    for name in ("jarvis_gate.py", "jarvis_extract.py", "jarvis_models.py",
+                 "jarvis_skills.py"):
+        write(live / name, "# a live patched base file\n")
+    write(live / "_jarvis-state.json", json.dumps({"patchList": []}))
+    return live
+
+
+def show_private_chat(repo, ref, repo_path):
+    if Path(repo_path).name == "private-chat.patch":
+        return patch_text("private-chat.patch")
+    return b""
+
+
+def t_private_chat_delta_is_carried_as_its_patch_hunks():
+    root = tmpdir()
+    try:
+        live = hermetically_private_chat_live(root)
+        before = (live / "jarvis_hud.py").read_text(encoding="utf-8")
+        hunks = R.patch_hunks(patch_text("private-chat.patch").decode("utf-8"),
+                              "jarvis_hud.py")
+        check("the private-chat patch parses into its 13 HUD hunks",
+              len(hunks) == 13, len(hunks))
+        bad = [(i, before.count("\n".join(h["old"])))
+               for i, h in enumerate(hunks, 1) if before.count("\n".join(h["old"])) != 1]
+        check("every pre-image block appears exactly once in the base HUD",
+              bad == [], bad)
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["private-chat.patch"], show=show_private_chat, repo=REPO,
+            state_patches=[])
+        check("the private-chat HUD delta plans cleanly",
+              refusals == [] and list(staged) == ["jarvis_hud.py"],
+              (refusals, sorted(staged)))
+        text = staged.get("jarvis_hud.py", "")
+        check("... all 13 post-image blocks are in the staged HUD",
+              all("\n".join(h["new"]) in text for h in hunks))
+        check("... every pre-image block is gone (each replaced exactly once)",
+              all("\n".join(h["old"]) not in text for h in hunks))
+        check("... the staged HUD compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        check("... the action names the patch and the hunk count",
+              len(deltas) == 1 and deltas[0].patch == "private-chat.patch"
+              and "13 hunk" in deltas[0].anchor, deltas)
+        check("... and the live file was never touched",
+              (live / "jarvis_hud.py").read_text(encoding="utf-8") == before)
+        check("... and no token or secret text is printed",
+              TOKEN not in text and all(TOKEN not in str(r) for r in refusals))
+        write(live / "jarvis_hud.py", text)         # pretend the deploy applied it
+        again, staged2, refusals2 = R.plan_deltas(
+            live, ["private-chat.patch"], show=show_private_chat, repo=REPO,
+            state_patches=[])
+        check("a second plan sees the whole private-chat delta as ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"], (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_private_chat_hunk_that_shifted_is_refused():
+    root = tmpdir()
+    try:
+        live = hermetically_private_chat_live(root)
+        hud = (live / "jarvis_hud.py").read_text(encoding="utf-8")
+        hunks = R.patch_hunks(patch_text("private-chat.patch").decode("utf-8"),
+                              "jarvis_hud.py")
+        shifted = "\n".join(hunks[1]["old"])
+        moved = hud.replace(shifted, "\n".join(["# a shifted pre-image line"]
+                                               + shifted.splitlines()[1:]), 1)
+        check("the fixture really shifted one hunk's pre-image block",
+              moved != hud and moved.count(shifted) == 0)
+        write(live / "jarvis_hud.py", moved)
+        before = (live / "jarvis_hud.py").read_bytes()
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["private-chat.patch"], show=show_private_chat, repo=REPO,
+            state_patches=[])
+        check("a private-chat hunk that no longer matches is refused, not guessed",
+              len(refusals) == 1 and "expected exactly 1" in refusals[0]
+              and "private-chat.patch" in refusals[0], refusals)
+        check("... and nothing is staged", staged == {}, staged)
+        check("... and the live file is untouched",
+              (live / "jarvis_hud.py").read_bytes() == before)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -2399,6 +2503,8 @@ def main():
                t_the_final_guard_deltas_reach_the_live_gate,
                t_a_duplicated_final_old_block_is_refused,
                t_the_real_live_gate_gets_the_final_guard_read_only,
+               t_private_chat_delta_is_carried_as_its_patch_hunks,
+               t_a_private_chat_hunk_that_shifted_is_refused,
                t_the_list_parser_refuses_rather_than_reading_nothing,
                t_the_lists_are_read_from_the_ref_not_the_working_tree,
                t_a_patch_parses_into_per_file_added_lines,

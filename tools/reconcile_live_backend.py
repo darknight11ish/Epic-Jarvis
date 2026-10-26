@@ -321,6 +321,9 @@ GATE_GUARDS_CHECK_ANCHOR = "def check(action: str,"
 #:   anchor: the exact line the patch's added lines are inserted BEFORE (must appear once)
 #:   file:   a literal block (a fix with no `.patch`), inserted at `anchor`
 #:   replace_file: a literal block that REPLACES the named old block (must appear once)
+#:   hunks:  True = carry the patch's OWN hunks (a patch that changes several
+#:           disjoint regions of one file); each hunk's pre-image block is
+#:           replaced by its post-image block, in file order.
 #: A patch touching a patched file that is absent and has no entry here is refused, not
 #: guessed. Adding a new HUD patch is one small entry, not new code.
 DELTA_TABLE = {
@@ -531,6 +534,36 @@ DELTA_TABLE = {
             "probes": ("if path in STATIC_ASSETS:",),
             "anchor": HUD_STATIC_ROUTE_ANCHOR,
             "file": HUD_STATIC_ROUTE_FILE,
+        },
+    },
+    # private-chat.patch (2026-10-25, the architect's H10 ruling; merged in #836).
+    # The one patch since no-expiry-cards.patch that changes `jarvis_hud.py` in
+    # MANY disjoint places - 13 hunks: the private flag at the top of the turn
+    # and the device sighting hold, the tool list and budget, `answer_turn`'s
+    # `private=` argument, the route header (twice), the speed/route-audit/
+    # feedback/sources writers, the agent's `gate_check`, the chat-log call, the
+    # `_CHAT_CLIENT_FIELDS` tuple, and the helper functions plus `_temporary_chat`.
+    # One anchor insert cannot carry that, so the entry says `"hunks": True` and
+    # the patch's own hunks are the regions (plan_deltas replaces each pre-image
+    # block with its post-image block, in file order). The probes are post-image
+    # lines from several different regions, so only a FULLY applied file counts
+    # as present; each hunk's own added lines let a partially deployed file
+    # finish without replacing a region twice. A hunk whose pre-image block is
+    # missing or not exactly once refuses the whole file rather than guessing.
+    # Measured read-only on 2026-10-26: all 13 pre-image blocks appear exactly
+    # once in the owner's live `jarvis_hud.py`, and once in the published base.
+    "private-chat.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                "_private = _private_chat(body)",
+                "_private_turn(cfg, body)",
+                'route_header["private"] = True',
+                'def _private_gate(action, detail, prompt=""):',
+                '_persist_ok("route_audit", body)',
+                '_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", '
+                '"interrupted", "temporary", "private", "live", "screen")',
+            ),
+            "hunks": True,
         },
     },
 }
@@ -845,6 +878,57 @@ def parse_patch_files(patch_text: str) -> dict:
     return files
 
 
+_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def patch_hunks(patch_text: str, target: str) -> list:
+    """[{old, new, added}] for ONE file's hunks, in file order. Reads only.
+
+    Each hunk carries its whole pre-image block (`old`) and its whole post-image
+    block (`new`): context lines are in both, so replacing `old` with `new` in a
+    file that holds the pre-image leaves every other byte untouched. A patch
+    that changes several disjoint regions of one file cannot be carried by one
+    anchor insert - the no-expiry-cards.patch regions solve that with literal
+    block files, and a patch that is IN the stack can carry its own blocks
+    instead: a DELTA_TABLE entry says `"hunks": True` and `plan_deltas` replaces
+    each hunk's pre-image block with its post-image block. `added` is the hunk's
+    own `+` lines, used to recognise a region that is already applied on a
+    partially deployed file.
+    """
+    hunks = []
+    current = None
+    in_hunk = False
+    for line in str(patch_text).splitlines():
+        header = _FILE_HEADER.match(line)
+        if header:
+            current = header.group(1)
+            in_hunk = False
+            continue
+        if current != target:
+            continue
+        if _HUNK_HEADER.match(line):
+            hunks.append({"old": [], "new": [], "added": []})
+            in_hunk = True
+            continue
+        if not in_hunk:
+            continue
+        if line.startswith("\\"):
+            continue                      # "\ No newline at end of file"
+        if not line:                      # a blank context line whose space was stripped
+            prefix, body = " ", ""
+        else:
+            prefix, body = line[0], line[1:]
+        if prefix == " ":
+            hunks[-1]["old"].append(body)
+            hunks[-1]["new"].append(body)
+        elif prefix == "-":
+            hunks[-1]["old"].append(body)
+        elif prefix == "+":
+            hunks[-1]["new"].append(body)
+            hunks[-1]["added"].append(body)
+    return hunks
+
+
 def probe_candidates(added: Iterable[str], limit: int = 3) -> tuple:
     """The most distinctive added lines of one patch/file, best first.
 
@@ -1021,6 +1105,55 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
                     staged[target] = text
                     deltas.append(DeltaAction(patch, target, "insert", (),
                                               f"{len(regions)} region(s)"))
+                continue
+            if entry.get("hunks"):
+                # A patch that changes several disjoint regions of one file: its
+                # own hunks ARE the regions. Each hunk's whole pre-image block is
+                # replaced by its post-image block, in order; a hunk whose own
+                # added lines are already in the file is skipped, so a second
+                # deploy is clean and a partially deployed file finishes. Any
+                # hunk whose pre-image block is missing or not exactly once
+                # refuses the whole file - a shifted live HUD is never guessed at.
+                hunks = patch_hunks(raw, target)
+                if not hunks:
+                    refusals.append(
+                        f"{patch} -> {target}: its entry says hunks, but the patch "
+                        f"has no hunk for this file; refusing to guess.")
+                    continue
+                region_error = ""
+                changed = False
+                for index, hunk in enumerate(hunks, 1):
+                    old = "\n".join(hunk["old"])
+                    new = "\n".join(hunk["new"])
+                    added = [a for a in hunk["added"] if str(a).strip()]
+                    # Already applied: every one of this hunk's OWN added lines is
+                    # in the file AND its pre-image block is gone. Both halves are
+                    # needed: a removal can re-add a line at a different indentation
+                    # (feedback's `record_turn` call), so an added line may also
+                    # appear in the pre-image - only a gone pre-image block proves
+                    # the hunk was applied.
+                    if added and all(a in text for a in added) and old not in text:
+                        continue
+                    if not old or old == new:
+                        region_error = (f"{patch} -> {target}: hunk {index} has no "
+                                        f"pre-image block to replace; refusing to guess.")
+                        break
+                    count = text.count(old)
+                    if count != 1:
+                        region_error = (
+                            f"{patch} -> {target}: hunk {index}'s pre-image block "
+                            f"appears {count} time(s) in the live file; expected "
+                            f"exactly 1. Refusing rather than guessing.")
+                        break
+                    text = text.replace(old, new, 1)
+                    changed = True
+                if region_error:
+                    refusals.append(region_error)
+                    continue
+                if changed and text != (staged.get(target) or live_text[target]):
+                    staged[target] = text
+                    deltas.append(DeltaAction(patch, target, "insert", (),
+                                              f"{len(hunks)} hunk(s)"))
                 continue
             anchor = entry.get("anchor") or ""
             if not anchor:
