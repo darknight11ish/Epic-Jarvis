@@ -5661,13 +5661,13 @@ if ($fail.Count -gt 0) {
         $names = @($skipped) + @($skippedVisible)
         $why = @()
         if ($skippedVisible.Count -gt 0) {
-            $why += "skipped on purpose, because each one starts a real, VISIBLE browser window: $($skippedVisible -join ', '); set $visibleBrowserEnv=1 to run them"
+            $why += "Skipped on purpose, because each one starts a real, VISIBLE browser window: $($skippedVisible -join ', '); set $visibleBrowserEnv=1 to run them"
         }
         if ($skipped.Count -gt 0) {
             if ($skippedVisible.Count -gt 0) {
-                $why += "the other skips usually mean a backend file, a Python package or a machine feature the suite needs is not there"
+                $why += "The other skips usually mean a backend file, a Python package or a machine feature the suite needs is not there"
             } else {
-                $why += "a skip here usually means a backend file, a Python package or a machine feature the suite needs is not there"
+                $why += "A skip here usually means a backend file, a Python package or a machine feature the suite needs is not there"
             }
         }
         Add-Note "Patched, but $($skippedTotal) of the $pass suites could not fully run, so this is NOT fully proven: $($names -join ', '). $($why -join '. ')."
