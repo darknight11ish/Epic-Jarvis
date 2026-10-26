@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
 """Check every claim in docs/CLAIMS.tsv against the code, in both directions.
 
-    python3 tools/check_claims.py [--list] [-v] [register.tsv]
+    python3 tools/check_claims.py [--list] [-v] [--use-env-backend] [register.tsv]
 
 The register is `docs/CLAIMS.tsv` unless a path is given; the argument is how
 `backend/test_claims.py` points this check at one broken row at a time.
+
+THE MACHINE'S OWN `JARVIS_BACKEND` IS IGNORED (2026-10-25), exactly as
+`backend/run_suites.py:881-884` ignores it. That variable is set for the owner's
+Windows account on this PC and names the LIVE backend folder, and
+`backend/_where.py` puts that folder first on `sys.path` - so a `test:` row used
+to run its suite against live code without anybody typing anything. On
+2026-10-25 that made this checker report claim MED-01 as no longer holding
+(`backend/test_medical_advocate.py exited 1: AssertionError:
+MedicalStoreUnavailable not raised`) against a suite that is 95/95 green with the
+variable removed: a red register, and a `main` that was never red. A check run is
+about THIS CHECKOUT unless a person says otherwise. So each suite is started with
+the variable removed (`_suite_env`), one line names the value that was ignored,
+and `--use-env-backend` passes it through on purpose. That environment is passed
+to `subprocess.run(env=...)` explicitly, so nothing inherited from a parent
+process can put the value back.
 
 WHY THIS EXISTS. This project writes down what it knows in prose - a decision
 log, audit reports, design docs - and for a long time nothing checked any of
@@ -118,6 +133,8 @@ checked.
 """
 from __future__ import annotations
 
+import argparse
+import os
 import re
 import subprocess
 import sys
@@ -153,6 +170,12 @@ MAX_BYTES = 8 * 1024 * 1024
 #: register names takes about 2 seconds; the ceiling is for a hang, not for a
 #: slow machine.
 TEST_TIMEOUT = 600
+
+#: The explicit opt-in to run each `test:` row's suite against the backend folder
+#: `JARVIS_BACKEND` names - the owner's LIVE folder on this PC. The same flag,
+#: spelled the same way, as `backend/run_suites.py:830`: one word for one thing,
+#: so nobody has to learn a second name for the choice they already made once.
+USE_ENV_BACKEND_FLAG = "--use-env-backend"
 
 #: How the shipped suites print a skip. Three shapes are real in this tree
 #: (measured 2026-10-24): `skip  <why>` (test_api_doc, test_media_index,
@@ -553,22 +576,61 @@ def exception_lines(text: str, limit: int = 2) -> list[str]:
     return found[-limit:]
 
 
-def check_test(suite: str):
+def _suite_env(use_env_backend: bool = False) -> dict[str, str]:
+    """The environment every `test:` row's suite is started with.
+
+    THE DEFAULT IS HERMETIC, the contract `backend/run_suites.py:881-884` holds
+    and this check did not. `JARVIS_BACKEND` is set for the owner's Windows
+    account on this PC, pointing at the LIVE backend folder, and
+    `backend/_where.py` puts that folder first on `sys.path` - so a `test:` row
+    used to run its suite against live code without anyone typing anything. On
+    2026-10-25 that reported claim MED-01 as no longer holding while the suite
+    is 95/95 green against this checkout. So the ambient value is popped from
+    the copy this returns and NEVER reaches a suite; `--use-env-backend` puts it
+    back on purpose.
+
+    A line says which value was ignored, because silently ignoring a setting is
+    its own surprise (the same sentence `run_suites.py` prints, adapted to this
+    checker). Nothing here mutates `os.environ`: the caller passes the result to
+    `subprocess.run(env=...)` for every suite, so a parent process cannot put the
+    value back behind this function's own back.
+    """
+    env = dict(os.environ)
+    if use_env_backend:
+        return env
+    ambient = env.pop("JARVIS_BACKEND", None)
+    if ambient:
+        print(f"[check_claims] Note: ignoring ambient JARVIS_BACKEND=\"{ambient}\" "
+              f"(running every test: row against this checkout; pass "
+              f"{USE_ENV_BACKEND_FLAG} to test the live folder)")
+    return env
+
+
+def check_test(suite: str, env: dict[str, str] | None = None):
     """Run one suite. Exiting 0 is necessary, never sufficient: a suite that
     printed a skip about the code (not about this machine) did not run that
     check, so it did not prove the row. See A SKIP IS NOT PROOF in the module
-    docstring."""
+    docstring.
+
+    `env` is the environment to start the suite with - `main` builds it ONCE
+    through `_suite_env`, so the note about the ignored ambient value is printed
+    once rather than once per row. Nothing is inherited implicitly: `env=` is
+    always passed, so the ambient `JARVIS_BACKEND` cannot reach a suite even
+    from a parent process.
+    """
     candidates = [REPO / suite, REPO / "backend" / suite]
     if not suite.endswith(".py"):
         candidates = [REPO / "backend" / (suite + ".py")] + candidates
     chosen = next((p for p in candidates if p.is_file()), None)
     if chosen is None:
         return False, f"no suite file called {suite!r}"
+    if env is None:
+        env = _suite_env()
     try:
         done = subprocess.run(
             [sys.executable, str(chosen)], cwd=str(REPO),
             capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=TEST_TIMEOUT)
+            errors="replace", timeout=TEST_TIMEOUT, env=env)
     except subprocess.TimeoutExpired:
         return False, f"{suite} did not finish within {TEST_TIMEOUT}s"
     except OSError as err:
@@ -622,7 +684,7 @@ def parse_check(check: str):
     return kind, (doc.strip(), path.strip(), value), ""
 
 
-def run_row(row: dict):
+def run_row(row: dict, env: dict[str, str] | None = None):
     """(passed, detail) - or (None, reason) for an unverifiable row."""
     kind, args, why = parse_check(row["check"])
     if why:
@@ -636,7 +698,7 @@ def run_row(row: dict):
     if kind == "absent":
         return check_grep(args[0], args[1], False)
     if kind == "test":
-        return check_test(*args)
+        return check_test(*args, env=env)
     return check_number(*args)
 
 
@@ -705,18 +767,56 @@ def read_register(register: Path = REGISTER):
     return rows, problems
 
 
-def main() -> int:
-    listing = "--list" in sys.argv
-    verbose = listing or "-v" in sys.argv
+def _parser() -> argparse.ArgumentParser:
+    """The command line, in one place.
+
+    A function rather than a few lines inside `main` so a test can ask the
+    checker's OWN parser about `--use-env-backend` without running a single
+    suite: the flag existing and the flag working are two different claims, and
+    `backend/test_claims.py` proves both.
+    """
+    parser = argparse.ArgumentParser(
+        prog="check_claims.py",
+        description="Check every claim in docs/CLAIMS.tsv against the code, in "
+                    "both directions.")
+    parser.add_argument("--list", action="store_true", dest="listing",
+                        help="print every row that was checked, so 'nothing is "
+                             "wrong' can be told apart from 'nothing was looked "
+                             "at'")
+    parser.add_argument("-v", action="store_true", dest="verbose",
+                        help="print one line per row (implied by --list)")
+    parser.add_argument(USE_ENV_BACKEND_FLAG, action="store_true",
+                        dest="use_env_backend",
+                        help="run each test: row's suite against the backend "
+                             "folder JARVIS_BACKEND names - the LIVE folder - "
+                             "instead of this checkout. Without it that ambient "
+                             "value is ignored, the way backend/run_suites.py "
+                             "ignores it")
     # An optional path, defaulting to this repository's register. It exists so
     # backend/test_claims.py can point the check at a temporary file carrying
     # one broken row of each kind and prove both directions really do fail. A
     # path that is not there is a finding, never a quiet fallback to the real
     # register - that would be a green run that checked something else.
-    given = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
-    register = Path(given[0]) if given else REGISTER
+    parser.add_argument("register", nargs="?", default=None,
+                        help="the register to check (default: docs/CLAIMS.tsv)")
+    return parser
+
+
+def main() -> int:
+    args = _parser().parse_args()
+    listing = args.listing
+    verbose = listing or args.verbose
+    register = Path(args.register) if args.register else REGISTER
     if not register.is_absolute():
         register = (Path.cwd() / register).resolve()
+
+    # ONE environment for every `test:` row, built before any suite runs and
+    # used only through `subprocess.run(env=...)`. The ambient `JARVIS_BACKEND`
+    # is gone unless `--use-env-backend` asked for it, and one line says so when
+    # it was there - the contract `backend/run_suites.py:881-884` has held since
+    # 2026-10-21, which this check did not (2026-10-25). Built here, once, so
+    # the note is printed once rather than once per row.
+    suite_env = _suite_env(args.use_env_backend)
 
     rows, problems = read_register(register)
     if not rows and not problems:
@@ -744,7 +844,7 @@ def main() -> int:
                 print(f"  {row['id']:<7} unverifiable  {row['claim']}")
                 print(f"          cannot be checked: {row['check']}")
             continue
-        passed, detail = run_row(row)
+        passed, detail = run_row(row, env=suite_env)
         if passed is None:
             unclear.append((row, detail))
             if listing:

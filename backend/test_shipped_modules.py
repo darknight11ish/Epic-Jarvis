@@ -130,6 +130,11 @@ INDIRECT = {
               "time-zone data of its own (jarvis_calendar.py's event times)",
     "sherpa-onnx-core": "sherpa-onnx loads it (its native library); named so the "
                         "hash-locked requirements.lock holds it on every platform",
+    "filelock": "huggingface-hub uses it to stop two downloads writing the same file; "
+                "no shipped module imports it by name, but naming it in requirements.txt "
+                "makes the 4.2.1 security floor (three advisories fixed) part of what the "
+                "lock must satisfy, instead of a version a later recompile could move back "
+                "(2026-10-25)",
     # The six pywinrt packages jarvis_ocr.py needs (2026-09-29). They are imported
     # as winrt.windows.<namespace>, all of which the one name "winrt" stands for
     # above; pywinrt 3.x installs only the namespaces named, so each is listed.
