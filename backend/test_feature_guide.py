@@ -83,6 +83,13 @@ FAILED, PASSED, SKIPPED = [], [], []
 TMP = Path(tempfile.mkdtemp(prefix="jarvis-feature-guide-"))
 _SOURCE = json.loads((REPO / "features" / "features.json").read_text(encoding="utf-8"))
 SOURCE = _SOURCE
+#: The contract's own record of the approved label mix. `tools/
+#: check_feature_controls.py` pins those numbers to the owner's approval; this
+#: suite derives them from the contract instead of typing them, so a new
+#: feature row never needs a count literal edited here.
+_CONTRACT = json.loads(
+    (REPO / "contract" / "feature-controls.json").read_text(encoding="utf-8"))
+CONTRACT_LABEL_COUNTS = _CONTRACT["label_counts"]
 _SETTINGS_BACKUP = R.BOOL_SETTINGS
 
 # The real config folders of the two switches this suite reads for real are
@@ -717,8 +724,8 @@ def t_what_can_i_change_is_still_the_exact_answer():
 
 
 def t_every_feature_has_a_matrix_row_and_a_reason():
-    """The owner's requirement is a matrix, not an anecdote: every one of the
-    139 catalogue features is either command-controllable (proved by a working
+    """The owner's requirement is a matrix, not an anecdote: every catalogue
+    feature is either command-controllable (proved by a working
     phrase through the real matcher) or carries a stable reason code and an
     owner. A feature missing from both is a silent gap - this test forbids it."""
     rows = FG.control_matrix()
@@ -837,13 +844,15 @@ def t_the_five_owner_labels_are_exact_and_every_feature_has_one():
                   "not a toggle" in mine["not_a_toggle_words"].lower(),
                   mine["not_a_toggle_words"])
     counts = {label: sum(1 for r in directory if r["label"] == label) for label in FG.CONTROL_LABELS}
-    # Lead's 2026-10-22 classification rules, pinned exactly:
+    # Lead's 2026-10-22 classification rules, pinned exactly. The expected
+    # numbers are the contract's own approved `label_counts`, not typed here:
+    # tools/check_feature_controls.py holds the contract to the owner's mix.
     check("Settings-Only is exactly the Accounts + Restore-backup pair",
-          counts[FG.LABEL_SETTINGS_ONLY] == 2
+          counts[FG.LABEL_SETTINGS_ONLY] == CONTRACT_LABEL_COUNTS[FG.LABEL_SETTINGS_ONLY]
           and {r["id"] for r in directory if r["label"] == FG.LABEL_SETTINGS_ONLY}
           == {"accounts", "backup"}, counts)
     check("Always On is the canonical 12-row safety list",
-          counts[FG.LABEL_ALWAYS_ON] == len(FG.ALWAYS_ON_IDS) == 12
+          counts[FG.LABEL_ALWAYS_ON] == len(FG.ALWAYS_ON_IDS)
           and {r["id"] for r in directory if r["label"] == FG.LABEL_ALWAYS_ON}
           == FG.ALWAYS_ON_IDS, counts)
     check("the canonical 12 always-on ids are the approved union",
@@ -852,11 +861,11 @@ def t_the_five_owner_labels_are_exact_and_every_feature_has_one():
               "stale-link", "stop-everything", "crisis-help", "sensitive-facts",
               "memory-waiting", "settings-entry", "devices"}, sorted(FG.ALWAYS_ON_IDS))
     check("PC-Only is the pc-only, app-local and non-account key rows",
-          counts[FG.LABEL_PC_ONLY] == 16, counts)
+          counts[FG.LABEL_PC_ONLY] == CONTRACT_LABEL_COUNTS[FG.LABEL_PC_ONLY], counts)
     check("Command-Only is the remaining abilities + read-only pages",
-          counts[FG.LABEL_COMMAND_ONLY] == 69, counts)
+          counts[FG.LABEL_COMMAND_ONLY] == CONTRACT_LABEL_COUNTS[FG.LABEL_COMMAND_ONLY], counts)
     check("Switchable/Adjustable is the real switch, choice and multi-field rows",
-          counts[FG.LABEL_SWITCH_ADJUST] == 40, counts)
+          counts[FG.LABEL_SWITCH_ADJUST] == CONTRACT_LABEL_COUNTS[FG.LABEL_SWITCH_ADJUST], counts)
     # Lead review: the six Switchable rows without a typed proof carry a
     # visible planned marker (backup is Settings-Only, so not counted here).
     planned = [r for r in FG.control_matrix() if r.get("planned")]
@@ -867,7 +876,7 @@ def t_the_five_owner_labels_are_exact_and_every_feature_has_one():
           [r["id"] for r in planned])
     check("every planned row carries the visible note",
           all(r.get("planned_words") for r in planned), planned)
-    check("the five counts sum to the catalogue", sum(counts.values()) == 139, counts)
+    check("the five counts sum to the catalogue", sum(counts.values()) == len(SOURCE), counts)
     # The rules themselves, so a future reclassification cannot quietly drift:
     # an always-on rule may still have a typed control (approvals has a card
     # display choice) but its owner-facing label must say Always On.

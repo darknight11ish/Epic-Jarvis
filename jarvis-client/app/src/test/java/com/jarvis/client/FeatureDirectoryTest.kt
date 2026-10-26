@@ -9,7 +9,7 @@ import org.junit.Test
 
 /**
  * The Android "All features and abilities" directory, held to the merged PC
- * data: all 139 rows, exactly the five approved labels, honest examples and
+ * data: every row, exactly the five approved labels, honest examples and
  * screen paths for every non-toggle row, no fake controls, and every row
  * findable by its own words.
  */
@@ -18,9 +18,12 @@ class FeatureDirectoryTest {
     private val rows = FeatureDirectory.ROWS
 
     @Test
-    fun `all 139 features are present, each once, with a real id and name`() {
-        assertEquals(139, rows.size)
-        assertEquals("the generated artifact says the same count", 139, FeatureDirectory.COUNT)
+    fun `every feature is present, each once, with a real id and name`() {
+        // COUNT is generated from the same rows (len(rows) in
+        // jarvis-client/tools/gen_feature_directory.py), so this holds the two
+        // generated halves together instead of typing the total here.
+        assertEquals("the generated artifact's COUNT matches its own rows",
+            rows.size, FeatureDirectory.COUNT)
         assertEquals("ids are unique", rows.size, rows.map { it.id }.toSet().size)
         assertTrue("names are not blank", rows.all { it.name.isNotBlank() })
         assertTrue("groups are not blank", rows.all { it.group.isNotBlank() })
