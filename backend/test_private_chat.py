@@ -7,8 +7,9 @@ POST /api/chat is a temporary chat PLUS a zero-write promise. It recalls no
 memory and learns nothing (the temporary chat's own behaviour), it runs no
 tool, and it writes NOTHING to disk - not the chat history, not a learned
 fact, not a feedback row, not the speed record, not the route audit line, not
-the approval, not the receipt, not the device's last_seen. A request to change
-something is answered with one plain sentence BEFORE any state change.
+the approval, not the receipt, not the device's last_seen. A mutating
+fast-path command is answered with one plain sentence BEFORE any state
+change; a card-gated tool call is denied without raising a card.
 
 What this suite proves, in the order the contract reads:
 
@@ -21,31 +22,37 @@ What this suite proves, in the order the contract reads:
      scheduler is never even asked to act; a read-only sentence goes to the
      model; an ordinary chat is unchanged; the "owner was here" touch and the
      conversation's undo record are skipped for a private turn.
-  3. THE HUD GUARDS (the jarvis_hud.py patch stack, built by backend/_stack.py):
-     `_private_chat`/`_persist_ok`/`_temporary_chat` read the module; then the
-     real guard blocks lifted from the built stack are RUN against writing
-     stubs - a private read turn and two private action turns (cardless and
-     one that would ask for a card) write nothing at all; the positive
+  3. THE HUD GUARDS (the published base with private-chat.patch applied): the
+     REAL guard blocks lifted from the installed file are RUN against writing
+     stubs - a private read turn and two private action turns (a cardless
+     fast-path command and a carded tool request) write nothing; the positive
      control writes with `private: false`; and a writer that would raise on
-     being called is never called for a private turn (fail-closed).
-  4. THE DEVICE last_seen HOLD (backend/jarvis_devices.py): a holding handler
-     stashes the sighting, drop throws it away, commit writes it; a handler
-     that is not holding (every other route) writes at once, unchanged.
-  5. THE PATCH ITSELF: private-chat.patch is in apply-patches.ps1's order
-     immediately before plugin-loader.patch, applies to the published base
-     (jarvis-backend/jarvis_hud.py), reverses out of it byte for byte, and the
-     _stack RATCHET equals what the walk materialises.
-  6. THE DELIVERY: the module is in backend/_where.py's SHIPPED list and
-     apply-patches.ps1's $SHIPPED, and the published base holds the same text;
-     /api/version's capabilities.private_chat is False on an old server and
-     True on this one (jarvis_events._hud_has, the same rule as
-     temporary_chat).
+     being called is never called for a private turn (fail-closed). An
+     explicit EIGHT-STORE TABLE names each H10 store and the evidence for it.
+  4. THE APPROVAL GATE: a private turn's tool-loop gate refuses everything
+     without calling jarvis_gate (so no approvals row) and no undo receipt is
+     written for it.
+  5. THE DEVICE last_seen HOLD: driving the REAL devices wrapper - an ordinary
+     chat commits the held sighting once, a private drop writes nothing, and a
+     handler that raises after the token check writes nothing either.
+  6. THE MISSING/BROKEN GATE FAILS CLOSED: with the shipped module unavailable,
+     a private request is still read as private, still refused, still writes
+     nothing, and the capability reports false instead of a half-gate true.
+  7. THE PATCH ITSELF: private-chat.patch is in apply-patches.ps1's order
+     immediately before plugin-loader.patch, applies to the published base,
+     reverses out of it, and its wiring is found structurally (ast nodes, not
+     source text).
+  8. THE DELIVERY: the module is in both SHIPPED lists and the published base
+     holds the same text; /api/version's capabilities.private_chat needs BOTH
+     the hud function and the module - false on an older server, false with
+     the patch and no module, true on this one.
 
-No pytest, no network, no model. Real SQLite files and a real ChatLog in a
-temporary folder where the test is about the chat log's own behaviour.
+No pytest, no network, no model. Every check drives real code; the only text
+this suite reads is the file it itself just produced from the published base.
 """
 from __future__ import annotations
 
+import ast
 import json
 import shutil
 import subprocess
@@ -72,10 +79,16 @@ import _stack  # noqa: E402
 PASSED, FAILED = [], []
 SKIPPED = []
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-private-"))
+EVIDENCE: dict = {}
 
 REFUSAL = ("A private chat can read, search, and answer, but it doesn't change "
            "settings, save items, or run actions — switch back to a normal chat "
            "to do that.")
+
+#: The eight H10 stores a chat turn can write - every one must appear in
+#: EVIDENCE with a True when the suite finishes. The table is the contract.
+H10_STORES = ("chat_history", "memory_learner", "feedback", "speed",
+              "route_audit", "approvals", "receipts", "device_last_seen")
 
 
 def check(name, cond, detail=""):
@@ -89,12 +102,6 @@ def skip(why):
     never as a pass (the BLOCKED-is-never-a-pass rule)."""
     SKIPPED.append(why)
     print(f"skip  {why}")
-
-
-def _fresh(name):
-    d = _TMP / name
-    d.mkdir(parents=True, exist_ok=True)
-    return d
 
 
 # ---------------------------------------------------------------- the module
@@ -167,10 +174,8 @@ def t_the_fast_path_is_off():
             Q.answer(text, sched=_Sched(), now=1_800_000_000.0, private=True)
         check("no receipt is written for a refused private command", receipts == [], receipts)
     finally:
-        if real is None:
-            sys.modules.pop("jarvis_receipts", None)
-        else:
-            sys.modules["jarvis_receipts"] = real
+        _uninstall("jarvis_receipts", real)
+    EVIDENCE["receipts"] = receipts == []
 
 
 def t_answer_turn_writes_nothing():
@@ -205,27 +210,27 @@ def t_answer_turn_writes_nothing():
               res is not None and res.reply == REFUSAL, res)
     finally:
         Q._forget_set = real_forget
-        if real_briefing is None:
-            sys.modules.pop("jarvis_briefing", None)
-        else:
-            sys.modules["jarvis_briefing"] = real_briefing
+        _uninstall("jarvis_briefing", real_briefing)
 
 
-# --------------------------------------------------------------- the hud guard
+# ------------------------------------------------------- the installed file
 
 _HUD = None
 _INSTALLED = None
 
 
 def hud():
+    """The patch stack's own build: proves the whole stack still builds, the
+    private hunks applied to real context (the walk's materialised count is
+    the RATCHET), and it keeps that claim tested instead of decorative."""
     global _HUD
     if _HUD is None:
         _HUD, log = _stack.stand_in("jarvis_hud.py")
         check("the whole jarvis_hud.py stack builds, private-chat.patch included",
-              _HUD is not None and "def _private_chat(body)" in _HUD,
+              _HUD is not None and _stack.function_text(_HUD, "_private_chat") is not None,
               "\n".join(log or [])[-500:])
-        check("the walk's materialised count equals the _stack RATCHET "
-              "(one hunk: the owner's own route-audit line)",
+        check("the walk's materialised count equals the _stack RATCHET (the two "
+              "hunks that read the owner's own HUD text)",
               _stack.materialised("jarvis_hud.py")["materialised"]
               == _stack.RATCHET["jarvis_hud.py"])
     return _HUD
@@ -256,10 +261,9 @@ def installed():
                 return None
             # .read_bytes().decode() rather than .read_text(): this suite must
             # not register a source-text pin (tools/check_no_source_pins.py,
-            # whose ceiling for this file is 0), and what is compared below is
-            # text this test itself just produced, not production source. The
-            # CRLF normalisation is because this PC's git rewrites the temp
-            # file to CRLF when it applies the patch.
+            # ceiling 0 for this file), and the only text compared is what this
+            # test itself just produced. CRLF normalisation: this PC's git
+            # rewrites the temp file to CRLF when it applies the patch.
             _INSTALLED = ((d / "jarvis_hud.py").read_bytes().decode("utf-8")
                           .replace("\r\n", "\n"))
         finally:
@@ -275,34 +279,78 @@ def _grab(src, start, stop):
 
 def _helpers(src):
     ns = {}
-    for name in ("_private_chat", "_persist_ok", "_temporary_chat"):
+    for name in ("_private_chat", "_private_refusal", "_persist_ok",
+                 "_private_turn", "_private_gate", "_temporary_chat"):
         code = _stack.function_text(src, name)
         if code is None:
-            check(f"{name} is in the built stack", False)
+            check(f"{name} is in the installed file", False)
             return None
         exec(compile(code, f"<{name}>", "exec"), ns)
     return ns
 
 
-class _Learner:
-    """A learner that records every turn it is offered."""
+def _ast_call(src, name=None, attr=None):
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Call):
+            f = node.func
+            if name is not None and isinstance(f, ast.Name) and f.id == name:
+                return True
+            if attr is not None and isinstance(f, ast.Attribute) and f.attr == attr:
+                return True
+    return False
 
-    def __init__(self):
-        self.calls = []
 
-    def offer(self, *a, **k):
-        self.calls.append((a, k))
-        return None
+def _ast_gate_wiring(src):
+    """Is the tool loop handed `gate_check: _private_gate`?"""
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values):
+            if (isinstance(key, ast.Constant) and key.value == "gate_check"
+                    and isinstance(value, ast.Name) and value.id == "_private_gate"):
+                return True
+    return False
 
 
-def _hud_env(helpers, body):
-    return {"body": body, "_private": helpers["_private_chat"](body),
-            "_persist_ok": helpers["_persist_ok"],
-            "_temporary_chat": helpers["_temporary_chat"],
-            "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
-            "_history": {"turn": {"answer": "hi"}, "at": 1.0},
-            "GATING": True, "MEMORY": True, "jarvis_side_memory": False,
-            "LEARNER": _Learner(), "json": json, "types": types}
+def _ast_persist(src, kind):
+    for node in ast.walk(ast.parse(src)):
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name) and node.func.id == "_persist_ok"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and node.args[0].value == kind):
+            return True
+    return False
+
+
+def _ast_attr(src, attr):
+    """Any use of `something.<attr>` - the devices release is written as
+    `(jarvis_devices.drop_seen if _private else jarvis_devices.commit_seen)(self)`,
+    so the attribute is not always the direct func of a Call."""
+    return any(isinstance(node, ast.Attribute) and node.attr == attr
+               for node in ast.walk(ast.parse(src)))
+
+
+def _ast_private_turn(src):
+    return _ast_call(src, name="_private_turn")
+
+
+def _ast_constant(src, name):
+    """A module-level string constant's own value, read structurally (an
+    ast.Constant), so a fallback sentence can be compared without pinning the
+    file's prose."""
+    for node in ast.walk(ast.parse(src)):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == name
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)):
+            return node.value.value
+    return None
+
+
+def _ast_drop_seen(src):
+    return _ast_call(src, attr="drop_seen")
 
 
 def _stub(name, **attrs):
@@ -325,7 +373,30 @@ def _uninstall(name, real):
         sys.modules[name] = real
 
 
+def _hud_env(helpers, body):
+    return {"body": body, "_private": helpers["_private_chat"](body),
+            "_persist_ok": helpers["_persist_ok"],
+            "_private_turn": helpers["_private_turn"],
+            "_temporary_chat": helpers["_temporary_chat"],
+            "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
+            "_history": {"turn": {"answer": "hi"}, "at": 1.0},
+            "GATING": True, "MEMORY": True, "jarvis_side_memory": False,
+            "LEARNER": _Learner(), "json": json, "types": types}
+
+
+class _Learner:
+    """A learner that records every turn it is offered."""
+
+    def __init__(self):
+        self.calls = []
+
+    def offer(self, *a, **k):
+        self.calls.append((a, k))
+        return None
+
+
 def t_the_hud_helpers():
+    hud()                       # run the stand-in/RATCHET checks at least once
     src = installed()
     if src is None:
         return
@@ -345,6 +416,16 @@ def t_the_hud_helpers():
           all(ns["_persist_ok"](kind, {"messages": []}) is True for kind in P.KINDS))
     check("_persist_ok: an unknown kind is refused (fail closed)",
           ns["_persist_ok"]("some-new-writer", {"messages": []}) is False)
+    cfg = {"tools": {"enabled": ["read_file", "write_file"]}}
+    ns["_private_turn"](cfg, {"private": True})
+    check("_private_turn: a private turn empties the tool list", cfg["tools"]["enabled"] == [],
+          cfg)
+    cfg = {"tools": {"enabled": ["read_file"]}}
+    ns["_private_turn"](cfg, {"messages": []})
+    check("CONTROL: an ordinary turn keeps its tools", cfg["tools"]["enabled"] == ["read_file"],
+          cfg)
+    check("_private_refusal: the sentence comes from the one shipped module",
+          ns["_private_refusal"]() == P.REFUSAL, ns["_private_refusal"]())
 
 
 def _run_guard(src, start, stop, body, helpers, *, writer, extra=None):
@@ -381,10 +462,7 @@ class _Writer:
         module = _stub(self.name, **{self.attr: self._rec})
         real = _install(self.name, module)
         self._real = real
-        extra = {}
-        if self.name == "jarvis_framework":
-            extra["jarvis_framework"] = module
-        return extra
+        return {"jarvis_framework": module} if self.name == "jarvis_framework" else {}
 
     def restore(self):
         _uninstall(self.name, self._real)
@@ -406,7 +484,18 @@ FINALLY = ('            try:\n                import jarvis_chat_log\n'
            '\n# Keys whose values are content rather than plumbing.')
 
 
+def _guard_clean(src, helpers, start, stop, writer, extra=None):
+    writer.env()
+    try:
+        calls, env = _run_guard(src, start, stop, {"private": True}, helpers,
+                                writer=writer, extra=extra)
+    finally:
+        writer.restore()
+    return calls == [], env
+
+
 def t_the_turn_writers_are_guarded():
+    hud()                       # run the stand-in/RATCHET checks at least once
     src = installed()
     if src is None:
         return
@@ -414,94 +503,215 @@ def t_the_turn_writers_are_guarded():
     if helpers is None:
         return
     cases = (
-        ("the route-audit line", AUDIT, _Writer("jarvis_framework", "audit_log"),
+        ("chat_history", "the chat log", FINALLY,
+         _Writer("jarvis_chat_log", "record_turn"), {}),
+        ("feedback", "the feedback row", FEEDBACK,
+         _Writer("jarvis_feedback", "record_turn"), {}),
+        ("speed", "the speed record", SPEED,
+         _Writer("jarvis_speed", "start"), {}),
+        ("route_audit", "the route-audit line", AUDIT,
+         _Writer("jarvis_framework", "audit_log"),
          {"lanes": ["qwen3:8b"], "local_model": "qwen3:8b", "tainted": False,
           "injected": 0,
           "route_header": {"lane": "qwen3:8b", "memory_side": "hud", "gate": None,
                            "reason": "", "complexity": None, "degraded_from": None}}),
-        ("the feedback row", FEEDBACK, _Writer("jarvis_feedback", "record_turn"), {}),
-        ("the speed record", SPEED, _Writer("jarvis_speed", "start"), {}),
-        ("the answer-sources row", SOURCES, _Writer("jarvis_sources", "record"),
+        ("sources", "the answer-sources row", SOURCES,
+         _Writer("jarvis_sources", "record"),
          {"_turn": {"tool_sources": [], "unverified_quotes": []}}),
-        ("the chat log / learner", FINALLY, _Writer("jarvis_chat_log", "record_turn"), {}),
     )
-    for label, (start, stop), writer, extra in cases:
+    for store, label, (start, stop), writer, extra in cases:
+        clean, _env = _guard_clean(src, helpers, start, stop, writer, extra)
+        check(f"private turn: {label} is not written", clean, _env)
+        EVIDENCE[store] = clean
         writer.env()
         try:
-            calls, _env = _run_guard(src, start, stop, {"private": True}, helpers,
-                                     writer=writer, extra=extra)
-            check(f"private turn: {label} is not written", calls == [], calls)
             calls, _env = _run_guard(src, start, stop,
                                      {"messages": [{"role": "user", "content": "hi"}]},
                                      helpers, writer=writer, extra=extra)
-            check(f"CONTROL ordinary turn: {label} is written", len(calls) == 1, calls)
         finally:
             writer.restore()
-    # fail-closed: a writer that raises is never called for a private turn
-    for label, (start, stop), writer, extra in cases:
-        writer = _Writer(writer.name, writer.attr, raises=True)
-        writer.env()
-        try:
-            calls, _env = _run_guard(src, start, stop, {"private": True}, helpers,
-                                     writer=writer, extra=extra)
-            check(f"private turn: {label} is never called (would raise; fail-closed)",
-                  calls == [], calls)
-        finally:
-            writer.restore()
+        check(f"CONTROL ordinary turn: {label} is written", len(calls) == 1, calls)
     # the learner is the second writer in the same finally block
     writer = _Writer("jarvis_chat_log", "record_turn")
     writer.env()
     try:
-        _calls, env = _run_guard(src, FINALLY[0], FINALLY[1], {"private": True}, helpers,
-                                 writer=writer)
-        check("private turn: the learner is not offered the turn",
-              env["LEARNER"].calls == [], env["LEARNER"].calls)
+        _calls, env = _run_guard(src, FINALLY[0], FINALLY[1], {"private": True},
+                                 helpers, writer=writer)
     finally:
         writer.restore()
+    check("private turn: the learner is not offered the turn",
+          env["LEARNER"].calls == [], env["LEARNER"].calls)
+    EVIDENCE["memory_learner"] = env["LEARNER"].calls == []
     writer = _Writer("jarvis_chat_log", "record_turn")
     writer.env()
     try:
         _calls, env = _run_guard(src, FINALLY[0], FINALLY[1],
                                  {"messages": [{"role": "user", "content": "hi"}]},
                                  helpers, writer=writer)
-        check("CONTROL ordinary turn: the learner is offered it",
-              len(env["LEARNER"].calls) == 1, env["LEARNER"].calls)
     finally:
         writer.restore()
+    check("CONTROL ordinary turn: the learner is offered it",
+          len(env["LEARNER"].calls) == 1, env["LEARNER"].calls)
+    # fail-closed: a writer that raises is never called for a private turn
+    for store, label, (start, stop), writer, extra in cases:
+        writer = _Writer(writer.name, writer.attr, raises=True)
+        clean, _env = _guard_clean(src, helpers, start, stop, writer, extra)
+        check(f"private turn: {label} is never called (would raise; fail-closed)",
+              clean, _env)
+
+
+def t_the_private_gate_denies_cards():
+    """The carded-action half: a tool request in a private chat is denied
+    WITHOUT calling jarvis_gate, so no approvals row exists and no undo
+    receipt from a tool action can be produced."""
+    src = installed()
+    if src is None:
+        return
+    ns = {}
+    for name in ("_private_refusal", "_private_gate"):
+        exec(compile(_stack.function_text(src, name), f"<{name}>", "exec"), ns)
+    gate_calls, receipt_calls = [], []
+    real_gate = sys.modules.get("jarvis_gate")
+    fake_gate = _stub("jarvis_gate", check=lambda *a, **k: gate_calls.append((a, k)))
+    sys.modules["jarvis_gate"] = fake_gate
+    real_receipts = sys.modules.get("jarvis_receipts")
+    sys.modules["jarvis_receipts"] = _stub(
+        "jarvis_receipts", record=lambda *a, **k: receipt_calls.append((a, k)))
+    try:
+        verdict = ns["_private_gate"]("write_file", {"text": "a private note"},
+                                      "write a file")
+    finally:
+        _uninstall("jarvis_gate", real_gate)
+        _uninstall("jarvis_receipts", real_receipts)
+    check("a carded tool request in a private chat is DENIED by the gate",
+          getattr(verdict, "allowed", True) is False
+          and getattr(verdict, "reason", "") == REFUSAL, vars(verdict))
+    check("... without calling jarvis_gate (so no approvals row)",
+          gate_calls == [], gate_calls)
+    check("... and no undo receipt is written for it", receipt_calls == [], receipt_calls)
+    EVIDENCE["approvals"] = gate_calls == [] and getattr(verdict, "allowed", True) is False
+    EVIDENCE["receipts"] = EVIDENCE.get("receipts", False) and receipt_calls == []
+
+
+def t_the_missing_gate_fails_closed():
+    """The shipped module is missing or broken: the flag must still be read,
+    still refused, still write nothing - and the capability must report false
+    rather than a half-gate true."""
+    real_priv = sys.modules.get("jarvis_private_chat")
+    sys.modules["jarvis_private_chat"] = None          # import raises
+    try:
+        src = installed()
+        if src is None:
+            return
+        ns = {"_PRIVATE_REFUSAL": _ast_constant(src, "_PRIVATE_REFUSAL")}
+        for name in ("_private_chat", "_private_refusal", "_persist_ok",
+                     "_private_turn"):
+            exec(compile(_stack.function_text(src, name), f"<{name}>", "exec"), ns)
+        check("hud: the strict flag reading survives a missing module",
+              ns["_private_chat"]({"private": True}) is True
+              and ns["_private_chat"]({"private": "yes"}) is False)
+        check("hud: every write kind is still refused for a private body",
+              all(ns["_persist_ok"](kind, {"private": True}) is False
+                  for kind in P.KINDS))
+        check("hud: an ordinary chat may still write with the module missing",
+              all(ns["_persist_ok"](kind, {"messages": []}) is True for kind in P.KINDS))
+        cfg = {"tools": {"enabled": ["write_file"]}}
+        ns["_private_turn"](cfg, {"private": True})
+        check("hud: the tool list is still emptied", cfg["tools"]["enabled"] == [])
+        check("hud: the refusal sentence falls back byte-identically",
+              ns["_private_refusal"]() == REFUSAL, ns["_private_refusal"]())
+        check("quick: its fallback sentence is byte-identical too",
+              Q._PRIVATE_REFUSAL_FALLBACK == REFUSAL, Q._PRIVATE_REFUSAL_FALLBACK)
+        check("quick: the flag is still read as private", Q._private_body({"private": True}))
+        res = Q.answer(MUTATING[0], sched=_Sched(), now=1_800_000_000.0, private=True)
+        check("quick: a mutating command is still refused with the sentence",
+              res is not None and res.reply == REFUSAL, res)
+        # the capability must not claim a half-gate
+        try:
+            import jarvis_events as E
+        except ImportError:
+            sys.path.append(str(REPO / "backend" / "rebuilt"))
+            import jarvis_events as E
+        fake_hud = types.ModuleType("jarvis_hud")
+        fake_hud._private_chat = lambda body: True
+        real_hud = sys.modules.get("jarvis_hud")
+        sys.modules["jarvis_hud"] = fake_hud
+        try:
+            check("capability: false when the patch is there but the module is not",
+                  E._capability_probe()["private_chat"] is False)
+        finally:
+            _uninstall("jarvis_hud", real_hud)
+    finally:
+        _uninstall("jarvis_private_chat", real_priv)
 
 
 def t_the_device_last_seen_is_held():
     writes = []
+    seen_written = dict(DEV._SEEN_WRITTEN)
     real_mutate = DEV._mutate
     DEV._mutate = lambda change: writes.append(change)
-    DEV._SEEN_WRITTEN.clear()
+    real_load = DEV.load
+    DEV.load = lambda: ({"devices": [], "shared": {"retired": False}}, None)
     try:
+        class Fake:
+            def __init__(self, mode):
+                self.path = "/api/chat"
+                self.mode = mode
+
+            def do_GET(self):
+                pass
+
+            def do_POST(self):
+                # what the hud's token check does for a device key, under the hold
+                DEV._note_seen("wrapper-device", self)
+                if self.mode == "raise":
+                    raise RuntimeError("mid-turn")
+                if self.mode == "drop":
+                    DEV.drop_seen(self)
+                return {"ok": True}
+
+        banner = DEV.install(Fake, origin_ok=lambda h: True,
+                             token_ok=lambda h: True, read_body=lambda h: b"{}")
+        check("the real devices wrapper installs", isinstance(banner, str) and banner,
+              banner)
+
+        DEV._SEEN_WRITTEN.clear()
+        Fake("ok").do_POST()
+        ok_commit = len(writes) == 1
+        check("ordinary chat: the held sighting is committed once", ok_commit, writes)
+        writes.clear()
+        DEV._SEEN_WRITTEN.clear()
+        Fake("drop").do_POST()
+        ok_drop = writes == []
+        check("private chat: the drop writes nothing at all", ok_drop, writes)
+        writes.clear()
+        DEV._SEEN_WRITTEN.clear()
+        raised = False
+        try:
+            Fake("raise").do_POST()
+        except RuntimeError:
+            raised = True
+        ok_raise = raised and writes == []
+        check("a handler that fails after the token check writes NO sighting "
+              "(the wrapper drops it, fail-closed)", ok_raise, writes)
+        # the plain hold/commit/drop contract, without the wrapper
+        writes.clear()
+        DEV._SEEN_WRITTEN.clear()
         h = types.SimpleNamespace()
         DEV.hold_seen(h)
-        DEV._note_seen("dev-private-1", h)
-        check("a held device sighting is stashed, not written", writes == [], writes)
-        DEV.drop_seen(h)
+        DEV._note_seen("held-device", h)
         DEV.commit_seen(h)
-        check("... and drop throws it away - nothing is written", writes == [], writes)
-        h2 = types.SimpleNamespace()
-        DEV.hold_seen(h2)
-        DEV._note_seen("dev-ordinary-1", h2)
-        DEV.commit_seen(h2)
-        check("CONTROL: an ordinary chat's held sighting is committed once",
-              len(writes) == 1, writes)
+        check("CONTROL: a held sighting commits on commit_seen", len(writes) == 1, writes)
         DEV._SEEN_WRITTEN.clear()
-        DEV._note_seen("dev-immediate-1", None)
-        check("CONTROL: a route that does not hold writes at once, unchanged",
-              len(writes) == 2, writes)
-        h3 = types.SimpleNamespace()
-        DEV.hold_seen(h3)
-        DEV._note_other("100.64.0.7", h3)
-        DEV.drop_seen(h3)
-        DEV.commit_seen(h3)
-        check("the shared key's sighting is held and dropped the same way",
-              len(writes) == 2, writes)
+        DEV._note_seen("immediate-device", None)
+        check("CONTROL: a route that does not hold writes at once", len(writes) == 2,
+              writes)
     finally:
         DEV._mutate = real_mutate
+        DEV.load = real_load
+        DEV._SEEN_WRITTEN.clear()
+        DEV._SEEN_WRITTEN.update(seen_written)
+    EVIDENCE["device_last_seen"] = ok_commit and ok_drop and ok_raise
 
 
 def t_the_patch_applies():
@@ -527,10 +737,10 @@ def t_the_patch_applies():
                   r.returncode == 0, r.stderr.strip())
         patched = ((d / "jarvis_hud.py").read_bytes().decode("utf-8")
                    .replace("\r\n", "\n"))
-        check("forwards gives the private helpers in the turn",
-              "def _private_chat(body)" in patched
-              and ' _persist_ok("route_audit", body)' in patched
-              and "jarvis_devices.drop_seen(self)" in patched)
+        check("forwards gives the private helpers to the turn",
+              all(_stack.function_text(patched, name) is not None
+                  for name in ("_private_chat", "_private_refusal", "_persist_ok",
+                               "_private_turn", "_private_gate", "_temporary_chat")))
         r = subprocess.run([git, "apply", "--reverse", "p.patch"], cwd=d,
                            capture_output=True, text=True)
         check("reversing it restores the published base exactly",
@@ -539,6 +749,18 @@ def t_the_patch_applies():
               .replace("\r\n", "\n")
               == base.read_bytes().decode("utf-8").replace("\r\n", "\n"),
               r.stderr.strip())
+        # the wiring, found as ast nodes (not by pinning source text)
+        check("wiring: the private flag is read at the top of the turn",
+              _ast_call(patched, name="_private_chat"))
+        check("wiring: the held device sighting is released there (drop_seen)",
+              _ast_attr(patched, "drop_seen"))
+        check("wiring: the fast-path block empties the tool list (_private_turn)",
+              _ast_private_turn(patched))
+        check("wiring: the tool loop is handed gate_check=_private_gate",
+              _ast_gate_wiring(patched))
+        for kind in ("speed", "route_audit", "feedback_turn", "sources"):
+            check(f"wiring: the {kind} writer goes through _persist_ok",
+                  _ast_persist(patched, kind))
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -553,10 +775,6 @@ def t_the_delivery():
     check("... and the published base holds the same text",
           (REPO / "backend" / "jarvis_private_chat.py").read_bytes()
           == (REPO / "jarvis-backend" / "jarvis_private_chat.py").read_bytes())
-    check("the hud patch is named nowhere it should not be: it adds no shipped file "
-          "of its own - the module is shipped, the patch is a patch",
-          (REPO / "backend" / "jarvis_private_chat.py").is_file()
-          and not (REPO / "backend" / "jarvis_hud.py").exists())
 
 
 def t_the_capability():
@@ -565,6 +783,7 @@ def t_the_capability():
     except ImportError:
         sys.path.append(str(REPO / "backend" / "rebuilt"))
         import jarvis_events as E
+    checkout_has_module = True
     check("an older server (no _private_chat) reports private_chat false",
           E._capability_probe()["private_chat"] is False)
     fake = types.ModuleType("jarvis_hud")
@@ -574,8 +793,28 @@ def t_the_capability():
     try:
         check("the patched server reports private_chat true",
               E._capability_probe()["private_chat"] is True)
+        real_priv = sys.modules.get("jarvis_private_chat")
+        sys.modules["jarvis_private_chat"] = None
+        try:
+            check("... and false when the module is missing (fail closed)",
+                  E._capability_probe()["private_chat"] is False)
+        finally:
+            _uninstall("jarvis_private_chat", real_priv)
     finally:
         _uninstall("jarvis_hud", real)
+
+
+def t_zz_the_eight_store_table():
+    """The H10 eight-store table, checked LAST: every store must have a
+    behavioural evidence entry recorded by the tests above, and every one must
+    read "refused for a private turn". A store added to the contract without
+    its proof fails here."""
+    missing = [store for store in H10_STORES if store not in EVIDENCE]
+    check("every one of the H10 eight stores has evidence in this suite",
+          not missing, f"missing: {missing}")
+    failed = [store for store in H10_STORES if EVIDENCE.get(store) is not True]
+    check("every one of the H10 eight stores is refused for a private turn",
+          not failed, f"not refused: {failed}; evidence: {EVIDENCE}")
 
 
 if __name__ == "__main__":

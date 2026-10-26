@@ -204,18 +204,22 @@ PIN = {
     # patches, so they do not cost this walk anything.
     "no-expiry-cards.patch":                   (8, 62),     # position 36
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
-    # chat is strictly reads-only): ONE hunk reads the owner's original HUD
-    # text - the route-audit line `if GATING:` sits four lines under
-    # `budget.spend()`, which no patch in this walk writes. The other ten
-    # hunks were re-anchored onto text earlier patches write (the fast-path
-    # block, the feedback/speed/sources guards, the finally, the temporary-chat
-    # helper region and the two header lines), so they invent nothing; the
-    # budget write costs nothing either, because it is switched off by
-    # emptying the tools config in the fast-path block rather than by editing
-    # the `budget.spend()` line. Checked the other way too:
+    # chat is strictly reads-only): TWO hunks read the owner's original HUD
+    # text. One is the route-audit line - `if GATING:` sits four lines under
+    # `budget.spend()`, which no patch in this walk writes. The other came with
+    # the first review's fail-closed fix: the private flag is now read, and
+    # the device sighting the token check held is released, immediately after
+    # the body is parsed - the lines either side of that point are the owner's
+    # too, so the hunk invents its pre-image honestly. The other eleven hunks
+    # were re-anchored onto text earlier patches write (the fast-path block,
+    # the feedback/speed/sources guards, the tool-loop call, the finally, the
+    # temporary-chat helper region and the two header lines), so they invent
+    # nothing; the budget write costs nothing either, because it is switched
+    # off by emptying the tools config in the fast-path block rather than by
+    # editing the `budget.spend()` line. Checked the other way too:
     # backend/test_private_chat.py applies the patch to the published base
     # forwards and reverses it byte for byte.
-    "private-chat.patch":                      (1, 7),      # position 151
+    "private-chat.patch":                      (2, 13),     # position 151
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

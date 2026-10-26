@@ -19607,19 +19607,22 @@ one plain sentence before anything changes.
 It ships ONE new module, `jarvis_private_chat.py` (in `$SHIPPED` and in
 `backend/_where.py`'s `SHIPPED`), which owns the strict flag reading, the one
 refusal sentence and the fail-closed `persist(kind, payload)` gate. The patch
-itself is eleven hunks in `jarvis_hud.py`: the private read and the held
-device `last_seen` drop go in the fast-path block (which also empties the
-tool list and switches the budget write off), the header says
-`"private": true`, and the speed record, route audit, feedback turn,
-answer-sources row and the finally's chat-log and learner calls are gated.
+itself is thirteen hunks in `jarvis_hud.py`: the private flag is read and the
+held device `last_seen` released immediately after the body is parsed (so no
+early return or error can leave it for the wrapper), the fast-path block
+empties the tool list and switches the budget write off, the header says
+`"private": true`, the tool-loop gate denies everything without a card, and
+the speed record, route audit, feedback turn, answer-sources row and the
+finally's chat-log and learner calls are gated.
 `jarvis_quick.py` refuses every mutating intent of its own, `jarvis_devices.py`
 gained the sighting hold, and `rebuilt/jarvis_events.py` advertises
 `capabilities.private_chat`. All three are shipped modules, so the two-file
 rule applies to each.
 
 `backend/test_private_chat.py` is the proof, including the patch applying to
-the published base and reversing out of it. Its one hunk that reads the
-owner's own HUD text (the route-audit line, four lines under
-`budget.spend()`) is recorded in `_stack.py`'s RATCHET (56 -> 57) and in
-`tools/check_patch_original_text.py`'s pin table (1 hunk / 7 lines). It sits
+the published base and reversing out of it and the fail-closed missing-gate
+case. Its two hunks that read the owner's own HUD text (the body-parse flag
+read and the route-audit line, four lines under `budget.spend()`) are
+recorded in `_stack.py`'s RATCHET (56 -> 58) and in
+`tools/check_patch_original_text.py`'s pin table (2 hunks / 13 lines). It sits
 immediately BEFORE `plugin-loader.patch`, which must stay last of all.

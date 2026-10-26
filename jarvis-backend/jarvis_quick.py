@@ -6463,8 +6463,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
         # hand it to the model like any ordinary question instead.
         if intent.name in READ_ONLY_INTENTS:
             return None
-        import jarvis_private_chat
-        return Result(jarvis_private_chat.REFUSAL, intent.name, private=True)
+        return Result(_private_refusal(), intent.name, private=True)
     if sched is None:
         import jarvis_schedule
         sched = jarvis_schedule.get()
@@ -6675,16 +6674,38 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     return res
 
 
+#: private-chat.patch: the refusal sentence's fallback, byte-identical to the
+#: shipped module's REFUSAL (backend/test_private_chat.py asserts the equality,
+#: so they cannot drift). The gate itself is one strict inline test, so a
+#: backend WITHOUT jarvis_private_chat.py still refuses - a private request
+#: must never become an ordinary one because a file is missing.
+_PRIVATE_REFUSAL_FALLBACK = (
+    "A private chat can read, search, and answer, but it doesn't change "
+    "settings, save items, or run actions — switch back to a normal chat "
+    "to do that.")
+
+
+def _private_refusal() -> str:
+    """The one refusal sentence: the shipped module's copy, or its
+    byte-identical fallback when that module is missing or broken."""
+    try:
+        import jarvis_private_chat
+        return jarvis_private_chat.REFUSAL
+    except Exception:
+        return _PRIVATE_REFUSAL_FALLBACK
+
+
 def _private_body(body) -> bool:
-    """private-chat.patch: is this request a private chat? One strict reading
-    in one place (jarvis_private_chat.is_private: JSON `true`, nothing else).
-    A backend without the module has no private mode and behaves exactly as
-    before this patch - the flag is ignored, never an error."""
+    """private-chat.patch: is this request a private chat? FAIL CLOSED: the
+    canonical reading is jarvis_private_chat.is_private (JSON `true`, and
+    nothing else), and when that module cannot be imported the same one-line
+    test is made here rather than answering False. A missing or broken gate
+    must refuse the private turn, never turn it into an ordinary one."""
     try:
         import jarvis_private_chat
         return bool(jarvis_private_chat.is_private(body))
     except Exception:
-        return False
+        return isinstance(body, dict) and body.get("private") is True
 
 
 def _temporary_body(body) -> bool:

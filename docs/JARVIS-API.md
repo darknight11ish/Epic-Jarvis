@@ -24978,42 +24978,59 @@ history, and additionally:
   `feedback.db`'s turn row, `speed.jsonl`, the route-audit line
   (`~/.openjarvis/logs/jarvis-<date>.jsonl`), `hud-budget.json`,
   `approvals.db`, `receipts.db`, the answer-sources row and the device's
-  `last_seen`. The device sighting is written by the token check before the
-  body is read, so it is held for the length of the request and dropped when
-  the body says private (`jarvis_devices.hold_seen` / `drop_seen`).
-- **runs no tool and no mutating fast-path answer.** The tool list the turn
-  offers is emptied, and `jarvis_quick.answer()` refuses a state-changing
-  sentence BEFORE running it - so no reminder, timer, setting, personality,
-  goal, note or receipt is touched. A private chat reads, searches and
-  answers from the model; it does not act.
-- **answers a request to act with one sentence**: "A private chat can read,
-  search, and answer, but it doesn't change settings, save items, or run
-  actions — switch back to a normal chat to do that." (the sentence has one
-  copy, in the shipped `jarvis_private_chat.py`).
+  `last_seen`. The gate is **fail-closed**: if the shipped
+  `jarvis_private_chat.py` is missing or broken, the strict one-line flag
+  reading still applies and every private write is still refused - a missing
+  file can never turn a private turn into an ordinary one. The device sighting
+  is written by the token check before the body is read, so it is held for the
+  length of the request and dropped as soon as the body says private; if the
+  request fails before that drop, the wrapper drops it too, so a failed private
+  request writes no sighting either.
+- **runs no tool.** The tool list the turn offers is emptied, AND the turn's
+  approval gate refuses anything the model still asks for - without raising a
+  card - so no tool can run, no `approvals.db` row is written and no undo
+  receipt from a tool-based action can be produced. `jarvis_quick.answer()`
+  refuses a state-changing fast-path command BEFORE running it, so no reminder,
+  timer, setting, personality, goal or note is touched and no cardless receipt
+  is written. A private chat reads, searches and answers from the model; it
+  does not act.
+- **answers a mutating FAST-PATH command with one sentence**: "A private chat
+  can read, search, and answer, but it doesn't change settings, save items, or
+  run actions — switch back to a normal chat to do that." (the sentence has one
+  copy, in the shipped `jarvis_private_chat.py`; a backend without the module
+  still refuses with a byte-identical fallback). A request that would need a
+  card-gated tool never gets as far as a card: the tool list is empty and the
+  private gate denies any remaining tool call with the same sentence - the
+  sentence is not a promise that every private request receives it.
 - **the RAM-only parts stay RAM-only**: the live-turn registry is not called
   either, so a private turn leaves no hash and no marker - there is nothing
   on disk to correlate.
 
-`X-Jarvis-Route` carries **`"private": true`** on every private answer (with
-the temporary keys when memory is not Jarvis's own upstream's), so an app can
-prove the PC treated the turn as private. `GET /api/version`'s
-`capabilities.private_chat` is true only when the running server has
-`private-chat.patch` and its shipped `jarvis_private_chat.py` - asked of the
-server by name, exactly like `capabilities.temporary_chat`; an app must send
-nothing unless it is true.
+`X-Jarvis-Route` carries **`"private": true`** on every answer the turn
+actually produces after the body was read (with the temporary keys when memory
+is not Jarvis's own upstream's), so an app can prove the PC treated the turn as
+private; a request rejected earlier as malformed never reaches the header.
+`GET /api/version`'s `capabilities.private_chat` is true only when the running
+server has BOTH `private-chat.patch`'s `_private_chat` and the shipped
+`jarvis_private_chat.py` - asked of the server by name, exactly like
+`capabilities.temporary_chat`. A server with the patch and no module reports
+false, so an app sends nothing rather than believing a half-gate.
 
 **Deliberately not built in Slice 1:** neither app sends the flag yet, there
 is no UI toggle or marker, and the private turn answers with the model alone
 (no memory, no tools). Slice 2 is the apps' half; the backend contract above
 is already the one they will read.
 
-**Tests.** `backend/test_private_chat.py`: the gate module's strict reading
-and fail-closed `persist()`; the fast path refusing every mutating sentence
-before the scheduler is asked anything, and a read-only one going to the
-model; the real hud guard blocks lifted from the installed file and run
-against writing stubs - a private read turn and two private action turns
-write nothing, the positive control writes with `private: false`, and a
-writer that would raise is never called (fail-closed); the device `last_seen`
-hold / commit / drop; the patch applying to the published base and reversing
-out of it; the module's SHIPPED and twin delivery; and
-`capabilities.private_chat` false on an older server, true on this one.
+**Tests.** `backend/test_private_chat.py`: the gate module's strict reading and
+fail-closed `persist()`; the fast path refusing every mutating sentence before
+the scheduler is asked anything, and a read-only one going to the model; the
+real hud guard blocks lifted from the installed file and run against writing
+stubs, plus an **eight-store table** naming each store above and the evidence
+for it; a private read turn and two private action turns (a cardless fast-path
+command and a carded tool request) write nothing, the positive control writes
+with `private: false`, and a writer that would raise is never called
+(fail-closed); the device `last_seen` hold / commit / drop-on-failure driven
+through the real devices wrapper; the missing/broken-gate case (private stays
+refused and the capability reports false); the patch applying to the published
+base and reversing out of it; and the module's SHIPPED and twin delivery.
+A dated entry in `docs/DECISIONS.md` records the ruling.

@@ -118,9 +118,10 @@ def helpers(src) -> dict:
     note_at = src.index("_TEMPORARY_NOTE = (")
     note = src[note_at:src.index("\n\n", note_at)]
     private = _stack.function_text(src, "_private_chat") or ""
+    persist = _stack.function_text(src, "_persist_ok") or ""
     code = "\n".join([fields, _stack.function_text(src, "_chat_client_fields_off"),
                       private, _stack.function_text(src, "_temporary_chat"), note,
-                      _stack.function_text(src, "_temporary_remember")])
+                      _stack.function_text(src, "_temporary_remember"), persist])
     exec(compile(code, "<temporary-chat helpers>", "exec"), ns)
     return ns
 
@@ -283,13 +284,13 @@ def _turn(src, st, query, body):
     mem = types.SimpleNamespace(store=lambda: spy, with_profile=M.with_profile)
     real_past = sys.modules.get("jarvis_past")
     # private-chat.patch: the header fragment now reads _private (False for
-    # every turn in THIS suite - these are temporary, not private, chats) and
-    # gates the feedback turn through _persist_ok, which an ordinary chat
-    # always allows. Both names are supplied here rather than editing the
-    # lifted code, so the fragment stays what the stack really writes.
+    # every turn in THIS suite - these are temporary, not private, chats).
+    # _persist_ok is the stack's REAL helper (lifted above), not a True stub:
+    # a broken gate would then visibly stop an ordinary temporary turn writing,
+    # which is the safe direction and something a stub would hide.
     ns = dict(helpers(src), jarvis_memory=mem, query=query, MEMORY_K=5, time=time, body=body,
               messages=[{"role": "user", "content": query}],
-              _private=False, _persist_ok=lambda kind, payload: True)
+              _private=False)
     ns["_dated_fact"] = lambda f: "- " + str(f.get("text", ""))
     try:
         exec(compile(search, "<stacked search>", "exec"), ns)

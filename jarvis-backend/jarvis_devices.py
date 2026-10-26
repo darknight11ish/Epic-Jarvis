@@ -1205,23 +1205,35 @@ def hold_seen(handler) -> None:
 
 
 def drop_seen(handler) -> None:
-    """A private chat: throw the held sighting away - it is never written."""
+    """A private chat, or a request that failed: throw the held sighting away.
+
+    The `_jarvis_seen_dropped` mark is what makes the wrapper's own `finally`
+    safe: an exception raised anywhere after the token check (or an early
+    return before the hud could drop) drops the sighting here and commit_seen
+    then writes nothing. Fail closed: a private turn with any failure at all
+    still writes no last_seen."""
     try:
         handler._jarvis_seen_hold = False
         handler._jarvis_seen_pending = None
+        handler._jarvis_seen_dropped = True
     except Exception:
         pass
 
 
 def commit_seen(handler) -> None:
-    """Write whatever the token check held (an ordinary chat, or nothing)."""
+    """Write whatever the token check held - unless it was dropped.
+
+    A dropped sighting is never written, whether it was dropped by the hud
+    (private) or by the wrapper's exception path (a turn that failed). An
+    ordinary, successful chat whose hud did not drop it is written once."""
     try:
         pending = getattr(handler, "_jarvis_seen_pending", None)
+        dropped = bool(getattr(handler, "_jarvis_seen_dropped", False))
         handler._jarvis_seen_hold = False
         handler._jarvis_seen_pending = None
     except Exception:
         return
-    if not pending:
+    if dropped or not pending:
         return
     try:
         if pending[0] == "device":
@@ -3158,6 +3170,13 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 hold_seen(self)
                 try:
                     return post0(self)
+                except BaseException:
+                    # private-chat.patch: a request that fails after the token
+                    # check writes NO sighting - drop it and let the error go
+                    # on (the hud's own drop already does this for a private
+                    # turn that reaches its body; this covers everything else).
+                    drop_seen(self)
+                    raise
                 finally:
                     commit_seen(self)
             return post0(self)

@@ -3521,3 +3521,30 @@ calls, holds no lock while it waits and loads no model.
     deploy, and the two replaced files have `*.before-browser-face-2026-10-25`
     copies; restoring them removes the sixteen new files (only while their
     sha256 still matches what was deployed) and needs one backend restart.
+
+## 2026-10-25 — A private chat is strictly reads-only (H10 ruling, backend Slice 1)
+
+  * **The ruling.** Gemini's H10 answer to the private-chat question
+    (2026-10-25, design A) is recorded here as the decision the code
+    implements: `"private": true` on `POST /api/chat` is a temporary chat plus
+    a zero-write promise, and the boundary is reads-only - a request to change
+    something is refused, not executed with a receipt. The gate is the shipped
+    `backend/jarvis_private_chat.py`; the hud half is
+    `backend/private-chat.patch`. JARVIS-API section 156 is the contract.
+  * **Why reads-only, not "actions with receipts".** A cardless action would
+    write both the thing it changed and an undo row in `receipts.db` carrying
+    the owner's own words - so the chat would not have been private at all.
+    The eight stores a turn can reach (chat history, memory and the learner,
+    feedback, speed, the route audit, approvals, receipts, the device's
+    last_seen) are each gated, and the gate is fail-closed: a missing or
+    broken module still refuses the private turn rather than making it
+    ordinary. The test suite carries an explicit eight-store table.
+  * **What is NOT built.** Neither app sends the flag and neither has a toggle
+    or marker; Slice 2 is the apps' half. Nothing here is a live deploy.
+  * **The cost, measured.** One shipped module, one 13-hunk hud patch, and two
+    hunks that read the owner's own HUD text (the body-parse block and the
+    route-audit line), recorded in `backend/_stack.py`'s RATCHET (56 -> 58) and
+    in `tools/check_patch_original_text.py`'s pin table (2 hunks / 13 lines).
+    The first independent review's findings are recorded in the PR: fail-closed
+    gate, the wrapper drop-on-failure, the explicit deny-all approval gate, the
+    eight-store table and the corrected wording.
