@@ -228,7 +228,7 @@ export const DESKTOP_FAQ = Object.freeze([
       "files, run scripts/update-jarvis.ps1: it stops Jarvis, gets the newest " +
       "files, patches the backend, updates this app, starts Jarvis again and runs " +
       "the live check. It prints the whole plan first with -Print and keeps a log " +
-      "in _jarvis-logs in your Jarvis folder. If it stops and says why, " +
+      "in _jarvis-logs in your backend folder. If it stops and says why, " +
       "docs/INSTALL.md, \"Updating everything\", has each step as one line to " +
       "copy. The phone app: install the newest file from the release page over " +
       "the old one; it stays paired. Your settings file and your phone pairing " +

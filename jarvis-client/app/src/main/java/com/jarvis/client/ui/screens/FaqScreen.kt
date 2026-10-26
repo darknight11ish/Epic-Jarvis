@@ -295,7 +295,7 @@ private val FAQS = listOf(
             "files, run scripts/update-jarvis.ps1: it stops Jarvis, gets the " +
             "newest files, patches the backend, updates the desktop app, starts " +
             "Jarvis again and runs the live check. It prints the whole plan first " +
-            "with -Print and keeps a log in _jarvis-logs in your Jarvis folder. " +
+            "with -Print and keeps a log in _jarvis-logs in your backend folder. " +
             "If it stops and says why, docs/INSTALL.md, \"Updating everything\", " +
             "has each step as one line to copy. This app: install the newest file " +
             "from the release page over the old one; it stays paired. Your " +
