@@ -83,15 +83,31 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 /// keeps `WRITE_TIMEOUT`.
 const REPEAT_EDIT_TIMEOUT: Duration = Duration::from_secs(1_200);
 
-/// ONE drawing (the owner's Image mode, 2026-10-24). A real local draw on this
-/// PC was measured at **274 s**: the picture program loads its model onto the
-/// 12 GB card and draws, and after the owner says yes the everyday chat is
-/// stepped aside and loaded back too. `WRITE_TIMEOUT` would give up on a
-/// picture that is still coming, so this is the one budget the make call uses;
-/// every other pictures command keeps `WRITE_TIMEOUT`. The same ceiling as
-/// `REPEAT_EDIT_TIMEOUT`, and for the same shape of reason - something on the
-/// far side is allowed to take minutes, not seconds.
-const PICTURE_TIMEOUT: Duration = Duration::from_secs(1_200);
+/// ONE drawing (the owner's Image mode, 2026-10-24; settled 2026-10-25). The
+/// PC's worst case for one drawing is the SUM of its five own ceilings, not
+/// one measured draw:
+///
+///   `jarvis_picture_card.unload_lane(timeout=120.0)`  -> 120 s
+///   `jarvis_pictures.DRAW_WAIT_S`                     -> 600 s
+///   `free_models()`: `POST /free` at `FREE_WAIT_S`    -> 180 s
+///   `free_models()`: its `/system_stats` poll deadline -> 180 s
+///   `jarvis_picture_card.warm_lane(timeout=600.0)`    -> 600 s
+///   = **1,680 s**
+///
+/// The two 180 s terms are ONE constant used twice: `free_models()` calls
+/// `/free` with `timeout=FREE_WAIT_S` and THEN sets
+/// `deadline = time.time() + FREE_WAIT_S` to poll `/system_stats`, so letting
+/// go of the picture models costs up to 360 s, not 180. The earlier "four
+/// ceilings = 1,500 s" figure missed that second wait.
+///
+/// A read timeout measures SILENCE, and this one request says nothing at all
+/// until the whole swap is done, so this budget must outlast that sum: a
+/// legitimate slow draw plus the warm-back must never look like a failure.
+/// 1,740 s is the sum plus a minute of headroom (and is divisible by 60).
+/// `WRITE_TIMEOUT` would give up on a picture that is still coming, so this is
+/// the one budget the make call uses; every other pictures command keeps
+/// `WRITE_TIMEOUT`.
+const PICTURE_TIMEOUT: Duration = Duration::from_secs(1_740);
 
 // ---------------------------------------------------------------------------
 // Reading
@@ -1049,5 +1065,44 @@ mod read_kind_tests {
         assert_eq!(read_kind(Some(500)), "failed");
         assert_eq!(read_kind(Some(401)), "failed");
         assert_eq!(read_kind(None), "failed");
+    }
+}
+
+#[cfg(test)]
+mod picture_timeout_tests {
+    use super::PICTURE_TIMEOUT;
+
+    /// The PC's worst case for ONE drawing, in seconds: the sum of its five
+    /// own ceilings, each a backend source line rather than a guess.
+    ///
+    ///   `jarvis_picture_card.unload_lane(timeout=120.0)`   -> 120
+    ///   `jarvis_pictures.DRAW_WAIT_S`                      -> 600
+    ///   `free_models()`: `/free` at `FREE_WAIT_S`          -> 180
+    ///   `free_models()`: its `/system_stats` poll deadline -> 180
+    ///   `jarvis_picture_card.warm_lane(timeout=600.0)`     -> 600
+    ///
+    /// The two 180s are the same constant twice, one after the other: the
+    /// `/free` call's own timeout, then the poll deadline set after it.
+    ///
+    /// A read timeout measures SILENCE, so the desktop's budget must outlast
+    /// the whole sum - not just one measured draw of about 380 s.
+    const PC_WORST_CASE_S: u64 = 120 + 600 + 180 + 180 + 600;
+
+    #[test]
+    fn a_drawing_budget_outlasts_the_pcs_worst_case() {
+        // If a ceiling in the backend moves, this is where it has to be
+        // re-derived rather than quietly left behind.
+        assert_eq!(PC_WORST_CASE_S, 1_680, "the PC's five ceilings changed");
+        assert!(
+            PICTURE_TIMEOUT.as_secs() > PC_WORST_CASE_S,
+            "PICTURE_TIMEOUT of {} s must outlast the PC's {PC_WORST_CASE_S} s worst case",
+            PICTURE_TIMEOUT.as_secs()
+        );
+        // The settled number (2026-10-25): 1,740 s, one minute over the sum.
+        assert!(
+            PICTURE_TIMEOUT.as_secs() >= 1_740,
+            "PICTURE_TIMEOUT of {} s is below the settled 1,740 s",
+            PICTURE_TIMEOUT.as_secs()
+        );
     }
 }
