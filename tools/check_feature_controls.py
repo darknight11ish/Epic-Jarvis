@@ -7,7 +7,7 @@ and findable/adjustable in Settings - and the claim must be checkable, not
 anecdotal.
 
 This checker reads `contract/feature-controls.json` and compares every row
-against the REAL files: `backend/jarvis_feature_catalogue.py` (the 139
+against the REAL files: `backend/jarvis_feature_catalogue.py` (the catalogue
 features), `backend/jarvis_settings_registry.py` (BOOL_SETTINGS,
 SETTINGS_ROWS, SECTIONS, NOT_BY_ASKING), `backend/jarvis_quick.py` (the typed
 grammar, through its pure `match()`), and the desktop/phone Settings surfaces.
@@ -21,7 +21,7 @@ It does not edit any of them, and it does not treat a recorded gap as a pass:
   planned grammar gap that has since been fixed is a FAILURE (the matrix is
   stale), never a quiet pass;
 * an unknown new feature (or a dropped one) is a loud failure - nothing may be
-  silently omitted from the 139;
+  silently omitted from the contract;
 * every BOOL_SETTINGS switch, every SETTINGS_ROWS row and every SECTIONS
   section must appear in the matrix, and the page/phone evidence must still be
   true.
@@ -163,7 +163,7 @@ def main(argv=None):
     bool_by_key = {b.key: b for b in sr.BOOL_SETTINGS}
     rows_by_id = {r.dom_id: r for r in sr.SETTINGS_ROWS}
 
-    # ---- the 139 features: no unknown, no silent drop ----------------------
+    # ---- every catalogue feature: no unknown, no silent drop ----------------
     real = {f["id"]: f for f in fc.FEATURES}
     matrix = {f.get("id"): f for f in contract.get("features", [])}
     c.need(contract.get("feature_count") == len(fc.FEATURES),
@@ -514,7 +514,9 @@ def main(argv=None):
     label_diff = []
     if fg is not None and hasattr(fg, "control_matrix"):
         fg_rows = {r.get("id"): r for r in fg.control_matrix()}
-        c.need(set(fg_rows) == set(real), "jarvis_feature_guide.control_matrix() does not cover the 139 features")
+        c.need(set(fg_rows) == set(real),
+               "jarvis_feature_guide.control_matrix() does not cover the %d "
+               "catalogue features" % len(real))
         c.need(list(getattr(fg, "CONTROL_LABELS", [])) == approved,
                "FG.CONTROL_LABELS differs from the owner's five label strings")
         c.need(getattr(fg, "matrix_rows_without_reason", lambda: [])() == [],
