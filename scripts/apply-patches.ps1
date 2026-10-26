@@ -2272,6 +2272,13 @@ $SHIPPED = @(
 # without it runs exactly as before (backend/_where.py's SHIPPED list has the
 # same entry, and backend/test_shipped_modules.py fails if the two disagree).
 'jarvis_product_read.py'
+# The product-check CAPTURE SEAM (2026-10-26): classifies supplied page HTML
+# into product / owner-login / challenge / not-a-product and names the injected
+# driver point; it never opens a browser or fetches a page. Standard library
+# plus the read half only. Nothing imports it yet and no route/app surface
+# exists, so a backend without it runs exactly as before (backend/_where.py's
+# SHIPPED list has the same entry; test_shipped_modules fails if they disagree).
+'jarvis_product_capture.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

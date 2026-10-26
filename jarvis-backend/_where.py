@@ -1290,6 +1290,12 @@ SHIPPED = (
     # storage, no route, no tool and no app surface. Nothing imports it yet, so
     # a backend without it runs exactly as before.
     "jarvis_product_read.py",
+    # The product-check CAPTURE SEAM (2026-10-26): classifies a supplied page
+    # string into product / owner-login / challenge / not-a-product and names
+    # the injected driver point; it never opens a browser or fetches a page.
+    # Standard library plus the read half only. Nothing imports it yet and no
+    # route/app surface exists, so a backend without it runs exactly as before.
+    "jarvis_product_capture.py",
 )
 
 
