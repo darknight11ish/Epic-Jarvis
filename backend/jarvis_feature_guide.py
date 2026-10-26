@@ -1514,7 +1514,7 @@ EXAMPLE_PHRASES = {
     "today": "what is on today",
     "focus": "focus for 25 minutes",
     "history-search": "what did i say about the garden",
-    "temporary-chat": "start a temporary chat",
+    "temporary-chat": "start an incognito chat",
     "memory-known": "what do you remember about me",
     "memory-saved": "what have you learned about me",
     "memory-as-of": "what did i believe on this date",

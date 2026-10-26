@@ -4649,7 +4649,7 @@ CHAT_TAG_MISSING = ("Your PC's Jarvis cannot file chats under tags yet - run app
 CHAT_TAG_OUTSIDE = ("I do not file a chat after it has read outside text, like an email or a web "
                     "page. Use History to file it yourself.")
 CHAT_TAG_NO_CHAT = ("I cannot tell which chat this is. Open History and file it from there.")
-CHAT_TAG_TEMPORARY = ("This is a temporary chat, so it is not kept and cannot be filed.")
+CHAT_TAG_TEMPORARY = ("This is an incognito chat, so it is not kept and cannot be filed.")
 CHAT_TAG_NOT_KEPT = ("This chat has not been saved yet, so there is nothing to file. Try again "
                      "after my next answer, or use History.")
 
