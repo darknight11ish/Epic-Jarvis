@@ -1276,6 +1276,13 @@ SHIPPED = (
     # subprocess, no route, no tool and no app surface; nothing imports it yet,
     # so a backend without it runs exactly as before.
     "jarvis_product_research.py",
+    # The product-check READ path, slice 2 (2026-10-26): page HTML captured
+    # from the owner's own browser -> tolerant review records in the engine's
+    # schema + honest warnings + assemble_report(). PURE - html.parser, re and
+    # the engine module only; no network, no browser import, no subprocess, no
+    # storage, no route, no tool and no app surface. Nothing imports it yet, so
+    # a backend without it runs exactly as before.
+    "jarvis_product_read.py",
 )
 
 
