@@ -1,0 +1,8 @@
+{
+  "name": "secret-handoff",
+  "summary": "the host half of the owner-secret hand-off.",
+  "module": "jarvis_secret_handoff_wiring",
+  "install": "handler",
+  "replaces_patch": "secret-handoff.patch",
+  "stack_order": 152
+}

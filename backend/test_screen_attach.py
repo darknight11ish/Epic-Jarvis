@@ -491,6 +491,10 @@ def t_hygiene():
     # /api/screen wrapper this patch installs.
     stack_order = __import__("_stack").order()
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
+             # secret-handoff.patch (2026-10-26): ONE added install block in
+             # jarvis_hud.py, on setup.patch own last printed lines, and no line
+             # this patch POST /api/screen wrapper wrote.
+             "secret-handoff.patch",
              "gate-raise-rows.patch",
              "plugin-loader.patch",
              # app-control.patch (2026-10-19, the owner's phone

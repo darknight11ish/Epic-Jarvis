@@ -1264,11 +1264,17 @@ SHIPPED = (
     # (2026-10-26: the architect's ruling, the cindy evaluation, and the
     # owner's reversal of the order so the taint ships inside the flow it
     # protects). A pure rule engine: the taint table, the hand-off card state
-    # machine and the abort conditions. No route, no card, no typing and no
-    # network yet - the wiring into jarvis_ui_control.py / jarvis_browser_control.py
-    # is the next slice, so nothing imports it today and a backend without it
-    # runs exactly as before. docs/DESIGN-SECRET-HANDOFF.md is the record.
+    # machine and the abort conditions. It IS imported now, by the host half
+    # (jarvis_secret_handoff_wiring.py) and by jarvis_ui_control.py for the
+    # desktop flow; the browser path is deliberately NOT wired (ARCHITECTURE
+    # section 8), so a backend without the wiring module runs exactly as before.
+    # docs/DESIGN-SECRET-HANDOFF.md is the record.
     "jarvis_secret_handoff.py",
+    # The host half: measures a password-masked control with UI Automation,
+    # raises the owner's card through the engine, and serves the host-only
+    # create/pending/fill/cancel routes. No browser session, no secret storage;
+    # the browser path is NOT wired (ARCHITECTURE section 8).
+    "jarvis_secret_handoff_wiring.py",
     # The offline product-check engine, slice 1 (2026-10-25, the owner's
     # product-research request; docs/DESIGN-PRODUCT-RESEARCH.md): tolerant
     # review records, evidence-only signals, validation of the local model's
@@ -1370,3 +1376,4 @@ def require_rebuilt(*modules: str) -> None:
         print("\nNot run: this suite would have tested something other than the "
               "modules it is about.")
         sys.exit(1)
+

@@ -669,6 +669,10 @@ def t_the_patch_and_the_lists():
     # adds no gate list entry, no risk row and no _TOOL_ACTIONS line - it
     # rewrites nothing referee.patch's hunks anchor on.
     later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
+             # secret-handoff.patch (2026-10-26): ONE added install block in
+             # jarvis_hud.py, on setup.patch own last printed lines, and no
+             # hunk in jarvis_gate.py - so it rewrites nothing referee.patch wrote.
+             "secret-handoff.patch",
              "gate-action-name.patch", "tutorials.patch", "readpage.patch",
              "chatbot-limits.patch", "chatbot-limits-hud.patch",
              "gate-risk-rows.patch", "accounts.patch",

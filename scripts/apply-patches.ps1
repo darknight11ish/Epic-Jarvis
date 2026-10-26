@@ -1673,6 +1673,19 @@ $PATCHES = @(
     # final printed text of the stack above it (no install block, no gate row,
     # no tier change), so the loader's own anchor is untouched.
     'private-chat.patch'
+    # secret-handoff.patch (2026-10-26): the owner-secret hand-off card. The
+    # agent's UI-control plan can no longer type into a password-masked control;
+    # instead the HOST measures that control with UI Automation, raises one card
+    # for the owner (the agent's note is labelled unverified), and the owner's
+    # secret is typed by the host through the existing UI-control path. The rule
+    # engine (jarvis_secret_handoff.py, shipped whole) owns every void and the
+    # 15-minute read taint; jarvis_secret_handoff_wiring.py is the host layer and
+    # serves GET /api/secret-handoff/pending plus POST create/fill/cancel, token
+    # and loopback only, body never logged. Its install block goes at the end of
+    # the chain, immediately before plugin-loader.patch, whose hunk is
+    # re-anchored onto this block's last two printed lines (tools/check_plugins.py
+    # checks that). The browser path is deliberately NOT wired (ARCHITECTURE 8).
+    'secret-handoff.patch'
     'plugin-loader.patch'
 )
 
@@ -2229,13 +2242,18 @@ $SHIPPED = @(
 # before (backend/_where.py's SHIPPED list has the same entry, and
 # backend/test_shipped_modules.py fails if the two disagree).
 'jarvis_private_chat.py'
-# The owner-secret hand-off's rule engine (2026-10-26): the 15-minute
-# secret-page read taint and the hand-off card state machine, shipped whole
-# like every module a patch will call. No route, no card, no typing and no
-# network yet - the wiring is the next slice, so nothing imports it today
-# and a backend without it runs exactly as before
-# (docs/DESIGN-SECRET-HANDOFF.md is the record).
+# The owner-secret hand-off's rule engine and its host half (2026-10-26):
+# the 15-minute secret-page read taint, the hand-off card state machine, the
+# host measurement/typing layer and the host-only create/pending/fill/cancel
+# routes. The host half imports the engine and installs the routes through the
+# secret-handoff.patch startup call; the browser path is deliberately NOT wired
+# (docs/ARCHITECTURE.md section 8). docs/DESIGN-SECRET-HANDOFF.md is the record.
 'jarvis_secret_handoff.py'
+# The host half of the same hand-off (2026-10-26): measures a password-masked
+# control with UI Automation, raises the owner's card through the engine, and
+# serves the host-only create/pending/fill/cancel routes. No browser session
+# and no secret storage; the browser path is NOT wired (ARCHITECTURE section 8).
+'jarvis_secret_handoff_wiring.py'
 # The offline product-check engine, slice 1 (2026-10-25, the owner's
 # product-research request; docs/DESIGN-PRODUCT-RESEARCH.md): tolerant review
 # records, evidence-only signals, validation of the local model's aspects and

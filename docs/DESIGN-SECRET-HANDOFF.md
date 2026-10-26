@@ -1,10 +1,14 @@
 # Design: the owner-secret hand-off, and the 15-minute secret-page read taint
 
-**Status: the rule engine is built and tested; the wiring is not built.** Nothing
-imports `backend/jarvis_secret_handoff.py` yet. That is deliberate - same shape as the
-price radar's F1 slice: the module (+ byte-identical `jarvis-backend/` twin) and its
-suite land first, so the safety rules can be reviewed and tested without a half-wired
-UI, and a backend without the module behaves exactly as before.
+**Status: the rule engine and the desktop wiring are built and unit-tested; the
+browser path is NOT wired.** The engine (`backend/jarvis_secret_handoff.py`) and
+its host layer (`backend/jarvis_secret_handoff_wiring.py`) now serve the HUD
+card and the `jarvis_ui_control.plan()` hook; the read taint is consulted by
+`get_window_state()` and `read_selection()`. The browser path is deliberately
+not wired tonight: its sessions are tool-scoped and the HUD has no session
+handle to name, so ARCHITECTURE section 8 records it rather than inventing a
+HUD-owned browser session. No real UIA window or browser page has been driven
+from this container - the wiring is proven by its own suite only.
 
 **Why this exists.** `jarvis_ui_control.py` refuses a password-masked control outright
 (`code` `password_control`), and that refusal is right. It also means Jarvis cannot log
@@ -111,7 +115,7 @@ a different pathname, the new page is readable and the login page stays locked.
 - **Nothing is measured live.** No real browser session, no real UIA window and no real
   card exists yet, so the wiring slice is the first measurement.
 
-## 4. The wiring slice (next), in order
+## 4. The wiring slice (built 2026-10-26), in order
 
 1. `jarvis_ui_control.py`: a `secret_handoff_snapshot()` that reads the live focused
    control (UIA), proves `IsPassword`, and builds a `VerifiedTargetSnapshot`; the read
@@ -123,5 +127,13 @@ a different pathname, the new page is readable and the login page stays locked.
 3. The route + card: a host-only `POST` pair (create/fill) that never logs its body, and
    a HUD card following the two-box layout in 1.2. Turning the feature on stays one
    approval card; nothing types until the owner does.
-4. Docs: `docs/JARVIS-API.md` route section, `docs/ARCHITECTURE.md` §8 for the phone
-   being deliberately out (the card is PC-only in slice 1).
+4. Docs: `docs/JARVIS-API.md` section 157, `docs/ARCHITECTURE.md` §8 for the phone
+   and the browser path being deliberately out (the card is PC-only in this slice,
+   and browser sessions have no HUD-namable handle).
+
+What this slice actually wired, and what it did not: the desktop half is wired
+(the plan hook raises the card; the fill re-measures the stored window/control;
+the taint is consulted by both desktop read paths; the HUD card is in the three
+`jarvis_hud.html` twins). The browser half is not wired and section 8 says why.
+The browser's own `read_page` therefore has no taint source tonight; that is a
+deliberate consequence of not inventing a browser session.

@@ -6,13 +6,13 @@
 > is the detail.
 
 
-One hundred and forty-five patches against the Jarvis backend, each meant to
+One hundred and forty-six patches against the Jarvis backend, each meant to
 have an executable test beside it. One does not: `vram-estimate.patch` adds
 `_cache_bits_from_env` and `batch_surcharge_mb` to `jarvis_models.py`, and no
 suite names either function (checked 2026-10-14 with `git grep` over
 `backend/test_*.py`). Both figures come from the `$PATCHES` list in
 `scripts/apply-patches.ps1`, which is the list the installer actually walks -
-all 145 `.patch` files in this folder are in it, one each, and the script
+all 146 `.patch` files in this folder are in it, one each, and the script
 refuses to run if a `.patch` file here is missing from it. That is the number
 to trust, because the list grows. The paragraphs below were written as the list
 grew, so the counts in them are the count at the time.
@@ -19635,3 +19635,4 @@ the route-audit line, four lines under `budget.spend()`) are recorded in
 immediately BEFORE `plugin-loader.patch`, which must stay last of all, and the
 suite also checks it applies to the owner's live `jarvis_hud.py` copy when one
 is present.
+

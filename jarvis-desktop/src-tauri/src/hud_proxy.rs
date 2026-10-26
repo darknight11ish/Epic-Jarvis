@@ -42,7 +42,7 @@ use crate::ChatState;
 /// `/api/schedule/act` are NOT here and stay refused; a change goes through
 /// `hud_schedule_add` / `hud_schedule_act`, which hold the same stale-link
 /// rule as the Brain.
-pub const HUD_GET_PATHS: [&str; 7] = [
+pub const HUD_GET_PATHS: [&str; 8] = [
     "/api/status",
     "/api/graph",
     "/api/pending",
@@ -50,6 +50,10 @@ pub const HUD_GET_PATHS: [&str; 7] = [
     "/api/memory/pending",
     "/api/presets",
     "/api/schedule",
+    // The owner-secret hand-off card's pending list (2026-10-26): read-only,
+    // the cards the host measured; filling/cancelling are the two shell
+    // commands in hud_secret_handoff.rs, never the page's own POSTs.
+    "/api/secret-handoff/pending",
 ];
 
 /// The retrieval trace: `/api/retrieve?q=<the question>`, and nothing else.

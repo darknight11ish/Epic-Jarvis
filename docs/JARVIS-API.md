@@ -25177,3 +25177,66 @@ missing/broken-gate case (private stays refused and the capability reports
 false); the patch applying to the published base AND to the owner's live
 `jarvis_hud.py`, and reversing out of it; and the module's SHIPPED and twin
 delivery. A dated entry in `docs/DECISIONS.md` records the ruling.
+
+## 157. The owner-secret hand-off: a card the host draws, and the 15-minute read taint (wired 2026-10-26)
+
+The rule engine is `jarvis_secret_handoff.py` and the host half is
+`jarvis_secret_handoff_wiring.py`. Together they let the owner type a password
+into ONE card the host draws and have the host type it into the control the
+owner approved, without the value ever entering the model's context, a tool
+result, a log line, the clipboard, a database or a file.
+
+**How a card is raised.** When an agent's UI-control plan
+(`jarvis_ui_control.plan()`) carries a `type` request aimed at a
+password-masked control, the plan does not bind a step and does not run the
+request. The host measures that control with Windows UI Automation (pid, hwnd,
+window class, control identity, `IsPassword=True`), raises one card through the
+engine, and the plan reports the unmatched request as
+`code: "secret_handoff_raised"`. The agent's own `why` is the card's second box
+and is always labelled unverified. The model never supplies a target field.
+
+**Routes (host-only: pairing token AND a loopback caller; the body is never
+logged or echoed).**
+
+| route | what it does |
+|---|---|
+| `GET /api/secret-handoff/pending` | the cards waiting for the owner: `handoff_id`, `verified_target` (host-measured), `target_kind`, `is_https`, `agent_claimed_purpose`, `agent_purpose_is_untrusted`, `expires_in_seconds`. Never a secret. |
+| `POST /api/secret-handoff/create` | raises a card from the password-masked control that has focus **right now** (the honest fallback for a host caller; the HUD does not use it - its own click moves focus). Body: `{"purpose": "..."}` optionally. Refuses 409 when the focused control is not password-masked. |
+| `POST /api/secret-handoff/fill` | body `{"handoff_id": "...", "secret": "..."}`. Re-measures the stored window/control, builds a live `VerifiedTargetSnapshot`, and calls the engine's `execute_owner_fill(..., from_this_pc=True)`. The ENGINE decides every void (changed target, changed control, no longer password-masked, expired, empty/oversized, used card); this route does not repeat those checks. A changed target therefore types zero characters and answers 409 with the engine's own sentence. |
+| `POST /api/secret-handoff/cancel` | body `{"handoff_id": "..."}`. The owner pressed Cancel; drops the card. |
+
+Both POST routes refuse a non-loopback caller **before the body is read** (403
+with a plain sentence), and origin/token are checked before that. The body
+reader is the server's own; no route logs, stores or returns the request body.
+
+**The HUD card holds no token, and its writes go through the shell.** The page
+never receives the pairing token (apps security audit M2): the pending read is
+one more entry on hud_proxy.rs's fixed GET list (GET /api/secret-handoff/pending),
+and Fill and Cancel are two Rust commands - hud_secret_handoff_fill and
+hud_secret_handoff_cancel - granted to the HUD window through the hud-link
+permission set and registered in uild.rs's command list. They add the token
+in Rust, validate the card id shape before sending, never log or include the
+secret in an error, and POST the two host-only routes above; the bootstrap
+fetch shim still refuses the page's own POSTs, exactly like every other HUD
+write. Nothing about this weakens the rule: the page gets no token.
+
+**What the fill does, in order.** The taint is marked by the engine BEFORE the
+first character is typed (so a typing failure still leaves the target
+read-locked); typing goes through `jarvis_ui_control.secret_handoff_type`,
+which refuses a control that is no longer password-masked, focuses it and sends
+the keys through the same SendKeys path every other UI-control type step uses.
+The receipt names the verified target and the taint duration - never the value.
+
+**The read side.** While a target key is tainted (15 minutes, in memory only),
+`jarvis_ui_control.get_window_state()` answers
+`{"ok": false, "code": "secret_read_restricted"}` before it reads the tree or
+pixels, and `read_selection()` returns the same refusal before it reads a
+character. The keys are page addresses or `pid:hwnd:window class`, never a
+secret.
+
+**What is deliberately NOT wired.** The browser path: `jarvis_browser_control`
+sessions are tool-scoped, so the HUD has no session handle to name and this
+slice does not invent one (see `docs/ARCHITECTURE.md` §8). The phone: the card
+is PC-only. No approval card is raised by this feature itself: the owner's
+typing is the approval, and the existing gate still governs the plan that
+asked.

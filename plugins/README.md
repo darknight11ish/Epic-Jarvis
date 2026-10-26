@@ -8,7 +8,7 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **26 drop-in modules**, in [`ready/`](ready/) -
+- **27 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
 - **127 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -43,6 +43,7 @@ you drop in and take out.
 | 142 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
 | 143 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
 | 150 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
+| 152 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
 
 ## What stays in the core
 

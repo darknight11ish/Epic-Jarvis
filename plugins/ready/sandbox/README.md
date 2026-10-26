@@ -17,7 +17,7 @@ restart Jarvis.
 
 - Module the loader calls: `jarvis_sandbox_exec.install()` (takes the core's Handler)
 - The patch this replaces: none - the feature was born as a folder
-- Position in the loader's order: 152, the first free slot after every folder
+- Position in the loader's order: 155, the first free slot after every folder
   the old patch stack had (`self-improve` is 151, `setup` is 150,
   `notion-obsidian` is 149)
 

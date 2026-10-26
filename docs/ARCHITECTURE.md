@@ -3177,6 +3177,25 @@ honest sentence if `/api/version` does not advertise `capabilities.private_chat`
 mode is Incognito, and this slice is desktop-only. That is the one-sided
 decision, recorded here rather than left to be discovered.
 
+**The owner-secret hand-off is PC-only, and its browser path is deliberately
+NOT WIRED (2026-10-26).** `jarvis_secret_handoff.py` (the rule engine and the
+15-minute read taint) and `jarvis_secret_handoff_wiring.py` (the host
+measurement, the card routes and the `jarvis_ui_control.plan()` hook) are wired
+for the **desktop/window** path only, and the HUD card is the desktop HUD's.
+The browser path is not wired tonight because it has no honest session handle:
+`jarvis_browser_control.py`'s sessions are created and named by the browser
+tool itself, so the HUD has nothing stable to ask for and this slice refuses to
+invent a HUD-owned browser session (that would be a new profile and a new
+one-time login, not a wiring detail). The phone is out for the same reason the
+card is PC-only: the secret is typed on this PC, into the host, and the phone
+has no card to type it into. There is no route for the phone and no app source
+names these modules, so `tools/check_parity.py` has nothing to classify - the
+gap is recorded here rather than left to read as an oversight. The honest
+limits are in the modules and `docs/DESIGN-SECRET-HANDOFF.md`: Python cannot
+wipe memory, the taint table is in memory only (a backend restart clears it),
+the card has 180 seconds, and no real UIA window or Playwright page has been
+driven in this container - the wiring is unit-proven only.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
