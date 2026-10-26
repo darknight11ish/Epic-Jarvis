@@ -1532,9 +1532,10 @@ CATALOGUE = (
 FAQ = (
     {"q": "Does Jarvis send my things anywhere?",
      "a": "Email, files, credentials and saved memory are only ever read by the "
-          "model on this PC. Web search, the chatbot driver and online weather "
-          "are the named exceptions, each asks first, and web search can be your "
-          "own SearXNG on this PC.",
+          "model on this PC. Web search, the chatbot driver, online weather, "
+          "customer-support chats and a quiz you send to a cloud service can send "
+          "things out: a search from your own words can go without a card, and the "
+          "rest ask first. Web search can be your own SearXNG on this PC.",
      "where": "Brain → What asks first"},
     {"q": "Will it open a tunnel so I can reach it from anywhere?",
      "a": "No. The phone reaches the PC over Tailscale or NordVPN Meshnet, both "
@@ -1581,8 +1582,9 @@ FAQ = (
      "where": "Brain → Backup"},
     {"q": "It says \"Jarvis isn't connected\".",
      "a": "The PC's backend is not answering: usually the app is closed, the PC "
-          "is asleep, or the model is loading. The tray icon says the same "
-          "thing.",
+          "is asleep, or the app has lost its connection to the PC. The tray icon "
+          "says the same thing. If the PC is fine and only the model is down, both "
+          "apps say the model isn't running instead.",
      "where": "The tray icon, and Brain → About"},
     {"q": "How do I stop it mid-action?",
      "a": "The stop-everything hotkey on the PC, the phone's Stop, or ending a "
@@ -1603,21 +1605,28 @@ FAQ = (
           "and the words are marked as outside text.",
      "where": "Nothing to change - send it again after a screenshot"},
     {"q": "How do I update Jarvis?",
-     "a": "Pull the repository and run scripts/apply-patches.ps1, then restart. "
-          "The patcher leaves your own jarvis-framework.toml alone.",
-     "where": "docs/ARCHITECTURE.md, and README.md"},
+     "a": "Run scripts/update-jarvis.ps1 from the folder you downloaded: it "
+          "patches the backend, updates the desktop app and starts Jarvis again. "
+          "Then install the newest phone app. Your own jarvis-framework.toml is "
+          "left alone.",
+     "where": "docs/INSTALL.md, and README.md"},
     {"q": "Do I need the second graphics card?",
-     "a": "No. Picture understanding and the long-context lane wait for it; "
-          "everything else runs on the card you have. Nothing switches to it "
-          "until it is installed and measured.",
+     "a": "No. Seven optional extras wait for it: longer conversations, pictures "
+          "(including the Live camera), background learning, browser control, the "
+          "wiki builder, the study helper and referee suggestions. Everything else "
+          "runs on the card you have, and each extra stays off until you switch it "
+          "on with a card.",
      "where": "Settings → Second graphics card"},
     {"q": "How do I see what it has been doing?",
-     "a": "History (with continued chats marked), the read-only approval list, "
-          "and the audit log on the PC.",
+     "a": "History (with a voice mark, a read-outside-text mark and the kind of "
+          "chat), the read-only list of past approvals, and the audit log on the "
+          "PC.",
      "where": "History, and the log folder in Brain → About"},
     {"q": "Why does an option say it will ask for Windows Hello?",
-     "a": "Anything that loosens a rule asks once, on the PC, with Windows "
-          "Hello. That is the guardrail working, not a fault.",
+     "a": "Because loosening a rule asks first. On the PC that is usually Windows "
+          "Hello; a phone may raise a money limit with its own fingerprint or PIN "
+          "instead; and turning a private topic back on is just a card. That is the "
+          "guardrail working, not a fault.",
      "where": "Brain → What asks first"},
     {"q": "How do I get a tutorial back?",
      "a": "Open Tutorials and choose \"Show this one again\" on any finished "
