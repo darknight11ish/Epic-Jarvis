@@ -122,27 +122,46 @@ class LiveExtrasTest {
     /**
      * The owner's request of 2026-10-26 ("get rid of the long explanation on
      * jarvis live"): the three-sentence headset-button paragraph is not on the
-     * Live screen any more. The words are checked in the shipped source, and
-     * so is the one short line that stayed (which microphone is in use), so a
-     * later edit cannot quietly put the paragraph back or drop the line.
+     * Live screen any more. Two different checks, because words can come back
+     * two ways: the phrases are scanned across every Kotlin file in the app
+     * (so the paragraph is caught wherever it is moved - inline, in a constant,
+     * in a rules table), and the notes plate itself is held to being SHORT -
+     * no quoted note of 90+ characters and no two-sentence note, which is the
+     * shape of the paragraph that was removed. The one short line the owner
+     * kept (which microphone is in use) is still required.
+     *
+     * The words are deliberately not pinned by their old constant name:
+     * "never approves anything" legitimately remains in LiveExtras's own KDoc.
      */
     @Test
     fun `the Live screen does not carry the long headset explanation`() {
-        val extras = listOf(
-            File("src/main/java/com/jarvis/client/voice/LiveExtras.kt"),
-            File("app/src/main/java/com/jarvis/client/voice/LiveExtras.kt"),
-            File("jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveExtras.kt"),
-        ).first { it.isFile }.readText()
-        val screen = listOf(
-            File("src/main/java/com/jarvis/client/ui/screens/LiveScreen.kt"),
-            File("app/src/main/java/com/jarvis/client/ui/screens/LiveScreen.kt"),
-            File("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/LiveScreen.kt"),
-        ).first { it.isFile }.readText()
-        assertFalse("the removed headset explanation is back in LiveExtras",
-            extras.contains("Headset button:"))
-        assertFalse("the notes plate adds a headset paragraph again", screen.contains("HEADSET_HINT"))
-        assertTrue("the microphone line is still in the notes",
-            screen.contains("mic?.let { add(it) }"))
+        val main = listOf(File("src/main/java"), File("app/src/main/java"),
+            File("jarvis-client/app/src/main/java")).first { it.isDirectory }
+        val screen = File(main, "com/jarvis/client/ui/screens/LiveScreen.kt").readText()
+        // The words, wherever they are moved to - not just the constant's name.
+        val kotlinSources = main.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .joinToString("\n") { it.readText() }
+        for (phrase in listOf(
+            "press to stop Jarvis talking",
+            "hold to turn the microphone off or on",
+            "opens the phone's assistant instead",
+        )) {
+            assertFalse("the removed headset explanation is back: '$phrase'",
+                kotlinSources.contains(phrase))
+        }
+        // The owner asked for a SHORT plate: no single-line note of 90+ chars,
+        // and no two-sentence note. (The longest string literal in the plate
+        // today is 81 characters; the removed paragraph was 221, split into
+        // three lines. The phrases above are what catch a split-up return; this
+        // catches a reworded one-line return, which the phrases cannot.)
+        val notes = screen.substringAfter("val notes = buildList {")
+            .substringBefore("if (notes.isNotEmpty())")
+        val longNotes = Regex("\"[^\"\\r\\n]*\"").findAll(notes)
+            .count { it.value.length - 2 >= 90 }
+        assertEquals("a long note is back in the Live plate", 0, longNotes)
+        assertFalse("a two-sentence note is back in the Live plate", notes.contains(". "))
+        assertTrue("the microphone line is still in the notes", notes.contains("mic?.let { add(it) }"))
     }
 
     @Test

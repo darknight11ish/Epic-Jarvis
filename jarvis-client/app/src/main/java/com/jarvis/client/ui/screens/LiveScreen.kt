@@ -49,7 +49,6 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalRadii
 import com.jarvis.client.voice.BargeIn
-import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveMicGate
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.VoiceSession
@@ -173,10 +172,9 @@ private fun LiveFacePane(face: LiveFace, modifier: Modifier = Modifier) {
  *   camera switch appears only when the PC says it is ready - it is off until
  *   the 12 GB graphics card is in and passes the photo test.
  * - The Live extras (the owner's decisions of 2026-09-28): which microphone
- *   it listens through (a Bluetooth headset's is preferred), what the
- *   headset button does, and text shared with "Talk about this in Live" -
- *   held here as a "Shared text" chip and sent, tagged "shared" (outside
- *   text), only when the owner taps Send.
+ *   it listens through (a Bluetooth headset's is preferred), and text shared
+ *   with "Talk about this in Live" - held here as a "Shared text" chip and
+ *   sent, tagged "shared" (outside text), only when the owner taps Send.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
