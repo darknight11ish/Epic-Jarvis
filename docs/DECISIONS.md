@@ -3575,8 +3575,11 @@ calls, holds no lock while it waits and loads no model.
     turn itself enforces the tool half: it is handed `private: true`, empties
     its own tool list (the owner's framework file cannot re-enable one),
     refuses any tool call instead of dispatching it, skips the tool-chain audit
-    recorder and the next_time/energy writes - so the settings and schedule
-    shortcuts, which bypass the approval gate by design, cannot run.
+    recorder, the next_time/energy writes and the Write Like Me drafting block
+    (no voiceprint.db, no embedding-model download, no stored writing sample in
+    the prompt) - so the settings and schedule shortcuts, which bypass the
+    approval gate by design, cannot run, and no stored words are read back into
+    the answer.
   * **What is NOT built.** Neither app sends the flag and neither has a toggle
     or marker; Slice 2 is the apps' half. Nothing here is a live deploy.
   * **The cost, measured.** One shipped module, one 13-hunk hud patch, four

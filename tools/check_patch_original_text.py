@@ -210,8 +210,8 @@ PIN = {
     # the first review's fail-closed fix: the private flag is now read, and
     # the device sighting the token check held is released, immediately after
     # the body is parsed - the lines either side of that point are the owner's
-    # too, so the hunk invents its pre-image honestly. The other eleven hunks
-    # were re-anchored onto text earlier patches write (the fast-path block,
+    # too, so the hunk invents its pre-image honestly. The other eleven of its
+    # thirteen hunks were re-anchored onto text earlier patches write (the fast-path block,
     # the feedback/speed/sources guards, the tool-loop call, the finally, the
     # temporary-chat helper region and the two header lines), so they invent
     # nothing; the budget write costs nothing either, because it is switched

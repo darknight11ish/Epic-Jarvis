@@ -9160,24 +9160,34 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         recorder = None
     steps: list = []
     watch = _TurnWatch(messages, request)
-    # Write Like Me (Q4, 2026-10-20): on a LOCAL DRAFTING turn only, put the
-    # owner's own (stripped) examples in front of the request. The helper
-    # returns "" - and does not latch - when the feature is off, there is no
-    # sample, the turn is Temporary, or it is an external-chatbot path. A
-    # non-empty block is data, not instructions: the rules line says so, and
-    # the turn is latched local so it cannot escalate to a cloud lane. No
-    # lane, tool list, card or route changes here.
-    try:
-        import jarvis_voiceprint as _VP
-        _draft_text = _newest_user_text(messages)
-        if _draft_text and _VP.drafting_request(_draft_text):
-            _style = _VP.drafting_block(_draft_text,
-                                        temporary=_looks_temporary(request))
-            if _style:
-                messages = ([{"role": "system", "content": _style}]
-                            + list(messages))
-    except Exception:
+    if private:
+        # private-chat.patch (H10; the round-3 review's blocker): the Write
+        # Like Me drafting block is SKIPPED ENTIRELY in a private turn. It
+        # would read voiceprint.db, possibly download the local embedding
+        # model on its first use, latch the conversation, write an audit line
+        # and put the owner's own stored writing samples INTO the prompt - and
+        # a private chat promises none of that. Skipping the import too is
+        # deliberate: nothing from that module is even asked a question here.
         pass
+    else:
+        # Write Like Me (Q4, 2026-10-20): on a LOCAL DRAFTING turn only, put the
+        # owner's own (stripped) examples in front of the request. The helper
+        # returns "" - and does not latch - when the feature is off, there is
+        # no sample, the turn is Temporary, or it is an external-chatbot path.
+        # A non-empty block is data, not instructions: the rules line says so,
+        # and the turn is latched local so it cannot escalate to a cloud lane.
+        # No lane, tool list, card or route changes here.
+        try:
+            import jarvis_voiceprint as _VP
+            _draft_text = _newest_user_text(messages)
+            if _draft_text and _VP.drafting_request(_draft_text):
+                _style = _VP.drafting_block(_draft_text,
+                                            temporary=_looks_temporary(request))
+                if _style:
+                    messages = ([{"role": "system", "content": _style}]
+                                + list(messages))
+        except Exception:
+            pass
     # Jarvis Live's own speed slice (2026-10-18): the Live-only model from
     # `[live]`, the one injected lane URL (the preset-lane patch supplies
     # :11435 later - jarvis_model_lanes.py is not edited here), a 16K context

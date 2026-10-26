@@ -24998,7 +24998,10 @@ history, and additionally:
   request fails before that drop, the wrapper drops it too, so a failed private
   request writes no sighting either. In the agent turn, `private` also switches
   off the end-of-turn tool-chain audit line (`jarvis_skill_discovery`) and the
-  `jarvis_next_time` brought-up mark and `jarvis_energy` row.
+  `jarvis_next_time` brought-up mark and `jarvis_energy` row, and it skips the
+  **Write Like Me drafting block entirely**: no `voiceprint.db` read, no
+  embedding-model download, no latch and no stored writing samples in the
+  prompt.
 - **runs no tool.** The hud tells the agent the turn is private (the
   `private: true` handed in beside the deny-all gate), and the agent enforces
   it where every local turn passes: it empties the tool list ITSELF - the
@@ -25012,16 +25015,18 @@ history, and additionally:
   tool-based action can be produced. `jarvis_quick.answer()` refuses a
   state-changing fast-path command BEFORE running it, so no reminder, timer,
   setting, personality, goal or note is touched and no cardless receipt is
-  written either. A private chat reads, searches and answers from the model; it
-  does not act.
+  written either. A private chat reads, searches and answers from the model
+  alone: no stored memory, no stored writing samples and no tools; it does not
+  act.
 - **answers a mutating FAST-PATH command with one sentence**: "A private chat
   can read, search, and answer, but it doesn't change settings, save items, or
   run actions — switch back to a normal chat to do that." (the sentence has one
   copy, in the shipped `jarvis_private_chat.py`; a backend without the module
   still refuses with a byte-identical fallback). A request that would need a
   card-gated tool never gets as far as a card: the tool list is empty and the
-  private gate denies any remaining tool call with the same sentence - the
-  sentence is not a promise that every private request receives it.
+  AGENT answers any remaining tool call with a short refusal instead of
+  dispatching it - the approval gate is never even reached. The sentence is
+  not a promise that every private request receives it.
 - **the RAM-only parts stay RAM-only**: the live-turn registry is not called
   either, so a private turn leaves no hash and no marker - there is nothing
   on disk to correlate.
@@ -25038,8 +25043,8 @@ false, so an app sends nothing rather than believing a half-gate.
 
 **Deliberately not built in Slice 1:** neither app sends the flag yet, there
 is no UI toggle or marker, and the private turn answers with the model alone
-(no memory, no tools). Slice 2 is the apps' half; the backend contract above
-is already the one they will read.
+(no stored memory, no writing samples, no tools). Slice 2 is the apps' half;
+the backend contract above is already the one they will read.
 
 **Tests.** `backend/test_private_chat.py`: the gate module's strict reading and
 fail-closed `persist()`; the fast path refusing every mutating sentence before
@@ -25053,7 +25058,10 @@ with `private: false`, and a writer that would raise is never called
 tools**, whose scripted model asks for `change_setting` - the settings
 shortcut that bypasses the gate - proving the offer is empty, nothing is
 dispatched, no card is asked, no chain line and no energy row is written, and
-the same turn without the flag does each of those; the device `last_seen`
+the same turn without the flag does each of those; a drafted request in a
+private turn never reaches the Write Like Me block (no `voiceprint.db`, no
+stored sample in the prompt) while the same turn without the flag does; the
+device `last_seen`
 hold / commit / drop-on-failure driven through the real devices wrapper; the
 missing/broken-gate case (private stays refused and the capability reports
 false); the patch applying to the published base AND to the owner's live

@@ -19618,7 +19618,9 @@ finally's chat-log and learner calls are gated.
 gained the sighting hold, `jarvis_agent.py` gained the `private` flag (the
 agent itself empties the tool list, so the owner's framework file cannot
 re-enable one; it refuses any tool call instead of dispatching it, skips the
-end-of-turn chain recorder and the next_time/energy writes), and
+end-of-turn chain recorder and the next_time/energy writes, and skips the
+Write Like Me drafting block so no voiceprint.db, model download or stored
+sample is involved), and
 `rebuilt/jarvis_events.py` advertises `capabilities.private_chat` only when
 both the patch and the shipped module are there. All four are shipped modules,
 so the two-file rule applies to each.

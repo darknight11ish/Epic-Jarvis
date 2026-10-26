@@ -275,8 +275,9 @@ RATCHET = {
     #: three, and the pin must EQUAL the walk. A ratchet: it may still only go
     #: down.
     #: RAISED 2026-10-25, 56 -> 58, for `private-chat.patch` (the architect's
-    #: H10 ruling: a private chat is strictly reads-only). Ten of its thirteen
-    #: hunks anchor on text an earlier patch writes, so they cost nothing; the
+    #: H10 ruling: a private chat is strictly reads-only). Eleven of its
+    #: thirteen hunks anchor on text an earlier patch writes, so they cost
+    #: nothing; the
     #: two that do read the owner's own HUD text are the route-audit line
     #: (`if GATING:` sits four lines under `budget.spend()`) and, after the
     #: first review's fail-closed fix, the body-parse block where the private

@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -990,6 +991,80 @@ def t_the_agent_runs_no_tool_in_a_private_chat():
           len(ordinary["chains"]) == 1, ordinary["chains"])
     check("CONTROL ordinary turn: the energy row is written",
           len(ordinary["energy"]) == 1, ordinary["energy"])
+
+
+def t_the_drafting_block_is_skipped():
+    """The round-3 blocker: a drafted request in a private turn must not reach
+    Write Like Me (jarvis_voiceprint) at all - no voiceprint.db read, no
+    embedding-model download, no latch, no stored writing sample in the prompt.
+    The same turned-off module is used for a positive control WITHOUT the flag,
+    so the trap is shown to be real."""
+    try:
+        sys.path.insert(0, str(REPO / "backend" / "rebuilt"))
+        import jarvis_agent as AG
+        import _ollama_wire as W
+    except ImportError as exc:
+        return skip(f"the agent harness is not importable here: {exc}")
+    STYLE = ("Here is how the owner has written about similar things before:\n"
+             "- SAMPLE: the quarterly report you asked for")
+    calls = {"request": 0, "block": 0}
+    def drafting_request(text):
+        calls["request"] += 1
+        return True
+    def drafting_block(text, *, temporary=False, external=False, store=None):
+        calls["block"] += 1
+        return "" if temporary else STYLE
+    fake = _stub("jarvis_voiceprint", drafting_request=drafting_request,
+                 drafting_block=drafting_block)
+    real = sys.modules.get("jarvis_voiceprint")
+    sys.modules["jarvis_voiceprint"] = fake
+    db = _TMP / "voiceprint" / "voiceprint.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    old_env = os.environ.get("JARVIS_VOICEPRINT_DB")
+    os.environ["JARVIS_VOICEPRINT_DB"] = str(db)
+    DRAFT = "draft an email to my boss asking for the quarterly report"
+    try:
+        def run(private):
+            seen = []
+            def opener(url, payload):
+                seen.append(payload)
+                return W.FakeResponse(W.stream(_wire_events(
+                    {"choices": [{"message": {"role": "assistant",
+                                              "content": "draft done"}}]})))
+            streamed = []
+            with _NoRealIO(AG):
+                AG.run_local_turn(
+                    [{"role": "user", "content": DRAFT}], "qwen3:8b",
+                    ollama_url="http://127.0.0.1:11434", stream_out=streamed.append,
+                    open_stream=opener, enabled_tools=set(), private=private,
+                    context_length=16384, model_waking=lambda url, model: False)
+            return seen
+        ordinary_seen = run(False)
+
+        def contents(seen):
+            return [message.get("content")
+                    for payload in seen
+                    for message in (payload.get("messages") or [])]
+
+        check("the trap is real: an ordinary drafting turn DOES reach Write Like Me",
+              calls == {"request": 1, "block": 1}, calls)
+        check("... and its stored sample is in the ordinary prompt",
+              any(STYLE in (text or "") for text in contents(ordinary_seen)),
+              contents(ordinary_seen))
+        calls.update({"request": 0, "block": 0})
+        private_seen = run(True)
+        check("private drafting turn: Write Like Me is never asked anything",
+              calls == {"request": 0, "block": 0}, calls)
+        check("private drafting turn: no stored writing sample in the prompt",
+              not any(STYLE in (text or "") for text in contents(private_seen)),
+              contents(private_seen))
+        check("private drafting turn: no voiceprint.db is created", not db.is_file(), db)
+    finally:
+        _uninstall("jarvis_voiceprint", real)
+        if old_env is None:
+            os.environ.pop("JARVIS_VOICEPRINT_DB", None)
+        else:
+            os.environ["JARVIS_VOICEPRINT_DB"] = old_env
 
 
 def t_zz_the_eight_store_table():
