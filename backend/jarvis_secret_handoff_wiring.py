@@ -320,7 +320,7 @@ def handle_post(path: str, body: dict, *, peer=None, local=None) -> tuple:
     if path == CANCEL_PATH:
         hid = str(body.get("handoff_id") or "")
         if not hid:
-            return _refusal(400, "handoff_id is required")
+            return _refusal(400, "that request did not name a card")
         return 200, {"ok": True, "cancelled": cancel_card(hid)}
     if path == CREATE_PATH:
         purpose = body.get("purpose")
@@ -338,7 +338,7 @@ def handle_post(path: str, body: dict, *, peer=None, local=None) -> tuple:
         hid = str(body.get("handoff_id") or "")
         secret_value = body.get("secret")
         if not hid:
-            return _refusal(400, "handoff_id is required")
+            return _refusal(400, "that request did not name a card")
         try:
             receipt = fill_card(hid, secret_value if isinstance(secret_value, str) else "")
         except SecretHandoffVoidedError as exc:

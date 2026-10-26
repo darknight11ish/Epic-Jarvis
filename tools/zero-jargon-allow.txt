@@ -42,3 +42,4 @@ MB
 # --- deliberate product vocabulary -------------------------------------------
 API key            # "API key" is a settings row the owner asked for
 Pairing token      # the owner's own name for the phone key
+UNENCRYPTED HTTP   # the deliberate red badge on the owner-secret hand-off card (ARCHITECTURE section 8, JARVIS-API section 157): the address-bar word the owner asked about, shown as a warning rather than tucked away
