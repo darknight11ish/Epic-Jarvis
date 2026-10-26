@@ -782,18 +782,49 @@ def t_the_patch_applies():
         skip("no live jarvis_hud.py on this box; the live-apply rehearsal is desk-only")
         return
     d = Path(tempfile.mkdtemp(prefix="jarvis-private-live-"))
+    helpers = ("_private_chat", "_private_refusal", "_persist_ok",
+               "_private_turn", "_private_gate", "_temporary_chat")
     try:
         shutil.copy(live, d / "jarvis_hud.py")
         shutil.copy(HERE / "private-chat.patch", d / "p.patch")
+        live_text = ((d / "jarvis_hud.py").read_bytes().decode("utf-8")
+                     .replace("\r\n", "\n"))
+        # Two honest shapes of a correct live tree, and nothing else counts:
+        #  (a) the patch is not in it yet and applies cleanly - apply-patches.ps1
+        #      would apply it, so the rehearsal applies it too;
+        #  (b) the live deploy has already applied it, which `git apply --check`
+        #      reports as a failure while `git apply --reverse --check` succeeds
+        #      - then the six private helpers must really be in the file, or it
+        #      is not "already applied" but a tree that drifted away.
+        # A live file that is neither cleanly patchable nor already patched fails.
         r = subprocess.run([git, "apply", "--check", "p.patch"], cwd=d,
                            capture_output=True, text=True)
-        check("the patch applies to the OWNER'S LIVE jarvis_hud.py (not only the base)",
-              r.returncode == 0, r.stderr.strip())
-        if r.returncode == 0:
+        forward_ok = r.returncode == 0
+        forward_err = r.stderr.strip()
+        r = subprocess.run([git, "apply", "--check", "--reverse", "p.patch"], cwd=d,
+                           capture_output=True, text=True)
+        reverse_ok = r.returncode == 0
+        reverse_err = r.stderr.strip()
+        already = (not forward_ok) and reverse_ok
+        check("the OWNER'S LIVE jarvis_hud.py is either cleanly patchable or already has "
+              "private-chat.patch applied - one of the two, never neither",
+              forward_ok or already,
+              f"git apply --check: {forward_err or 'ok'}\n"
+              f"git apply --check --reverse: {reverse_err or 'ok'}")
+        if already:
+            missing = [n for n in helpers if _stack.function_text(live_text, n) is None]
+            check("... it is 'already applied' for the patch's own reason: all six private "
+                  "helpers are really in the live file", not missing, missing)
+        if forward_ok:
             subprocess.run([git, "apply", "p.patch"], cwd=d, capture_output=True, text=True)
             r = subprocess.run([sys.executable, "-m", "py_compile", "jarvis_hud.py"],
                                cwd=d, capture_output=True, text=True)
             check("... and the patched live file still compiles", r.returncode == 0,
+                  r.stderr.strip())
+        elif already:
+            r = subprocess.run([sys.executable, "-m", "py_compile", "jarvis_hud.py"],
+                               cwd=d, capture_output=True, text=True)
+            check("... and the already-patched live file still compiles", r.returncode == 0,
                   r.stderr.strip())
     finally:
         shutil.rmtree(d, ignore_errors=True)
