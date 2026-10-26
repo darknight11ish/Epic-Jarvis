@@ -23,6 +23,10 @@ import com.jarvis.client.data.AppControl
  *    skipped WHOLE, before its text is ever touched, and so are its children;
  *  - it never reads an invisible control, and it truncates long text
  *    ([AppControl.MAX_CONTROL_TEXT]);
+ *  - it never takes a picture of the screen or taps a pixel it guessed: a
+ *    screen it cannot read is refused as `ui_tree_blank`, never guessed at;
+ *  - it never says Done for a `type` it could not read back - Android's own
+ *    "true" is not proof the field kept the words (`text_not_taken`);
  *  - it never reads or performs anything on a screen whose app is not on the
  *    owner's list - the executor checks that before calling here, and this
  *    class checks it again against the plan's app;
@@ -38,8 +42,37 @@ class JarvisAccessibilityService : AccessibilityService() {
         /** The step ran. NOT a claim about what the app did with it. */
         data object Done : Outcome
 
-        /** The step did not run, and [sentence] says why, plainly. */
-        data class Refused(val sentence: String) : Outcome
+        /**
+         * The step did not run, and [sentence] says why, plainly.
+         *
+         * [code] is a stable name for the failure, empty for the refusals this
+         * service already had; the honest ones are
+         * [AppControl.CODE_BLANK_TREE] and [AppControl.CODE_TEXT_NOT_TAKEN]. It
+         * is carried for the runtime and never shown in place of [sentence].
+         */
+        data class Refused(val sentence: String, val code: String = "") : Outcome
+    }
+
+    /**
+     * What one screen read found: the masked screen, or an honest refusal.
+     *
+     * A refusal is a VALUE, never a null and never an empty snapshot - both of
+     * those read as "nothing here" instead of "Jarvis could not read it".
+     */
+    sealed interface Read {
+        /** The screen Android gave, masked and bounded. */
+        data class Seen(val snapshot: AppControl.Snapshot) : Read
+
+        /**
+         * No readable screen. [code] is stable ([AppControl.CODE_BLANK_TREE]),
+         * [sentence] is the plain words to show, and [app] is the app Android
+         * named for it, when it named one ("" when it did not).
+         */
+        data class Unreadable(
+            val app: String,
+            val code: String,
+            val sentence: String,
+        ) : Read
     }
 
     // The window in front, from Android's own events. Never the screen's words.
@@ -78,22 +111,34 @@ class JarvisAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * The masked snapshot: the app and window in front, then the controls the
-     * PC needs to name ONE step. Bounded ([AppControl.MAX_CONTROLS] controls,
-     * a depth and visit limit) and masked by [AppControl.mask] - password and
+     * The masked screen: the app and window in front, then the controls the PC
+     * needs to name ONE step. Bounded ([AppControl.MAX_CONTROLS] controls, a
+     * depth and visit limit) and masked by [AppControl.mask] - password and
      * invisible nodes never enter it.
      *
-     * Null when Android will not give a window: the caller says so plainly and
-     * sends nothing.
+     * It never returns null and never returns an empty screen as if that were a
+     * real one: with no window, no app, or not one readable/actionable node, the
+     * answer is [Read.Unreadable] carrying `ui_tree_blank` and a plain sentence,
+     * which the runtime reports. Nothing is sent to the PC in that case, and no
+     * picture or guessed pixel is used to fill the gap.
      */
-    fun snapshot(): AppControl.Snapshot? {
-        val root: AccessibilityNodeInfo = rootInActiveWindow ?: return null
+    fun readScreen(): Read {
+        val root = rootInActiveWindow
+            ?: return Read.Unreadable(
+                foregroundPackage,
+                AppControl.CODE_BLANK_TREE,
+                AppControl.BLANK_TREE,
+            )
         // Compose/RecyclerView update in place without a window-state event, so
         // the cached root can be stale: ask Android for the tree again first.
         runCatching { root.refresh() }
         val app = root.packageName?.toString()?.takeIf { it.isNotBlank() } ?: foregroundPackage
+        if (app.isBlank()) {
+            return Read.Unreadable("", AppControl.CODE_BLANK_TREE, AppControl.BLANK_TREE)
+        }
         val title = foregroundTitle.ifBlank { shortClassName(app, root.className?.toString()) }
         val controls = ArrayList<AppControl.Control>(AppControl.MAX_CONTROLS)
+        var usable = 0
         val queue = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
         queue.add(root to 0)
         var visited = 0
@@ -123,7 +168,14 @@ class JarvisAccessibilityService : AccessibilityService() {
                     editable = node.isEditable,
                     scrollable = node.isScrollable,
                 )
-                if (masked != null) controls.add(masked)
+                if (masked != null) {
+                    controls.add(masked)
+                    usable += 1
+                } else if (node.isClickable || node.isEditable || node.isScrollable) {
+                    // An unlabelled icon button still counts: the screen is not
+                    // blank just because this snapshot cannot name the control.
+                    usable += 1
+                }
             }
             if (depth < MAX_DEPTH) {
                 for (index in 0 until node.childCount) {
@@ -132,8 +184,10 @@ class JarvisAccessibilityService : AccessibilityService() {
                 }
             }
         }
-        if (app.isBlank()) return null
-        return AppControl.Snapshot(app, title, controls)
+        if (AppControl.blankTree(hasWindow = true, usableNodes = usable)) {
+            return Read.Unreadable(app, AppControl.CODE_BLANK_TREE, AppControl.BLANK_TREE)
+        }
+        return Read.Seen(AppControl.Snapshot(app, title, controls))
     }
 
     /**
@@ -144,7 +198,7 @@ class JarvisAccessibilityService : AccessibilityService() {
      */
     fun performStep(step: AppControl.Step, planApp: String): Outcome {
         val root = rootInActiveWindow
-            ?: return Outcome.Refused(AppControl.said(AppControl.Why.TARGET_CHANGED))
+            ?: return Outcome.Refused(AppControl.BLANK_TREE, AppControl.CODE_BLANK_TREE)
         if (planApp.isNotBlank() && root.packageName?.toString() != planApp) {
             // The wrong app is in front: never act on it.
             return Outcome.Refused(AppControl.said(AppControl.Why.TARGET_CHANGED))
@@ -240,8 +294,19 @@ class JarvisAccessibilityService : AccessibilityService() {
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return Outcome.Done
-        return Outcome.Refused("Android would not type into that field, so nothing changed.")
+        if (!node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+            return Outcome.Refused("Android would not type into that field, so nothing changed.")
+        }
+        // Android's own "true" is not proof the field kept the words. Read the
+        // field back (refreshed, because the cached node can still hold the old
+        // text) and only then say Done - a model must never be told "done" for
+        // a field that is still empty.
+        runCatching { node.refresh() }
+        val readBack = runCatching { node.text?.toString() }.getOrNull()
+        if (!AppControl.textTook(text, readBack)) {
+            return Outcome.Refused(AppControl.TEXT_NOT_TAKEN, AppControl.CODE_TEXT_NOT_TAKEN)
+        }
+        return Outcome.Done
     }
 
     /**

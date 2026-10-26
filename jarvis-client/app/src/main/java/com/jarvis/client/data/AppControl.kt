@@ -104,6 +104,26 @@ object AppControl {
     const val SNAPSHOT_EMPTY =
         "No readable controls on this screen right now. Nothing was sent and nothing ran."
 
+    /**
+     * A window with nothing on it Jarvis could read or act on, or no window at
+     * all. Refused with [CODE_BLANK_TREE] instead of sending an empty screen -
+     * and never "fixed" by taking a picture or tapping a guessed pixel: the
+     * PC's action set has no screenshot action, and raw pixel tapping was
+     * declined.
+     */
+    const val BLANK_TREE =
+        "Android gave Jarvis no readable screen just now - there is nothing on it " +
+            "Jarvis can read or act on. Nothing was sent and nothing ran."
+
+    /** Android's own `ACTION_SET_TEXT` said yes, but the field did not keep the words. */
+    const val TEXT_NOT_TAKEN =
+        "Android said it took the words, but the field did not keep them, so this is " +
+            "not counted as typed."
+
+    /** Stable names for the two honest failures; they are carried, never shown as words. */
+    const val CODE_BLANK_TREE = "ui_tree_blank"
+    const val CODE_TEXT_NOT_TAKEN = "text_not_taken"
+
     const val NO_ROUTE =
         "Your PC's Jarvis does not have app control yet (its backend is older). " +
             "Update Jarvis on the PC, then come back to this screen."
@@ -421,6 +441,24 @@ object AppControl {
         val endX = left + (right - left) * 0.1f
         return if (startX - endX < 4f) null else startX to endX
     }
+
+    /**
+     * The blank-tree rule, in one place so a JVM test holds it: a window must be
+     * in front AND carry at least ONE node Jarvis could read or act on. True
+     * means the phone refuses with [CODE_BLANK_TREE] - it never sends an empty
+     * screen or quietly returns nothing, because either reads as "nothing here"
+     * rather than as "Jarvis could not read it".
+     */
+    fun blankTree(hasWindow: Boolean, usableNodes: Int): Boolean =
+        !hasWindow || usableNodes <= 0
+
+    /**
+     * The `type` read-back rule: Android's own action answering true is NOT
+     * proof the field kept the words. Only the field's own text, read back and
+     * equal to exactly what was set, counts as typed; anything else is
+     * [CODE_TEXT_NOT_TAKEN], never Done.
+     */
+    fun textTook(expected: String, readBack: String?): Boolean = readBack == expected
 
     // ------------------------------------------------------ planning wire --
 

@@ -575,4 +575,35 @@ class AppControlTest {
         assertFalse(body.contains("\"action\""))
         assertFalse(body.contains("\"text\""))
     }
+
+    // --------------------------------- the honest failures (2026-10-25) --
+
+    @Test
+    fun `no window or no usable node is a blank tree, never an empty screen`() {
+        // No window at all, and a window carrying nothing readable, are the
+        // same refusal - a value with a stable code, not a null and not an
+        // empty snapshot sent as if it were a real screen.
+        assertTrue(AppControl.blankTree(hasWindow = false, usableNodes = 0))
+        assertTrue(AppControl.blankTree(hasWindow = true, usableNodes = 0))
+        assertFalse(AppControl.blankTree(hasWindow = true, usableNodes = 1))
+        assertFalse(AppControl.blankTree(hasWindow = true, usableNodes = 120))
+        assertEquals("ui_tree_blank", AppControl.CODE_BLANK_TREE)
+        assertTrue(AppControl.BLANK_TREE.contains("nothing on it Jarvis can read or act on"))
+        assertTrue(AppControl.BLANK_TREE.contains("Nothing was sent and nothing ran."))
+    }
+
+    @Test
+    fun `a type counts only when the field reads back exactly the words set`() {
+        assertTrue(AppControl.textTook("hello", "hello"))
+        assertTrue(AppControl.textTook("two words", "two words"))
+        // An empty field, the old text, part of the words, or a different case
+        // is a failure with its own code - never Done.
+        assertFalse(AppControl.textTook("hello", ""))
+        assertFalse(AppControl.textTook("hello", null))
+        assertFalse(AppControl.textTook("hello", "hello there"))
+        assertFalse(AppControl.textTook("hello", "old text"))
+        assertFalse(AppControl.textTook("hello", "Hello"))
+        assertEquals("text_not_taken", AppControl.CODE_TEXT_NOT_TAKEN)
+        assertTrue(AppControl.TEXT_NOT_TAKEN.contains("not counted as typed"))
+    }
 }
