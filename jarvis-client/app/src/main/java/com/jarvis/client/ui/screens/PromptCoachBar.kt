@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,6 +94,15 @@ private val SUGGESTION_MAX_HEIGHT = 220.dp
  * @param sendMine sends what is in the box as it is - which, while the panel is
  *   drawn, is exactly the text that was coached (`current` above).
  * @param sendSuggestion puts this rewrite in the box and sends it.
+ * @param showButton whether this bar draws its own "Coach this" button. Home
+ *   passes false since 2026-10-25: the owner asked for the chat bar to keep
+ *   only the typing box, Send and the microphone, and the button moved into
+ *   the shared More menu. The bar itself is still the one place the advice
+ *   panel and the PC's own missing-route line can be drawn.
+ * @param request a counter the caller bumps to ask for coaching. It exists for
+ *   the menu entry that replaced the button: the menu cannot press a button it
+ *   does not draw, so it bumps this and the bar runs the same ask. Zero is the
+ *   ordinary state (nothing asked); each bump after that asks once.
  */
 /**
  * Whether the "Coach this" bar is drawn at all.
@@ -123,6 +133,8 @@ internal fun PromptCoachBar(
     sendMine: () -> Unit,
     sendSuggestion: (String) -> Unit,
     onAddFix: (String) -> Unit,
+    showButton: Boolean = true,
+    request: Int = 0,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -175,49 +187,65 @@ internal fun PromptCoachBar(
     val enoughWords = written.trim().split(WHITESPACE).count { it.isNotEmpty() } >= PromptCoach.MIN_WORDS
     val canAsk = link == LinkState.CONNECTED && !streaming && !coaching && enoughWords && !shared
 
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Quiet(
-            v.button,
-            enabled = canAsk,
-            modifier = Modifier.semantics {
-                contentDescription = if (canAsk) {
-                    "Ask your PC what is missing from this question before you send it"
-                } else {
-                    "Coach this is not available just now"
+    // The ask itself, in ONE place: the bar's own button (when the caller still
+    // draws one) and the More menu's "Coach this" row both run this, so the two
+    // doors cannot coach differently.
+    fun ask() {
+        if (!canAsk) return
+        val asked = draft()
+        if (asked.isBlank()) return
+        close()
+        coachedText = asked
+        coaching = true
+        scope.launch {
+            try {
+                when (val r = JarvisRuntime.coach(asked, PromptCoach.history(thread))) {
+                    is PromptCoach.Read.Shown -> critique = r.critique
+                    is PromptCoach.Read.Refused -> refusal = r.said
+                    PromptCoach.Read.Malformed -> refusal = PromptCoach.MALFORMED
+                    PromptCoach.Read.Missing -> refusal = PromptCoach.MISSING
+                    is PromptCoach.Read.Failed -> refusal = r.why
                 }
-            },
-            onClick = {
-                val asked = draft()
-                if (asked.isBlank()) return@Quiet
-                close()
-                coachedText = asked
-                coaching = true
-                scope.launch {
-                    try {
-                        when (val r = JarvisRuntime.coach(asked, PromptCoach.history(thread))) {
-                            is PromptCoach.Read.Shown -> critique = r.critique
-                            is PromptCoach.Read.Refused -> refusal = r.said
-                            PromptCoach.Read.Malformed -> refusal = PromptCoach.MALFORMED
-                            PromptCoach.Read.Missing -> refusal = PromptCoach.MISSING
-                            is PromptCoach.Read.Failed -> refusal = r.why
+            } finally {
+                coaching = false
+            }
+        }
+    }
+    // The menu's "Coach this" entry cannot press a button this bar does not
+    // draw (Home passes showButton = false), so it bumps `request` and the same
+    // ask runs once per bump. Zero is the ordinary state.
+    LaunchedEffect(request) {
+        if (request > 0) ask()
+    }
+
+    if (showButton || coaching) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            if (showButton) {
+                Quiet(
+                    v.button,
+                    enabled = canAsk,
+                    modifier = Modifier.semantics {
+                        contentDescription = if (canAsk) {
+                            "Ask your PC what is missing from this question before you send it"
+                        } else {
+                            "Coach this is not available just now"
                         }
-                    } finally {
-                        coaching = false
-                    }
-                }
-            },
-        )
-        if (coaching) {
-            Text(
-                PromptCoach.READING,
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textMid,
-                modifier = Modifier.liveStatus(),
-            )
+                    },
+                    onClick = { ask() },
+                )
+            }
+            if (coaching) {
+                Text(
+                    PromptCoach.READING,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                    modifier = Modifier.liveStatus(),
+                )
+            }
         }
     }
 

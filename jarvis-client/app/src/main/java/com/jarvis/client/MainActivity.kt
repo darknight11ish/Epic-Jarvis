@@ -3023,6 +3023,14 @@ class MainActivity : FragmentActivity() {
                         // "Open about" by voice or chat (OpenPlace).
                         initialSection = sectionFor(Screen.FAQ),
                         onSectionConsumed = sectionConsumed,
+                        // Find moved out of Home's status line and into Help
+                        // (the owner's ask of 2026-10-25). Harmless when
+                        // unpaired, and deliberately still shown there: Help
+                        // is one of the screens reachable BEFORE pairing
+                        // (2093's exemption list), while Find is not - so the
+                        // row is only offered when this phone could reach it,
+                        // instead of opening the pairing screen over it.
+                        onOpenFind = if (paired) ({ nav.go(Screen.FIND) }) else null,
                     )
 
                     // "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md,
@@ -3037,8 +3045,9 @@ class MainActivity : FragmentActivity() {
 
                     // "Find anything" (ui/screens/FindScreen.kt; the parity
                     // audit of 2026-10-10, gap 8): the typed search over every
-                    // place in the app, opened from the Find button on Home's
-                    // status line. It navigates and does nothing else.
+                    // place in the app, opened from the Find row inside Help
+                    // since 2026-10-25 (it used to be on Home's status line).
+                    // It navigates and does nothing else.
                     Screen.FIND -> com.jarvis.client.ui.screens.FindScreen(
                         // The two hiding rules, read the same way the screens
                         // read them: what "Show or hide menus" hides, and the
@@ -3478,10 +3487,6 @@ class MainActivity : FragmentActivity() {
                                 onStartPhoneWatch = { startPhoneWatch() },
                                 onStopPhoneWatch = { com.jarvis.client.net.ScreenWatch.requestStop() },
                                 onOpenUsageAccess = { openUsageAccess() },
-                                // "Find anything" (ui/screens/FindScreen.kt):
-                                // the typed search over every place in the app,
-                                // from the Find button on the status line.
-                                onOpenFind = { nav.go(Screen.FIND) },
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value
@@ -3672,6 +3677,22 @@ class MainActivity : FragmentActivity() {
                                         .menuFor(Screen.BRAIN.name, "models")
                                         ?.let { JarvisRuntime.menus.showForVisit(it) }
                                     pendingSection = "models"
+                                    pendingSectionScreen = Screen.BRAIN.name
+                                    nav.go(Screen.BRAIN)
+                                },
+                                // "Jarvis Presets" (the owner's ask of
+                                // 2026-10-25: the presets control belongs
+                                // inside the More menu). It opens the Brain's
+                                // Hardware plate, where FocusPresetsSection is
+                                // drawn - the same destination OpenPlace
+                                // already gives "open focus presets"
+                                // (`Where.Go(Screen.BRAIN, "hardware")`), so
+                                // nothing new is read and no route is added.
+                                onOpenPresets = {
+                                    com.jarvis.client.ui.MenuPlaces
+                                        .menuFor(Screen.BRAIN.name, "hardware")
+                                        ?.let { JarvisRuntime.menus.showForVisit(it) }
+                                    pendingSection = "hardware"
                                     pendingSectionScreen = Screen.BRAIN.name
                                     nav.go(Screen.BRAIN)
                                 },

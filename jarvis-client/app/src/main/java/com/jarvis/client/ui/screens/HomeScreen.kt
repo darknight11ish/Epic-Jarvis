@@ -65,6 +65,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -102,6 +103,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.jarvis.client.Activity
 import com.jarvis.client.FaceState
 import com.jarvis.client.LinkState
@@ -113,9 +115,12 @@ import com.jarvis.client.face.FaceView
 import com.jarvis.client.data.FaceSize
 import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.Attention
+import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
+import com.jarvis.client.net.TemporaryChat
+import com.jarvis.client.net.Thinking
 import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
@@ -157,14 +162,19 @@ import kotlin.math.sin
 private const val DEFAULT_FACE_FRACTION = 0.75f
 
 /**
- * What the face pane holds besides the face itself: the lane chip, the
- * "Open the Brain" caption with its gaps, and the Galaxy row under it. Used to
- * grow the pane so a CHOSEN size is really drawn at that size - see the
- * measure block below - and deliberately a little generous: too small and the
- * face is capped by the leftover height again, which is the fault this
- * exists to fix.
+ * What the face pane holds besides the face itself: the lane chip, and the
+ * Galaxy row under it. Used to grow the pane so a CHOSEN size is really drawn
+ * at that size - see the measure block below - and deliberately a little
+ * generous: too small and the face is capped by the leftover height again,
+ * which is the fault this exists to fix.
+ *
+ * It was 104dp while an "Open the Brain →" caption was also drawn here. The
+ * owner asked on 2026-10-25 for that caption to go (the nav row's Brain button
+ * is the same door), so the pane's own furniture is one caption lighter; 80dp
+ * keeps the same deliberate slack without reserving room for a line that is
+ * no longer drawn.
  */
-private val FACE_PANE_CHROME = 104.dp
+private val FACE_PANE_CHROME = 80.dp
 
 /**
  * The conversation keeps at least this much, however large the face is asked
@@ -790,11 +800,14 @@ data class HomeActions(
     /** Jarvis Live: open its screen (ui/screens/LiveScreen.kt), where it starts and ends. */
     val onOpenLive: () -> Unit = {},
     /**
-     * "Find anything" (ui/screens/FindScreen.kt): the typed search over every
-     * place in the app, opened from the Find button on the status line. It
-     * searches and navigates; nothing here changes a setting.
+     * "Jarvis Presets" - the owner's ask of 2026-10-25: the presets control
+     * moves out of the chat bar and into the More menu. It opens the Brain's
+     * Hardware plate, where [FocusPresetsSection] is drawn - the same
+     * destination OpenPlace gives "open focus presets"
+     * (`Where.Go(Screen.BRAIN, "hardware")`, OpenPlace.kt). Navigation only:
+     * choosing a preset still raises the contract's own approval card.
      */
-    val onOpenFind: () -> Unit = {},
+    val onOpenPresets: () -> Unit = {},
     /**
      * The owner tapped Right or Wrong on the answer [turnId]. The runtime
      * works out whether that sets, changes or takes back the mark, and sends
@@ -1015,6 +1028,15 @@ fun HomeScreen(
     // rememberSaveable, so turning the phone does not snap an open row shut.
     var navOpen by rememberSaveable { mutableStateOf(false) }
     val navShown = state.navAlwaysShown || navOpen
+
+    // The one More menu, shared by the chat composer and the full-screen face
+    // bar (the owner's ask of 2026-10-25: one shared menu rather than two that
+    // can drift apart). Hoisted here, so both surfaces open the same dialog.
+    var moreOpen by rememberSaveable { mutableStateOf(false) }
+    // "Coach this" lives in that menu now. Pressing it bumps this counter;
+    // the coach bar above the box runs the ask and its advice panel still
+    // opens beside the words it is about (see PromptCoachBar's `request`).
+    var coachTick by remember { mutableIntStateOf(0) }
 
     // ---- The split between the face and the conversation -----------------
     //
@@ -1249,7 +1271,14 @@ fun HomeScreen(
                 showCaption = true,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
-            VoiceBar(state, actions, reply, micLevel, onShowChat = { peekChat = true })
+            VoiceBar(
+                state,
+                actions,
+                reply,
+                micLevel,
+                onShowChat = { peekChat = true },
+                onOpenMore = { moreOpen = true },
+            )
         } else {
             if (state.faceSize.hidden) {
                 // No face at all: the conversation takes the whole room, and
@@ -1372,8 +1401,26 @@ fun HomeScreen(
                     Quiet("Back to full screen", onClick = { peekChat = false })
                 }
             }
-            Composer(state, draft, actions, micLevel)
+            Composer(
+                state,
+                draft,
+                actions,
+                micLevel,
+                onOpenMore = { moreOpen = true },
+                coachTick = coachTick,
+            )
         }
+    }
+    // The shared More menu, drawn once for whichever surface opened it: the
+    // chat bar's "More" or the full-screen face bar's. One composable, so the
+    // two lists cannot disagree about what the chat offers.
+    if (moreOpen) {
+        HomeMoreMenu(
+            state = state,
+            actions = actions,
+            onDismiss = { moreOpen = false },
+            onCoachThis = { coachTick += 1 },
+        )
     }
 }
 
@@ -1445,7 +1492,13 @@ private fun ConversationList(
             }
         }
 
-        item(key = "quick-note") { QuickNotePlate(open = state.quickNoteOpen, actions = actions) }
+        // Quick note (backend/note-capture.patch) moved into the More menu on
+        // 2026-10-25: the small closed-state button no longer sits in the
+        // conversation. The plate itself still opens here when the menu (or
+        // the home-screen widget's Note) asks for it.
+        if (state.quickNoteOpen) {
+            item(key = "quick-note") { QuickNotePlate(open = true, actions = actions) }
+        }
 
         // "Playing on your PC" (2026-09-28): play, pause, next, previous -
         // greyed while the link is stale (rule 4), no card.
@@ -1862,17 +1915,6 @@ private fun StatusLine(
                 }
             }
         }
-
-        // "Find anything" (ui/screens/FindScreen.kt; the parity audit of
-        // 2026-10-10, gap 8): the typed search over every place in the app.
-        // Here rather than in the navigation row below, for a reason that
-        // shows on a narrow phone: that row weights six destinations equally,
-        // and a seventh would ellipsize "Appearance" on most screens. This
-        // line is always on screen - even when the owner has the navigation
-        // row set to "Hidden until swiped" - so the way in is a control the
-        // owner can see, never a gesture. Word for word the label the
-        // desktop's own bar puts on its palette button.
-        Quiet(com.jarvis.client.ui.FindWords.BUTTON, color = chrome.textMid, onClick = actions.onOpenFind)
 
         // Shown only while there is something to retry: offline, and also
         // "Catching up…" (phone walk-through, 2026-09-27). A link that is up
@@ -2358,19 +2400,11 @@ private fun FaceBlock(
                 // machine" is the single most consequential fact the UI carries and
                 // it had no representation here at all.
                 LaneChip(state.status)
-                if (showCaption && opensMind) {
-                    Gap(2)
-                    Text(
-                        "Open the Brain →",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = wellChrome.textLo,
-                        modifier = Modifier
-                            .clip(LocalRadii.current.insetShape)
-                            .pressable(onClick = actions.onOpenBrain)
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                    Gap(2)
-                } else {
+                // "Open the Brain →" used to sit here. The owner asked on
+                // 2026-10-25 for it to go: the navigation row's Brain button
+                // and the face tap (when the owner allows it) are the same
+                // door, and the caption was a second, redundant way in.
+                if (!showCaption) {
                     Gap(6)
                 }
                 // The Galaxy, one tap from Home (the owner's request of
@@ -3592,6 +3626,8 @@ private fun Composer(
     draft: () -> String,
     actions: HomeActions,
     micLevel: State<Float>,
+    onOpenMore: () -> Unit,
+    coachTick: Int,
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
@@ -3612,10 +3648,10 @@ private fun Composer(
             .background(chrome.surface1)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-    // The focus preset chip (owner decision 2026-10-18): the current preset,
-    // and the one-asked-action list behind it. It sits at the top of the chat
-    // bar so the owner can see what the next question will run on.
-    FocusPresetChip(state.link, state.stale)
+    // The chat bar keeps only the typing box, Send and the microphone. The
+    // focus presets, Photo, Think, Coach this, Temporary chat, Earlier chats,
+    // Notifications and Quick note all moved into the More menu (the owner's
+    // ask of 2026-10-25), reached from the More button beside the box.
     // The one quiet line about the chat itself (the chat audit, 2026-09-28):
     // read out by TalkBack as it appears, dismissed by a tap.
     state.chatNote?.let { line ->
@@ -3641,16 +3677,12 @@ private fun Composer(
             )
         }
     }
-    // A temporary chat: the marker for the whole chat, and the way in and
-    // out - and "Earlier chats", the way to History (the owner's decision,
-    // 2026-09-28).
-    TemporaryChatStrip(
-        on = state.temporary,
-        empty = state.lastUserText == null && state.conversationTurns == 0,
-        enabled = !state.streaming,
-        onToggle = actions.onToggleTemporary,
-        onEarlierChats = actions.onEarlierChats,
-    )
+    // A temporary chat still says so while it is on - the marker for the
+    // whole chat (the owner's decision, 2026-09-28). Starting or ending it,
+    // and "Earlier chats", moved into the More menu on 2026-10-25.
+    if (state.temporary) {
+        TemporaryChatMarker(empty = state.lastUserText == null && state.conversationTurns == 0)
+    }
     VoiceStrips(state, actions)
     // A picture waiting to go with the next question. Dismiss drops it.
     if (state.pictureBusy) {
@@ -3694,6 +3726,13 @@ private fun Composer(
         link = state.link,
         shared = state.sharedLine != null,
         streaming = state.streaming,
+        // The "Coach this" button itself moved into the More menu (the
+        // owner's ask of 2026-10-25). The bar is still the one place the
+        // advice panel and the PC's own missing-route line can be drawn, so
+        // it stays - with no button - and the menu's Coach this entry bumps
+        // `request` to run the same ask.
+        showButton = false,
+        request = coachTick,
         // "Send mine": exactly the words in the box, down the chat's own path.
         // Nothing is sent unless one of these two is pressed.
         sendMine = { actions.onSend() },
@@ -3719,55 +3758,20 @@ private fun Composer(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
     ) {
-        // Only while the PC's Pictures feature works - see HomeState.pictureOffered.
-        if (state.pictureOffered) {
-            Quiet(
-                "Photo",
-                color = chrome.textMid,
-                enabled = state.link == LinkState.CONNECTED && !state.streaming && !state.pictureBusy,
-                onClick = actions.onAttachPicture,
-            )
-            Spacer(Modifier.width(4.dp))
-        }
-        // Only while phone notifications are on AND something has actually
-        // been captured - see HomeState.notificationsAttachable. Attaching
-        // never sends on its own: it fills the same shared-text chip the
-        // Share sheet does, and the owner still presses Send.
-        if (state.notificationsAttachable) {
-            Quiet(
-                "Notifications",
-                color = chrome.textMid,
-                enabled = !state.streaming,
-                onClick = actions.onAttachNotifications,
-            )
-            Spacer(Modifier.width(4.dp))
-        }
-        // "Think about this one" (the owner's decision, 2026-10-11): Jarvis
-        // thinks about THIS question before answering it - the everyday model
-        // thinks before every answer by default, and a normal answer allowance
-        // spent thinking comes back EMPTY, so it is asked for one question at
-        // a time rather than left on. It lights while it is on, and goes out
-        // by itself when the question is sent: it is not a setting, and the
-        // next question is an ordinary one again. Drawn only on a PC that says
-        // it understands the field (HomeState.thinkOffered) - a PC that would
-        // ignore it is never offered a key that does nothing.
-        if (state.thinkOffered) {
-            Quiet(
-                com.jarvis.client.net.Thinking.ONE_SHOT_LABEL,
-                color = if (state.thinkOnce) chrome.okInk else chrome.textMid,
-                enabled = !state.streaming,
-                modifier = Modifier.semantics {
-                    contentDescription = if (state.thinkOnce) {
-                        "Thinking about this one: on. " +
-                            com.jarvis.client.net.Thinking.ONE_SHOT_WHY
-                    } else {
-                        com.jarvis.client.net.Thinking.ONE_SHOT_WHY
-                    }
-                },
-                onClick = actions.onToggleThinkOnce,
-            )
-            Spacer(Modifier.width(4.dp))
-        }
+        // Everything else that used to be a key in this row (Photo, Think,
+        // Notifications, the preset chip, the temporary-chat controls) is in
+        // the shared More menu now. This row is the owner's ask of
+        // 2026-10-25: the typing box, Send and the microphone - plus the one
+        // button that opens the rest.
+        Quiet(
+            MoreMenuWords.MORE,
+            color = chrome.textMid,
+            modifier = Modifier.semantics {
+                contentDescription = "More chat controls, presets and tools"
+            },
+            onClick = onOpenMore,
+        )
+        Spacer(Modifier.width(8.dp))
         // BasicTextField rather than OutlinedTextField: the Material one brings
         // its own container, its own 56dp minimum, its own label animation and
         // its own notched outline, none of which belong in a design made of
@@ -3935,6 +3939,7 @@ private fun VoiceBar(
     reply: () -> String,
     micLevel: State<Float>,
     onShowChat: () -> Unit,
+    onOpenMore: () -> Unit,
 ) {
     val chrome = LocalChrome.current
     Column(
@@ -3953,11 +3958,23 @@ private fun VoiceBar(
         VoiceStrips(state, actions)
         ReplyPeek(reply, state.streaming)
         Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-            Quiet(
-                "Show chat",
-                modifier = Modifier.align(Alignment.CenterStart),
-                onClick = onShowChat,
-            )
+            Row(
+                Modifier.align(Alignment.CenterStart),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Quiet("Show chat", onClick = onShowChat)
+                Spacer(Modifier.width(8.dp))
+                // The SAME menu the chat bar's More opens (the owner's ask of
+                // 2026-10-25: one shared menu) - the full-screen face bar was
+                // otherwise the one place with no way to reach those controls.
+                Quiet(
+                    MoreMenuWords.MORE,
+                    modifier = Modifier.semantics {
+                        contentDescription = "More chat controls, presets and tools"
+                    },
+                    onClick = onOpenMore,
+                )
+            }
             Box(Modifier.align(Alignment.Center)) {
                 // A PC that has not offered push-to-talk must not get an
                 // enabled microphone that does nothing - the same gate the
@@ -4025,5 +4042,194 @@ private fun ReplyPeek(reply: () -> String, streaming: Boolean) {
         maxLines = 3,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+    )
+}
+
+/**
+ * The marker above the chat box while a temporary chat is ON (the owner's
+ * decision of 2026-09-25): the mode's own name and, while the chat is still
+ * empty, its one line. No button - starting and ending it are in the More
+ * menu now (the owner's ask of 2026-10-25); this is a status, like the voice
+ * strips beside it.
+ */
+@Composable
+private fun TemporaryChatMarker(empty: Boolean) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(LocalRadii.current.controlShape)
+            .background(accent.copy(alpha = 0.10f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                TemporaryChat.LABEL,
+                style = MaterialTheme.typography.labelLarge,
+                color = chrome.textHi,
+            )
+            if (empty) {
+                Text(
+                    TemporaryChat.LINE,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid,
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+}
+
+/**
+ * "More" - the one menu the chat bar and the full-screen face bar both open
+ * (the owner's ask of 2026-10-25: one shared menu, not two that can drift).
+ *
+ * The chat bar keeps only the typing box, Send and the microphone; everything
+ * that used to sit around them is listed here, and ONLY while this PC really
+ * offers it - the same gates the controls themselves carried
+ * (`pictureOffered`, `thinkOffered`, the coach's route and switch,
+ * `notificationsAttachable`, `!streaming`). Nothing new can act: every row
+ * calls the existing [HomeActions] callback.
+ *
+ * Drawn as the app's own quiet text rows inside a plain [Dialog] (the
+ * PhotoReminderDialog shape: flat surface, no Material sheet, no new
+ * dependency). Every row closes the menu before it acts, so a control that
+ * raises its own surface - the coach's advice panel, the Brain's preset plate,
+ * Android's photo picker, the note plate - is never left behind a dialog.
+ *
+ * "Jarvis Presets" is navigation only: it opens the Brain's Hardware plate,
+ * where [FocusPresetsSection] already lives (the destination OpenPlace names
+ * for "open focus presets"). Choosing a preset still raises its approval card.
+ */
+@Composable
+private fun HomeMoreMenu(
+    state: HomeState,
+    actions: HomeActions,
+    onDismiss: () -> Unit,
+    onCoachThis: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val coach = state.promptCoach
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(chrome.surface1)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        ) {
+            Text(
+                MoreMenuWords.MORE,
+                style = MaterialTheme.typography.titleMedium,
+                color = chrome.textHi,
+            )
+            Gap(4)
+            Text(
+                MoreMenuWords.SUBTITLE,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+            Gap(8)
+            Rule()
+            Gap(4)
+
+            // Jarvis Presets (owner decision 2026-10-18): the preset chip used
+            // to sit above the box. Its list lives on the Brain's Hardware
+            // plate - the destination OpenPlace already names for "open focus
+            // presets" - so this row navigates there rather than growing a
+            // second copy of the list here.
+            MoreRow(MoreMenuWords.PRESETS) { onDismiss(); actions.onOpenPresets() }
+
+            // Photo, while the PC's Pictures feature works (HomeState.pictureOffered).
+            if (state.pictureOffered) {
+                MoreRow(
+                    MoreMenuWords.PHOTO,
+                    enabled = state.link == LinkState.CONNECTED &&
+                        !state.streaming && !state.pictureBusy,
+                ) { onDismiss(); actions.onAttachPicture() }
+            }
+
+            // Think about this one (the owner's decision, 2026-10-11): a
+            // one-question flag. The label says which state the next press
+            // lands in, so a lit key is not a mystery.
+            if (state.thinkOffered) {
+                MoreRow(
+                    if (state.thinkOnce) {
+                        Thinking.ONE_SHOT_LABEL + ": on"
+                    } else {
+                        Thinking.ONE_SHOT_LABEL
+                    },
+                    enabled = !state.streaming,
+                ) { onDismiss(); actions.onToggleThinkOnce() }
+            }
+
+            // Coach this (docs/PROMPT-COACH-DESIGN.md, JARVIS-API section
+            // 119): only on a PC whose switch is ON and whose route it knows -
+            // a PC with no coach gets its own MISSING line above the box
+            // instead (PromptCoachBar), never a button that would 404. The
+            // words are the PC's own.
+            if (coach != null && coach.routeKnown && coach.on) {
+                MoreRow(
+                    coach.button,
+                    enabled = state.link == LinkState.CONNECTED &&
+                        !state.streaming && state.sharedLine == null,
+                ) {
+                    onDismiss()
+                    onCoachThis()
+                }
+            }
+
+            // Temporary chat (the owner's decision of 2026-09-25) and
+            // "Earlier chats" (the chat audit, 2026-09-28). The marker still
+            // appears above the box while a temporary chat is on; starting or
+            // ending it happens here now.
+            MoreRow(
+                if (state.temporary) TemporaryChat.END else TemporaryChat.START,
+                enabled = !state.streaming,
+            ) { onDismiss(); actions.onToggleTemporary() }
+            MoreRow(ChatHistory.EARLIER_CHATS) { onDismiss(); actions.onEarlierChats() }
+
+            // Notifications, only while phone notifications are on AND
+            // something was captured (HomeState.notificationsAttachable).
+            // Attaching never sends on its own.
+            if (state.notificationsAttachable) {
+                MoreRow(MoreMenuWords.NOTIFICATIONS, enabled = !state.streaming) {
+                    onDismiss()
+                    actions.onAttachNotifications()
+                }
+            }
+
+            // Quick note (backend/note-capture.patch): opens the plate in the
+            // conversation, the same one the home-screen widget's Note opens.
+            MoreRow(MoreMenuWords.QUICK_NOTE) { onDismiss(); actions.onQuickNoteOpenChange(true) }
+
+            Gap(8)
+            Rule()
+            Gap(4)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Quiet(MoreMenuWords.CLOSE, color = chrome.textMid, onClick = onDismiss)
+            }
+        }
+    }
+}
+
+/**
+ * One row of the shared More menu: the same quiet text control every other
+ * list in the app uses, full width so the whole row is the target. The caller
+ * closes the dialog BEFORE the action runs - several of these actions raise a
+ * surface of their own (the coach's advice panel, the Brain's preset plate,
+ * Android's photo picker, the note plate), and none should open behind a
+ * dialog.
+ */
+@Composable
+private fun MoreRow(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Quiet(
+        label,
+        enabled = enabled,
+        color = LocalChrome.current.textHi,
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
     )
 }

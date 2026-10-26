@@ -165,6 +165,15 @@ class AuditPlumbingTest {
     @Test
     fun theTalkButtonsOwnCaptureStateCannotRestartTheGesture() {
         val button = source("ui/parts/VoiceButton.kt")
+        // Code only: the file's own doc comment explains the old key in words,
+        // and the forbidden pattern must be read from the CODE, not from the
+        // explanation of why it was wrong.
+        val code = button.lines()
+            .filterNot {
+                val t = it.trimStart()
+                t.startsWith("//") || t.startsWith("/*") || t.startsWith("*")
+            }
+            .joinToString("\n")
         // The owner's report of 2026-10-13 - "the mic button ... doesnt work
         // if i tap it or hold it down" - was this: the pointerInput was keyed
         // on `capturing`, and `onBegin()` makes VoiceSession set CAPTURING
@@ -178,7 +187,7 @@ class AuditPlumbingTest {
         )
         assertFalse(
             "`capturing` is a pointerInput key again - the gesture will restart and cancel itself",
-            Regex("""pointerInput\([^)]*capturing""").containsMatchIn(button),
+            Regex("""pointerInput\([^)]*capturing""").containsMatchIn(code),
         )
         assertTrue(
             "`capturing` is not read through rememberUpdatedState",
@@ -203,7 +212,11 @@ class AuditPlumbingTest {
     @Test
     fun fullScreensMicrophoneIsGatedOnThePcOfferingIt() {
         val home = source("ui/screens/HomeScreen.kt")
-        val voiceBar = after(home, "private fun VoiceBar(")
+        // The whole of VoiceBar, not a fixed character window: a More control
+        // now sits above the microphone in the same bar, and the old 2,000
+        // character window would have pushed these lines out of view.
+        val voiceBar = home.substringAfter("private fun VoiceBar(")
+            .substringBefore("private fun ReplyPeek(")
         assertTrue(
             "Full screen draws its microphone for a PC that has not offered push-to-talk",
             voiceBar.contains("if (state.voiceOffered) {"),
@@ -211,6 +224,80 @@ class AuditPlumbingTest {
         assertTrue(
             "Full screen's microphone is enabled without the PC's own voice offer",
             voiceBar.contains("enabled = state.voiceOffered &&"),
+        )
+    }
+
+    // ------------------------------------------------- the shared More menu ---
+
+    @Test
+    fun theMovedChatControlsLiveInOneSharedMenu() {
+        val home = source("ui/screens/HomeScreen.kt")
+        val composer = home.substringAfter("private fun Composer(").substringBefore("\n@Composable")
+        // The whole of VoiceBar again - see fullScreensMicrophoneIsGated...
+        val voiceBar = home.substringAfter("private fun VoiceBar(")
+            .substringBefore("private fun ReplyPeek(")
+        val menu = home.substringAfter("private fun HomeMoreMenu(")
+        // The chat bar keeps only the typing box, Send and the microphone -
+        // and the one button that opens the rest (the owner's ask of
+        // 2026-10-25). None of the moved controls may be drawn in it.
+        for (moved in listOf(
+            "FocusPresetChip(",
+            "TemporaryChatStrip(",
+            "state.pictureOffered",
+            "state.thinkOffered",
+        )) {
+            assertFalse("the chat bar still draws $moved", composer.contains(moved))
+        }
+        assertTrue("the chat bar has no More control", composer.contains("onClick = onOpenMore"))
+        // The full-screen face bar opens the SAME menu (one shared menu, not
+        // a second list that can drift).
+        assertTrue("the face bar has no More control", voiceBar.contains("onClick = onOpenMore"))
+        // The "why the microphone is greyed" line must survive on both
+        // surfaces: moving a control must not move its explanation with it.
+        assertTrue(
+            "the chat bar no longer says why the microphone is greyed",
+            composer.contains("MicWords.heldLine("),
+        )
+        assertTrue(
+            "the full-screen bar no longer says why the microphone is greyed",
+            voiceBar.contains("MicWords.heldLine("),
+        )
+        // ...and that one menu carries every moved control, under the same
+        // offer gates the controls themselves used.
+        for (word in listOf(
+            "MoreMenuWords.PRESETS",
+            "MoreMenuWords.PHOTO",
+            "Thinking.ONE_SHOT_LABEL",
+            "TemporaryChat.START",
+            "ChatHistory.EARLIER_CHATS",
+            "MoreMenuWords.NOTIFICATIONS",
+            "MoreMenuWords.QUICK_NOTE",
+        )) {
+            assertTrue("the shared More menu does not offer $word", menu.contains(word))
+        }
+        // The coach button left PromptCoachBar for the menu: the bar must be
+        // able to hide its own button and to be asked to coach from outside.
+        val coachBar = source("ui/screens/PromptCoachBar.kt")
+        assertTrue(
+            "the coach bar cannot hide its own button",
+            coachBar.contains("showButton: Boolean = true"),
+        )
+        assertTrue(
+            "the coach bar cannot be asked to coach from outside",
+            coachBar.contains("request: Int = 0"),
+        )
+        // The two controls the owner asked to have gone really are gone from
+        // Home: the redundant "Open the Brain →" caption and the Find button
+        // (Find moved into Help - FindAnythingTest holds that side). The
+        // caption is pinned by its action, not its words: the file's own
+        // comments quote the removed words to explain them.
+        assertFalse(
+            "the removed \"Open the Brain →\" caption is back on Home",
+            home.contains(".pressable(onClick = actions.onOpenBrain)"),
+        )
+        assertFalse(
+            "a Find button is back on Home",
+            home.contains("com.jarvis.client.ui.FindWords.BUTTON"),
         )
     }
 }

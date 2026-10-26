@@ -314,6 +314,14 @@ fun FaqScreen(
     initialSection: String? = null,
     /** Called once [initialSection] has been acted on, so it is not acted on again. */
     onSectionConsumed: () -> Unit = {},
+    /**
+     * The way into "Find anything" from Help, or null when this phone cannot
+     * reach it (the owner's ask of 2026-10-25: the Find button left Home's
+     * status line). Null on an unpaired phone on purpose: Help is reachable
+     * before pairing, and Find is not - MainActivity decides, the same way the
+     * pairing screen keeps Help exempt.
+     */
+    onOpenFind: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val listState = rememberLazyListState()
@@ -335,6 +343,16 @@ fun FaqScreen(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp),
         ) {
             item(key = "top-space") { Spacer(Modifier.height(6.dp)) }
+            // The way into "Find anything" (ui/screens/FindScreen.kt, the
+            // phone's half of the desktop's command palette). It used to sit
+            // on Home's status line; the owner asked on 2026-10-25 for it to
+            // move into Help, which is where a control is looked for when it
+            // cannot be found. Drawn only when the caller can reach the screen
+            // (null on an unpaired phone - see the parameter).
+            val find = onOpenFind
+            if (find != null) {
+                item(key = "find") { FindAnythingEntry(onOpenFind = find) }
+            }
             items(FAQS, key = { it.q }) { FaqCard(it) }
             // Identity, not behaviour - the FAQ above already answers "how does
             // this behave"; this answers "what is this, and where did it come
@@ -345,6 +363,42 @@ fun FaqScreen(
             item(key = "about") { AboutCard() }
             item(key = "bottom-space") { Spacer(Modifier.height(4.dp)) }
         }
+    }
+}
+
+/**
+ * The way into "Find anything" from Help: the same card shape the questions
+ * use, with the screen's own name and its one-line description, and a chevron
+ * pointing on. A destination, not a toggle - nothing here searches by itself,
+ * and the press goes straight to the screen.
+ */
+@Composable
+private fun FindAnythingEntry(onOpenFind: () -> Unit) {
+    val chrome = LocalChrome.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(LocalRadii.current.cardShape)
+            .background(chrome.surface1)
+            .pressable(onClick = onOpenFind)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                com.jarvis.client.ui.FindWords.TITLE,
+                style = MaterialTheme.typography.titleSmall,
+                color = chrome.textHi,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                com.jarvis.client.ui.FindWords.SEARCHES,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Chevron(tint = chrome.textMid, rotation = 270f)
     }
 }
 
