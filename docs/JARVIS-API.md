@@ -5435,7 +5435,7 @@ What it understands:
 |---|---|
 | Timers | "set a timer for 10 minutes", "10 minute timer", "timer for 1h30", "set a pasta timer for 12 minutes", "cancel the timer", "cancel the pasta timer", "pause / resume the timer", "add 5 minutes to the timer", "5 more minutes" (only while a timer runs), "take 2 minutes off the timer", "how long is left" (only while a timer **or** a focus session is running) |
 | Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
-| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat). **Time-first works too** (2026-10-18): "remind me in 2 minutes to drink water", "remind in 2 minutes to drink water" (the phone's own shorthand, no "me"), and "in 10 minutes remind me to drink water" |
+| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat). **Time-first works too** (2026-10-18): "remind me in 2 minutes to drink water", "remind in 2 minutes to drink water" (the phone's own shorthand, no "me"), and "in 10 minutes remind me to drink water". **Since 2026-10-27 the owner's own HUD wording is here too** (see below): "add a reminder to take my pills at 6pm", "add a reminder for tomorrow at 6pm to call Mum", "i need a reminder to call the dentist tomorrow", "reminder to call Mum at 6", "new reminder to pay rent on Friday at 5pm", and any of these after a polite lead-in ("please", "can you", "i want to") |
 | To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
 | Named lists (21.9) | "add milk to the shopping list", "add milk, eggs and bread to the shopping list", "what's on my shopping list", "cross milk off the shopping list", "remove eggs from the shopping list", "what lists do I have", "clear the shopping list" (changes nothing: it points to the app) |
 | Snooze (21.9) | "snooze", "snooze 5 minutes", "snooze the alarm", "remind me again in 10 minutes" |
@@ -5443,6 +5443,25 @@ What it understands:
 | Morning briefing | "brief me now", "brief me every weekday at 7" (**a card**), "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
 | Features (§130) | "what is the prompt coach", "what does the prompt coach do", "is the prompt coach on", "is the prompt coach on right now", "how do I turn on the prompt coach", "how do I turn off the prompt coach", "what features do you have", "list the memory features", "turn on <a feature that names one switch>" - added 2026-10-20 |
+
+**A reminder the grammar missed can no longer become a model's prose success
+(2026-10-27, the owner's HUD bug).** The owner typed "add a reminder ..." into
+the HUD, Jarvis's answer said it had set one, nothing was written and the
+Reminders tab stayed empty. Two causes, both fixed. First, the grammar above
+did not know "add a reminder", "i need a reminder" / "i want a reminder",
+"reminder to ..." or a polite lead-in before any of them ("can you add a
+reminder ..."), so the sentence went to the model. Second, the model's own
+`[tools].enabled` list does not name `set_reminder` (the fast path is the
+intended route; see `jarvis_agent.SCHEDULE_TOOLS`), so it had no tool to call
+and answered in prose. The phrasings above are answered here now, and a model
+answer that claims a reminder, timer or to-do item with the verb first or the
+job first ("Added a reminder ...", "Reminder set for 6pm.") is corrected with
+"(Nothing was actually done - no action ran in this answer.)" exactly like
+"I've set a reminder..." - `jarvis_claims.CLAIMS_SCHEDULE_DONE`, which also
+counts a read-only `feature_guide` result as no action. Questions, offers and
+instructions are not claims: "Reminder set for 6pm" typed as a command is
+still not a command (it goes to the model), and neither is "Set a reminder
+for 6pm if you like.".
 
 **Feature questions are answered from the feature list, not the model.** The
 three "Features" wordings above read `features/features.json` itself (through

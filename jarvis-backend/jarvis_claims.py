@@ -13,7 +13,16 @@ drift apart:
     ("called", "contacted", "notified", "booked", "deleted", "cancelled",
     "paid", "ordered") - "I've called 911 for you" must never stand
     unchallenged when Jarvis has no way to call anyone.
-  - claims_done(text) - the same pattern, read sentence by sentence and a
+  - CLAIMS_SCHEDULE_DONE (2026-10-27) - the same claim about a reminder,
+    timer, alarm or to-do item with the verb FIRST or the job first, which
+    CLAIMS_DONE's "I've"/"I just"/"Done" prefix could not see: "Added a
+    reminder to take your pills at 6pm.", "Reminder added for 6pm.". That is
+    the shape the model actually used on the owner's HUD: the reminder was
+    never written, the answer said it had been, and no correction line was
+    added. Kept to the scheduler's nouns and anchored at the sentence start so
+    instructions ("you can add a reminder by saying...") and other subjects
+    are not claims.
+  - claims_done(text) - both patterns, read sentence by sentence and a
     little more carefully, because at run time a wrong hit adds a wrong line
     to a real answer. A question ("Should I set a reminder?"), an "if ..."
     sentence, a sentence about something done earlier ("I already set it
@@ -54,13 +63,37 @@ CLAIMS_DONE = re.compile(
     r"written|wrote|called|contacted|notified|booked|deleted|cancelled|paid|ordered)\b"
     r"|^\s*done\b", re.I | re.M)
 
+#: The SAME claim with no "I" in front, or with the job first - the shape an
+#: 8B model actually used in the owner's HUD bug of 2026-10-27 ("Added a
+#: reminder to take your pills at 6pm."), which they read as done while no row
+#: was written. CLAIMS_DONE needs "I've"/"I just"/"Done" before the verb, so
+#: these went uncorrected. Kept to the scheduler's own nouns on purpose, so a
+#: recipe's "Added salt" or a story's "Set the scene" is never called a claim
+#: about this PC's jobs; the sentence-start anchor is what keeps "you can add
+#: a reminder by saying ..." (an instruction) out of it.
+CLAIMS_SCHEDULE_DONE = re.compile(
+    r"^\s*(?:added|set|created|scheduled|saved|started|put|made)\s+"
+    r"(?:(?:a|an|the|your|it|them|another|new|one|two|\d+)\s+)*"
+    r"(?:new\s+|another\s+)?(?:reminder|timer|alarm|to-?do)\b"
+    r"|^\s*(?:added|put)\s+(?:it|that|this|them)\s+(?:to|on)\s+"
+    r"(?:your|the|my)\s+(?:to-?do\s+list|todo(?:\s+list)?|list)\b"
+    r"|\b(?:reminder|timer|alarm)\s+(?:(?:is|was|has\s+been)\s+)?"
+    r"(?:added|set|created|scheduled|saved|started)\b",
+    re.I)
+
 #: Tools that only read, look up or work something out. A result from one of
 #: these never backs "I've done it". Everything else - a note write, a home
 #: change, a reminder, an email, a plug-in tool - counts as an action.
+#:
+#: `feature_guide` (2026-10-27): it explains a feature from the list on this
+#: PC and changes nothing, but it was missing here - and it IS offered by the
+#: shipped `[tools].enabled`. A turn where the model explained a feature and
+#: then said it had set a reminder therefore silenced the "nothing was done"
+#: line (the field bug's second honesty gap).
 READ_ONLY_TOOLS = frozenset({
     "calculator", "memory_search", "file_read", "github_search", "web_search",
     "calendar_read", "email_check", "notes_search", "my_files", "my_spending", "retirement_whatif", "home_read",
-    "coming_up", "more_tools",
+    "coming_up", "more_tools", "feature_guide",
 })
 
 #: The line added to a typed answer that claimed an action nobody took.
@@ -94,8 +127,11 @@ SCHEDULE_CORRECTION_HEAD = "Correction - "
 
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]*", re.M)
 #: A sentence that is a question, a condition or an offer - not a claim.
+#: "if you like/want/..." is the offer that the verb-first scheduler pattern
+#: would otherwise read as done ("Set a reminder for 6pm if you like.").
 _NOT_A_CLAIM = re.compile(
-    r"\?\s*$|^\s*(if|should|shall|would|could|can|do you want|want me)\b|\b(if|once|when) i\b",
+    r"\?\s*$|^\s*(if|should|shall|would|could|can|do you want|want me)\b|\b(if|once|when) i\b"
+    r"|\bif\s+you(?:'d|\s+(?:like|want|wish|prefer))\b",
     re.I)
 #: Something done before this answer ("I already set it this morning").
 _EARLIER = re.compile(
@@ -109,7 +145,8 @@ def claims_done(text: str) -> bool:
     """True when `text` says, in some sentence, that an action was taken."""
     for m in _SENTENCE.finditer(text or ""):
         sentence = m.group(0).strip()
-        if not sentence or not CLAIMS_DONE.search(sentence):
+        if not sentence or not (CLAIMS_DONE.search(sentence)
+                                or CLAIMS_SCHEDULE_DONE.search(sentence)):
             continue
         if _NOT_A_CLAIM.search(sentence) or _EARLIER.search(sentence) \
                 or _MEMORY.search(sentence):

@@ -341,6 +341,11 @@ _EXTRA_LEADS = (
     "do you think you can ",
     "i would like you to ",
     "i would love you to ",
+    "i want you to ",
+    "i need you to ",
+    "i would like to ",
+    "i want to ",
+    "i need to ",
     "any chance you could ",
     "any chance you can ",
     "could you possibly ",
@@ -349,6 +354,13 @@ _EXTRA_LEADS = (
     "be so kind as to ",
     "if you don't mind ",
     "would you mind ",
+    "can you ",
+    "could you ",
+    "would you ",
+    "will you ",
+    "i would like ",
+    "i want ",
+    "i need ",
     "please ",
     "kindly ",
     "just ",
@@ -1950,8 +1962,21 @@ def _run_focus(intent: Intent) -> Result:
     return Result(str(out.get("said") or out.get("error") or ""), n)
 
 
-_REMIND = re.compile(r"(?:remind(?:\s+me)?|set\s+(?:a|an)\s+reminder|make\s+(?:a|an)\s+reminder"
-                     r"|create\s+(?:a|an)\s+reminder)")
+#: The ways a reminder is asked for. "add a reminder ..." is the owner's own
+#: phrasing from the HUD (2026-10-27): it was NOT here, so the sentence went to
+#: the model, which is only offered set_reminder when [tools].enabled names it
+#: (the shipped list does not) - and the model then SAID it had set one while
+#: no row was written. "i need a reminder", "a reminder" and "reminder to ..."
+#: were missing the same way, and the polite lead-ins in _EXTRA_LEADS now make
+#: "can you add a reminder ..." the plain command. Every phrasing this covers
+#: is pinned in test_schedule.py, including the near-misses that must still go
+#: to the model ("reminder set for 6pm" is a CLAIM, not a command).
+_REMIND_ASK = (r"(?:remind(?:\s+me)?"
+               r"|(?:add|set|make|create|schedule|put)\s+(?:a|an)?\s*"
+               r"(?:new\s+)?reminder"
+               r"|(?:a|an)\s+(?:new\s+)?reminder"
+               r"|new\s+reminder|reminder)")
+_REMIND = re.compile(_REMIND_ASK)
 
 
 def _reminder(s: str, now: float) -> Optional[Intent]:
@@ -1962,8 +1987,7 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
     # branch is what covers a time phrase before the command, and the optional
     # "me" below covers the shorthand the owner really typed.
     lead = re.fullmatch(r"(?P<lead>in|at|on)\s+(?P<when>.+?)\s+"
-                        r"(?:remind(?:\s+me)?|set\s+(?:a|an)\s+reminder|"
-                        r"make\s+(?:a|an)\s+reminder|create\s+(?:a|an)\s+reminder)"
+                        + _REMIND_ASK +
                         r"\s+(?:to|about|that)\s+(?P<text>.+)", s)
     if lead:
         text = lead.group("text").strip()
