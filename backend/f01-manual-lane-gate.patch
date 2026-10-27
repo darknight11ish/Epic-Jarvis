@@ -20,11 +20,10 @@
              budget = jarvis_router.Budget.load()
              tainted = _history_tainted(messages, body)
              decision = jarvis_router.choose(
-@@ -4759,7 +4770,15 @@ class Handler(BaseHTTPRequestHandler):
+@@ -4759,6 +4770,14 @@ class Handler(BaseHTTPRequestHandler):
                  # tainted or picture turn out - it only ever turns gate 6
                  # from "offer" into "escalate" for a question that had
                  # already cleared every other gate on its own merits.
--                owner_said_yes=bool(body.get("cloud_yes")),
 +                # f01-manual-lane-gate.patch: a manual pick IS the owner's yes
 +                # for THIS one question - choosing the lane in the app is the
 +                # same gesture as pressing "Try the cloud model" - and that is
@@ -33,11 +32,27 @@
 +                # gate still runs, in the same order; the pick answers gate 6
 +                # and nothing else. Without a pick this is the line
 +                # cloud-say-yes.patch added, read exactly as before.
-+                owner_said_yes=bool(body.get("cloud_yes")) or manual_pick,
+                 # cloud-escalate.patch (2026-10-27): the HUD page sends
+                 # `cloud_yes` while the PC's escalation box is on, so from
+                 # the HUD it is a STANDING yes and counts only while this
+@@ -4769,10 +4788,12 @@ class Handler(BaseHTTPRequestHandler):
+                 # per-question tap it always was. The standing switch
+                 # itself is read by jarvis_router.choose(), never from
+                 # anything a client sent.
+-                owner_said_yes=(bool(body.get("cloud_yes")) and (
+-                    str((getattr(self, "headers", None) or {}).get(
+-                        "X-Jarvis-Client") or "").strip().lower() != "hud"
+-                    or bool(__import__("jarvis_presets").escalate_on()))),
++                owner_said_yes=(
++                    (bool(body.get("cloud_yes")) and (
++                        str((getattr(self, "headers", None) or {}).get(
++                            "X-Jarvis-Client") or "").strip().lower() != "hud"
++                        or bool(__import__("jarvis_presets").escalate_on())))
++                    or manual_pick),
                  # screen.patch: a turn carrying the owner's screen never
                  # leaves this PC - not when it is long, not when a cloud lane
                  # is offered, not when the owner said yes to the cloud for
-@@ -4769,6 +4788,18 @@ class Handler(BaseHTTPRequestHandler):
+@@ -4782,6 +4803,18 @@ class Handler(BaseHTTPRequestHandler):
              if jarvis_side_memory and decision.gate == "unavailable":
                  decision.reason = "escalation off while Jarvis injects memory itself"
                  decision.gate = "privacy"
@@ -56,8 +71,8 @@
          else:
              tainted = _history_tainted(messages, body)
              chosen = body.get("lane") or local_model
-@@ -6101,24 +6132,105 @@ def _lane_names() -> list:
-     ))
+@@ -6145,24 +6178,105 @@ def _lane_names() -> list:
+         return []
  
  
 -def _manual_decision(chosen: str, local_model: str):

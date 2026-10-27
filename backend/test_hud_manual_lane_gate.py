@@ -74,7 +74,10 @@ PASSED, FAILED, SKIPPED = [], [], []
 
 #: The everyday model on a normal PC, and two cloud lanes PROXY_FILE could list.
 LOCAL = "qwen3.5:9b"
-LANES = ["gpt-oss:120b-cloud", "glm-4.6:cloud"]
+# cloud-escalate.patch keeps ONE cloud lane and drops every other name, so the
+# tests use the real name: any other list is filtered to EMPTY by the router
+# (gate "unavailable"), which is exactly what this file proves below.
+LANES = ["jarvis-escalate"]
 
 #: A question the router escalates on its own merits when the owner says yes:
 #: long, clause-heavy and public. Used as the CLEAN control everywhere below.
@@ -141,7 +144,12 @@ def t_the_patch_and_the_base():
     check("... and it is the last code patch, immediately before the loader",
           "f01-manual-lane-gate.patch" in names
           and names.index("f01-manual-lane-gate.patch")
-          == names.index("plugin-loader.patch") - 1, names[-3:])
+          == names.index("plugin-loader.patch") - 1, names[-4:])
+    check("... stacked directly after cloud-escalate.patch, whose hunks are now "
+          "part of this patch's own context",
+          "cloud-escalate.patch" in names
+          and names.index("f01-manual-lane-gate.patch")
+          == names.index("cloud-escalate.patch") + 1, names[-4:])
     check("the published base is there to patch", BASE.is_file(), str(BASE))
     check("the patch file is there", PATCH.is_file(), str(PATCH))
     if not (BASE.is_file() and PATCH.is_file()):
@@ -151,29 +159,54 @@ def t_the_patch_and_the_base():
         return skip("git is not installed, so the patch cannot be applied here")
     raw = PATCH.read_bytes()
     check("the patch has no CRLF in it (git apply reads those as broken context)",
-          b"\r\n" not in raw, f"{raw.count(b'\r\n')} CRLF line(s)")
-    base_text = BASE.read_bytes().decode("utf-8").replace("\r\n", "\n")
+          b"\\r\\n" not in raw, f"{raw.count(b'\\r\\n')} CRLF line(s)")
+    # F-01 is the SECOND of two new patches in one release: cloud-escalate.patch
+    # comes first, so this patch's context is that patch's own output. The
+    # apply/reverse pair below walks the stack in its real order, forwards and
+    # back, and checks the base is reached exactly.
+    cloud = PATCH.parent / "cloud-escalate.patch"
+    check("the patch before this one (cloud-escalate.patch) is there to stack",
+          cloud.is_file(), str(cloud))
+    if not cloud.is_file():
+        return
+    base_text = BASE.read_bytes().decode("utf-8").replace("\\r\\n", "\\n")
     d = Path(tempfile.mkdtemp(prefix="jarvis-f01-"))
+
+    def _read():
+        return ((d / "jarvis_hud.py").read_bytes().decode("utf-8")
+                .replace("\\r\\n", "\\n"))
+
+    def _run(*args):
+        # core.autocrlf is `true` on some Windows clones (this desk, measured
+        # 2026-10-27). The patches are LF, so the conversion is turned off.
+        return subprocess.run([git, "-c", "core.autocrlf=false", "apply", *args],
+                              cwd=d, capture_output=True, text=True)
+
     try:
         (d / "jarvis_hud.py").write_text(base_text, encoding="utf-8", newline="")
-        (d / "p.patch").write_bytes(raw.replace(b"\r\n", b"\n"))
-        # core.autocrlf is `true` on some Windows clones (this desk, measured
-        # 2026-10-27). The patch is LF, so the conversion is turned off and the
-        # comparisons below normalise anyway - both, so neither can hide a
-        # break.
-        for extra in (["--check"], [], ["--check", "--reverse"], ["--reverse"], []):
-            r = subprocess.run([git, "-c", "core.autocrlf=false", "apply", *extra,
-                                "p.patch"], cwd=d, capture_output=True, text=True)
+        (d / "p.patch").write_bytes(raw.replace(b"\\r\\n", b"\\n"))
+        (d / "c.patch").write_bytes(cloud.read_bytes().replace(b"\\r\\n", b"\\n"))
+        r = _run("c.patch")
+        check("git apply cloud-escalate.patch (the patch this one stacks on)",
+              r.returncode == 0, r.stderr.strip())
+        if r.returncode != 0:
+            return
+        pre_text = _read()
+        for extra in (["--check"], [], ["--check", "--reverse"], ["--reverse"]):
+            r = _run(*extra, "p.patch")
             check(f"git apply {' '.join(extra) or '(forwards)'} f01-manual-lane-gate.patch",
                   r.returncode == 0, r.stderr.strip())
-        PATCHED = ((d / "jarvis_hud.py").read_bytes().decode("utf-8")
-                   .replace("\r\n", "\n"))
-        r = subprocess.run([git, "-c", "core.autocrlf=false", "apply", "--reverse",
-                            "p.patch"], cwd=d, capture_output=True, text=True)
-        back = ((d / "jarvis_hud.py").read_bytes().decode("utf-8")
-                .replace("\r\n", "\n"))
-        check("reversing it restores the published base exactly",
-              r.returncode == 0 and back == base_text, r.stderr.strip())
+        back = _read()
+        check("reversing f01 restores cloud-escalate.patch's own result exactly",
+              r.returncode == 0 and back == pre_text, r.stderr.strip())
+        r = _run("--reverse", "c.patch")
+        base_back = _read()
+        check("reversing the stack restores the published base exactly",
+              r.returncode == 0 and base_back == base_text, r.stderr.strip())
+        r1, r2 = _run("c.patch"), _run("p.patch")
+        check("the two-patch stack re-applies after the reverse (both directions clean)",
+              r1.returncode == 0 and r2.returncode == 0, (r1.stderr + r2.stderr).strip())
+        PATCHED = _read()
     finally:
         shutil.rmtree(d, ignore_errors=True)
     try:
@@ -215,9 +248,11 @@ def t_the_wiring():
                                  PATCHED, re.M)))
     check("wiring: the universal gate block is the one the manual path now passes through",
           bool(re.search(r'^            decision = jarvis_router\.choose\($', PATCHED, re.M)))
-    check("wiring: the pick stands in for the owner's yes - gate 6 and nothing else",
-          bool(re.search(r'^                owner_said_yes=bool\(body\.get\("cloud_yes"\)\)'
-                         r' or manual_pick,$', PATCHED, re.M)))
+    check("wiring: the pick stands in for the owner's yes - gate 6 and nothing else "
+          "(stacked on cloud-escalate.patch's standing-yes expression)",
+          bool(re.search(r'owner_said_yes=\(\n[ \t]+\(bool\(body\.get\("cloud_yes"\)\)'
+                         r' and \(', PATCHED))
+          and "or manual_pick)," in PATCHED)
     check("wiring: a manual pick is decided AFTER the router's own decision",
           bool(re.search(r'^            if manual_pick:$', PATCHED, re.M)
                and re.search(r'if manual_pick:\n(?:[ \t]*#.*\n)*[ \t]*decision = '
@@ -253,7 +288,7 @@ def t_the_rule_refuses_what_the_router_refuses():
     if not fns:
         return skip("the patched functions could not be lifted out")
     _ml, md = fns
-    pick = LANES[1]
+    pick = LANES[0]
 
     # A clean, complex, public question with the owner's yes: the CONTROL. If
     # this does not escalate there is nothing for the refusals below to be
@@ -350,7 +385,7 @@ def t_the_rule_handles_what_is_not_a_decision():
         return skip("the patched functions could not be lifted out")
     _ml, md = fns
     _ml_off, md_off = off
-    pick = LANES[1]
+    pick = LANES[0]
     check("no router at all: a cloud pick stays local, and says so",
           _ml_off(None, pick, LOCAL, LANES)[0] == LOCAL
           and "routing module is not installed" in _ml_off(None, pick, LOCAL, LANES)[1],
@@ -436,16 +471,16 @@ def t_the_control_would_fail_on_todays_code():
                     owner_said_yes=True, conversation_tainted=True)
     check("CONTROL: the router keeps this tainted turn local (gate 'taint')",
           dec.gate == "taint", dec.gate)
-    old_decision = old(LANES[1], LOCAL)
+    old_decision = old(LANES[0], LOCAL)
     check("CONTROL (today's code): the manual path sends the tainted turn to the "
-          "CLOUD lane anyway", old_decision.lane == LANES[1], old_decision.as_dict())
+          "CLOUD lane anyway", old_decision.lane == LANES[0], old_decision.as_dict())
     check("CONTROL (today's code): ... with no gate at all but 'manual'",
           old_decision.gate == "manual", old_decision.gate)
     check("CONTROL (today's code): ... and it never even asks the router",
           "choose(" not in old_src and "decide" not in old_src, old_src[:300])
     check("CONTROL: the patched code refuses that same pick",
           _load_functions(PATCHED, "_manual_lane", "_manual_decision")[1](
-              LANES[1], LOCAL, dec, LANES).lane == LOCAL)
+              LANES[0], LOCAL, dec, LANES).lane == LOCAL)
 
 
 def main():

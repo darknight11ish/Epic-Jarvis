@@ -6,7 +6,7 @@
 > is the detail.
 
 
-One hundred and fifty-eight patches against the Jarvis backend, each meant to
+One hundred and fifty-nine patches against the Jarvis backend, each meant to
 have an executable test beside it. One does not: `vram-estimate.patch` adds
 `_cache_bits_from_env` and `batch_surcharge_mb` to `jarvis_models.py`, and no
 suite names either function (checked 2026-10-14 with `git grep` over
@@ -16,8 +16,9 @@ all 158 `.patch` files in this folder are in it, one each, and the script
 refuses to run if a `.patch` file here is missing from it. That is the number
 to trust, because the list grows. The paragraphs below were written as the list
 grew, so the counts in them are the count at the time.
-*(Both counts were re-measured on 2026-10-27, when `f01-manual-lane-gate.patch`
-made it 158: they read 146 before, so they had drifted 11 behind the list.)*
+*(Both counts were re-measured on 2026-10-27, when `cloud-escalate.patch` and
+`f01-manual-lane-gate.patch` made it 159: they read 146 before, so they had drifted
+11 behind the list.)*
 The last four of the older ones - `ui-control-wiring.patch`, `ollama-direct.patch`,
 `tool-calling-wiring.patch` and `loopback-too.patch` - sit outside the ordered
 stack below: each only touches its own few lines, shared with no other patch
@@ -19765,7 +19766,9 @@ older app draws a refused pick as the local answer it is.
 manual path exists nowhere else, and `_manual_decision()` itself is the
 function whose gates were missing - so `_stack.py`'s `jarvis_hud.py` RATCHET
 moves 58 -> 61 and `tools/check_patch_original_text.py`'s pin records
-`f01-manual-lane-gate.patch` at 3 hunks / 37 lines, with the reason in both.
+`f01-manual-lane-gate.patch`'s hunks that read the owner's own text, with the
+reason in both (its context now includes `cloud-escalate.patch`'s output, because
+that patch is applied first).
 The fourth hunk (`owner_said_yes=`) anchors on the line `cloud-say-yes.patch`
 writes and invents nothing. It touches no install block, no gate row, no tier
 line and no app file.

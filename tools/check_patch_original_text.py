@@ -93,25 +93,18 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all FIFTEEN - those thirteen, plus `private-chat.patch` at position 151,
-added 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks
-anchor on text an earlier patch writes, and the other two - the body-parse
-block that reads the private flag, and the route-audit line - read the
-owner's own line) and `cloud-escalate.patch` at position 153, added 2026-10-27
-(two of its three hunks: `_lane_names()`'s body, which no patch had ever
-touched, and the cloud reply's reader, which reached the owner's PC by a
-re-take rather than a patch) - with their positions, instead of pretending they
-are not there. The position-29 rule is kept as a REPORTED fact, not a gate.
-
-all fifteen - those thirteen, plus `private-chat.patch` at position 151,
-added 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks
-anchor on text an earlier patch writes, and the other two - the body-parse
-block that reads the private flag, and the route-audit line - read the
-owner's own line), and `f01-manual-lane-gate.patch` at position 154, added
-2026-10-27 (three of its four hunks are the manual lane-picking path and
-`_manual_decision()`, which no patch in this walk writes: that path's missing
-gates were the defect) - with their positions, instead of pretending they are
-not there. The position-29 rule is kept as a REPORTED fact, not a gate.
+all SIXTEEN - those thirteen, plus `private-chat.patch` at position 152, added
+2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
+text an earlier patch writes, and the other two - the body-parse block that
+reads the private flag, and the route-audit line - read the owner's own line),
+plus TWO patches added together on 2026-10-27: `cloud-escalate.patch` at
+position 154 (two of its three hunks: `_lane_names()`'s body, which no patch
+had ever touched, and the cloud reply's reader, which reached the owner's PC
+by a re-take rather than a patch) and `f01-manual-lane-gate.patch` at position
+155 (the manual lane-picking path and `_manual_decision()`, which no patch in
+this walk writes - and whose missing gates WERE the F-01 defect) - with their
+positions, instead of pretending they are not there. The position-29 rule is
+kept as a REPORTED fact, not a gate.
 
 THE PIN
 
