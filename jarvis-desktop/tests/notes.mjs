@@ -156,14 +156,16 @@ await check("widget: the PC cannot say - none shown, and why", async () => {
   assert.match(line, /Couldn't check which note apps are set up on your PC: .*apply-patches/);
 });
 
-await check("quickbar: the help shows only the prefixes that are set up", async () => {
+await check("quickbar: the prefix help left with the primer, and nothing dead remains", async () => {
   const page = await K.open(browser, base, "index.html", { noteTargets: T.logseq_only });
-  const rows = await page.evaluate(() => Object.fromEntries(
-    [...document.querySelectorAll("[data-note-target]")].map((r) => [r.dataset.noteTarget, !r.hidden])));
-  const line = await shown(page, "#note-targets-line");
+  const gone = await page.evaluate(() => ({
+    chips: document.querySelectorAll("[data-note-target]").length,
+    line: document.querySelector("#note-targets-line") !== null,
+    primer: document.querySelector("#primer") !== null,
+  }));
   await page.close();
-  assert.deepEqual(rows, { logseq: true, joplin: false, obsidian: false });
-  assert.equal(line, false);
+  assert.deepEqual(gone, { chips: 0, line: false, primer: false },
+    "the removed primer (or its prefix help) is still in the bar's DOM");
 });
 
 await check("quickbar: #obs by hand, not set up - says so, and sends nothing", async () => {
@@ -185,26 +187,30 @@ await check("quickbar: #obs by hand, not set up - says so, and sends nothing", a
 await check("quickbar: #obs files to Obsidian when it is set up", async () => {
   const page = await K.open(browser, base, "index.html", { noteTargets: T.all,
     noteJobs: [{ id: "o", state: "filed", message: "Filed in Obsidian, 2026-09-24.md." }] });
-  const help = await shown(page, '[data-note-target="obsidian"]');
   await page.fill("#prompt", "#obs call Mum");
+  const chip = await page.locator("#note-chip-label").innerText();
   await page.press("#prompt", "Enter");
   await page.waitForTimeout(300);
   const calls = await page.evaluate(() => window.__noteCalls);
   const answer = await page.locator("#answer").innerText();
   await page.close();
-  assert.equal(help, true);
+  assert.match(chip, /Obsidian/, "the note chip does not name the app the prefix picked");
   assert.deepEqual(calls, [{ cmd: "capture_note", target: "obsidian", text: "call Mum" }]);
   assert.match(answer, /Filed in Obsidian/);
 });
 
-await check("quickbar: the PC cannot say - no prefix in the help, the reason instead", async () => {
+await check("quickbar: an unreadable note list paints no help line, and typing still works", async () => {
   const page = await K.open(browser, base, "index.html", { noteTargets: { error: "could not reach the Jarvis server" } });
-  const rows = await page.evaluate(() =>
-    [...document.querySelectorAll("[data-note-target]")].filter((r) => !r.hidden).length);
-  const line = await page.locator("#note-targets-line").innerText();
+  await page.fill("#prompt", "#log call Mum");
+  const chip = await page.locator("#note-chip-label").innerText();
+  const gone = await page.evaluate(() => ({
+    chips: document.querySelectorAll("[data-note-target]").length,
+    line: document.querySelector("#note-targets-line") !== null,
+  }));
   await page.close();
-  assert.equal(rows, 0);
-  assert.match(line, /Couldn't check which note apps are set up on your PC: could not reach/);
+  assert.deepEqual(gone, { chips: 0, line: false },
+    "the removed help line is still painted in the bar");
+  assert.match(chip, /Logseq/, "a typed prefix no longer reaches the chip");
 });
 
 await check("widget: a filed note says where, in the PC's words", async () => {

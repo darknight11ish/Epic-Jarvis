@@ -1,7 +1,13 @@
 /**
- * The desktop's Private chat mode - owner-approved 2026-10-26.
+ * The desktop's Incognito mode - private chat, owner-approved 2026-10-26.
+ * The owner's decision of 2026-10-27 made this the bar's ONE Incognito chip:
+ * the old temporary-chat button left the DOM and its milder mode collapsed
+ * into this stricter one. The capability, the server route and the
+ * `private_chat` behaviour are untouched; only the words moved from
+ * "Private chat" to "Incognito" so the chip, its title, its strip and its
+ * announcements cannot say two different things.
  *
- * A private turn is a temporary chat PLUS a strict zero-write promise
+ * An Incognito turn is a temporary chat PLUS a strict zero-write promise
  * (backend/private-chat.patch, backend/jarvis_private_chat.py,
  * docs/JARVIS-API.md section 156): nothing is recalled or learned, nothing is
  * kept, every disk write is refused, and no tool runs at all - so no card, no
@@ -12,29 +18,29 @@
  * This module owns the mode's words and the toggle's state machine only.
  * main.js owns the conversation and the transport: `private.toggle()` from the
  * chip, `private.on` for the request's `private` flag, `private.paint(empty)`
- * whenever the conversation empties or fills, and `offQuietly()` when the other
- * mode (Temporary) or a kept chat takes over.
+ * whenever the conversation empties or fills, and `offQuietly()` when a kept
+ * chat takes over.
  */
 
-export const PRIVATE_LABEL = "Private";
+export const PRIVATE_LABEL = "Incognito";
 export const PRIVATE_LINE =
-  "Private: Jarvis won't use or learn from your memory, keeps nothing, and won't run tools or change anything.";
+  "Incognito: Jarvis won't use or learn from your memory, keeps nothing, and won't run tools or change anything.";
 export const PRIVATE_ON_TITLE =
-  "Start a private chat: Jarvis won't use memory, keep anything, or run tools";
-export const PRIVATE_OFF_TITLE = "End the private chat and start a normal one";
+  "Start an incognito chat: Jarvis won't use memory, keep anything, or run tools";
+export const PRIVATE_OFF_TITLE = "End the incognito chat and start a normal one";
 export const PRIVATE_STARTED =
-  "Private chat started. Jarvis won't use memory, keep anything, or run tools.";
-export const PRIVATE_ENDED = "Private chat ended. Your next question starts a normal chat.";
+  "Incognito chat started. Jarvis won't use memory, keep anything, or run tools.";
+export const PRIVATE_ENDED = "Incognito chat ended. Your next question starts a normal chat.";
 export const PRIVATE_UNAVAILABLE =
-  "Private chat isn't available on this PC's version of Jarvis, so nothing was sent. " +
+  "Incognito isn't available on this PC's version of Jarvis, so nothing was sent. " +
   "Run apply-patches.ps1 on the PC to update it.";
 export const PRIVATE_NOT_CONFIRMED =
-  "Your PC did not confirm this was a private chat, so this answer may have used your " +
+  "Your PC did not confirm this was an incognito chat, so this answer may have used your " +
   "memory, kept something, or run a tool.";
-export const CONTINUED_PRIVATE_OFF = "Private is off: a continued chat is kept.";
+export const CONTINUED_PRIVATE_OFF = "Incognito is off: a continued chat is kept.";
 
-/** The strip already says "Private" beside the line, so the line does not repeat it. */
-const PRIVATE_STRIP_LINE = PRIVATE_LINE.replace(/^Private:\s*/, "");
+/** The strip already says "Incognito" beside the line, so the line does not repeat it. */
+const PRIVATE_STRIP_LINE = PRIVATE_LINE.replace(/^Incognito:\s*/, "");
 
 const errorText = (e) => String((e && e.message) || e || "It did not work.");
 

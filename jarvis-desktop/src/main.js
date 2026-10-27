@@ -211,7 +211,7 @@ import {
   threadSummary,
   userMessage,
 } from "./chat-history.js";
-import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./note-capture.js";
+import { fileNote, loadTargets, notSetUp, targetName } from "./note-capture.js";
 // Where a spoken answer is cut into pieces - the same rule as the phone.
 import { nextSpeechPiece } from "./speech-pieces.js";
 // Temporary chat and "Used in this answer" (2026-09-25) - answer-memory.js.
@@ -228,12 +228,11 @@ import {
   replacesHeading,
   replacesNote,
 } from "./replace-confirm.js";
-import { buildSayableList } from "./sayable.js";
 // The command palette (docs/UI-AUDIT-2026-10-05.md section 2.4, "what I would
 // change" row 4): the list and the search live in palette.js, which is pure,
 // and every name in it comes from the generated menu catalogue.
 import { HINT_LABEL, WORDS as PALETTE_WORDS } from "./palette.js";
-import { buildPaletteHint, close as closePalette, isOpen as paletteOpen, mountPalette, openPalette } from "./palette-ui.js";
+import { close as closePalette, isOpen as paletteOpen, mountPalette } from "./palette-ui.js";
 // Clipboard history (Pillar 14B): the transform drawer Alt+Shift+C opens. The
 // ring itself is Rust's, RAM-only and off until the drawer's own switch; this
 // module is the view over six commands (clipboard-drawer.js's own doc).
@@ -377,7 +376,9 @@ const dom = {
   markRight: $("mark-right"),
   markWrong: $("mark-wrong"),
   answerMarkNote: $("answer-mark-note"),
-  temporary: $("temporary"),
+  // The bar no longer offers a temporary-chat toggle (owner, 2026-10-27): the
+  // one Incognito chip is #private below. The temporary marker strip stays -
+  // it is still how a chat the PC itself made temporary (a game) says so.
   temporaryStrip: $("temporary-strip"),
   lockdownStrip: $("lockdown-strip"),
   temporaryLine: $("temporary-line"),
@@ -398,7 +399,6 @@ const dom = {
   cloudOfferDismiss: $("cloud-offer-dismiss"),
   approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
-  primer: $("primer"),
   mic: $("mic"),
   voiceAuto: $("voice-auto"),
   liveToggle: $("jarvis-live-toggle"),
@@ -425,8 +425,10 @@ const dom = {
   liveMute: $("jarvis-live-mute"),
   liveEnd: $("jarvis-live-end"),
   liveChips: $("jarvis-live-chips"),
-  pin: $("pin"),
-  sayableToggle: $("sayable-toggle"),
+  // The pin button, the "?" primer door and its elements left the bar on the
+  // owner's decision of 2026-10-27. The window still pins itself while an
+  // answer card is on screen (setPinned below); it is just not something the
+  // owner toggles from the bar any more.
   openSettings: $("open-settings"),
   hideBar: $("hide-bar"),
   submitHint: $("submit-hint"),
@@ -539,9 +541,8 @@ const dom = {
   stop: $("stop"),
   newConversation: $("new-conversation"),
   // "Earlier chats" (the chat audit, 2026-09-28): the Brain's History, from
-  // the card and from the primer; and the quiet line about the chat itself.
+  // the card; and the quiet line about the chat itself.
   earlierChats: $("earlier-chats"),
-  earlierChatsPrimer: $("earlier-chats-primer"),
   chatNote: $("chat-note"),
   // "Carry on the last chat": beside the note that a new conversation began
   // after the owner's own quiet wait - 30 minutes by default (the second chat
@@ -549,7 +550,6 @@ const dom = {
   carryOnLast: $("carry-on-last"),
   // "You: ..." above the answer - the question this answer is for.
   youLine: $("you-line"),
-  chatEndedNote: $("chat-ended-note"),
   services: $("services"),
 
   previousAnswer: $("previous-answer"),
@@ -777,12 +777,18 @@ const state = {
 /**
  * Temporary chat (the owner's decision, 2026-09-25): the toggle and the
  * marker strip. Turning it on or off starts a new conversation, so nothing
- * said in one kind of chat is re-sent in the other. On only when the PC
- * says it can hold one (commands.rs temporary_chat_available; stream_chat
- * checks again before each temporary question).
+ * said in one kind of chat is re-sent in the other.
+ *
+ * The owner's decision of 2026-10-27 removed the bar's temporary-chat button:
+ * one Incognito chip now carries the STRICTER private-chat mode
+ * (`privateChat`, below), and this toggle has no button at all. It stays for
+ * two things that are not the chip: the request's `temporary` flag (read by
+ * send(), always false from the bar now) and the marker for a chat the PC
+ * ITSELF made temporary - a game or role-play (setGame, from the route
+ * header). `button: null` is deliberate, and the toggle knows it.
  */
 const temporaryChat = createTemporaryToggle({
-  button: dom.temporary,
+  button: null,
   strip: dom.temporaryStrip,
   line: dom.temporaryLine,
   refused: dom.temporaryRefused,
@@ -810,11 +816,14 @@ const temporaryChat = createTemporaryToggle({
 });
 
 /**
- * Private chat (owner-approved 2026-10-26): the toggle and its marker strip.
- * A private turn is a temporary chat plus a strict zero-write promise; the PC
- * must advertise capabilities.private_chat, or this stays off and says why.
- * Turning it on/off starts a new conversation, like Temporary, and the two
- * modes turn each other off. main.js resets it when a chat ends.
+ * Incognito - the bar's ONE chat-mode chip (owner, 2026-10-27; private chat,
+ * owner-approved 2026-10-26): the toggle and its marker strip. It is the
+ * stricter half of the old Private/Temporary pair: an Incognito turn is a
+ * temporary chat plus a strict zero-write promise, and the PC must advertise
+ * `capabilities.private_chat` or this stays off and says why. The mild
+ * temporary mode no longer has a button of its own (see temporaryChat above).
+ * Turning it on/off starts a new conversation, and main.js resets it when a
+ * chat ends.
  */
 const privateChat = createPrivateToggle({
   button: dom.private,
@@ -1146,9 +1155,6 @@ let resizeTimer = null;
  * jitter between two heights.
  */
 function syncWindowHeight() {
-  // Every caller that changes what the stack holds already calls this, which
-  // makes it the one place the primer's visibility cannot be forgotten.
-  syncPrimer();
   const height = Math.ceil(dom.shell.getBoundingClientRect().height);
   if (!height) return;
   if (state.phase === "streaming" && height < lastReportedHeight) return;
@@ -1185,7 +1191,6 @@ function openCard(statusText) {
   dom.card.hidden = false;
   dom.cardStatusText.textContent = statusText;
   syncCardTools();
-  syncPrimer();
 }
 
 /** Copy has nothing to copy on a card with no answer yet (a chat just
@@ -1198,76 +1203,12 @@ function syncCardTools() {
   if (dom.previousAnswer) dom.previousAnswer.classList.toggle("alone", empty);
 }
 
-/**
- * Fills the primer's #sayable-list from sayable.js's own fixed words
- * ("Things you can say" - the ease-of-use audit's do-first table, row 4).
- *
- * Unlike the kbd chips this replaces, these are not live PC settings: the
- * hardcoded list in sayable.js IS the source both apps read, so there is
- * nothing to fetch and nothing that can go stale from a rebind. Tapping a
- * line only fills #prompt - it is never sent by the list itself.
- */
-function renderSayableList() {
-  const host = document.getElementById("sayable-list");
-  if (!host) return;
-  host.replaceChildren(
-    buildSayableList((sentence) => {
-      dom.prompt.value = sentence;
-      autoGrowPrompt();
-      dom.prompt.focus();
-      dom.prompt.setSelectionRange(sentence.length, sentence.length);
-      syncWindowHeight();
-    }),
-  );
-}
-
-/**
- * The bar's own way into the palette, beside "Things you can say": a button
- * because it does something on click, and a keyboard user reaches it with
- * Tab. Typing "/" in an empty box does the same thing (palette-ui.js), so
- * the hint is the discoverable half and the key is the fast one.
- */
-function renderPaletteHint() {
-  const host = document.getElementById("palette-hint");
-  if (!host) return;
-  host.replaceChildren(buildPaletteHint(() => openPalette()));
-}
-
-/**
- * Whether the owner opened the primer ("Things you can say"). It starts
- * closed, so the bar opens at its compact input-row height (owner,
- * 2026-10-19: "the jarvis bar is huge now, i want it back to its compact
- * size"); #sayable-toggle on the bar is the only thing that opens it, and
- * the same button closes it again.
- */
-let primerOpen = false;
-
-/**
- * The primer is the window's help/empty state: shown only when the owner
- * opened it with #sayable-toggle AND nothing else in the stack is busy.
- * Opening or closing it is the only thing that changes its visibility; the
- * bar's height follows from this one flag, so it cannot be left expanded
- * behind an answer.
- *
- * The button is a disclosure, so it carries `aria-expanded`, and that state
- * follows what is on screen rather than `primerOpen` alone: a card or a busy
- * surface keeps the primer hidden while the flag is still true, and a screen
- * reader must be told "collapsed" then. The standing feature audit flagged
- * the old `aria-pressed`, which claimed the panel was open while it was not.
- */
-function syncPrimer() {
-  const busy =
-    !dom.card.hidden ||
-    !dom.attention.hidden ||
-    !dom.approval.hidden ||
-    !dom.parked.hidden ||
-    !dom.attachments.hidden;
-  const hidden = busy || !primerOpen;
-  dom.primer.hidden = hidden;
-  if (dom.sayableToggle) {
-    dom.sayableToggle.setAttribute("aria-expanded", String(!hidden));
-  }
-}
+/* (The "Things you can say" primer - renderSayableList, renderPaletteHint,
+   primerOpen and syncPrimer - was removed with its "?" door on the owner's
+   decision of 2026-10-27. The bar keeps only the ask box, the model/route
+   row, the mode chips, the gear and the close; the palette still opens with
+   "/" in an empty box, and the same help words live in Settings' Brain tab,
+   "Tutorials and the FAQ".) */
 
 /** Collapses the card and clears everything it was showing. */
 function closeCard({ wasTemporary = temporaryChat.on, wasPrivate = privateChat.on,
@@ -1305,19 +1246,15 @@ function closeCard({ wasTemporary = temporaryChat.on, wasPrivate = privateChat.o
   state.turnQuestion = null;
   state.turnProvenance = null;
   hideChatNote();
-  // Where it went, said the next time the bar is opened, until a question
-  // is asked (the chat audit, 2026-09-28: Esc used to end a chat without a
-  // word). A temporary chat was never kept, so it says nothing.
-  // A second Esc with no chat left leaves the line as it is. Turning a
-  // temporary chat on says the same of the chat it ended, which was kept
-  // (the chat audit, desktop C11: it used to go without a word). A
-  // temporary chat or a game says that nothing of it was kept, and every
-  // ending is said to a screen reader too (the second chat audit,
-  // 2026-09-28, desktop B3 and C3).
-  if (dom.chatEndedNote && hadChat) {
+  // Where it went, said until a question is asked (the chat audit,
+  // 2026-09-28: Esc used to end a chat without a word). The visible line
+  // lived in the primer, which the owner removed on 2026-10-27; the WORDS
+  // still reach a screen reader through the bar's announcer. A kept chat says
+  // where it went, and a temporary chat or a game says that nothing of it was
+  // kept (the second chat audit, 2026-09-28, desktop B3 and C3). A second Esc
+  // with no chat left says nothing.
+  if (hadChat) {
     const line = endedPrivate ? PRIVATE_ENDED : endedTemporary ? ENDED_TEMPORARY : ENDED_SAVED;
-    dom.chatEndedNote.hidden = false;
-    dom.chatEndedNote.textContent = line;
     if (!quiet) announce(line);
   }
   paintedBlocks = 0;
@@ -1534,7 +1471,6 @@ async function continueChat(id, { moved = false } = {}) {
   state.thread = kept.slice();
   state.conversationId = id;
   state.lastTurnAt = Date.now();
-  if (dom.chatEndedNote) dom.chatEndedNote.hidden = true;
   openCard(moved ? "Jarvis Live" : "Continuing a chat");
   await refreshThreadHidden();
   const lines = [moved ? MOVED_HERE : continuedLine(conv && conv.title)];
@@ -2389,11 +2325,6 @@ function parseNotePrefix(text) {
   return { ...spec, body: text.slice(match[0].length) };
 }
 
-/** True only when the PC said this target is set up. */
-function targetReady(target) {
-  return state.noteTargets.known && state.noteTargets.targets.includes(target);
-}
-
 /** True when the PC said, for certain, that this target is NOT set up. */
 function targetMissing(target) {
   return state.noteTargets.known && !state.noteTargets.targets.includes(target);
@@ -2413,25 +2344,14 @@ function syncNoteChip() {
   syncWindowHeight();
 }
 
-/**
- * The help list shows a prefix only for a note app the PC is set up for,
- * and one line saying why when it shows none.
- */
-function syncNotePrimer() {
-  for (const row of document.querySelectorAll("[data-note-target]")) {
-    row.hidden = !targetReady(row.dataset.noteTarget);
-  }
-  const line = document.getElementById("note-targets-line");
-  if (!line) return;
-  const none = !state.noteTargets.known || state.noteTargets.targets.length === 0;
-  line.hidden = !none;
-  if (none) line.lastElementChild.textContent = noTargetsLine(state.noteTargets);
-}
+/* (The note-prefix help list left with the primer on 2026-10-27:
+   syncNotePrimer and its rows are gone. The note chip beside the reactor -
+   syncNoteChip below - is still the live "where your typed note will go"
+   display, and it is the part that was on screen.) */
 
 /** Asks the PC which note apps are set up, then repaints what depends on it. */
 async function refreshNoteTargets() {
   state.noteTargets = await loadTargets(invokeStrict);
-  syncNotePrimer();
   syncNoteChip();
 }
 
@@ -4006,7 +3926,6 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
   if (state.abort || state.inFlight) return;
   state.inFlight = message;
   hideChatNote();
-  if (dom.chatEndedNote) dom.chatEndedNote.hidden = true;
   // A new conversation after the owner's own wait (Settings -> "A new
   // conversation starts after"; 30 quiet minutes by DEFAULT - the owner's
   // decision, 2026-09-28, and what a missing or unreadable choice reads as).
@@ -5505,11 +5424,17 @@ listen("voice-heard", (event) => {
 
 async function setPinned(pinned, { silent = false } = {}) {
   state.pinned = pinned;
-  dom.pin.setAttribute("aria-pressed", String(pinned));
-  if (!silent) {
-    dom.pin.title = pinned
-      ? "Unpin (auto-hide on focus loss)"
-      : "Keep Jarvis open when it loses focus";
+  // The bar has no pin button any more (owner, 2026-10-27). The window still
+  // pins itself while an answer card is on screen - setPinned(true) below -
+  // and this keeps that state; there is just no control to paint or retitle.
+  // `pin-changed` still arrives from Rust and still updates `state.pinned`.
+  if (dom.pin) {
+    dom.pin.setAttribute("aria-pressed", String(pinned));
+    if (!silent) {
+      dom.pin.title = pinned
+        ? "Unpin (auto-hide on focus loss)"
+        : "Keep Jarvis open when it loses focus";
+    }
   }
   await invoke("set_quickbar_pinned", { pinned });
 }
@@ -5781,14 +5706,14 @@ if (dom.carryOnLast) {
     if (id) continueChat(id);
   });
 }
-for (const b of [dom.earlierChats, dom.earlierChatsPrimer]) {
-  if (b) {
-    b.textContent = EARLIER_CHATS;
-    b.title = EARLIER_CHATS_TITLE;
-    b.addEventListener("click", openEarlierChats);
-  }
+if (dom.earlierChats) {
+  dom.earlierChats.textContent = EARLIER_CHATS;
+  dom.earlierChats.title = EARLIER_CHATS_TITLE;
+  dom.earlierChats.addEventListener("click", openEarlierChats);
 }
-if (dom.temporary) dom.temporary.addEventListener("click", () => temporaryChat.toggle());
+// One chip, the strict one (owner, 2026-10-27): #temporary left the DOM, so
+// there is no temporary-chat listener to register. #private is the Incognito
+// button and its handler is unchanged.
 if (dom.private) dom.private.addEventListener("click", () => privateChat.toggle());
 
 dom.copy.addEventListener("click", async () => {
@@ -5814,8 +5739,6 @@ dom.copy.addEventListener("click", async () => {
   }, 1200);
 });
 
-dom.pin.addEventListener("click", () => setPinned(!state.pinned));
-
 // "Hide the Jarvis bar" - the × on the bar itself (the owner's request,
 // 2026-10-10). Exactly what Esc does: `hide_quickbar` in Rust drops the pin
 // first, so the next summon starts clean rather than reappearing stuck open.
@@ -5830,15 +5753,10 @@ if (dom.hideBar) {
   });
 }
 
-// "What can I say?" - the door to the "Things you can say" primer. The bar
-// opens compact by default (owner, 2026-10-19); this button opens the panel,
-// and pressing it again closes it so the bar returns to its input-row height.
-if (dom.sayableToggle) {
-  dom.sayableToggle.addEventListener("click", () => {
-    primerOpen = !primerOpen;
-    syncWindowHeight();
-  });
-}
+// (The pin button and its click handler left with the bar's pin (owner,
+// 2026-10-27), and so did the "?" button that opened the "Things you can
+// say" primer. Esc-to-hide still works: it is the bar's own keydown handler
+// below, not the removed badge.)
 
 // "Jarvis settings" - the gear on the bar itself (the owner's request,
 // 2026-10-10). `open_fix_place` is the one door to the Settings window that
@@ -6039,9 +5957,6 @@ document.addEventListener("click", (event) => {
 listen("focus-input", () => {
   focusInput();
   refreshHealth();
-  // Every summon starts compact: the primer is a panel the owner opens, not
-  // a state a previous summon can leave the bar stuck in.
-  primerOpen = false;
   // A spending table still on screen is asked for again: hidden if the PC
   // has been locked meanwhile, drawn again once it is unlocked.
   if (spendingView) spendingView.recheck();
@@ -6184,7 +6099,9 @@ listen("approval-resolved", (event) => {
 
 listen("pin-changed", (event) => {
   state.pinned = Boolean(event.payload);
-  dom.pin.setAttribute("aria-pressed", String(state.pinned));
+  // No pin button to paint (owner, 2026-10-27): the state still tracks Rust,
+  // which is what the "keep it open while a card is up" behaviour reads.
+  if (dom.pin) dom.pin.setAttribute("aria-pressed", String(state.pinned));
 });
 
 /* ==========================================================================
@@ -6193,7 +6110,6 @@ listen("pin-changed", (event) => {
 
 applyRoute(DEFAULT_ROUTE);
 syncNoteChip();
-syncNotePrimer();
 refreshNoteTargets();
 // Asked again each time the bar comes up, so a vault set up since shows.
 window.addEventListener("focus", () => refreshNoteTargets());
@@ -6213,11 +6129,11 @@ followTheme();
 // has no browser chrome, so without this there is no way to make the text
 // bigger anywhere in the app. The window re-measures after each step.
 followZoom(() => syncWindowHeight());
-renderSayableList();
 // The command palette (palette-ui.js): built from the menu catalogue, opened
-// with "/" in an empty box or the "Find" button, closed with Escape. It never
-// opens over a waiting gate - that card is the top surface then, and covering
-// it would hide the one thing the app stops for.
+// with "/" in an empty box, closed with Escape. (The bar's "Find" button was
+// the primer's, and left with it on 2026-10-27; "/" is the one door now.) It
+// never opens over a waiting gate - that card is the top surface then, and
+// covering it would hide the one thing the app stops for.
 mountPalette({
   openPlace: openPlaceFromPalette,
   canOpen: () => !state.approval,
@@ -6228,7 +6144,6 @@ mountPalette({
   isHidden: (id) => isHidden(loadMenuState(), id),
   onClose: () => syncWindowHeight(),
 });
-renderPaletteHint();
 // Clipboard history (Pillar 14B, clipboard-drawer.js): the drawer Alt+Shift+C
 // opens, with the three transforms over a kept copy. The ring itself is Rust's
 // - RAM-only, off until the drawer's own switch, wiped on lock - so this is
