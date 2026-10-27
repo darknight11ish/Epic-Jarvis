@@ -13620,25 +13620,29 @@ function select(node) {
 }
 
 /* ==========================================================================
-   Layout presets (Phase G0 of the Galaxy rework, 2026-10-23)
+   Layout presets (Phase G0 of the Galaxy rework, 2026-10-23; all eight looks
+   built 2026-10-27)
 
    The Galaxy keeps the constellation that ships today as its DEFAULT view. This
-   section only adds three FLAT layouts beside it - star map, clean tree and zen
-   ring - from the pure `galaxy-presets.js` module, plus the chips in the Galaxy
-   bar and the 6/7/8 hotkeys.
+   section only adds the eight looks beside it - star map, clean tree, zen ring,
+   planetary orbit, neural arbor, nebula, DNA helix and radar dome - from the
+   pure `galaxy-presets.js` module, plus the chips in the Galaxy bar and the
+   1-8 hotkeys.
 
    The rules this section keeps:
    - the default view is untouched: it is still the same physics constellation
      (`startLayout`/`step`), still cached by signature, and switching back
      restores the positions the owner was looking at (only a refresh or a first
      visit rebuilds them);
-   - a flat layout only MOVES the nodes the existing renderer already draws. It
-     adds no node, no link, no label rule and no cap - `rank`, `group`, `weight`
-     and the 240-node bound all stay exactly what `galaxy-view.js` decided;
+   - a look only MOVES the nodes the existing renderer already draws. It adds no
+     node, no link, no label rule and no cap - `rank`, `group`, `weight` and the
+     240-node bound all stay exactly what `galaxy-view.js` decided;
    - it is a local display choice: no route, no server write, no dependency, no
      3D, no remote asset;
-   - the five rich presets are shown disabled as "not built yet" (blueprint
-     phase G4), never silently missing and never pretending to exist.
+   - a preset the module lists but does not build is still shown disabled with
+     the words "not built yet" rather than hidden, so the menu can never pretend
+     one exists. There are none today (`PLANNED_PRESETS` is empty); the guard
+     stays for the next look that is listed before it is drawable.
    ========================================================================== */
 
 let galaxyPreset = { id: DEFAULT_PRESET, saved: null, layout: null };
@@ -13826,15 +13830,15 @@ function buildPresetMenu() {
     } else {
       chip.setAttribute("aria-pressed", "false");
       chip.title = meta.id === DEFAULT_PRESET
-        ? "The current constellation (default). Press 6, 7 or 8 for a flat layout."
+        ? "The current constellation (default). Press 1 to 8 for another look."
         : `${meta.hint}. Press ${meta.key}; press it again for the constellation.`;
       chip.addEventListener("click", () => applyGalaxyPreset(meta.id));
     }
     host.append(chip);
   }
   // The owner's last choice comes back on the next launch (a display choice on
-  // this device only). A stored value that is not one of the three built
-  // layouts reads as the constellation - never as a broken page.
+  // this device only). A stored value that is not one of the eight looks
+  // reads as the constellation - never as a broken page.
   const stored = storedPreset(readPresetStorage());
   if (stored !== DEFAULT_PRESET) {
     galaxyPreset = { id: stored, saved: null, layout: null };

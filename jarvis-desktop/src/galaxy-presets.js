@@ -1,13 +1,10 @@
 /**
  * The Galaxy's flat layout presets - the pure half of Phase G0.
  *
- * Phase G0 of the Galaxy rework (the owner's answer A/A, 2026-10-23; the
- * blueprint `jarvis_galaxy_rework_architectural_blueprint_2026_10_23.md`, Part
- * B, presets 6-8) is deliberately small: the desktop brain window keeps its
- * current constellation (the physics layout in `brain.js` renderGraph/
- * startLayout), and beside it the owner can choose one of three FLAT layouts.
- * Nothing here draws: every function returns plain numbers and is
- * deterministic, so the layouts are unit-tested with no DOM at all.
+ * The desktop brain window keeps its current constellation (the physics layout
+ * in `brain.js` renderGraph/startLayout), and beside it the owner can choose
+ * one of EIGHT looks. Nothing here draws: every function returns plain numbers
+ * and is deterministic, so the layouts are unit-tested with no DOM at all.
  *
  * WHAT A PRESET IS (the blueprint's three simple views)
  *
@@ -30,6 +27,52 @@
  *                    the others spaced evenly on one R=108 halo, with inward
  *                    Bezier chords. A list too large for the one halo grows
  *                    OUTWARD at a 24px pitch, so R=108 stays the calm centre.
+ *
+ * THE FIVE RICH VIEWS the blueprint lists (built 2026-10-27)
+ *
+ *  The owner's ask of 2026-10-27 was "an easy way to change the appearance of
+ *  the jarvis galaxy to the other models [modes]", so the five that used to be
+ *  disabled chips are real looks now. They are FLAT, 2D interpretations of the
+ *  blueprint's five rich views - not the WebGL engines (see the honesty note
+ *  below), and each one is a different way of USING THE AREA:
+ *
+ *   - `planetary-orbit` - a sun at the centre (the best-known name) with the
+ *                    rest on concentric ellipses (a = 74 + 46k, squashed to
+ *                    0.6 of that height), a few bodies per orbit, each orbit's
+ *                    bodies staggered by the golden angle so two orbits never
+ *                    line their planets up. Ellipses, not circles, so it is not
+ *                    the star map with a bigger centre.
+ *   - `neural-arbor` - a soma at the centre, then a doubling tree: level m
+ *                    holds up to 2^m names on a circle, and every name is
+ *                    joined to its nearest name on the level before by one
+ *                    faint dendrite. Each level's radius is chosen so its
+ *                    neighbours still clear the gap, so the tree does not
+ *                    overlap however many names it holds.
+ *   - `nebula`      - a phyllotaxis cloud: names on the golden angle at
+ *                    r = R*sqrt(t), so the density is even and the parastichies
+ *                    read as spiral arms - no rings, no rows, no centre.
+ *   - `dna-helix`   - two sine strands, the second braided half a rung behind
+ *                    the first, joined by rungs, and tilted 30 degrees so the
+ *                    braid runs across the picture instead of up it.
+ *   - `radar-dome`  - a half disc above a horizon line: names on concentric
+ *                    semicircle arcs, with the horizon and one sweep arm as
+ *                    guides. The only look with a flat edge.
+ *
+ *  HONESTY ABOUT "RICH": the blueprint's five are 3D engines with their own
+ *  controls (warp orbit, isolate cortical layer, sweep laser, lockdown dome...).
+ *  What is built here is the FLAT half of each: deterministic 2D positions and
+ *  guide lines in the same shape, with no 3D, no new dependency, no per-preset
+ *  control, no extra data and no route. A look moves the dots; it never adds a
+ *  node, a link, a label rule or a write.
+ *
+ * ONE COPY OF THE MATHS, AND A MIRROR
+ *
+ *  `jarvis_hud.html` is one vendored file with no imports, so the HUD's Galaxy
+ *  carries a small INLINE MIRROR of these layout functions (documented as such
+ *  at its own copy). The mirror must stay identical in behaviour:
+ *  `jarvis-desktop/tests/hud.mjs` compares the two position for position, so a
+ *  drift between them fails a test instead of quietly giving the two windows
+ *  different pictures.
  *
  * HARD RULES THIS MODULE KEEPS
  *
@@ -102,52 +145,111 @@ export const ZEN_RING_PITCH = 24;
 export const ZEN_HALO_GAP = 21;
 export const ZEN_MAX_CHORDS = 48;
 
+/** planetary-orbit: the innermost orbit's semi-major axis, the gap between
+ *  orbits, the squash that makes them ellipses, and the sun's own clear space.
+ *
+ *  The blueprint draws planets on orbits round a star. Two orbits 46 apart,
+ *  squashed to 0.6, are at least 46 * 0.6 = 27.6 apart at their closest (the
+ *  minor-axis end), which clears the 24 gap; the sun sits well inside the first
+ *  orbit's 74 * 0.6 = 44.4 near point. */
+export const ORBIT_FIRST = 74;
+export const ORBIT_PITCH = 46;
+export const ORBIT_SQUASH = 0.6;
+/** A stop for the orbit loop, never reached at 240 names; a whole circle needs
+ *  ORBIT_FIRST + ORBIT_PITCH * k to reach r >= 917 at 240, so this is slack. */
+export const ORBIT_MAX_ORBITS = 40;
+
+/** neural-arbor: how much clear space the soma keeps, and the safety factor
+ *  above the gap that every level's radius is built to (1.06 = 6% air, so a
+ *  rounding error cannot put two names exactly on the limit). */
+export const ARBOR_GAP_ROOM = 26;
+export const ARBOR_SPREAD = 1.06;
+/** A stop for the level loop; a real tree needs ~8 levels at 240 names. */
+export const ARBOR_MAX_LEVELS = 24;
+
+/** The golden angle in radians - the phyllotaxis constant the nebula's spiral
+ *  arms and the planetary orbits' stagger both use. */
+export const GOLDEN_ANGLE = 2.399963229728653;
+
+/** nebula: the cloud's radius. R=250 is what keeps 240 names at least 24 apart
+ *  in an even cloud: an even disc needs sqrt(240 * 24^2 / (pi * 0.81)) ~ 233. */
+export const NEBULA_RADIUS = 250;
+
+/** dna-helix: the vertical distance between rungs, the second strand's half
+ *  rung offset, the wave's amplitude and its wavelength, and the tilt.
+ *
+ *  The half-rung offset is the whole no-overlap guarantee: any two names from
+ *  the two strands are at least HELIX_RUNG / 2 = 24 apart vertically, whatever
+ *  the wave does horizontally, and two names on one strand are a full rung
+ *  apart. The tilt is a rigid rotation, so it cannot change any distance. */
+export const HELIX_RUNG = 48;
+export const HELIX_AMP = 46;
+export const HELIX_WAVE = 192;
+export const HELIX_TILT = -Math.PI / 6;
+
+/** radar-dome: the innermost arc, the gap between arcs, the sweep arm's angle
+ *  (60 degrees above the horizon), and a stop for the arc loop. */
+export const DOME_FIRST = 46;
+export const DOME_PITCH = 46;
+export const DOME_SWEEP = -Math.PI / 3;
+export const DOME_MAX_ARCS = 40;
+
 /** Where the owner's chosen preset is remembered. A DEVICE display choice, in
  *  the same place and spirit as the theme (`jarvis.theme` in brain.js): it is
- *  never sent to the PC and never written to the backend. */
+ *  never sent to the PC and never written to the backend. The HUD page keeps
+ *  its own key for its own canvas (`jarvis.galaxy.hud.look`), because the two
+ *  windows are separate surfaces (the HUD is also served to other devices). */
 export const PRESET_STORAGE_KEY = "jarvis.galaxy.preset";
 
-/** The three layouts G0 builds. Order is the hotkey order (6, 7, 8). */
+/** Every look the eight hotkeys choose. Order is the key order (1..8), which is
+ *  also the blueprint's numbering: its five rich views first, then the three
+ *  flat ones. `hint` is the one-line "what it is" the chip's tooltip uses. */
 export const BUILT_PRESETS = Object.freeze([
+  Object.freeze({ id: "planetary-orbit", key: "1", label: "Planetary orbit",
+                  hint: "a sun and its orbits" }),
+  Object.freeze({ id: "neural-arbor", key: "2", label: "Neural arbor",
+                  hint: "branching dendrites" }),
+  Object.freeze({ id: "nebula", key: "3", label: "Nebula", hint: "a drifting cloud" }),
+  Object.freeze({ id: "dna-helix", key: "4", label: "DNA helix",
+                  hint: "two strands and rungs" }),
+  Object.freeze({ id: "radar-dome", key: "5", label: "Radar dome",
+                  hint: "a dome of blips" }),
   Object.freeze({ id: "star-map", key: "6", label: "Star map", hint: "flat rings" }),
   Object.freeze({ id: "clean-tree", key: "7", label: "Clean tree", hint: "four rows" }),
   Object.freeze({ id: "zen-ring", key: "8", label: "Zen ring", hint: "one halo" }),
 ]);
 
-/** The five rich presets the blueprint lists before these three.
+/** Presets a build can list before it can draw them. EMPTY since 2026-10-27:
+ *  all eight looks are built, so nothing is shown as "not built yet".
  *
- *  Shown in the menu as "not built yet" - never silently missing, and never
- *  claiming to exist (the blueprint's phases G4 builds them; G0 builds only the
- *  flat layouts). */
-export const PLANNED_PRESETS = Object.freeze([
-  Object.freeze({ id: "planetary-orbit", key: "1", label: "Planetary orbit" }),
-  Object.freeze({ id: "neural-arbor", key: "2", label: "Neural arbor" }),
-  Object.freeze({ id: "nebula", key: "3", label: "Nebula" }),
-  Object.freeze({ id: "dna-helix", key: "4", label: "DNA helix" }),
-  Object.freeze({ id: "radar-dome", key: "5", label: "Radar dome" }),
-]);
+ *  Kept (empty) rather than deleted, with `plannedForKey` below, because the
+ *  menu/status/keyboard code is written to tell the truth about a future look
+ *  that is listed before it exists - `brain.js` still refuses to draw a
+ *  `built: false` chip. Deleting the shape would make that day a rewrite;
+ *  leaving one empty list makes it one entry. */
+export const PLANNED_PRESETS = Object.freeze([]);
 
-/** What the switcher shows, in menu order: the default, the five not-built
- *  presets in blueprint number order, then the three that work. */
+/** What the switcher shows, in menu order: the default, then the eight looks in
+ *  key order (the same order the chips have always had: 1 to 8). */
 export const PRESET_MENU = Object.freeze([
   Object.freeze({ id: DEFAULT_PRESET, key: null, label: "Constellation", built: true,
                   hint: "the current layout" }),
-  ...PLANNED_PRESETS.map((p) => Object.freeze({ ...p, built: false, hint: "not built yet" })),
   ...BUILT_PRESETS.map((p) => Object.freeze({ ...p, built: true })),
 ]);
 
-/** The preset a hotkey selects, or null. Only the three built layouts answer a
- *  key; 1-5 are handled by `plannedForKey` and shown as not built. */
+/** The preset a hotkey selects, or null. Every look answers its own key now. */
 export function presetForKey(key) {
   const text = String(key);
   return BUILT_PRESETS.find((p) => p.key === text) ?? null;
 }
 
-/** The not-built preset a hotkey names, or null. */
+/** The not-built preset a hotkey names, or null. Always null now that all
+ *  eight looks are built - see `PLANNED_PRESETS`. */
 export function plannedForKey(key) {
   const text = String(key);
   return PLANNED_PRESETS.find((p) => p.key === text) ?? null;
 }
+
 
 /** One preset's menu entry by id, or null. */
 export function presetMeta(id) {
@@ -173,17 +275,17 @@ export function presetStatus(id) {
       ? "Layout: the constellation (the current view)."
       : `Layout: ${meta.label}. Press its key again for the constellation.`;
   }
-  return `${meta.label} is not built yet. Press 6, 7 or 8 for a flat layout.`;
+  return `${meta.label} is not built yet. Press 1 to 8 for one of the eight looks.`;
 }
 
 /**
  * What a key press should do, given the preset already on screen.
  *
  * The decision only, so the page's handler is three lines and this is testable:
- *   - a built preset's key selects it; pressing it AGAIN returns to the
+ *   - a built look's key (1-8) selects it; pressing it AGAIN returns to the
  *     constellation, so the current view is never more than one key away;
- *   - a not-built preset's key (1-5) asks the page to say so, and changes
- *     nothing;
+ *   - a key that names a listed-but-not-built preset asks the page to say so,
+ *     and changes nothing (no such look today - see `PLANNED_PRESETS`);
  *   - anything else (0, arrows, letters... the stage's own pan/zoom keys) gets
  *     `null` and is left to the existing handler.
  */
@@ -199,9 +301,9 @@ export function switchRequest(key, activeId = DEFAULT_PRESET) {
 }
 
 /**
- * Which preset a remembered value names. Only the three BUILT layouts can be
- * restored; anything else (the constellation's own id, a planned preset, a
- * corrupt value from an older build, `null`) means the constellation.
+ * Which preset a remembered value names. Only a BUILT look can be restored;
+ * anything else (the constellation's own id, a look this build does not have,
+ * a corrupt value from an older build, `null`) means the constellation.
  *
  * This is the safe half of the persistence: the caller stores a string and
  * never trusts what it reads back, so a corrupt or stale value can only ever
@@ -316,13 +418,74 @@ function capped(nodes) {
 }
 
 /** The guide shapes a layout returns: faint rings, lines and chords.
- *  Pure data, drawn by brain.js's own SVG layer; a test can assert it. */
+ *  Pure data, drawn by brain.js's own SVG layer; a test can assert it.
+ *
+ *  A `path` is one SVG `d` string - and, for a renderer that is not SVG (the
+ *  HUD's canvas mirror), the same geometry in plain numbers, whichever of these
+ *  three fits the shape:
+ *    - `points`: [[x, y], ...] the polyline the `d` draws;
+ *    - `ellipse`: {a, b}, a full ellipse round the origin;
+ *    - `from`/`ctrl`/`to`: the quadratic Bezier the `d` draws (`M ... Q ...`).
+ *  At least one is always present, so a canvas can draw every guide. */
 function guides() {
   return { circles: [], lines: [], paths: [] };
 }
 
 function round2(v) {
   return Math.round(v * 100) / 100;
+}
+
+/** One sampled polyline: the SVG text, and the points themselves. */
+function polylinePath(points, kind) {
+  const rounded = points.map((p) => [round2(p.x), round2(p.y)]);
+  const d = rounded.map(([x, y], i) => `${i ? "L" : "M"} ${x} ${y}`).join(" ");
+  return { d, kind, points: rounded };
+}
+
+/** One quadratic Bezier: the SVG text the Brain window draws, and the three
+ *  points the canvas mirror re-draws it from (the same numbers, rounded the
+ *  same way, so both renderers agree). */
+function quadPath(from, ctrl, to, kind) {
+  const a = { x: round2(from.x), y: round2(from.y) };
+  const c = { x: round2(ctrl.x), y: round2(ctrl.y) };
+  const b = { x: round2(to.x), y: round2(to.y) };
+  return {
+    d: `M ${a.x} ${a.y} Q ${c.x} ${c.y} ${b.x} ${b.y}`,
+    kind,
+    from: a,
+    ctrl: c,
+    to: b,
+  };
+}
+
+/** A full ellipse round the origin, sampled finely enough to read as smooth. */
+const ELLIPSE_SAMPLES = 72;
+function ellipsePath(a, b, kind) {
+  const points = [];
+  for (let i = 0; i <= ELLIPSE_SAMPLES; i++) {
+    const t = (i / ELLIPSE_SAMPLES) * Math.PI * 2;
+    points.push({ x: a * Math.cos(t), y: b * Math.sin(t) });
+  }
+  const path = polylinePath(points, kind);
+  path.ellipse = { a: round2(a), b: round2(b) };
+  return path;
+}
+
+/** How many nodes fit on a HALF circle (a dome's arc) of `radius` with `gap`
+ *  air: adjacent centres are 2R sin(pi / (2 * count)) apart, so the largest
+ *  count whose chord clears `gap` is pi / (2 * asin(gap / (2R))). */
+function halfRingCapacity(radius, gap) {
+  if (radius <= 0) return 1;
+  const ratio = gap / (2 * radius);
+  if (ratio >= 1) return 1;
+  return Math.max(1, Math.floor(Math.PI / (2 * Math.asin(ratio))));
+}
+
+/** The smallest angle between two directions, in [0, pi]. */
+function angleBetween(a, b) {
+  const turn = Math.PI * 2;
+  const d = (((a - b) % turn) + turn) % turn;
+  return d > Math.PI ? turn - d : d;
 }
 
 /* --------------------------------------------------------------------------
@@ -383,12 +546,23 @@ export function layoutStarMap(nodes, { gap = MIN_GAP } = {}) {
  * -------------------------------------------------------------------------- */
 
 /** Which of the four rows a name belongs to. 0 is the core row, filled from
- *  the list's own order (most facts first), not by group. */
+ *  the list's own order (most facts first), not by group.
+ *
+ *  Two graphs feed this layout: the Brain window's people-and-things picture
+ *  (kinds: person, pet, place, organisation, project, thing) and the HUD's
+ *  capability Galaxy (kinds: core, model, cluster, tool, and the memory kinds).
+ *  The four bands have a meaning in each, so each kind maps to the band that
+ *  means the same thing there. A kind neither graph has falls to "the rest". */
 export function cleanTreeRowFor(node, index = 0) {
   if (index < TREE_CORE) return 0;
   const group = String(node?.group ?? "other");
   if (group === "person" || group === "pet") return 1;           // the beings
   if (group === "organisation" || group === "project") return 2; // the work
+  // The HUD's own halves: the brains the PC runs, then the abilities they hold
+  // (an ability group is a group OF abilities). Without these the HUD's clean
+  // tree would be the core row and one long row of everything else.
+  if (group === "model") return 1;                               // the brains
+  if (group === "cluster" || group === "tool") return 2;         // the abilities
   return 3;                                                      // places & things
 }
 
@@ -480,10 +654,7 @@ export function layoutZenRing(nodes, { gap = ZEN_HALO_GAP } = {}) {
     const ey = Math.sin(angle) * ZEN_RADIUS * 0.36;
     const cx = Math.cos(angle + 0.22) * ZEN_RADIUS * 0.7;
     const cy = Math.sin(angle + 0.22) * ZEN_RADIUS * 0.7;
-    out.paths.push({
-      d: `M ${round2(p.x)} ${round2(p.y)} Q ${round2(cx)} ${round2(cy)} ${round2(ex)} ${round2(ey)}`,
-      kind: "chord",
-    });
+    out.paths.push(quadPath(p, { x: cx, y: cy }, { x: ex, y: ey }, "chord"));
   }
   return {
     id: "zen-ring",
@@ -495,15 +666,313 @@ export function layoutZenRing(nodes, { gap = ZEN_HALO_GAP } = {}) {
   };
 }
 
+/* --------------------------------------------------------------------------
+ * planetary-orbit
+ * -------------------------------------------------------------------------- */
+
+/**
+ * A sun and its orbits: the best-known name at the centre, every other name on
+ * one of a set of concentric ELLIPSES.
+ *
+ * Each orbit is 46 units wider than the one inside it and squashed to 0.6 of
+ * that height, so two neighbouring orbits are at least 27.6 apart at their
+ * closest (the minor-axis end) and the 24 gap holds without `separate()` having
+ * to move anything. Bodies on an orbit are evenly spaced in the ellipse's own
+ * parameter, which is what makes the count formula the one a circle of the
+ * same *height* would give; each orbit starts at a different phase so two
+ * orbits never line their planets up.
+ *
+ * The guides are the orbits themselves: one faint ellipse each. That is why it
+ * does not read as the star map - the star map is circles and spokes.
+ */
+export function layoutPlanetaryOrbit(nodes, { gap = MIN_GAP } = {}) {
+  const list = capped(nodes);
+  const points = [];
+  const orbits = [];
+  if (list.length) points.push({ x: 0, y: 0 });          // the sun
+  let need = Math.max(0, list.length - 1);
+  for (let k = 0; need > 0 && k < ORBIT_MAX_ORBITS; k++) {
+    const a = ORBIT_FIRST + ORBIT_PITCH * k;
+    const b = a * ORBIT_SQUASH;
+    const count = Math.min(ringCapacity(b, gap), need);
+    const phase = k * GOLDEN_ANGLE;
+    for (let j = 0; j < count; j++) {
+      const t = -Math.PI / 2 + phase + (j / count) * Math.PI * 2;
+      points.push({ x: Math.cos(t) * a, y: Math.sin(t) * b });
+    }
+    orbits.push({ a, b, count });
+    need -= count;
+  }
+  separate(points, gap);
+
+  const out = guides();
+  for (const orbit of orbits) out.paths.push(ellipsePath(orbit.a, orbit.b, "orbit"));
+  return {
+    id: "planetary-orbit",
+    nodes: list.map((n, i) => ({ id: n.id, x: points[i].x, y: points[i].y })),
+    rings: orbits.map((orbit) => orbit.a),
+    rows: [],
+    minGap: gap,
+    guides: out,
+  };
+}
+
+/* --------------------------------------------------------------------------
+ * neural-arbor
+ * -------------------------------------------------------------------------- */
+
+/**
+ * A soma and its dendrites: a doubling tree, level by level.
+ *
+ * Level 0 is the soma at the centre. Level m holds up to 2^m names, evenly
+ * spaced on a circle, and every name is joined by ONE faint dendrite to the
+ * nearest name on the level before - so the guides are a tree with exactly
+ * n - 1 edges, and the picture is a branching arbor rather than a set of
+ * rings. Each level's radius is the smallest that keeps its own neighbours a
+ * whole gap apart (2 * r * sin(pi / count) >= gap * 1.06) and that also keeps
+ * it a gap clear of the level inside it, so no two names can collide however
+ * many there are.
+ *
+ * A level that cannot be filled (240 names leave the last level short) spreads
+ * the names it does hold over the whole circle, so the crown never has a
+ * missing wedge.
+ */
+export function layoutNeuralArbor(nodes, { gap = MIN_GAP } = {}) {
+  const list = capped(nodes);
+  const points = [];
+  const levels = [];                 // [{ radius, count, first }]
+  let placed = 0;
+  let previousRadius = 0;
+  for (let m = 0; placed < list.length && m < ARBOR_MAX_LEVELS; m++) {
+    const want = m === 0 ? 1 : 2 ** m;
+    const count = Math.min(want, list.length - placed);
+    let radius = 0;
+    if (m > 0) {
+      // A level holding one name has no neighbour to clear: only the level
+      // inside it constrains its radius.
+      const cleared = count > 1
+        ? (gap * ARBOR_SPREAD) / (2 * Math.sin(Math.PI / count))
+        : 0;
+      radius = Math.max(cleared, previousRadius + gap, ARBOR_GAP_ROOM);
+    }
+    const first = points.length;
+    for (let i = 0; i < count; i++) {
+      const angle = ((i + 0.5) / count) * Math.PI * 2;
+      points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+    }
+    levels.push({ radius, count, first });
+    previousRadius = radius;
+    placed += count;
+  }
+  separate(points, gap);
+
+  const out = guides();
+  for (let m = 1; m < levels.length; m++) {
+    const parent = levels[m - 1];
+    const child = levels[m];
+    for (let i = 0; i < child.count; i++) {
+      const at = child.first + i;
+      const angle = Math.atan2(points[at].y, points[at].x);
+      let nearest = parent.first;
+      let nearestGap = Infinity;
+      for (let j = 0; j < parent.count; j++) {
+        const other = parent.first + j;
+        const distance = angleBetween(angle, Math.atan2(points[other].y, points[other].x));
+        if (distance < nearestGap) {
+          nearestGap = distance;
+          nearest = other;
+        }
+      }
+      out.lines.push({
+        x1: points[nearest].x, y1: points[nearest].y,
+        x2: points[at].x, y2: points[at].y,
+        kind: "dendrite",
+      });
+    }
+  }
+  return {
+    id: "neural-arbor",
+    nodes: list.map((n, i) => ({ id: n.id, x: points[i].x, y: points[i].y })),
+    rings: levels.map((level) => level.radius),
+    rows: [],
+    minGap: gap,
+    guides: out,
+  };
+}
+
+/* --------------------------------------------------------------------------
+ * nebula
+ * -------------------------------------------------------------------------- */
+
+/**
+ * A drifting cloud: names on the golden angle at r = R * sqrt(t).
+ *
+ * That is the phyllotaxis sunflower, the one deterministic arrangement that
+ * fills a disc at an even density: the area each name gets is the same, so the
+ * 240-name case still clears the gap (R = 250 is sized for exactly that), and
+ * the parastichies read as spiral arms. No rings, no rows, no centre name - the
+ * cloud IS the look, so it carries no guides.
+ */
+export function layoutNebula(nodes, { gap = MIN_GAP } = {}) {
+  const list = capped(nodes);
+  const count = list.length;
+  const points = [];
+  for (let i = 0; i < count; i++) {
+    const t = count > 1 ? (i + 0.5) / count : 0.5;
+    const radius = NEBULA_RADIUS * Math.sqrt(t);
+    const angle = i * GOLDEN_ANGLE;
+    points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+  }
+  separate(points, gap);
+  return {
+    id: "nebula",
+    nodes: list.map((n, i) => ({ id: n.id, x: points[i].x, y: points[i].y })),
+    rings: [],
+    rows: [],
+    minGap: gap,
+    guides: guides(),
+  };
+}
+
+/* --------------------------------------------------------------------------
+ * dna-helix
+ * -------------------------------------------------------------------------- */
+
+/** The point one strand takes at `v` (the un-tilted height), before the tilt. */
+function helixPoint(v, strand, height) {
+  const phase = (((v + height / 2) / HELIX_WAVE) * Math.PI * 2);
+  const u = Math.cos(phase) * HELIX_AMP * (strand ? -1 : 1);
+  const c = Math.cos(HELIX_TILT);
+  const s = Math.sin(HELIX_TILT);
+  return { x: u * c - v * s, y: u * s + v * c };
+}
+
+/**
+ * A double helix: two strands braided half a rung apart, joined by rungs, and
+ * tilted 30 degrees so the braid crosses the picture instead of standing up it.
+ *
+ * The half-rung offset is the whole no-overlap proof: two names from the two
+ * strands are at least HELIX_RUNG / 2 = 24 apart VERTICALLY whatever the wave
+ * does, and two names on one strand are a whole rung apart. The tilt is a rigid
+ * rotation of every point, so it cannot change a distance. The height is a
+ * whole number of rungs, so those offsets are exact.
+ *
+ * The guides are the two backbones (the same wave, sampled three times per
+ * rung) and one rung per pair - a ladder you can read at a glance.
+ */
+export function layoutDnaHelix(nodes, { gap = MIN_GAP } = {}) {
+  const list = capped(nodes);
+  const rungs = Math.max(1, Math.ceil(list.length / 2));
+  const height = rungs * HELIX_RUNG;
+  const points = list.map((_, i) => {
+    const rung = Math.floor(i / 2);
+    const strand = i % 2;
+    const v = rung * HELIX_RUNG + (strand ? HELIX_RUNG / 2 : 0) - height / 2;
+    return helixPoint(v, strand, height);
+  });
+  separate(points, gap);
+
+  const out = guides();
+  for (const strand of [0, 1]) {
+    const path = [];
+    for (let s = 0; s <= rungs * 3; s++) {
+      const v = ((s / 3) * HELIX_RUNG) + (strand ? HELIX_RUNG / 2 : 0) - height / 2;
+      path.push(helixPoint(v, strand, height));
+    }
+    out.paths.push(polylinePath(path, "strand"));
+  }
+  for (let i = 0; i + 1 < points.length; i += 2) {
+    out.lines.push({
+      x1: points[i].x, y1: points[i].y,
+      x2: points[i + 1].x, y2: points[i + 1].y,
+      kind: "rung",
+    });
+  }
+  return {
+    id: "dna-helix",
+    nodes: list.map((n, i) => ({ id: n.id, x: points[i].x, y: points[i].y })),
+    rings: [],
+    rows: [],
+    minGap: gap,
+    guides: out,
+  };
+}
+
+/* --------------------------------------------------------------------------
+ * radar-dome
+ * -------------------------------------------------------------------------- */
+
+/** A semicircle arc above the horizon (canvas Y grows downward, so the dome is
+ *  the NEGATIVE-y half), sampled for the guide layer. */
+const DOME_ARC_SAMPLES = 48;
+function domeArcPath(radius) {
+  const points = [];
+  for (let i = 0; i <= DOME_ARC_SAMPLES; i++) {
+    const phi = (i / DOME_ARC_SAMPLES) * Math.PI;
+    points.push({ x: Math.cos(phi) * radius, y: -Math.sin(phi) * radius });
+  }
+  return polylinePath(points, "arc");
+}
+
+/**
+ * A radar dome: a half disc above a horizon line, names on concentric arcs.
+ *
+ * The tightest pair on an arc is the same chord bound a half circle gives
+ * (2r sin(pi / 2n) >= gap), and neighbouring arcs are 46 apart, further than
+ * the gap. The horizon and one sweep arm at 60 degrees are the guides, and the
+ * flat bottom edge is what makes this the only look that is not round.
+ */
+export function layoutRadarDome(nodes, { gap = MIN_GAP } = {}) {
+  const list = capped(nodes);
+  const points = [];
+  const arcs = [];
+  let need = list.length;
+  for (let k = 0; need > 0 && k < DOME_MAX_ARCS; k++) {
+    const radius = DOME_FIRST + DOME_PITCH * k;
+    const count = Math.min(halfRingCapacity(radius, gap), need);
+    for (let j = 0; j < count; j++) {
+      const phi = ((j + 0.5) / count) * Math.PI;         // above the horizon
+      points.push({ x: Math.cos(phi) * radius, y: -Math.sin(phi) * radius });
+    }
+    arcs.push(radius);
+    need -= count;
+  }
+  separate(points, gap);
+
+  const out = guides();
+  for (const radius of arcs) out.paths.push(domeArcPath(radius));
+  const outer = arcs.length ? arcs[arcs.length - 1] : DOME_FIRST;
+  out.lines.push({ x1: -outer, y1: 0, x2: outer, y2: 0, kind: "horizon" });
+  out.lines.push({
+    x1: 0, y1: 0,
+    x2: Math.cos(DOME_SWEEP) * outer, y2: Math.sin(DOME_SWEEP) * outer,
+    kind: "sweep",
+  });
+  return {
+    id: "radar-dome",
+    nodes: list.map((n, i) => ({ id: n.id, x: points[i].x, y: points[i].y })),
+    rings: arcs,
+    rows: [],
+    minGap: gap,
+    guides: out,
+  };
+}
+
 /**
  * The layout for a preset id, or null when there is none to apply (the default
- * constellation is not a flat layout, and a planned preset does not exist).
+ * constellation is not a flat layout, and a look this build does not have has
+ * no layout).
  */
 export function layoutFor(id, nodes, options) {
   switch (id) {
     case "star-map": return layoutStarMap(nodes, options);
     case "clean-tree": return layoutCleanTree(nodes, options);
     case "zen-ring": return layoutZenRing(nodes, options);
+    case "planetary-orbit": return layoutPlanetaryOrbit(nodes, options);
+    case "neural-arbor": return layoutNeuralArbor(nodes, options);
+    case "nebula": return layoutNebula(nodes, options);
+    case "dna-helix": return layoutDnaHelix(nodes, options);
+    case "radar-dome": return layoutRadarDome(nodes, options);
     default: return null;
   }
 }
