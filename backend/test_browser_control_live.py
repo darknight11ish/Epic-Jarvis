@@ -199,7 +199,8 @@ def t_the_reader_sees_what_a_person_sees():
           sorted(e["within_name"] for e in replies) == ["Order 1", "Order 2"], repr(replies))
     check("every record is the compact shape, no HTML",
           all(set(e) == {"role", "name", "text", "enabled", "interactive", "sensitive",
-                         "password", "within_role", "within_name"} for e in page["elements"]),
+                         "password", "within_role", "within_name", "box"}
+              for e in page["elements"]),
           repr(page["elements"][:2]))
 
 
