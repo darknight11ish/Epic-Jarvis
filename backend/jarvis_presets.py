@@ -1,8 +1,15 @@
-"""jarvis_presets.py - the four focus presets the chat bar and Settings show.
+"""jarvis_presets.py - the focus presets the chat bar and Settings show.
 
-Pure data plus pure helpers; reads nothing, switches nothing. The four replace
-the five "work setups" in jarvis_work.py (owner decision 2026-10-18):
-General (absorbs Admin + Long), Coding, Agentic+Vision, Fast.
+Pure data plus pure helpers; reads nothing except, since 2026-10-27, WHICH
+cloud key is saved on this PC (Credential Manager presence only - never a key,
+never a fragment) and this month's spend against the owner's own limit, which
+is what the Cloud row in the Presets menu shows. It still switches nothing and
+starts nothing: every apply raises the one ask card itself, and the cloud
+provider's apply changes NO model and starts NO lane.
+
+The four local presets replace the five "work setups" in jarvis_work.py (owner
+decision 2026-10-18): General (absorbs Admin + Long), Coding, Agentic+Vision,
+Fast.
 
 Every measured number below is from
 .dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md (and STRATEGY beside it);
@@ -276,6 +283,463 @@ def _write_choice(preset_id: str) -> bool:
         return False
 
 
+# --------------------------------------------------------------------------
+#   The cloud provider, and the standing escalation (2026-10-27)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S DECISION, 2026-10-27. The Cloud row sits in the Presets menu
+# beside General/Coding/Agentic+Vision/Fast (the owner's "coder, general,
+# fast"), and picking one of the API services is an APPLY: ONE
+# `change_own_config` card, nothing marked chosen until THIS PC's own file
+# says so - the same rule every model preset already keeps
+# (hud-presets.js, "a model preset is a loosening: ONE card").
+#
+# ONE SERVICE AT A TIME, and it is `cloud-choice.json` beside the other
+# settings files. `cloud_lanes()` turns that one choice into the ONE lane name
+# the whole program uses - `jarvis-escalate` - and turns "no choice" into no
+# lane at all, which is `jarvis_router.choose()`'s gate "unavailable". That is
+# the replacement, not a hole: before this, the lane list came from
+# `litellm-proxy.yaml`, the config of a proxy that is not installed and never
+# was, and it named three lanes (escalate, critic, bulk) where this program
+# has one service.
+#
+# THE CHECKBOX UNDER IT IS A STANDING GRANT, and that is a rule the owner
+# changed rather than a rule that was never there. `jarvis_router.choose()`
+# says in its own words that cloud use is "per use, with permission ... and
+# asks. No standing grant." (2026-09-24). On 2026-10-27 the owner asked for
+# exactly that grant, and docs/DECISIONS.md records the change. What keeps it
+# from being the app doing silently what the record says it never does:
+#
+#   * turning it ON raises ONE `change_own_config` card (`escalate_switch`'s
+#     words below), and nothing is written before that yes. Turning it OFF is
+#     immediate - the asymmetry every other switch in this program keeps;
+#   * the FILE IS THE ONLY SOURCE of the standing yes. A client flag cannot
+#     set it (`jarvis_router.choose()` reads this file, never a request body),
+#     so a stale page or a phone cannot make a standing decision the PC has
+#     not made;
+#   * every privacy gate still runs FIRST and can still only push the turn
+#     back to local: Lockdown, a tainted conversation, a picture, the screen's
+#     words, a private topic, a pasted secret, the monthly money limit.
+#
+# WHAT THIS SECTION READS. Which keys are SAVED (Credential Manager presence -
+# never a key, never a fragment, never a message) and this month's spending.
+# That is the owner's own PC and it is a read; nothing here writes until a card
+# has been answered.
+
+CLOUD_CHOICE_FILE = "cloud-choice.json"
+CLOUD_ESCALATE_FILE = "escalate-cloud.json"
+CLOUD_ESCALATE_PATH = "/api/work/cloud-escalate"
+#: The ONE cloud lane name. `jarvis_chatbot_api.CLOUD_LANES` maps it to the
+#: service behind it; `jarvis_router.choose()` escalates on it and on nothing
+#: else, so a stray name can never become "the cloud".
+CLOUD_LANE = "jarvis-escalate"
+#: The card action every loosening in this program uses.
+CLOUD_ACTION = "change_own_config"
+#: The Cloud row's own id - NOT one of PRESET_IDS, so both apps' five-preset
+#: list is unchanged and the phone keeps ignoring a key it does not know.
+CLOUD_PRESET_ID = "cloud"
+
+
+def _cloud_choice_path():
+    return _config_dir() / CLOUD_CHOICE_FILE
+
+
+def _escalate_path():
+    return _config_dir() / CLOUD_ESCALATE_FILE
+
+
+def _provider_ids() -> tuple:
+    """The connected services' ids, in `jarvis_chatbot_api.PRESETS`' own order.
+
+    Never raises: without that module (a clone, or a backend missing it) the
+    answer is (). The module is imported LAZILY, inside the call, because
+    this file is imported by suites that must run with no API module at all -
+    the same discipline `jarvis_auto_router._money_module` uses.
+    """
+    try:
+        import jarvis_chatbot_api as API
+        return tuple(API.PRESETS)
+    except Exception:
+        return ()
+
+
+def cloud_chosen() -> str:
+    """The service id the owner last applied in the Presets menu, or "".
+
+    "" is the honest answer for "no file", "an unreadable file", and "a name
+    this PC does not know" - and it means NO cloud lane exists at all, which
+    is gate "unavailable" rather than a lane nobody chose. Never raises.
+    """
+    try:
+        import json
+        doc = json.loads(_cloud_choice_path().read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not isinstance(doc, dict):
+        return ""
+    pid = str(doc.get("provider") or "")
+    if not pid:
+        return ""
+    known = _provider_ids()
+    return pid if (not known or pid in known) else ""
+
+
+def _write_cloud_choice(provider: str) -> bool:
+    """Save the one provider. Atomic; False (and nothing changed) on any error."""
+    import json
+    try:
+        _config_dir().mkdir(parents=True, exist_ok=True)
+        tmp = _cloud_choice_path().with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"provider": str(provider)}, indent=2) + "\n",
+                       encoding="utf-8")
+        tmp.replace(_cloud_choice_path())
+        return True
+    except Exception:
+        return False
+
+
+def cloud_lanes() -> list:
+    """The cloud lanes this PC has RIGHT NOW: one name, or none.
+
+    None is not a hole - it is gate "unavailable", the honest answer for a PC
+    where the owner has not picked a cloud service. `_lane_names()` in
+    jarvis_hud.py is the only caller (through cloud-escalate.patch), and it
+    used to read `litellm-proxy.yaml` for three names that no longer exist.
+    """
+    return [CLOUD_LANE] if cloud_chosen() else []
+
+
+def escalate_on() -> bool:
+    """Is the PC's own standing escalation switch ON?
+
+    ON only when the file says so, literally: absent, unreadable, corrupt or
+    holding anything but `"on": true` reads as OFF. That is the same
+    fail-closed shape `jarvis_auto_router`'s own switch keeps, and it is the
+    direction a privacy switch has to fail in. Never raises.
+    """
+    try:
+        import json
+        doc = json.loads(_escalate_path().read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    return isinstance(doc, dict) and doc.get("on") is True
+
+
+def escalate_why() -> str:
+    """The plain sentence for `cloud.escalate.why` - "" when it is ON."""
+    if escalate_on():
+        return ""
+    return ("not turned on for this PC" if not _escalate_path().exists()
+            else "the setting on this PC cannot be read, so it stays off")
+
+
+def _write_cloud_escalate(on: bool) -> bool:
+    """Save the switch. Atomic; False (and nothing changed) on any error."""
+    import json
+    try:
+        _config_dir().mkdir(parents=True, exist_ok=True)
+        tmp = _escalate_path().with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"on": bool(on), "on_since": time.time()},
+                                  indent=2) + "\n", encoding="utf-8")
+        tmp.replace(_escalate_path())
+        return True
+    except Exception:
+        return False
+
+
+def cloud_providers() -> list:
+    """One row per connected API service, for the Cloud submenu.
+
+    The row carries the service's NAME, host and model, whether a key is
+    SAVED (`True`/`False`, or `None` when Credential Manager cannot be asked),
+    the PC's own plain sentence for why it cannot be used (`ready_for`), the
+    money line (`money_view`) and the one honest way to add a key from an app:
+    the command line to run ON THIS PC. Keys are added on the PC only - there
+    is no route for it, and the phone never sends one (rule 3).
+
+    NO KEY, NO FRAGMENT OF ONE AND NO MESSAGE is in this answer, ever.
+    `lane_status()`'s own docstring says the same for the same reason.
+    """
+    try:
+        import jarvis_chatbot_api as API
+    except Exception:
+        return []
+    chosen = cloud_chosen()
+    rows = []
+    for pid, preset in API.PRESETS.items():
+        try:
+            saved = API.key_saved(pid)
+        except Exception:
+            saved = None
+        try:
+            why = API.ready_for(pid)
+        except Exception:
+            why = "this PC could not say whether that service can be used"
+        try:
+            model = str(API.model_for(pid)[0] or preset.model)
+        except Exception:
+            model = preset.model
+        try:
+            money = API.money_view(pid)
+        except Exception:
+            money = None
+        rows.append({
+            "id": pid, "short": preset.short, "name": preset.name,
+            "company": preset.company, "host": preset.host, "model": model,
+            "key_saved": saved, "ready": not why, "why": why,
+            "chosen": pid == chosen,
+            "money": money,
+            "key_line": API.KEY_LINE.format(short=preset.short),
+            "key_where": preset.key_where,
+        })
+    return rows
+
+
+def cloud_view() -> dict:
+    """The `/api/presets` answer's new `cloud` key.
+
+    `provider` is the service in use ("" when none is), `providers` every
+    connected service (see cloud_providers), `escalate` the PC's own standing
+    switch. Additive: the five presets are untouched, `version` stays 1, and
+    every reader that does not know this key ignores it.
+    """
+    return {"provider": cloud_chosen(),
+            "providers": cloud_providers(),
+            "escalate": {"on": escalate_on(), "why": escalate_why()}}
+
+
+def cloud_preset_view() -> dict:
+    """The Cloud row itself, in the SAME shape as a `Preset.view()`.
+
+    Its id is "cloud", it is deliberately absent from `PRESETS`/`PRESET_IDS`
+    (both apps' five-row list stays five rows), and its `apply` block says the
+    two things that make it different: it is a cloud row, and it needs a
+    provider before it can be applied.
+    """
+    return {
+        "id": CLOUD_PRESET_ID, "title": "Cloud",
+        "focus": "a second opinion from a service you have connected",
+        "what": ("Send hard questions to one of the cloud services whose key is saved on "
+                 "this PC, instead of answering them here. Each answer costs a little "
+                 "on that account."),
+        "cost": ("Every message goes to that company's own servers, under its terms, and "
+                 "is billed to your account there. Jarvis stops before a message that "
+                 "could pass the monthly money limit you set."),
+        "worse": ("Your words leave this PC. Anything private, tainted, a picture or your "
+                  "screen never goes - those gates run first and answer here. The answer "
+                  "is capped, so a thinking model may return its working-out instead of an "
+                  "answer."),
+        "model": "",
+        "lane": {"key": CLOUD_PRESET_ID, "card": "", "port": 0,
+                 "words": "the cloud"},
+        "context": 0,
+        "helper": None,
+        "policy": {"prompt": "balanced", "diet": "balanced", "tools": []},
+        "measured": None,
+        "pending": False,
+        "heavy_mode": False,
+        "apply": {"action": APPLY_ACTION, "switch_route": SWITCH_ROUTE,
+                  "apply_route": APPLY_PATH, "lane_start": False, "auto": False,
+                  "cloud": True, "needs_provider": True},
+    }
+
+
+def _gate(action: str, detail: dict, prompt: str):
+    """`jarvis_gate.check()`, failing CLOSED on any error.
+
+    The same shape `jarvis_big_coder._gate` uses: a gate that cannot be
+    reached is a refusal, never an allow. Tests pass their own `gate_check`.
+    """
+    class _Refused:
+        allowed = False
+        outcome = "refused"
+
+        def __init__(self, reason):
+            self.reason = reason
+    try:
+        import jarvis_gate
+    except Exception as exc:
+        return _Refused(f"the approval gate is not available here ({exc})")
+    try:
+        return jarvis_gate.check(action, detail, prompt=prompt)
+    except Exception as exc:
+        return _Refused(f"the approval gate raised {type(exc).__name__}")
+
+
+def _service_words(API, provider: str) -> tuple:
+    """(company, host, model, money line) for ONE service, in plain words."""
+    preset = API.PRESETS[provider]
+    try:
+        model = str(API.model_for(provider)[0] or preset.model)
+    except Exception:
+        model = preset.model
+    try:
+        money = API.money_view(provider) or {}
+    except Exception:
+        money = {}
+    return preset.company, preset.host, model, str(money.get("line") or "")
+
+
+def _cloud_card_text(API, provider: str) -> str:
+    """What applying this provider changes, in the owner's own words."""
+    company, host, model, money = _service_words(API, provider)
+    said = (f"Send hard questions to {company} ({host}, model {model}) instead of "
+            f"answering them on this PC. Every message then goes to {company}'s own "
+            f"servers, under its terms, and is billed to your account there.")
+    if money:
+        said += " " + money
+    said += (" Anything private, a tainted conversation, a picture or your screen still "
+             "never leaves this PC, and nothing on this PC changes until you say yes.")
+    return said
+
+
+def _escalate_card_text(API=None) -> str:
+    """The ONE card turning the standing switch ON raises.
+
+    In the owner's own words, and naming the provider when one is chosen: he
+    is being asked to let Jarvis spend money and send his words without a
+    per-question yes, so the sentence has to say both, and say what still
+    does NOT go.
+    """
+    provider = cloud_chosen()
+    who = "the cloud service you chose"
+    if provider:
+        try:
+            import jarvis_chatbot_api as _API
+            who = _API.PRESETS[provider].company
+        except Exception:
+            who = "the cloud service you chose"
+    return (f"Jarvis may send a hard question to {who} without asking you first. "
+            f"Anything private, a tainted conversation, a picture or your screen still "
+            f"never leaves this PC, and the monthly money limit still applies.")
+
+
+def apply_cloud(*, provider="", gate_check=None) -> tuple:
+    """Use ONE cloud provider after the owner's single `change_own_config` card.
+
+    ORDER, and it is the contract: refuse a provider that was not named or
+    does not exist (400) -> refuse a service this PC cannot use yet, in the
+    PC's own words, BEFORE any card (409: no key, no price, no monthly limit)
+    -> raise the ONE card -> only after that yes, write `cloud-choice.json`
+    and `presets-choice.json`.
+
+    IT STARTS NO LANE AND SWITCHES NO MODEL. This is the one apply branch that
+    must not run `start_lane`/`switch_model`: a cloud preset changes nothing
+    local, and starting a GPU lane for it would unload the model the owner is
+    using. `test_presets_cloud.py` proves both spies were never called.
+    """
+    pid = str(provider or "").strip()
+    try:
+        import jarvis_chatbot_api as API
+    except Exception:
+        return 503, {"ok": False, "changed": False,
+                     "error": ("the cloud services are not set up on this PC, so no "
+                               "cloud provider can be chosen")}
+    ids = tuple(API.PRESETS)
+    if not pid:
+        return 400, {"ok": False, "changed": False,
+                     "error": f"say which cloud service; the services are {', '.join(ids)}"}
+    if pid not in API.PRESETS:
+        return 400, {"ok": False, "changed": False,
+                     "error": (f"there is no cloud service called {pid!r}; the services "
+                               f"are {', '.join(ids)}")}
+    why = ""
+    try:
+        why = str(API.ready_for(pid) or "")
+    except Exception:
+        why = "this PC could not say whether that service can be used"
+    if why:
+        return 409, {"ok": False, "changed": False, "error": why,
+                     "provider": cloud_chosen()}
+    words = _cloud_card_text(API, pid)
+    company = API.PRESETS[pid].company
+    verdict = (gate_check or _gate)(
+        CLOUD_ACTION, {"text": words},
+        f"send hard questions to {company} instead of answering them on this PC")
+    if not getattr(verdict, "allowed", False):
+        return 200, {"ok": False, "changed": False, "provider": cloud_chosen(),
+                     "preset": cloud_preset_view(),
+                     "outcome": str(getattr(verdict, "outcome", "refused")),
+                     "message": "Not changed - the cloud provider stays as it was."}
+    previous = choice()
+    if not _write_cloud_choice(pid):
+        return 503, {"ok": False, "changed": False,
+                     "error": ("the chosen cloud provider could not be saved on this PC; "
+                               "nothing was changed")}
+    if not _write_choice(CLOUD_PRESET_ID):
+        return 503, {"ok": False, "changed": False,
+                     "error": ("the cloud provider was saved but the chosen preset could "
+                               "not be; the next read will say which provider is in use")}
+    return 200, {"ok": True, "changed": True, "provider": pid,
+                 "preset": cloud_preset_view(), "previous_preset": previous,
+                 "cloud": cloud_view(),
+                 "message": (f"{company} is the cloud service Jarvis will use. Nothing "
+                             f"on this PC's models changed, and nothing is sent until a "
+                             f"hard question clears every gate and you have said yes.")}
+
+
+def cloud_escalate(*, on, gate_check=None) -> tuple:
+    """Turn the standing escalation switch on (ONE card) or off (at once).
+
+    ON is a LOOSENING - Jarvis may then spend money and send the owner's words
+    with no per-question yes - so it raises ONE `change_own_config` card and
+    writes nothing before that yes. OFF is a tightening and is instant, the
+    same asymmetry every other switch in this program keeps
+    (`set_web_search`: "OFF at once; ON raises the one approval card").
+
+    It refuses ON with no provider chosen, BEFORE a card: a standing yes to a
+    service that is not chosen cannot do anything, and a card for a setting
+    that cannot work would be a lie.
+
+    Returns (http status, body). `card` says whether a card was raised, so an
+    app can say "waiting for your click" instead of guessing.
+    """
+    want = bool(on)
+    now = escalate_on()
+    if want == now:
+        return 200, {"ok": True, "on": now, "changed": False, "card": False,
+                     "message": f"Escalation is already {'on' if want else 'off'}.",
+                     "escalate": {"on": now, "why": escalate_why()}}
+    if want:
+        if not cloud_chosen():
+            return 409, {"ok": False, "on": False, "changed": False, "card": False,
+                         "error": ("no cloud service has been chosen on this PC yet - "
+                                   "pick one in the Presets menu first"),
+                         "escalate": {"on": False, "why": escalate_why()}}
+        words = _escalate_card_text()
+        verdict = (gate_check or _gate)(
+            CLOUD_ACTION, {"text": words},
+            "let hard questions go to the cloud without asking first")
+        if not getattr(verdict, "allowed", False):
+            return 200, {"ok": False, "on": now, "changed": False, "card": True,
+                         "outcome": str(getattr(verdict, "outcome", "refused")),
+                         "message": "Not turned on - Jarvis still asks before every cloud turn.",
+                         "escalate": {"on": now, "why": escalate_why()}}
+    if not _write_cloud_escalate(want):
+        return 503, {"ok": False, "on": now, "changed": False, "card": want,
+                     "error": ("the switch could not be saved on this PC; nothing was "
+                               "changed"),
+                     "escalate": {"on": now, "why": escalate_why()}}
+    return 200, {"ok": True, "on": want, "changed": True, "card": want,
+                 "message": ("Jarvis may now send a hard question to the cloud without "
+                             "asking first. Everything private still stays here."
+                             if want else
+                             "Jarvis asks before every cloud turn again."),
+                 "escalate": {"on": want, "why": escalate_why()}}
+
+
+def escalate_from_body(body) -> tuple:
+    """`POST /api/work/cloud-escalate {"on": true|false}` -> cloud_escalate()."""
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "expected a JSON object"}
+    if "on" not in body:
+        return 400, {"ok": False,
+                     "error": 'expected {"on": true} or {"on": false}'}
+    if not isinstance(body.get("on"), bool):
+        return 400, {"ok": False, "error": '"on" must be true or false'}
+    return cloud_escalate(on=body["on"])
+
+
 def _lane_url(key: str) -> str:
     return f"http://127.0.0.1:{LANES[key]['port']}"
 
@@ -310,10 +774,14 @@ def _active_lane_key() -> Optional[str]:
 
 
 def live_status() -> dict:
-    """GET /api/work's new answer: the five presets (the one contract both app
-    UIs render), the detected cards, the questionnaire, the 1/2/3-GPU
-    recommendations, the chosen preset and the active lane. Reads only - it
-    starts nothing, switches nothing and writes nothing."""
+    """GET /api/work's and GET /api/presets' answer: the five local presets,
+    the Cloud row, the cloud provider list and the PC's own escalation switch,
+    the detected cards, the questionnaire, the 1/2/3-GPU recommendations, the
+    chosen preset and the active lane.
+
+    Reads only, and never switches a model, starts a lane or writes a file -
+    the two things it DOES read from the owner's PC are which cloud keys are
+    saved (presence only) and this month's spend, both for `cloud`."""
     chosen = choice()
     chosen_preset = by_id(chosen) if chosen else None
     hw = hardware_block()
@@ -334,6 +802,14 @@ def live_status() -> dict:
     return {
         "found": f"{len(PRESETS)} focus presets",
         "presets": [p.view() for p in PRESETS],
+        # The Cloud row: a SIXTH row in the same shape, deliberately not in
+        # `presets` - both apps' five-row list stays five rows (the owner's
+        # decision of 2026-10-27: additive keys only, so the phone needs no
+        # change at all to keep working).
+        "cloud_preset": cloud_preset_view(),
+        # The provider in use, the services to choose from, and the PC's own
+        # standing escalation switch. See cloud_view().
+        "cloud": cloud_view(),
         "old_ids_replaced": list(OLD_IDS),
         # The exact shape the generated contract fixture has (and the one the
         # desktop/Android readers expect): hardware.detected + hardware.questionnaire.
@@ -352,10 +828,17 @@ def live_status() -> dict:
                             "catalogue. A pending preset waits for its model."),
     }
 
-def apply_preset(preset_id, *, start_lane=None, switch_model=None,
-                 active_url=None, set_active_url=None, read_choice=None,
-                 write_choice=None, rollback_model=None) -> tuple:
-    """Apply ONE preset after the owner's single switch_model card.
+
+def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
+                 switch_model=None, active_url=None, set_active_url=None,
+                 read_choice=None, write_choice=None, rollback_model=None) -> tuple:
+    """Apply ONE preset after the owner's single card.
+
+    `preset_id == "cloud"` is its own branch (`apply_cloud`): it raises ONE
+    `change_own_config` card for the service, writes the choice, and starts no
+    lane and switches no model - so `start_lane`, `switch_model`,
+    `rollback_model` and `set_active_url` are never touched on it. Everything
+    below this line is the local-preset path, unchanged.
 
     Order: start the named lane if it is down -> switch the model (the ask card
     lives inside switch_model) -> point chat at it -> save the chosen preset.
@@ -372,6 +855,8 @@ def apply_preset(preset_id, *, start_lane=None, switch_model=None,
     model back with the auto-tier jarvis_models.rollback() as well as restoring
     the chat lane and the remembered preset.
     """
+    if str(preset_id or "") == CLOUD_PRESET_ID:
+        return apply_cloud(provider=provider, gate_check=cloud_gate)
     p = by_id(preset_id)
     if p is None:
         return 400, {"ok": False, "changed": False,
@@ -473,16 +958,27 @@ def _default_switch(ref: str):
 
 
 def apply_from_body(body) -> tuple:
+    """`POST /api/work/apply {"preset": "<id>", "provider": "<service>"}`.
+
+    `provider` is read only for the `"cloud"` preset and ignored everywhere
+    else, which is what keeps every existing call's bytes meaning exactly what
+    they meant before (a body with no `provider` is the same request it was).
+    """
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "expected a JSON object"}
-    return apply_preset(body.get("preset"))
+    provider = body.get("provider")
+    if provider is not None and not isinstance(provider, str):
+        return 400, {"ok": False, "error": '"provider" must be text'}
+    return apply_preset(body.get("preset"), provider=provider)
 
 
 def install(Handler, *, origin_ok, token_ok, read_body):
-    """Wire GET /api/work (the new preset contract) and POST /api/work/apply
-    onto the HUD's Handler. Returns the status line the banner prints. Reads
-    nothing from the owner's PC except what live_status() reports; it approves
-    nothing: switch_to raises the one switch_model ask card itself."""
+    """Wire GET /api/work and GET /api/presets (the preset contract),
+    POST /api/work/apply and POST /api/work/cloud-escalate onto the HUD's
+    Handler. Returns the status line the banner prints. Reads nothing from the
+    owner's PC except what live_status() reports; it approves nothing: the
+    local apply raises the one switch_model ask card itself, and the cloud
+    apply and the escalation switch raise the one change_own_config card."""
     original_get = getattr(Handler, "do_GET", None)
 
     def do_GET(self):
@@ -509,7 +1005,7 @@ def install(Handler, *, origin_ok, token_ok, read_body):
     def do_POST(self):
         import json
         path = str(getattr(self, "path", "") or "").split("?", 1)[0]
-        if path != APPLY_PATH:
+        if path not in (APPLY_PATH, CLOUD_ESCALATE_PATH):
             if original is None:
                 return self._send(404, {"error": "not found"})
             return original(self)
@@ -521,7 +1017,12 @@ def install(Handler, *, origin_ok, token_ok, read_body):
             body = json.loads(read_body(self) or b"{}")
         except (ValueError, json.JSONDecodeError) as exc:
             return self._send(400, {"error": str(exc)})
-        code, out = apply_from_body(body)
+        # The standing escalation switch is its OWN route, because it is its
+        # own verb: applying a preset says which model answers, and this says
+        # whether Jarvis may ask the cloud with no per-question yes. Both raise
+        # a card through the same gate, so neither is reachable without one.
+        code, out = (escalate_from_body(body) if path == CLOUD_ESCALATE_PATH
+                     else apply_from_body(body))
         return self._send(code, out)
 
     Handler.do_POST = do_POST

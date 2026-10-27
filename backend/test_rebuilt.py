@@ -1212,11 +1212,11 @@ class Router(unittest.TestCase):
         # CONTROL: degrading a CLOUD lane down TO local must still work -
         # that direction is the documented, real use of local appearing in
         # the list. Stubbed degrade_chain, not the module's shipped default:
-        # the real chain is ["jarvis-escalate","jarvis-bulk","jarvis-critic"],
-        # which does not contain "local" at all, and "jarvis-bulk" being IN
-        # that chain means degrade() prefers it over any custom `lanes` this
-        # test passes - exactly as documented, and not what this control is
-        # checking.
+        # the real chain is ["jarvis-escalate"] alone since 2026-10-27 (it was
+        # ["jarvis-escalate","jarvis-bulk","jarvis-critic"]), which does not
+        # contain "local" at all, and a name IN that chain means degrade()
+        # prefers it over any custom `lanes` this test passes - exactly as
+        # documented, and not what this control is checking.
         keep_cfg = RT._cfg
         RT._cfg = lambda *a, **k: (["cloud-x", "local"] if a[:2] == ("budget", "degrade_chain") else keep_cfg(*a, **k))
         try:

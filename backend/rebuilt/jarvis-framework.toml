@@ -708,7 +708,7 @@ requests_per_minute = 15
 requests_per_day = 800
 on_minute_limit_hit = "degrade_to_next_lane_silently"
 on_day_limit_hit = "hold_local_until_reset_and_notify"
-degrade_chain = ["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]
+degrade_chain = ["jarvis-escalate"]
 
 # Also enforced today (jarvis_router.py `choose()` gate 2).
 [routing]

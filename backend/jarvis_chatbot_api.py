@@ -225,7 +225,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import jarvis_chatbot as CB
 
@@ -730,6 +730,38 @@ REASONING_NOT_ANSWER = ("The cloud model ran out of room before it wrote an answ
 #: Said when there is neither an answer nor any working-out to show, so a turn
 #: that produced nothing is never left as an empty card.
 NO_ANSWER_AT_ALL = "The cloud model did not send an answer this time."
+
+# ============================================================================
+#   A cloud answer nobody asked for (2026-10-27)
+# ============================================================================
+#
+# THE PROBLEM THIS SOLVES, and it is the one above with the owner removed from
+# it. The fallback above is the owner's decision of 2026-10-14 and it is right
+# for the turn it was decided about: he pressed "Try the cloud model" on a hard
+# question, so showing him the working-out with a line saying what it is beats
+# a blank card. From 2026-10-27 the PC can escalate WITH NO CLICK AT ALL - the
+# standing switch in the Presets menu, or "send this to the cloud" typed in the
+# message - and the measured behaviour of that same service on that same kind
+# of question is `finish_reason: "length"` with an empty `content` (four of
+# four, docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md). Showing an
+# unrequested turn a page of the model's private working-out, under a sentence
+# about running out of room, reads as a broken answer to a question the owner
+# never asked to send anywhere.
+#
+# SO AN AUTOMATIC TURN IS DIFFERENT. When the reply has no usable answer:
+#   * the working-out is NOT shown as the answer;
+#   * the PC answers it instead - `fallback()`, the caller's own local turn,
+#     because that is what "answer it here" means in this program;
+#   * one line says both, so the owner is never shown a local answer dressed as
+#     a cloud one, and never a blank card either.
+# If the local turn fails too, the line says the cloud did not answer and
+# nothing is invented. A turn the owner CLICKED for is untouched, byte for
+# byte, exactly as 2026-10-14 decided.
+CLOUD_ANSWERED_HERE = ("The cloud did not answer this one, so this PC answered it "
+                       "instead:")
+NO_CLOUD_ANSWER_HERE = ("The cloud did not answer this one, and this PC could not answer "
+                        "it either. Nothing was shown, because the cloud sent only its "
+                        "working-out and that is not an answer.")
 
 
 class MoneyFileError(RuntimeError):
@@ -1607,6 +1639,42 @@ def _added_chunk(text: str) -> bytes:
     return b"data: " + json.dumps(payload, ensure_ascii=False).encode("utf-8") + b"\n\n"
 
 
+def _only_reasoning(event: bytes) -> bool:
+    """Does this SSE event carry the model's working-out and nothing else?
+
+    True only when EVERY `data:` line in it has an empty `content` and some
+    `reasoning_content`, and it asks for no tool. An event that carries an
+    answer, a tool call, a finish_reason or anything this file cannot read is
+    NOT one of these - which is the safe direction: the caller writes it as it
+    always did rather than swallowing it.
+    """
+    saw_reasoning = False
+    saw_data = False
+    for line in event.split(b"\n"):
+        line = line.strip()
+        if not line.startswith(b"data:"):
+            continue
+        body = line[5:].strip()
+        if body == b"[DONE]":
+            return False
+        try:
+            got = json.loads(body.decode("utf-8", "replace"))
+        except ValueError:
+            return False
+        if not isinstance(got, dict):
+            return False
+        saw_data = True
+        text, reasoning = visible_and_reasoning(got)
+        if text.strip() or tool_calls(got):
+            return False
+        if (_finish_reason(got) or got.get("done") is True
+                or got.get("finished") is True):
+            return False
+        if reasoning.strip():
+            saw_reasoning = True
+    return bool(saw_data and saw_reasoning)
+
+
 class CloudAnswer:
     """Reads a cloud service's reply and makes sure a blank one is not what
     the owner sees when the model wrote its working-out instead.
@@ -1630,16 +1698,35 @@ class CloudAnswer:
     added text lands BEFORE the client is told the answer is over: every reader
     this program has finalizes on that event and would drop anything written
     after it. `used_reasoning` says whether the working-out is what was shown.
+
+    `auto=True` for a turn the PC escalated WITH NO CLICK (the standing switch
+    or a phrase in the message): then a reply with no usable answer shows the
+    LOCAL answer from `fallback()` under one honest line, never the
+    working-out. `answered_here` says the local turn's answer was used, and
+    `used_reasoning` stays False for those turns - it is a promise that the
+    owner is never shown working-out as an answer to a question he did not ask
+    to send anywhere. See CLOUD_ANSWERED_HERE above.
     """
 
-    def __init__(self, streamed: bool) -> None:
+    def __init__(self, streamed: bool, *, auto: bool = False,
+                 fallback: Optional[Callable[[], str]] = None) -> None:
         self.streamed = bool(streamed)
         #: True once the working-out has been shown as the answer. Read by
         #: whoever wants to say so somewhere else too; never set otherwise.
         self.used_reasoning = False
+        #: Whether this turn was escalated with no click (see `auto=` above).
+        self.auto = bool(auto)
+        #: The caller's own local turn, used only for `auto` turns whose cloud
+        #: reply has no usable answer. Called at most once, at `close()`.
+        self.fallback = fallback
+        #: True once the local answer was used in place of the cloud's.
+        self.answered_here = False
+        #: The plain sentence that was added, "" when nothing was.
+        self.said = ""
         self._raw = b""          # read, not yet written
         self._held: list = []    # whole events that would end the stream
         self._hidden: list = []  # the working-out, in the order it arrived
+        self._withheld: list = []  # events that carry ONLY the working-out
         self._visible = False    # has anything that counts as an answer been seen?
         self._ended = False      # has the stream said it is finished?
 
@@ -1659,7 +1746,14 @@ class CloudAnswer:
                 break
             self._raw = rest
             self._read_event(event)
-            if self._ended and not self._visible:
+            if self.auto and _only_reasoning(event):
+                # An automatic turn never shows the working-out, so the events
+                # that carry ONLY it are withheld rather than written. That is
+                # the one exception to "never drop a byte": on a turn the owner
+                # clicked for, nothing is dropped at all, and what this drops is
+                # exactly the text the added line would otherwise print.
+                self._withheld.append(event)
+            elif self._ended and not self._visible:
                 self._held.append(event)     # written after the added text
             else:
                 out.append(event)
@@ -1716,11 +1810,36 @@ class CloudAnswer:
 
     def _added(self) -> bytes:
         """The chunk that stands in for an answer that was never written."""
+        return _added_chunk(self._stand_in())
+
+    def _stand_in(self) -> str:
+        """What to say when the model wrote no usable answer, in plain words.
+
+        ONE place for both framings (a streamed reply and a whole body), so
+        the two can never drift apart. The `auto` branch is the 2026-10-27
+        rule: a turn nobody clicked for is answered HERE, and the working-out
+        is not shown at all.
+        """
         said = "".join(self._hidden).strip()
+        if self.auto:
+            answer = ""
+            if self.fallback is not None:
+                try:
+                    answer = str(self.fallback() or "").strip()
+                except Exception:
+                    answer = ""
+            if answer:
+                self.answered_here = True
+                self.said = CLOUD_ANSWERED_HERE
+                return CLOUD_ANSWERED_HERE + "\n\n" + answer
+            self.said = NO_CLOUD_ANSWER_HERE
+            return NO_CLOUD_ANSWER_HERE
         if said:
             self.used_reasoning = True
-            return _added_chunk(REASONING_NOT_ANSWER + "\n\n" + said)
-        return _added_chunk(NO_ANSWER_AT_ALL)
+            self.said = REASONING_NOT_ANSWER
+            return REASONING_NOT_ANSWER + "\n\n" + said
+        self.said = NO_ANSWER_AT_ALL
+        return NO_ANSWER_AT_ALL
 
     def _whole_body(self, raw: bytes) -> bytes:
         """One whole JSON reply, rewritten only when it has no answer in it.
@@ -1739,12 +1858,11 @@ class CloudAnswer:
         text, reasoning = visible_and_reasoning(got)
         if text.strip() or tool_calls(got):
             return raw
-        said = reasoning.strip()
-        if said:
-            self.used_reasoning = True
-            shown = REASONING_NOT_ANSWER + "\n\n" + said
-        else:
-            shown = NO_ANSWER_AT_ALL
+        # `_read_event` has not run for a whole body, so the working-out is
+        # put where `_stand_in` reads it - otherwise a one-shot reply with
+        # only reasoning in it would lose the reasoning fallback entirely.
+        self._hidden = [reasoning] if reasoning.strip() else []
+        shown = self._stand_in()
         try:
             choice = got["choices"][0]
             part = choice.get("message")
@@ -1894,18 +2012,20 @@ def point_at(pid: str, base_url: str) -> Preset:
 #
 # THE MAPPING IS DECLARED, NOT INVENTED. A lane name is a label in
 # jarvis-framework.toml's `degrade_chain`, so it has to keep meaning
-# whatever the owner's file says. Three are named here because they are the
-# three that file ships with; every other non-local lane falls to
-# DEFAULT_LANE, with its own line saying so in the refusal words below.
+# whatever the owner's file says. ONE is named here, and since 2026-10-27 that
+# is the whole list: the owner's `litellm-proxy.yaml` used to offer three
+# (`jarvis-escalate`, `jarvis-critic`, `jarvis-bulk`) and all three mapped to
+# this one service, so the two extra names were a label and a model name and
+# never a route. They are gone (`docs/DECISIONS.md`, 2026-10-27), and
+# `jarvis_router.cloud_lanes()` refuses any other name, so an older config that
+# still lists them cannot bring a second lane back. Every other non-local lane
+# falls to DEFAULT_LANE, with its own line saying so in the refusal words below.
 CLOUD_LANES = {
     # The owner's decision (2026-10-06) is that the service behind the cloud
-    # lane is DeepSeek. The model per lane is this project's choice, not
-    # DeepSeek's: the cheapest and fastest for the lane that runs most, the
-    # strongest for the one whose job is to check an answer. Change a line
-    # here (or the [chatbot] deepseek_api_model line) to change it.
+    # lane is DeepSeek. The model is this project's choice, not DeepSeek's: the
+    # cheapest and fastest current one. Change this line (or the
+    # [chatbot] deepseek_api_model line) to change it.
     "jarvis-escalate": ("deepseek_api", "deepseek-flash"),
-    "jarvis-bulk": ("deepseek_api", "deepseek-flash"),
-    "jarvis-critic": ("deepseek_api", "deepseek-v4-pro"),
 }
 
 #: (service, model) for any other non-local lane name - a name left in the

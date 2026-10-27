@@ -1,0 +1,103 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -4749,19 +4749,32 @@
+                 has_image=bool(body.get("has_image")),
+                 conversation_tainted=tainted,
+                 budget=budget,
+                 # cloud-say-yes.patch: the owner's yes for THIS ONE
+                 # question - the app's "Try the cloud model" button, shown
+                 # only after choose() itself already offered a lane with
+                 # gate "offer" (docs/JARVIS-API.md, "`offer` in
+                 # `X-Jarvis-Route`"). Absent or false reads exactly as
+                 # before this patch. Every gate above still runs first, in
+                 # the same order, so a yes can never pull a private,
+                 # tainted or picture turn out - it only ever turns gate 6
+                 # from "offer" into "escalate" for a question that had
+                 # already cleared every other gate on its own merits.
+-                owner_said_yes=bool(body.get("cloud_yes")),
++                # cloud-escalate.patch (2026-10-27): the HUD page sends
++                # `cloud_yes` while the PC's escalation box is on, so from
++                # the HUD it is a STANDING yes and counts only while this
++                # PC's own file still says on - a stale page cannot turn a
++                # switch that has been turned off into a yes for one
++                # question. Another client's `cloud_yes` (the phone's
++                # "Try the cloud model", the desktop window's strip) is the
++                # per-question tap it always was. The standing switch
++                # itself is read by jarvis_router.choose(), never from
++                # anything a client sent.
++                owner_said_yes=(bool(body.get("cloud_yes")) and (
++                    str((getattr(self, "headers", None) or {}).get(
++                        "X-Jarvis-Client") or "").strip().lower() != "hud"
++                    or bool(__import__("jarvis_presets").escalate_on()))),
+                 # screen.patch: a turn carrying the owner's screen never
+                 # leaves this PC - not when it is long, not when a cloud lane
+                 # is offered, not when the owner said yes to the cloud for
+                 # it. The router's own gate "screen" (test_router_private_terms).
+                 has_screen=_screen_turn(body),
+@@ -5601,9 +5601,27 @@
+                     _says = None
+                     if lane != local_model:
+                         try:
+                             import jarvis_chatbot_api as _api
+-                            _says = _api.CloudAnswer("event-stream" in str(
+-                                upstream.headers.get("Content-Type", "")).lower())
++                            # cloud-escalate.patch (2026-10-27): this turn
++                            # may have been escalated with no click at all -
++                            # the PC's standing switch, or "send this to
++                            # the cloud" typed in the message - and the
++                            # measured behaviour on exactly those questions
++                            # is `finish_reason: "length"` with no answer
++                            # (four of four, the 2026-10-14 field test). So
++                            # the reader is told, and a reply with nothing
++                            # usable in it is answered HERE instead, under
++                            # one honest line, rather than shown as the
++                            # model's private working-out. A turn the owner
++                            # clicked for is untouched - byte for byte what
++                            # the 2026-10-14 decision made it.
++                            _says = _api.CloudAnswer(
++                                "event-stream" in str(
++                                    upstream.headers.get("Content-Type", "")).lower(),
++                                auto=bool(getattr(decision, "auto", False)),
++                                fallback=(lambda: __import__("jarvis_agent").answer_here(
++                                    messages, local_model,
++                                    ollama_url=active_ollama_url())))
+                         except Exception:
+                             _says = None
+                     try:
+@@ -6089,13 +6089,26 @@
+-def _lane_names() -> list:
+-    if not PROXY_FILE.exists():
+-        return []
+-    try:
+-        raw = PROXY_FILE.read_text(encoding="utf-8", errors="replace")
+-    except OSError:
+-        return []
+-    return list(dict.fromkeys(
+-        re.findall(r"^\s*-?\s*model_name:\s*([A-Za-z0-9_\-]+)", raw, re.M)
+-    ))
++def _lane_names() -> list:
++    """The cloud lanes this PC has right now: ONE name, or none.
++
++    cloud-escalate.patch (2026-10-27). The owner's decision keeps one cloud
++    lane (`jarvis_router.CLOUD_LANE`) and drops `jarvis-critic` and
++    `jarvis-bulk`, and the list has to come from the provider he CHOSE in the
++    Presets menu rather than from a config file for a proxy that is not
++    installed and never was. This used to read `litellm-proxy.yaml` and hand
++    back three names; `docs/ACCOUNT-KEYS-DESIGN.md` already says that file
++    "is now read by nothing", and until this patch that was not true.
++
++    None is not a hole: `jarvis_router.choose()` answers gate "unavailable",
++    which is the honest answer for a PC where no cloud service has been
++    picked yet, and `main()` prints "lanes: none found" instead of naming
++    three lanes that do not exist. Never raises: a missing or broken
++    `jarvis_presets.py` reads as no lane, the direction that cannot send
++    words anywhere.
++    """
++    try:
++        import jarvis_presets
++        return list(jarvis_presets.cloud_lanes())
++    except Exception:
++        return []
+ 
+ 
+ def _manual_decision(chosen: str, local_model: str):
