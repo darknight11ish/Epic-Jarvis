@@ -325,7 +325,17 @@ jobs:
       # a named SKIP and prove nothing - and SKIPPED IS NOT A PASS. Pillow 13
       # is the version requirements.lock pins for Python 3.12 and the only
       # release that fixes the 24 advisories Pillow 12.3.0 carried (2026-10-21).
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0
+      #
+      # fsrs 6.3.2 is here for backend/test_decks.py, and it is the same
+      # lesson one step further: that suite's main() returns 0 having run NO
+      # check when py-fsrs is missing, which before 2026-10-27 was counted as
+      # `ok`. The run_suites.py zero-check rule now reports such a suite as
+      # NO-CHECKS and fails the job, which is how this line came to exist - the
+      # Ubuntu job ran test_decks.py's zero checks on every push and nobody
+      # knew. With py-fsrs installed it runs 351 checks here. `fsrs==6.3.2`
+      # exactly, the version backend/requirements.lock pins for Python 3.12
+      # (its golden numbers are backend/decks_fsrs_golden.json).
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
       # Fail fast (2026-10-25): this generator check used to sit after the
       # suites, in the "Job list" step, so a stale backend/tasks.patch was
       # reported only after ~35 minutes of suites. It needs nothing from those
@@ -675,7 +685,15 @@ jobs:
       # pyyaml, for the same reason as the Ubuntu job above: without it
       # backend/test_ci_emulator_install.py's wiring half SKIPS by name here
       # too. One version, from requirements.lock.
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 tzdata==2026.4 uiautomation==2.0.29 pyyaml==6.0.3
+      #
+      # fsrs (py-fsrs), for backend/test_decks.py, and for the reason the
+      # 2026-10-27 zero-check rule exists: without it that suite prints one
+      # skip line, runs NO check and exits 0, which this job's exit-code loop
+      # would count as a pass. Installed here so its checks really run on
+      # Windows - 349 passed, 2 skipped measured on the owner's PC, the two
+      # being the time.tzset-only checks Windows cannot run. Exact version,
+      # from requirements.lock.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 tzdata==2026.4 uiautomation==2.0.29 pyyaml==6.0.3 fsrs==6.3.2
       - name: Backend suites that need no file from the owner's PC, on Windows
         # One step, not two: an environment variable set in one step does not
         # reach the next one.
@@ -910,7 +928,13 @@ jobs:
             'test_today.py',
             'test_token_file.py',
             'test_token_store.py',
-            'test_tool_calling_wiring.py',
+            # test_tool_calling_wiring.py is NOT here, on purpose: every one of
+            # its six checks lifts `do_POST`'s text out of jarvis_hud.py, the
+            # owner's patched entry point that no checkout holds, so on this
+            # runner it skips all six and exits 0 - which this step's exit-code
+            # check would call a pass. The Ubuntu job names it in
+            # run_suites.py's NEEDS_OWNER list instead; the owner's PC is the
+            # only machine that runs it for real (2026-10-27).
             'test_tool_eval.py',
             'test_tool_text.py',
             'test_tool_updates.py',

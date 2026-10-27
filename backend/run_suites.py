@@ -193,6 +193,13 @@ import _where  # noqa: E402
 #   test_gate_egress.py (5 failures) fail checks that read the owner's real
 #   file; test_decide_once.py, test_degrade_filter.py, test_memory_noise.py and
 #   test_memory_prefix.py print one whole-suite skip and exit 0 (0 checks).
+#
+# ONE MORE WAS ADDED THE SAME DAY, by the zero-check rule below: every one of
+# test_tool_calling_wiring.py's six checks lifts `do_POST`'s text out of
+# jarvis_hud.py, so with no jarvis_hud.py it printed six skips, ran nothing and
+# exited 0 - which used to read as a pass and is now NO-CHECKS. Naming it here
+# is the honest form: the runner says which file it is waiting for. The owner's
+# PC is the only machine it can run on.
 NEEDS_OWNER = {
     "test_approval_notice.py": ("jarvis_gate.py", "jarvis_events.py"),
     "test_decide_once.py": ("jarvis_extract.py", "jarvis_hud.py", "jarvis_memory.py"),
@@ -211,6 +218,7 @@ NEEDS_OWNER = {
     # fails and every cloud check would read as "no lane".
     "test_ollama_direct.py": ("jarvis_hud.py",),
     "test_token_file.py": ("jarvis_hud.py",),
+    "test_tool_calling_wiring.py": ("jarvis_hud.py",),
 }
 
 # The files only the owner's PC has. Checked below: every NEEDS_OWNER entry

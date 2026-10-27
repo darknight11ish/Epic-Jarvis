@@ -3846,6 +3846,24 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     one is still `ok`. `backend/test_suite_state.py` still passes unchanged.
     The workflow itself has been parsed with PyYAML, and `strategy.job-total`
     is documented by GitHub as the matrix length in both `jobs.<job_id>.name`
-    and `steps.env`; what has NOT happened is a GitHub Actions run of this
-    branch, so the first CI run is what shows the compile gate and the new
-    shard wiring in the real job.
+    and `steps.env`.
+  * **The rule's own first CI run found two suites that had been proving
+    nothing (run 40468616102, 2026-10-27).** The branch's first run went red on
+    the new rule, not on a product change, and both failures were real:
+    `test_decks.py` printed one skip and ran NO check because `py-fsrs` was
+    never installed by either backend job - 349 checks sat unrun on every push
+    while the job read green; `fsrs==6.3.2`, the version `requirements.lock`
+    pins for Python 3.12, is now installed by BOTH the Ubuntu and the Windows
+    backend jobs, so its 351 checks run on Ubuntu and 349 passed with 2
+    legitimately skipped on Windows. `test_tool_calling_wiring.py` lifts
+    `do_POST`'s text out of `jarvis_hud.py` in all six checks, and that file is
+    the owner's patched entry point which no checkout holds - so no CI runner
+    can run it at all: it moved into `NEEDS_OWNER` (skipped by name, saying
+    which file it waits for) and out of the Windows job's suite list, where six
+    skips and exit 0 would have read as a pass. The owner's PC is still the
+    only machine it runs on, for real. **What is not fixed:** the Windows job
+    still trusts exit codes alone, so a future suite that skips every check
+    there would still read as a pass - the Ubuntu sweep is the one with the
+    rule, and widening it to that job is named as remaining work rather than
+    claimed here. What has NOT happened is a green run of the amended branch:
+    the next CI run is what shows the fix.
