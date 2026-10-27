@@ -127,6 +127,32 @@ def t_titles_for_names_with_no_phrase_still_read():
           W.title_for("learning_enable") == "Jarvis wants to turn on learning")
 
 
+def t_a_written_title_is_one_somebody_wrote():
+    """`title_for` ALWAYS makes a readable line, so "it reads" cannot answer
+    "did anyone write this?". `has_written_title` asks the second question,
+    and jarvis_owner_check refuses a Windows Hello prompt for an action that
+    fails it (2026-10-26) - a prompt could only quote a name back."""
+    missing = [a for a in W.TITLES if not W.has_written_title(a)]
+    check("every action with a phrase counts as written", not missing, missing)
+    check("no action at all is not written",
+          not W.has_written_title("") and not W.has_written_title(None))
+    for action in ("frobnicate_widget", "some_tool_nobody_classified"):
+        check(f"{action!r}: not written, though title_for still reads",
+              not W.has_written_title(action)
+              and W.title_for(action).startswith("Jarvis wants your OK for"),
+              W.title_for(action))
+    import gen_risky_approval_cases as RC
+    check("the generated 'unclassified' fixture row is that same case",
+          RC.UNKNOWN == "some_tool_nobody_classified"
+          and not W.has_written_title(RC.UNKNOWN), RC.UNKNOWN)
+    for action in ("mcp_start__my_program", "mcp__my_program__read_a_file"):
+        check(f"a plug-in's own name counts as written: {action}",
+              W.has_written_title(action))
+    for bare in ("mcp_start__", "mcp__"):
+        check(f"a bare plug-in prefix is not written: {bare!r}",
+              not W.has_written_title(bare))
+
+
 def t_the_notice_uses_the_table():
     notice_for = C.load_notice_for()
     for action in sorted(W.TITLES):

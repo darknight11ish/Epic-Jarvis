@@ -2323,14 +2323,20 @@ def secret_handoff_live_snapshot(descriptor: dict) -> dict:
             identity = _secret_handoff_identity(control)
         except Exception:
             identity = ""
-        # The stored id ends with ":" + the control's identity (see
-        # _secret_handoff_descriptor_from); comparing the identity against the
-        # id's LAST colon segment can never match, so the live snapshot used to
-        # say "changed" for the very control it had just measured and the engine
-        # voided every fill ("the focused input control changed"). Compare the
-        # whole identity as a suffix instead (measured live 2026-10-26).
-        if masked and identity and expected.endswith(":" + identity):
-            control_id = expected
+        # The stored id is `uia:<pid>:<hwnd>:<index>:<control_type>:<identity>`
+        # (see _secret_handoff_descriptor_from), and the identity itself may
+        # contain colons. Splitting at most 6 times puts the whole identity in
+        # part 6, so the comparison is EXACT: a stored identity of
+        # "login:foo:bar" no longer matches a live "bar" through a suffix test.
+        # That suffix test is what #864 shipped, and a shrunk identity would
+        # have re-pointed the card at a different control while still reading
+        # as unchanged. A stored id that is not a well-formed `uia:` id never
+        # matches, so a moved target keeps reading as "changed" and the engine
+        # still voids it (measured live 2026-10-26).
+        if masked and identity:
+            parts = expected.split(":", 5)
+            if len(parts) == 6 and parts[0] == "uia" and parts[5] == identity:
+                control_id = expected
     return {
         "target_key": H.normalize_secret_target_key(pid=pid, hwnd=live_hwnd,
                                                     window_class=klass),

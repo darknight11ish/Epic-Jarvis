@@ -10,7 +10,10 @@ repository (backend/.gitignore refuses them). Run anywhere else, those suites
 fail with an ImportError that looks exactly like a broken patch. A CI job
 that is always red teaches everyone to ignore it, so those suites are
 SKIPPED here, each one named with the files it is waiting for - and only
-while those files are absent. Every other suite must pass.
+while those files are absent. FOUR MORE SUITES ARE A SECOND, SEPARATE SKIP
+CLASS (2026-10-26, below): they are skipped by name even when their files are
+present, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set, because each
+starts a real, visible Chromium window. Every other suite must pass.
 
 THE BACKEND IT RUNS AGAINST. Not this folder: a temporary folder holding a
 copy of every module apply-patches.ps1 ships (backend/_where.py SHIPPED),
@@ -28,8 +31,10 @@ run. Now the ambient variable is **ignored** unless it is asked for:
 `--use-env-backend` runs against whatever `JARVIS_BACKEND` names, and
 `--backend-path DIR` runs against DIR, explicitly. Both are refused when what
 they name is not a folder, and the default prints one line when it had to
-ignore the ambient value, so nobody is surprised. A suite is skipped only if
-its files are really not there, whichever backend is used.
+ignore the ambient value, so nobody is surprised. A suite is skipped when
+its files are really not there, whichever backend is used - or, for the four
+visible-browser suites below, even when its files are there and the opt-in is
+not set.
 
    python3 backend/run_suites.py                       # throwaway copy (default)
    python3 backend/run_suites.py --backend-path "C:/Users/you/Documents/jarvis-backend"
@@ -58,6 +63,8 @@ a second list to keep in step.
 
 The skip list is explicit, not guessed from a failure: a suite that is not in
 it and fails is a failure, and a suite in it whose files ARE present runs.
+The four visible-browser suites below are the exception: they are skipped by
+name even when present, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set.
 
 AND FOUR SUITES ARE NOT RUN AT ALL UNLESS ASKED (2026-10-26).
 `test_chatbot_sites.py`, `test_chatbot_gemini.py`, `test_handoff.py` and

@@ -64,6 +64,7 @@ window" form, which only the Windows API itself offers.
 """
 from __future__ import annotations
 
+import atexit
 import hashlib
 import hmac
 import io
@@ -102,6 +103,10 @@ GONE = ("This request stopped waiting while Windows Hello was open (it ran out o
         "time or was answered), so it was not approved")
 QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell "
                     "whether this approval needs Windows Hello. Nothing was approved")
+#: The action has no written words of its own, so a prompt could only quote a
+#: name nobody described: refused before any prompt appears (2026-10-26).
+UNLABELLED = ("Jarvis has no written words for this action yet, so it will not ask "
+              "you to confirm it. Nothing was approved")
 
 #: Cards that are approved on THIS PC only, and always with Windows Hello,
 #: whatever their risk says: loosening "What asks first" (jarvis_asks_first.
@@ -163,6 +168,53 @@ PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so not
 #: `expires_in` (a backend without approval-expiry.patch).
 DEFAULT_TIME_LEFT = 900.0
 
+#: The longest a Windows Hello prompt may stay up, however much time its card
+#: has left (2026-10-26). The prompt's only cancellation is its own deadline -
+#: the visible dialog belongs to Windows, and killing the process that asked
+#: for it does not close it (measured: .dsh-scratch/WINDOWS-HELLO-2026-10-26/
+#: FINDINGS.md section 3) - so the number given here IS its lifetime. Three
+#: minutes is long enough to reach the PC and confirm, and short enough that a
+#: prompt queued behind another one cannot sit on screen for a quarter of an
+#: hour because its card happened to have that long. The card is not used up
+#: by a prompt that closes: it keeps waiting, and Approve can be pressed
+#: again.
+_PROMPT_MAX = 180.0
+
+#: The ceiling on how long a request waits for the one-prompt-at-a-time lock
+#: before it is refused (2026-10-26 review). The prompt in front of it can last
+#: `_PROMPT_MAX` (180 s); its child then gets ten seconds to answer after its
+#: own deadline (`_verify_windows`'s `proc.wait`), the cancel that follows gets
+#: two more, and `stop()`'s two-second join runs while the lock is still held -
+#: so the worst legitimate hold is about 194 s, and 210 is the ceiling that
+#: covers it. (The thirty seconds is slack over the PROMPT, not over that hold:
+#: 210 - 180.) `_PROMPT.acquire(-1)` waited for ever: one child that never
+#: answered held every later approval until the backend was restarted. A card
+#: that has not had its turn is refused with the same 409 as one that ran out.
+_PROMPT_WAIT_MAX = _PROMPT_MAX + 30.0
+
+#: How often the card is asked whether it is still waiting while its prompt is
+#: open (2026-10-26 review; .dsh-scratch/WINDOWS-HELLO-2026-10-26/FINDINGS.md
+#: section 5 B asks for 0.25 s). A quarter of a second is fast enough that the
+#: dialog is gone a moment after its card is, and cheap enough that the poll
+#: costs nothing: one queue read four times a second, only while a prompt is up.
+_WATCH_INTERVAL = 0.25
+
+
+def _wait_for_prompt(left: Optional[float]) -> float:
+    """How long a request may wait for the one-prompt-at-a-time lock.
+
+    A card with no deadline waits the whole `_PROMPT_WAIT_MAX`; a card with one
+    waits its own time left, because it can never be prompted after that - and
+    never more than `_PROMPT_WAIT_MAX`, the ceiling that covers the worst
+    legitimate hold of the prompt in front: about 194 s, being 180 s of prompt,
+    ten seconds for the child's answer, two for the cancel and two for
+    `stop()`'s join (2026-10-26 review: the cap used to be `_PROMPT_MAX`,
+    180 s, up to about 14 s short of that hold, so a card could be refused just
+    as its turn arrived).
+    """
+    return _PROMPT_WAIT_MAX if left is None else min(left, _PROMPT_WAIT_MAX)
+
+
 # ---------------------------------------------------------------------------
 # Which approvals are risky - ONE rule, three places
 # ---------------------------------------------------------------------------
@@ -217,6 +269,26 @@ def approval_message(row: Optional[dict]) -> str:
     risk = row.get("risk") if isinstance(row.get("risk"), dict) else {}
     why = str(risk.get("why") or "").strip() or "Check the card before you confirm."
     return f"{title}\n{why}"[:300]
+
+
+def has_written_title(action) -> bool:
+    """True when jarvis_card_words has words somebody WROTE for `action`.
+
+    `approval_message` can always build a readable line, because the card's
+    own title is there - but for an action with no phrase in the card words,
+    that title is a name Jarvis quotes back (`title_for`'s fallback), not a
+    description of anything. A prompt showing only that asks the owner to
+    confirm a blank, so `approve_check` refuses before the prompt appears
+    (2026-10-26).
+
+    A missing words module answers False, and that is on purpose: if this
+    process cannot read the written words, it cannot prove a card has any.
+    """
+    try:
+        import jarvis_card_words
+        return bool(jarvis_card_words.has_written_title(action))
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -687,6 +759,125 @@ _VERIFIER: Optional[Callable[[str, float], str]] = None
 _PROMPT = threading.Lock()
 
 
+class _LivePrompt:
+    """One Windows Hello child process that is still waiting for an answer.
+
+    The child watches its own stdin (`_watch_for_stop`): a "cancel" line, or
+    the pipe closing, makes it cancel the Windows prompt instead of waiting
+    out its deadline. Keeping this end of the pipe open is therefore what
+    ties the prompt to the backend - when the backend goes away, the pipe
+    closes, and the child asks Windows to close the dialog.
+    """
+
+    def __init__(self, proc, token=None):
+        self.proc = proc
+        #: Which approval raised this prompt. `None` when the prompt was not
+        #: raised by `approve_check` (a hand-run, or a test's stand-in). The
+        #: watcher matches on this so it can only ever cancel its OWN prompt
+        #: (2026-10-26 review).
+        self.token = token
+        self.stop = threading.Event()
+
+    def say(self, ask: dict) -> bool:
+        """Send the one JSON line the child reads first. False if it cannot."""
+        try:
+            self.proc.stdin.write(json.dumps(ask) + "\n")
+            self.proc.stdin.flush()
+            return True
+        except (OSError, ValueError, AttributeError):
+            return False
+
+    def cancel(self) -> None:
+        """Ask the child to close the prompt, then close its pipe.
+
+        Closing is the same request as the line (the child treats the end of
+        the pipe as "the backend is going away"), so a lost line still stops
+        it. Never raises.
+        """
+        self.stop.set()
+        stdin = getattr(self.proc, "stdin", None)
+        if stdin is None:
+            return
+        try:
+            if not stdin.closed:
+                stdin.write("cancel\n")
+                stdin.flush()
+        except Exception:
+            pass
+        try:
+            stdin.close()
+        except Exception:
+            pass
+
+    def close(self) -> None:
+        """Close this end of the pipe once the prompt is over."""
+        stdin = getattr(self.proc, "stdin", None)
+        try:
+            if stdin is not None and not stdin.closed:
+                stdin.close()
+        except Exception:
+            pass
+
+
+_LIVE_PROMPTS: set = set()
+_LIVE_LOCK = threading.Lock()
+
+
+def _cancel_live_prompts() -> int:
+    """Ask every prompt still open to close. Returns how many were asked.
+
+    Registered with `atexit` at import, which is this project's pattern for
+    work that must happen on the way out (`jarvis_hud._release_gpu`, and
+    several other modules). It covers a clean backend shutdown:
+    /api/shutdown, Ctrl-C, a normal exit. It cannot cover a hard kill of the
+    process - the desktop's job object, Task Manager - because no Python runs
+    then, so a prompt in that case still ends only at its own deadline. That
+    limit is real and is written down in the PR, not hidden here.
+    """
+    with _LIVE_LOCK:
+        live = list(_LIVE_PROMPTS)
+    for prompt in live:
+        prompt.cancel()
+    return len(live)
+
+
+#: Thread-local token for the approval that is raising a prompt right now.
+#: `approve_check` sets it around its `verify` call; `_verify_windows` reads it
+#: and tags the live prompt with it. A thread-local, not a module global,
+#: because the token belongs to one request (2026-10-26 review).
+_CURRENT_PROMPT = threading.local()
+
+
+def _prompt_token() -> Optional[object]:
+    """The token of the prompt this thread is raising, or None."""
+    return getattr(_CURRENT_PROMPT, "token", None)
+
+
+def _cancel_prompts_for(token) -> int:
+    """Ask only the prompts raised for ONE approval to close. Returns how many.
+
+    `_cancel_live_prompts` is for shutdown: everything closes. This is for the
+    card watcher, whose queue read can outlive `_PromptWatch.stop()`'s
+    two-second join - so by the time it reports "gone", the prompt lock may have
+    been released and the NEXT card's prompt may be the one on screen.
+    Cancelling by token means a stale watcher can only close the prompt it was
+    made for (2026-10-26 review). A token of None cancels nothing: an untagged
+    prompt was not raised by `approve_check`, so no watcher owns it.
+    """
+    if token is None:
+        return 0
+    with _LIVE_LOCK:
+        live = [p for p in _LIVE_PROMPTS if getattr(p, "token", None) is token]
+    for prompt in live:
+        prompt.cancel()
+    return len(live)
+
+
+#: The atexit hook itself, kept in a name so a test can check that importing
+#: this module really registers it.
+_SHUTDOWN_HOOK = atexit.register(_cancel_live_prompts)
+
+
 def set_verifier(fn: Optional[Callable[[str, float], str]]) -> None:
     """Replace the Windows Hello call (tests). None puts the real one back."""
     global _VERIFIER
@@ -716,24 +907,76 @@ def _child_env() -> dict:
         return {k: v for k, v in os.environ.items() if k.upper() in keep}
 
 
+#: How the Windows Hello child process is started. A name of its own so a test
+#: can stand a FAKE child in its place: the real one raises a real prompt, and
+#: no test may do that.
+_SPAWN = subprocess.Popen
+
+
 def _verify_windows(message: str, timeout: float) -> str:
     """Runs the check in a child process (this file, `--hello`). A mistake in
     the Windows calls can then end only the child - read as "failed", so the
     approval is refused - never the backend. The message goes in on stdin,
-    never on a command line other programs can list."""
+    never on a command line other programs can list.
+
+    The child's stdin STAYS OPEN while it works: the JSON line tells it what
+    to ask, and a later "cancel" line - or this end of the pipe closing - tells
+    it to close the prompt. That is the cancellation the backend controls; the
+    child's death is not one (the 2026-10-26 measurement found the Windows
+    dialog survives the process that asked for it). A timeout asks the child
+    to cancel, gives it a moment, and only then kills it.
+
+    The prompt is tagged with the token of the approval raising it
+    (`_prompt_token`), so its watcher can cancel this prompt and no other.
+    """
+    # THE PROMPT'S LIFETIME IS CAPPED HERE TOO (2026-10-26 review). The caller
+    # already passes at most `_PROMPT_MAX` and the child clamps what it is
+    # given; this is the third place, so no future caller can hand Windows a
+    # longer dialog than the documented bound.
     try:
-        r = subprocess.run(
+        seconds = min(max(1.0, float(timeout)), _PROMPT_MAX)
+    except (TypeError, ValueError, OverflowError):
+        seconds = _PROMPT_MAX
+    try:
+        proc = _SPAWN(
             [sys.executable, "-I", str(Path(__file__).resolve()), "--hello"],
-            input=json.dumps({"message": message, "timeout": float(timeout)}),
-            capture_output=True, text=True, timeout=float(timeout) + 10.0,
-            env=_child_env(),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, env=_child_env(),
             # CREATE_NO_WINDOW: no console flashes up. The check's own small
             # window, and Windows Hello's prompt, are not affected.
             creationflags=0x08000000,
         )
     except (OSError, subprocess.SubprocessError, ValueError):
         return FAILED_
-    return parse_child_answer(r.returncode, r.stdout)
+    live = _LivePrompt(proc, token=_prompt_token())
+    with _LIVE_LOCK:
+        _LIVE_PROMPTS.add(live)
+    try:
+        if not live.say({"message": message, "timeout": seconds}):
+            return FAILED_
+        try:
+            proc.wait(timeout=seconds + 10.0)
+        except subprocess.TimeoutExpired:
+            live.cancel()               # a kill cannot close the prompt
+            try:
+                proc.wait(timeout=2.0)
+            except (subprocess.TimeoutExpired, OSError, ValueError):
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+            return FAILED_
+        except (OSError, ValueError):
+            return FAILED_
+        try:
+            out = proc.stdout.read() if proc.stdout is not None else ""
+        except (OSError, ValueError):
+            out = ""
+        return parse_child_answer(proc.returncode, out)
+    finally:
+        with _LIVE_LOCK:
+            _LIVE_PROMPTS.discard(live)
+        live.close()
 
 
 def parse_child_answer(returncode: int, stdout: str) -> str:
@@ -795,7 +1038,98 @@ IID_ASYNC_INFO = uuid.UUID("00000036-0000-0000-c000-000000000046")  # IAsyncInfo
 CLASS_NAME = "Windows.Security.Credentials.UI.UserConsentVerifier"
 
 
-def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Windows only
+class _Stopped(Exception):
+    """The backend is going away, so the prompt was told to cancel: unwind."""
+
+
+def _watch_for_stop(stream, stop: threading.Event) -> None:
+    """Set `stop` when the parent writes "cancel" or closes its end of the pipe.
+
+    Run in a thread in the child. The pipe is the only honest lifetime tie the
+    prompt has: when the backend exits, cleanly or by its handles being
+    closed, the pipe ends and this notices. A "cancel" line says the same
+    thing while the backend is still alive.
+    """
+    try:
+        for line in stream:
+            if str(line).strip().lower() == "cancel":
+                break
+    except Exception:
+        pass
+    stop.set()
+
+
+#: What `_wait_async` returns when the stop flag cancelled the wait.
+_STOPPED = object()
+
+
+def _wait_async(status_of, cancel, value_of, stop, deadline, *,
+                clock=time.monotonic, tick=None):
+    """Wait for one Windows async operation to finish, or cancel it.
+
+    `status_of()` is the operation's own status: 0 started, 1 completed,
+    2 cancelled, 3 error, None when it cannot be read. `cancel()` asks
+    Windows to close the prompt. `value_of()` reads the finished result.
+    Returns the result, None when the wait ended without one, or `_STOPPED`
+    when `stop` was set - the caller turns that into "cancelled".
+
+    Split out of `_hello_child` so the rule can be tested with no Windows and
+    no prompt at all: the loop body is the part that decides, and a fake
+    operation can show that `cancel` is called exactly when the flag is set
+    or the deadline has passed. `tick()` runs once per pass; the real one
+    dispatches Windows messages and sleeps a moment, and a test passes its own
+    so it never waits.
+    """
+    while True:
+        status = status_of()
+        if status is None:
+            return None
+        if status != 0:                       # 0 Started
+            break
+        if stop is not None and stop.is_set():
+            cancel()
+            return _STOPPED
+        if clock() > deadline:
+            cancel()
+            return None
+        if tick is not None:
+            tick()
+    if status != 1:                           # 1 Completed; 2 Canceled, 3 Error
+        return None
+    return value_of()
+
+
+def _hello_ask(line: str) -> tuple:
+    """The one line the `--hello` child reads first, as (message, seconds).
+
+    Split out of the `__main__` block so the rule can be tested with no
+    process and no prompt. An EMPTY line is not `{}`: the old code read it as
+    a request with no timeout, and the 900 s default then let a child that had
+    been asked nothing raise a quarter-hour dialog - the one path with no card
+    at all, and exactly the lifetime this module exists to bound (2026-10-26
+    review). It raises instead, and the caller answers "failed" before it ever
+    gets near Windows.
+
+    The seconds are clamped to `_PROMPT_MAX` HERE, in the child, because the
+    dialog's lifetime is decided here: the child must not depend on the parent
+    having done its arithmetic.
+    """
+    text = str(line or "").strip()
+    if not text:
+        raise ValueError("--hello: no question on stdin")
+    ask = json.loads(text)
+    if not isinstance(ask, dict):
+        raise ValueError("--hello: the question is not an object")
+    try:
+        asked = float(ask.get("timeout") or DEFAULT_TIME_LEFT)
+    except (TypeError, ValueError, OverflowError):
+        asked = DEFAULT_TIME_LEFT
+    seconds = min(max(1.0, asked), _PROMPT_MAX)
+    return str(ask.get("message") or "Approve a Jarvis action"), seconds
+
+
+def _hello_child(message: str, timeout: float,
+                 should_stop: Optional[threading.Event] = None) -> str:  # pragma: no cover - Windows only
     """The check itself, in the child process. Windows only.
 
     The desktop's lock.rs `hello::verify`, in Python: availability first,
@@ -804,6 +1138,10 @@ def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Win
     falling back to the plain prompt if Windows refuses that form. At most
     two tries, and only for temporary failures: a dismissed prompt is an
     answer and is never asked again.
+
+    `should_stop` is the backend's cancellation: when it is set the prompt is
+    cancelled and the answer is "cancelled", rather than waiting out the
+    deadline. `_watch_for_stop` is what sets it.
     """
     import ctypes
     from ctypes import wintypes
@@ -869,24 +1207,31 @@ def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Win
         iid = guid(IID_ASYNC_INFO)
         if method(op, 0, ctypes.POINTER(GUID), ctypes.POINTER(vp))(op, ctypes.byref(iid), ctypes.byref(info)) < 0:
             return None
-        try:
-            status = ctypes.c_int(0)
-            while True:
-                if method(info, 7, ctypes.POINTER(ctypes.c_int))(info, ctypes.byref(status)) < 0:
-                    return None
-                if status.value != 0:            # 0 Started
-                    break
-                if time.monotonic() > deadline:
-                    method(info, 9)(info)        # Cancel: the prompt closes
-                    return None
-                pump()
-                time.sleep(0.05)
-            if status.value != 1:                # 1 Completed; 2 Canceled, 3 Error
+        status = ctypes.c_int(0)
+
+        def status_of() -> Optional[int]:
+            if method(info, 7, ctypes.POINTER(ctypes.c_int))(info, ctypes.byref(status)) < 0:
                 return None
+            return status.value
+
+        def cancel() -> None:
+            method(info, 9)(info)            # Cancel: the prompt closes
+
+        def value_of() -> Optional[int]:
             value = ctypes.c_int32(0)
             if method(op, 8, ctypes.POINTER(ctypes.c_int32))(op, ctypes.byref(value)) < 0:
                 return None
             return value.value
+
+        def tick() -> None:
+            pump()
+            time.sleep(0.05)
+
+        try:
+            got = _wait_async(status_of, cancel, value_of, should_stop, deadline, tick=tick)
+            if got is _STOPPED:
+                raise _Stopped()
+            return got
         finally:
             release(info)
 
@@ -950,6 +1295,8 @@ def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Win
             if time.monotonic() > deadline:
                 break
         return FAILED_
+    except _Stopped:
+        return CANCELLED_
     finally:
         if hwnd:
             user32.DestroyWindow(hwnd)
@@ -1026,6 +1373,86 @@ def _pending_rows() -> list:
     return list(jarvis_gate.pending())
 
 
+class _PromptWatch:
+    """Watches one card while its prompt is open, and closes the prompt when
+    the card stops waiting (2026-10-26 review).
+
+    Before this, the dialog's only bound was the number of seconds chosen
+    before it opened: let the card be denied, withdrawn or expire while the
+    prompt was up, and the dialog stayed for the rest of that number - up to
+    three minutes. The prompt is the child process's, and
+    `_cancel_prompts_for` is what asks THIS one to close, so the watcher is a
+    poll of the card plus that same cancel.
+
+    Run in a thread from `approve_check`, which holds `_PROMPT` for as long as
+    its prompt is up. Asking every live prompt to close would be safe while
+    that lock is held - but `stop()` joins for only two seconds, and a queue
+    read can outlive it. The lock is then released and the NEXT card's prompt
+    can be live when the stale watcher's read finally returns, so the watcher
+    is given its own approval's cancel (`cancel`, token-matched) and can never
+    close another card's prompt (2026-10-26 review). A prompt that is already
+    over when the watcher looks is harmless: the token matches nothing left in
+    `_LIVE_PROMPTS`.
+
+    It cancels on what the QUEUE says, never on a read that failed: a locked
+    database must not close a prompt the owner is looking at, and a watcher
+    bug must not close every prompt. Either way nothing can be approved
+    without the read that follows the prompt (`approve_check` answers 503 or
+    409 on it), so a queue this module cannot read still fails closed.
+    """
+
+    def __init__(self, pending, request_id, interval: float = _WATCH_INTERVAL,
+                 cancel: Optional[Callable[[], int]] = None):
+        self.pending = pending
+        self.request_id = request_id
+        self.interval = interval
+        #: What closes the prompt this watcher owns. Default is the
+        #: shutdown-wide cancel; `approve_check` passes the token-scoped one.
+        self.cancel = cancel or _cancel_live_prompts
+        self.done = threading.Event()      # the prompt is over
+        self.gone = threading.Event()      # the card stopped waiting
+        self.reads = 0
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="jarvis-prompt-watch")
+
+    def start(self) -> "_PromptWatch":
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        """The prompt is over. Never leaves a thread behind that matters: the
+        poll is a daemon, and a queue read that hangs is why the join is
+        bounded. A thread that never started is not joined (that would raise),
+        which keeps the call safe from any `start()` failure."""
+        self.done.set()
+        if self._thread.ident is not None:
+            self._thread.join(timeout=2.0)
+
+    def _still_waiting(self) -> bool:
+        """True unless the card has definitely stopped waiting.
+
+        A queue that cannot be read is NOT "gone": the prompt then ends at its
+        own deadline, as it did before this watcher existed, and the read after
+        it answers 503 - so nothing is approved either way.
+        """
+        try:
+            row = _find(self.pending(), self.request_id)
+        except Exception:
+            return True
+        left = _time_left(row) if row is not None else None
+        return row is not None and (left is None or left > 0)
+
+    def _run(self) -> None:
+        while not self.done.wait(self.interval):
+            self.reads += 1
+            if not self._still_waiting():
+                self.gone.set()
+            if self.gone.is_set():
+                # Every pass, not once: the first look can beat the child
+                # process into _LIVE_PROMPTS, and the next still finds it.
+                self.cancel()
+
+
 def _signed_check(body, row, device) -> Optional[tuple]:
     """Phase 2 (docs/PAIRING-DESIGN.md 11.4): a RISKY card approved from
     another device with a DEVICE key must carry a valid signature from that
@@ -1087,6 +1514,14 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         if refused is not None:
             return refused
     if (is_risky(row) or action in PC_ONLY_ACTIONS) and here:
+        # A prompt may only ask about something Jarvis can NAME. An action with
+        # no written words gets a title made up from its own name
+        # (`jarvis_card_words.FALLBACK`), which reads fine but describes
+        # nothing - so the owner would be asked to confirm a blank. Refused
+        # here, before any prompt is shown (2026-10-26). Fail closed: if the
+        # words module cannot be read, no card can prove it has written words.
+        if not has_written_title(action):
+            return 403, {"ok": False, "error": UNLABELLED, "owner_check": "unlabelled"}
         left = _time_left(row)
         # `left` is None for a card with no deadline at all (jarvis_gate.
         # APPROVAL_NEVER_EXPIRES). Such a card has no moment to be late for,
@@ -1095,22 +1530,81 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         # that says this is still the live card.
         if left is not None and left <= 0:
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
-        # -1 is "block until it is free" (`threading.Lock.acquire`'s own
-        # spelling); None would mean the same here but reads like "no wait".
-        if not _PROMPT.acquire(timeout=left if left is not None else -1):
+        # THE WAIT FOR THE PROMPT IS BOUNDED (2026-10-26 review). It used to be
+        # `acquire(-1)` - for ever - so one child that never answered held every
+        # later approval until the backend was restarted. A card WITH a deadline
+        # can never be prompted after it, so its own number is the whole useful
+        # wait; a card with no deadline waits the worst legitimate hold of the
+        # prompt in front, `_PROMPT_WAIT_MAX` (`_wait_for_prompt`). The cap is
+        # `_PROMPT_WAIT_MAX`, NOT `_PROMPT_MAX`: the prompt in front can spend
+        # its 180 s and then hold this lock for about 14 more (ten for its
+        # child's answer, two for the cancel, two for the watcher's `stop()`),
+        # so a wait capped at `_PROMPT_MAX` was up to about 14 s short and
+        # refused a card just as its turn arrived (2026-10-26 review).
+        if not _PROMPT.acquire(timeout=_wait_for_prompt(left)):
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
         try:
-            # The prompt gets a concrete number of seconds either way. For a
-            # card with no deadline there is nothing to pass but the shipped
-            # timeout, so the Windows Hello dialog is bounded (a dialog left
-            # open for ever is a dialog nobody can answer) while the DECISION
-            # is not: the card is still waiting afterwards, and the owner can
-            # try again as many times as they like.
-            outcome = verify(approval_message(row),
-                             max(1.0, left if left is not None
-                                 else DEFAULT_TIME_LEFT))
+            # THE WAIT FOR THE PROMPT CAN BE LONGER THAN THE CARD HAS LEFT.
+            # `left` above was read before that wait, and another prompt may
+            # have held this one for minutes. So the card is read AGAIN now
+            # that the prompt is ours, and the number that counts is the one
+            # from this second read: a prompt that opens as its card expires,
+            # or after it has, is the measured defect this closes (2026-10-26,
+            # .dsh-scratch/WINDOWS-HELLO-2026-10-26/FINDINGS.md section 3).
+            try:
+                live = _find(pending(), request_id)
+            except Exception:
+                return 503, {"ok": False, "error": QUEUE_UNREADABLE,
+                             "owner_check": "unreadable"}
+            left = _time_left(live) if live is not None else None
+            if live is None or (left is not None and left <= 0):
+                return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
+            # The label was checked before the wait, on the row as it was then.
+            # A same-id action can change while the prompt queues (the gate
+            # raises a fresh card under the same id for some actions), and
+            # this is the row whose title the prompt would name - so it is
+            # this row's action that must have written words (2026-10-26
+            # review).
+            if not has_written_title(live.get("action")):
+                return 403, {"ok": False, "error": UNLABELLED, "owner_check": "unlabelled"}
+            # ...and it is this row's action the approval is stamped for: the
+            # gate asks for the stamp of the card that is on screen, not of
+            # the one read before the wait.
+            action = live.get("action")
+            # The prompt gets a concrete number of seconds either way, and it
+            # is never more than the card has left or _PROMPT_MAX. That number
+            # is what Windows is told, so it is the dialog's lifetime - the
+            # hard-kill bound as well as the ordinary one; what the watcher
+            # below adds is that a card which stops waiting closes the dialog
+            # within a quarter of a second instead of being waited out. Three
+            # minutes is long enough to reach the PC and confirm. A card with
+            # no deadline still waits afterwards - the owner can press Approve
+            # again - so this bounds the dialog, not the decision.
+            left = min(left, _PROMPT_MAX) if left is not None else _PROMPT_MAX
+            # THE WATCHER MAY ONLY CLOSE ITS OWN PROMPT (2026-10-26 review):
+            # `stop()` joins for two seconds, and a queue read slower than that
+            # outlives it - the lock is then released and the next card's
+            # prompt can be the one on screen. `token` tags the live prompt
+            # this call raises (`_prompt_token` is read by `_verify_windows`),
+            # and `_cancel_prompts_for` matches only that token.
+            token = object()
+            watch = _PromptWatch(pending, request_id,
+                                 cancel=lambda: _cancel_prompts_for(token))
+            _CURRENT_PROMPT.token = token
+            try:
+                watch.start()
+                outcome = verify(approval_message(live), max(1.0, left))
+            finally:
+                _CURRENT_PROMPT.token = None
+                watch.stop()
         finally:
             _PROMPT.release()
+        # The prompt was closed by the watcher, not answered by the owner: the
+        # card stopped waiting under it. Answer the 409 both apps read as "no
+        # longer waiting", not "the owner dismissed the prompt", which would be
+        # false (2026-10-26 review).
+        if watch.gone.is_set():
+            return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
         if outcome == UNAVAILABLE:
             return 403, {"ok": False, "error": NOT_SET_UP, "owner_check": "not_set_up"}
         if outcome == CANCELLED_:
@@ -1206,9 +1700,17 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 if __name__ == "__main__":
     if "--hello" in sys.argv:
         try:
-            ask = json.loads(sys.stdin.read() or "{}")
-            said = _hello_child(str(ask.get("message") or "Approve a Jarvis action"),
-                                float(ask.get("timeout") or DEFAULT_TIME_LEFT))
+            # ONE line, not read-to-EOF: the pipe stays open after it, and a
+            # later "cancel" line (or the pipe closing) is how the backend
+            # says "close the prompt" - see _watch_for_stop.
+            # `_hello_ask` is what that line may say: an empty one is refused
+            # rather than read as "{}", and the seconds are clamped to
+            # _PROMPT_MAX in the child itself (2026-10-26 review).
+            message, seconds = _hello_ask(sys.stdin.readline())
+            stop = threading.Event()
+            threading.Thread(target=_watch_for_stop, args=(sys.stdin, stop),
+                             daemon=True).start()
+            said = _hello_child(message, seconds, should_stop=stop)
         except Exception:
             said = FAILED_
         print(json.dumps({"outcome": said if said in OUTCOMES else FAILED_}))

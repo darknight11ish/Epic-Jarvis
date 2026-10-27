@@ -41,9 +41,12 @@ WHAT IT PINS, with no browser started anywhere:
      drives that window fails here until it is guarded too; all five files
      assign the same opt-in value; and the runner's reader fails closed - only
      "1" is an opt-in, never "yes", "true" or "0". THE COMPLETENESS PIN IS NOT
-     A BACKEND-WIDE GUARANTEE: `jarvis_browser_control.py` also has a visible
-     launch by default (`_HEADLESS = False`, :1284/:1460), and a new suite that
-     drives IT visibly would not be caught here.
+     A BACKEND-WIDE GUARANTEE: `jarvis_browser_control.py` has its own visible
+     launch by default (`_HEADLESS = False`, `launch(headless=_HEADLESS)`), so
+     two facts about it are pinned here as well - its importer set (five files,
+     so a NEW suite that imports it is noticed) and the one live suite's
+     headless override. Whether any OTHER known importer launches visibly is
+     not statically decidable from an import, and is not claimed.
   5. THE CODE-ONLY HALVES STILL RUN IN CI. Both CI backend jobs carry
      `JARVIS_ALLOW_VISIBLE_BROWSER_TESTS: "1"`; no runner installs a Playwright
      browser, so each suite runs its code checks and its real-browser half
@@ -63,7 +66,9 @@ Every source check walks `ast` nodes instead of comparing source text, because
 `tools/check_no_source_pins.py` counts a text pin and this file has no ceiling.
 
 Run it through the runner (`python -B backend/run_suites.py
-test_browser_test_guard.py`) or directly; it needs nothing but the repository.
+test_browser_test_guard.py`) or directly; it opens no browser. The one shipped
+module it pins is read from `_where.BACKEND` - this folder in a clone, the
+staged flattening under the runner, or `JARVIS_BACKEND` on a real install.
 """
 from __future__ import annotations
 
@@ -81,11 +86,20 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import run_suites as R  # noqa: E402
+from _where import BACKEND  # noqa: E402
 
 PASSED, FAILED, SKIPPED = [], [], []
 
 #: The one opt-in, as every file must spell it.
 OPT_IN = "JARVIS_ALLOW_VISIBLE_BROWSER_TESTS"
+
+#: The backend suites that import `jarvis_browser_control` today. An IMPORTER
+#: set, never a launch claim: a suite reaches the module's visible launch
+#: through its own helpers, so an import cannot decide whether a window opens.
+#: The one live suite's headless override is pinned separately.
+BROWSER_CONTROL_IMPORTERS = (
+    "test_browser_control.py", "test_browser_control_live.py",
+    "test_browser_engine.py", "test_duet_d2.py", "test_form_review.py")
 
 #: The workflow whose two backend jobs run the suites on a machine with no
 #: Playwright browser, and must therefore carry the opt-in.
@@ -126,6 +140,57 @@ def _tree(path: Path):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return ast.parse(path.read_text(encoding="utf-8"), str(path))
+
+
+def _importers(module: str) -> set:
+    """The backend test files that import `module`, by the ast walk.
+
+    The same walk the completeness pin below uses, so the two importer sets
+    cannot be derived differently.
+    """
+    found = set()
+    for path in sorted(HERE.glob("test_*.py")):
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.ImportFrom) and node.module == module:
+                found.add(path.name)
+            elif isinstance(node, ast.Import) and any(
+                    a.name == module for a in node.names):
+                found.add(path.name)
+    return found
+
+
+def _module_values(tree, name) -> list:
+    """Every value a module-level `name = ...` assignment gives it, in order."""
+    return [node.value for node in tree.body
+            if isinstance(node, ast.Assign) and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == name]
+
+
+def _attribute_assignments(tree, attr) -> list:
+    """Every `something.<attr> = value`: (line, target, value).
+
+    `Assign` and `AnnAssign` both, because either is an assignment.
+    """
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets, value = [node.target], node.value
+        else:
+            continue
+        found += [(node.lineno, target, value) for target in targets
+                  if isinstance(target, ast.Attribute) and target.attr == attr]
+    return found
+
+
+def _headless_keywords(tree) -> list:
+    """Every `headless=` keyword passed to any `....launch(...)` call."""
+    return [k for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "launch"
+            for k in n.keywords if k.arg == "headless"]
 
 
 def _constant(tree, name):
@@ -397,23 +462,98 @@ def t_the_runner_skips_them_by_name():
 # ---------------------------------------------------------------------------
 
 def t_the_guarded_set_is_complete():
-    importers = set()
-    for path in sorted(HERE.glob("test_*.py")):
-        tree = _tree(path)
-        found = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "jarvis_chatbot_web":
-                found = True
-            elif isinstance(node, ast.Import) and any(
-                    a.name == "jarvis_chatbot_web" for a in node.names):
-                found = True
-        if found:
-            importers.add(path.name)
+    importers = _importers("jarvis_chatbot_web")
     check("the guarded list is exactly the backend suites that import "
           "jarvis_chatbot_web - the module whose visible launch THESE FOUR "
           "reach (not a backend-wide guarantee: jarvis_browser_control.py has "
-          "its own visible default and is not covered)",
+          "its own visible default; its importer set and the live suite's "
+          "headless override are pinned separately, and whether any other "
+          "importer launches visibly is not statically decidable)",
           importers == set(GUARDED), sorted(importers))
+
+
+# ---------------------------------------------------------------------------
+#   4b. The other visible launch: jarvis_browser_control.py
+#
+#   The completeness pin above covers importers of jarvis_chatbot_web only.
+#   These pin what can be measured for the OTHER module whose default is a
+#   visible window - and say what is not claimed: an import is not a launch.
+# ---------------------------------------------------------------------------
+
+def t_the_browser_control_visible_default_is_pinned():
+    """The shipped module's default really is a visible window, and its launch
+    really obeys the switch.
+
+    Read from `_where.BACKEND` - the repo's own copy in a clone, the staged
+    flattening under the runner, `JARVIS_BACKEND` on a real install - so the
+    pins read the copy the backend job sees. That mode has a trap MEASURED
+    here on 2026-10-26: an ambient `JARVIS_BACKEND` pointed the read at the
+    owner's installed copy, so the pins passed while THIS repository's copy
+    said `_HEADLESS = True`. The identity check below is what refuses that:
+    when the two are different files they must be the same text, so the pins
+    can never pass by reading a different tree."""
+    path = BACKEND / "jarvis_browser_control.py"
+    ours = HERE / "jarvis_browser_control.py"
+    if not path.is_file():
+        check("the shipped jarvis_browser_control.py is where the backend reads "
+              "it", False, f"{path} is not a file (_where.BACKEND is {BACKEND})")
+        return
+    if (os.environ.get("JARVIS_BACKEND") and ours.is_file()
+            and path.resolve() != ours.resolve()):
+        check("the jarvis_browser_control.py these pins read is this "
+              "repository's copy, not a different tree JARVIS_BACKEND names",
+              path.read_bytes().replace(b"\r\n", b"\n")
+              == ours.read_bytes().replace(b"\r\n", b"\n"),
+              f"{path} differs from {ours}")
+    tree = _tree(path)
+    values = _module_values(tree, "_HEADLESS")
+    check("the shipped jarvis_browser_control.py still defaults to a VISIBLE "
+          "window: its one module-level _HEADLESS assignment is False",
+          len(values) == 1 and isinstance(values[0], ast.Constant)
+          and values[0].value is False,
+          [ast.unparse(v) for v in values] or "no module-level _HEADLESS = ...")
+    headless = _headless_keywords(tree)
+    check("... and its launch still obeys that switch: `launch(headless=_HEADLESS)`",
+          any(isinstance(k.value, ast.Name) and k.value.id == "_HEADLESS"
+              for k in headless),
+          [ast.unparse(k) for k in headless] or "no launch(headless=...) call")
+
+
+def t_the_live_suite_turns_the_visible_default_off():
+    """One suite switches the visible default off for itself, and no other
+    backend suite touches `_HEADLESS` at all."""
+    live = HERE / "test_browser_control_live.py"
+    if not live.is_file():
+        check("test_browser_control_live.py is where this file expects it",
+              False, str(live))
+        return
+    hits = _attribute_assignments(_tree(live), "_HEADLESS")
+    ok = (len(hits) == 1 and isinstance(hits[0][1].value, ast.Name)
+          and hits[0][1].value.id == "B"
+          and isinstance(hits[0][2], ast.Constant)
+          and hits[0][2].value is True)
+    check("test_browser_control_live.py still turns the visible default off for "
+          "itself: one `B._HEADLESS = True` assignment",
+          ok, [(line, ast.unparse(target), ast.unparse(value))
+               for line, target, value in hits])
+    owners = {path.name: _attribute_assignments(_tree(path), "_HEADLESS")
+              for path in sorted(HERE.glob("test_*.py"))}
+    owners = {name: hits for name, hits in owners.items() if hits}
+    check("no other backend suite assigns _HEADLESS at all - exactly one file "
+          "does, and it is the live suite",
+          set(owners) == {"test_browser_control_live.py"},
+          {name: [(line, ast.unparse(target)) for line, target, _v in hits]
+           for name, hits in owners.items()})
+
+
+def t_the_browser_control_importer_set_is_pinned():
+    """A new suite that imports the module fails here until it is looked at."""
+    importers = _importers("jarvis_browser_control")
+    check("jarvis_browser_control.py's importer set is exactly the frozen five "
+          "- an IMPORTER set, NOT a launch claim: launching visibly is not "
+          "statically decidable from an import, and the live suite's headless "
+          "override is pinned separately",
+          importers == set(BROWSER_CONTROL_IMPORTERS), sorted(importers))
 
 
 def t_one_opt_in_name_and_it_fails_closed():
@@ -530,6 +670,9 @@ def main():
                t_the_suite_refuses_end_to_end,
                t_the_runner_skips_them_by_name,
                t_the_guarded_set_is_complete,
+               t_the_browser_control_visible_default_is_pinned,
+               t_the_live_suite_turns_the_visible_default_off,
+               t_the_browser_control_importer_set_is_pinned,
                t_one_opt_in_name_and_it_fails_closed,
                t_ci_keeps_the_code_only_checks,
                t_the_cli_cannot_start_the_fleet_by_accident):

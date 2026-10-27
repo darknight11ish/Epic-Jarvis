@@ -1,0 +1,2185 @@
+{
+  "_comment": "Made by tools/gen_galaxy_picture_cases.py from the desktop's REAL jarvis-desktop/src/galaxy-view.js (orderedEntities, buildEntityGraph) and jarvis-desktop/src/galaxy-presets.js (layoutZenRing). Do not edit by hand.",
+  "_contract": "Positions are the desktop's layout units; the phone's fit() scales them to its canvas. 48 is the phone's cap, applied before the links: a dropped name gets no dot and no link.",
+  "max_nodes": 48,
+  "cases": [
+    {
+      "name": "names",
+      "entities": [
+        {
+          "id": "1",
+          "name": "Priya",
+          "kind": "person",
+          "fact_ids": [
+            9,
+            7,
+            5,
+            3
+          ]
+        },
+        {
+          "id": "2",
+          "name": "Biscuit",
+          "kind": "pet",
+          "fact_ids": [
+            8
+          ]
+        },
+        {
+          "id": "3",
+          "name": "Garage",
+          "kind": "project",
+          "fact_ids": [
+            5,
+            3
+          ]
+        },
+        {
+          "id": "4",
+          "name": "Dan",
+          "kind": "person",
+          "fact_ids": [
+            9,
+            12,
+            11,
+            5
+          ]
+        }
+      ],
+      "ordered_ids": [
+        "4",
+        "1",
+        "3",
+        "2"
+      ],
+      "nodes": [
+        {
+          "id": "4",
+          "x": 0,
+          "y": 0,
+          "r": 6.16227766016838
+        },
+        {
+          "id": "1",
+          "x": 6.6130927153957075e-15,
+          "y": -108,
+          "r": 6.16227766016838
+        },
+        {
+          "id": "3",
+          "x": 93.53074360871938,
+          "y": 53.99999999999998,
+          "r": 5.449489742783178
+        },
+        {
+          "id": "2",
+          "x": -93.53074360871936,
+          "y": 54.000000000000036,
+          "r": 4.414213562373095
+        }
+      ],
+      "links": [
+        {
+          "source": "1",
+          "target": "3",
+          "shared": 2
+        },
+        {
+          "source": "1",
+          "target": "4",
+          "shared": 2
+        },
+        {
+          "source": "3",
+          "target": "4",
+          "shared": 1
+        }
+      ],
+      "total": 4
+    },
+    {
+      "name": "cap",
+      "entities": [
+        {
+          "id": "1",
+          "name": "Name 01",
+          "kind": "person",
+          "fact_ids": [
+            1001,
+            501,
+            2010
+          ]
+        },
+        {
+          "id": "2",
+          "name": "Name 02",
+          "kind": "pet",
+          "fact_ids": [
+            1002,
+            502,
+            2020,
+            2021
+          ]
+        },
+        {
+          "id": "3",
+          "name": "Name 03",
+          "kind": "place",
+          "fact_ids": [
+            1003,
+            503,
+            2030,
+            2031,
+            2032
+          ]
+        },
+        {
+          "id": "4",
+          "name": "Name 04",
+          "kind": "organisation",
+          "fact_ids": [
+            1004,
+            504
+          ]
+        },
+        {
+          "id": "5",
+          "name": "Name 05",
+          "kind": "project",
+          "fact_ids": [
+            1005,
+            505,
+            2050
+          ]
+        },
+        {
+          "id": "6",
+          "name": "Name 06",
+          "kind": "thing",
+          "fact_ids": [
+            1006,
+            500,
+            2060,
+            2061
+          ]
+        },
+        {
+          "id": "7",
+          "name": "Name 07",
+          "kind": null,
+          "fact_ids": [
+            1007,
+            501,
+            2070,
+            2071,
+            2072
+          ]
+        },
+        {
+          "id": "8",
+          "name": "Name 08",
+          "kind": "person",
+          "fact_ids": [
+            1008,
+            502
+          ]
+        },
+        {
+          "id": "9",
+          "name": "Name 09",
+          "kind": "pet",
+          "fact_ids": [
+            1009,
+            503,
+            2090
+          ]
+        },
+        {
+          "id": "10",
+          "name": "Name 10",
+          "kind": "place",
+          "fact_ids": [
+            1010,
+            504,
+            2100,
+            2101
+          ]
+        },
+        {
+          "id": "11",
+          "name": "Name 11",
+          "kind": "organisation",
+          "fact_ids": [
+            1011,
+            505,
+            2110,
+            2111,
+            2112
+          ]
+        },
+        {
+          "id": "12",
+          "name": "Name 12",
+          "kind": "project",
+          "fact_ids": [
+            1012,
+            500
+          ]
+        },
+        {
+          "id": "13",
+          "name": "Name 13",
+          "kind": "thing",
+          "fact_ids": [
+            1013,
+            501,
+            2130
+          ]
+        },
+        {
+          "id": "14",
+          "name": "Name 14",
+          "kind": null,
+          "fact_ids": [
+            1014,
+            502,
+            2140,
+            2141
+          ]
+        },
+        {
+          "id": "15",
+          "name": "Name 15",
+          "kind": "person",
+          "fact_ids": [
+            1015,
+            503,
+            2150,
+            2151,
+            2152
+          ]
+        },
+        {
+          "id": "16",
+          "name": "Name 16",
+          "kind": "pet",
+          "fact_ids": [
+            1016,
+            504
+          ]
+        },
+        {
+          "id": "17",
+          "name": "Name 17",
+          "kind": "place",
+          "fact_ids": [
+            1017,
+            505,
+            2170
+          ]
+        },
+        {
+          "id": "18",
+          "name": "Name 18",
+          "kind": "organisation",
+          "fact_ids": [
+            1018,
+            500,
+            2180,
+            2181
+          ]
+        },
+        {
+          "id": "19",
+          "name": "Name 19",
+          "kind": "project",
+          "fact_ids": [
+            1019,
+            501,
+            2190,
+            2191,
+            2192
+          ]
+        },
+        {
+          "id": "20",
+          "name": "Name 20",
+          "kind": "thing",
+          "fact_ids": [
+            1020,
+            502
+          ]
+        },
+        {
+          "id": "21",
+          "name": "Name 21",
+          "kind": null,
+          "fact_ids": [
+            1021,
+            503,
+            2210
+          ]
+        },
+        {
+          "id": "22",
+          "name": "Name 22",
+          "kind": "person",
+          "fact_ids": [
+            1022,
+            504,
+            2220,
+            2221
+          ]
+        },
+        {
+          "id": "23",
+          "name": "Name 23",
+          "kind": "pet",
+          "fact_ids": [
+            1023,
+            505,
+            2230,
+            2231,
+            2232
+          ]
+        },
+        {
+          "id": "24",
+          "name": "Name 24",
+          "kind": "place",
+          "fact_ids": [
+            1024,
+            500
+          ]
+        },
+        {
+          "id": "25",
+          "name": "Name 25",
+          "kind": "organisation",
+          "fact_ids": [
+            1025,
+            501,
+            2250
+          ]
+        },
+        {
+          "id": "26",
+          "name": "Name 26",
+          "kind": "project",
+          "fact_ids": [
+            1026,
+            502,
+            2260,
+            2261
+          ]
+        },
+        {
+          "id": "27",
+          "name": "Name 27",
+          "kind": "thing",
+          "fact_ids": [
+            1027,
+            503,
+            2270,
+            2271,
+            2272
+          ]
+        },
+        {
+          "id": "28",
+          "name": "Name 28",
+          "kind": null,
+          "fact_ids": [
+            1028,
+            504
+          ]
+        },
+        {
+          "id": "29",
+          "name": "Name 29",
+          "kind": "person",
+          "fact_ids": [
+            1029,
+            505,
+            2290
+          ]
+        },
+        {
+          "id": "30",
+          "name": "Name 30",
+          "kind": "pet",
+          "fact_ids": [
+            1030,
+            500,
+            2300,
+            2301
+          ]
+        },
+        {
+          "id": "31",
+          "name": "Name 31",
+          "kind": "place",
+          "fact_ids": [
+            1031,
+            501,
+            2310,
+            2311,
+            2312
+          ]
+        },
+        {
+          "id": "32",
+          "name": "Name 32",
+          "kind": "organisation",
+          "fact_ids": [
+            1032,
+            502
+          ]
+        },
+        {
+          "id": "33",
+          "name": "Name 33",
+          "kind": "project",
+          "fact_ids": [
+            1033,
+            503,
+            2330
+          ]
+        },
+        {
+          "id": "34",
+          "name": "Name 34",
+          "kind": "thing",
+          "fact_ids": [
+            1034,
+            504,
+            2340,
+            2341
+          ]
+        },
+        {
+          "id": "35",
+          "name": "Name 35",
+          "kind": null,
+          "fact_ids": [
+            1035,
+            505,
+            2350,
+            2351,
+            2352
+          ]
+        },
+        {
+          "id": "36",
+          "name": "Name 36",
+          "kind": "person",
+          "fact_ids": [
+            1036,
+            500
+          ]
+        },
+        {
+          "id": "37",
+          "name": "Name 37",
+          "kind": "pet",
+          "fact_ids": [
+            1037,
+            501,
+            2370
+          ]
+        },
+        {
+          "id": "38",
+          "name": "Name 38",
+          "kind": "place",
+          "fact_ids": [
+            1038,
+            502,
+            2380,
+            2381
+          ]
+        },
+        {
+          "id": "39",
+          "name": "Name 39",
+          "kind": "organisation",
+          "fact_ids": [
+            1039,
+            503,
+            2390,
+            2391,
+            2392
+          ]
+        },
+        {
+          "id": "40",
+          "name": "Name 40",
+          "kind": "project",
+          "fact_ids": [
+            1040,
+            504
+          ]
+        },
+        {
+          "id": "41",
+          "name": "Name 41",
+          "kind": "thing",
+          "fact_ids": [
+            1041,
+            505,
+            2410
+          ]
+        },
+        {
+          "id": "42",
+          "name": "Name 42",
+          "kind": null,
+          "fact_ids": [
+            1042,
+            500,
+            2420,
+            2421
+          ]
+        },
+        {
+          "id": "43",
+          "name": "Name 43",
+          "kind": "person",
+          "fact_ids": [
+            1043,
+            501,
+            2430,
+            2431,
+            2432
+          ]
+        },
+        {
+          "id": "44",
+          "name": "Name 44",
+          "kind": "pet",
+          "fact_ids": [
+            1044,
+            502
+          ]
+        },
+        {
+          "id": "45",
+          "name": "Name 45",
+          "kind": "place",
+          "fact_ids": [
+            1045,
+            503,
+            2450
+          ]
+        },
+        {
+          "id": "46",
+          "name": "Name 46",
+          "kind": "organisation",
+          "fact_ids": [
+            1046,
+            504,
+            2460,
+            2461
+          ]
+        },
+        {
+          "id": "47",
+          "name": "Name 47",
+          "kind": "project",
+          "fact_ids": [
+            1047,
+            505,
+            2470,
+            2471,
+            2472
+          ]
+        },
+        {
+          "id": "48",
+          "name": "Name 48",
+          "kind": "thing",
+          "fact_ids": [
+            1048,
+            500
+          ]
+        },
+        {
+          "id": "49",
+          "name": "Name 49",
+          "kind": null,
+          "fact_ids": [
+            1049,
+            501,
+            2490
+          ]
+        },
+        {
+          "id": "50",
+          "name": "Name 50",
+          "kind": "person",
+          "fact_ids": [
+            1050,
+            502,
+            2500,
+            2501
+          ]
+        },
+        {
+          "id": "51",
+          "name": "Name 51",
+          "kind": "pet",
+          "fact_ids": [
+            1051,
+            503,
+            2510,
+            2511,
+            2512
+          ]
+        },
+        {
+          "id": "52",
+          "name": "Name 52",
+          "kind": "place",
+          "fact_ids": [
+            1052,
+            504
+          ]
+        },
+        {
+          "id": "53",
+          "name": "Name 53",
+          "kind": "organisation",
+          "fact_ids": [
+            1053,
+            505,
+            2530
+          ]
+        },
+        {
+          "id": "54",
+          "name": "Name 54",
+          "kind": "project",
+          "fact_ids": [
+            1054,
+            500,
+            2540,
+            2541
+          ]
+        },
+        {
+          "id": "55",
+          "name": "Name 55",
+          "kind": "thing",
+          "fact_ids": [
+            1055,
+            501,
+            2550,
+            2551,
+            2552
+          ]
+        },
+        {
+          "id": "56",
+          "name": "Name 56",
+          "kind": null,
+          "fact_ids": [
+            1056,
+            502
+          ]
+        },
+        {
+          "id": "57",
+          "name": "Name 57",
+          "kind": "person",
+          "fact_ids": [
+            1057,
+            503,
+            2570
+          ]
+        },
+        {
+          "id": "58",
+          "name": "Name 58",
+          "kind": "pet",
+          "fact_ids": [
+            1058,
+            504,
+            2580,
+            2581
+          ]
+        },
+        {
+          "id": "59",
+          "name": "Name 59",
+          "kind": "place",
+          "fact_ids": [
+            1059,
+            505,
+            2590,
+            2591,
+            2592
+          ]
+        },
+        {
+          "id": "60",
+          "name": "Name 60",
+          "kind": "organisation",
+          "fact_ids": [
+            1060,
+            500
+          ]
+        }
+      ],
+      "ordered_ids": [
+        "59",
+        "55",
+        "51",
+        "47",
+        "43",
+        "39",
+        "35",
+        "31",
+        "27",
+        "23",
+        "19",
+        "15",
+        "11",
+        "7",
+        "3",
+        "58",
+        "54",
+        "50",
+        "46",
+        "42",
+        "38",
+        "34",
+        "30",
+        "26",
+        "22",
+        "18",
+        "14",
+        "10",
+        "6",
+        "2",
+        "57",
+        "53",
+        "49",
+        "45",
+        "41",
+        "37",
+        "33",
+        "29",
+        "25",
+        "21",
+        "17",
+        "13",
+        "9",
+        "5",
+        "1",
+        "60",
+        "56",
+        "52"
+      ],
+      "nodes": [
+        {
+          "id": "59",
+          "x": 0,
+          "y": 0,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "55",
+          "x": 6.6130927153957075e-15,
+          "y": -108,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "51",
+          "x": 21.06975477774186,
+          "y": -105.92481028354888,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "47",
+          "x": 41.3298106954297,
+          "y": -99.77898951121897,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "43",
+          "x": 60.001585166117046,
+          "y": -89.79871812867489,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "39",
+          "x": 76.36753236814714,
+          "y": -76.36753236814712,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "35",
+          "x": 89.79871812867489,
+          "y": -60.00158516611704,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "31",
+          "x": 99.77898951121897,
+          "y": -41.3298106954297,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "27",
+          "x": 105.92481028354888,
+          "y": -21.06975477774185,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "23",
+          "x": 108,
+          "y": 0,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "19",
+          "x": 105.92481028354888,
+          "y": 21.06975477774185,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "15",
+          "x": 99.77898951121897,
+          "y": 41.3298106954297,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "11",
+          "x": 89.79871812867489,
+          "y": 60.001585166117025,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "7",
+          "x": 76.36753236814714,
+          "y": 76.36753236814712,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "3",
+          "x": 60.001585166117025,
+          "y": 89.79871812867489,
+          "r": 7.358898943540674
+        },
+        {
+          "id": "58",
+          "x": 41.3298106954297,
+          "y": 99.77898951121897,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "54",
+          "x": 21.06975477774188,
+          "y": 105.92481028354888,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "50",
+          "x": 6.6130927153957075e-15,
+          "y": 108,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "46",
+          "x": -21.06975477774187,
+          "y": 105.92481028354888,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "42",
+          "x": -41.32981069542969,
+          "y": 99.77898951121897,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "38",
+          "x": -60.00158516611701,
+          "y": 89.79871812867489,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "34",
+          "x": -76.36753236814712,
+          "y": 76.36753236814714,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "30",
+          "x": -89.79871812867489,
+          "y": 60.00158516611704,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "26",
+          "x": -99.77898951121894,
+          "y": 41.32981069542975,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "22",
+          "x": -105.92481028354888,
+          "y": 21.06975477774189,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "18",
+          "x": -108,
+          "y": 1.3226185430791415e-14,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "14",
+          "x": -105.92481028354888,
+          "y": -21.069754777741863,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "10",
+          "x": -99.77898951121895,
+          "y": -41.32981069542973,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "6",
+          "x": -89.7987181286749,
+          "y": -60.00158516611701,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "2",
+          "x": -76.36753236814715,
+          "y": -76.36753236814712,
+          "r": 6.60555127546399
+        },
+        {
+          "id": "57",
+          "x": -60.00158516611704,
+          "y": -89.79871812867489,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "53",
+          "x": -41.32981069542976,
+          "y": -99.77898951121894,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "49",
+          "x": -21.069754777741895,
+          "y": -105.92481028354888,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "45",
+          "x": 27.44434318794425,
+          "y": -129.11548329686232,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "41",
+          "x": 77.58765330260645,
+          "y": -106.79024325749306,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "37",
+          "x": 114.3153532995459,
+          "y": -65.99999999999999,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "33",
+          "x": 131.27689018861207,
+          "y": -13.797757151330247,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "29",
+          "x": 125.53946015096027,
+          "y": 40.79024325749305,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "25",
+          "x": 98.09511696301604,
+          "y": 88.32524003936928,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "21",
+          "x": 53.68923688600563,
+          "y": 120.58800040882332,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "17",
+          "x": -2.1227218975731603e-14,
+          "y": 132,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "13",
+          "x": -53.68923688600561,
+          "y": 120.58800040882333,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "9",
+          "x": -98.09511696301605,
+          "y": 88.32524003936926,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "5",
+          "x": -125.53946015096027,
+          "y": 40.790243257493074,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "1",
+          "x": -131.2768901886121,
+          "y": -13.797757151330202,
+          "r": 6.872983346207417
+        },
+        {
+          "id": "60",
+          "x": -114.31535329954589,
+          "y": -66.00000000000001,
+          "r": 6
+        },
+        {
+          "id": "56",
+          "x": -77.58765330260638,
+          "y": -106.79024325749312,
+          "r": 6
+        },
+        {
+          "id": "52",
+          "x": -27.444343187944177,
+          "y": -129.11548329686235,
+          "r": 6
+        }
+      ],
+      "links": [
+        {
+          "source": "1",
+          "target": "13",
+          "shared": 1
+        },
+        {
+          "source": "1",
+          "target": "19",
+          "shared": 1
+        },
+        {
+          "source": "1",
+          "target": "25",
+          "shared": 1
+        },
+        {
+          "source": "1",
+          "target": "31",
+          "shared": 1
+        },
+        {
+          "source": "1",
+          "target": "37",
+          "shared": 1
+        },
+        {
+          "source": "1",
+          "target": "43",
+          "shared": 1
+        },
+        {
+          "source": "1",
+          "target": "49",
+          "shared": 1
+        },
+        {
+          "source": "1",
+          "target": "55",
+          "shared": 1
+        },
+        {
+          "source": "1",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "10",
+          "target": "22",
+          "shared": 1
+        },
+        {
+          "source": "10",
+          "target": "34",
+          "shared": 1
+        },
+        {
+          "source": "10",
+          "target": "46",
+          "shared": 1
+        },
+        {
+          "source": "10",
+          "target": "52",
+          "shared": 1
+        },
+        {
+          "source": "10",
+          "target": "58",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "17",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "23",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "29",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "35",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "41",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "47",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "5",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "53",
+          "shared": 1
+        },
+        {
+          "source": "11",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "13",
+          "target": "19",
+          "shared": 1
+        },
+        {
+          "source": "13",
+          "target": "25",
+          "shared": 1
+        },
+        {
+          "source": "13",
+          "target": "31",
+          "shared": 1
+        },
+        {
+          "source": "13",
+          "target": "37",
+          "shared": 1
+        },
+        {
+          "source": "13",
+          "target": "43",
+          "shared": 1
+        },
+        {
+          "source": "13",
+          "target": "49",
+          "shared": 1
+        },
+        {
+          "source": "13",
+          "target": "55",
+          "shared": 1
+        },
+        {
+          "source": "13",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "14",
+          "target": "2",
+          "shared": 1
+        },
+        {
+          "source": "14",
+          "target": "26",
+          "shared": 1
+        },
+        {
+          "source": "14",
+          "target": "38",
+          "shared": 1
+        },
+        {
+          "source": "14",
+          "target": "50",
+          "shared": 1
+        },
+        {
+          "source": "14",
+          "target": "56",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "21",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "27",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "3",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "33",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "39",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "45",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "51",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "57",
+          "shared": 1
+        },
+        {
+          "source": "15",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "17",
+          "target": "23",
+          "shared": 1
+        },
+        {
+          "source": "17",
+          "target": "29",
+          "shared": 1
+        },
+        {
+          "source": "17",
+          "target": "35",
+          "shared": 1
+        },
+        {
+          "source": "17",
+          "target": "41",
+          "shared": 1
+        },
+        {
+          "source": "17",
+          "target": "47",
+          "shared": 1
+        },
+        {
+          "source": "17",
+          "target": "5",
+          "shared": 1
+        },
+        {
+          "source": "17",
+          "target": "53",
+          "shared": 1
+        },
+        {
+          "source": "17",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "18",
+          "target": "30",
+          "shared": 1
+        },
+        {
+          "source": "18",
+          "target": "42",
+          "shared": 1
+        },
+        {
+          "source": "18",
+          "target": "54",
+          "shared": 1
+        },
+        {
+          "source": "18",
+          "target": "6",
+          "shared": 1
+        },
+        {
+          "source": "18",
+          "target": "60",
+          "shared": 1
+        },
+        {
+          "source": "19",
+          "target": "25",
+          "shared": 1
+        },
+        {
+          "source": "19",
+          "target": "31",
+          "shared": 1
+        },
+        {
+          "source": "19",
+          "target": "37",
+          "shared": 1
+        },
+        {
+          "source": "19",
+          "target": "43",
+          "shared": 1
+        },
+        {
+          "source": "19",
+          "target": "49",
+          "shared": 1
+        },
+        {
+          "source": "19",
+          "target": "55",
+          "shared": 1
+        },
+        {
+          "source": "19",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "2",
+          "target": "26",
+          "shared": 1
+        },
+        {
+          "source": "2",
+          "target": "38",
+          "shared": 1
+        },
+        {
+          "source": "2",
+          "target": "50",
+          "shared": 1
+        },
+        {
+          "source": "2",
+          "target": "56",
+          "shared": 1
+        },
+        {
+          "source": "21",
+          "target": "27",
+          "shared": 1
+        },
+        {
+          "source": "21",
+          "target": "3",
+          "shared": 1
+        },
+        {
+          "source": "21",
+          "target": "33",
+          "shared": 1
+        },
+        {
+          "source": "21",
+          "target": "39",
+          "shared": 1
+        },
+        {
+          "source": "21",
+          "target": "45",
+          "shared": 1
+        },
+        {
+          "source": "21",
+          "target": "51",
+          "shared": 1
+        },
+        {
+          "source": "21",
+          "target": "57",
+          "shared": 1
+        },
+        {
+          "source": "21",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "22",
+          "target": "34",
+          "shared": 1
+        },
+        {
+          "source": "22",
+          "target": "46",
+          "shared": 1
+        },
+        {
+          "source": "22",
+          "target": "52",
+          "shared": 1
+        },
+        {
+          "source": "22",
+          "target": "58",
+          "shared": 1
+        },
+        {
+          "source": "23",
+          "target": "29",
+          "shared": 1
+        },
+        {
+          "source": "23",
+          "target": "35",
+          "shared": 1
+        },
+        {
+          "source": "23",
+          "target": "41",
+          "shared": 1
+        },
+        {
+          "source": "23",
+          "target": "47",
+          "shared": 1
+        },
+        {
+          "source": "23",
+          "target": "5",
+          "shared": 1
+        },
+        {
+          "source": "23",
+          "target": "53",
+          "shared": 1
+        },
+        {
+          "source": "23",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "25",
+          "target": "31",
+          "shared": 1
+        },
+        {
+          "source": "25",
+          "target": "37",
+          "shared": 1
+        },
+        {
+          "source": "25",
+          "target": "43",
+          "shared": 1
+        },
+        {
+          "source": "25",
+          "target": "49",
+          "shared": 1
+        },
+        {
+          "source": "25",
+          "target": "55",
+          "shared": 1
+        },
+        {
+          "source": "25",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "26",
+          "target": "38",
+          "shared": 1
+        },
+        {
+          "source": "26",
+          "target": "50",
+          "shared": 1
+        },
+        {
+          "source": "26",
+          "target": "56",
+          "shared": 1
+        },
+        {
+          "source": "27",
+          "target": "3",
+          "shared": 1
+        },
+        {
+          "source": "27",
+          "target": "33",
+          "shared": 1
+        },
+        {
+          "source": "27",
+          "target": "39",
+          "shared": 1
+        },
+        {
+          "source": "27",
+          "target": "45",
+          "shared": 1
+        },
+        {
+          "source": "27",
+          "target": "51",
+          "shared": 1
+        },
+        {
+          "source": "27",
+          "target": "57",
+          "shared": 1
+        },
+        {
+          "source": "27",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "29",
+          "target": "35",
+          "shared": 1
+        },
+        {
+          "source": "29",
+          "target": "41",
+          "shared": 1
+        },
+        {
+          "source": "29",
+          "target": "47",
+          "shared": 1
+        },
+        {
+          "source": "29",
+          "target": "5",
+          "shared": 1
+        },
+        {
+          "source": "29",
+          "target": "53",
+          "shared": 1
+        },
+        {
+          "source": "29",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "3",
+          "target": "33",
+          "shared": 1
+        },
+        {
+          "source": "3",
+          "target": "39",
+          "shared": 1
+        },
+        {
+          "source": "3",
+          "target": "45",
+          "shared": 1
+        },
+        {
+          "source": "3",
+          "target": "51",
+          "shared": 1
+        },
+        {
+          "source": "3",
+          "target": "57",
+          "shared": 1
+        },
+        {
+          "source": "3",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "30",
+          "target": "42",
+          "shared": 1
+        },
+        {
+          "source": "30",
+          "target": "54",
+          "shared": 1
+        },
+        {
+          "source": "30",
+          "target": "6",
+          "shared": 1
+        },
+        {
+          "source": "30",
+          "target": "60",
+          "shared": 1
+        },
+        {
+          "source": "31",
+          "target": "37",
+          "shared": 1
+        },
+        {
+          "source": "31",
+          "target": "43",
+          "shared": 1
+        },
+        {
+          "source": "31",
+          "target": "49",
+          "shared": 1
+        },
+        {
+          "source": "31",
+          "target": "55",
+          "shared": 1
+        },
+        {
+          "source": "31",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "33",
+          "target": "39",
+          "shared": 1
+        },
+        {
+          "source": "33",
+          "target": "45",
+          "shared": 1
+        },
+        {
+          "source": "33",
+          "target": "51",
+          "shared": 1
+        },
+        {
+          "source": "33",
+          "target": "57",
+          "shared": 1
+        },
+        {
+          "source": "33",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "34",
+          "target": "46",
+          "shared": 1
+        },
+        {
+          "source": "34",
+          "target": "52",
+          "shared": 1
+        },
+        {
+          "source": "34",
+          "target": "58",
+          "shared": 1
+        },
+        {
+          "source": "35",
+          "target": "41",
+          "shared": 1
+        },
+        {
+          "source": "35",
+          "target": "47",
+          "shared": 1
+        },
+        {
+          "source": "35",
+          "target": "5",
+          "shared": 1
+        },
+        {
+          "source": "35",
+          "target": "53",
+          "shared": 1
+        },
+        {
+          "source": "35",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "37",
+          "target": "43",
+          "shared": 1
+        },
+        {
+          "source": "37",
+          "target": "49",
+          "shared": 1
+        },
+        {
+          "source": "37",
+          "target": "55",
+          "shared": 1
+        },
+        {
+          "source": "37",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "38",
+          "target": "50",
+          "shared": 1
+        },
+        {
+          "source": "38",
+          "target": "56",
+          "shared": 1
+        },
+        {
+          "source": "39",
+          "target": "45",
+          "shared": 1
+        },
+        {
+          "source": "39",
+          "target": "51",
+          "shared": 1
+        },
+        {
+          "source": "39",
+          "target": "57",
+          "shared": 1
+        },
+        {
+          "source": "39",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "41",
+          "target": "47",
+          "shared": 1
+        },
+        {
+          "source": "41",
+          "target": "5",
+          "shared": 1
+        },
+        {
+          "source": "41",
+          "target": "53",
+          "shared": 1
+        },
+        {
+          "source": "41",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "42",
+          "target": "54",
+          "shared": 1
+        },
+        {
+          "source": "42",
+          "target": "6",
+          "shared": 1
+        },
+        {
+          "source": "42",
+          "target": "60",
+          "shared": 1
+        },
+        {
+          "source": "43",
+          "target": "49",
+          "shared": 1
+        },
+        {
+          "source": "43",
+          "target": "55",
+          "shared": 1
+        },
+        {
+          "source": "43",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "45",
+          "target": "51",
+          "shared": 1
+        },
+        {
+          "source": "45",
+          "target": "57",
+          "shared": 1
+        },
+        {
+          "source": "45",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "46",
+          "target": "52",
+          "shared": 1
+        },
+        {
+          "source": "46",
+          "target": "58",
+          "shared": 1
+        },
+        {
+          "source": "47",
+          "target": "5",
+          "shared": 1
+        },
+        {
+          "source": "47",
+          "target": "53",
+          "shared": 1
+        },
+        {
+          "source": "47",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "49",
+          "target": "55",
+          "shared": 1
+        },
+        {
+          "source": "49",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "5",
+          "target": "53",
+          "shared": 1
+        },
+        {
+          "source": "5",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "50",
+          "target": "56",
+          "shared": 1
+        },
+        {
+          "source": "51",
+          "target": "57",
+          "shared": 1
+        },
+        {
+          "source": "51",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "52",
+          "target": "58",
+          "shared": 1
+        },
+        {
+          "source": "53",
+          "target": "59",
+          "shared": 1
+        },
+        {
+          "source": "54",
+          "target": "6",
+          "shared": 1
+        },
+        {
+          "source": "54",
+          "target": "60",
+          "shared": 1
+        },
+        {
+          "source": "55",
+          "target": "7",
+          "shared": 1
+        },
+        {
+          "source": "57",
+          "target": "9",
+          "shared": 1
+        },
+        {
+          "source": "6",
+          "target": "60",
+          "shared": 1
+        }
+      ],
+      "total": 60
+    },
+    {
+      "name": "thirteen",
+      "entities": [
+        {
+          "id": "87",
+          "name": "Many 13",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "88",
+          "name": "Many 12",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "89",
+          "name": "Many 11",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "90",
+          "name": "Many 10",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "91",
+          "name": "Many 09",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "92",
+          "name": "Many 08",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "93",
+          "name": "Many 07",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "94",
+          "name": "Many 06",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "95",
+          "name": "Many 05",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "96",
+          "name": "Many 04",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "97",
+          "name": "Many 03",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "98",
+          "name": "Many 02",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        },
+        {
+          "id": "99",
+          "name": "Many 01",
+          "kind": "person",
+          "fact_ids": [
+            7000
+          ]
+        }
+      ],
+      "ordered_ids": [
+        "99",
+        "98",
+        "97",
+        "96",
+        "95",
+        "94",
+        "93",
+        "92",
+        "91",
+        "90",
+        "89",
+        "88",
+        "87"
+      ],
+      "nodes": [
+        {
+          "id": "99",
+          "x": 0,
+          "y": 0,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "98",
+          "x": 6.6130927153957075e-15,
+          "y": -108,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "97",
+          "x": 53.999999999999986,
+          "y": -93.53074360871938,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "96",
+          "x": 93.53074360871936,
+          "y": -54,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "95",
+          "x": 108,
+          "y": 0,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "94",
+          "x": 93.53074360871938,
+          "y": 53.99999999999998,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "93",
+          "x": 53.999999999999986,
+          "y": 93.53074360871938,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "92",
+          "x": 6.6130927153957075e-15,
+          "y": 108,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "91",
+          "x": -54.00000000000002,
+          "y": 93.53074360871936,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "90",
+          "x": -93.53074360871936,
+          "y": 54.000000000000036,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "89",
+          "x": -108,
+          "y": 1.3226185430791415e-14,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "88",
+          "x": -93.53074360871936,
+          "y": -54.000000000000014,
+          "r": 4.414213562373095
+        },
+        {
+          "id": "87",
+          "x": -54.00000000000005,
+          "y": -93.53074360871936,
+          "r": 4.414213562373095
+        }
+      ],
+      "links": [],
+      "total": 13
+    }
+  ]
+}
