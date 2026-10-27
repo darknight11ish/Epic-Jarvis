@@ -370,12 +370,17 @@ check("every row lands under one of the four headings", () => {
 
 /* ── 5. The surface the palette is drawn into ───────────────────────────── */
 
-check("index.html has the palette, and the bar's way in", () => {
+check("index.html has the palette", () => {
   const html = page("index.html");
   for (const id of ["palette", "palette-search", "palette-list", "palette-status",
-    "palette-empty", "palette-hint"]) {
+    "palette-empty"]) {
     assert.match(html, new RegExp(`id="${id}"`), `index.html has no #${id}`);
   }
+  // The bar's own "Find" button lived in the primer, which the owner removed
+  // on 2026-10-27, so #palette-hint is gone; typing "/" in an empty box is
+  // the palette's remaining door (palette-ui.mjs drives it).
+  assert.doesNotMatch(html, /id="palette-hint"/,
+    "the primer's palette-hint button is back in the bar");
   // A live region inside a hidden box announces nothing: the count line has
   // to be OUTSIDE the palette (which is itself hidden when closed), and it
   // must still be in the accessibility tree - so `.sr-only`, never `hidden`.

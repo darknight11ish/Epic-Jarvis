@@ -3686,6 +3686,32 @@ _BROWSER_MODE_USE = re.compile(
     r"(?:always\s+|only\s+|just\s+|please\s+)?use\s+(?:the\s+)?"
     r"(?P<mode>visible|headless|windowless|automatic)\s+browser"
     r"(?:\s+(?:by\s+default|from\s+now\s+on))?")
+#: The FACE, in the words a person actually uses for it (2026-10-26). The
+#: generic "set <control> to <value>" grammar already covers "change the face
+#: to the red panda", "set your face to orbit" and "switch the face to the
+#: owl" - these three shapes have no "to" and get their own patterns rather
+#: than a loosening of that one:
+#:
+#:   "use the Orbit face" / "wear the red panda face"
+#:   "make your face the accretion face"
+#:   "put the spiral face on"
+#:
+#: and one READ, which changes nothing: "what face are you using?".
+#: The value is looked up in jarvis_settings_registry's face list - the
+#: visual spec's own ids and names - so an unknown face is refused with the
+#: real list, never guessed at.
+_FACE_USE = re.compile(r"(?:use|wear|try|go\s+with)\s+(?:the\s+|a\s+)?(.+?)\s+face")
+#: The trailing "face" is REQUIRED, and it is not decoration: without it
+#: "make the face bigger" (the per-device face-size control, whose typed path
+#: is honestly recorded as not-yet-resolvable) would match here and be
+#: answered as an unknown face instead of reaching its own row. Measured:
+#: tools/check_feature_controls.py caught exactly that.
+_FACE_MAKE = re.compile(
+    r"make\s+(?:your|the|my)\s+face\s+(?:the\s+|a\s+)?(.+?)\s+face")
+_FACE_PUT_ON = re.compile(r"(?:put|wear|try)\s+(?:the\s+)?(.+?)\s+face\s+(?:on|please)")
+_FACE_ASK = re.compile(
+    r"(?:what|which)\s+face\s+(?:are\s+you|do\s+you\s+have|is\s+on)\s*"
+    r"(?:using|wearing|on|now)?")
 
 #: "What asks first" (jarvis_asks_first.LOOSE): stricter (ask again) or
 #: looser (stop asking - the PC only, one card plus Windows Hello). An
@@ -3836,8 +3862,12 @@ def _settings_control(s: str) -> Optional[Intent]:
     if kind == "ask":
         return Intent("control_ask", {"control": got["control"]})
     if kind == "bad":
+        # The words the owner said come along too: a control with one field
+        # answers a bad value by naming the wrong value and the real ones (see
+        # _run_control_bad). Without it the answer read "face's face".
         return Intent("control_bad", {"control": got["control"],
-                                      "field": got["field"], "value": ""})
+                                      "field": got["field"],
+                                      "value": got.get("value") or ""})
     return Intent("control_bad", {"control": got["control"], "field": "",
                                   "value": got.get("value") or ""})
 
@@ -3864,6 +3894,19 @@ def _settings_choice(s: str) -> Optional[Intent]:
             return Intent("settings_choice_bad",
                           {"key": key, "words": " ".join(str(value_words).split())})
         return Intent("settings_choice", {"key": key, "value": value})
+
+    def face_intent(words: str) -> Optional[Intent]:
+        """One face from the words after the pattern, or the real list on a miss."""
+        return one("face", "the face", words)
+
+    for pattern in (_FACE_USE, _FACE_MAKE, _FACE_PUT_ON):
+        m = pattern.fullmatch(s)
+        if m:
+            got = face_intent(m.group(1))
+            if got is not None:
+                return got
+    if _FACE_ASK.fullmatch(s):
+        return Intent("face_ask", {})
 
     m = _SET_HANDOFF_MODE.fullmatch(s)
     if m:
@@ -6481,6 +6524,12 @@ def _run_settings_choice_help(f: dict) -> Result:
     return Result(f"For {name}, you can say: {options}.", "settings_choice_help")
 
 
+def _run_face_ask() -> Result:
+    """Which face is on, in the spec's own words - a read, nothing written."""
+    import jarvis_settings_registry as R
+    return Result(R.face_words(), "face_ask")
+
+
 def _run_settings_only(f: dict) -> Result:
     """The two own-approved Settings-only exceptions: plain words, no card,
     nothing changed (ruling Q3.3)."""
@@ -6540,10 +6589,29 @@ def _run_control_bad(f: dict) -> Result:
     import jarvis_settings_registry as R
     control = str(f.get("control") or "")
     field = str(f.get("field") or "")
+    said = str(f.get("value") or "").strip()
+    if field and said:
+        # A control with ONE field and a value it does not have: name the value
+        # that was wrong and list the real ones. `control_bad_words` names the
+        # field instead, which for the face read "That is not one of the values
+        # for face's face" (2026-10-26, measured through "change your face to
+        # zorb"); the owner needs to hear the word he said and the choices.
+        try:
+            rows = R.fields_for_control(control)
+        except Exception:                   # noqa: BLE001 - fall back below
+            rows = []
+        if len(rows) == 1:
+            try:
+                options = sorted(rows[0].setting.options().keys())
+            except Exception:               # noqa: BLE001 - fall back below
+                options = []
+            if options:
+                return Result(
+                    f'"{said}" is not one of the choices for {control}. '
+                    f'Say one of: {", ".join(options)}.', "control_bad")
     if field:
         return Result(R.control_bad_words(control, field), "control_bad")
-    return Result(R.control_invalid_words(control, str(f.get("value") or "")),
-                  "control_bad")
+    return Result(R.control_invalid_words(control, said), "control_bad")
 
 
 def _run_settings_not_by_asking(f: dict) -> Result:
@@ -6920,6 +6988,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_choice_bad(f)
     if n == "settings_choice_help":
         return _run_settings_choice_help(f)
+    if n == "face_ask":
+        return _run_face_ask()
     if n == "settings_only":
         return _run_settings_only(f)
     if n == "settings_wake_word":
@@ -7415,7 +7485,7 @@ UNDO_NOTHING_SAID = "Nothing of mine to cancel."
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
-    "feature_change", "feature_change_ask", "feature_change_refused",
+    "face_ask", "feature_change", "feature_change_ask", "feature_change_refused",
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown",

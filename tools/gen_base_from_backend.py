@@ -28,7 +28,7 @@ re-taken", and nothing else:
         quiz_grader_cases.json   from backend/
         rust-crates.lock         from jarvis-desktop/src-tauri/Cargo.lock
         jarvis-visual-spec.json  the owner's own copy, which is what /api/visual-spec reads
-        theme.css, fonts.css, the thirteen .js modules and the seven woff2 faces
+        theme.css, fonts.css, the fourteen .js modules and the seven woff2 faces
                                  from backend/static/ - jarvis_hud.py's
                                  STATIC_ASSETS whitelist reads each beside
                                  itself (PWA Slice 3a, 2026-10-23); the page's
@@ -172,6 +172,8 @@ BESIDE = (
      "a module the page imports; served at /hud-edit.js"),
     ("hud-presets.js", "{repo}/backend/static/hud-presets.js",
      "a module the page imports; served at /hud-presets.js"),
+    ("galaxy-presets.js", "{repo}/backend/static/galaxy-presets.js",
+     "the module the Galaxy's look switcher imports; served at /galaxy-presets.js"),
     ("private-speech.js", "{repo}/backend/static/private-speech.js",
      "the page's speech rule; served at /private-speech.js"),
     ("face-voice.js", "{repo}/backend/static/face-voice.js",

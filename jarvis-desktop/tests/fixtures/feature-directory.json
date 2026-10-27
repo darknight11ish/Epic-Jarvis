@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "4ea36907558eddfa5afaa919fb311d956bc1af49871334f5f83cfae42394d6a0",
+  "source_sha256": "9ef1a084699a977212f675c0ec18ce9145401516eea33253adf43be4c3a16a38",
   "feature_count": 140,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -1527,15 +1527,15 @@
       "title": "Choose Jarvis's face",
       "group": "The PC itself",
       "surface": "both",
-      "label": "PC-Only Setting (Honest Refusal on Phone)",
-      "status": "pc-only",
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "status": "enforced",
       "label_note": "",
-      "example": "turn on Choose Jarvis's face",
+      "example": "change your face to Spiral",
       "example_ok": true,
-      "where": "desktop Settings: All features and abilities; phone: that app's own Settings",
-      "where_desktop": "All features and abilities",
-      "where_phone": "that app's own Settings",
-      "note": "Settings control today; typed path still being wired.",
+      "where": "desktop Settings: appearance-card; phone: All features and abilities",
+      "where_desktop": "appearance-card",
+      "where_phone": "All features and abilities",
+      "note": "",
       "not_a_control": true
     },
     {

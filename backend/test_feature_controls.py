@@ -34,6 +34,12 @@ SOURCES = [
     "contract/feature-controls.json",
     "jarvis-desktop/src/settings.html",
     "jarvis-desktop/src/settings-catalog.js",
+    # The faces feature's typed values are the visual spec's own ids and
+    # display names (2026-10-26), and the registry reads the spec to build
+    # them in a process with no server. Without it in this copied tree the
+    # faces phrases cannot resolve and this suite fails on a sentence that
+    # works in the real tree.
+    "jarvis-desktop/src/jarvis-visual-spec.json",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsSearch.kt",
     "jarvis-client/app/src/main/java/com/jarvis/client/net/SettingsCatalog.kt",

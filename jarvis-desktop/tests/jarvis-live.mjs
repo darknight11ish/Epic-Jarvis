@@ -372,19 +372,20 @@ if (K) {
     await page.close();
   });
 
-  await check("Temporary is on: the strip says this Live session will not be kept, and only while it is on", async () => {
+  await check("the Live strip's temporary line can no longer fire: the bar has no temporary toggle", async () => {
+    // This used to drive #temporary and read the line it raised. The owner's
+    // decision of 2026-10-27 removed that button - the one Incognito chip is
+    // the strict private chat - so `temporaryChat.on` is never true from the
+    // bar. The line and its words stay (a game chat still uses the temporary
+    // strip), so this pins the shape: the words are unchanged, the strip is
+    // hidden, and there is no control that can turn it on.
     assert.equal(R.SEEN.temporary_on, "Incognito is on - this Live session will not be kept in History.");
     const page = await bar([]);
-    // A PC that can hold a temporary chat (the fake bridge's switch).
-    await page.evaluate(() => { window.__temporaryOk = true; });
-    assert.equal(await page.isHidden("#jarvis-live-temporary"), true, "said before Temporary was on");
-    await page.click("#temporary");
-    await page.waitForTimeout(200);
-    assert.equal(await page.isHidden("#jarvis-live-temporary"), false, "Temporary is on and the strip said nothing");
-    assert.equal((await page.textContent("#jarvis-live-temporary")).trim(), R.SEEN.temporary_on);
-    await page.click("#temporary");
-    await page.waitForTimeout(200);
-    assert.equal(await page.isHidden("#jarvis-live-temporary"), true, "still said after Temporary went off");
+    assert.equal(await page.isHidden("#jarvis-live-temporary"), true, "said with no temporary chat on");
+    const toggle = await page.evaluate(() => document.querySelector("#temporary"));
+    const pressed = await page.evaluate(() => document.querySelector("#private")?.getAttribute("aria-pressed"));
+    assert.equal(toggle, null, "the #temporary button is back, so this line can be raised again");
+    assert.equal(pressed, "false");
     assert.deepEqual(page.__errors, []);
     await page.close();
   });

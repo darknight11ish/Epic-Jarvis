@@ -1382,7 +1382,6 @@ NO_COMMAND_REASON = {
     "phone-limits": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
     "appearance": ('app-local', "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.", 'setup-ui'),
     "crash-notes": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
-    "faces": ('app-local', "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.", 'setup-ui'),
     "first-run": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
     "setup-questionnaire": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
     "shortcuts": ('app-local', "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.", 'setup-ui'),
@@ -1485,6 +1484,11 @@ EXTRA_ADJUST = {
     "calendar": ("asks-first",),
     "home-status": ("asks-first",),
     "weather-sky": ("animal-options",),
+    # The face is picked in the Faces window, which is opened from the
+    # Appearance card - the catalogue's covers name the window's own id
+    # ("faces"), not a Settings section, so the place the typed control sits
+    # in has to be named here (2026-10-26).
+    "faces": ("appearance-card",),
 }
 
 
@@ -1532,6 +1536,11 @@ OWN_CONTROLS = {
     "custom-voices": (("voice_speaker",), ("settings_choice",), {}),
     "data-sandbox": (("sandbox_exec",), ("feature_switch",), {}),
     "email-read": ((), ("settings_asks_first",), {"settings_asks_first": {"email_read"}}),
+    # The face (2026-10-26): a named choice reached by "change your face to
+    # Red Panda" (control_set) and "use the Orbit face" (settings_choice). The
+    # key is the one thing both intents carry, so a phrase that names a
+    # DIFFERENT choice cannot be counted as this row's own.
+    "faces": (("face",), ("control_set", "settings_choice"), {}),
     "focus-presets": (("focus_preset",), ("control_set",), {}),
     "home-status": ((), ("settings_asks_first",), {"settings_asks_first": {"home_read"}}),
     "lights": (("lights_without_card",), ("settings_bool",), {}),

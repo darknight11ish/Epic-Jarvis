@@ -1,5 +1,6 @@
 /**
- * Private chat in the desktop quickbar - owner-approved 2026-10-26.
+ * Incognito (private chat) in the desktop quickbar - owner-approved
+ * 2026-10-26, made the bar's ONE Incognito chip on 2026-10-27.
  *
  * A private turn is a temporary chat PLUS a strict zero-write promise
  * (docs/JARVIS-API.md section 156): no memory, nothing learned or kept, no
@@ -7,10 +8,13 @@
  * - the mode is offered only on a PC whose /api/version advertises
  *   capabilities.private_chat; an older PC stays off and says why, and the
  *   Rust command refuses rather than sending an ordinary turn;
- * - every question of a private chat is sent with `private: true` and NEVER
+ * - every question of an incognito chat is sent with `private: true` and NEVER
  *   with `temporary: true` (the server implies the temporary half);
- * - it starts a new conversation when turned on or off, cannot be on at the
- *   same time as Incognito/Temporary, and resets when a chat ends;
+ * - it starts a new conversation when turned on or off, and resets when a
+ *   chat ends;
+ * - there is ONE chip: the old #temporary button left the DOM with the
+ *   owner's decision of 2026-10-27, so the two modes cannot both be on
+ *   because the milder one has no control at all;
  * - an answer the PC did not confirm as private says so plainly.
  *
  * Pure words first, then the quickbar in a real browser on the uikit mock.
@@ -45,16 +49,18 @@ const LOCAL = { lane: "qwen3:8b", where: "local", gate: "complexity" };
 
 /* ── The words ─────────────────────────────────────────────────────────── */
 
-await check("the words say what a private chat promises", async () => {
-  assert.equal(PRIVATE_LABEL, "Private");
+await check("the words say what an incognito chat promises", async () => {
+  assert.equal(PRIVATE_LABEL, "Incognito");
   assert.match(PRIVATE_LINE, /won't use or learn from your memory/);
   assert.match(PRIVATE_LINE, /keeps nothing/);
   assert.match(PRIVATE_LINE, /won't run tools/);
+  assert.doesNotMatch(PRIVATE_LINE, /^Private/,
+    "the one chip says Incognito; the strip line must not start with the old name");
   assert.match(PRIVATE_UNAVAILABLE, /isn't available on this PC's version of Jarvis/);
   assert.match(PRIVATE_UNAVAILABLE, /nothing was sent/);
   assert.match(PRIVATE_ENDED, /next question starts a normal chat/);
   assert.match(PRIVATE_STARTED, /won't use memory/);
-  assert.match(PRIVATE_NOT_CONFIRMED, /did not confirm this was a private chat/);
+  assert.match(PRIVATE_NOT_CONFIRMED, /did not confirm this was an incognito chat/);
   assert.match(CONTINUED_PRIVATE_OFF, /continued chat is kept/);
 });
 
@@ -122,7 +128,7 @@ await check("on: a marker for the whole chat, and every question carries ONLY pr
   assert.equal(pressed, "true");
   assert.equal(marked, "true");
   assert.match(empty, new RegExp(`^${PRIVATE_LABEL}`));
-  assert.ok(empty.includes(PRIVATE_LINE.replace(/^Private:\s*/, "")), empty);
+  assert.ok(empty.includes(PRIVATE_LINE.replace(/^Incognito:\s*/, "")), empty);
   assert.equal(sent[0].private, true, "the question did not carry private: true");
   assert.notEqual(sent[0].temporary, true, "private and temporary were both sent");
 });
@@ -146,39 +152,53 @@ await check("turning it on or off starts a new conversation", async () => {
   assert.equal(pressed, "false");
 });
 
-await check("Private and Incognito cannot both be on; each turns the other off", async () => {
+await check("there is ONE Incognito chip - the old temporary button has no control at all", async () => {
   const page = await quickbar({ chatReplies: ["A."] }, { __privateOk: true, __temporaryOk: true });
-  await page.locator("#temporary").click();
-  await page.waitForTimeout(150);
+  // The owner's decision of 2026-10-27: private chat and the milder temporary
+  // mode collapsed into this one chip. The old #temporary button is not in
+  // the DOM, so "both on" is impossible by construction rather than by a
+  // mutual-exclusion rule - and #private still toggles cleanly on and off.
+  const temporary = await page.evaluate(() => document.querySelector("#temporary"));
   await page.locator("#private").click();
   await page.waitForTimeout(200);
-  const tempPressed = await page.locator("#temporary").getAttribute("aria-pressed");
-  const privatePressed = await page.locator("#private").getAttribute("aria-pressed");
-  await page.locator("#temporary").click();
+  const on = await page.locator("#private").getAttribute("aria-pressed");
+  await page.locator("#private").click();
   await page.waitForTimeout(200);
-  const tempAgain = await page.locator("#temporary").getAttribute("aria-pressed");
-  const privateAgain = await page.locator("#private").getAttribute("aria-pressed");
+  const off = await page.locator("#private").getAttribute("aria-pressed");
+  const sent = await page.evaluate(() => window.__calls.filter((c) => c[0] === "temporary_chat_available").length);
   await page.close();
-  assert.equal(privatePressed, "true");
-  assert.equal(tempPressed, "false", "Incognito stayed on beside Private");
-  assert.equal(tempAgain, "true");
-  assert.equal(privateAgain, "false", "Private stayed on beside Incognito");
+  assert.equal(temporary, null, "the #temporary button is still in the bar - there must be one chip");
+  assert.equal(on, "true", "the one chip did not turn on");
+  assert.equal(off, "false", "the one chip did not turn off");
+  assert.equal(sent, 0, "the one chip asked for the temporary capability - Incognito is the private_chat mode");
 });
 
-await check("new conversation resets Private to off and says the chat was private", async () => {
-  const page = await quickbar({ chatReplies: ["Done."] }, { __privateOk: true });
+await check("a new conversation resets Incognito to off, and ending one still says it was private", async () => {
+  const page = await quickbar({ chatReplies: ["Done.", "Again."] }, { __privateOk: true });
   await page.locator("#private").click();
   await page.waitForTimeout(150);
   await submit(page, "secret");
   await page.locator("#new-conversation").click();
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(300);
   const pressed = await page.locator("#private").getAttribute("aria-pressed");
   const hidden = await page.locator("#private-strip").isHidden();
-  const note = await page.locator("#chat-ended-note").innerText();
+
+  // The visible "where the chat went" line lived in the removed primer (and
+  // was only on screen if the owner had opened that panel). The WORDS the
+  // chat was private are still spoken through the bar's one announcer on the
+  // path that ends a chat - Esc - so that is where this is pinned now.
+  await page.locator("#private").click();
+  await page.waitForTimeout(150);
+  await submit(page, "secret again");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  const spoken = await page.evaluate(() =>
+    [...document.querySelectorAll('[aria-live="polite"]')].map((n) => n.textContent).join(" ").trim());
   await page.close();
-  assert.equal(pressed, "false", "Private survived the end of its chat");
-  assert.equal(hidden, true, "the private marker stayed after the chat ended");
-  assert.equal(note.trim(), PRIVATE_ENDED);
+  assert.equal(pressed, "false", "Incognito survived the end of its chat");
+  assert.equal(hidden, true, "the incognito marker stayed after the chat ended");
+  assert.match(spoken, new RegExp(PRIVATE_ENDED.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `the bar ended an incognito chat without saying so: "${spoken}"`);
 });
 
 await check("a PC that does not confirm a private turn is never pretended to have", async () => {

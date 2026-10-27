@@ -164,7 +164,14 @@ def rows(data: dict) -> list:
         fid = row["id"]
         evidence = row.get("label_evidence") or {}
         note = ""
-        if fid in multi:
+        if fid in multi and str(row.get("status") or "") != "enforced":
+            # A feature named by a multi-field board gets the board's honest
+            # note ONLY while it has no enforced typed path of its own. Since
+            # 2026-10-26 the faces row IS enforced ("change your face to
+            # Spiral"), but it is also named by the per-face-tuning board
+            # (sharpness and frame rate, still untyped) - and saying of the
+            # whole row "typed path still being wired" would contradict its
+            # own example sentence on the page.
             note = PLANNED_NOTE
         elif fid in planned:
             gap = planned[fid]

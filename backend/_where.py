@@ -795,6 +795,10 @@ SHIPPED = (
     "static/hud-safety.js",
     "static/hud-edit.js",
     "static/hud-presets.js",
+    # The Galaxy's looks (2026-10-27): the HUD's look switcher loads this module
+    # with a dynamic import(), so the page's closed whitelist has to serve it
+    # from beside the server like the modules above.
+    "static/galaxy-presets.js",
     "static/private-speech.js",
     "static/face-voice.js",
     "static/face-moments.js",

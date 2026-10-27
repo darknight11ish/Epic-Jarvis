@@ -89,7 +89,7 @@ on a throwaway copy instead.
 |---|---|---|
 | `memory-safety.patch` | `jarvis_memory.py`, `jarvis_extract.py` | Five ways the memory store destroyed or refused data. Apply first. |
 | `events-pump.patch` | `jarvis_hud.py` | Starts the event pump, which nothing was starting. One line and a comment. |
-| `appearance.patch` | `jarvis_hud.py` | `GET`/`POST /api/appearance`, so the phone and the desktop can agree on a face. |
+| `appearance.patch` | `jarvis_hud.py` | `GET`/`POST /api/appearance`, so the phone and the desktop can agree on a face. A POST **merges** (a key it does not carry keeps its stored value), and since 2026-10-26 the face can be **asked for in chat** - one `face` key through the same write, no card, both apps follow. |
 | `gate-push.patch` | `jarvis_gate.py` | Stops the approval gate posting unredacted private content to a public broker. Apply this one whether or not you use ntfy. |
 | `skill-notes.patch` | `jarvis_skills.py` | Gates and surfaces the skill notes, which steer answers, are written without approval, and appear on no screen. |
 | `documents-honesty.patch` | `jarvis_hud.py` | The brain map reports a document store that has never existed. Makes the status line true. |
@@ -832,6 +832,31 @@ buttons should change from *"saved on this machine only"* to *"saved to Jarvis
 
 It does not touch anything else. No existing route changes behaviour.
 
+## Ask for a face (2026-10-26)
+
+The owner asked to be able to *say* what face to wear, from the desktop or the
+phone. The storage and the live event were already here, so this is one named
+choice in `jarvis_settings_registry.py` (`ChoiceSetting("face")`) reached by the
+grammar `jarvis_quick.py` already has, and two functions this patch adds:
+
+| | |
+|---|---|
+| `_appearance_faces()` | `[{id, name}]` straight from `jarvis-visual-spec.json` - the ONE list the face is checked and spoken against. A face added to the spec can be asked for without editing Python. |
+| `_appearance_set_face(face_id)` | `face` and nothing else: refuses an unknown id with the real names (400), refuses on a machine with no spec (503), otherwise calls `_appearance_save({"face": id})` - the same one write the route uses. The merge is what makes "one key" safe. |
+
+`jarvis_settings_registry.set_face` (the `ChoiceSetting`'s setter) finds the
+RUNNING server's `_appearance_set_face` the way `jarvis_events._hud_has` finds
+the server - `__main__` then `jarvis_hud`, never a fresh import - and its
+success answer names the face, says it changed on both apps, and says the voice
+did not change. Sentences: "change your face to Spiral", "use the Orbit face",
+"switch the face to the red panda", "make your face the accretion face", "put
+the spiral face on", "what face are you using?". No card: this document is
+cosmetic. There is no new route, so `check_parity.py` needs no new entry.
+
+The voice is deliberately untouched. A face never changes the voice by itself,
+and the "does this animal use its own voice?" question is the Faces window's
+offer - a chat turn must not answer it for the owner.
+
 ## Why it is shaped this way
 
 **It is cosmetic, so it is not gated.** The document decides how Jarvis looks.
@@ -875,8 +900,10 @@ in `~/.openjarvis/`.
 
 **The server stamps `updated`, not the client.** Two devices with two clocks
 are the case that field exists to arbitrate, so the one machine both of them
-talk to owns it. Last write wins — there is one owner here, and a merge
-strategy would be machinery for a conflict that does not happen.
+talk to owns it. Last write wins, **key by key**: two devices setting the same
+key within the same second still end with one of them, and that is the rule,
+not an accident - there is one owner here, and a merge *strategy* would be
+machinery for a conflict that does not happen.
 
 **The write is atomic.** Written to a temporary file and renamed, because a
 half-written file here means the owner's face silently reverting.
@@ -889,18 +916,27 @@ weight and should not sit behind that review.
 ## Test it
 
 ```powershell
-$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_appearance.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_appearance.py; py -3 backend\test_appearance_command.py
 ```
 
-Nineteen checks against the real `jarvis-visual-spec.json`: that all fifty
-colours are found, that an unknown colour is refused rather than dropped, that
-`banked` is accepted, that a refused save leaves the stored document untouched,
-that a save publishes an event, that a machine without the spec says so, that a
-corrupt file reports itself instead of taking the surface down, and - since the
-2026-10-26 merge - that a face-only save keeps every colour binding, a
-bindings-only save keeps the face, `null`/empty clear exactly what they name, an
-unknown field changes nothing, and the published event carries the merged
-document.
+Nineteen checks in `test_appearance.py` against the real
+`jarvis-visual-spec.json`: that all fifty colours are found, that an unknown
+colour is refused rather than dropped, that `banked` is accepted, that a
+refused save leaves the stored document untouched, that a machine without the
+spec says so, that a corrupt file reports itself instead of taking the surface
+down, and - since the 2026-10-26 merge - that a face-only save keeps every
+colour binding, a bindings-only save keeps the face, `null`/empty clear exactly
+what they name, an unknown field changes nothing, and the published event
+carries the merged document.
+
+Sixteen more in `test_appearance_command.py` for the asking path: that the
+face list is the spec's own, that the registry's list is the patch's (and the
+contract's is the measured one), that one face write keeps the colours and
+publishes the merged document, that an unknown face and a machine with no spec
+are refused in words with nothing written, that a server without the patch says
+"run apply-patches.ps1", that all six sentences resolve and actually change the
+face through the one write, that the questions name the real current face, and
+that no voice binding is written.
 
 Two of those exist because `python -m py_compile` passed while the patch was
 broken twice: `time` was never imported, so every save would have raised

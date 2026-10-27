@@ -391,13 +391,17 @@ await check("a search that matches nothing says so in words", async () => {
     `the no-match count was not announced. saw: ${JSON.stringify(spoken)}`);
 });
 
-await check("the bar's own Find button opens it, and Enter in the box still sends", async () => {
+await check("the palette's bar door is \"/\" only, and Enter in the box still sends", async () => {
   const page = await openBar();
-  // The Find button lives in the primer, which the bar keeps behind its "?"
-  // button now (compact first, owner 2026-10-19), so open it first.
-  await page.locator("#sayable-toggle").click();
-  await page.waitForTimeout(250);
-  await page.locator("#palette-hint button").click();
+  // The primer's "Find" button was the palette's visible door; it left with
+  // the primer (owner, 2026-10-27). "/" in an empty box is the door that
+  // remains, and this pins both it and the ordinary Enter-to-send path.
+  const gone = await page.evaluate(() => ({
+    hint: document.querySelector("#palette-hint"),
+    door: document.querySelector("#sayable-toggle"),
+  }));
+  await page.locator("#prompt").focus();
+  await page.keyboard.press("/");
   await page.waitForTimeout(250);
   const opened = await paletteState(page);
   await page.keyboard.press("Escape");
@@ -409,8 +413,10 @@ await check("the bar's own Find button opens it, and Enter in the box still send
   await page.waitForTimeout(250);
   const calls = await page.evaluate(() => window.__calls.map((c) => c[0]));
   await page.close();
-  assert.equal(opened.hidden, false, "the Find button did nothing");
-  assert.equal(opened.focus, "palette-search", "the Find button did not move the keyboard in");
+  assert.equal(gone.hint, null, "the primer's Find button is back in the bar");
+  assert.equal(gone.door, null, "the \"?\" primer door is back in the bar");
+  assert.equal(opened.hidden, false, "\"/\" did not open the palette");
+  assert.equal(opened.focus, "palette-search", "\"/\" did not move the keyboard in");
   assert.ok(calls.includes("stream_chat"), "Enter in the box no longer sends");
 });
 
