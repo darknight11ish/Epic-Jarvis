@@ -1402,6 +1402,40 @@
         </label>
         <p class="note" id="hud-open-bar-status" role="status"></p>
 
+        <!-- Read-aloud buttons on answers (the owner's ask of 2026-10-27, in
+             his words: "a read out loud button i can enable in the settings
+             which will add a read out loud icon next to all chat boxes that i
+             can click on and jarvis will speak out loud the chat box in his
+             chosen current voice"). OFF to start.
+
+             A `.mn-sync-row` checkbox and NOT a `.toggle` row, on purpose:
+             every `.toggle` row on this page is the registry's
+             (backend/jarvis_settings_registry.py -> tools/gen_settings_cases.py
+             writes the shared fixture AND jarvis-client's generated
+             SettingsCatalog.kt), and this change owns neither the phone's lane
+             nor a backend file. The shape below is Settings' own for a
+             checkbox the registry does not carry - `#mn-sync` under "How
+             Jarvis talks" is the existing one - so the row still reads and
+             behaves like its neighbours.
+
+             What it does NOT do: it does not turn read-aloud on or off, it
+             speaks nothing by itself, and it does not widen what may be
+             spoken. A private answer gets no speaker at all. -->
+        <label class="mn-sync-row">
+          <input id="hud-read-aloud-icons" type="checkbox" />
+          <span>Read-aloud buttons on answers
+            <span class="toggle-detail" id="hud-read-aloud-icons-detail">
+              Off to start. On: each finished answer in the big window that may
+              be read aloud gets a small speaker beside it, and clicking that
+              speaker reads that answer out loud in Jarvis's voice. An answer
+              that has to stay on screen gets no speaker. Off: no speakers
+              beside answers, and Jarvis still reads answers aloud exactly as
+              it does today.
+            </span>
+          </span>
+        </label>
+        <p class="note" id="hud-read-aloud-icons-status" role="status"></p>
+
         <!-- The HUD's layouts (H1/H3 of the editable-HUD design; rulings
              23-28 and Q5): the seven built-in ones - Cockpit, Studio, Ambient,
              Quiet, Telemetry & Ops, Second Brain & Planner and Minimal - plus

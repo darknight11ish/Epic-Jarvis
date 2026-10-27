@@ -3289,6 +3289,37 @@ install nothing would do. No route is added, so `tools/check_parity.py` has
 nothing new to classify; the phone's own check-and-install screen already
 exists and is unchanged.
 
+**The HUD's Live button and its per-answer read-aloud speakers are the big
+window's, and that is one-sided on purpose** (the owner's two asks of
+2026-10-27: "a live mode button in the left column of the Jarvis HUD", and "a
+read out loud button i can enable in the settings which will add a read out
+loud icon next to all chat boxes that i can click on and jarvis will speak out
+loud the chat box in his chosen current voice"). **Live is not missing from the
+phone** - it has had its own Live control since 2026-09-28 and both apps read
+the same `live-rules.js`; what is desktop-only is THIS WINDOW'S button: the
+HUD's left rail (`jarvis_hud.html` `#rail-toolbar`) sends the bar's own
+`live_start`/`live_stop`, mirrored deliberately rather than re-invented. The
+phone has no HUD, so the button has no meaning there, and nothing was taken
+from it. **The speakers are the desktop's alone, and lightly for now**: the
+switch in Settings -> "The big HUD window" (`read-aloud-icons.js`) and the
+speaker on each finished answer live in the HUD page's own chat renderer, which
+is a desktop webview page; the phone's chat is Compose and its read-aloud
+behaviour is unchanged. What is NOT one-sided is the rule: the speaker is drawn
+only where `private-speech.js`'s `mayReadAloud` says this window would already
+have spoken the answer, which is the rule the phone's own speech path holds too
+(`docs/JARVIS-API.md` §16 step 3), so neither app has a way to read a private
+answer aloud. **The phone half is a named follow-up for the Android session**,
+not an invented caller: a per-answer speaker on the phone is that session's
+work, and no route, command or capability was added for either feature
+(`tools/check_parity.py` therefore classifies nothing new; the only grant is
+the HUD window's own `hud-live` set in `permissions/surfaces.toml`). The
+settings row is NOT in the registry the phone mirrors
+(`backend/jarvis_settings_registry.py` -> `tools/gen_settings_cases.py` writes
+`jarvis-client`'s generated catalogue), on purpose: this change may not write
+into `jarvis-client`. That is also why `features/features.json` - three
+byte-identical copies, one inside `jarvis-client` - was not extended.
+
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

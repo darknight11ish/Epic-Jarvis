@@ -3784,8 +3784,6 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     and the three two-file checks. **Not proven here:** a real signed release
     installed by the card - the updater's own installer path was not run in
     this container, and that is the owner's field test, never a pass.
-
-
 ## 2026-10-27 — The Galaxy's five missing looks are built, the HUD has ONE look switch, and the dock follows the words
 
   * **What the owner asked, in their own words.** *"id like an easy way to
@@ -3833,3 +3831,67 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
   * **The phone is untouched.** Its Galaxy stays the read-only zen-ring picture
     decided on 2026-10-26: no look switch and no new look there, no new route,
     no write. Nothing in this work changes what the phone shows.
+
+## 2026-10-27 — Live is one control in two windows, and reading an answer out loud is opt-in
+
+  * **The owner's two asks, in his own words.** "a live mode button in the left
+    column of the Jarvis HUD", and "a read out loud button i can enable in the
+    settings which will add a read out loud icon next to all chat boxes that i
+    can click on and jarvis will speak out loud the chat box in his chosen
+    current voice".
+  * **Live: one control, mirrored - not a second Live.** The HUD's left rail
+    (`#rail-toolbar`, `jarvis_hud.html`) sends the BAR'S OWN commands with the
+    bar's own arguments: `live_start` with `by: "button"` and a fresh
+    `conversationId` from `chat-history.js`, `live_stop` when it is on. The name
+    ("Jarvis Live"), the visible word ("Live"), the two `title` sentences and
+    `aria-pressed` are the bar's, and the state comes from the bar's own two
+    sources: `live_status` on opening, then the shell's `live-status` event read
+    through `live-rules.js`'s `onHere(status, "desktop")` - so a session running
+    on the PHONE does not paint this button as on. Every refusal stays in Rust
+    (`live.rs`: a stale link, App lock, no microphone) and no approval card is
+    raised, exactly as from the bar. **The one thing this needed and no more:**
+    a `hud-live` set in `permissions/surfaces.toml` granting `live_status`,
+    `live_start` and `live_stop` and deliberately NOT `live_act` (more time,
+    carry on), `live_mute` or `live_hold` - this window may start, stop and
+    read, and nothing else. No Tauri command and no backend route were added;
+    there is no HTTP route for starting Live (`backend/jarvis_live.py` answers
+    `/api/live/stream` with the frozen 501 stub), so the existing commands are
+    the only path there is.
+  * **Read-aloud speakers: OFF by default, and they never loosen the privacy
+    rule.** Settings -> "The big HUD window" gained "Read-aloud buttons on
+    answers" (`read-aloud-icons.js`, `jarvis.hud.readAloudIcons`, this
+    computer's `localStorage`, no backend, no pairing token, **no approval
+    card** - the same appearance-class choice as the "Open the Jarvis bar"
+    switch beside it, and the same card that already says "for this computer
+    only, and it changes at once"). With it OFF nothing changes at all: no
+    speakers, and the window's existing automatic read-aloud speaks exactly as
+    it did before. With it ON, a finished Jarvis ANSWER gets a small speaker
+    that reads THAT answer through the page's existing `voice.speak` - the same
+    object, the same OS voice, the same shell filter that allows local voices
+    only. It speaks nothing by itself.
+  * **The rule that must not be got wrong.** A speaker is drawn only when
+    `private-speech.js`'s `mayReadAloud({route: that answer's own route,
+    toolsKnown: true})` says this window would already have spoken it - the
+    exact call the page's automatic read-aloud makes - so an answer that used a
+    sensitive saved fact (`injected_sensitive`, or `injected_facts` from a PC
+    that does not say how many were sensitive: fail closed) or one the router
+    gated `private` gets NO speaker at all. Two things back that up rather than
+    replacing it: where the rule module cannot be loaded this FAILS CLOSED (no
+    speaker), which is deliberately stricter than the automatic path's `!rule`
+    fallback; and the shell's own `speechSynthesis.speak` wrapper
+    (`hud_bootstrap.js` section 2e) still refuses a kept-on-screen answer and
+    draws "It's on your screen." - so even a direct `speak()` of that answer's
+    words reaches nobody. `tests/hud-live-read-aloud.mjs` pins all of it,
+    including the case where the answer is asked for directly. The owner's own
+    messages never get a speaker, and neither does the canned hello the window
+    opens with: it is not an answer, and this window has never read it aloud.
+  * **What was deliberately not done.** No new Tauri command, no new backend
+    route, no network service of any kind for speech (the HUD reads answers
+    with the OS voice the shell already restricts to local ones). The Android
+    app is untouched: the speakers and this switch are the big HUD window's, and
+    the phone has no HUD - its own read-aloud behaviour and its own Live control
+    are unchanged. That half, and why it is one-sided, is written in
+    `docs/ARCHITECTURE.md` §8 and named there as follow-up for the Android
+    session. The feature catalogue (`features/features.json`) was NOT extended
+    for the switch on purpose: it is one file in three byte-identical copies,
+    one of which is inside `jarvis-client`, which this change may not write.
