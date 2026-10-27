@@ -36,6 +36,10 @@ import { OPEN_BAR_KEY, HUD_LAYOUTS } from "../src/hud-window.js";
 // gate now holds itself to route by route (the check further down).
 import { usedSensitiveFact } from "../src/private-speech.js";
 import { normalizeLayout, presetLayout } from "../src/hud-layout.js";
+// The Brain window's own Galaxy layout maths: the HUD carries an inline mirror
+// of it (the page is one vendored file), and one check below compares the two
+// position for position so the two windows cannot drift apart.
+import { layoutFor as galaxyLayoutFor } from "../src/galaxy-presets.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "src");
@@ -2759,6 +2763,40 @@ await check("one open-the-bar control is drawn; the duplicate pill and dock icon
   assert.equal(withoutShell.shown, false);
 });
 
+await check("the Studio dock's icons are in the same order as the stage's words", async () => {
+  // The owner, 2026-10-27: "the icons on the left column don't match the order of
+  // the horizontal words in the jarvis hud (reminder is out of place for
+  // example)". One set of sections, two places to reach them - so one order. The
+  // hidden Jarvis-bar button is not a section and stays last.
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const order = await page.evaluate(() => ({
+    dock: [...document.querySelectorAll("#studio-dock .dock-btn[data-hud-tab-choice]")]
+      .map((b) => b.getAttribute("data-hud-tab-choice")),
+    words: [...document.querySelectorAll("#stage-tabs [data-hud-tab-choice]")]
+      .map((b) => b.getAttribute("data-hud-tab-choice")),
+    wordText: [...document.querySelectorAll("#stage-tabs [data-hud-tab-choice]")]
+      .map((b) => b.textContent.trim()),
+    dockTitles: [...document.querySelectorAll("#studio-dock .dock-btn[data-hud-tab-choice]")]
+      .map((b) => b.getAttribute("title")),
+    lastButton: [...document.querySelectorAll("#studio-dock .dock-btn")].at(-1).id,
+    quickbarIsChoice: document.getElementById("dock-quickbar")
+      .hasAttribute("data-hud-tab-choice"),
+  }));
+  await page.close();
+  assert.deepEqual(order.dock, ["galaxy", "today", "reminders", "memory", "telemetry"],
+    "the dock is not in the stage's order (Galaxy, Approvals, Reminders, Memory, Telemetry)");
+  assert.deepEqual(order.words, ["galaxy", "today", "reminders", "memory", "telemetry"]);
+  assert.deepEqual(order.dock, order.words, "the left icons and the horizontal words disagree");
+  assert.deepEqual(order.wordText, ["Galaxy", "Approvals", "Reminders", "Memory", "Telemetry"]);
+  assert.ok(order.dockTitles.every((title) => title && title.length > 5),
+    "a dock icon lost its plain-words title");
+  assert.equal(order.lastButton, "dock-quickbar", "the hidden Jarvis-bar button is not last");
+  assert.equal(order.quickbarIsChoice, false,
+    "the Jarvis-bar button is not a section, and must not be one of the five tab choices");
+  assert.deepEqual(problems, []);
+});
+
+
 await check("P0.6: Windows is asked for the monochrome presentation of the two dock emoji", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   // The owner's field test (2026-10-23): the alarm and lightning drew as colour
@@ -3037,6 +3075,180 @@ await check("GALAXY v2: the lens is remembered, like the other cosmetic view cho
   assert.match(after.counts, /Memory:/, "the remembered lens did not redraw its own counts");
   await page.close();
 });
+
+/* =========================================================================
+ * THE GALAXY'S LOOKS (2026-10-27)
+ *
+ * The owner: "id like an easy way to change the appearance of the jarvis galaxy
+ * to the other models [modes]" - and, asked which surface, BOTH the HUD's
+ * Galaxy and the Brain window. So the HUD's own canvas carries a row of nine
+ * pills (the constellation plus eight looks) under the lens pills. A look only
+ * MOVES the dots this renderer already draws: no node, no link, no route, no
+ * write. The choice is remembered on this device (`jarvis.galaxy.hud.look`).
+ *
+ * The maths is an inline MIRROR of jarvis-desktop/src/galaxy-presets.js (this
+ * page is one vendored file, so it can carry no import). The third check below
+ * compares the two position for position: a drift between the two windows fails
+ * here instead of quietly giving them different pictures.
+ * ======================================================================= */
+
+/** The look pills, in the order the owner asked for them. */
+const LOOK_ORDER = ["constellation", "star-map", "clean-tree", "zen-ring",
+  "planetary-orbit", "neural-arbor", "nebula", "dna-helix", "radar-dome"];
+const LOOK_WORDS = ["Constellation", "Star map", "Clean tree", "Zen ring",
+  "Planetary orbit", "Neural arbor", "Nebula", "DNA helix", "Radar dome"];
+
+await check("GALAXY LOOKS: the nine pills are in the Galaxy view, in the owner's order", async () => {
+  const { page, problems } = await openGalaxy(browser, GALAXY_GRAPH);
+  const looks = await page.evaluate(() => [...document.querySelectorAll("button[data-galaxy-look]")]
+    .map((b) => ({
+      id: b.getAttribute("data-galaxy-look"), tag: b.tagName,
+      text: b.textContent.trim(), pressed: b.getAttribute("aria-pressed"),
+      title: b.getAttribute("title"),
+      inBrain: Boolean(b.closest("#brain")),
+      group: b.parentElement.getAttribute("aria-label"),
+    })));
+  assert.deepEqual(looks.map((l) => l.id), LOOK_ORDER);
+  assert.deepEqual(looks.map((l) => l.text), LOOK_WORDS);
+  assert.ok(looks.every((l) => l.tag === "BUTTON" && l.inBrain),
+    "a look pill is not a real button inside the Galaxy view");
+  assert.ok(looks.every((l) => l.title && l.title.length > 20),
+    "a look pill has no plain-words title saying what it draws");
+  assert.equal(looks[0].group, "Galaxy look", "the row is not a labelled group for a screen reader");
+  assert.deepEqual(looks.filter((l) => l.pressed === "true").map((l) => l.id), ["constellation"],
+    "the constellation is still the default look");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("GALAXY LOOKS: every pill really moves the dots, and Constellation comes back", async () => {
+  const { page } = await openGalaxy(browser, GALAXY_GRAPH);
+  const positions = () => page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll(".galaxy-node-btn")]
+      .map((b) => [b.getAttribute("data-galaxy-node"), `${b.style.left}/${b.style.top}`])));
+  const base = await positions();
+  const count = Object.keys(base).length;
+  assert.ok(count >= 6, "the fixture graph lost its nodes");
+  for (const id of LOOK_ORDER.slice(1)) {
+    await page.click(`button[data-galaxy-look="${id}"]`);
+    await page.waitForTimeout(220);
+    const now = await positions();
+    const moved = Object.keys(base).filter((key) => base[key] !== now[key]).length;
+    assert.ok(moved >= Math.ceil(count * 0.8),
+      `${id} moved only ${moved} of ${count} dots`);
+    assert.equal(await page.evaluate(() => galaxy.look()), id, `${id} is not the look on screen`);
+    const pressed = await page.evaluate(() => [...document.querySelectorAll(
+      'button[data-galaxy-look][aria-pressed="true"]')].map((b) => b.getAttribute("data-galaxy-look")));
+    assert.deepEqual(pressed, [id], `${id} is not the only pressed pill`);
+    // The dots are painted, not just moved in the DOM: count lit canvas pixels.
+    const lit = await page.evaluate(() => {
+      const c = document.getElementById("galaxy");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let on = 0;
+      for (let i = 3; i < d.length; i += 4 * 11) if (d[i] > 0) on += 1;
+      return on;
+    });
+    assert.ok(lit > 20, `${id} painted an empty canvas`);
+  }
+  await page.click('button[data-galaxy-look="constellation"]');
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => galaxy.look()), "constellation");
+  assert.equal(await page.evaluate(() => localStorage.getItem("jarvis.galaxy.hud.look")), null,
+    "choosing the constellation should forget the stored look");
+  await page.close();
+});
+
+await check("GALAXY LOOKS: the HUD's own maths matches the Brain window's galaxy-presets.js", async () => {
+  // The one thing that keeps two windows from drifting: the same list in must
+  // put the same names on the same points out, for every look. The two runtimes
+  // are different V8 builds, and Math.sin/cos/asin are allowed to differ in the
+  // last bit between them, so "the same point" means within a millionth of a
+  // layout unit - far below anything a pixel can show, and still far tighter
+  // than any real drift (a formula change moves dots by whole units).
+  const near = (hud, want, id) => {
+    assert.equal(hud.length, want.length, `${id}: a different number of names`);
+    for (let i = 0; i < want.length; i++) {
+      assert.equal(hud[i][0], want[i][0], `${id}: name ${i} is not the same name`);
+      for (const axis of [1, 2]) {
+        assert.ok(Math.abs(hud[i][axis] - want[i][axis]) < 1e-6,
+          `${id}: ${want[i][0]} moved (${axis}: ${hud[i][axis]} against ${want[i][axis]})`);
+      }
+    }
+  };
+  const { page } = await openGalaxy(browser, GALAXY_GRAPH);
+  const list = GALAXY_GRAPH.nodes.map((n) => ({ id: n.id, group: n.group }));
+  for (const id of LOOK_ORDER.slice(1)) {
+    const hud = await page.evaluate(({ id, list }) =>
+      galaxy.layoutForLook(id, list).nodes.map((p) => [p.id, p.x, p.y]), { id, list });
+    near(hud, galaxyLayoutFor(id, list).nodes.map((p) => [p.id, p.x, p.y]), id);
+  }
+  // And a full 240-name list, the bound both sides are written for.
+  const many = Array.from({ length: 260 }, (_, i) => ({
+    id: `e:${i + 1}`, group: ["person", "pet", "place", "project", "tool"][i % 5],
+  }));
+  for (const id of LOOK_ORDER.slice(1)) {
+    const hud = await page.evaluate(({ id, many }) =>
+      galaxy.layoutForLook(id, many).nodes.map((p) => [p.id, p.x, p.y]), { id, many });
+    assert.equal(hud.length, 240, `${id}: the HUD did not cap at 240 names`);
+    near(hud, galaxyLayoutFor(id, many).nodes.map((p) => [p.id, p.x, p.y]), id);
+  }
+  await page.close();
+});
+
+await check("GALAXY LOOKS: the choice is remembered per PC, and a stale value is the constellation", async () => {
+  const { page } = await openGalaxy(browser, GALAXY_GRAPH);
+  await page.click('button[data-galaxy-look="dna-helix"]');
+  await page.waitForTimeout(250);
+  assert.equal(await page.evaluate(() => localStorage.getItem("jarvis.galaxy.hud.look")), "dna-helix",
+    "the look was not remembered on this device");
+  await page.reload();
+  await page.waitForTimeout(1400);
+  await page.click('[data-view="brain"]');
+  await page.waitForTimeout(500);
+  const kept = await page.evaluate(() => ({
+    look: galaxy.look(),
+    pressed: [...document.querySelectorAll('button[data-galaxy-look][aria-pressed="true"]')]
+      .map((b) => b.getAttribute("data-galaxy-look")),
+  }));
+  assert.equal(kept.look, "dna-helix", "the saved look did not come back after a reload");
+  assert.deepEqual(kept.pressed, ["dna-helix"]);
+  // A value from a build that had other looks cannot break this one.
+  await page.evaluate(() => localStorage.setItem("jarvis.galaxy.hud.look", "a-look-from-2027"));
+  await page.reload();
+  await page.waitForTimeout(1400);
+  await page.click('[data-view="brain"]');
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => ({
+    look: galaxy.look(),
+    pressed: [...document.querySelectorAll('button[data-galaxy-look][aria-pressed="true"]')]
+      .map((b) => b.getAttribute("data-galaxy-look")),
+    dots: document.querySelectorAll(".galaxy-node-btn").length,
+  }));
+  assert.equal(after.look, "constellation", "a stale value did not fall back to the constellation");
+  assert.deepEqual(after.pressed, ["constellation"]);
+  assert.ok(after.dots > 0, "a stale value left the Galaxy empty");
+  await page.close();
+});
+
+await check("GALAXY LOOKS: a look holds still, and the spin button says what is true", async () => {
+  // A look is a stationary diagram: the force simulation would pull its dots
+  // back into the constellation's shell in a few frames. So choosing a look
+  // stops the spin and the button tells the truth ("Resume spin").
+  const { page } = await openGalaxy(browser, GALAXY_GRAPH);
+  assert.equal((await page.locator("#g-spin").innerText()).trim(), "Pause spin");
+  await page.click('button[data-galaxy-look="star-map"]');
+  await page.waitForTimeout(250);
+  assert.equal((await page.locator("#g-spin").innerText()).trim(), "Resume spin",
+    "the spin button still offers to pause a picture that is already still");
+  const first = await page.evaluate(() => [...document.querySelectorAll(".galaxy-node-btn")]
+    .map((b) => `${b.style.left}/${b.style.top}`).join("|"));
+  await page.waitForTimeout(600);
+  const second = await page.evaluate(() => [...document.querySelectorAll(".galaxy-node-btn")]
+    .map((b) => `${b.style.left}/${b.style.top}`).join("|"));
+  assert.equal(first, second, "the look's dots are still being pushed around by the simulation");
+  await page.close();
+});
+
 
 /* =========================================================================
  * GALAXY v2 node budget (Wave 3 slice G2, 2026-10-21, Ruling 11.5)

@@ -476,6 +476,12 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 .lens-button:hover{color:var(--text);}
 .lens-button[aria-pressed="true"]{background:rgb(var(--ice-rgb) / .12); color:var(--ice);}
 .lens-button:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+/* ---- The Galaxy's LOOKS (2026-10-27, the owner: "an easy way to change the
+   appearance of the jarvis galaxy to the other models [modes]"). The same
+   segmented control as the lens row beside it - one size smaller, because it
+   holds nine words instead of three. ------------------------------- */
+.look-group{padding:1px;}
+.look-button{padding:5px 7px; font-size:10px;}
 .lens-counts{
   font-family:var(--f-mono); font-size:10px; color:var(--dimmer);
   white-space:nowrap; flex-basis:100%; padding-left:2px;
@@ -1964,26 +1970,33 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
       </button>
     </div>
 
-    <!-- Studio layout's icon dock. The same four sections the stage's tab bar
+    <!-- Studio layout's icon dock. The same five sections the stage's tab bar
          offers (the layout script keeps both in step: one set of tabs, two
          places to reach them), plus the Jarvis bar. Hidden in the other two
          layouts by CSS; nothing here replaces a view - each button chooses
-         what the inspector stage shows. -->
+         what the inspector stage shows.
+         THE ORDER IS THE STAGE TABS' ORDER, left to right: Galaxy, Approvals,
+         Reminders, Memory, Telemetry (the owner, 2026-10-27: "the icons on the
+         left column don't match the order of the horizontal words in the jarvis
+         hud (reminder is out of place for example)"). It used to be Galaxy,
+         Telemetry, Memory, Approvals, Reminders - the same five sections in an
+         order nothing else used, so a thumb had to learn a second map. Keep the
+         two lists in the same order; tests/hud.mjs reads both and compares. -->
     <nav class="studio-dock" id="studio-dock" aria-label="HUD sections">
       <button type="button" class="dock-btn" data-hud-tab-choice="galaxy" title="Galaxy map" aria-pressed="false">
         <span aria-hidden="true">&#10022;</span>
-      </button>
-      <button type="button" class="dock-btn" data-hud-tab-choice="telemetry" title="Telemetry and systems" aria-pressed="false">
-        <span aria-hidden="true">&#9637;</span>
-      </button>
-      <button type="button" class="dock-btn" data-hud-tab-choice="memory" title="Memory and the second brain" aria-pressed="false">
-        <span aria-hidden="true">&#9672;</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="today" title="Approvals waiting for you" aria-pressed="false">
         <span aria-hidden="true">&#10003;</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="reminders" title="Reminders, timers, alarms and to-do" aria-pressed="false">
         <span aria-hidden="true">&#9200;&#xFE0E;</span>
+      </button>
+      <button type="button" class="dock-btn" data-hud-tab-choice="memory" title="Memory and the second brain" aria-pressed="false">
+        <span aria-hidden="true">&#9672;</span>
+      </button>
+      <button type="button" class="dock-btn" data-hud-tab-choice="telemetry" title="Telemetry and systems" aria-pressed="false">
+        <span aria-hidden="true">&#9637;</span>
       </button>
       <button type="button" class="dock-btn" id="dock-quickbar" title="Jarvis bar" hidden>
         <span aria-hidden="true">&#9889;&#xFE0E;</span>
@@ -2266,6 +2279,46 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
           <button type="button" class="lens-button" data-galaxy-lens="unified"
                   aria-pressed="false"
                   title="Both lenses side by side, memory first - the counts line says which half is which">Unified</button>
+        </span>
+        <!-- THE GALAXY'S LOOKS (2026-10-27). The owner asked for "an easy way to
+             change the appearance of the jarvis galaxy to the other models
+             [modes]" and chose BOTH: this row here in the HUD and the eight
+             looks themselves. The look moves the DOTS - it adds no route, no
+             node and no write - and the choice is remembered on this device
+             (`jarvis.galaxy.hud.look`). Constellation, the first button, is the
+             view that ships today and the default; a corrupt or stale stored
+             value falls back to it (see storedLook()).
+             The words are the owner's: Constellation, Star map, Clean tree,
+             Zen ring, Planetary orbit, Neural arbor, Nebula, DNA helix,
+             Radar dome. The Brain window's chips carry the same eight looks. -->
+        <span class="lens-group look-group" role="group" aria-label="Galaxy look">
+          <button type="button" class="lens-button look-button" data-galaxy-look="constellation"
+                  aria-pressed="true"
+                  title="The physics constellation: the view that ships today (the default)">Constellation</button>
+          <button type="button" class="lens-button look-button" data-galaxy-look="star-map"
+                  aria-pressed="false"
+                  title="Flat rings at three radii with seven sector spokes">Star map</button>
+          <button type="button" class="lens-button look-button" data-galaxy-look="clean-tree"
+                  aria-pressed="false"
+                  title="Four stationary rows, the best-known names along the top">Clean tree</button>
+          <button type="button" class="lens-button look-button" data-galaxy-look="zen-ring"
+                  aria-pressed="false"
+                  title="One calm halo, the best-known name at the centre">Zen ring</button>
+          <button type="button" class="lens-button look-button" data-galaxy-look="planetary-orbit"
+                  aria-pressed="false"
+                  title="A sun at the centre and the rest on ellipses round it">Planetary orbit</button>
+          <button type="button" class="lens-button look-button" data-galaxy-look="neural-arbor"
+                  aria-pressed="false"
+                  title="A branching tree of dendrites growing out of a centre name">Neural arbor</button>
+          <button type="button" class="lens-button look-button" data-galaxy-look="nebula"
+                  aria-pressed="false"
+                  title="A drifting cloud with spiral arms, no rings and no rows">Nebula</button>
+          <button type="button" class="lens-button look-button" data-galaxy-look="dna-helix"
+                  aria-pressed="false"
+                  title="Two strands braided with rungs, tilted across the picture">DNA helix</button>
+          <button type="button" class="lens-button look-button" data-galaxy-look="radar-dome"
+                  aria-pressed="false"
+                  title="A dome of blips above a horizon, with one sweep arm">Radar dome</button>
         </span>
         <input id="gsearch" type="text" placeholder="Search the brain…" autocomplete="off">
         <button class="ghost" id="g-reset">Reset view</button>
@@ -3287,11 +3340,599 @@ const galaxy = (() => {
     return lens;
   }
 
+  // ==================================================================
+  // The Galaxy's LOOKS (2026-10-27)
+  //
+  // The owner asked for "an easy way to change the appearance of the jarvis
+  // galaxy to the other models [modes]": the eight looks the Brain window's
+  // chips offer, chosen from the row under the lens buttons, and remembered on
+  // this device. A look MOVES the dots this renderer already draws - it adds no
+  // node, no link, no route and no write, and the constellation stays the
+  // default.
+  //
+  // THE MATHS BELOW IS A MIRROR OF jarvis-desktop/src/galaxy-presets.js. This
+  // page is ONE vendored file served from the backend as well, so it can carry
+  // no import; the mirror is therefore deliberate, and it must stay identical
+  // in behaviour: the same formulas, the same order, the same `separate()` net,
+  // so a given list of names lands on the same points here as it does in the
+  // Brain window. `jarvis-desktop/tests/hud.mjs` compares the two position for
+  // position, so a change on one side that is not carried to the other FAILS a
+  // test instead of quietly giving the two windows different pictures. If you
+  // change a layout here, change it there too.
+  const LOOK_KEY = "jarvis.galaxy.hud.look";
+  const LOOK_DEFAULT = "constellation";
+  const LOOK_MENU = ["constellation", "star-map", "clean-tree", "zen-ring",
+    "planetary-orbit", "neural-arbor", "nebula", "dna-helix", "radar-dome"];
+  const LOOK_MAX_NODES = 240;
+  const LOOK_MIN_GAP = 24;
+  /** The world radius every look is scaled to, so all eight (and the
+   *  constellation's own shell, 260-380) keep their dots the same on-screen
+   *  size and stay inside the perspective camera's comfortable range. */
+  const LOOK_TARGET_RADIUS = 260;
+  const STAR_RINGS = [34, 68, 108];
+  const STAR_RING_PITCH = 34;
+  const STAR_SPOKES = 7;
+  const TREE_ROW_Y = [-62, -24, 14, 48];
+  const TREE_COL_GAP = 26;
+  const TREE_CORE = 6;
+  const ZEN_RADIUS = 108;
+  const ZEN_RING_PITCH = 24;
+  const ZEN_HALO_GAP = 21;
+  const ZEN_MAX_CHORDS = 48;
+  const ORBIT_FIRST = 74;
+  const ORBIT_PITCH = 46;
+  const ORBIT_SQUASH = 0.6;
+  const ORBIT_MAX_ORBITS = 40;
+  const ARBOR_GAP_ROOM = 26;
+  const ARBOR_SPREAD = 1.06;
+  const ARBOR_MAX_LEVELS = 24;
+  const GOLDEN_ANGLE = 2.399963229728653;
+  const NEBULA_RADIUS = 250;
+  const HELIX_RUNG = 48;
+  const HELIX_AMP = 46;
+  const HELIX_WAVE = 192;
+  const HELIX_TILT = -Math.PI / 6;
+  const DOME_FIRST = 46;
+  const DOME_PITCH = 46;
+  const DOME_SWEEP = -Math.PI / 3;
+  const DOME_MAX_ARCS = 40;
+
+  let look = LOOK_DEFAULT;
+  let lookLayout = null;   // the last layout this look produced (the tests read it)
+  let lookGuides = null;   // the same guides, scaled to world units (the canvas)
+
+  function lookRound(v){ return Math.round(v * 100) / 100; }
+
+  function lookCapped(list){
+    const src = Array.isArray(list) ? list : [];
+    return src.slice(0, LOOK_MAX_NODES);
+  }
+
+  /** How many names fit on a circle of `radius` with `gap` air (pi/asin(g/2r)). */
+  function lookRingCapacity(radius, gap){
+    if(radius <= 0) return 1;
+    const ratio = gap / (2 * radius);
+    if(ratio >= 1) return 1;
+    return Math.max(1, Math.floor(Math.PI / Math.asin(ratio)));
+  }
+
+  function lookRingPoints(count, radius, phase = 0){
+    const out = [];
+    for(let i = 0; i < count; i++){
+      const angle = -Math.PI / 2 + phase + (i / count) * Math.PI * 2;
+      out.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+    }
+    return out;
+  }
+
+  /** How many names fit on a HALF circle (a dome's arc): pi/(2 asin(g/2r)). */
+  function lookHalfRingCapacity(radius, gap){
+    if(radius <= 0) return 1;
+    const ratio = gap / (2 * radius);
+    if(ratio >= 1) return 1;
+    return Math.max(1, Math.floor(Math.PI / (2 * Math.asin(ratio))));
+  }
+
+  function lookAngleBetween(a, b){
+    const turn = Math.PI * 2;
+    const d = (((a - b) % turn) + turn) % turn;
+    return d > Math.PI ? turn - d : d;
+  }
+
+  /** The no-overlap guarantee: identical to the module's `separate()`, pair
+   *  order and tie-break included, so both windows separate the same way. */
+  function lookSeparate(points, gap){
+    const want = gap * gap;
+    for(let pass = 0; pass < 80; pass++){
+      let moved = false;
+      for(let i = 0; i < points.length; i++){
+        for(let j = i + 1; j < points.length; j++){
+          const a = points[i];
+          const b = points[j];
+          let dx = b.x - a.x;
+          let dy = b.y - a.y;
+          let d2 = dx*dx + dy*dy;
+          if(d2 >= want) continue;
+          if(d2 < 1e-9){
+            dx = ((i * 31 + j * 17) % 5) - 2 || 1;
+            dy = ((i * 13 + j * 7) % 5) - 2 || 1;
+            d2 = dx*dx + dy*dy;
+          }
+          const d = Math.sqrt(d2);
+          const push = (gap - d) / 2;
+          const ux = dx / d;
+          const uy = dy / d;
+          a.x -= ux * push;
+          a.y -= uy * push;
+          b.x += ux * push;
+          b.y += uy * push;
+          moved = true;
+        }
+      }
+      if(!moved) break;
+    }
+    return points;
+  }
+
+  function lookGuidesShell(){ return { circles: [], lines: [], paths: [] }; }
+
+  /** A sampled polyline as the guide shape the painter uses: [[x, y], ...]. */
+  function lookPolyline(points){
+    return points.map(p => [lookRound(p.x), lookRound(p.y)]);
+  }
+
+  function lookEllipse(a, b){
+    const points = [];
+    for(let i = 0; i <= 72; i++){
+      const t = (i / 72) * Math.PI * 2;
+      points.push({ x: a * Math.cos(t), y: b * Math.sin(t) });
+    }
+    return lookPolyline(points);
+  }
+
+  function lookDomeArc(radius){
+    const points = [];
+    for(let i = 0; i <= 48; i++){
+      const phi = (i / 48) * Math.PI;
+      points.push({ x: Math.cos(phi) * radius, y: -Math.sin(phi) * radius });
+    }
+    return lookPolyline(points);
+  }
+
+  /** Which of the four clean-tree rows a name belongs to (the module's
+   *  `cleanTreeRowFor`: core row by rank, then by kind - and this page's kinds
+   *  (model, cluster, tool) map to the same two middle bands there). */
+  function lookTreeRow(node, index){
+    if(index < TREE_CORE) return 0;
+    const group = String((node && node.group) != null ? node.group : "other");
+    if(group === "person" || group === "pet") return 1;
+    if(group === "organisation" || group === "project") return 2;
+    if(group === "model") return 1;
+    if(group === "cluster" || group === "tool") return 2;
+    return 3;
+  }
+
+  function lookLyStarMap(list, gap){
+    const points = [];
+    const rings = [];
+    let ringIndex = 0;
+    while(points.length < list.length){
+      const radius = ringIndex < STAR_RINGS.length
+        ? STAR_RINGS[ringIndex]
+        : STAR_RINGS[STAR_RINGS.length - 1]
+          + STAR_RING_PITCH * (ringIndex - STAR_RINGS.length + 1);
+      const capacity = lookRingCapacity(radius, gap);
+      const count = Math.min(capacity, list.length - points.length);
+      const phase = (ringIndex * Math.PI) / Math.max(1, capacity * 2);
+      points.push(...lookRingPoints(count, radius, phase));
+      rings.push(radius);
+      ringIndex++;
+    }
+    lookSeparate(points, gap);
+    const out = lookGuidesShell();
+    for(const r of rings) out.circles.push({ r, kind: "ring" });
+    const outer = rings.length ? rings[rings.length - 1] : STAR_RINGS[0];
+    for(let k = 0; k < STAR_SPOKES; k++){
+      const angle = Math.PI / 7 + (k / STAR_SPOKES) * Math.PI * 2;
+      out.lines.push({ x1: 0, y1: 0,
+        x2: Math.cos(angle) * outer, y2: Math.sin(angle) * outer, kind: "spoke" });
+    }
+    return { nodes: points, guides: out, minGap: gap };
+  }
+
+  function lookLyCleanTree(list, gap){
+    const rows = TREE_ROW_Y.map((y, row) => ({ row, y, members: [] }));
+    list.forEach((n, i) => rows[lookTreeRow(n, i)].members.push({ node: n, index: i }));
+    const points = new Array(list.length);
+    for(const row of rows){
+      const count = row.members.length;
+      row.members.forEach((entry, j) => {
+        points[entry.index] = { x: (j - (count - 1) / 2) * TREE_COL_GAP, y: row.y };
+      });
+    }
+    lookSeparate(points, gap);
+    const out = lookGuidesShell();
+    for(const row of rows){
+      const half = (Math.max(0, row.members.length - 1) * TREE_COL_GAP) / 2 + 13;
+      out.lines.push({ x1: -half, y1: row.y, x2: half, y2: row.y, kind: "row" });
+    }
+    return { nodes: points, guides: out, minGap: gap };
+  }
+
+  function lookLyZenRing(list, gap){
+    const ringCounts = [];
+    let need = Math.max(0, list.length - 1);
+    for(let r = 0; need > 0; r++){
+      const radius = ZEN_RADIUS + ZEN_RING_PITCH * r;
+      const capacity = lookRingCapacity(radius, gap);
+      const count = Math.min(capacity, need);
+      ringCounts.push({ radius, count });
+      need -= count;
+      if(r > 40) break;
+    }
+    const points = [];
+    if(list.length) points.push({ x: 0, y: 0 });
+    ringCounts.forEach(({ radius, count }, index) => {
+      points.push(...lookRingPoints(count, radius, index * (Math.PI / Math.max(2, count))));
+    });
+    lookSeparate(points, gap);
+    const out = lookGuidesShell();
+    for(const { radius } of ringCounts){
+      out.circles.push({ r: radius, kind: radius === ZEN_RADIUS ? "halo" : "ring" });
+    }
+    const halo = ringCounts[0] ? ringCounts[0].count : 0;
+    const chords = Math.min(ZEN_MAX_CHORDS, halo);
+    for(let k = 0; k < chords; k++){
+      const p = points[1 + k];
+      if(!p || (p.x === 0 && p.y === 0)) continue;
+      const angle = Math.atan2(p.y, p.x);
+      const ex = Math.cos(angle) * ZEN_RADIUS * 0.36;
+      const ey = Math.sin(angle) * ZEN_RADIUS * 0.36;
+      const cx = Math.cos(angle + 0.22) * ZEN_RADIUS * 0.7;
+      const cy = Math.sin(angle + 0.22) * ZEN_RADIUS * 0.7;
+      // The chord the module renders as `M .. Q ..`; the canvas samples the
+      // same quadratic into a polyline.
+      const from = { x: lookRound(p.x), y: lookRound(p.y) };
+      const ctrl = { x: lookRound(cx), y: lookRound(cy) };
+      const to = { x: lookRound(ex), y: lookRound(ey) };
+      const pts = [];
+      for(let s = 0; s <= 12; s++){
+        const t = s / 12;
+        const mt = 1 - t;
+        pts.push([mt*mt*from.x + 2*mt*t*ctrl.x + t*t*to.x,
+                  mt*mt*from.y + 2*mt*t*ctrl.y + t*t*to.y]);
+      }
+      out.paths.push(pts);
+    }
+    return { nodes: points, guides: out, minGap: gap };
+  }
+
+  function lookLyPlanetaryOrbit(list, gap){
+    const points = [];
+    const orbits = [];
+    if(list.length) points.push({ x: 0, y: 0 });
+    let need = Math.max(0, list.length - 1);
+    for(let k = 0; need > 0 && k < ORBIT_MAX_ORBITS; k++){
+      const a = ORBIT_FIRST + ORBIT_PITCH * k;
+      const b = a * ORBIT_SQUASH;
+      const count = Math.min(lookRingCapacity(b, gap), need);
+      const phase = k * GOLDEN_ANGLE;
+      for(let j = 0; j < count; j++){
+        const t = -Math.PI / 2 + phase + (j / count) * Math.PI * 2;
+        points.push({ x: Math.cos(t) * a, y: Math.sin(t) * b });
+      }
+      orbits.push({ a, b, count });
+      need -= count;
+    }
+    lookSeparate(points, gap);
+    const out = lookGuidesShell();
+    for(const orbit of orbits) out.paths.push(lookEllipse(orbit.a, orbit.b));
+    return { nodes: points, guides: out, minGap: gap };
+  }
+
+  function lookLyNeuralArbor(list, gap){
+    const points = [];
+    const levels = [];
+    let placed = 0;
+    let previousRadius = 0;
+    for(let m = 0; placed < list.length && m < ARBOR_MAX_LEVELS; m++){
+      const want = m === 0 ? 1 : 2 ** m;
+      const count = Math.min(want, list.length - placed);
+      let radius = 0;
+      if(m > 0){
+        const cleared = count > 1
+          ? (gap * ARBOR_SPREAD) / (2 * Math.sin(Math.PI / count))
+          : 0;
+        radius = Math.max(cleared, previousRadius + gap, ARBOR_GAP_ROOM);
+      }
+      const first = points.length;
+      for(let i = 0; i < count; i++){
+        const angle = ((i + 0.5) / count) * Math.PI * 2;
+        points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+      }
+      levels.push({ radius, count, first });
+      previousRadius = radius;
+      placed += count;
+    }
+    lookSeparate(points, gap);
+    const out = lookGuidesShell();
+    for(let m = 1; m < levels.length; m++){
+      const parent = levels[m - 1];
+      const child = levels[m];
+      for(let i = 0; i < child.count; i++){
+        const at = child.first + i;
+        const angle = Math.atan2(points[at].y, points[at].x);
+        let nearest = parent.first;
+        let nearestGap = Infinity;
+        for(let j = 0; j < parent.count; j++){
+          const other = parent.first + j;
+          const distance = lookAngleBetween(angle, Math.atan2(points[other].y, points[other].x));
+          if(distance < nearestGap){ nearestGap = distance; nearest = other; }
+        }
+        out.lines.push({ x1: points[nearest].x, y1: points[nearest].y,
+                         x2: points[at].x, y2: points[at].y, kind: "dendrite" });
+      }
+    }
+    return { nodes: points, guides: out, minGap: gap };
+  }
+
+  function lookLyNebula(list, gap){
+    const count = list.length;
+    const points = [];
+    for(let i = 0; i < count; i++){
+      const t = count > 1 ? (i + 0.5) / count : 0.5;
+      const radius = NEBULA_RADIUS * Math.sqrt(t);
+      const angle = i * GOLDEN_ANGLE;
+      points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+    }
+    lookSeparate(points, gap);
+    return { nodes: points, guides: lookGuidesShell(), minGap: gap };
+  }
+
+  function lookHelixPoint(v, strand, height){
+    const phase = ((v + height / 2) / HELIX_WAVE) * Math.PI * 2;
+    const u = Math.cos(phase) * HELIX_AMP * (strand ? -1 : 1);
+    const c = Math.cos(HELIX_TILT);
+    const s = Math.sin(HELIX_TILT);
+    return { x: u * c - v * s, y: u * s + v * c };
+  }
+
+  function lookLyDnaHelix(list, gap){
+    const rungs = Math.max(1, Math.ceil(list.length / 2));
+    const height = rungs * HELIX_RUNG;
+    const points = list.map((_, i) => {
+      const rung = Math.floor(i / 2);
+      const strand = i % 2;
+      const v = rung * HELIX_RUNG + (strand ? HELIX_RUNG / 2 : 0) - height / 2;
+      return lookHelixPoint(v, strand, height);
+    });
+    lookSeparate(points, gap);
+    const out = lookGuidesShell();
+    for(const strand of [0, 1]){
+      const path = [];
+      for(let s = 0; s <= rungs * 3; s++){
+        const v = ((s / 3) * HELIX_RUNG) + (strand ? HELIX_RUNG / 2 : 0) - height / 2;
+        path.push(lookHelixPoint(v, strand, height));
+      }
+      out.paths.push(lookPolyline(path));
+    }
+    for(let i = 0; i + 1 < points.length; i += 2){
+      out.lines.push({ x1: points[i].x, y1: points[i].y,
+                       x2: points[i + 1].x, y2: points[i + 1].y, kind: "rung" });
+    }
+    return { nodes: points, guides: out, minGap: gap };
+  }
+
+  function lookLyRadarDome(list, gap){
+    const points = [];
+    const arcs = [];
+    let need = list.length;
+    for(let k = 0; need > 0 && k < DOME_MAX_ARCS; k++){
+      const radius = DOME_FIRST + DOME_PITCH * k;
+      const count = Math.min(lookHalfRingCapacity(radius, gap), need);
+      for(let j = 0; j < count; j++){
+        const phi = ((j + 0.5) / count) * Math.PI;
+        points.push({ x: Math.cos(phi) * radius, y: -Math.sin(phi) * radius });
+      }
+      arcs.push(radius);
+      need -= count;
+    }
+    lookSeparate(points, gap);
+    const out = lookGuidesShell();
+    for(const radius of arcs) out.paths.push(lookDomeArc(radius));
+    const outer = arcs.length ? arcs[arcs.length - 1] : DOME_FIRST;
+    out.lines.push({ x1: -outer, y1: 0, x2: outer, y2: 0, kind: "horizon" });
+    out.lines.push({ x1: 0, y1: 0,
+      x2: Math.cos(DOME_SWEEP) * outer, y2: Math.sin(DOME_SWEEP) * outer, kind: "sweep" });
+    return { nodes: points, guides: out, minGap: gap };
+  }
+
+  /** The mirror of galaxy-presets.js `layoutFor()`: points in the input list's
+   *  own order, or null for the constellation / an unknown look. */
+  function lookLayoutFor(id, list){
+    const capped = lookCapped(list);
+    if(id === "constellation" || LOOK_MENU.indexOf(id) < 0) return null;
+    let built;
+    switch(id){
+      case "star-map": built = lookLyStarMap(capped, LOOK_MIN_GAP); break;
+      case "clean-tree": built = lookLyCleanTree(capped, LOOK_MIN_GAP); break;
+      case "zen-ring": built = lookLyZenRing(capped, ZEN_HALO_GAP); break;
+      case "planetary-orbit": built = lookLyPlanetaryOrbit(capped, LOOK_MIN_GAP); break;
+      case "neural-arbor": built = lookLyNeuralArbor(capped, LOOK_MIN_GAP); break;
+      case "nebula": built = lookLyNebula(capped, LOOK_MIN_GAP); break;
+      case "dna-helix": built = lookLyDnaHelix(capped, LOOK_MIN_GAP); break;
+      case "radar-dome": built = lookLyRadarDome(capped, LOOK_MIN_GAP); break;
+      default: return null;
+    }
+    return {
+      id,
+      nodes: capped.map((n, i) => ({ id: n.id, x: built.nodes[i].x, y: built.nodes[i].y })),
+      minGap: built.minGap,
+      guides: built.guides,
+    };
+  }
+
+  function lookIsActive(){ return look !== LOOK_DEFAULT; }
+
+  /** The look the owner chose last, from THIS device's storage only. A corrupt
+   *  or stale value (a look from a newer build, junk, a whole object) can only
+   *  ever read as the constellation - never as a broken page. */
+  function storedLook(){
+    try{
+      const got = localStorage.getItem(LOOK_KEY);
+      if(typeof got !== "string") return LOOK_DEFAULT;
+      const id = got.trim();
+      return LOOK_MENU.indexOf(id) >= 0 ? id : LOOK_DEFAULT;
+    }catch(e){ return LOOK_DEFAULT; }
+  }
+
+  function updateLookButtons(){
+    document.querySelectorAll("button[data-galaxy-look]").forEach(b => {
+      const on = b.getAttribute("data-galaxy-look") === look;
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  /** Put every dot where the chosen look says, in world units. Returns false
+   *  when the look cannot be laid out, so the caller can fall back safely. */
+  function applyLookPositions(){
+    if(!lookIsActive()){ lookLayout = null; lookGuides = null; return false; }
+    const layout = lookLayoutFor(look, nodes.map(n => ({ id: n.id, group: n.group })));
+    if(!layout){ lookLayout = null; lookGuides = null; return false; }
+    lookLayout = layout;
+    // One uniform scale: every look lands in the world radius the
+    // constellation's own shell occupies, so the perspective camera, the dot
+    // sizes and the label sizes stay the same from look to look.
+    let maxR = 0;
+    for(const p of layout.nodes) maxR = Math.max(maxR, Math.hypot(p.x, p.y));
+    const scale = maxR > 0 ? LOOK_TARGET_RADIUS / maxR : 1;
+    for(let i = 0; i < nodes.length; i++){
+      const p = layout.nodes[i];
+      if(!p) continue;
+      const n = nodes[i];
+      n.x = p.x * scale; n.y = p.y * scale; n.z = 0;
+      n.vx = 0; n.vy = 0; n.vz = 0;
+    }
+    lookGuides = scaleLookGuides(layout.guides, scale);
+    // Re-centre the camera on what the look drew. The focused name's own
+    // fly-to target means nothing once every dot has moved, so it is dropped;
+    // the inspector itself is left alone (a lens switch must not close it).
+    camTarget = { x: 0, y: 0, z: 0 };
+    fitLookCamera();
+    return true;
+  }
+
+  function scaleLookGuides(source, scale){
+    if(!source) return null;
+    const out = { circles: [], lines: [], paths: [] };
+    for(const c of source.circles || []) out.circles.push({ r: c.r * scale });
+    for(const l of source.lines || []){
+      out.lines.push({ x1: l.x1 * scale, y1: l.y1 * scale,
+                       x2: l.x2 * scale, y2: l.y2 * scale });
+    }
+    for(const p of source.paths || []){
+      const pts = Array.isArray(p) ? p : p && p.points;
+      if(!pts) continue;
+      out.paths.push(pts.map(pt => [pt[0] * scale, pt[1] * scale]));
+    }
+    return out;
+  }
+
+  /** Frame a flat look: centre on what the look actually drew, and pull back
+   *  until all of it fits. The constellation keeps its own `fitCamera()`. */
+  function fitLookCamera(){
+    if(!nodes.length) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for(const n of nodes){
+      if(n.x < minX) minX = n.x;
+      if(n.x > maxX) maxX = n.x;
+      if(n.y < minY) minY = n.y;
+      if(n.y > maxY) maxY = n.y;
+    }
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    let maxR = 0;
+    for(const n of nodes) maxR = Math.max(maxR, Math.hypot(n.x - cx, n.y - cy));
+    camTarget = { x: cx, y: cy, z: 0 };
+    camAt = { x: cx, y: cy, z: 0 };
+    const span = Math.min(W || 900, H || 600);
+    zoom = Math.max(0.06, Math.min(1.6, (span * 0.40) / Math.max(120, maxR)));
+  }
+
+  /** Choose a look (the owner's click). Saves it on this device, moves the
+   *  dots, and stops the spin so the diagram holds still - the spin button's
+   *  own word follows, so it never claims to be doing something it is not. */
+  function setLook(id, { save = true } = {}){
+    const want = LOOK_MENU.indexOf(id) >= 0 ? id : LOOK_DEFAULT;
+    look = want;
+    updateLookButtons();
+    if(lookIsActive()){
+      spin = false;
+      const spinBtn = document.getElementById("g-spin");
+      if(spinBtn) spinBtn.textContent = "Resume spin";
+      yaw = 0; pitch = 0;
+    } else {
+      lookLayout = null; lookGuides = null;
+      clearFocus();
+      camTarget = { x: 0, y: 0, z: 0 };
+      fitCamera();
+    }
+    if(lookIsActive() && !applyLookPositions()){
+      look = LOOK_DEFAULT;                 // cannot draw it: the constellation stays
+      lookLayout = null; lookGuides = null;
+      updateLookButtons();
+      clearFocus();
+      fitCamera();
+    }
+    if(save){
+      try{
+        if(look === LOOK_DEFAULT) localStorage.removeItem(LOOK_KEY);
+        else localStorage.setItem(LOOK_KEY, look);
+      }catch(e){ /* the picture still switches; only the memory of it is lost */ }
+    }
+    syncOverlay();
+    return look;
+  }
+
+  /** The look's faint lines, drawn under the links and the dots. Only the
+   *  guides the mirror produced are drawn; the constellation has none. */
+  function drawLookGuides(){
+    if(!lookGuides) return;
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    ctx.strokeStyle = tk("--edge", "#356f8c");
+    ctx.lineWidth = 1;
+    const stroke = (pts) => {
+      if(!pts || pts.length < 2) return;
+      let started = false;
+      ctx.beginPath();
+      for(const pt of pts){
+        const s = projectAt(pt[0], pt[1], 0);
+        if(!s){ started = false; continue; }
+        if(started) ctx.lineTo(s.x, s.y);
+        else { ctx.moveTo(s.x, s.y); started = true; }
+      }
+      ctx.stroke();
+    };
+    for(const c of lookGuides.circles){
+      const pts = [];
+      for(let i = 0; i <= 96; i++){
+        const a = (i / 96) * Math.PI * 2;
+        pts.push([Math.cos(a) * c.r, Math.sin(a) * c.r]);
+      }
+      stroke(pts);
+    }
+    for(const line of lookGuides.lines) stroke([[line.x1, line.y1], [line.x2, line.y2]]);
+    for(const pts of lookGuides.paths) stroke(pts);
+    ctx.restore();
+  }
+
   function applyLens(){
     const use = budgetNodes(lensNodes());
     const linksIn = lensLinks(use);
     lastBudgetKey = `${nodeBudget()}:${budgetCapped}`;
     rebuild({ nodes: use, links: linksIn });
+    applyLookPositions();
     renderCounts(use);
     syncOverlay();
   }
@@ -3304,7 +3945,10 @@ const galaxy = (() => {
     ctx.setTransform(dpr,0,0,dpr,0,0);
     // The brain view is hidden at boot, so the first real measurement is the
     // first chance to frame the graph against actual pixels.
-    if(nodes.length && W > 0 && !fitted){ fitted = true; fitCamera(); }
+    if(nodes.length && W > 0 && !fitted){
+      fitted = true;
+      if(lookIsActive()) fitLookCamera(); else fitCamera();
+    }
     // The node budget follows the surface's size, so a window that crosses the
     // inline/full threshold re-applies the lens instead of keeping the other
     // surface's cap (and its "showing N of M" line) on screen.
@@ -3320,7 +3964,9 @@ const galaxy = (() => {
       ? { nodes: graph.nodes.slice(), links: Array.isArray(graph.links) ? graph.links.slice() : [] }
       : { nodes: [], links: [] };
     lens = storedLens();
+    look = storedLook();
     updateLensButtons();
+    updateLookButtons();
     applyLens();
   }
 
@@ -3418,8 +4064,8 @@ const galaxy = (() => {
   }
 
   // -- projection ------------------------------------------------------
-  function project(p){
-    const dx = p.x - camAt.x, dy = p.y - camAt.y, dz = p.z - camAt.z;
+  function projectAt(px, py, pz){
+    const dx = px - camAt.x, dy = py - camAt.y, dz = pz - camAt.z;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     let x = dx*cy - dz*sy, z = dx*sy + dz*cy;
     const cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -3429,6 +4075,7 @@ const galaxy = (() => {
     const k = (dist * zoom) / depth;
     return { x: W/2 + x*k, y: H/2 + y*k, k, depth };
   }
+  function project(p){ return projectAt(p.x, p.y, p.z); }
 
   /** True only when the drawing loop has a reason to run: the Brain map is on
    *  screen AND the window itself is visible. A hidden window, or the
@@ -3465,7 +4112,10 @@ const galaxy = (() => {
   function draw(ts){
     if(!shouldRun()){ running = false; return; }
     if(nodes.length){
-      step(0.32);
+      // A chosen LOOK is a stationary diagram: the force simulation would pull
+      // its dots back into the constellation's shell in a few frames, so it is
+      // frozen while a look is on and picked up again on the way back.
+      if(!lookIsActive()) step(0.32);
       if(spin && !dragging && !S.reduced) yaw += 0.0016;
       camAt.x += (camTarget.x - camAt.x)*0.08;
       camAt.y += (camTarget.y - camAt.y)*0.08;
@@ -3473,6 +4123,9 @@ const galaxy = (() => {
     }
 
     ctx.clearRect(0,0,W,H);
+
+    // The look's own faint guides sit under the links and the dots.
+    drawLookGuides();
 
     const near = focusId ? (adj.get(focusId) || new Set()) : null;
     const q = query.trim().toLowerCase();
@@ -3659,9 +4312,13 @@ const galaxy = (() => {
   }, {passive:false});
   cv.addEventListener("touchend", () => { pinch = 0; });
 
-  // The lens pills and the node buttons: real controls, keyboard included.
+  // The lens pills, the look pills and the node buttons: real controls,
+  // keyboard included.
   document.querySelectorAll("button[data-galaxy-lens]").forEach(btn => {
     btn.addEventListener("click", () => setLens(btn.getAttribute("data-galaxy-lens")));
+  });
+  document.querySelectorAll("button[data-galaxy-look]").forEach(btn => {
+    btn.addEventListener("click", () => setLook(btn.getAttribute("data-galaxy-look")));
   });
   // Arrow keys move between node buttons in their deterministic order, so a
   // keyboard user can walk the graph instead of tabbing through every node;
@@ -3731,11 +4388,23 @@ const galaxy = (() => {
 
   return {
     load, resize, setTrace, flyTo, setRunning, syncRunning,
-    reset(){ clearFocus(); yaw=.5; pitch=-.25; fitCamera(); },
+    reset(){
+      clearFocus();
+      if(lookIsActive()){ yaw = 0; pitch = 0; fitLookCamera(); }
+      else { yaw=.5; pitch=-.25; fitCamera(); }
+    },
     search(v){ query = v; },
     toggleSpin(){ spin = !spin; return spin; },
     lens(){ return lens; },
     focused(){ return focusId ? nodes.find(n => n.id === focusId) : null; },
+    /** The Galaxy's look (2026-10-27): which one is showing, how to choose one,
+     *  and the layout maths itself. `layoutForLook` is the mirror of
+     *  `galaxy-presets.js`'s `layoutFor`, exposed so `tests/hud.mjs` can prove
+     *  the two windows put the same names on the same points. */
+    look(){ return look; },
+    setLook,
+    layoutForLook(id, list){ return lookLayoutFor(id, list); },
+    lookIds(){ return LOOK_MENU.slice(); },
     /** G2: what the node budget did, for the tests and for anyone reading this
      *  code - the cap in force, how many nodes the lens really has, how many
      *  are drawn, and how many labels this surface allows. */
