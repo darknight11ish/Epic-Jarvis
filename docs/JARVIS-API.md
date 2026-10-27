@@ -21722,6 +21722,9 @@ grammar learned the rest of the questions a person actually asks:
 | "where is <feature>" / "where do I find" / "where do I change" | `feature_explain` | the same `where` line, plus the phone's own copy of the list |
 | "how do I turn on/off <feature>" / "enable/disable" / "how to" / "where do I" | `feature_howto` | the row's `where` and `asks`, the exact phrase that would change the ONE switch, and the current state |
 | "can I change <feature>" / "how do I change" / "is it adjustable" | `feature_change` (new) | which of the five owner-facing kinds it is, whether it has one switch, several or none, and the exact phrase or Settings place - **changing nothing** |
+| "make <switch> off" / "set <switch> to off" / "I want <switch> off" / "<switch> should be off" / "make sure it is off" | `feature_change_apply` (new, 2026-10-27) | ONE setting changed through its OWN setter, for the 27 switches on the allow-list: a card is the setter's own, and the reply names the old and the new value only after a re-read |
+| "change <switch>" / "toggle <switch>" (no state said) | `feature_change_ask` (new, 2026-10-27) | ONE question back ("Do you want prompt coach on or off?"), changing nothing and raising no card |
+| a password, a key, a token, deep config, or an ask that cannot be undone | `feature_change_refused` (new, 2026-10-27) | one plain sentence and nothing changed |
 | "is <feature> on?" / "off" / "enabled" / "right now" / "what is the state of" | `feature_state` | the switch's real value, read from the module that owns it, or "I could not read it" |
 | "what features do you have?" / "list the features" | `features_list` | the 9 groups with real counts |
 | a group's name | `features_group` | that group's rows |
@@ -21731,6 +21734,25 @@ Every explain answer is assembled by one renderer (`jarvis_feature_guide.explain
 model turn and a fixed phrase cannot say different things. "Can I change it?" is read-only:
 it is in `jarvis_quick.READ_ONLY_INTENTS`, so "cancel that" never takes back something it
 did not do, and the test suite proves no `BoolSetting.set` runs for any of the 140 rows.
+
+**And a setting can now be CHANGED by asking, not only explained (2026-10-27).** The
+plainest sentences - "make the prompt coach off", "set web search to off", "I want the
+prompt coach off", "the prompt coach should be off", "make sure it is off" - matched
+nothing and reached the model, which has no settings tool. They now resolve against the
+real registry, but only for the switches in `jarvis_quick.CHANGE_BY_ASKING` (27 of the 31
+`BoolSetting` rows; the allow-list is derived by three rules stated in its own comment).
+The write is the SAME `BoolSetting.set` the Settings switch, the HUD route and "turn
+on/off <name>" already call, so the card, the tier, the PC-only refusal and the wording are
+the setting's own - this lane decides none of them and contains no gate call. What the
+answer claims is bounded by what it read: `feature_change_apply` pre-reads the value (and
+refuses to write when it cannot be read), says "already on/off" with zero setter calls when
+the value is already right, passes the module's own waiting sentence through when its card
+is up, and after an immediate apply RE-READS the value and states the old and the new one -
+or says plainly that the value did not move. The three switches whose value cannot be read
+today (`second_card_*`) and the one whose card is PC-only (`lights_without_card`) are
+deliberately outside the list: they keep `feature_change`'s own explanation, word for word,
+and are never written from chat. `backend/test_ask_to_change.py` proves all of it,
+including a real end-to-end change in a throwaway config folder.
 
 **The list learned two fields (2026-10-26).** `features/features.json` rows may carry
 `aliases` - the owner's other names for ONE feature, e.g. "customer support" for the row

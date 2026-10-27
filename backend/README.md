@@ -57,6 +57,18 @@ Jarvis"), with a new `jarvis_speech.py` that finally has speech-to-text, a
 voice and Silero VAD to run. The last section of this file, "Voice that
 works", has the one-line installs for the models and what was measured.
 
+**And one feature below has NO patch on purpose: changing a setting by asking
+for it on or off (2026-10-27).** It lives in `jarvis_quick.py`, which is in
+`$SHIPPED` in `scripts/apply-patches.ps1`, and step 3 copies every shipped
+module over the backend AFTER step 2 applies the patches - so a patch against
+`jarvis_quick.py` would be applied and then overwritten by the same run, and
+would be dead code on the owner's PC. It ships as `backend/jarvis_quick.py`
+(and its `jarvis-backend/` twin, kept byte-identical by the two-file rule) and
+is proved by `backend/test_ask_to_change.py`: 27 of the 31 on/off switches take
+the plainest phrasings through the same setter their Settings switch already
+calls, the four others keep the guide's own explanation, and an applied change
+is answered with a read-back of the old and new value.
+
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
 
