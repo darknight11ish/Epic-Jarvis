@@ -2433,11 +2433,11 @@ private fun FaceBlock(
                 // is you.") - this button adds no way around it.
                 if (showCaption) {
                     Gap(2)
-                    // Two doors to two Brain plates, side by side and both one
-                    // tap from Home: the Galaxy ("people-and-things") and the
-                    // focus presets ("hardware"). Same shape, same tokens, one
-                    // Row - so the new one is a first-class neighbour rather
-                    // than a second row nobody notices.
+                    // Three doors to three Brain plates, side by side and both
+                    // one tap from Home: the Galaxy ("people-and-things"), the
+                    // focus presets ("hardware") and the model list ("models").
+                    // Same shape, same tokens, one Row - so each is a
+                    // first-class neighbour rather than a row nobody notices.
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -2470,6 +2470,26 @@ private fun FaceBlock(
                                 .pressable(onClick = actions.onOpenPresets)
                                 // Read aloud as what it opens, not as an arrow.
                                 .semantics { contentDescription = "Jarvis presets" }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                        // The model list, one tap from Home - the owner's ask of
+                        // 2026-10-27: the model name should be the button that
+                        // opens the current-models menu. The lane pill is the
+                        // first door (when the PC's status names a lane/model),
+                        // but this phone's PC sends neither, so the pill is not
+                        // drawn - this is the door that always exists. It calls
+                        // the same action the plain-word model errors use and
+                        // only navigates: switching or installing still raises
+                        // the plate's existing approval card.
+                        Text(
+                            "Model →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = wellChrome.textLo,
+                            modifier = Modifier
+                                .clip(LocalRadii.current.insetShape)
+                                .pressable(onClick = actions.onOpenModelChoices)
+                                // Read aloud as what it opens, not as an arrow.
+                                .semantics { contentDescription = "Jarvis model" }
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                         )
                     }

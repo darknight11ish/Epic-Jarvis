@@ -50,17 +50,44 @@ class ModelDoorTest {
             home.contains("private fun LaneChip(status: StatusInfo?, onOpenModels: () -> Unit)"),
         )
         // The same action, not a second one: declaration once, used by the
-        // plain-word model errors and by this pill - two uses, no more.
+        // plain-word model errors, by this pill and by Home's "Model ->" door.
         assertEquals(
             "the model door adds an action of its own",
             1,
             home.split("val onOpenModelChoices: () -> Unit").size - 1,
         )
         assertEquals(
-            "the model door is not the second user of the one model action",
-            2,
+            "the model doors are not the expected users of the one model action",
+            3,
             home.split("actions.onOpenModelChoices").size - 1,
         )
+    }
+
+    @Test
+    fun `Home also offers a Model door beside Presets for a PC that names no model`() {
+        // The lane pill is the first door, but this PC's /api/status names no
+        // lane and no model, so the pill is absent. The text door must exist.
+        val presetsAt = home.indexOf("\"Presets →\"")
+        val modelAt = home.indexOf("\"Model →\"")
+        assertTrue("the Presets door is gone, so there is nothing to sit beside", presetsAt > 0)
+        assertTrue("Home has no one-tap \"Model ->\" door", modelAt > presetsAt)
+        val between = home.substring(presetsAt, modelAt)
+        assertTrue("the Model door is not beside the Presets door", between.length < 1600)
+        assertFalse("a condition gates the Model door", between.contains("if ("))
+        assertFalse("the Model door is in the More dialog, not Home's row", between.contains("MoreMenu"))
+        val door = home.substring(modelAt, minOf(home.length, modelAt + 700))
+        assertTrue(
+            "the Model door does not call Home's one model action",
+            door.contains(".pressable(onClick = actions.onOpenModelChoices)"),
+        )
+        assertTrue(
+            "the Model door has no spoken name",
+            door.contains("contentDescription = \"Jarvis model\""),
+        )
+        // Navigation only - no write appears in the door's own body.
+        listOf("/api/", "postCard", "installModel", "switchModel", "rollbackModel").forEach {
+            assertFalse("the Model door gained a write: $it", door.contains(it))
+        }
     }
 
     @Test
