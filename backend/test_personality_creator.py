@@ -34,7 +34,7 @@ What is proven here, on the real modules and the real chat fast path:
     two conversations never see each other's draft;
   - nothing leaves this PC: the model URL is forced to loopback, and the
     model's answer is data - an extra instruction field is discarded, not read;
-  - the stale "eight personalities" sentence now says nine (a real, user-visible
+  - the stale "eight personalities" sentence now says ten (a real, user-visible
     defect found while building this).
 
     python3 test_personality_creator.py

@@ -3293,7 +3293,7 @@ _P_QUERY = re.compile(
 #: personalities", "tell me about your personalities", "what does each
 #: personality do", "what are your personalities like" - ALL of them
 #: (2026-10-26). "my" is accepted as the owner says it: "describe my
-#: personalities" answers with the same nine (they are the personalities the
+#: personalities" answers with the same ten (they are the personalities the
 #: chat has), and the saved "My Personalities" stay the separate ones the
 #: status answer names.
 #: One line per preset, every word from that preset's own `description`: the
@@ -3306,7 +3306,7 @@ _P_QUERY = re.compile(
 #: backend/test_feature_guide.py's alias sweep, and its
 #: "where do i change the jarvis presets" test. Only a sentence that says
 #: WHOSE personalities are meant - your / the / my - asks to describe them.
-#: A bare "presets" is the layout presets, not the nine, so that noun is gone
+#: A bare "presets" is the layout presets, not the ten, so that noun is gone
 #: from these forms; "personality presets" (the whole phrase) still counts.
 #:
 #: Tried BEFORE the one-preset forms below, deliberately: "tell me about your
@@ -3316,11 +3316,11 @@ _P_QUERY = re.compile(
 _P_DESCRIBE_ALL = re.compile(
     r"(?:describe|explain|tell\s+me\s+about)\s+(?:all\s+(?:of\s+)?)?"
     r"(?:your|the|my)\s+"
-    r"(?:nine\s+)?(?:personalities|personality\s+presets|personas|characters)"
+    r"(?:(?:nine|ten)\s+)?(?:personalities|personality\s+presets|personas|characters)"
     r"|(?:what|which)\s+(?:does|do)\s+each\s+(?:personality|persona|character)\s+do"
-    r"|what\s+(?:are|is)\s+(?:your|the|my)\s+(?:nine\s+)?(?:personalities|personas)"
+    r"|what\s+(?:are|is)\s+(?:your|the|my)\s+(?:(?:nine|ten)\s+)?(?:personalities|personas)"
     r"\s+(?:like|for)"
-    r"|what\s+(?:do|does)\s+(?:all\s+(?:of\s+)?)?(?:your|the|my)\s+(?:nine\s+)?"
+    r"|what\s+(?:do|does)\s+(?:all\s+(?:of\s+)?)?(?:your|the|my)\s+(?:(?:nine|ten)\s+)?"
     r"(?:personalities|personas)\s+do")
 
 #: "what does the Classic Butler personality do", "what is the Classic Butler

@@ -7348,8 +7348,9 @@ its answer, except that its switch example is now the sentence that works
 ("switch to the Classic Butler personality").
 
 What it changes in a turn, and only this: the local model's request gets the
-active preset's compact `<jarvis_persona>` block (measured at <= 729 characters
-worst case, under the 750-character ~180-token cap) plus a one-line recency
+active preset's compact `<jarvis_persona>` block (measured at most 722 characters
+with each preset's own dials - 730 with the longest word on every dial - under the
+750-character ~180-token cap) plus a one-line recency
 hint just before the newest question; the block's spoken-live variant keeps
 `Jarvis Live` answers to 1-3 sentences with no Markdown; a **crisis turn
 replaces the whole persona block with the calm support text**, so no preset can

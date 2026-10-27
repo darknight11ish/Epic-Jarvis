@@ -1093,11 +1093,16 @@ def t_personality_crisis_override_strips_persona_text():
         for preset in M._BUILTIN:
             for spoken in (False, True):
                 text = M._compose(preset, preset["dials"], spoken, True).lower()
+                # The per-turn post_history_hint and the description are sent
+                # too, so a number pasted there would be just as live as one in
+                # the persona block; scan them all (verifier F4).
+                side = " ".join(str(preset.get(k) or "") for k in
+                                 ("post_history_hint", "description")).lower()
                 for word in banned:
-                    if word in text:
+                    if word in text or word in side:
                         found.append((preset["id"], spoken, word))
-        check("no built-in persona carries a crisis number or script "
-              "- the code owns that message", not found, found)
+        check("no built-in persona or its per-turn hint carries a crisis number "
+              "or script - the code owns that message", not found, found)
         check("the sensitive-fact spoken hold (#492) is still the exact sentence",
               M._SAFETY["sensitive_fact_spoken_reply"] == "It's on your screen.")
 
@@ -1344,6 +1349,10 @@ def t_personality_describe_bite6():
         for text in ("describe your personalities", "explain your personalities",
                      "tell me about your personalities", "what does each personality do",
                      "what are your personalities like",
+                     "describe your ten personalities",
+                     "what are your ten personalities like",
+                     "what do your ten personalities do",
+                     "explain your ten personalities",
                      "describe my personalities", "tell me about my personalities"):
             intent = Q.match(text)
             check(f"describe-all matched: {text!r}", intent is not None
