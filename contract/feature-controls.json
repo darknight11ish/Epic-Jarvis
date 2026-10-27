@@ -5118,14 +5118,41 @@
       "name": "Choose Jarvis's face",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance. The HUD's face page also shows in a browser on the PC.",
+      "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance. The HUD's face page also shows in a browser on the PC. Or just ask - \"change your face to Spiral\", \"use the Orbit face\".",
       "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Choose Jarvis's face",
-        "turn_off": "turn off Choose Jarvis's face",
-        "adjust": [],
-        "intent": "feature_switch_refused"
+        "type": "adjust",
+        "setting_keys": [
+          "face"
+        ],
+        "turn_on": "change your face to Spiral",
+        "turn_off": null,
+        "adjust": [
+          {
+            "phrase": "change your face to Spiral",
+            "intent": "control_set",
+            "place": "appearance-card",
+            "kind": "choice"
+          },
+          {
+            "phrase": "use the Orbit face",
+            "intent": "settings_choice",
+            "place": "appearance-card",
+            "kind": "choice"
+          },
+          {
+            "phrase": "make your face the accretion face",
+            "intent": "settings_choice",
+            "place": "appearance-card",
+            "kind": "choice"
+          },
+          {
+            "phrase": "put the spiral face on",
+            "intent": "settings_choice",
+            "place": "appearance-card",
+            "kind": "choice"
+          }
+        ],
+        "intent": "control_set"
       },
       "desktop": {
         "section": "appearance-card",
@@ -5145,24 +5172,29 @@
         ],
         "found": true
       },
-      "status": "pc-only",
-      "owner": "setup-ui",
-      "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
-      "label": "PC-Only Setting (Honest Refusal on Phone)",
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "typed control and both Settings locations verified",
+      "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "turn on Choose Jarvis's face",
-        "screen_path": "desktop Settings: All features and abilities; phone: that app's own Settings"
+        "example_phrase": "change your face to Spiral",
+        "screen_path": "desktop Settings: appearance-card; phone: All features and abilities"
       },
       "command": {
-        "status": "not-a-setting",
-        "reason_code": "app-local",
-        "owner": "setup-ui",
-        "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
+        "status": "adjust",
+        "reason_code": "command",
+        "owner": "voiceprint-wiring",
+        "reason": "",
         "settings_gap": null,
-        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
+        "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
-      "own_keys": [],
-      "own_intents": [],
+      "own_keys": [
+        "face"
+      ],
+      "own_intents": [
+        "control_set",
+        "settings_choice"
+      ],
       "own_actions": {},
       "label_note": ""
     },
@@ -11252,7 +11284,7 @@
       "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch."
     }
   ],
-  "label_legend": "Exactly five labels (owner + Gemini Q8, 2026-10-22): Switchable / Adjustable (Typed & Settings) [{'planned': 30, 'enforced': 10}] · Settings-Only (By Design — Security Boundary) [{'open-only': 2}] · PC-Only Setting (Honest Refusal on Phone) [{'pc-only': 16}] · Command-Only (Runs When You Ask — No Switch Needed) [{'not-a-setting': 70}] · Always On (Core Safety Rule — Cannot Be Turned Off) [{'not-a-setting': 12}]",
+  "label_legend": "Exactly five labels (owner + Gemini Q8, 2026-10-22): Switchable / Adjustable (Typed & Settings) [{'planned': 30, 'enforced': 11}] · Settings-Only (By Design — Security Boundary) [{'open-only': 2}] · PC-Only Setting (Honest Refusal on Phone) [{'pc-only': 15}] · Command-Only (Runs When You Ask — No Switch Needed) [{'not-a-setting': 70}] · Always On (Core Safety Rule — Cannot Be Turned Off) [{'not-a-setting': 12}]",
   "choice_settings": [
     {
       "key": "handoff_mode",
@@ -11495,6 +11527,55 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "named choice setting newly wired; setter test/proof still pending"
+    },
+    {
+      "key": "face",
+      "names": [
+        "the face",
+        "your face",
+        "jarvis's face",
+        "jarvis face",
+        "which face jarvis wears",
+        "the face jarvis wears"
+      ],
+      "section": "appearance-card",
+      "options": {
+        "accretion": "accretion",
+        "arc": "arc",
+        "cascade": "cascade",
+        "comb": "comb",
+        "coreplate": "coreplate",
+        "fullerene": "fullerene",
+        "geodesic": "geodesic",
+        "iris": "iris",
+        "kirkwood": "kirkwood",
+        "membrane": "membrane",
+        "monkey": "monkey",
+        "nucleus": "nucleus",
+        "orbit": "orbit",
+        "orbital": "orbital",
+        "owl": "pygmyowl",
+        "panda": "redpanda",
+        "pygmy owl": "pygmyowl",
+        "pygmyowl": "pygmyowl",
+        "red panda": "redpanda",
+        "redpanda": "redpanda",
+        "rime": "rime",
+        "robot": "robot",
+        "sea otter": "seaotter",
+        "seaotter": "seaotter",
+        "shoal": "shoal",
+        "spectrum": "spectrum",
+        "spiral": "spiral",
+        "swarm": "swarm",
+        "tokamak": "tokamak",
+        "workbench": "workbench"
+      },
+      "desktop_found": true,
+      "phone_found": true,
+      "handler": "jarvis_settings_registry.set_face",
+      "status": "enforced",
+      "proof": "backend/test_appearance_command.py: each asked phrase resolves to this key and one face change writes only `face`, through the same _appearance_save POST /api/appearance calls"
     }
   ],
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
@@ -11504,10 +11585,10 @@
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 30,
-      "enforced": 10
+      "enforced": 11
     },
     "PC-Only Setting (Honest Refusal on Phone)": {
-      "pc-only": 16
+      "pc-only": 15
     },
     "Always On (Core Safety Rule — Cannot Be Turned Off)": {
       "not-a-setting": 12
@@ -11517,11 +11598,11 @@
     }
   },
   "label_counts": {
-    "Switchable / Adjustable (Typed & Settings)": 40,
+    "Switchable / Adjustable (Typed & Settings)": 41,
     "Settings-Only (By Design — Security Boundary)": 2,
-    "PC-Only Setting (Honest Refusal on Phone)": 16,
+    "PC-Only Setting (Honest Refusal on Phone)": 15,
     "Command-Only (Runs When You Ask — No Switch Needed)": 70,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12
   },
-  "label_count_note": "Owner-approved 2026-10-23 counts, plus the desktop Private chat row added 2026-10-26: 40 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 70 Command-Only, 12 Always-On (140 total). Changes from the 2026-10-22 mix (42/2/13/70/12): picture-mode moved to Switchable/Adjustable (ADJ-Q1); calendar, phone-notifications and phone-watch moved to PC-Only (ADJ-Q1); private-chat added as Command-Only (2026-10-26)."
+  "label_count_note": "Current mix after the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 70 Command-Only, 12 Always-On (140 total). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before that the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26)."
 }
