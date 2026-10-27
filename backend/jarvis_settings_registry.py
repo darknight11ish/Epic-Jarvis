@@ -2373,6 +2373,11 @@ class ChoiceSetting:
     set: Callable[..., Outcome] = field(repr=False)
     #: One line for "what can I change?" - never used to dispatch.
     describe: str = ""
+    #: Said when this PC has NO choices for the setting at all, replacing the
+    #: generic "Say one of: ." - see `_no_choices_words`. Empty for every
+    #: setting whose list is built in, because those always have choices; the
+    #: face is the only one whose list is a file read from beside the server.
+    when_empty: str = ""
 
     def options(self) -> dict:
         """The spoken->value map, keys normalized the way speech arrives.
@@ -2722,7 +2727,10 @@ CHOICE_SETTINGS: tuple = (
         ("the face", "your face", "jarvis's face", "jarvis face",
          "which face jarvis wears", "the face jarvis wears"),
         "appearance-card", _face_choices, set_face,
-        "which face Jarvis wears (the visual spec's own face names, no card)"),
+        "which face Jarvis wears (the visual spec's own face names, no card)",
+        when_empty=("This PC has no list of faces yet - the file "
+                    "jarvis-visual-spec.json is not in the backend folder, so "
+                    "I cannot name a face. Nothing was changed.")),
 )
 
 
@@ -3005,6 +3013,22 @@ def control_current_words(setting: ChoiceSetting) -> str:
     return "unknown"
 
 
+def _no_choices_words(setting: ChoiceSetting) -> str:
+    """Said when this PC has no choices for a setting at all.
+
+    THE FACE IS THE ONE REAL CASE, and the only setting with its own sentence:
+    its list is the owner's `jarvis-visual-spec.json`, read from beside the
+    server (see `_face_choices`), so a PC without that file has nothing to
+    offer and must say which file would supply them. The generic alternative
+    printed "Say one of: ." - measured 2026-10-27 through "set the face to red
+    panda" on a backend with no spec in it, which is worse than no answer."""
+    if setting.when_empty:
+        return setting.when_empty
+    name = setting.names[0] if setting.names else setting.key
+    return (f"{name} has no choices on this PC yet, so there is nothing to "
+            f"set it to.")
+
+
 def control_ask_words(control: str) -> str:
     """The deterministic clarifying question: valid fields + current values."""
     parts = []
@@ -3021,6 +3045,8 @@ def control_bad_words(control: str, field: str) -> str:
     if row is None:
         return f"I do not have a field called {field} for {control}."
     options = sorted(row.setting.options().keys())
+    if not options:
+        return _no_choices_words(row.setting)
     return (f"That is not one of the values for {control}'s {field}. "
             f"Say one of: {', '.join(options)}.")
 
@@ -3036,6 +3062,7 @@ def control_invalid_words(control: str, words: str) -> str:
         if options:
             return (f"I did not recognise \"{words}\" as a value for {control}. "
                     f"Say one of: {', '.join(options)}.")
+        return _no_choices_words(rows[0].setting)
     fields = "; ".join(r.field for r in rows)
     return (f"I did not recognise \"{words}\" as a value for {control}. "
             f"Its fields are: {fields}.")
@@ -3062,8 +3089,7 @@ def choice_bad_words(setting: ChoiceSetting) -> str:
     """The honest answer when the value is not one this setting has."""
     options = setting.option_words()
     if not options:
-        return (f"{setting.names[0] if setting.names else setting.key} has no "
-                "choices on this PC yet, so there is nothing to set it to.")
+        return _no_choices_words(setting)
     return (f"That is not one of the choices for "
             f"{setting.names[0] if setting.names else setting.key}. "
             f"Say one of: {options}.")
