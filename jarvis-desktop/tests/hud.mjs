@@ -2258,7 +2258,7 @@ const KEPT_IDS = [
   "r-gate", "r-complexity", "r-meter", "r-why", "tools-used", "r-facts",
   "r-docs", "r-ents", "r-tools", "r-mem", "r-rpm", "r-rpd", "r-stt", "r-tts",
   "r-level", "hud-layout-badge", "stage-tabs", "history-toggle", "core-expand",
-  "rail-quickbar", "lane-compact", "appr-badge", "ambient-status", "studio-dock",
+  "rail-quickbar", "current-models", "appr-badge", "ambient-status", "studio-dock",
   // The owner's two rail controls (2026-10-26). `hud-settings` is the shell's,
   // added into the rail's tools group by hud_bootstrap.js - it is in this list
   // because every view shape must keep it, exactly like the page's own ids.
@@ -2594,7 +2594,7 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
       tabsShown: shown("stage-tabs"),
       dockShown: shown("studio-dock"),
       railHidden: getComputedStyle(document.getElementById("rail-right")).display === "none",
-      laneSelectShown: shown("lane-compact"),
+      modelsShown: shown("current-models"),
       titleHidden: getComputedStyle(document.getElementById("stage-title")).display === "none",
     };
   });
@@ -2610,19 +2610,26 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
     synced: [...document.querySelectorAll('[data-hud-tab-choice="memory"]')]
       .every((b) => b.getAttribute("aria-selected") === "true"),
   }));
-  // The compact brain dropdown lists the SAME lanes, and choosing one clicks
-  // the page's own lane button.
+  // The Current Models button opens the panel, and a route in it clicks the
+  // page's own lane button - the same lanes the compact dropdown listed.
   const lanes = await page.evaluate(() => {
-    const select = document.getElementById("lane-compact");
+    document.getElementById("current-models").click();
+    const panel = document.getElementById("current-models-panel");
     const buttons = [...document.querySelectorAll("#lanes .lane")];
-    const before = buttons.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane);
-    const want = select.options[select.options.length - 1].value;
-    select.value = want;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    const after = [...document.querySelectorAll("#lanes .lane")]
-      .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane);
-    return { options: select.options.length, buttons: buttons.length, before, after, want };
+    const routes = [...panel.querySelectorAll(".hud-models-route")];
+    return { panelOpen: !panel.hidden,
+      buttons: buttons.map((b) => b.dataset.lane), routes: routes.map((r) => r.dataset.lane),
+      before: buttons.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane),
+      want: routes[routes.length - 1].dataset.lane };
   });
+  await page.click(`#current-models-panel .hud-models-route[data-lane="${lanes.want}"]`);
+  await page.waitForTimeout(250);
+  const routed = await page.evaluate(() => ({
+    lanes: [...document.querySelectorAll("#lanes .lane")]
+      .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane),
+    panel: [...document.querySelectorAll("#current-models-panel .hud-models-route")]
+      .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane),
+  }));
   await page.close();
   assert.equal(split.talk, true, "Studio hides the conversation");
   assert.equal(split.brain, true, "Studio's Galaxy stage is not showing");
@@ -2630,7 +2637,7 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
   assert.equal(split.tabsShown, true, "the Inspector Stage tabs are not drawn");
   assert.equal(split.dockShown, true, "the Studio icon dock is not drawn");
   assert.equal(split.railHidden, true, "the full telemetry rail is drawn in the split view");
-  assert.equal(split.laneSelectShown, true, "Studio has no compact brain dropdown");
+  assert.equal(split.modelsShown, true, "Studio has no Current Models button");
   assert.equal(split.titleHidden, true, "the stage title takes the Studio header's room");
   assert.equal(memoryTab.tab, "memory");
   assert.equal(memoryTab.railShown, true, "the Memory tab did not open a stage panel");
@@ -2638,9 +2645,11 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
   assert.equal(memoryTab.telemetryShown, false, "the Memory panel also shows the telemetry");
   assert.equal(memoryTab.brainShown, false, "the Galaxy map stayed up behind the Memory panel");
   assert.equal(memoryTab.synced, true, "the dock and the stage tab bar disagree about the chosen tab");
-  assert.equal(lanes.options, lanes.buttons, "the brain dropdown and the lane buttons disagree in count");
-  assert.notDeepEqual(lanes.after, lanes.before, "choosing a lane in the dropdown changed nothing");
-  assert.deepEqual(lanes.after, [lanes.want], "the dropdown chose a lane the page does not use");
+  assert.equal(lanes.panelOpen, true, "the Current Models button did not open its panel");
+  assert.deepEqual(lanes.routes, lanes.buttons, "the panel and the lane buttons disagree");
+  assert.notDeepEqual(routed.lanes, lanes.before, "choosing a route in the panel changed nothing");
+  assert.deepEqual(routed.lanes, [lanes.want], "the panel chose a lane the page does not use");
+  assert.deepEqual(routed.panel, [lanes.want], "the panel's mark did not follow the page's lane");
   assert.deepEqual(problems, []);
 });
 

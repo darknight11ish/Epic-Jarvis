@@ -509,10 +509,58 @@
       else if (channel === "link") linkChanged(payload);
       else if (channel === "appearance") appearanceChanged(payload);
       else if (channel === "bar") barStateChanged(payload);
+      else if (channel === "update") updateProgress(payload);
     } catch (err) {
       console.error("[jarvis] feed failed", err);
     }
   };
+
+  /* ---------------------------------------------------------------- *
+   * 2f. Update progress, in the chat (2026-10-26)
+   *
+   * The owner asked in chat for updates to be startable: "can jarvis talk
+   * about an update if theres one availabale and the changes? and start the
+   * update process for me?" - "if i ask in chat". The talking is the backend's
+   * answer (jarvis_quick.py); the starting is ONE approval card; once that
+   * card is approved the SHELL runs its own updater and pushes each half's
+   * step here, on the feed's `update` channel.
+   *
+   * WHY THIS WINDOW GETS NO NEW COMMAND. It could have been given
+   * `check_for_update`/`install_update` to render this itself. It is not: a
+   * page - this one included - must not be able to start an install, and the
+   * capability file is the line (`capabilities/hud.json` carries no update
+   * permission and this change adds none). So the shell PUSHES the words it
+   * already produced, and the page only draws them.
+   *
+   * WHY A SYSTEM LINE, NOT AN ANSWER. These are the shell's status words, not
+   * something the owner asked and not Jarvis's reply: they go in the page's
+   * own log through its own `addMessage`, under the "system" role, so the
+   * chat's own spoken-reply and private rules never treat one as an answer.
+   * The text is Rust's `detail`, which never says "updated" about a half that
+   * did not update (update.rs `Step`).
+   * ---------------------------------------------------------------- */
+
+  /** The words for one update step, or "" when there is nothing to draw. */
+  function updateLine(payload) {
+    if (!payload || typeof payload.detail !== "string") return "";
+    return payload.detail.trim();
+  }
+
+  function updateProgress(payload) {
+    var text = updateLine(payload);
+    if (!text) return;
+    if (typeof window.addMessage === "function") {
+      window.addMessage("system", text);
+      return;
+    }
+    var log = document.getElementById("log");
+    if (!log) return;
+    var line = document.createElement("p");
+    line.className = "jarvis-update";
+    line.textContent = text;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
 
   /* The owner's appearance document - which face, which colours - for the
    * page's reactor, which is the kit face (faces.html in display mode) in
@@ -828,8 +876,10 @@
    * for anything under /api/ and hands it to src-tauri/src/hud_proxy.rs:
    *
    *   - a GET goes to `hud_get`, which allows only the page's own reads
-   *     (/api/status, /graph, /pending, /initiative, /memory/pending and
-   *     /retrieve?q=) and refuses every other path before sending anything;
+   *     (the fixed list in `hud_proxy.rs`'s `allowed_get`: status, graph,
+   *     pending, initiative, memory/pending, presets, schedule,
+   *     secret-handoff/pending, models, and /retrieve?q=) and refuses every
+   *     other path before sending anything;
    *   - POST /api/chat goes to `hud_chat`, streamed back over a channel and
    *     rebuilt into a streaming Response, so the page reads the answer as
    *     it always has. Its AbortController still stops it (`hud_chat_cancel`).

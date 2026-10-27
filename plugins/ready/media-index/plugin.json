@@ -3,5 +3,5 @@
   "summary": "searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (on asks once), and Delete the stored words.",
   "module": "jarvis_media_index",
   "install": "handler",
-  "stack_order": 153
+  "stack_order": 154
 }

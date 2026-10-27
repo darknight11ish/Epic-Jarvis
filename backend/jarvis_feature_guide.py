@@ -49,6 +49,16 @@ down, never a guess:
     support" for "Deal with customer support for me"); they are matched EXACTLY,
     like the id and the title, so they widen what a person can say without
     widening what counts as a guess.
+  * THE TEMPLATE SENTENCES ARE DATA (2026-10-26 semantic read of 20 live
+    answers). "A change that loosens a rule still asks on a card first." is
+    appended only for a switch in `CARD_ON_LOOSENING` - it was false on manner,
+    prompt-coach, write-like-me and pictures - and the Always-On "cannot be
+    turned off" sentence is replaced by `ALWAYS_ON_OFF_PATH` for `app-lock`,
+    whose rule is also a real switch with an OFF path (Windows Hello). A
+    reminder that repeats a claim the app contradicts is not a harmless
+    template. The rewording of a Status line from those tables is DISPLAY ONLY,
+    exactly like the phone-only one: `label_for()`, the five approved label
+    strings and their pinned counts do not move.
 
 WHAT IT DOES NOT DO, said plainly:
 
@@ -756,7 +766,16 @@ def both_pc_change_words(row: dict) -> str:
     does not claim the phone has no control it might have - only that THIS
     setting is the PC's (the contract's own reason for these rows is "no backend
     route to change it").
+
+    TWO rows are the exception, and their sentence is replaced rather than
+    softened for all four: the phone's Appearance screen really does write the
+    SHARED document - it picks a face and pushes it, and the desktop adopts it
+    (2026-10-26 semantic read, finding 3). See BOTH_PHONE_WRITES.
     """
+    fid = str(row.get("id") or "")
+    if fid in BOTH_PHONE_WRITES:
+        return (f"Its setting is in {settings_path_words(row)}. "
+                f"{BOTH_PHONE_WRITES[fid]}")
     return (f"Its setting is in {settings_path_words(row)}. It is changed on the "
             f"PC; the phone has the feature but cannot change the PC's setting.")
 
@@ -798,8 +817,15 @@ def change_words(row: dict) -> str:
         labels = [setting["label"] for setting in settings]
         if len(labels) == 1:
             only = labels[0]
-            return (f'To turn it on or off, say "turn on {only}" or "turn off '
-                    f'{only}". A change that loosens a rule still asks on a card first.')
+            said = (f'To turn it on or off, say "turn on {only}" or "turn off '
+                    f'{only}".')
+            # The card sentence is DATA, not a template (2026-10-26 semantic
+            # read, finding 5): it used to be appended to every single-switch
+            # row, and four of them never raise a card. See CARD_ON_LOOSENING.
+            if settings[0].get("key") in CARD_ON_LOOSENING:
+                said += (" A change that loosens a rule still asks on a card "
+                         "first.")
+            return said
         return ("It has more than one switch: " + ", ".join(f'"{l}"' for l in labels)
                 + '. Say "turn on <one of those>" for the one you mean; nothing '
                   'changes until you name one.')
@@ -811,7 +837,14 @@ def change_words(row: dict) -> str:
         return (f"Its typed control is not wired yet; open {settings_path_words(row)} "
                 f"to change it.")
     if label == LABEL_ALWAYS_ON:
-        extra = ALWAYS_ON_EXCEPTION.get(str(row.get("id") or ""))
+        fid = str(row.get("id") or "")
+        off_path = ALWAYS_ON_OFF_PATH.get(fid)
+        if off_path:
+            # Not every Always-On rule is an off-less control: App lock is a
+            # real switch whose OFF asks Windows Hello (2026-10-26 semantic
+            # read, finding 2). The rule under it is what stays on.
+            return f"It is Always On (Core Safety Rule). {off_path}"
+        extra = ALWAYS_ON_EXCEPTION.get(fid)
         return ("It is Always On (Core Safety Rule) and cannot be turned off."
                 + (f" {extra}" if extra else ""))
     if label == LABEL_SETTINGS_ONLY:
@@ -849,6 +882,12 @@ def status_label(row: dict) -> str:
     if (str(row.get("surface") or "") == "phone"
             and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY)):
         return PHONE_ONLY_DISPLAY_LABEL
+    if label == LABEL_ALWAYS_ON:
+        # Display only, same shape as the phone-only reword above: the five
+        # label strings and their pinned counts are `label_for()`'s, but an
+        # Always-On row with a real OFF path must not read out "Cannot Be
+        # Turned Off" (see ALWAYS_ON_DISPLAY).
+        return ALWAYS_ON_DISPLAY.get(str(row.get("id") or ""), label)
     return label
 
 
@@ -1921,6 +1960,83 @@ ALWAYS_ON_EXCEPTION = {
         "stays on."),
 }
 
+#: The Always-On rows whose rule is ALSO a real switch with an OFF path. Only
+#: `app-lock` qualifies, and it is why the blanket "cannot be turned off" was
+#: false (2026-10-26 semantic read, finding 2): the PC's Settings has a real
+#: App lock checkbox (`jarvis-desktop/src/settings.html:1517`,
+#: `<input id="sec-app-lock" type="checkbox">`), whose change goes through
+#: `set_security_settings` (`jarvis-desktop/src-tauri/src/lock.rs:1089`).
+#: Turning a lock OFF is a loosening, so it asks Windows Hello first
+#: (`lock.rs:1104-1107`; `jarvis-desktop/src/security-settings.js:76-79`,
+#: `(prev.appLock && !next.appLock)`), and both apps have that switch, OFF by
+#: default (`docs/ARCHITECTURE.md:2189`). What never turns off is the rule under
+#: it: a risky action is never approved without Windows Hello, lock or no lock
+#: (`lock/rules.rs:41-48`, the owner's 2026-09-25 decision).
+ALWAYS_ON_OFF_PATH = {
+    "app-lock": (
+        "The rule underneath is what stays on: a risky action is never approved "
+        "without Windows Hello, lock or no lock. App lock itself is a real "
+        "switch in Settings, Security - turning it on is instant, and turning "
+        "it off asks for Windows Hello first."),
+}
+
+#: The Status line for those rows. DISPLAY ONLY, the same shape as
+#: `PHONE_ONLY_DISPLAY_LABEL` below: `label_for()` keeps the owner-approved
+#: five-label mix and its pinned counts (40/2/16/70/12,
+#: `tools/check_feature_controls.py:425-433`), but this row's Status line must
+#: not read out "Cannot Be Turned Off" for a control that can.
+ALWAYS_ON_DISPLAY = {
+    "app-lock": "Always On (Core Safety Rule — Off Only With Windows Hello)",
+}
+
+#: Rows BOTH apps have whose SHARED appearance document the phone really does
+#: write. The blanket `both_pc_change_words()` sentence says the phone "cannot
+#: change the PC's setting", which is false for these two (2026-10-26 semantic
+#: read, finding 3): the phone's Appearance screen picks a face and pushes it -
+#: `appearance.setFace()` then `JarvisRuntime.pushAppearance()`
+#: (`jarvis-client/.../MainActivity.kt:3233-3236`), the document carries `face`
+#: (`.../data/AppearanceStore.kt:424-429`), and the desktop adopts it
+#: (`jarvis-desktop/src-tauri/src/appearance.rs:76`, `:166-177`). The theme is
+#: deliberately NOT in that document (`AppearanceStore.kt:417-422`), so each row
+#: says which half travels. Each string is the sentence after "Its setting is
+#: in <place>. "
+BOTH_PHONE_WRITES = {
+    "faces": ("On the phone, Appearance picks the same face and sends it to the "
+              "PC, so either app can change it."),
+    "appearance": ("On the phone, Appearance changes the same face and state "
+                   "colours and sends them to the PC; the theme itself stays on "
+                   "each device."),
+}
+
+#: One-switch Switchable rows: does loosening the switch ask on a card?
+#: `change_words()` used to append "A change that loosens a rule still asks on a
+#: card first." to EVERY single-switch row, and it was false on four of them
+#: (2026-10-26 semantic read, finding 5). The sentence is data now: it appears
+#: only for a switch listed in CARD_ON_LOOSENING, and the suite fails on a
+#: single-switch row whose key is in NEITHER set, so a new switch cannot
+#: silently inherit the promise. Each entry quotes the switch's own rule and the
+#: line it was read from.
+CARD_ON_LOOSENING = frozenset({
+    # "either setting on raises an approval card; turning it off is immediate"
+    "background_learning",   # jarvis_auto_learn.py:16, :260-264
+    "briefing_senders",      # "ON through ONE approval card" jarvis_briefing.py:2116
+    "chat_history",          # "OFF at once, ON is its own card" registry:967
+    "media_index",           # "ON is ONE normal approval card" registry:721-725
+    "headless_browser",      # BE.request(...) registry:688-694
+    "screen_picture",        # SP.request(...) registry:662-668
+    "lights_without_card",   # request_lights(...) registry:605-611
+    "sandbox_exec",          # "ON is ONE normal approval card" registry:700-705
+})
+#: ...and the four whose setter says it never asks. `humour` is the row the
+#: semantic read caught: `set_humor` - "At once either way - it changes wording
+#: only." (registry:910-912).
+CARD_FREE_SWITCHES = frozenset({
+    "prompt_coach",   # "Neither direction asks" registry:566-568
+    "humor",          # "At once either way" registry:910-912
+    "write_like_me",  # "No card either way" registry:976-979
+    "pictures",       # "BOTH directions ... neither asks" registry:736-738
+})
+
 #: The Settings place the owner is sent to for an ability with no switch. The
 #: directory itself is the guaranteed path (both apps build it, ruling Q2b -
 #: the desktop since #748 and the phone since #749); a feature with a real
@@ -1956,7 +2072,7 @@ _PROSE_OPENERS = ("the", "a", "an", "it", "this", "that", "then", "and", "or",
                   "when", "where", "what", "how", "if", "so")
 
 
-def _path_shaped(place: str) -> bool:
+def _path_shaped(place: str, *, section: str = "") -> bool:
     """Is this a Settings place, or a piece of prose that happens to follow a comma?
 
     The guard exists because `where` is written for a person to read, not to be
@@ -1964,10 +2080,18 @@ def _path_shaped(place: str) -> bool:
     "Appearance", and "Settings, the first card on the page." must yield nothing
     (it names a position, not a place) so the answer falls back to the directory
     instead of inventing a path.
+
+    `section` is the registry's own name for the card the row covers. A place
+    that IS that card is a real place whatever its first word - "Settings, How
+    Jarvis talks." opens with a prose opener but names the card, and refusing it
+    is what left `manner` reading its lowercase spoken alias instead (2026-10-26
+    semantic read, finding 8).
     """
     place = " ".join(str(place or "").split())
     if not place:
         return False
+    if section and _norm(place) == _norm(section):
+        return True
     words = place.split()
     if len(words) > _MAX_PLACE_WORDS:
         return False
@@ -1978,7 +2102,7 @@ def _path_shaped(place: str) -> bool:
     return True
 
 
-def _where_place(row: dict) -> str:
+def _where_place(row: dict, *, section: str = "") -> str:
     """The `<Place>` of the row's own opening "Settings, <Place>", or "".
 
     Only the OPENING path is read, and only up to its own full stop, dash or
@@ -1992,26 +2116,59 @@ def _where_place(row: dict) -> str:
     head = rest.split(".", 1)[0]
     head = head.split(" - ", 1)[0]
     head = head.split(",", 1)[0].strip()
-    return head if _path_shaped(head) else ""
+    return head if _path_shaped(head, section=section) else ""
+
+
+#: Words that are NAMES rather than ordinary nouns when a Settings place is
+#: written out. The registry keeps them lowercase because there they are MATCHING
+#: aliases ("how jarvis talks", `backend/jarvis_settings_registry.py:252`), while
+#: the card they open is capitalised (`jarvis-desktop/src/settings.html:1020`,
+#: "How Jarvis talks") and the row's own `where` prints it that way. Written out
+#: as a place, "Settings: Settings, how jarvis talks." therefore disagreed with
+#: the "Where: Settings, How Jarvis talks." line directly under it (2026-10-26
+#: semantic read, finding 8: 107 of 405 answer heads).
+_PLACE_NAMES = {"jarvis": "Jarvis", "hud": "HUD", "api": "API"}
+
+
+def _place_display(name: str) -> str:
+    """A Settings place as the card writes it: names capitalised, sentence first letter.
+
+    DISPLAY ONLY. `_norm()` matching still sees the registry's own lowercase text
+    (`_section_words()` and `find()` are untouched), and no section id or alias
+    changes - only the words an answer prints.
+    """
+    shown = []
+    for word in " ".join(str(name or "").split()).split(" "):
+        stem, apostrophe, tail = word.partition("'")
+        shown.append(_PLACE_NAMES.get(stem.lower(), stem) + apostrophe + tail)
+    text = " ".join(shown)
+    return text[:1].upper() + text[1:] if text[:1].islower() else text
 
 
 def settings_path_words(row: dict) -> str:
     """The EXACT place the owner finds this feature, in Settings words.
 
-    The registry's section names come FIRST and are used as written: they are
-    the Settings cards this repository already knows how to open. When a row
-    covers no such card, its own `where` may still open with a path -
-    "Settings, Appearance, then Open Faces on the PC." - and that place is used
-    only if it passes `_path_shaped`. What is never used is the prose after the
-    first comma unexamined; when no path survives, the answer gives the
-    directory, which every feature really is listed at.
+    The registry's section names come FIRST: they are the Settings cards this
+    repository already knows how to open. When the row's own `where` names that
+    SAME card, its words are used instead, because `where` is the sentence the
+    Settings page itself shows ("Settings, How Jarvis talks.") and the two lines
+    of one answer must not disagree about capitalisation (2026-10-26 semantic
+    read, finding 8). A section name with no such place is written out by
+    `_place_display()`. When a row covers no card, its own `where` may still open
+    with a path - "Settings, Appearance, then Open Faces on the PC." - and that
+    place is used only if it passes `_path_shaped`. What is never used is the
+    prose after the first comma unexamined; when no path survives, the answer
+    gives the directory, which every feature really is listed at.
     """
     sections = _section_words(row)
     if sections:
-        return f"Settings, {sections}"
+        place = _where_place(row, section=sections)
+        if place and _norm(place) == _norm(sections):
+            return f"Settings, {_place_display(place)}"
+        return f"Settings, {_place_display(sections)}"
     place = _where_place(row)
     if place:
-        return f"Settings, {place}"
+        return f"Settings, {_place_display(place)}"
     return SETTINGS_DIRECTORY
 
 
@@ -2081,7 +2238,12 @@ def ability_explanation(row: dict) -> str:
         return f"{title} is a PC-Only Setting. {both_pc_change_words(row)}"
     if label == LABEL_ALWAYS_ON:
         why = str(row.get("what") or row.get("asks") or "").strip()
-        extra = ALWAYS_ON_EXCEPTION.get(str(row.get("id") or ""))
+        fid = str(row.get("id") or "")
+        off_path = ALWAYS_ON_OFF_PATH.get(fid)
+        extra = ALWAYS_ON_EXCEPTION.get(fid)
+        if off_path:
+            return (f"{title} is Always On (Core Safety Rule). {why} {off_path} "
+                    f"It is inspected at {path}.")
         return (f"{title} is Always On (Core Safety Rule) and cannot be turned "
                 f"off. {why} It is inspected at {path}."
                 + (f" {extra}" if extra else ""))

@@ -1142,6 +1142,15 @@
        "title": "Check online for tool updates"
       },
       {
+       "action": "desktop_update",
+       "fixed": false,
+       "id": "desktop_update",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Update Jarvis itself - the backend first, then this app"
+      },
+      {
        "fixed": true,
        "id": "fixed:playbook_rejection",
        "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
@@ -2407,6 +2416,15 @@
        "title": "Check online for tool updates"
       },
       {
+       "action": "desktop_update",
+       "fixed": false,
+       "id": "desktop_update",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Update Jarvis itself - the backend first, then this app"
+      },
+      {
        "fixed": true,
        "id": "fixed:playbook_rejection",
        "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
@@ -3667,6 +3685,15 @@
        "title": "Check online for tool updates"
       },
       {
+       "action": "desktop_update",
+       "fixed": false,
+       "id": "desktop_update",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Update Jarvis itself - the backend first, then this app"
+      },
+      {
        "fixed": true,
        "id": "fixed:playbook_rejection",
        "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
@@ -4922,6 +4949,15 @@
        "title": "Check online for tool updates"
       },
       {
+       "action": "desktop_update",
+       "fixed": false,
+       "id": "desktop_update",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Update Jarvis itself - the backend first, then this app"
+      },
+      {
        "fixed": true,
        "id": "fixed:playbook_rejection",
        "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
@@ -6175,6 +6211,15 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "action": "desktop_update",
+       "fixed": false,
+       "id": "desktop_update",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Update Jarvis itself - the backend first, then this app"
       },
       {
        "fixed": true,
@@ -7446,6 +7491,15 @@
        "title": "Check online for tool updates"
       },
       {
+       "action": "desktop_update",
+       "fixed": false,
+       "id": "desktop_update",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Update Jarvis itself - the backend first, then this app"
+      },
+      {
        "fixed": true,
        "id": "fixed:playbook_rejection",
        "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
@@ -8704,6 +8758,15 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "action": "desktop_update",
+       "fixed": false,
+       "id": "desktop_update",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Update Jarvis itself - the backend first, then this app"
       },
       {
        "fixed": true,

@@ -888,12 +888,15 @@ html.hud-window-hidden *::after{
 .ambient-view:hover{color:var(--text); border-color:var(--line-hot);}
 .ambient-view[aria-pressed="true"]{border-color:var(--ice); color:var(--ice);}
 
-.lane-compact{
+.current-models{
   display:none; max-width:190px; background:var(--plate-2); border:1px solid var(--line);
-  border-radius:3px; padding:5px 8px; color:var(--text);
-  font-family:var(--f-mono); font-size:11px;
+  border-radius:3px; padding:5px 8px; color:var(--text); cursor:pointer;
+  font-family:var(--f-mono); font-size:11px; letter-spacing:.02em;
+  transition:border-color .15s, color .15s;
 }
-.lane-compact:focus{outline:none; border-color:var(--line-hot);}
+.current-models:hover{border-color:var(--line-hot);}
+.current-models[aria-expanded="true"]{border-color:var(--line-hot); color:var(--ice);}
+.current-models:focus{outline:none; border-color:var(--line-hot);}
 
 #stage-tabs{display:none;}
 .stage-tab{
@@ -1168,7 +1171,7 @@ html[data-hud-shell="split-stage"] #reactor{width:48px; height:48px;}
 html[data-hud-shell="split-stage"] .reactor-state{
   position:static; transform:none; font-size:9px;
 }
-html[data-hud-shell="split-stage"] .lane-compact{display:block;}
+html[data-hud-shell="split-stage"] .current-models{display:block;}
 html[data-hud-shell="split-stage"] .rail-toggle{display:none;}
 html[data-hud-shell="split-stage"] .appr-badge:not([hidden]){display:inline-flex;}
 html[data-hud-shell="split-stage"] #rail-right{
@@ -1337,7 +1340,7 @@ html[data-hud-shell="center-core"] .stage-bar{
 html[data-hud-shell="center-core"] .stage-bar h2,
 html[data-hud-shell="center-core"] #chip-model,
 html[data-hud-shell="center-core"] #chip-state,
-html[data-hud-shell="center-core"] .lane-compact{display:none;}
+html[data-hud-shell="center-core"] .current-models{display:none;}
 html[data-hud-shell="center-core"] .ambient-view{display:inline-flex;}
 html[data-hud-shell="center-core"] .appr-badge:not([hidden]){display:inline-flex;}
 html[data-hud-shell="center-core"] #ambient-status{
@@ -1731,6 +1734,23 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
     color:var(--dim); font-family:inherit; font-size:10.5px;
   }
   .hud-presets-close:hover{color:var(--text); border-color:var(--line-hot);}
+  /* The Current Models panel (the owner's ask of 2026-10-26). It wears the
+     Presets menu's own popover classes above - one panel look, one set of
+     tokens - so only its readout lines and lane routes are its own. Those
+     routes reuse the rail's .lane pressed look (ice, not gold) and its tag
+     type, because they are the same lanes wearing a different box. */
+  .hud-models-fact{margin:3px 0; font-size:11.5px; color:var(--text); line-height:1.5;}
+  .hud-models-actions{display:flex; justify-content:flex-end; align-items:center;
+    gap:6px; margin-top:8px;}
+  .hud-models-actions .hud-presets-close{margin-top:0;}
+  .hud-models-route{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .hud-models-route .tag{font-size:9px; letter-spacing:.1em; color:var(--dimmer);
+    text-transform:uppercase;}
+  .hud-models-route[aria-pressed="true"]{
+    border-color:var(--ice); color:var(--ice);
+    background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
+  }
+  .hud-models-route[aria-pressed="true"] .tag{color:var(--ice);}
   .hud-presets-dialog{
     width:min(560px, calc(100vw - 32px)); max-height:82vh; overflow:auto;
     border:1px solid var(--line-hot); border-radius:6px; padding:14px;
@@ -2165,10 +2185,19 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
       <span class="chip appr-badge" id="appr-badge" hidden>0 waiting</span>
       <span class="chip" id="chip-model">local</span>
       <span class="chip" id="chip-state">standing by</span>
-      <!-- Studio layout: the compact brain dropdown. Its options are built
-           from the SAME #lanes buttons renderLanes() draws (a selection
-           clicks that button), so there is one list of lanes, not two. -->
-      <select class="lane-compact" id="lane-compact" aria-label="Brain in use" title="Brain in use"></select>
+      <!-- Studio layout: the "Current Models" button (the owner's ask of
+           2026-10-26). It replaces the compact lane dropdown that used to sit
+           here. The button is a DOOR, not a control: it opens a read-only
+           panel (hud-presets.js `mountCurrentModels`) with the model answering,
+           what the PC has loaded, the chosen focus preset and the same lane
+           routes the dropdown offered. Those routes are built from the SAME
+           #lanes buttons renderLanes() draws (built from that one list, never a
+           copy), and nothing is switched, installed, approved or routed from
+           here itself. -->
+      <button class="current-models" id="current-models" type="button"
+              aria-haspopup="dialog" aria-expanded="false"
+              aria-label="Current Models: what Jarvis is using and has loaded"
+              title="Current Models: what Jarvis is using and has loaded">Current Models</button>
       <!-- The legacy three-pill HUD-layout control was REMOVED on
            2026-10-22 (F1 of the coherence slice). The layout is the saved
            H1/H2 document in the desktop settings store, and the window shows a
@@ -6163,8 +6192,10 @@ subscribe();
  *     telemetry's "no turns" state, the second-brain tiles' click-through to
  *     the Galaxy map, the compact core docking and the footer bar pill;
  *   * the Ambient/center-core mirrored status pill and the history drawer;
- *   * the split-stage dock's brain dropdown, built from the SAME #lanes
- *     buttons renderLanes() already drew.
+ *   * the split-stage dock's "Current Models" panel (2026-10-26): the button
+ *     replaced the compact lane dropdown, and the panel (mounted by
+ *     hud-presets.js) reads the PC's own model facts and routes the next
+ *     message by clicking the SAME #lanes buttons renderLanes() already drew.
  *
  *  It reads the DOM, never rebuilds it: every id, listener and element the
  *  page's own script owns is untouched, and this file adds no HTML sinks
@@ -6564,47 +6595,16 @@ subscribe();
     historyBtn.addEventListener("click", function () { setHistory(!log.classList.contains("full")); });
   }
 
-  /* ── the Studio dock's brain dropdown ───────────────────────────────── *
-   *  Built from the SAME .lane buttons renderLanes() draws: choosing an
-   *  option clicks that button, so the page's own handler changes the lane
-   *  and repaints #lanes - there is one list of lanes, never a copy. */
+  /* ── the Cloud button ───────────────────────────────────────────────── *
+   *  ONE route to the cloud lane renderLanes() draws; a lane choice, not an
+   *  apply - no card - and it is never marked while the proxy is down.
+   *  (The Studio dock's old lane dropdown that used to live here was replaced
+   *  by the Current Models panel in hud-presets.js on 2026-10-26. The lanes
+   *  themselves are still #lanes, and the panel routes by clicking those
+   *  buttons - this page keeps no second list.) */
   var cloudButton = $("preset-cloud");
-if (cloudButton) {
-  cloudButton.addEventListener("click", chooseCloud);
-}
-var laneSelect = $("lane-compact");
-  if (laneSelect) {
-    laneSelect.addEventListener("change", function () {
-      var buttons = document.querySelectorAll("#lanes .lane");
-      for (var i = 0; i < buttons.length; i += 1) {
-        if (buttons[i].dataset.lane === laneSelect.value) { buttons[i].click(); break; }
-      }
-      paintLaneSelect();
-    });
-  }
-
-  function paintLaneSelect() {
-    if (!laneSelect) return;
-    var lanes = $("lanes");
-    if (!lanes) return;
-    var buttons = [].slice.call(lanes.querySelectorAll(".lane"));
-    var current = null;
-    buttons.forEach(function (b) {
-      if (b.getAttribute("aria-pressed") === "true") current = b;
-    });
-    if (laneSelect.options.length !== buttons.length) {
-      laneSelect.textContent = "";
-      buttons.forEach(function (b) {
-        var option = document.createElement("option");
-        option.value = b.dataset.lane;
-        var label = b.querySelector("span");
-        option.textContent = label ? label.textContent : b.dataset.lane;
-        laneSelect.append(option);
-      });
-    }
-    if (current && laneSelect.value !== current.dataset.lane) {
-      laneSelect.value = current.dataset.lane;
-    }
+  if (cloudButton) {
+    cloudButton.addEventListener("click", chooseCloud);
   }
 
   /* ── keeping the mirrors in step ────────────────────────────────────── *
@@ -6639,7 +6639,6 @@ var laneSelect = $("lane-compact");
     paintAmbient();
   });
   watch($("chip-model"), { childList: true, characterData: true, subtree: true }, paintAmbient);
-  watch($("lanes"), { childList: true, subtree: true, attributes: true }, paintLaneSelect);
 
   /* The Ambient view switches are the page's own setView, with their own
    * pressed state (the rail's .mode buttons still work in the other two
@@ -6672,7 +6671,6 @@ var laneSelect = $("lane-compact");
   paintTelemetry();
   paintAmbientViews();
   paintQuickbar();
-  paintLaneSelect();
   setHistory(false);
   paintCore();
   /* hud_bootstrap.js is injected before this page's own scripts, so
@@ -7510,7 +7508,7 @@ mountSafetyRail().then((rail) => {
  * untouched. In a plain browser the mount succeeds but the [Edit HUD] button
  * hides itself: there is no shell to save a layout through. */
 import { mountHudEditor } from "./hud-edit.js";
-import { mountHudPresets } from "./hud-presets.js";
+import { mountHudPresets, mountCurrentModels } from "./hud-presets.js";
 /* PWA slice 2: a plain browser keeps per-DEVICE layouts (localStorage, via
  * hud-layout-store.js) instead of the host PC's store, so the editor and the
  * Layouts menu are offered there too. The store still uses Tauri IPC when
@@ -7530,5 +7528,11 @@ mountHudEditor({
 mountHudPresets({
   shellPresent: hudShellStore,
 });
+/* The Studio dock's Current Models button (the owner's ask of 2026-10-26). A
+ * READ-ONLY panel: the model answering, what the PC has loaded, the chosen
+ * focus preset - plus the same lane routes the compact dropdown offered, built
+ * from the page's own #lanes buttons. The three reads are hud_proxy.rs's fixed
+ * list, and there is no write, no command and no approval card here. */
+mountCurrentModels();
 </script>
 

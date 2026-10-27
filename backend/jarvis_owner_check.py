@@ -160,7 +160,13 @@ UNLABELLED = ("Jarvis has no written words for this action yet, so it will not a
 PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "restore_backup",
                              "pair_device", "unretire_shared_key", "register_approval_key",
                              "handoff_keep_offering",
-                             "handoff_bring_to_front"})
+                             "handoff_bring_to_front",
+                             # 2026-10-26: the update card replaces this PC's own
+                             # executable and patches the folder Jarvis runs from,
+                             # so only the PC it runs on can say yes - with
+                             # Windows Hello. A phone approving it would promise an
+                             # install nothing on the phone can perform.
+                             "desktop_update"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 

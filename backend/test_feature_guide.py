@@ -1286,13 +1286,23 @@ def t_aliases_are_the_rows_own_names():
     check("every alias names its own row exactly, and only that row", not problems,
           problems[:8])
     # A row's alias is as usable as its title: the same four questions answer.
+    # 2026-10-27 (PR #876): "tell me about my personalities" is answered by
+    # `jarvis_quick`'s own `personality_describe` - the nine presets, each in
+    # its own words. That IS an explain answer for this one row, so it counts;
+    # "where is", "how do I use" and "can I change" still have to reach the
+    # feature guide, and every other row is unchanged. The bare
+    # "tell me about personalities"/"tell me about presets" forms stay with the
+    # guide, because `_P_DESCRIBE_ALL` now requires a possessive.
     bad = []
     for row in SOURCE:
         for alias in row.get("aliases") or []:
             for template in ("tell me about {}", "where is {}", "how do I use {}",
                              "can I change {}"):
+                allowed = ("feature_explain", "feature_change")
+                if row["id"] == "manner" and template == "tell me about {}":
+                    allowed = allowed + ("personality_describe",)
                 got = match(template.format(_flat(alias)))
-                if got is None or got.name not in ("feature_explain", "feature_change"):
+                if got is None or got.name not in allowed:
                     bad.append((row["id"], alias, template, got.name if got else None))
     check("...and every alias answers the explain, where, use and change questions",
           not bad, bad[:8])
@@ -1513,16 +1523,28 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
 #: comma-fragment garble they replace read "It is changed at Settings, a new
 #: conversation starts after on this PC; the phone says so rather than pretending
 #: it changed".
+#:
+#: `faces` and `appearance` no longer carry the blanket sentence: the phone's
+#: Appearance screen really does write the shared appearance document (2026-10-26
+#: semantic read, finding 3), so each says which half the phone changes. The two
+#: that really are the PC's keep it - and the places are now written the way the
+#: Settings card writes them ("Settings, Connection", not "Settings, connection").
 BOTH_PC_ONLY_SENTENCES = {
-    "chat-thread": ("Its setting is in Settings, a new conversation starts after. "
+    "chat-thread": ("Its setting is in Settings, A new conversation starts after. "
                     "It is changed on the PC; the phone has the feature but cannot "
                     "change the PC's setting."),
-    "connection": ("Its setting is in Settings, connection. It is changed on the PC; "
+    "connection": ("Its setting is in Settings, Connection. It is changed on the PC; "
                    "the phone has the feature but cannot change the PC's setting."),
-    "appearance": ("Its setting is in Settings, appearance. It is changed on the PC; "
-                   "the phone has the feature but cannot change the PC's setting."),
-    "faces": ("Its setting is in Settings, Appearance. It is changed on the PC; "
-              "the phone has the feature but cannot change the PC's setting."),
+}
+#: The two rows whose shared document the phone writes. Pinned exactly too, so
+#: neither can drift back to "cannot change the PC's setting".
+BOTH_PHONE_WRITE_SENTENCES = {
+    "faces": ("Its setting is in Settings, Appearance. On the phone, Appearance "
+              "picks the same face and sends it to the PC, so either app can "
+              "change it."),
+    "appearance": ("Its setting is in Settings, Appearance. On the phone, "
+                   "Appearance changes the same face and state colours and sends "
+                   "them to the PC; the theme itself stays on each device."),
 }
 #: The garble shape itself: a Settings path swallowed by " on this PC" in the same
 #: clause. It is what `settings_path_words()` produced when a prose `where` was
@@ -1582,7 +1604,8 @@ def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
     both_pc = [row for row in SOURCE if row["surface"] == "both"
                and FG.label_for(row) == FG.LABEL_PC_ONLY]
     check("exactly the four pinned rows are both-apps PC-Only settings",
-          [r["id"] for r in both_pc] == list(BOTH_PC_ONLY_SENTENCES),
+          sorted(r["id"] for r in both_pc)
+          == sorted(list(BOTH_PC_ONLY_SENTENCES) + list(BOTH_PHONE_WRITE_SENTENCES)),
           [r["id"] for r in both_pc])
     for fid, want in BOTH_PC_ONLY_SENTENCES.items():
         row = FG.row_by_id(fid)
@@ -1591,6 +1614,21 @@ def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
         ability = FG.ability_explanation(row)
         check(f"{fid} says the same when asked how to turn it on",
               want in ability and "on this PC" not in ability, ability)
+        words = FG.explain_words(row)
+        check(f"{fid}'s whole answer carries that sentence and both apps",
+              want in words and "It is in both apps" in words, words[:200])
+    # The two rows the phone really does write (finding 3): the sentence names
+    # the phone's own Appearance screen and never says it cannot change the
+    # shared document. Pinned word for word in both the change sentence and the
+    # whole answer.
+    for fid, want in BOTH_PHONE_WRITE_SENTENCES.items():
+        row = FG.row_by_id(fid)
+        check(f"{fid} says the phone writes the shared document too",
+              FG.change_words(row) == want, FG.change_words(row))
+        ability = FG.ability_explanation(row)
+        check(f"{fid} says the same when asked how to turn it on",
+              want in ability
+              and "cannot change the PC's setting" not in ability, ability)
         words = FG.explain_words(row)
         check(f"{fid}'s whole answer carries that sentence and both apps",
               want in words and "It is in both apps" in words, words[:200])
@@ -1646,8 +1684,18 @@ def t_a_phone_only_status_line_agrees_with_its_surface():
                 bad.append((row["id"], "a phone row's label was reworded for no reason",
                             status))
         elif status != FG.label_for(row):
-            bad.append((row["id"], "a non-phone row was reworded", status))
+            # One non-phone row is reworded on purpose: an Always-On row whose
+            # rule is also a real switch with an OFF path must not read out
+            # "Cannot Be Turned Off" (2026-10-26 semantic read, finding 2). See
+            # ALWAYS_ON_DISPLAY - and the count/directory checks below.
+            if FG.ALWAYS_ON_DISPLAY.get(row["id"]) == status:
+                if FG.label_for(row) != FG.LABEL_ALWAYS_ON:
+                    bad.append((row["id"], "a non-Always-On row was reworded", status))
+            else:
+                bad.append((row["id"], "a non-phone row was reworded", status))
     check("every row's Status line agrees with its surface", not bad, bad[:8])
+    check("...and exactly one non-phone row has a display reword",
+          list(FG.ALWAYS_ON_DISPLAY) == ["app-lock"], list(FG.ALWAYS_ON_DISPLAY))
     five = [row for row in phone
             if FG.label_for(row) in (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
     check("...the five phone controls are the ones this rewording covers",
@@ -1696,10 +1744,15 @@ def t_a_settings_path_is_a_place_not_a_sentence():
     check("...and a row that opens with prose yields nothing",
           FG._where_place({"where": "Scroll the Jarvis bar. Settings has it."}) == "",
           FG._where_place({"where": "Scroll the Jarvis bar. Settings has it."}))
-    for fid, want in (("chat-thread", "Settings, a new conversation starts after"),
-                      ("connection", "Settings, connection"),
-                      ("appearance", "Settings, appearance"),
-                      ("faces", "Settings, Appearance")):
+    for fid, want in (("chat-thread", "Settings, A new conversation starts after"),
+                      ("connection", "Settings, Connection"),
+                      ("appearance", "Settings, Appearance"),
+                      ("faces", "Settings, Appearance"),
+                      # The row the semantic read caught: its Settings place was
+                      # the registry's lowercase spoken alias ("Settings, how
+                      # jarvis talks") while the `Where:` line under it said
+                      # "Settings, How Jarvis talks" (finding 8).
+                      ("manner", "Settings, How Jarvis talks")):
         got = FG.settings_path_words(FG.row_by_id(fid))
         check(f"{fid}'s Settings place is a real path", got == want, got)
     bad = []
@@ -1712,6 +1765,180 @@ def t_a_settings_path_is_a_place_not_a_sentence():
         if " on this PC" in path:
             bad.append((row["id"], path, "the old garble is back"))
     check("every row's Settings place is a path, not a sentence", not bad, bad[:8])
+
+
+def t_app_lock_is_never_said_to_be_unturnoffable():
+    """Finding 2 (2026-10-26 semantic read): "cannot be turned off" was false.
+
+    The PC's Settings has a real App lock checkbox
+    (`jarvis-desktop/src/settings.html:1517`) whose change goes through
+    `set_security_settings` (`jarvis-desktop/src-tauri/src/lock.rs:1089`), and
+    turning a lock OFF is a loosening, so it asks Windows Hello first
+    (`lock.rs:1104-1107`; `security-settings.js:76-79`,
+    `(prev.appLock && !next.appLock)`). The answer said both things at once: the
+    App lock switch can go off with Hello, and the blanket Always-On sentence
+    said it cannot.
+
+    The row keeps its owner-approved Always-On LABEL and its pinned count - the
+    safety rule that really is always on is named instead ("no lock, no risky
+    approval", `lock/rules.rs:41-48`, the owner's 2026-09-25 decision) and the
+    Status line is reworded for DISPLAY only, exactly like the phone-only
+    reword. The other eleven Always-On rows keep the strict sentence.
+    """
+    row = FG.row_by_id("app-lock")
+    words = FG.explain_words(row)
+    check("the app-lock answer never says it cannot be turned off",
+          "cannot be turned off" not in words.lower(), words[:400])
+    check("...and it names the real switch, its Windows Hello gate, and the rule "
+          "that does stay on",
+          "real switch in Settings, Security" in words
+          and "turning it off asks for Windows Hello first" in words
+          and "never approved without Windows Hello, lock or no lock" in words,
+          words[:400])
+    # The Status line is the other half of the same answer: it is the only
+    # place the label's own "Cannot Be Turned Off" used to be read out.
+    check("...and its Status line is reworded, so the label cannot contradict it",
+          FG.status_label(row) == FG.ALWAYS_ON_DISPLAY["app-lock"]
+          and "Cannot Be Turned Off" not in FG.status_label(row),
+          FG.status_label(row))
+    check("...in both the explain answer and the change sentence",
+          FG.change_words(row) == ("It is Always On (Core Safety Rule). "
+                                   + FG.ALWAYS_ON_OFF_PATH["app-lock"]),
+          FG.change_words(row))
+    check("...and in 'can I turn it on?', which says the same",
+          "cannot be turned off" not in FG.ability_explanation(row).lower()
+          and "turning it off asks for Windows Hello first"
+          in FG.ability_explanation(row),
+          FG.ability_explanation(row))
+    # The rewording is display-only and must not move the owner-approved mix:
+    # the label, the count tools/check_feature_controls.py pins, and the data
+    # both apps' feature lists render are exactly as approved.
+    directory = {r["id"]: r for r in FG.abilities_directory()}
+    check("...the app-lock label, its count and the directory data are untouched",
+          FG.label_for(row) == FG.LABEL_ALWAYS_ON
+          and directory["app-lock"]["label"] == FG.LABEL_ALWAYS_ON
+          and sum(1 for r in SOURCE if FG.label_for(r) == FG.LABEL_ALWAYS_ON)
+          == len(FG.ALWAYS_ON_IDS) == 12,
+          (FG.label_for(row), directory["app-lock"]["label"]))
+    strict = [r["id"] for r in SOURCE
+              if FG.label_for(r) == FG.LABEL_ALWAYS_ON
+              and "cannot be turned off" in FG.change_words(r)]
+    check("...and the other eleven Always-On rules keep the strict sentence",
+          len(strict) == 11 and "app-lock" not in strict, strict)
+
+
+def t_the_card_sentence_is_only_where_a_card_really_is():
+    """Finding 5 (2026-10-26 semantic read): the card promise was a template.
+
+    `change_words()` appended "A change that loosens a rule still asks on a card
+    first." to every single-switch Switchable row, and the deployed setters say
+    it is false on four of them: `manner`/humour "At once either way - it changes
+    wording only" (`jarvis_settings_registry.py:912`), `prompt-coach` "Neither
+    direction asks" (`:566-568`), `write-like-me` "No card either way" (`:976`),
+    `pictures` "BOTH directions ... neither asks" (`:736-738`).
+
+    The sentence is data now (`CARD_ON_LOOSENING` / `CARD_FREE_SWITCHES`), and
+    this pins BOTH directions plus the rule that every single switch is
+    classified - a new switch must not silently inherit the promise.
+    """
+    sent = "A change that loosens a rule still asks on a card first."
+    single = [r for r in SOURCE
+              if FG.label_for(r) == FG.LABEL_SWITCH_ADJUST
+              and len(FG.feature_switches(r)) == 1]
+    check("there are single-switch Switchable rows to check", len(single) == 14,
+          len(single))
+    R = FG._registry()
+    real_keys = {b.key for b in getattr(R, "BOOL_SETTINGS", ())}
+    classified = FG.CARD_ON_LOOSENING | FG.CARD_FREE_SWITCHES
+    check("...every classified key is a real switch",
+          classified <= real_keys, sorted(classified - real_keys))
+    check("...and no switch is in both sets",
+          not (FG.CARD_ON_LOOSENING & FG.CARD_FREE_SWITCHES),
+          sorted(FG.CARD_ON_LOOSENING & FG.CARD_FREE_SWITCHES))
+    unclassified, wrong = [], []
+    for row in single:
+        key = FG.feature_switches(row)[0]["key"]
+        if key not in classified:
+            unclassified.append((row["id"], key))
+        says = sent in FG.change_words(row)
+        if says != (key in FG.CARD_ON_LOOSENING):
+            wrong.append((row["id"], key, says))
+    check("...every single switch is classified, none silently defaulted",
+          not unclassified, unclassified)
+    check("...and the sentence appears exactly where a card really is raised",
+          not wrong, wrong)
+    # The four the read proved false, and four that really do card: both
+    # directions pinned by NAME so a reword cannot quietly drop either half.
+    for fid in ("manner", "prompt-coach", "write-like-me", "pictures"):
+        check(f"{fid} no longer promises a card its setter never raises",
+              sent not in FG.change_words(FG.row_by_id(fid)),
+              FG.change_words(FG.row_by_id(fid)))
+    for fid in ("lights", "history", "browser-engine", "data-sandbox",
+                "briefing", "media-read"):
+        check(f"{fid} still says that loosening it asks on a card",
+              sent in FG.change_words(FG.row_by_id(fid)),
+              FG.change_words(FG.row_by_id(fid)))
+    # ...and the switch sentence itself is unchanged apart from the card half.
+    check("the turn-on/off half of the sentence is untouched",
+          FG.change_words(FG.row_by_id("manner")) == (
+              'To turn it on or off, say "turn on humour" or "turn off humour".'),
+          FG.change_words(FG.row_by_id("manner")))
+
+
+def t_the_settings_place_is_written_like_the_control():
+    """Finding 8 (2026-10-26 semantic read): lowercase place vs the card's words.
+
+    107 of 405 answer heads read "Settings: Settings, how jarvis talks." while
+    the `Where:` line directly under it read "Where: Settings, How Jarvis
+    talks." - `settings_path_words()` printed the registry's spoken alias, which
+    is lowercase because it is a MATCHING name
+    (`jarvis_settings_registry.py:252`), while `where` prints the Settings card's
+    own words (`jarvis-desktop/src/settings.html:1020`).
+
+    Each answer now prints the place the card writes: the row's own `where` words
+    when they name the same card, otherwise the section name through
+    `_place_display()` (names capitalised, first letter only). The registry's
+    names, the section ids and the alias vocabulary are untouched - matching
+    still sees the lowercase text.
+    """
+    bad = []
+    for row in SOURCE:
+        path = FG.settings_path_words(row)
+        place = path[len("Settings, "):] if path.startswith("Settings, ") else ""
+        if place and place[:1].islower():
+            bad.append((row["id"], path, "the place starts lowercase"))
+        if place and place != FG._place_display(place):
+            bad.append((row["id"], path, "the place is not display-normalised"))
+    check("no Settings place starts with a lowercase letter", not bad, bad[:8])
+    # Where the row's own `where` names the card, the two lines of one answer
+    # must be the SAME words - that is the whole finding.
+    same = []
+    for row in SOURCE:
+        section = FG._section_words(row)
+        if not section:
+            continue
+        place = FG._where_place(row, section=section)
+        if place and FG._norm(place) == FG._norm(section):
+            same.append((row["id"], section, place))
+    check("...there are rows whose `where` names the card itself", len(same) >= 5,
+          len(same))
+    mismatch = [(fid, FG.settings_path_words(FG.row_by_id(fid)), place)
+                for fid, _section, place in same
+                if FG.settings_path_words(FG.row_by_id(fid))
+                != f"Settings, {FG._place_display(place)}"]
+    check("...and each prints the Where line's own words", not mismatch,
+          mismatch[:8])
+    words = FG.explain_words(FG.row_by_id("manner"))
+    check("...so 'how jarvis talks' is not printed as a place any more",
+          "Settings: Settings, How Jarvis talks." in words
+          and "Settings: Settings, how jarvis talks." not in words, words[:400])
+    check("...the Where line says the same thing",
+          "Where: Settings, How Jarvis talks." in words, words[:400])
+    # Display only: the registry's own name is still the lowercase matching
+    # alias, and the contract's section names are untouched.
+    check("...and the registry's spoken name is unchanged",
+          FG._section_words(FG.row_by_id("manner")) == "how jarvis talks",
+          FG._section_words(FG.row_by_id("manner")))
 
 
 def t_how_do_i_change_asks_the_same_question_as_where_do_i_change():
@@ -1845,6 +2072,9 @@ if __name__ == "__main__":
                t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone,
                t_a_phone_only_status_line_agrees_with_its_surface,
                t_a_settings_path_is_a_place_not_a_sentence,
+               t_app_lock_is_never_said_to_be_unturnoffable,
+               t_the_card_sentence_is_only_where_a_card_really_is,
+               t_the_settings_place_is_written_like_the_control,
                t_how_do_i_change_asks_the_same_question_as_where_do_i_change,
                t_the_matrix_keeps_every_typed_phrase):
         print(f"\n--- {fn.__name__} ---")
