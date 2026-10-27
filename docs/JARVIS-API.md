@@ -7148,6 +7148,25 @@ as aliases of `voice_sync` / `custom_personalities`, and `personality_default`,
   secrets before it is stored; the name is capped at 60 characters and the
   other fields at 240, with at most 20 saved presets.
 
+**Asking what each one does** (2026-10-26, `jarvis_quick.py`): "what does the
+Classic Butler personality do", "what is TARS like", "describe the butler
+personality" and "tell me about TARS" answer with that preset's own
+`description` from this payload (no new copy) and `Say "switch to the <title>
+personality" to use it.` - the sentence that really switches, measured for all
+nine titles. Titles, aliases and saved "My Personalities" names all resolve
+through `jarvis_manner.normalize_personality_id()`. "Describe your
+personalities", "describe my personalities", "explain your personalities",
+"tell me about your personalities", "what does each personality do" and "what
+are your personalities like" answer with one `- <title> - <description>` line
+for each of the nine in contract order, then the four dials and how to make
+your own. Both are quick-intent reads - `personality_describe` is in
+`READ_ONLY_INTENTS` - so no card and no model; as for every quick answer, the
+sentence's usual command digest is still recorded, and nothing the owner can
+see is written. A sentence that names no preset ("what does it do", "tell me
+about yourself") stays with the model. "What personality are you using?" keeps
+its answer, except that its switch example is now the sentence that works
+("switch to the Classic Butler personality").
+
 What it changes in a turn, and only this: the local model's request gets the
 active preset's compact `<jarvis_persona>` block (measured at <= 721 characters
 worst case, under the 750-character ~180-token cap) plus a one-line recency
