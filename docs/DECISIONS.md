@@ -3784,6 +3784,119 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     installed by the card - the updater's own installer path was not run in
     this container, and that is the owner's field test, never a pass.
 
+## 2026-10-27 — The Galaxy's five missing looks are built, the HUD has ONE look switch, and the dock follows the words
+
+  * **What the owner asked, in their own words.** *"id like an easy way to
+    change the appearance of the jarvis galaxy to the other models"*, and when
+    asked which part of Jarvis they meant: *"by galaxy i mean the matrix of
+    ideas and all sorts of things, not the jarvis face model"*. They chose
+    BOTH halves - a switch in the HUD and the extra looks built - and, the
+    same day, *"the icons on the left column dontt match the order of teh
+    horizontal words in the jarvis hud (reminder is out of place for
+    example)"*.
+  * **The five looks are built, not previewed.** `planetary-orbit`,
+    `neural-arbor`, `nebula`, `dna-helix` and `radar-dome` are real
+    deterministic layouts in `jarvis-desktop/src/galaxy-presets.js`, each with
+    its own arrangement - concentric flattened ellipses round a sun; a crown of
+    rows widening upward with dendrites; a golden-angle cloud with no rings,
+    rows or lines; double helices side by side; arcs over a ground row - and
+    each keeps the module's existing rules: pure, deterministic, standard
+    library only, at most 240 names, no two names closer than the layout's own
+    gap. They keep their blueprint hotkeys 1-5, so keys that used to say "not
+    built yet" now draw a picture; `PLANNED_PRESETS` is empty and nothing in
+    either window says a look does not exist.
+  * **The HUD's Galaxy gets one plain Look list, beside the three lenses.** It
+    is filled from the module's own list of looks (never a second list), so it
+    cannot offer a look the module does not build or miss one it does. Choosing
+    one lays the same names out in that look, remembers the choice on this
+    device under `jarvis.galaxy.preset`, and brings it back on the next load; a
+    stored value that is unknown, stale or nonsense is the constellation, never
+    a broken canvas. A flat look is drawn front-on and is not simulated (it is
+    a stationary diagram), and the fact-sharing web is not drawn over it. The
+    page loads the module with a dynamic `import()`, the same way it already
+    loads its speech rule, so the vendored page's inline-script count and CSP
+    are untouched and all three copies stay byte-identical.
+  * **No digit hotkeys in the HUD, deliberately.** The Brain window has 1-8
+    (its stage takes the focus and owns those keys). The HUD has no view-scoped
+    key handler - its global Space starts the microphone and its digit keys are
+    the chat box's - so a 1-5 shortcut there would fire while the owner is
+    typing. The Look list is the HUD's keyboard path instead.
+  * **The dock's icons follow the stage's words.** The Studio dock read Galaxy,
+    Telemetry, Memory, Approvals, Reminders while the inspector's tab bar read
+    Galaxy, Approvals, Reminders, Memory, Telemetry. The dock now reads the
+    same order as the words - Galaxy, Approvals, Reminders, Memory, Telemetry -
+    with every id and `data-hud-tab-choice` unchanged, so existing tests and
+    wiring keep working. `jarvis-desktop/tests/hud-galaxy-looks.mjs` reads BOTH
+    lists out of the page and fails if either is edited alone.
+  * **The phone is untouched.** Its Galaxy stays the read-only zen-ring picture
+    decided on 2026-10-26: no look switch and no new look there, no new route,
+    no write. Nothing in this work changes what the phone shows.
+
+## 2026-10-27 — Live is one control in two windows, and reading an answer out loud is opt-in
+
+  * **The owner's two asks, in his own words.** "a live mode button in the left
+    column of the Jarvis HUD", and "a read out loud button i can enable in the
+    settings which will add a read out loud icon next to all chat boxes that i
+    can click on and jarvis will speak out loud the chat box in his chosen
+    current voice".
+  * **Live: one control, mirrored - not a second Live.** The HUD's left rail
+    (`#rail-toolbar`, `jarvis_hud.html`) sends the BAR'S OWN commands with the
+    bar's own arguments: `live_start` with `by: "button"` and a fresh
+    `conversationId` from `chat-history.js`, `live_stop` when it is on. The name
+    ("Jarvis Live"), the visible word ("Live"), the two `title` sentences and
+    `aria-pressed` are the bar's, and the state comes from the bar's own two
+    sources: `live_status` on opening, then the shell's `live-status` event read
+    through `live-rules.js`'s `onHere(status, "desktop")` - so a session running
+    on the PHONE does not paint this button as on. Every refusal stays in Rust
+    (`live.rs`: a stale link, App lock, no microphone) and no approval card is
+    raised, exactly as from the bar. **The one thing this needed and no more:**
+    a `hud-live` set in `permissions/surfaces.toml` granting `live_status`,
+    `live_start` and `live_stop` and deliberately NOT `live_act` (more time,
+    carry on), `live_mute` or `live_hold` - this window may start, stop and
+    read, and nothing else. No Tauri command and no backend route were added;
+    there is no HTTP route for starting Live (`backend/jarvis_live.py` answers
+    `/api/live/stream` with the frozen 501 stub), so the existing commands are
+    the only path there is.
+  * **Read-aloud speakers: OFF by default, and they never loosen the privacy
+    rule.** Settings -> "The big HUD window" gained "Read-aloud buttons on
+    answers" (`read-aloud-icons.js`, `jarvis.hud.readAloudIcons`, this
+    computer's `localStorage`, no backend, no pairing token, **no approval
+    card** - the same appearance-class choice as the "Open the Jarvis bar"
+    switch beside it, and the same card that already says "for this computer
+    only, and it changes at once"). With it OFF nothing changes at all: no
+    speakers, and the window's existing automatic read-aloud speaks exactly as
+    it did before. With it ON, a finished Jarvis ANSWER gets a small speaker
+    that reads THAT answer through the page's existing `voice.speak` - the same
+    object, the same OS voice, the same shell filter that allows local voices
+    only. It speaks nothing by itself.
+  * **The rule that must not be got wrong.** A speaker is drawn only when
+    `private-speech.js`'s `mayReadAloud({route: that answer's own route,
+    toolsKnown: true})` says this window would already have spoken it - the
+    exact call the page's automatic read-aloud makes - so an answer that used a
+    sensitive saved fact (`injected_sensitive`, or `injected_facts` from a PC
+    that does not say how many were sensitive: fail closed) or one the router
+    gated `private` gets NO speaker at all. Two things back that up rather than
+    replacing it: where the rule module cannot be loaded this FAILS CLOSED (no
+    speaker), which is deliberately stricter than the automatic path's `!rule`
+    fallback; and the shell's own `speechSynthesis.speak` wrapper
+    (`hud_bootstrap.js` section 2e) still refuses a kept-on-screen answer and
+    draws "It's on your screen." - so even a direct `speak()` of that answer's
+    words reaches nobody. `tests/hud-live-read-aloud.mjs` pins all of it,
+    including the case where the answer is asked for directly. The owner's own
+    messages never get a speaker, and neither does the canned hello the window
+    opens with: it is not an answer, and this window has never read it aloud.
+  * **What was deliberately not done.** No new Tauri command, no new backend
+    route, no network service of any kind for speech (the HUD reads answers
+    with the OS voice the shell already restricts to local ones). The Android
+    app is untouched: the speakers and this switch are the big HUD window's, and
+    the phone has no HUD - its own read-aloud behaviour and its own Live control
+    are unchanged. That half, and why it is one-sided, is written in
+    `docs/ARCHITECTURE.md` §8 and named there as follow-up for the Android
+    session. The feature catalogue (`features/features.json`) was NOT extended
+    for the switch on purpose: it is one file in three byte-identical copies,
+    one of which is inside `jarvis-client`, which this change may not write.
+
+
 ## 2026-10-27 — CI parses every Python file, and a suite that runs no check is not a pass
 
   * **The problem, measured.** The 2026-10-27 test audit

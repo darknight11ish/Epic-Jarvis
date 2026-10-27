@@ -2228,6 +2228,13 @@ STATIC_ASSETS = {
     "/hud-safety.js": ("hud-safety.js", "text/javascript; charset=utf-8"),
     "/hud-edit.js": ("hud-edit.js", "text/javascript; charset=utf-8"),
     "/hud-presets.js": ("hud-presets.js", "text/javascript; charset=utf-8"),
+    # The Galaxy's looks (2026-10-27): the page's look switcher loads this one
+    # with a dynamic import(), so a browser HUD that cannot fetch it shows no
+    # switcher (the page catches the failure) instead of a broken picture. It is
+    # a module with no imports of its own, which is why it fits this closed
+    # whitelist unchanged; backend/test_hud_static.py keeps this entry and the
+    # page's real import in step.
+    "/galaxy-presets.js": ("galaxy-presets.js", "text/javascript; charset=utf-8"),
     "/private-speech.js": ("private-speech.js", "text/javascript; charset=utf-8"),
     "/face-voice.js": ("face-voice.js", "text/javascript; charset=utf-8"),
     "/face-moments.js": ("face-moments.js", "text/javascript; charset=utf-8"),

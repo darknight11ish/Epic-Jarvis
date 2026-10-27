@@ -93,7 +93,10 @@ def t_the_rule_is_the_readme_s_rule():
                      # itself; the page's real copies live in jarvis-desktop/src/
                      "theme.css", "fonts.css",
                      "lane-warning.js", "hud-actions.js", "hud-safety.js",
-                     "hud-edit.js", "hud-presets.js", "private-speech.js",
+                     # ... and the Galaxy's looks (2026-10-27), which the page's
+                     # look switcher loads with a dynamic import()
+                     "hud-edit.js", "hud-presets.js", "galaxy-presets.js",
+                     "private-speech.js",
                      "face-voice.js", "face-moments.js", "face-tuning.js",
                      "animal-shared.js", "hud-layout.js", "hud-layout-store.js",
                      # ... and PWA Slice 2's browser bridge, which the page

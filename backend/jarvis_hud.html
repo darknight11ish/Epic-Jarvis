@@ -416,6 +416,20 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
   background:linear-gradient(180deg, rgb(var(--accent-rgb) / .055), rgb(var(--accent-rgb) / .015));
   border:1px solid rgb(var(--accent-rgb) / .17); border-left:2px solid var(--ice);
 }
+/* The per-answer speaker (the owner's ask of 2026-10-27: a read-aloud switch
+   in Settings that puts one on every answer he may hear). Drawn ONLY when that
+   switch is on AND private-speech.js says this answer may be read aloud, which
+   is the same rule the page's own automatic read-aloud obeys - so an answer
+   that has to stay on screen never shows one. Sized like the rail's buttons so
+   it reads as one of the page's controls, not a stray glyph. */
+.msg.jarvis .speak-answer{
+  align-self:flex-start; display:inline-flex; align-items:center; justify-content:center;
+  width:24px; height:24px; padding:0; border-radius:3px; cursor:pointer;
+  background:none; border:1px solid var(--line); color:var(--dim);
+}
+.msg.jarvis .speak-answer:hover{color:var(--text); border-color:var(--line-hot);}
+.msg.jarvis .speak-answer:focus-visible{outline:none; color:var(--ice); border-color:var(--line-hot);}
+.msg.jarvis .speak-answer svg{width:14px; height:14px;}
 .msg.system .body{
   background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
 }
@@ -480,6 +494,32 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
   font-family:var(--f-mono); font-size:10px; color:var(--dimmer);
   white-space:nowrap; flex-basis:100%; padding-left:2px;
 }
+
+/* ---- the Galaxy's look switcher (2026-10-27) ----------------------------- *
+ * The owner asked for "an easy way to change the appearance of the jarvis
+ * galaxy to the other models". ONE plain control, in the same family as the
+ * lens buttons beside it: the constellation plus the eight flat layouts
+ * galaxy-presets.js builds, each with its plain name. A select rather than nine
+ * buttons because the search bar is one row and nine buttons IS the row.
+ * Nothing here is a new font, colour or image - every value comes from the
+ * page's own CSS variables, the same ones the lens buttons use. */
+.look-pick{
+  display:flex; align-items:center; gap:6px; padding:2px 2px 2px 8px;
+  border:1px solid var(--line); border-radius:3px; background:var(--plate-2);
+}
+.look-pick[hidden]{display:none;}
+.look-pick-label{
+  font-family:var(--f-mono); font-size:9.5px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--dimmer);
+}
+.look-pick select{
+  padding:5px 6px; border:0; border-radius:2px; background:transparent;
+  color:var(--text); font-family:var(--f-mono); font-size:10.5px;
+  letter-spacing:.04em; max-width:26ch;
+}
+.look-pick select:hover{color:var(--ice);}
+.look-pick select:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.look-pick option{background:var(--plate-2); color:var(--text);}
 .galaxy-overlay{
   position:absolute; inset:0; z-index:2; pointer-events:none;
 }
@@ -1993,26 +2033,34 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
       </button>
     </div>
 
-    <!-- Studio layout's icon dock. The same four sections the stage's tab bar
+    <!-- Studio layout's icon dock. The same five sections the stage's tab bar
          offers (the layout script keeps both in step: one set of tabs, two
          places to reach them), plus the Jarvis bar. Hidden in the other two
          layouts by CSS; nothing here replaces a view - each button chooses
-         what the inspector stage shows. -->
+         what the inspector stage shows.
+         THE ORDER IS THE TAB BAR'S ORDER (2026-10-27). It used to read Galaxy,
+         Telemetry, Memory, Approvals, Reminders while the words above read
+         Galaxy, Approvals, Reminders, Memory, Telemetry, and the owner said so:
+         "the icons on the left column dontt match the order of teh horizontal
+         words in the jarvis hud (reminder is out of place for example)". The
+         icons follow the words now, and tests/hud-galaxy-looks.mjs reads BOTH
+         lists out of this file and fails if either one is edited alone. Every
+         id and data-hud-tab-choice is unchanged: only the positions moved. -->
     <nav class="studio-dock" id="studio-dock" aria-label="HUD sections">
       <button type="button" class="dock-btn" data-hud-tab-choice="galaxy" title="Galaxy map" aria-pressed="false">
         <span aria-hidden="true">&#10022;</span>
-      </button>
-      <button type="button" class="dock-btn" data-hud-tab-choice="telemetry" title="Telemetry and systems" aria-pressed="false">
-        <span aria-hidden="true">&#9637;</span>
-      </button>
-      <button type="button" class="dock-btn" data-hud-tab-choice="memory" title="Memory and the second brain" aria-pressed="false">
-        <span aria-hidden="true">&#9672;</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="today" title="Approvals waiting for you" aria-pressed="false">
         <span aria-hidden="true">&#10003;</span>
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="reminders" title="Reminders, timers, alarms and to-do" aria-pressed="false">
         <span aria-hidden="true">&#9200;&#xFE0E;</span>
+      </button>
+      <button type="button" class="dock-btn" data-hud-tab-choice="memory" title="Memory and the second brain" aria-pressed="false">
+        <span aria-hidden="true">&#9672;</span>
+      </button>
+      <button type="button" class="dock-btn" data-hud-tab-choice="telemetry" title="Telemetry and systems" aria-pressed="false">
+        <span aria-hidden="true">&#9637;</span>
       </button>
       <button type="button" class="dock-btn" id="dock-quickbar" title="Jarvis bar" hidden>
         <span aria-hidden="true">&#9889;&#xFE0E;</span>
@@ -2058,6 +2106,35 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         </svg>
         <span class="rt-label">Presets</span>
       </button>
+      <!-- Jarvis Live, from the left column (the owner's ask of 2026-10-27:
+           "a live mode button in the left column of the Jarvis HUD").
+
+           It is the SAME control the floating bar has, not a second idea of
+           Live: `hudRailLive` below sends the BAR'S commands (`live_start`
+           with `by: "button"` and the new chat's id, `live_stop`), carries the
+           bar's own name, its on/off title and its `aria-pressed`, and reads
+           its state from the same two sources the bar does (`live_status` on
+           opening and the shell's `live-status` event). Every guard lives in
+           Rust (`live.rs`: a stale link, App lock, and no microphone all
+           refuse) and it raises no approval card, exactly as the bar's does.
+
+           Hidden until the shell is there: Live is a desktop session, and a
+           plain browser has no microphone path from this page - the same
+           reason the "Jarvis bar" pill at the foot of this rail stays hidden. -->
+      <button type="button" class="rail-toolbar-btn" id="rail-live"
+              title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
+              aria-label="Jarvis Live" aria-pressed="false" hidden>
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/>
+        </svg>
+        <span class="rt-label">Live</span>
+      </button>
+      <!-- Why Live did not start, in the PC's own sentence (live.rs), for a
+           screen reader. The button's title carries the on/off wording; this
+           carries the refusal, which is the part that would otherwise be
+           silent. The same shape #hud-stop-status uses. -->
+      <span class="sr-only" id="rail-live-status" role="status" aria-live="polite"></span>
     </div>
 
     <div class="rail-section hide-sm rail-lanes" id="rail-lanes">
@@ -2305,6 +2382,20 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
                   aria-pressed="false"
                   title="Both lenses side by side, memory first - the counts line says which half is which">Unified</button>
         </span>
+        <!-- The Galaxy's LOOK (2026-10-27, the owner: "id like an easy way to
+             change the appearance of the jarvis galaxy to the other models").
+             The options are NOT typed here: galaxy-presets.js is the page's ONE
+             list of looks, and the page's own script fills this select from it
+             (so a look can never be listed here and missing there). It starts
+             hidden and only appears once that module has loaded, so a page
+             served without it shows no dead control. Choosing one lays the
+             current lens out in that look, remembers it on this device under
+             the module's own storage key, and the choice comes back on the next
+             load. -->
+        <label class="look-pick" id="galaxy-look-pick" hidden>
+          <span class="look-pick-label">Look</span>
+          <select id="galaxy-look" aria-label="Galaxy look"></select>
+        </label>
         <input id="gsearch" type="text" placeholder="Search the brain…" autocomplete="off">
         <button class="ghost" id="g-reset">Reset view</button>
         <button class="ghost" id="g-spin">Pause spin</button>
@@ -3310,6 +3401,10 @@ const galaxy = (() => {
     el.setAttribute("data-galaxy-shown", String(nodesIn.length));
     el.setAttribute("data-galaxy-total", String(budgetTotal));
     el.setAttribute("data-galaxy-labels", String(labelBudget()));
+    // Which look this picture is in, as data: the constellation by default, or
+    // the id of the flat layout the owner chose. A test (and a reader of the
+    // DOM) can tell the two apart without reading pixels.
+    el.setAttribute("data-galaxy-look", lookOf());
   }
 
   /** The node buttons: one per visible node, sorted by id so tab order is
@@ -3373,6 +3468,133 @@ const galaxy = (() => {
     syncOverlay();
   }
 
+  // ---- Galaxy LOOKS (2026-10-27) ---------------------------------------
+  // The owner: "id like an easy way to change the appearance of the jarvis
+  // galaxy to the other models", and by galaxy they meant "the matrix of ideas
+  // and all sorts of things, not the jarvis face model". The eight flat looks
+  // live in galaxy-presets.js - a PURE module, unit-tested with no DOM - so this
+  // window has ONE list of looks and ONE layout implementation, the same ones
+  // the Brain window uses, and a look can never exist in one and not the other.
+  //
+  // A classic script cannot `import` at the top, but it can load a module when
+  // it needs one; that is the same dynamic import the speech rule further down
+  // this page uses, and it is why the CSP is untouched: the module is 'self'.
+  let lookEngine = null;         // the module, once it has loaded
+  let lookLoading = null;        // the one in-flight load
+  let lookId = null;             // the look on screen; null until it is known
+  let lookLayout = null;         // that look's layout, guides included
+
+  /** The look's id as the module spells it, or the constellation. */
+  function lookOf(){
+    return lookEngine ? (lookId || lookEngine.DEFAULT_PRESET) : "constellation";
+  }
+
+  /** True only while a flat look is drawing. Such a picture is a stationary
+   *  diagram: the physics does not run and the fact-sharing web (which belongs
+   *  to the constellation) is not drawn over it - the same rule the Brain
+   *  window applies with its is-flat-layout class. */
+  function flatLook(){
+    return Boolean(lookEngine) && Boolean(lookId) && lookId !== lookEngine.DEFAULT_PRESET;
+  }
+
+  /** What this device remembered, through the module's own safe reader, so an
+   *  unknown, stale or corrupt value can only ever come back as the
+   *  constellation - never as a broken picture. */
+  function lookStored(){
+    if(!lookEngine) return null;
+    try{ return lookEngine.storedPreset(localStorage.getItem(lookEngine.PRESET_STORAGE_KEY)); }
+    catch(e){ return lookEngine.DEFAULT_PRESET; }
+  }
+
+  /** Remember the choice on this device only, under the module's own key. The
+   *  constellation clears the key, exactly as the Brain window does. */
+  function lookRemember(id){
+    if(!lookEngine) return;
+    try{
+      if(id === lookEngine.DEFAULT_PRESET) localStorage.removeItem(lookEngine.PRESET_STORAGE_KEY);
+      else localStorage.setItem(lookEngine.PRESET_STORAGE_KEY, id);
+    }catch(e){ /* private mode: this window only, like the lens */ }
+  }
+
+  /** Lay the current nodes out in the active look. False when there is nothing
+   *  to lay out (the constellation IS the physics picture) or when the module
+   *  answered something this picture cannot use - in which case the
+   *  constellation stays on screen instead of a broken one. */
+  function placeLook(){
+    lookLayout = null;
+    if(!flatLook() || !nodes.length) return false;
+    let layout = null;
+    try{ layout = lookEngine.layoutFor(lookId, nodes); }catch(e){ layout = null; }
+    if(!lookEngine.layoutIsUsable(layout, nodes)) return false;
+    const byId = new Map(layout.nodes.map(p => [p.id, p]));
+    for(const n of nodes){
+      const p = byId.get(n.id);
+      n.x = p.x; n.y = p.y; n.z = 0;
+      n.vx = 0; n.vy = 0; n.vz = 0;
+      // A dot's radius is in the same units as the layout's gap (24), so it is
+      // capped at 10 (a 20-unit dot) to keep two names from touching.
+      n.r = Math.min(10, n.r);
+    }
+    // A flat look is drawn FRONT-ON. The constellation's 3-D tilt (yaw .5,
+    // pitch -.25) squashes a diagram that has no depth to show: rows stop being
+    // level and a circle stops being a circle. Dragging still tilts it if the
+    // owner wants to look; choosing a look again puts it back square.
+    yaw = 0;
+    pitch = 0;
+    lookLayout = layout;
+    return true;
+  }
+
+  /** Fill the switcher from the module's OWN list - the constellation (the way
+   *  back) and then every built look in hotkey order - so the menu can never
+   *  list a look the module does not build, or miss one it does. */
+  function paintLookChoices(){
+    const pick = document.getElementById("galaxy-look-pick");
+    const select = document.getElementById("galaxy-look");
+    if(!pick || !select || !lookEngine) return;
+    if(!select.options.length){
+      const looks = [{ id: lookEngine.DEFAULT_PRESET, label: "Constellation" },
+        ...lookEngine.BUILT_PRESETS];
+      for(const look of looks){
+        const option = document.createElement("option");
+        option.value = look.id;
+        option.textContent = look.label;
+        select.appendChild(option);
+      }
+      select.addEventListener("change", () => { setLook(select.value); });
+    }
+    select.value = lookOf();
+    pick.hidden = false;
+  }
+
+  /** Show one look: lay it out, remember it, keep the switcher in step. Anything
+   *  the module does not recognise reads as the constellation, so a bad value
+   *  from an older build cannot break this page. */
+  function setLook(id){
+    if(!lookEngine) return lookOf();
+    const want = lookEngine.storedPreset(id);
+    lookId = want;
+    lookRemember(want);
+    applyLens();               // replaces every node, so the look is re-placed
+    const select = document.getElementById("galaxy-look");
+    if(select) select.value = want;
+    return want;
+  }
+
+  function loadLookEngine(){
+    if(lookLoading) return lookLoading;
+    lookLoading = import("./galaxy-presets.js").then((mod) => {
+      lookEngine = mod;
+      lookId = lookStored();
+      paintLookChoices();
+      if(nodes.length) applyLens();     // the graph arrived first: lay it out now
+      return mod;
+    }).catch(() => null);   // no module beside the page: the constellation stays
+    return lookLoading;
+  }
+
+  loadLookEngine();
+
   function resize(){
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const r = cv.getBoundingClientRect();
@@ -3435,7 +3657,12 @@ const galaxy = (() => {
     });
     nodes.forEach(n => { n.r = 3 + Math.min(9, Math.sqrt(n.deg||1)*1.7) + (n.weight||0); });
 
-    for(let i=0;i<260;i++) step(0.9);   // pre-warm off-screen
+    // A flat look replaces the physics outright: its positions ARE the layout,
+    // so there is nothing to untangle and nothing may move afterwards. The
+    // constellation keeps its own off-screen warm-up.
+    if(!placeLook()){
+      for(let i=0;i<260;i++) step(0.9);   // pre-warm off-screen
+    }
     fitCamera();
     syncRunning();   // the map may be on screen beside the conversation (Studio), not only as the view
     buildLegend(graph);
@@ -3539,10 +3766,89 @@ const galaxy = (() => {
    *  what is really on screen. */
   function syncRunning(){ setRunning(shouldRun()); }
 
+  /** The points of one guide shape, in layout units, for the canvas to project.
+   *  A guide is plain data from galaxy-presets.js: a circle's radius, a line's
+   *  two ends, an orbit's two axes, or a curve's three control points. */
+  function guidePoints(shape){
+    if(!shape || typeof shape !== "object") return null;
+    if(Number.isFinite(shape.r)){                       // a ring, halo or arc
+      const out = [];
+      for(let i=0;i<=64;i++){
+        const angle = (i/64) * Math.PI * 2;
+        out.push({ x: Math.cos(angle)*shape.r, y: Math.sin(angle)*shape.r, z: 0 });
+      }
+      return out;
+    }
+    if(Number.isFinite(shape.a) && Number.isFinite(shape.b)){   // an orbit
+      const out = [];
+      for(let i=0;i<=64;i++){
+        const angle = (i/64) * Math.PI * 2;
+        out.push({ x: Math.cos(angle)*shape.a, y: Math.sin(angle)*shape.b, z: 0 });
+      }
+      return out;
+    }
+    if(Number.isFinite(shape.cx) && Number.isFinite(shape.cy)){ // a bent chord
+      const out = [];
+      for(let i=0;i<=16;i++){
+        const t = i/16, u = 1-t;
+        out.push({
+          x: u*u*shape.x1 + 2*u*t*shape.cx + t*t*shape.x2,
+          y: u*u*shape.y1 + 2*u*t*shape.cy + t*t*shape.y2,
+          z: 0,
+        });
+      }
+      return out;
+    }
+    if(Number.isFinite(shape.x1) && Number.isFinite(shape.x2)){
+      return [{ x: shape.x1, y: shape.y1, z: 0 }, { x: shape.x2, y: shape.y2, z: 0 }];
+    }
+    return null;
+  }
+
+  /** One faint stroke through layout-space points, projected with the same
+   *  camera as the dots - so a guide is always exactly under the names it
+   *  frames, at any zoom and any tilt. */
+  function strokeGuide(points){
+    let started = false;
+    ctx.beginPath();
+    for(const point of points){
+      const at = project(point);
+      if(!at){ started = false; continue; }
+      if(started) ctx.lineTo(at.x, at.y);
+      else { ctx.moveTo(at.x, at.y); started = true; }
+    }
+    ctx.stroke();
+  }
+
+  /** Draw the active look's guides under everything else. Nothing is drawn for
+   *  the constellation, and a look with no guides (the nebula) simply has none. */
+  function paintGuides(){
+    const guides = lookLayout && lookLayout.guides;
+    if(!guides) return;
+    ctx.save();
+    ctx.strokeStyle = tk("--edge", "#356f8c");
+    ctx.lineWidth = 1;
+    const layers = [
+      [guides.circles || [], 0.5],
+      [guides.paths || [], 0.38],
+      [guides.lines || [], 0.3],
+    ];
+    for(const [shapes, alpha] of layers){
+      ctx.globalAlpha = alpha;
+      for(const shape of shapes){
+        const points = guidePoints(shape);
+        if(points) strokeGuide(points);
+      }
+    }
+    ctx.restore();
+  }
+
   function draw(ts){
     if(!shouldRun()){ running = false; return; }
     if(nodes.length){
-      step(0.32);
+      // A flat look is a stationary diagram: the physics does not run, so the
+      // names stay exactly where the layout put them.
+      if(!flatLook()) step(0.32);
       if(spin && !dragging && !S.reduced) yaw += 0.0016;
       camAt.x += (camTarget.x - camAt.x)*0.08;
       camAt.y += (camTarget.y - camAt.y)*0.08;
@@ -3550,6 +3856,7 @@ const galaxy = (() => {
     }
 
     ctx.clearRect(0,0,W,H);
+    paintGuides();
 
     const near = focusId ? (adj.get(focusId) || new Set()) : null;
     const q = query.trim().toLowerCase();
@@ -3563,8 +3870,10 @@ const galaxy = (() => {
     const proj = new Map();
     for(const p of nodes){ const s = project(p); if(s) proj.set(p.id, s); }
 
-    // links first, behind everything
-    for(const l of links){
+    // links first, behind everything. A flat look draws none of them: they are
+    // the constellation's fact-sharing web, and they would cross every ring,
+    // row and orbit (the same reason the Brain window hides them).
+    for(const l of (flatLook() ? [] : links)){
       const a = proj.get(l.s.id), b = proj.get(l.t.id);
       if(!a || !b) continue;
       let alpha = 0.34;
@@ -3808,10 +4117,18 @@ const galaxy = (() => {
 
   return {
     load, resize, setTrace, flyTo, setRunning, syncRunning,
-    reset(){ clearFocus(); yaw=.5; pitch=-.25; fitCamera(); },
+    reset(){ clearFocus(); if(flatLook()){ yaw = 0; pitch = 0; } else { yaw=.5; pitch=-.25; } fitCamera(); },
     search(v){ query = v; },
     toggleSpin(){ spin = !spin; return spin; },
     lens(){ return lens; },
+    /** Which look is on screen: the constellation, or a flat layout's id. */
+    look(){ return lookOf(); },
+    /** True once galaxy-presets.js has loaded (the switcher is live then). */
+    lookReady(){ return Boolean(lookEngine); },
+    /** The layout behind the picture, for the tests and for anyone reading this
+     *  code (the same spirit as budgetInfo below): the module's own object,
+     *  guides and all, or null while the constellation is showing. */
+    lookInfo(){ return { look: lookOf(), layout: lookLayout }; },
     focused(){ return focusId ? nodes.find(n => n.id === focusId) : null; },
     /** G2: what the node budget did, for the tests and for anyone reading this
      *  code - the cap in force, how many nodes the lens really has, how many
@@ -3916,6 +4233,124 @@ const voice = (() => {
 
   return { start, stop, speak, get listening(){ return listening; }, supported: false };
 })();
+
+/* ==================================================================
+ * Read-aloud speakers on answers (the owner's ask of 2026-10-27)
+ *
+ * "a read out loud button i can enable in the settings which will add a read
+ *  out loud icon next to all chat boxes that i can click on and jarvis will
+ *  speak out loud the chat box in his chosen current voice"
+ *
+ * THREE THINGS THIS IS NOT, because each one would be a bug:
+ *
+ *  1. Not a second voice path. A click calls `voice.speak` above - the same
+ *     function the page's automatic read-aloud calls two hundred lines down -
+ *     so the voice, its rate, its pitch and the shell's local-voices-only rule
+ *     (`hud_bootstrap.js` wraps `getVoices`) are all unchanged.
+ *  2. Not a change to automatic read-aloud. The switch is read HERE and
+ *     nowhere else; with it off the page behaves exactly as it does today, and
+ *     turning it on speaks nothing by itself.
+ *  3. Not a way round the privacy rule. An answer is given a speaker only when
+ *     `private-speech.js`'s `mayReadAloud` says this window would already have
+ *     spoken it, judged on THAT answer's own route - and the shell's
+ *     `speechSynthesis.speak` wrapper refuses a kept-on-screen answer anyway,
+ *     drawing "It's on your screen." under it (bootstrap section 2e). Two
+ *     refusals, and this file loosens neither.
+ *
+ * The setting's key and its reading rule are ALSO in src/read-aloud-icons.js,
+ * which is what Settings writes and what `tests/hud-live-read-aloud.mjs` holds
+ * this copy to, value by value - the same arrangement hud_bootstrap.js has for
+ * OPEN_BAR_KEY. It is repeated here because this script has to read it while
+ * drawing an answer.
+ * ================================================================== */
+const READ_ALOUD_ICONS_KEY = "jarvis.hud.readAloudIcons";
+
+/** OFF unless this computer saved it on; OFF when storage cannot be read. */
+function readAloudIconsOn(){
+  try{
+    const v = localStorage.getItem(READ_ALOUD_ICONS_KEY);
+    if(v === null) return false;
+    return v === "true" || v === "on";
+  }catch(e){ return false; }
+}
+
+/* Every finished answer's words and route, by its own bubble element. A
+ * WeakMap and not a data- attribute: the words stay in memory with the page,
+ * so an answer that has to stay on screen is never copied into an attribute
+ * something else might read. Never written to disk. */
+const ANSWER_SAID = new WeakMap();
+
+/** Would this window already have read that answer aloud? Fails CLOSED if the
+ *  rule module cannot be loaded - deliberately stricter than the automatic
+ *  path below, whose `!rule` fallback speaks. A new button must not be the one
+ *  place a privacy check goes missing. */
+function answerMayBeSpoken(route){
+  return loadSpeechRule().then(rule => Boolean(rule) && rule.mayReadAloud(
+    { route: route || {}, toolsKnown: true }
+  ));
+}
+
+/** The one speaker for one answer, or nothing at all. */
+function paintSpeakButton(bubble){
+  if(!bubble) return;
+  const old = bubble.querySelector(".speak-answer");
+  if(old) old.remove();
+  const said = ANSWER_SAID.get(bubble);
+  if(!said || !readAloudIconsOn()) return;
+  answerMayBeSpoken(said.route).then(may => {
+    // Re-checked after the await: the switch may have gone off, the bubble may
+    // have been removed, or the module answered for a newer turn.
+    if(!may || !readAloudIconsOn() || !bubble.isConnected) return;
+    if(bubble.querySelector(".speak-answer")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "speak-answer";
+    btn.setAttribute("aria-label", "Read this answer aloud");
+    btn.title = "Read this answer aloud";
+    // Built node by node, NOT with innerHTML: this page is audited for HTML
+    // sinks (tests/csp-inline.mjs), and a glyph is no reason to add one. The
+    // three paths are the page's own speaker: the cone, then two arcs.
+    const SVG = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(SVG, "svg");
+    for (const [name, value] of Object.entries({
+      viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+      "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round",
+      "aria-hidden": "true", focusable: "false",
+    })) svg.setAttribute(name, value);
+    for (const d of ["M4 9v6h4l5 4V5L8 9H4Z", "M16.5 8.5a5 5 0 0 1 0 7", "M19 6a8.5 8.5 0 0 1 0 12"]) {
+      const path = document.createElementNS(SVG, "path");
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+    }
+    btn.appendChild(svg);
+    btn.addEventListener("click", () => {
+      // Said through the page's own speak path, so the shell's refusal and its
+      // "It's on your screen." line apply exactly as they do automatically.
+      voice.speak(ANSWER_SAID.get(bubble) ? ANSWER_SAID.get(bubble).text : "");
+    });
+    bubble.appendChild(btn);
+  }).catch(() => {});
+}
+
+/** Called once per FINISHED answer, with that answer's own route. */
+function offerSpeakButton(bubble, text, route){
+  if(!bubble) return;
+  ANSWER_SAID.set(bubble, { text: text || "", route: route || {} });
+  paintSpeakButton(bubble);
+}
+
+/** Repaint every answer on the page from what it remembered. Used when the
+ *  switch changes under a window that is already open, so turning it off
+ *  removes every speaker at once and turning it on adds them back. */
+function repaintSpeakButtons(){
+  document.querySelectorAll("#log .msg.jarvis").forEach(paintSpeakButton);
+}
+try{
+  window.addEventListener("storage", (e) => {
+    if(e && e.key && e.key !== READ_ALOUD_ICONS_KEY) return;
+    repaintSpeakButtons();
+  });
+}catch(e){ /* no storage events here: the switch still applies to new answers */ }
 
 /* ==================================================================
  * Retrieval trace - what the brain actually reached for
@@ -4217,6 +4652,10 @@ async function send(){
       if(cutShort) node.textContent = full + " [answer cut short \u2014 ask \u201cgo on\u201d for the rest]";
       // Finished: the right/wrong mark (hud_bootstrap.js) may show now.
       node.parentElement.dataset.state = "done";
+      // ...and, if the owner's read-aloud switch is on, so may its speaker.
+      // `full` and not `node.textContent`: the bracketed "[answer cut short]"
+      // above is the page talking about the answer, not the answer.
+      offerSpeakButton(node.parentElement, full, turnRoute);
     } else {
       const j = await res.json();
       if(j.error){
@@ -4224,7 +4663,9 @@ async function send(){
         e.fromServer = true; throw e;
       }
       full = j.choices?.[0]?.message?.content || "(empty reply)";
-      addMessage("jarvis", full).parentElement.dataset.state = "done";
+      const answered = addMessage("jarvis", full);
+      answered.parentElement.dataset.state = "done";
+      offerSpeakButton(answered.parentElement, full, turnRoute);
       $("r-model").textContent = j.model || "—";
       if(j.usage) $("r-tokens").textContent = j.usage.total_tokens ?? "—";
       if(j.complexity){
@@ -7115,5 +7556,102 @@ mountHudPresets({
  * from the page's own #lanes buttons. The three reads are hud_proxy.rs's fixed
  * list, and there is no write, no command and no approval card here. */
 mountCurrentModels();
+
+/* ── Jarvis Live, from the left rail (the owner's ask of 2026-10-27:
+ *    "a live mode button in the left column of the Jarvis HUD") ────────────
+ *
+ * The BAR'S control, in this window - not a second idea of Live. Same two
+ * commands with the same arguments (`live_start` with `by: "button"` and the
+ * new chat's id, `live_stop`), the same name and the same on/off words, and
+ * the same state read: `live_status` when this runs, then the shell's
+ * `live-status` event, which is exactly what repaints the bar (main.js's own
+ * listener). Every guard is Rust's - `live.rs` refuses a start on a stale
+ * link, under App lock, or with no microphone - and, like the bar's, it
+ * raises no approval card.
+ *
+ * It lives in THIS module, and it spells BOTH rules the bar uses instead of
+ * importing them - on purpose, and this is the reason:
+ *
+ *   * the ids: the page ALREADY has its own `newConversationId` (the main
+ *     script above, the same routine as `chat-history.js`'s), so a Live chat
+ *     started here is named the way the bar names one and the PC can offer it
+ *     to the other device for "Move it here";
+ *   * "is the session on THIS device": `live-rules.js`'s `onHere` is one line
+ *     (`status.on === true && status.device === me`), and this window may not
+ *     import it. The browser HUD is served from a CLOSED whitelist
+ *     (`backend/jarvis_hud.py`, `backend/test_hud_static.py`), which this
+ *     change must not widen for a desktop-only button - so the page keeps the
+ *     one-line copy, the way it already keeps its own copy of OPEN_BAR_KEY and
+ *     of the read-aloud switch's rule. `tests/hud-live-read-aloud.mjs` drives
+ *     the status table through the real button (on/this PC, on the PHONE, off,
+ *     missing, not an object), so the copy cannot drift unnoticed.
+ */
+(function hudRailLive() {
+  const button = document.getElementById("rail-live");
+  const status = document.getElementById("rail-live-status");
+  if (!button) return;
+  const core = window.__TAURI__ && window.__TAURI__.core;
+  // A plain browser gets NO Live button: there is no shell to ask, and this
+  // page has no microphone path of its own (see this file's voice section).
+  // The same gate, for the same reason, as the shell's settings gear.
+  if (!core || typeof core.invoke !== "function") return;
+  button.hidden = false;
+  let busy = false;
+  const say = (words) => {
+    if (status) status.textContent = words;
+    button.removeAttribute("aria-busy");
+  };
+  /** The bar's own two states, in the bar's own words (main.js `paintLive`). */
+  const paint = (on) => {
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    button.title = on
+      ? "Jarvis Live is on - click to end it"
+      : "Jarvis Live: talk back and forth, no \"Hey Jarvis\" needed";
+  };
+  /** `live-rules.js`'s own rule, one line, kept here for the reason above:
+   *  `status.on === true && status.device === me`. Anything else - another
+   *  device, a status this page cannot read, no session - is off. */
+  const liveOnHere = (state) =>
+    Boolean(state) && typeof state === "object"
+    && state.on === true && state.device === "desktop";
+  /** A session that is on AND on THIS device - anything else is off here. */
+  const paintStatus = (answer) => {
+    const s = answer && typeof answer === "object" ? answer : {};
+    paint(liveOnHere(s.status));
+  };
+  button.addEventListener("click", () => {
+    // One click at a time, as the bar does (main.js `live.busy`).
+    if (busy) return;
+    busy = true;
+    button.setAttribute("aria-busy", "true");
+    const on = button.getAttribute("aria-pressed") === "true";
+    const asked = on
+      ? core.invoke("live_stop")
+      : core.invoke("live_start", { by: "button", conversationId: newConversationId() });
+    asked.then((answer) => {
+      paintStatus(answer);
+      // The PC's own sentence when it gave one (live.rs payload `say`).
+      say(answer && typeof answer.say === "string" ? answer.say : "");
+    }, (error) => {
+      // Refused: the PC's own words, and never a claim that Live started.
+      say("Jarvis Live could not start: " + String((error && error.message) || error));
+      // Ask the truth back rather than guessing from the refusal.
+      core.invoke("live_status").then(paintStatus, () => {});
+    }).then(() => {
+      busy = false;
+      button.removeAttribute("aria-busy");
+    });
+  });
+  // Opening: the state the PC has now. A refusal leaves the button at its
+  // resting "off" rather than claiming a session that is not there.
+  core.invoke("live_status").then(paintStatus, () => {});
+  // While the window is open: the same event the bar repaints from.
+  const events = window.__TAURI__ && window.__TAURI__.event;
+  if (events && typeof events.listen === "function") {
+    events.listen("live-status", (event) => {
+      paintStatus((event && event.payload) || {});
+    }).catch(() => {});
+  }
+}());
 </script>
 

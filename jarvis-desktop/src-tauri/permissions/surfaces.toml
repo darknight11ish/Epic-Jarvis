@@ -2045,3 +2045,28 @@ permissions = [
   "allow-hud-personalities",
   "allow-hud-switch-personality",
 ]
+
+# The HUD's own Live button (2026-10-27). The owner asked for "a live mode
+# button in the left column of the Jarvis HUD", and it has to be the BAR'S
+# control rather than a second idea of Live - so it sends the bar's own two
+# commands, with the bar's own arguments. There is no HTTP route for starting
+# Live (`backend/jarvis_live.py` answers /api/live/stream with the frozen 501
+# stub), so these commands are the only path, and nothing new is added for it.
+#
+# WHY THIS IS SAFE TO GRANT TO THIS PAGE. Every refusal lives in Rust and is
+# untouched by this set: `live_start` is held on a stale link and under App
+# lock (`live.rs` STALE_HELD / APP_LOCK_HELD), it refuses when there is no
+# microphone (`voice::live_audio_refusal`), and it raises no approval card -
+# exactly the bar's behaviour, and `live_hold`/`live_act`/`live_mute` (more
+# time, carry on, mute, the card pause) are deliberately NOT here: this window
+# gets start, stop and the read, and nothing else. `live_status` only reports
+# the session's own state - fixed words, the owning device, the limits, never a
+# word anyone said.
+[[set]]
+identifier = "hud-live"
+description = "Start or end Jarvis Live from the HUD's left rail, and read the session's state. The bar's own live_start/live_stop; held on a stale link and under App lock in Rust, no card, and no microphone is opened here."
+permissions = [
+  "allow-live-status",
+  "allow-live-start",
+  "allow-live-stop",
+]
