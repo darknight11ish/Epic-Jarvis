@@ -21602,14 +21602,17 @@ the 140 rows both apps' Features pages draw - and nothing read them.
 `jarvis_agent.py`). Its one argument is `feature`, in the owner's words (or a group
 name, or `""` to list the groups). It returns the row's OWN facts - `what`, `where`
 (where to switch it on), `asks` (whether a card is needed), `limit`, `surface` (which
-apps have it) and `covers` (the settings places it names) - plus, for a switchable
-feature, whether its switch is **on or off right now**, read from the module that owns
-that switch through the SAME `jarvis_settings_registry.BoolSetting` entries
-`change_setting` writes (`jarvis_feature_guide.STATE_READERS`). It changes nothing, so
-it is decided under the gate's own read-only `skill_list` action (tier `auto`, **no
-card**) - no new gate action, no tier line, no patch. A switch a module cannot answer
-is reported as "I could not read it", never as off. An unknown or ambiguous name is
-said plainly and the real groups are offered; nothing is guessed.
+apps have it), `surface_reason` (why the other app has none, for a one-sided row),
+`aliases` (the owner's other names for it) and `covers` (the settings places it names) -
+plus, for a switchable feature, whether its switch is **on or off right now**, read from
+the module that owns that switch through the SAME `jarvis_settings_registry.BoolSetting`
+entries `change_setting` writes (`jarvis_feature_guide.STATE_READERS`). Its `words`
+sentence now also says how to use or change the feature, from the same five labels and
+switch table. It changes nothing, so it is decided under the gate's own read-only
+`skill_list` action (tier `auto`, **no card**) - no new gate action, no tier line, no
+patch. A switch a module cannot answer is reported as "I could not read it", never as
+off. An unknown or ambiguous name is said plainly and the real groups are offered;
+nothing is guessed.
 
 **The catalogue is a generated module.** `features/features.json` lives in this
 repository and is NOT copied to the PC's backend folder, so the guide ships its rows as
@@ -21629,29 +21632,69 @@ training card (`jarvis-desktop/src/manner.js`, `settings.html`) and the phone's 
 screen are the **next UI slice**: this change adds the row, the generated catalogue and
 the two phrases, and neither app's UI changes in this PR.
 
-**Three fixed phrases, no model at all** (`jarvis_quick.py`, so they work with any model,
-a slow one, or none): **"what is <feature>"** (and "what does it do", "tell me about",
-"explain"), **"how do I turn on/off <feature>"** (and "enable/disable", "how to", "where
-do I"), and **"is <feature> on?"** (and "off", "enabled", "right now", "what is the state
-of"). "What features do you have?" / "list the features" answer with the 9 groups. A
-sentence that clearly asks about a feature and names none says so; any sentence that does
-not name a real feature or switch falls through to the model exactly as before - "what is
-the weather", "is the oven on", "how do I turn on my phone's bluetooth" are untouched.
+**Nine questions now, no model at all** (`jarvis_quick.py`, so they work with any model, a
+slow one, or none). Until 2026-10-26 only three were wired; the owner's field test asked
+for Jarvis to be able to talk about *any* feature of the project, in detail, so the
+grammar learned the rest of the questions a person actually asks:
+
+| the owner's question | intent | what the answer carries |
+| --- | --- | --- |
+| "what is <feature>" / "what does it do" / "tell me about" / "explain" | `feature_explain` | name, what it does, status, Settings place, where, whether it asks first, the honest limit, which apps have it, its current switch state, and how to use or change it |
+| "how do I use <feature>" / "how does it work" | `feature_explain` | the same, because using it is the row's own `where` + its real example sentence |
+| "where is <feature>" / "where do I find" / "where do I change" | `feature_explain` | the same `where` line, plus the phone's own copy of the list |
+| "how do I turn on/off <feature>" / "enable/disable" / "how to" / "where do I" | `feature_howto` | the row's `where` and `asks`, the exact phrase that would change the ONE switch, and the current state |
+| "can I change <feature>" / "how do I change" / "is it adjustable" | `feature_change` (new) | which of the five owner-facing kinds it is, whether it has one switch, several or none, and the exact phrase or Settings place - **changing nothing** |
+| "is <feature> on?" / "off" / "enabled" / "right now" / "what is the state of" | `feature_state` | the switch's real value, read from the module that owns it, or "I could not read it" |
+| "what features do you have?" / "list the features" | `features_list` | the 9 groups with real counts |
+| a group's name | `features_group` | that group's rows |
+| "what can you do?" / "what are you capable of?" / "what are you able to do?" | `sayable_help` | unchanged: the fixed list of real sentences (`jarvis_sayable.py`) |
+
+Every explain answer is assembled by one renderer (`jarvis_feature_guide.explain_words`), so a
+model turn and a fixed phrase cannot say different things. "Can I change it?" is read-only:
+it is in `jarvis_quick.READ_ONLY_INTENTS`, so "cancel that" never takes back something it
+did not do, and the test suite proves no `BoolSetting.set` runs for any of the 140 rows.
+
+**The list learned two fields (2026-10-26).** `features/features.json` rows may carry
+`aliases` - the owner's other names for ONE feature, e.g. "customer support" for the row
+titled "Deal with customer support for me" (30 rows carry 55 aliases). They are matched
+EXACTLY, like the id and the title, so they widen what a person can say without widening
+what counts as a guess. Every one-sided row also carries `surface_reason`: 27 of 27 now do
+(the 8 `phone` ones already did; the 19 `desktop` ones were written on 2026-10-26 from the
+row's own `limit`/`where` or from `docs/ARCHITECTURE.md` §8), so the answer can say *why*
+the phone has none instead of only that it does. `tools/check_feature_list.py`'s rule 5 now
+demands the sentence in both directions, and `tools/gen_feature_guide_catalogue.py` carries
+both fields into `jarvis_feature_catalogue.py` (an unknown row key is still refused, so a
+new field has to be looked at by a person).
+
+**Two names that carry "Jarvis" for real.** `normalise()` strips "jarvis" and "for me" from
+the end of a sentence because they are usually the address, and four rows are NAMED with
+those words ("Floating Jarvis", "How Jarvis talks", "Starting Jarvis for you", "What Jarvis
+can reach") - so each fell to the model. The grammar now tries the tidied sentence and,
+only if that finds nothing, the same patterns once more on the message with just a leading
+"Jarvis," removed; the same exact-name gate applies, so this adds reach for real names and
+no guessing. The same fix stopped `_feature_target` from eating a feature's own trailing
+"options" ("Animal options" had become "animal"), and `_feature_switch_intent` now tries the
+exact name BEFORE stripping context words, which is what had silently emptied the typed
+phrase of those four rows in `control_matrix()` (4 of 140 before, 0 after).
+
 **The gate is exact (hardened 2026-10-20 after Gemini's review, §11.8.3):** without the
 words "Jarvis", "here" or "my settings" in the message, the subject after "what is [the]
-..." / "is [the] ... on" must be EXACTLY a feature name (its id or title, case,
+..." / "is [the] ... on" must be EXACTLY a feature name (its id, title or an alias - case,
 punctuation and a leading article ignored) - no loose substring. So "what is a focus
 session in psychology?", "how do I turn on dark mode in Chrome?", "where is my file
-manager?" and "is my oven on?" are the model's, while "what is the prompt coach" and
-"what is a focus session" still answer here; "I do not have that one" needs an explicit
+manager?", "how do I use a chainsaw?" and "is my oven on?" are the model's, while "where is
+the prompt coach" answers with the feature; "I do not have that one" needs an explicit
 "Jarvis"/"here"/"my settings" AND the word feature/option, so a general question never
-gets it. `backend/test_feature_guide.py` pins the exact matcher
-(`jarvis_feature_guide.find_exact`), the four review questions, and the positive
-controls. **Changing** by these words is the existing path: "turn on <feature>" resolves a
-feature to the ONE switch it names and calls that setting's own `BoolSetting.set`, so the
-card rules are unchanged; a feature naming several switches (Custom voices) changes
-nothing and says which ones; the answer is the setter's own outcome, never a "Done" when
-nothing happened.
+gets it. One deliberate exception is named in the tests: "what is the morning briefing?"
+and "is the morning briefing on?" are the briefing's own read/setup answers
+(`briefing_now`/`briefing_list`), which have owned those two sentences since 2026-09-28;
+the feature is explained by the other seven questions. `backend/test_feature_guide.py` pins
+the exact matcher (`jarvis_feature_guide.find_exact`), the review questions, the positive
+controls and the named exception. **Changing** by these words is the existing path: "turn on
+<feature>" resolves a feature to the ONE switch it names and calls that setting's own
+`BoolSetting.set`, so the card rules are unchanged; a feature naming several switches
+(Custom voices) changes nothing and says which ones; the answer is the setter's own
+outcome, never a "Done" when nothing happened.
 
 **Both apps, nothing app-specific:** the fixed phrases and the tool are reached through
 the same `/api/chat` turn both apps already use, so `docs/ARCHITECTURE.md` §8 needs no
@@ -21661,11 +21704,19 @@ owner's decision of 2026-10-19/20); on an existing install the model tool is off
 inherited `config.toml`, if the settings file names no `[tools]` section) - the fixed
 phrases need no config at all.
 
-**Tests.** `backend/test_feature_guide.py`: all 140 rows found with facts equal to the
-JSON; every switch has a state reader and the answers never claim a state they did not
-read; unknown/ambiguous honesty; the fixed phrases and their near misses; switching
-through the real setter with its real words; the tool's 300-token text, `auto`-tier
-no-card turn, and exact facts fed to the model. `test_tool_text.py`,
+**Tests.** `backend/test_feature_guide.py` (1707 checks, measured 2026-10-26): all 140 rows
+found with facts equal to the JSON; every switch has a state reader and the answers never
+claim a state they did not read; unknown/ambiguous honesty; the fixed phrases and their near
+misses; switching through the real setter with its real words; the tool's 300-token text,
+`auto`-tier no-card turn, and exact facts fed to the model. The 2026-10-26 section asks every
+one of the 140 rows all nine questions through its title, id AND aliases, and requires the
+answer that question needs (the full facts for explain/use/where, where + card + exact phrase
+for how-to, status + how for change, the real state for state); "can I change" is proved to
+run no setter for any row; every alias is proved to name only its own row; every one-sided
+answer is proved to carry its row's reason; the general questions ("how do I use a chainsaw",
+"where is my file manager", "where did I put my passport", "can I change my password in
+Chrome") are pinned as NOT feature answers; and the matrix build is proved to keep every
+row's three typed phrases. `test_tool_text.py`,
 `test_short_tool_list.py`, `test_reach.py` and `tools/tool_eval/jarvis_tools.json` carry
 the tool; `test_settings_tool.py`, `test_settings_registry.py`, `test_settings_help.py`
 and `test_quick_wins.py` are unchanged and green.

@@ -35,6 +35,26 @@ files · Money and health · Home · Phone · The PC itself · Safety), and each
 shows its own surface's features first, with the other app's marked "on your
 phone" / "on your PC".
 
+### The row's other fields
+
+Beyond the four a person reads, a row may carry:
+
+| Field | Meaning |
+|---|---|
+| `surface` | `both`, `desktop` or `phone` - which apps have the feature |
+| `surface_reason` | for a one-sided row: one sentence saying WHY the other app has none (rule 5, both directions since 2026-10-26) |
+| `covers` | the Settings sections, menu ids and lessons this row accounts for |
+| `must_mention` | 1-3 words its lesson really uses (rule 7) |
+| `aliases` | other names the owner says for THIS one feature, e.g. "customer support" for "Deal with customer support for me". Added 2026-10-26: 30 rows carry 55 of them. They are matched exactly, like the id and the title, and nothing else uses them |
+
+`aliases` and `surface_reason` are there because the list is now SPOKEN as well
+as drawn: chat answers "what is <feature>", "where is it", "how do I use it",
+"can I change it" and "is it on" from these rows (`docs/JARVIS-API.md`, the
+`feature_guide` section), and a one-sided answer says why the phone has none. A
+checked-in copy of the list travels to the PC as `jarvis_feature_catalogue.py`,
+written by `tools/gen_feature_guide_catalogue.py`; an unknown row key is refused
+there, so a new field cannot be added without being looked at.
+
 ## The source of truth, and why it cannot rot
 
 `features/features.json` is the list, checked in. Copies live where each app can

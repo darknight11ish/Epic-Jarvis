@@ -1160,6 +1160,17 @@ def _match(text, now: float) -> Optional[Intent]:
     # ("ring my phone" below, jarvis_find_phone.py) - the two features met
     # on these words when they were merged, 2026-09-28.
     got = None if _RING.fullmatch(s) else _where_put(s)
+    if (got is not None and got.name == "where_put"
+            and (_feature_lookup_exact(got.f.get("thing") or "") is not None
+                 or (_feature_explicit(s) and _feature_says_jarvis(text)))):
+        # "where is the talk button?" is a question about a FEATURE, not about
+        # where the owner last put something. The feature guide answers it a
+        # few lines below with the row's own `where` - and an explicit "Jarvis,
+        # where is the turbo FEATURE?" reaches the guide's honest unknown
+        # answer instead of a lost-object answer. An exact feature name or the
+        # word feature/option plus Jarvis context only, so "where is my
+        # passport?" and "where is my file manager?" keep this path (2026-10-26).
+        got = None
     if got is not None:
         return got
 
@@ -3889,6 +3900,48 @@ _FEATURE_WHAT = re.compile(
     r"|what\s+does\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+do"
     r"|tell\s+me\s+about\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
     r"|explain\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+#: "how do I use <feature>", "how does <feature> work" - how to START it, as
+#: opposed to switching it on (2026-10-26, the owner's requested phrasings). An
+#: ability with no switch is used by asking, so the explain answer is the right
+#: one: its `where`, `asks`, the example sentence and the Settings place.
+_FEATURE_USE = re.compile(
+    r"how\s+(?:do|can|should|would)\s+i\s+(?:use|try|set\s+up|start\s+using"
+    r"|get\s+started\s+with)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|how\s+does\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+work")
+#: "where is <feature>", "where do I find <feature>" - the explain answer's own
+#: `where` line. Only an exact name answers: "where is my file manager" keeps
+#: its own path (jarvis_places, and the model after it).
+_FEATURE_WHERE = re.compile(
+    r"where\s+(?:is|can\s+i\s+find|do\s+i\s+find|do\s+i\s+see|can\s+i\s+see)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    # "where do I change the presets?" (the owner's live field-test question,
+    # 2026-10-26) matched nothing at all: "where do I change" is a where
+    # question, not the "how do I change" one below. The same exact-name gate
+    # applies, so "where do I change my wifi password" is still the model's.
+    r"|where\s+do\s+i\s+(?:change|set|edit|adjust)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    # "how do I change the presets?" - the SAME question asked the other way
+    # round (2026-10-26, part B). It is an alternative in this pattern, not a
+    # new one, so it resolves through the same alias path ("presets" is
+    # focus-presets' own alias) and gets the same full answer: the explain view
+    # already ends with change_words(), which names the exact phrase or Settings
+    # place. The change lane below keeps "can I change/adjust ...", "is it
+    # adjustable" and "how do I adjust/edit/configure ...". The gate is
+    # unchanged, so "how do I change my password" still falls through to the
+    # model rather than being hijacked.
+    r"|how\s+do\s+i\s+change\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|where\s+in\s+jarvis\s+is\s+(?:the\s+|my\s+)?(.+)")
+#: "can I change <feature>", "how do I change <feature>", "is it adjustable" -
+#: answered from the five owner-facing labels and the real switch table, never
+#: by changing anything (2026-10-26).
+_FEATURE_CHANGE = re.compile(
+    r"can\s+i\s+(?:change|adjust|switch|turn\s+(?:on|off))\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|how\s+(?:do|can)\s+i\s+(?:change|adjust|edit|configure)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:changeable|adjustable"
+    r"|configurable|customi[sz]able)"
+    r"|can\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+be\s+(?:changed|adjusted"
+    r"|turned\s+(?:on|off))")
 #: "turn on <feature>" - runs AFTER jarvis_settings_registry's own exact-name
 #: phrases, so every setting already worded keeps its old path and words. A
 #: feature that names several switches changes NOTHING and says which ones.
@@ -3900,8 +3953,16 @@ _FEATURE_SWITCH = re.compile(
 
 def _feature_target(words) -> str:
     """The words after the pattern, with a trailing "feature"/"option" taken
-    off - "the prompt coach feature" names the prompt coach."""
+    off - "the prompt coach feature" names the prompt coach.
+
+    The trailing word is NOT taken off when the whole thing already names a
+    row: "Animal options" is a feature's own title, and stripping "options"
+    turned it into "animal", which matched nothing and fell to the model
+    (measured 2026-10-26, the field test of the owner's requested phrasings).
+    """
     text = " ".join(str(words or "").split())
+    if text and _feature_lookup_exact(text) is not None:
+        return text
     text = re.sub(r"\s*\b(?:feature|features|option|options|setting|settings)\b\s*$",
                   "", text, flags=re.I)
     return text.strip()
@@ -4014,6 +4075,35 @@ def _feature_explain_intent(s: str, raw, target: str, explicit: bool = False):
     return None
 
 
+def _feature_change_intent(s: str, raw, target: str, explicit: bool = False):
+    """The intent behind "can I change <feature>?" - resolved, never guessed.
+
+    A FEATURE first (its five-label kind is what the answer is built from), then
+    a plain switch the registry already names exactly, then the honest unknown
+    answer under the same gate as every other fixed phrase: explicit Jarvis
+    context AND the word feature/option.
+    """
+    row = _feature_lookup_exact(target)
+    if row is not None:
+        return Intent("feature_change", {"id": row["id"]})
+    setting = _feature_setting(target)
+    if setting is not None:
+        return Intent("feature_change", {"key": setting.key, "name": setting.names[0]})
+    if _feature_context_ok(raw, explicit):
+        clean = _feature_without_context(target)
+        row = _feature_lookup(clean)
+        if row is not None:
+            return Intent("feature_change", {"id": row["id"]})
+        setting = _feature_setting(clean)
+        if setting is not None:
+            return Intent("feature_change",
+                          {"key": setting.key, "name": setting.names[0]})
+    if _feature_context_ok(raw, explicit) and (_feature_explicit(s) or explicit):
+        return Intent("feature_unknown",
+                      {"words": _feature_target(_feature_without_context(target))})
+    return None
+
+
 def _feature_state_intent(raw, target: str, explicit: bool = False):
     row = _feature_lookup_exact(target)
     if row is not None:
@@ -4051,10 +4141,17 @@ def _feature_howto_intent(raw, target: str, on: bool, explicit: bool = False):
 
 
 def _feature_switch_intent(raw, target: str, on: bool, explicit: bool = False):
-    clean = _feature_without_context(target) if _feature_context_ok(raw, explicit) else target
+    # The EXACT name first, before any context word is taken off: four features
+    # have "Jarvis" in their own name ("How Jarvis talks", "Floating Jarvis",
+    # "Starting Jarvis for you", "What Jarvis can reach"), and stripping the
+    # context word first turned each of them into a different, unknown name, so
+    # their "turn on <feature>" phrase answered nothing at all (measured
+    # 2026-10-26 through jarvis_feature_guide.control_matrix()).
+    clean = target
     row = _feature_lookup_exact(clean)
     if row is None and _feature_context_ok(raw, explicit):
-        row = _feature_lookup(clean)
+        clean = _feature_without_context(target)
+        row = _feature_lookup_exact(clean) or _feature_lookup(clean)
     if row is None:
         return None
     try:
@@ -4083,12 +4180,30 @@ _GUIDE_LEAD = re.compile(
     r"feature\s+guide\s*(?:[,;:-]\s*)?(.*)$")
 
 
+def _feature_light(raw) -> str:
+    """The message with only its ADDRESS taken off - keeps a name's own words.
+
+    `normalise` strips "jarvis" and "for me" from the end of a sentence (they
+    are how people address Jarvis), and two features are NAMED with those
+    words: "Floating Jarvis" arrived as "floating", and "Talk to a chatbot for
+    me" as "talk to a chatbot" - neither is a row, so both fell to the model.
+    This keeps everything except a leading "Jarvis," and a trailing "please",
+    so the same patterns can try the owner's words intact. It grants no extra
+    reach: the exact-name gate is the same one (`_feature_guide_body`).
+    """
+    text = str(raw or "").lower().strip()
+    text = re.sub(r"^(?:hey\s+)?jarvis\s*[,;:.!-]?\s*", "", text)
+    text = re.sub(r"[\s,]+(?:please|thanks|thank\s+you)\s*$", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip(" ,;:.!?")
+
+
 def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
     """The whole feature-guidance block, in one place, in this order.
 
     `s` is the tidied sentence (no leading "Jarvis,"); `raw` is the message as
-    typed/spoken, used only for the explicit-context check (see
-    _FEATURE_CONTEXT).
+    typed/spoken, used for the explicit-context check (see _FEATURE_CONTEXT)
+    and for the second attempt below.
 
     NAMING THE GUIDE IS ITSELF THE CONTEXT (D1b, the live campaign of
     2026-10-25). A7c's words - "explain the prompt coach feature from your
@@ -4098,6 +4213,12 @@ def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
     trailing "from your feature guide" is taken off, a leading "use/check the
     feature guide to ..." is taken off, and the rest of the sentence is read by
     the SAME patterns below - with `said_guide` counting as explicit context.
+
+    TWO ATTEMPTS, ONE GATE (2026-10-26). The patterns run on the tidied
+    sentence; when that finds nothing, they run once more on `_feature_light`
+    (address only removed), so a feature whose own name ends in "Jarvis" or
+    "for me" still resolves. The exact-name-or-explicit-context rule is applied
+    identically in both, so this adds reach for real names, never a guess.
     """
     said_guide = False
     m = _GUIDE_TAIL.search(s)
@@ -4117,6 +4238,22 @@ def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
                                           _feature_target(only.group(1)), said_guide)
     if not s:
         return None
+    got = _feature_guide_body(s, raw, said_guide)
+    if got is not None:
+        return got
+    light = _feature_light(raw)
+    if not light or light == s:
+        return None
+    m = _GUIDE_TAIL.search(light)
+    if m:
+        light = light[:m.start()].strip(" ,;:-")
+    if not light or light == s:
+        return None
+    return _feature_guide_body(light, raw, said_guide)
+
+
+def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
+    """The patterns themselves, on one candidate sentence. See _feature_guide."""
     if _CLOUD_SYNC_TOPIC.search(s):
         # The guide's #646 note is the answer: Jarvis does not use cloud sync.
         # Answered here, deterministically, so a model never gets to suggest a
@@ -4146,6 +4283,24 @@ def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
         else:                           # where do i enable/disable <x>
             on, target = g[8] == "enable", g[9]
         return _feature_howto_intent(raw, _feature_target(target), on, said_guide)
+    m = _FEATURE_USE.fullmatch(s)
+    if m:
+        target = _feature_target(next(g for g in m.groups() if g is not None))
+        if not target:
+            return None
+        return _feature_explain_intent(s, raw, target, said_guide)
+    m = _FEATURE_WHERE.fullmatch(s)
+    if m:
+        target = _feature_target(next(g for g in m.groups() if g is not None))
+        if not target:
+            return None
+        return _feature_explain_intent(s, raw, target, said_guide)
+    m = _FEATURE_CHANGE.fullmatch(s)
+    if m:
+        target = _feature_target(next(g for g in m.groups() if g is not None))
+        if not target:
+            return None
+        return _feature_change_intent(s, raw, target, said_guide)
     m = _FEATURE_STATE.fullmatch(s)
     if m:
         return _feature_state_intent(raw, _feature_target(m.group(1) or m.group(2) or ""),
@@ -4387,10 +4542,20 @@ SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-pat
 #: "What can you do?" and close phrasings (jarvis_sayable.py, the ease-of-use
 #: audit's "Things you can say", 2026-09-27). Whole sentences only: "what can
 #: you do about the weather" goes to the model.
+#:
+#: "What are you CAPABLE of?" was the owner's own screenshot question
+#: (2026-10-26) and the word "capable" appeared nowhere in this file, so the
+#: sentence fell through to the model and could be answered differently each
+#: time. It is the same question as "what can you do?", so it gets the same
+#: fixed list, the same lane and no model.
 _SAYABLE = re.compile(
     r"what\s+can\s+(?:you|i|jarvis)\s+(?:do|say|ask(?:\s+you)?|tell\s+you)(?:\s+here)?"
     r"|what\s+(?:should|do)\s+i\s+(?:say|ask|type)(?:\s+to\s+you)?"
     r"|what\s+(?:are|were)\s+(?:your|jarvis'?s?)\s+commands"
+    r"|what\s+(?:are\s+you|is\s+jarvis)\s+capable\s+of"
+    r"|what\s+are\s+(?:your|my|jarvis'?s?)\s+capabilities"
+    r"|what\s+are\s+you\s+able\s+to\s+do"
+    r"|what\s+(?:is|does)\s+jarvis\s+able\s+to\s+do"
     r"|(?:show|list|tell)\s+me\s+what\s+(?:i\s+can\s+say|you\s+can\s+do)"
     r"|help(?:\s+me)?")
 
@@ -5584,6 +5749,19 @@ def _run_feature_switch_refused(f: dict) -> Result:
     return Result(str(f.get("words") or ""), "feature_switch_refused")
 
 
+def _run_feature_change(f: dict) -> Result:
+    """"Can I change it?" - the five-label kind, the real switch or place.
+
+    Read-only: it says how a change is made and changes nothing. `feature_change`
+    is in READ_ONLY_INTENTS for exactly that reason.
+    """
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_change")
+    out = FG.change(f.get("id") or f.get("name") or f.get("key") or "")
+    return Result(str(out.get("words") or ""), "feature_change")
+
+
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
@@ -5660,6 +5838,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_feature_howto(f)
     if n == "feature_howto_setting":
         return _run_feature_howto_setting(f)
+    if n == "feature_change":
+        return _run_feature_change(f)
     if n == "feature_switch":
         return _run_settings_bool({"key": f["key"], "on": f["on"]}, peer, local)
     if n == "feature_switch_refused":
@@ -6096,8 +6276,9 @@ UNDO_NOTHING_SAID = "Nothing of mine to cancel."
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
-    "feature_explain", "feature_howto", "feature_howto_setting", "feature_state",
-    "feature_state_setting", "feature_switch_refused", "feature_unknown",
+    "feature_change", "feature_explain", "feature_howto", "feature_howto_setting",
+    "feature_state", "feature_state_setting", "feature_switch_refused",
+    "feature_unknown",
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
     "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",

@@ -51,7 +51,7 @@ REQUIRED = ("id", "group", "title", "what", "where", "asks", "limit", "surface")
 #: exists so a new field has to be looked at by a person - and this is that
 #: looking, written down (2026-10-25, rule 7 of tools/check_feature_list.py).
 NOT_CARRIED = ("must_mention",)
-OPTIONAL = ("surface_reason", "covers")
+OPTIONAL = ("surface_reason", "aliases", "covers")
 
 HEADER = '''"""GENERATED FILE - do not edit by hand.
 
@@ -107,7 +107,7 @@ def load_rows() -> tuple:
         for key in ("id", "group", "title", "what", "where", "asks", "surface"):
             if not isinstance(row[key], str) or not row[key].strip():
                 raise SystemExit(f"{SOURCE}: row {n} ({row.get('id')!r}) has an empty {key}")
-        # `limit` is allowed to be empty: 17 rows have none to state, and the
+        # `limit` is allowed to be empty: 16 rows have none to state, and the
         # guide says exactly that ("the list gives no limit for this one")
         # rather than inventing one.
         if not isinstance(row["limit"], str):
@@ -121,12 +121,33 @@ def load_rows() -> tuple:
         covers = row.get("covers", [])
         if not isinstance(covers, list) or not all(isinstance(c, str) for c in covers):
             raise SystemExit(f"{SOURCE}: row {n} ({rid!r}) covers is not a list of strings")
+        # `aliases` are the other names a person uses for ONE feature ("customer
+        # support" for the row whose title is "Deal with customer support for
+        # me"). They are matched exactly, like the id and the title, so a short
+        # generic word is refused here rather than allowed to steal a general
+        # question in the guide.
+        aliases = row.get("aliases", [])
+        if not isinstance(aliases, list) or not all(
+                isinstance(a, str) and a.strip() == a and a for a in aliases):
+            raise SystemExit(f"{SOURCE}: row {n} ({rid!r}) aliases is not a list of "
+                             f"non-empty strings")
+        if len(set(aliases)) != len(aliases):
+            raise SystemExit(f"{SOURCE}: row {n} ({rid!r}) repeats an alias")
+        for alias in aliases:
+            if len(alias) < 4:
+                raise SystemExit(f"{SOURCE}: row {n} ({rid!r}) alias {alias!r} is too short "
+                                 f"to be a feature's own name")
+            if alias != alias.strip():
+                raise SystemExit(f"{SOURCE}: row {n} ({rid!r}) alias {alias!r} has spaces "
+                                 f"at its ends")
         if row["group"] not in groups:
             groups.append(row["group"])
         out = {k: row[k] for k in REQUIRED}
         out["covers"] = list(covers)
         if row.get("surface_reason"):
             out["surface_reason"] = row["surface_reason"]
+        if aliases:
+            out["aliases"] = list(aliases)
         clean.append(out)
     return clean, sha, groups
 
