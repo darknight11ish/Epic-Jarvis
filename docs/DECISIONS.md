@@ -3846,3 +3846,32 @@ a fired reminder's note and a read-only "opens on your PC" line, and approves
 the card through the EXISTING `/api/approve`; it has no way to create or edit an
 action, because a phone cannot read the PC's folders and a client must not edit
 deep configuration. That one-sided reason is in `docs/ARCHITECTURE.md` §8.
+
+
+## 2026-10-27 - the phone reads a typed answer aloud, behind the same gate as the HUD
+
+**Decided:** the phone gets one Read aloud control beside Copy on a finished
+typed answer, in Jarvis's chosen voice, through the existing
+`POST /api/voice/say` - no new route and no new setting. It never speaks an
+answer that used saved or sensitive facts, an answer the PC gated `private`,
+one that read the screen or camera, one whose turn ran a tool, one whose
+stream could not say, or on a stale link or a locked phone; those keep their
+words on screen with the one fixed sentence "It's on your screen.". The cap
+is one named constant, `READ_ALOUD_SENTENCE_CAP = 24`, so the HUD read-aloud
+slice adopts the identical number. The phone is deliberately stricter than
+the HUD's typed path in two places: it refuses when the route header is
+missing (the HUD reads `route || {}` and would speak) and it checks the real
+tool/screen facts (the HUD typed path still hardcodes `toolsKnown: true`);
+the HUD side is to be aligned, and that is a fix there, not a deviation here.
+
+**Why:** the owner asked on 2026-10-27 that the Android app carry the
+read-aloud the desktop HUD already had. The 2026-10-16 owner decision that
+put the gate on the HUD said in so many words "the bar, the widget and the
+phone are unchanged", so this is a new, narrower parity decision - not that
+decision read as if it had covered the phone.
+
+**Proven by:** `ReadAloudTest` (every fail-closed branch, the sentence split
+and the cap, the refusal wording) and `ReadAloudWiringTest` (one control
+beside Copy, the wrapper on every typed send, the PC's say route reused,
+arm-before-play, no new route) - both run off-device; the phone drive is a
+field-test row, not a pass.

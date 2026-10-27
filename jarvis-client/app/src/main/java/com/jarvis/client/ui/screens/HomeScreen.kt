@@ -3148,6 +3148,14 @@ private fun Reply(
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // Read-aloud of a typed answer (the owner's ask, 2026-10-27; the desktop
+    // HUD already does it under the owner's 2026-10-16 decision). The runtime
+    // holds the last finished typed answer and its fail-closed privacy facts;
+    // this screen only offers the control when the answer ON SCREEN is that
+    // one and the facts allow speech. The refusal words are fixed elsewhere.
+    val readAloudOffer by com.jarvis.client.JarvisRuntime.readAloud.collectAsState()
+    val readingAloud by com.jarvis.client.JarvisRuntime.readingAloud.collectAsState()
     val text = reply()
     AnimatedVisibility(
         visible = text.isNotBlank() || streaming || question != null || thread.isNotEmpty(),
@@ -3386,6 +3394,29 @@ private fun Reply(
                             putExtra(Intent.EXTRA_TEXT, text)
                         }
                         context.startActivity(Intent.createChooser(intent, null))
+                    }
+                    // "Read aloud" (the owner's ask, 2026-10-27): one control
+                    // beside Copy, drawn only on the one answer the runtime
+                    // holds and only when its own facts allow speech; while it
+                    // speaks, the same control says Stop. A refusal is one
+                    // fixed sentence - never the answer, never a fact.
+                    readAloudOffer?.takeIf {
+                        !streaming && it.text == text.trim() && it.mayRead
+                    }?.let {
+                        Quiet(
+                            if (readingAloud) com.jarvis.client.voice.ReadAloud.STOP
+                            else com.jarvis.client.voice.ReadAloud.LABEL,
+                            color = chrome.textMid,
+                        ) {
+                            if (readingAloud) {
+                                com.jarvis.client.JarvisRuntime.stopReadingAloud()
+                            } else {
+                                scope.launch {
+                                    val said = com.jarvis.client.JarvisRuntime.readAloudLastAnswer()
+                                    if (said.isNotBlank()) com.jarvis.client.JarvisRuntime.setNotice(said)
+                                }
+                            }
+                        }
                     }
                 }
                 // Only on an answer the desktop gave an id to, and only once
