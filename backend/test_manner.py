@@ -1350,10 +1350,14 @@ def t_personality_describe_bite6():
                   all(w in body for w in ("humour", "answer length", "formality",
                                           "address you", "make me a personality")), body)
             check(f"and it stays short: {text!r}", len(lines) <= 15, len(lines))
-        # 2b. What the one-preset comment now says, pinned by behaviour: an
-        #     alias alone IS enough inside these five shapes (the resolver is
-        #     the guard, not the wording), while a bare "what is <alias>" is
-        #     not one of the shapes at all.
+        # 2b. What the one-preset comment now says is measured by BEHAVIOUR, not
+        #     by reading its words: an alias alone IS enough inside these five
+        #     shapes (the resolver is the guard, not the wording), while a bare
+        #     "what is <alias>" is not one of the shapes at all. The comment's
+        #     own prose is deliberately NOT pinned - a test that asserts on the
+        #     source text of a production module goes red when the wording is
+        #     improved, which is the disease tools/check_no_source_pins.py
+        #     exists to prevent.
         for text, pid in [("what does the butler do", "classic_butler"),
                           ("what can TARS do", "dry_wit"),
                           ("what is brief like", "tactical_ops")]:
@@ -1361,12 +1365,6 @@ def t_personality_describe_bite6():
             check(f"an alias alone is enough in a question shape: {text!r}",
                   intent is not None and intent.name == "personality_describe"
                   and intent.f.get("personality") == pid, intent)
-        src = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
-        check("the one-preset comment no longer promises a title or the word "
-              "'personality' in every form",
-              "names the preset by its title or with the" not in src)
-        check("and it states the real guard: the resolver",
-              "The guard is the resolver, not" in src)
         # 3. The old question is untouched: still personality_status, still the
         #    nine titles, never the describe form.
         status_before = Q.run(Q.match("what personality are you using?"), None, time.time())
