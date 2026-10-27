@@ -58,8 +58,9 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
     resolved BEFORE the backup folder exists, so an unresolvable ref refuses
     with nothing written instead of journaling a deploy it cannot name. The keys
     are ADDITIVE: a version-1 journal written by an older tool has no source
-    keys, still loads, and still rolls back (`load_journal` reads only `version`,
-    `live` and `entries`; rollback ignores the rest).
+    keys, still loads, and still rolls back (`load_journal` validates only
+    `version` and `entries`, `rollback_backup` adds `live`; both ignore the
+    rest).
     2. HUD DELTAS for the five patched base files (`jarvis_hud.py`, `jarvis_gate.py`,
        `jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py`). Those files are
        never replaced, because the live copies are newer than the published base. For
@@ -1380,9 +1381,10 @@ def _restore_entries(live: Path, root: Path, entries: list) -> tuple:
 def load_journal(backup_root: Path) -> dict:
     """Read one deploy journal. Raises Refused on anything unsafe or unreadable.
 
-    Only `version`, `live` and `entries` are read, so a journal written before the
-    `source_*` keys existed still loads and still rolls back; the source keys are
-    carried in the returned dict for a caller that wants the proof, never required.
+    Only `version` and `entries` are validated here (`rollback_backup` also checks
+    `live`), so a journal written before the `source_*` keys existed still loads
+    and still rolls back; the source keys are carried in the returned dict for a
+    caller that wants the proof, never required.
     """
     path = Path(backup_root) / JOURNAL_NAME
     try:
