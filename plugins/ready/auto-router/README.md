@@ -44,11 +44,17 @@ a live turn changes.** That is deliberate:
 ## What it returns
 
 `evaluate_route(prompt, context_tokens=0, active_project=None, speed_stats=None)`
-gives a plain dict. `lane` is `"local"`, `"jarvis-escalate"` or
-`"jarvis-critic"`; `recommended` is true only for the last two; `advisory` is
+gives a plain dict. `lane` is `"local"` or `"jarvis-escalate"`; `recommended` is
+true only for the second; `advisory` is
 always true. A recommendation always carries `would_send` - the **scrubbed**
 text, and the only text the advice covers. The raw `prompt` is never handed back
 as something to send.
+
+**It was two lanes until 2026-10-27.** `jarvis-critic` was the stronger model a
+review task was offered; the owner's decision of that day keeps ONE cloud lane,
+so a review is a longer ANSWER (`REVIEW_ANSWER_TOKENS`) and not a second lane.
+`is_review()` is still here and still answers "would this answer be a long
+one?", which is what it sizes.
 
 ## The four gates, each one proved able to fail
 
