@@ -920,7 +920,7 @@ def t_both_apps_read_the_current_contract():
 
 
 # --------------------------------------------------------------------------
-#   Personality presets (2026-10-22): the owner's nine characters
+#   Personality presets (2026-10-22): the owner's ten characters
 # --------------------------------------------------------------------------
 #
 # The nine mutation bite-proofs the blueprint asks for, split across this file
@@ -961,7 +961,7 @@ def t_personality_budget_is_really_kept_and_a_break_is_reported():
     real = json.loads((REPO / "contract" / "personalities.json").read_text(encoding="utf-8"))
     worst = max(len(M._compose(p, p["dials"], spoken)) for p in M._BUILTIN
                 for spoken in (False, True))
-    check("all 9 assembled persona prompts fit the 750-char / ~180-token budget",
+    check("all 10 assembled persona prompts fit the 750-char / ~180-token budget",
           worst <= M.PROMPT_CHAR_CAP, f"worst {worst}")
     broken = json.loads(json.dumps(real))
     broken["personalities"][0]["prompt_block"] = "x" * 751
@@ -1074,7 +1074,7 @@ def t_personality_crisis_override_strips_persona_text():
             spoken = M.prompt_block(spoken_live=True)
             check(f"{pid}: spoken-live adds the 1-3 sentence cadence constraint",
                   M._SAFETY["spoken_live_note"] in spoken and len(spoken) <= M.PROMPT_CHAR_CAP)
-        check("the same calm block comes back for all 9 personalities",
+        check("the same calm block comes back for all 10 personalities",
               len(set(texts)) == 1)
         check("the crisis block has no critic or wit instruction in it",
               not any(w in texts[0].lower() for w in
@@ -1083,6 +1083,21 @@ def t_personality_crisis_override_strips_persona_text():
         check("no persona block carries a SecAlign marker",
               not any(mark in M.prompt_block() for mark in
                       ("<|im_start|>", "<|im_end|>", "<tool_call>", "<think>")))
+        # The crisis message is code (`jarvis_wellbeing.REPLY`), so no persona
+        # may carry a second one. This is a data assertion on the built-ins,
+        # not a source-text pin: a future hand-edit that pastes a hotline
+        # number or a crisis script into a personality fails here.
+        banned = ("988", "911", "nine eight eight", "crisis", "suicide",
+                  "self-harm", "hotline", "lifeline")
+        found = []
+        for preset in M._BUILTIN:
+            for spoken in (False, True):
+                text = M._compose(preset, preset["dials"], spoken, True).lower()
+                for word in banned:
+                    if word in text:
+                        found.append((preset["id"], spoken, word))
+        check("no built-in persona carries a crisis number or script "
+              "- the code owns that message", not found, found)
         check("the sensitive-fact spoken hold (#492) is still the exact sentence",
               M._SAFETY["sensitive_fact_spoken_reply"] == "It's on your screen.")
 
@@ -1147,8 +1162,8 @@ def t_personality_custom_presets_are_scrubbed_and_dial_copy_safe():
 def t_personality_views_carry_the_owner_surface():
     with Folder():
         v = M.handle_get()[1]
-        check("GET /api/manner carries all 9 presets with their ack and voice",
-              len(v["personalities"]) == 9
+        check("GET /api/manner carries all 10 presets with their ack and voice",
+              len(v["personalities"]) == 10
               and all(p["switch_ack"] and p["voice_blend"] and p["greeting_subtitle"]
                       for p in v["personalities"]))
         check("the view carries the four dials and the voice-sync switch",
@@ -1255,9 +1270,9 @@ def t_personality_quick_switching_bite3():
                 Q.run(intent, None, time.time())
                 check(f"dial persisted: {text!r}", M.dials()[name] == value, M.dials())
         query_intent = Q.match("what personality are you using?")
-        check("a question asks and lists the nine personalities",
+        check("a question asks and lists the ten personalities",
               query_intent is not None
-              and Q.run(query_intent, None, time.time()).reply.count(";") >= 6)
+              and Q.run(query_intent, None, time.time()).reply.count(";") >= 9)
         check("the old humour on/off sentence still belongs to its own switch",
               (Q.match("turn off humour") or Intent("", {})).name == "settings_bool")
 
@@ -1310,7 +1325,7 @@ def t_personality_describe_bite6():
                   in got.reply.lower(), got and got.reply)
             # The offered sentence must WORK, not just read right: feed it back
             # through the grammar. "switch to <title>" with no "the ... personality"
-            # is measured (2026-10-26, all nine) to match nothing, so this is what
+            # is measured (2026-10-26, all ten) to match nothing, so this is what
             # catches that wording coming back.
             said = re.findall(r'Say "([^"]+)"', got.reply if got is not None else "")
             back = Q.match(said[0]) if said else None
@@ -1323,7 +1338,7 @@ def t_personality_describe_bite6():
                   and "request_id" not in got.reply)
         # 2. ALL of them: every title and every description, contract order,
         #    one line each, and short. "describe my personalities" is the
-        #    owner's own possessive (F4): the same nine, and the reply still
+        #    owner's own possessive (F4): the same ten, and the reply still
         #    says it is describing what each personality does.
         titles = [p["title"] for p in M._BUILTIN]
         for text in ("describe your personalities", "explain your personalities",
@@ -1340,7 +1355,7 @@ def t_personality_describe_bite6():
             body = got.reply if got is not None else ""
             lines = body.split("\n")
             listed = [ln[2:].split(" - ")[0] for ln in lines if ln.startswith("- ")]
-            check(f"all nine, in contract order, one line each: {text!r}",
+            check(f"all ten, in contract order, one line each: {text!r}",
                   bool(titles) and listed == titles,
                   listed)
             check(f"every line is that preset's own description: {text!r}",
@@ -1366,14 +1381,14 @@ def t_personality_describe_bite6():
                   intent is not None and intent.name == "personality_describe"
                   and intent.f.get("personality") == pid, intent)
         # 3. The old question is untouched: still personality_status, still the
-        #    nine titles, never the describe form.
+        #    ten titles, never the describe form.
         status_before = Q.run(Q.match("what personality are you using?"), None, time.time())
         for text in ("what personality are you using", "what personalities do you have",
                      "list your personalities"):
             intent = Q.match(text)
             check(f"the old question still answers itself: {text!r}",
                   intent is not None and intent.name == "personality_status", intent)
-        check("the status answer keeps its shape: the active preset and the nine titles",
+        check("the status answer keeps its shape: the active preset and the ten titles",
               status_before is not None and status_before.intent == "personality_status"
               and "You're using" in status_before.reply
               and all(t in status_before.reply for t in titles),
@@ -1466,7 +1481,7 @@ def t_personality_wire_contract_769():
         for field in ("personalities", "personality", "dials", "voice_sync",
                       "custom_personalities"):
             check(f"#769 reads GET field {field!r}", field in view, sorted(view))
-        check("the GET personality ids are the nine contract ids",
+        check("the GET personality ids are the ten contract ids",
               [p["id"] for p in view["personalities"]] == [p["id"] for p in M._BUILTIN],
               [p["id"] for p in view["personalities"]])
         check("each preset carries the fields the panel draws",

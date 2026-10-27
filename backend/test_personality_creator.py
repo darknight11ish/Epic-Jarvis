@@ -432,7 +432,7 @@ def t_an_unknown_base_preset_falls_back_to_a_real_one():
         state = json.loads((Path(os.environ["OPENJARVIS_CONFIG_DIR"])
                             / C.DRAFT_FILE).read_text(encoding="utf-8"))
         base = state["drafts"]["conv-aaaaaaaa"]["draft"]["base_preset"]
-        check("the base is always one of the nine built-ins",
+        check("the base is always one of the ten built-ins",
               base in C._builtin_ids(), base)
         check("...and the reply names it", got["intent"] == "personality_create")
 
@@ -441,7 +441,7 @@ def t_the_builtin_list_matches_the_engine():
     expected = tuple(p["id"] for p in M._BUILTIN)
     check("the module's frozen built-in list equals jarvis_manner's own",
           tuple(C._builtin_ids()) == expected, (C._builtin_ids(), expected))
-    check("there are nine of them", len(expected) == 9, len(expected))
+    check("there are ten of them", len(expected) == 10, len(expected))
 
 
 def t_the_description_is_capped():
@@ -820,15 +820,16 @@ def t_a_dead_model_never_raises():
         C.urllib.request.urlopen = real
 
 
-def t_the_personality_list_says_nine_and_names_nine():
+def t_the_personality_list_says_ten_and_names_ten():
     with Folder():
         words = Q._personality_words()
         titles = [p["title"] for p in M._BUILTIN]
-        check("the quick answer says nine", "nine personalities" in words, words[:200])
-        check("...and lists all nine titles", all(t in words for t in titles),
+        check("the quick answer says ten", "ten personalities" in words, words[:200])
+        check("...and lists all ten titles", all(t in words for t in titles),
               [t for t in titles if t not in words])
-        check("the user-visible sentence no longer says eight",
-              "eight personalities" not in words)
+        check("the user-visible sentence no longer says eight or nine",
+              "eight personalities" not in words
+              and "nine personalities" not in words)
 
 
 # --------------------------------------------------------------------------
