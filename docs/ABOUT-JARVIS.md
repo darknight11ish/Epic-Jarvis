@@ -608,7 +608,9 @@ This is the section the project writes about itself, and the fuller live list is
   (`docs/ARCHITECTURE.md` §2, item 2).
 - **The phone is deliberately limited, and each limit has a reason.** It does no
   speech-to-text — *"A client must not do speech-to-text"* (`CLAUDE.md`); it has
-  no model catalogue to browse, no memory graph and no deep config editing
+  no model catalogue to browse, no **editable** memory graph (the phone shows a
+  read-only Galaxy picture since 2026-10-26: at most 48 names, no add, edit,
+  delete, merge or drag) and no deep config editing
   ("Also standing", same file); it reaches the PC only through Tailscale or
   NordVPN Meshnet, *"at home too"* (`README.md:486-489`); and where a feature is
   left off one side on purpose, the reason must be written down in

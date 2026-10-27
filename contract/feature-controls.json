@@ -2403,8 +2403,8 @@
       "id": "galaxy",
       "name": "Galaxy",
       "group": "Memory",
-      "surface": "desktop",
-      "where": "Brain, Galaxy.",
+      "surface": "both",
+      "where": "Brain, Galaxy (desktop). Brain, Memory, People and things (phone).",
       "control": {
         "type": "refused",
         "setting_keys": [],

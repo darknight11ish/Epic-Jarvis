@@ -3,7 +3,7 @@
 The owner's feature list, as data: 140 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 c21ac68bfebd2d116728eb4dd46ccabe0e732deef9e4786944ae8fc9f74c810d); the apps' Features pages read their own
+`features/features.json` (sha256 2955e310231cfaf1fd4c72c42670d4b7c18119c1e69d8a6534505a49149525ce); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "c21ac68bfebd2d116728eb4dd46ccabe0e732deef9e4786944ae8fc9f74c810d"
+SOURCE_SHA256 = "2955e310231cfaf1fd4c72c42670d4b7c18119c1e69d8a6534505a49149525ce"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -383,7 +383,7 @@ FEATURES = (
         "asks": "No card to look. Forget on a fact asks first, as it does anywhere.",
         "limit": "The desktop keeps no people-and-things list of its own.",
         "surface": "phone",
-        "surface_reason": "Linking facts to the people and things they name, and joining two entries, is the memory graph, which stays off the phone: the desktop keeps the names, \"About <name>\" and the merge card, and the phone shows no names (docs/ARCHITECTURE.md section 8).",
+        "surface_reason": "The desktop has no people-and-things list of its own: the list is a read-only phone view of names the facts already name, while joining two entries, the names under each fact, \"About <name>\" and the merge card stay the desktop's (docs/ARCHITECTURE.md section 8).",
         "covers": ["brain.memory.people-things", "memory-lists"],
     },
     {
@@ -523,12 +523,11 @@ FEATURES = (
         "id": "galaxy",
         "group": "Memory",
         "title": "Galaxy",
-        "what": "A map of what Jarvis knows, drawn from your own facts. It can be drawn as the constellation, or as one of three flat layouts - Star map, Clean tree, Zen ring - and the choice is remembered on this PC.",
-        "where": "Brain, Galaxy.",
+        "what": "A map of what Jarvis knows, drawn from your own facts. On the desktop it can be drawn as the constellation, or as one of three flat layouts - Star map, Clean tree, Zen ring - and the choice is remembered on this PC. On the phone it is a read-only picture: at most 48 names, no labels, and a tap opens that name's facts.",
+        "where": "Brain, Galaxy (desktop). Brain, Memory, People and things (phone).",
         "asks": "No card.",
-        "limit": "Drawn from the same memory lists, so it hides with them.",
-        "surface": "desktop",
-        "surface_reason": "The map is drawn in the PC's Brain window from the memory lists, and the memory graph stays off the phone, so the phone has no Galaxy view.",
+        "limit": "Drawn from the same memory lists, so it hides with them. The phone's picture is read-only - no add, edit, merge or drag - and the names it leaves out stay in the list below.",
+        "surface": "both",
         "covers": ["brain.tab.galaxy", "memory-lists"],
     },
     {
