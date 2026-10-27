@@ -395,6 +395,13 @@ else, is unreachable, or costs more than it can return.
      (`jarvis_hud.py:5739-5748`) reads `model_name:` entries out of it -
      `jarvis-escalate`, `jarvis-critic`, `jarvis-bulk`, all pinned to free
      OpenRouter models with model IDs "verified 2026-09-12".
+
+     > **Superseded 2026-10-27, the finding kept as written:** the names now
+     > map to DeepSeek (`jarvis_chatbot_api.CLOUD_LANES`, 2026-10-06), there is
+     > ONE lane instead of three (`docs/DECISIONS.md` 2026-10-27), and
+     > `_lane_names()` no longer reads `litellm-proxy.yaml` at all
+     > (`backend/cloud-escalate.patch`). `docs/JARVIS-API.md` section 145.1 is
+     > the current contract.
    - The owner has already set `OPENROUTER_KEY_1` (73 characters) and
      `LITELLM_MASTER_KEY` (41) as user environment variables, and
      `~/.openjarvis/cloud-keys.env` sits empty. So the path looks live and is

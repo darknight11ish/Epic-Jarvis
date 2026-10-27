@@ -530,3 +530,16 @@ thinking mode used up the whole 2048-token cap and nothing reads
 thinking off for `deepseek-flash`, or read `reasoning_content` when `content` is
 empty — and the feature is worth using. Until then it is a feature that charges
 for a blank screen.
+
+---
+
+**Closing line, added 2026-10-27 (the findings above are kept exactly as
+written).** The three lanes this record measured (`jarvis-escalate`,
+`jarvis-critic`, `jarvis-bulk`) became ONE on 2026-10-27 (`docs/DECISIONS.md`
+that date, `docs/JARVIS-API.md` section 145.1): all three mapped to DeepSeek, so
+the difference between them was a label and a model name and never a route, and
+`_lane_names()` no longer reads `litellm-proxy.yaml` at all. The blank-screen
+finding above is unchanged and is why an AUTOMATIC cloud turn - one nobody
+clicked for - is now answered on this PC under one honest line instead of
+showing the working-out. The measured cause (thinking billed inside the cap)
+was not fixed; it was routed around.
