@@ -3,7 +3,7 @@
 The owner's feature list, as data: 140 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 bf1fa15e5e5a9cee6b5deaa766b0ff10b546b273f2261956b7f2938423c856a5); the apps' Features pages read their own
+`features/features.json` (sha256 2955e310231cfaf1fd4c72c42670d4b7c18119c1e69d8a6534505a49149525ce); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "bf1fa15e5e5a9cee6b5deaa766b0ff10b546b273f2261956b7f2938423c856a5"
+SOURCE_SHA256 = "2955e310231cfaf1fd4c72c42670d4b7c18119c1e69d8a6534505a49149525ce"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -129,6 +129,7 @@ FEATURES = (
         "asks": "No card either way - it changes wording only.",
         "limit": "A personality changes how Jarvis sounds, never what it does, asks or remembers, and humour never appears on a card, an error or a serious topic.",
         "surface": "both",
+        "aliases": ["personalities", "personality presets", "my personalities"],
         "covers": ["settings.manner", "how-it-talks"],
     },
     {
@@ -140,6 +141,7 @@ FEATURES = (
         "asks": "No card to add your own writing samples on this PC. Forgetting a sample or learned rule asks 'are you sure?' first.",
         "limit": "Names, dates, amounts, links and numbers are stripped out ([name], [date], [amount]) before a sample is kept. Using your writing style marks the turn private (style_exemplars), so it always runs on your own PC's model and never goes to a cloud service.",
         "surface": "both",
+        "aliases": ["writing style"],
         "covers": [],
     },
     {
@@ -173,6 +175,7 @@ FEATURES = (
         "asks": "The headset button never approves anything.",
         "limit": "Live pauses itself during a phone or video call, where the phone can tell one is happening.",
         "surface": "both",
+        "aliases": ["live extras"],
         "covers": ["talking", "phone-live"],
     },
     {
@@ -184,6 +187,8 @@ FEATURES = (
         "asks": "One approval card to switch it on; after that no card each time. Switching it off is instant.",
         "limit": "On the PC only - a client must not turn speech into words. It waits while Jarvis Live is on.",
         "surface": "desktop",
+        "surface_reason": "The PC types what you say into the program in front, using a key you hold there; a phone must not turn speech into words, so it has no such key to hold (the row's own limit).",
+        "aliases": ["dictation", "talk to type"],
         "covers": ["how-it-talks"],
     },
     {
@@ -195,6 +200,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "The thread hides while \"Hide memory lists and chat history\" is on. A new conversation starts after 30 quiet minutes by default - 10 minutes, 1 hour, 4 hours or never can be chosen in Settings - and the old one stays in History, where Continue brings it back.",
         "surface": "both",
+        "aliases": ["chat thread", "continue this chat"],
         "covers": ["settings.idle-new", "records"],
     },
     {
@@ -206,6 +212,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "Only on a PC that has it. It also learns nothing from what you say there - no fact is saved, even with a \"Remember:\".",
         "surface": "both",
+        "aliases": ["incognito", "incognito chat"],
         "covers": [],
     },
     {
@@ -217,6 +224,7 @@ FEATURES = (
         "asks": "No card for turning it on, and none from it: nothing it does would need a card.",
         "limit": "It only works on a PC whose version of Jarvis has it: an older PC leaves it off and says why instead of quietly sending an ordinary chat. It cannot be on at the same time as Incognito - turning one on turns the other off. The phone has no Private chip on purpose: its private mode is Incognito, which is not the same guarantee - Incognito can still run tools.",
         "surface": "desktop",
+        "surface_reason": "The phone has no Private chip on purpose: its private mode is Incognito, which is not the same guarantee, because Incognito can still run tools (the row's own limit).",
         "covers": [],
     },
     {
@@ -228,6 +236,7 @@ FEATURES = (
         "asks": "No card - it is shown on screen only, and never handed to the AI.",
         "limit": "Hidden while the private lists are hidden.",
         "surface": "both",
+        "aliases": ["search history", "search what was said"],
         "covers": [],
     },
     {
@@ -239,6 +248,7 @@ FEATURES = (
         "asks": "Setting one up repeats, so it raises one card. \"Brief me now\" raises none.",
         "limit": "Shows the count and the senders of new email unless you choose the count only.",
         "surface": "both",
+        "aliases": ["morning briefing"],
         "covers": ["brain.work.briefing", "settings.briefing-settings", "work-and-attention"],
     },
     {
@@ -305,6 +315,7 @@ FEATURES = (
         "asks": "Muting is instant, and approves nothing.",
         "limit": "",
         "surface": "both",
+        "aliases": ["attention budget", "interruption budget"],
         "covers": ["brain.now.budget", "work-and-attention"],
     },
     {
@@ -360,6 +371,7 @@ FEATURES = (
         "asks": "Forget asks \"are you sure?\" first. Erase the words asks too, and cannot be undone - only the dates stay.",
         "limit": "Erasing a fact's words can also offer to delete the chat it came from.",
         "surface": "desktop",
+        "surface_reason": "The full list of what Jarvis knows, with Forget and Erase the words, is the PC's own Memory page; the phone shows its saved and waiting facts, not this list.",
         "covers": ["brain.memory.known", "memory-lists"],
     },
     {
@@ -371,7 +383,7 @@ FEATURES = (
         "asks": "No card to look. Forget on a fact asks first, as it does anywhere.",
         "limit": "The desktop keeps no people-and-things list of its own.",
         "surface": "phone",
-        "surface_reason": "Linking facts to the people and things they name, and joining two entries, is the memory graph, which stays off the phone: the desktop keeps the names, \"About <name>\" and the merge card, and the phone shows no names (docs/ARCHITECTURE.md section 8).",
+        "surface_reason": "The desktop has no people-and-things list of its own: the list is a read-only phone view of names the facts already name, while joining two entries, the names under each fact, \"About <name>\" and the merge card stay the desktop's (docs/ARCHITECTURE.md section 8).",
         "covers": ["brain.memory.people-things", "memory-lists"],
     },
     {
@@ -460,6 +472,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "It needs the connection live.",
         "surface": "both",
+        "aliases": ["what did i believe", "memory as of"],
         "covers": ["brain.memory.as-of", "memory"],
     },
     {
@@ -510,11 +523,11 @@ FEATURES = (
         "id": "galaxy",
         "group": "Memory",
         "title": "Galaxy",
-        "what": "A map of what Jarvis knows, drawn from your own facts. It can be drawn as the constellation, or as one of three flat layouts - Star map, Clean tree, Zen ring - and the choice is remembered on this PC.",
-        "where": "Brain, Galaxy.",
+        "what": "A map of what Jarvis knows, drawn from your own facts. On the desktop it can be drawn as the constellation, or as one of three flat layouts - Star map, Clean tree, Zen ring - and the choice is remembered on this PC. On the phone it is a read-only picture: at most 48 names, no labels, and a tap opens that name's facts.",
+        "where": "Brain, Galaxy (desktop). Brain, Memory, People and things (phone).",
         "asks": "No card.",
-        "limit": "Drawn from the same memory lists, so it hides with them.",
-        "surface": "desktop",
+        "limit": "Drawn from the same memory lists, so it hides with them. The phone's picture is read-only - no add, edit, merge or drag - and the names it leaves out stay in the list below.",
+        "surface": "both",
         "covers": ["brain.tab.galaxy", "memory-lists"],
     },
     {
@@ -526,6 +539,7 @@ FEATURES = (
         "asks": "No card of its own for a read: a file already inside a folder you allow is the same read_files_readonly rule as my_files, and the result is treated as outside text. The separate searchable-recordings switch decides whether readable words are kept; nothing is ever sent anywhere.",
         "limit": "English speech only; one file of at most 10 minutes and 100 MB; a WAV needs nothing else, other formats need ffmpeg installed on the PC (a missing ffmpeg is a plain refusal). It does not understand the picture in a video and cannot label speakers. The words are never learned as a fact; the optional searchable index keeps readable text on this PC until you delete it.",
         "surface": "both",
+        "aliases": ["read a recording", "transcribe a recording", "transcribe a video"],
         "covers": ["settings.media-index"],
     },
     {
@@ -648,6 +662,7 @@ FEATURES = (
         "asks": "Reading needs no card. Writing a note back after reading it raises one, as any note write after outside text does.",
         "limit": "",
         "surface": "both",
+        "aliases": ["ask about a pdf", "ask about a document"],
         "covers": ["documents-and-search"],
     },
     {
@@ -725,6 +740,7 @@ FEATURES = (
         "asks": "One card before the chat lists exactly which personal details Jarvis may give. Every offer (refund, cancellation, change) gets its own card. If the agent asks whether they are talking to a bot, Jarvis never claims to be human - it hands that question to you.",
         "limit": "Jarvis writes in your name, at human speed. Identity checks - card digits, security questions, codes - are always handed to you. The transcript can be exported as a file that is not encrypted.",
         "surface": "both",
+        "aliases": ["customer support", "support chat"],
         "covers": ["brain.work.support"],
     },
     {
@@ -791,6 +807,7 @@ FEATURES = (
         "asks": "A key is written straight into Windows Credential Manager. Raising a limit raises one card on the PC plus Windows Hello; lowering or removing one needs no card.",
         "limit": "The amount is an estimate from a price list you can see and correct, and the card says \"about\". Jarvis also asks each service to cap how long an answer can be.",
         "surface": "desktop",
+        "surface_reason": "The keys for the paid AI services are written into Windows Credential Manager on the PC, and the monthly limit is the PC's own Settings card; the phone is never asked for a key.",
         "covers": ["settings.chatbot-api-keys", "money-and-health"],
     },
     {
@@ -857,6 +874,7 @@ FEATURES = (
         "asks": "Read-only. Loosening it from the settings file is PC-only and raises one card plus Windows Hello.",
         "limit": "The link is kept as safely as a password: never logged, never shown, and sent nowhere but Google.",
         "surface": "desktop",
+        "surface_reason": "The private calendar link is read from the PC's Accounts settings by the PC's own backend, and the phone has no calendar-link card of its own.",
         "covers": ["home-calendar-email"],
     },
     {
@@ -901,6 +919,7 @@ FEATURES = (
         "asks": "One card every time, showing the full draft, before any text goes to the folder.",
         "limit": "",
         "surface": "desktop",
+        "surface_reason": "A draft is written into your mail account's Drafts folder by the PC's backend after the card is answered on the PC; the phone has no Drafts card.",
         "covers": ["home-calendar-email"],
     },
     {
@@ -981,6 +1000,7 @@ FEATURES = (
         "limit": "Bubble mode may need more than this setting before Android shows it at all - try it on the real phone.",
         "surface": "phone",
         "surface_reason": "The phone's Floating Jarvis is the app's own icon with a status dot (AvatarOverlayService.kt), not the animal - the desktop's floating face draws the real animal, so there is no animal on the phone to sleep, keep still or take a serious pose (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["floating jarvis", "floating face"],
         "covers": ["settings.floating-avatar", "phone-extras"],
     },
     {
@@ -1061,6 +1081,7 @@ FEATURES = (
         "asks": "No card - it only reads.",
         "limit": "Desktop only. The phone keeps its own crash screen, which appears after a crash on the phone.",
         "surface": "desktop",
+        "surface_reason": "The phone keeps its own crash screen, which appears after a crash on the phone, so this PC process note has no phone half (the row's own limit).",
         "covers": ["settings.crash-notes", "limits-and-notes"],
     },
     {
@@ -1094,6 +1115,8 @@ FEATURES = (
         "asks": "No card - it is the setup page itself.",
         "limit": "Desktop only. The phone's first screen is pairing instead.",
         "surface": "desktop",
+        "surface_reason": "The first card a new PC install meets is the PC's setup page; the phone's first screen is pairing instead (the row's own limit).",
+        "aliases": ["first run", "set up jarvis"],
         "covers": ["settings.first-run", "set-up-jarvis-card"],
     },
     {
@@ -1105,6 +1128,7 @@ FEATURES = (
         "asks": "No card to see the plan: it writes nothing. Applying is your explicit second press, and anything that loosens a rule still raises its own existing approval card on the PC, one at a time.",
         "limit": "A guided path through settings that already exist, not a second set of rules. The preset answer only RECOMMENDS a setup and switches no model. The phone is read-only: applying is the PC's step, where each approval card can wait for you.",
         "surface": "both",
+        "aliases": ["setup questionnaire", "first-time setup"],
         "covers": ["settings.setup-questionnaire"],
     },
     {
@@ -1116,6 +1140,7 @@ FEATURES = (
         "asks": "Hiding is instant and turns nothing off - Jarvis can still do it when asked. A few things always stay visible: approvals, security, What asks first, and the connection status.",
         "limit": "This hides menus on this device only, and the system-tray menu is not affected.",
         "surface": "both",
+        "aliases": ["menu visibility", "show or hide menus"],
         "covers": ["settings.menu-visibility", "brain"],
     },
     {
@@ -1127,6 +1152,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "A key another program already owns is refused, with the reason.",
         "surface": "desktop",
+        "surface_reason": "It is the PC keyboard's own shortcut list, with a key of your own for each, and the phone has no keyboard shortcuts to list.",
         "covers": ["settings.shortcuts", "how-it-talks", "pc-at-a-glance"],
     },
     {
@@ -1171,6 +1197,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "Hides with the other memory lists.",
         "surface": "desktop",
+        "surface_reason": "It is a card on the PC's Model page beside the models; the phone's Model tab holds Models, Compute and Skills and has no Memory card.",
         "covers": ["brain.model.memory", "model-page"],
     },
     {
@@ -1182,6 +1209,7 @@ FEATURES = (
         "asks": "No card - it only chooses which of the PC's own notifications appear.",
         "limit": "Desktop only. On the phone these are Android's own per-channel notification controls, reached from the \"Notifications from Jarvis\" row on Settings.",
         "surface": "desktop",
+        "surface_reason": "On the phone these are Android's own per-channel notification controls, reached from the \"Notifications from Jarvis\" row on Settings (the row's own limit).",
         "covers": ["settings.notifications", "phone-notifications"],
     },
     {
@@ -1193,6 +1221,7 @@ FEATURES = (
         "asks": "No card - it is a row inside the More options fold.",
         "limit": "Desktop only: the backend runs on the PC, next to the desktop app.",
         "surface": "desktop",
+        "surface_reason": "The backend runs on the PC, next to the desktop app, so whether Jarvis may start and stop it is a PC question only (the row's own limit).",
         "covers": ["settings.start-jarvis", "limits-and-notes", "set-up-jarvis-card"],
     },
     {
@@ -1215,6 +1244,7 @@ FEATURES = (
         "asks": "Every step still raises its own approval card before it acts, exactly as if you had asked for it on its own. Resume and Retry only put the job back in the queue - they decide nothing. Pause and Cancel are instant: stopping is never held back.",
         "limit": "The list shows how far each job got and which tools it will use, never what the job is about - the PC sends no titles or step text. Nothing runs while Jarvis is switched off, and the plan card that would start a job from a chat is CLOSED BY MEASUREMENT: the first real multi-step safety eval on this PC passed 1/8 (12.5%) against the 90% bar, so it stays off on today's 8B/9B models - and a passing result only counts for the exact everyday model and for 90 days, so switching models forces a fresh eval.",
         "surface": "both",
+        "aliases": ["jobs that keep going", "jobs after the chat ends"],
         "covers": ["tasks", "work-and-attention"],
     },
     {
@@ -1234,9 +1264,10 @@ FEATURES = (
         "title": "Focus presets",
         "what": "Five presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
-        "asks": "Opening the list changes nothing. Applying a preset will raise one approval card when the lane/apply patch lands; until then the apply action stays disabled.",
-        "limit": "The apply/lane patch is not merged, so no preset can be applied yet and no model changes.",
+        "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
+        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands.",
         "surface": "both",
+        "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],
     },
     {
@@ -1281,6 +1312,7 @@ FEATURES = (
         "asks": "Asks the first time only, then never again. Turning it off is instant.",
         "limit": "Updating a tool is a change, and raises its own card first.",
         "surface": "desktop",
+        "surface_reason": "It reports the packages and tools installed on this PC, and a phone has no such package list to check.",
         "covers": ["settings.tool-updates", "model-page"],
     },
     {
@@ -1292,6 +1324,8 @@ FEATURES = (
         "asks": "Starting with Windows is one tap; the log folder only opens a folder.",
         "limit": "",
         "surface": "desktop",
+        "surface_reason": "The settings file, the log folder and starting with Windows are the PC's own files and startup, and the phone has none of them.",
+        "aliases": ["settings file", "log folder"],
         "covers": ["settings.more-options", "limits-and-notes"],
     },
     {
@@ -1325,6 +1359,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "The HUD's own chat box has no Incognito chat, no New conversation and no crisis panel.",
         "surface": "desktop",
+        "surface_reason": "A phone has no HUD window: the big always-there panel is a PC surface (docs/ARCHITECTURE.md section 8).",
         "covers": ["settings.hud-window", "pc-at-a-glance"],
     },
     {
@@ -1336,6 +1371,7 @@ FEATURES = (
         "asks": "Setting the folder raises one card. Restoring is one card that always needs Windows Hello. Asking for a backup from the phone raises nothing: the file is written only once you say you have saved the recovery code the phone shows you.",
         "limit": "Locked with a recovery code only you have, shown once - lose the code and the backup is useless, and Jarvis cannot recover it. The phone shows the code and will not write the file until you tick that you have saved it, so an unfinished run leaves your PC untouched. Jarvis cannot prove from the phone that a backup opens: only the code opens one, and codes are only typed on the PC. Each new backup deletes the oldest of the last few kept, so making many pushes older copies out. Erased facts stay in older backups until they age out.",
         "surface": "both",
+        "aliases": ["backups"],
         "covers": ["settings.backup", "backups"],
     },
     {
@@ -1347,6 +1383,7 @@ FEATURES = (
         "asks": "Saving a secret writes it straight into Windows Credential Manager - never over HTTP, never shown again.",
         "limit": "The phone is never asked for an account secret.",
         "surface": "desktop",
+        "surface_reason": "The phone is never asked for an account secret: the mail password, the calendar link and the Home Assistant token are kept on the PC (the row's own limit).",
         "covers": ["settings.account-secrets", "money-and-health"],
     },
     {
@@ -1358,6 +1395,7 @@ FEATURES = (
         "asks": "Loosening a reading tool from the PC raises one card plus Windows Hello. Nothing outside that short safe list can be loosened from an app.",
         "limit": "Read-only; the PC writes it from its own settings.",
         "surface": "both",
+        "aliases": ["what jarvis can reach"],
         "covers": ["settings.reach", "documents-and-search"],
     },
     {
@@ -1380,6 +1418,7 @@ FEATURES = (
         "asks": "No card - it only reads.",
         "limit": "It shows the title, Approved / Denied / Timed out, when, and which device.",
         "surface": "both",
+        "aliases": ["past approvals"],
         "covers": ["brain.work.activity", "records", "asks-first"],
     },
     {
@@ -1391,6 +1430,7 @@ FEATURES = (
         "asks": "Turning a number down changes at once. Turning one up that lets Jarvis do more is a loosening, so the PC puts one approval card to you first and writes nothing until you answer.",
         "limit": "Only what the PC's own table offers: every limit names a setting the PC already reads, and the phone may not change the ones the table marks for the PC alone.",
         "surface": "both",
+        "aliases": ["limits and frequency"],
         "covers": ["settings.limits", "limits-and-notes"],
     },
     {
@@ -1413,6 +1453,7 @@ FEATURES = (
         "asks": "No card. It runs the same task the owner's own logon already runs unattended, so a card would only be stricter than the thing it duplicates; pressing the button is itself the owner's explicit act. One lane, the one Jarvis talks to - never both.",
         "limit": "Only the lane the chat is pointed at, and only when this PC has such a task. Starting a task is not the model arriving: the line is cleared only when the lane actually answers, and a start that does not come up says so and leaves the warning standing.",
         "surface": "both",
+        "aliases": ["start the model", "start the local model"],
         "covers": [],
     },
     {
@@ -1424,6 +1465,7 @@ FEATURES = (
         "asks": "No card, in either direction. It runs the same task the owner's own logon already runs unattended, so a card would only be stricter than the thing it duplicates; turning it back on is the same action the Start button beside it takes in the same second. The owner asked for it in these words on 2026-10-14: \"Also restart the lane automatically when it dies.\"",
         "limit": "Bounded, and it stops rather than hammering: a minute of being down before the first try, at most 3 tries in one episode, 5 minutes and then 10 between them, and then it gives up - only the standing warning remains, with the Start button still there. It never starts a second copy while one is starting, and never touches a lane that is answering. A lane stopped on purpose cannot be told from one that crashed: if Jarvis starts it again, it says so, and the button is how the owner says \"not that one\".",
         "surface": "both",
+        "aliases": ["restart the model", "restart the local model"],
         "covers": [],
     },
     {
@@ -1435,6 +1477,8 @@ FEATURES = (
         "asks": "No card. Nothing is kept until you press Turn on in the drawer, and that press is the permission.",
         "limit": "PC only: the phone's clipboard belongs to the phone's own OS and keyboard, and the drawer lives at the PC's Jarvis bar, so the phone has no clipboard history. On the PC it is off on every launch, held in memory - never written to disk, never logged - and wiped when Jarvis or Windows locks.",
         "surface": "desktop",
+        "surface_reason": "The phone's clipboard belongs to the phone's own OS and keyboard, and the drawer lives at the PC's Jarvis bar, so the phone has no clipboard history (the row's own limit).",
+        "aliases": ["clipboard history", "clipboard time machine"],
         "covers": ["clipboard-time-machine"],
     },
     {
@@ -1446,6 +1490,8 @@ FEATURES = (
         "asks": "Showing a difference asks nothing. A restore raises ONE card in the Jarvis bar; a denied or timed-out card changes nothing. The whole drawer hides while App lock or Hide memory lists and chat history is on.",
         "limit": "This PC only: the copies are files on this PC, and a phone has no page for them.",
         "surface": "desktop",
+        "surface_reason": "The copies are files on this PC, and a phone has no page for them (the row's own limit).",
+        "aliases": ["file history", "version history"],
         "covers": ["guardian_history"],
     },
     {
@@ -1545,6 +1591,7 @@ FEATURES = (
         "asks": "It is what makes the next risky step ask: note writes, web searches, smart-home switches.",
         "limit": "Outside text is never learned as a fact, and the tier is raised when it tries to rush you.",
         "surface": "both",
+        "aliases": ["outside text", "text from outside"],
         "covers": ["asks-first", "when-something-is-wrong"],
     },
     {
@@ -1567,6 +1614,7 @@ FEATURES = (
         "asks": "Turning the sandbox on asks first, with one approval card on the PC. Turning it off is instant. A run that reads a file you listed also asks first, showing the script and the file.",
         "limit": "It has no network, writes no file, reads only the listed files you picked, and refuses dangerous code before it starts. Its Windows job object blocks the clipboard, screen and desktop, but cannot block network access on its own.",
         "surface": "both",
+        "aliases": ["data sandbox", "python scripts"],
         "covers": ["settings.sandbox"],
     },
 )

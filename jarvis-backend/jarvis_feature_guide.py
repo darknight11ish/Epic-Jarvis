@@ -33,6 +33,22 @@ down, never a guess:
   * NO FEATURE IS INVENTED: an unknown name gets "I do not have that one; here
     are the groups", and an ambiguous one gets the real candidates. There is no
     fuzzy best guess that could hand back a different feature's facts.
+  * NINE QUESTIONS, NOT THREE (2026-10-26, the owner's requested field test).
+    Besides "what is it?" / "is it on?" / "how do I turn it on?", chat answers
+    "what does it do", "tell me about", "explain", "how do I use", "where is"
+    and "can I change" - all from the same row, so a feature is never answered
+    one way here and another way there. "Can I change it?" comes from the same
+    five owner-facing labels and the same switch table `turn on` writes
+    through, and changes nothing.
+  * THE ANSWER NAMES BOTH APPS. `surface` says which apps have it; when one
+    does not, the answer gives the row's own `surface_reason` (written for every
+    one-sided row on 2026-10-26), so "the phone does not have it" is never a
+    bare claim. A both-apps answer points at the phone's copy of the feature
+    list by name, because the row's `where` is written from the PC's side.
+  * ALIASES ARE THE OWNER'S OTHER NAMES. A row may carry `aliases` ("customer
+    support" for "Deal with customer support for me"); they are matched EXACTLY,
+    like the id and the title, so they widen what a person can say without
+    widening what counts as a guess.
 
 WHAT IT DOES NOT DO, said plainly:
 
@@ -150,7 +166,10 @@ def _tokens(text) -> tuple:
 
 
 def _name_tokens(row: dict) -> tuple:
-    return _tokens(row["id"].replace("-", " ")) + _tokens(row["title"])
+    out = _tokens(row["id"].replace("-", " ")) + _tokens(row["title"])
+    for alias in row.get("aliases") or ():
+        out += _tokens(alias)
+    return out
 
 
 def _extra_tokens(row: dict) -> tuple:
@@ -159,6 +178,10 @@ def _extra_tokens(row: dict) -> tuple:
     out = []
     for key in ("what", "where"):
         for word in _tokens(row.get(key) or ""):
+            if len(word) >= 4 and word not in _STOP:
+                out.append(word)
+    for alias in row.get("aliases") or ():
+        for word in _tokens(alias):
             if len(word) >= 4 and word not in _STOP:
                 out.append(word)
     return tuple(out)
@@ -175,7 +198,16 @@ def _query(words, *, loose: bool) -> tuple:
 
 
 def _exact(row: dict, query: str) -> bool:
-    return query in (_norm(row["id"].replace("-", " ")), _norm(row["title"]))
+    """Does `query` name this row exactly - its id, its title, or an alias?
+
+    `aliases` are the other names a person says for ONE feature: "customer
+    support" for the row whose title is "Deal with customer support for me".
+    They are matched EXACTLY, like the id and the title, never as a substring,
+    so a general question cannot be answered with a feature's facts.
+    """
+    if query in (_norm(row["id"].replace("-", " ")), _norm(row["title"])):
+        return True
+    return any(query == _norm(alias) for alias in row.get("aliases") or ())
 
 
 def _contains_all(have: tuple, want: tuple) -> bool:
@@ -545,18 +577,81 @@ def _setting_words(setting) -> str:
     return str(names[0]) if names else str(setting.key)
 
 
+def _setting_by_key(key: str):
+    R = _registry()
+    if R is None:
+        return None
+    return next((b for b in getattr(R, "BOOL_SETTINGS", ())
+                 if b.key == str(key or "")), None)
+
+
+def _matrix_row(row: dict):
+    """This feature's control-matrix row (cached), or None."""
+    global _MATRIX_BY_ID
+    fid = str((row or {}).get("id") or "")
+    if _MATRIX_CACHE is None:
+        _matrix()
+    if _MATRIX_BY_ID is None:
+        _MATRIX_BY_ID = {r["id"]: r for r in (_MATRIX_CACHE or [])}
+    return _MATRIX_BY_ID.get(fid)
+
+
+def feature_switches(row: dict) -> list:
+    """[{"key","label"}] - the switches the READ answers name for this row.
+
+    The control matrix's `switch_keys` is the authority, not `covers` alone: a
+    few rows' switch is linked by hand in `EXTRA_CONTROLS` (Memory saved ->
+    Background learning, Your past chats -> Chat history), and `covers` cannot
+    name them. Using the matrix keeps "is it on?" and "can I change it?" naming
+    the SAME switch the five labels are built from; `switches_for()` stays the
+    write path's own rule, untouched, because `switch_target()` must not start
+    resolving a switch it did not before.
+    """
+    mine = _matrix_row(row)
+    keys = list((mine or {}).get("switch_keys") or [])
+    if keys:
+        out = []
+        for key in keys:
+            setting = _setting_by_key(key)
+            out.append({"key": key,
+                        "label": _setting_words(setting) if setting is not None
+                                 else str(key).replace("_", " ")})
+        return out
+    return [{"key": s.key, "label": _setting_words(s)} for s in switches_for(row)]
+
+
 def _switch_state_rows(row: dict) -> list:
     out = []
-    for setting in switches_for(row):
-        out.append({"key": setting.key, "label": _setting_words(setting),
-                    "state": read_state(setting.key)})
+    for setting in feature_switches(row):
+        out.append({"key": setting["key"], "label": setting["label"],
+                    "state": read_state(setting["key"])})
     return out
 
 
-def _surface_words(surface: str) -> str:
-    return {"both": "It is in both apps - the PC and the phone.",
-            "desktop": "It is on the PC only.",
-            "phone": "It is on the phone only."}.get(surface, "")
+PHONE_FEATURES_PAGE = ("The phone lists it in the same feature list, under Brain, "
+                       "\"See every feature\".")
+
+
+def surface_words(row: dict) -> str:
+    """Which app(s) have it, and - when one does not - the row's own reason.
+
+    The reason is the feature list's `surface_reason`, written for every
+    one-sided row on 2026-10-26 (the desktop-only rows gained theirs then). When
+    a row has no reason the answer says that plainly rather than inventing one.
+    """
+    surface = str(row.get("surface") or "")
+    if surface == "both":
+        return ("It is in both apps - the PC and the phone. " + PHONE_FEATURES_PAGE)
+    reason = str(row.get("surface_reason") or "").strip()
+    if surface == "desktop":
+        line = "It is on the PC only"
+    elif surface == "phone":
+        line = "It is on the phone only"
+    else:
+        return ""
+    if reason:
+        return f"{line}: {reason}"
+    return f"{line}, and the feature list does not record why the other app has none."
 
 
 def _state_clause(rows: list) -> str:
@@ -586,25 +681,192 @@ def _limit_words(row: dict) -> str:
     return limit if limit else "The feature list gives no limit for this one."
 
 
+def _example_words(row: dict) -> str:
+    """One real sentence to use it, or the honest "none is pinned"."""
+    phrase = EXAMPLE_PHRASES.get(str(row.get("id") or ""))
+    if phrase:
+        return f'Say, for example: "{phrase}".'
+    return "Ask for it in your own words when you want it."
+
+
+def _phone_settings_words(row: dict) -> str:
+    """The phone's own Settings place, named from the row's own `where`.
+
+    The row's `where` starts with "Settings, " on every phone row, and the
+    sentence around this already says Settings, so the leading word is dropped
+    rather than reading "Settings, Settings, ...".
+    """
+    where = str(row.get("where") or "").strip()
+    head, sep, rest = where.partition(",")
+    if head.strip().lower() == "settings" and sep:
+        where = rest.strip()
+    if where and not where.endswith("."):
+        where += "."
+    return f"the phone's own Settings, {where}"
+
+
+#: The phone-only rows whose feature the PC ALSO has, as a DIFFERENT control.
+#: Each row's own `surface_reason` says so - "the desktop's floating face draws the
+#: real animal" (phone-floating) and "the desktop's frame-rate setting is the
+#: animal's, a different thing" (phone-screen-rate) - so "The PC does not have that
+#: control" contradicted the surface line printed in the same answer (2026-10-26,
+#: part B). The PC's control is not this setting, and the row's `where` names only
+#: the phone's.
+PHONE_PC_COUNTERPART = {
+    "phone-floating": "The PC's floating face is a different control.",
+    "phone-screen-rate": "The PC's frame-rate setting is the animal's, a different control.",
+}
+
+
+def _phone_pc_claim(row: dict) -> str:
+    """What this phone row says about the PC's own side, from the row's data."""
+    return PHONE_PC_COUNTERPART.get(
+        str(row.get("id") or ""), "The PC does not have that control.")
+
+
+def phone_change_words(row: dict) -> str:
+    """How a PHONE-ONLY row is changed: on the phone, never "on this PC".
+
+    Five rows (phone-notifications, phone-watch, phone-floating, phone-tiles,
+    phone-screen-rate) carry the PC-Only label because the phone is the only app
+    with the control, and `_label_from` picks that label from the row's reason
+    without looking at `surface`. The label's own words therefore said "on this
+    PC" for rows the PC does not have at all (2026-10-26 review, F3). The row's
+    `surface` wins, and the row's own `where` names the place.
+
+    The closing claim about the PC is per row (`_phone_pc_claim`): three of the
+    five really have no PC control, and saying so for the other two would
+    contradict the surface line in the same answer.
+    """
+    return (f"It is changed in {_phone_settings_words(row)} "
+            f"{_phone_pc_claim(row)}")
+
+
+def both_pc_change_words(row: dict) -> str:
+    """How a row BOTH apps have, whose CONTROL lives in the PC's Settings, changes.
+
+    Four rows (chat-thread, connection, appearance, faces) are `surface: "both"`
+    and carry the PC-Only label because the SETTING CONTROL is the PC's, not the
+    feature. Read out of the label alone, the sentence said "It is changed at
+    Settings, a new conversation starts after on this PC; the phone says so
+    rather than pretending it changed" (2026-10-26, part B): the place was glued
+    to "on this PC" with no sentence of its own, and the label's own words told
+    the owner the phone lacked a feature both apps have. The row's `surface`
+    decides now: the setting is the PC's, and the phone does not change it. It
+    does not claim the phone has no control it might have - only that THIS
+    setting is the PC's (the contract's own reason for these rows is "no backend
+    route to change it").
+    """
+    return (f"Its setting is in {settings_path_words(row)}. It is changed on the "
+            f"PC; the phone has the feature but cannot change the PC's setting.")
+
+
+def change_words(row: dict) -> str:
+    """How to use, turn on, or change this feature - never an invented switch.
+
+    A PHONE-ONLY row is answered from its `surface` BEFORE the label: the label
+    says PC-Only for the five phone controls (the phone is the only app with a
+    control), and reading that label's words out loud told the owner to change a
+    phone setting "on this PC" (2026-10-26 review, F3). A row BOTH apps have is
+    answered from its `surface` too, for the same reason: its control is the
+    PC's, and the phone is not said to lack the feature. No label count changes.
+
+    The five owner-facing labels decide the rest of the shape, so this can never
+    call a Command-Only ability a switch or a safety rule a setting:
+
+      * Switchable / Adjustable - the exact phrase for the ONE switch, or the
+        names of the several (nothing changes until one is named). A row whose
+        typed control is still planned says so instead of naming a phrase.
+      * Always On - cannot be turned off; its approved exception is named.
+      * Settings-Only / PC-Only - the exact Settings place, and which app may
+        change it.
+      * Command-Only - no switch of its own; a real example sentence where the
+        list pins one, plus the Settings place it is listed at.
+    """
+    label = label_for(row)
+    surface = str(row.get("surface") or "")
+    # The surface wins over the label's own words: see this docstring,
+    # phone_change_words() and both_pc_change_words(). Both Settings-shaped
+    # labels are covered because either one would otherwise say "on this PC" /
+    # "Open ... on the PC".
+    if surface == "phone" and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY):
+        return phone_change_words(row)
+    if surface == "both" and label == LABEL_PC_ONLY:
+        return both_pc_change_words(row)
+    settings = feature_switches(row)
+    if label == LABEL_SWITCH_ADJUST and settings:
+        labels = [setting["label"] for setting in settings]
+        if len(labels) == 1:
+            only = labels[0]
+            return (f'To turn it on or off, say "turn on {only}" or "turn off '
+                    f'{only}". A change that loosens a rule still asks on a card first.')
+        return ("It has more than one switch: " + ", ".join(f'"{l}"' for l in labels)
+                + '. Say "turn on <one of those>" for the one you mean; nothing '
+                  'changes until you name one.')
+    if label == LABEL_SWITCH_ADJUST:
+        adjust = list((_matrix_row(row) or {}).get("adjust") or [])
+        phrase = str((adjust[0] if adjust else {}).get("phrase") or "")
+        if phrase:
+            return f'To change it, say "{phrase}".'
+        return (f"Its typed control is not wired yet; open {settings_path_words(row)} "
+                f"to change it.")
+    if label == LABEL_ALWAYS_ON:
+        extra = ALWAYS_ON_EXCEPTION.get(str(row.get("id") or ""))
+        return ("It is Always On (Core Safety Rule) and cannot be turned off."
+                + (f" {extra}" if extra else ""))
+    if label == LABEL_SETTINGS_ONLY:
+        return (f"It is changed only at {settings_path_words(row)}: by your decision "
+                f"it is never typed or spoken.")
+    if label == LABEL_PC_ONLY:
+        return (f"It is changed at {settings_path_words(row)} on this PC; the phone "
+                f"says so rather than pretending it changed.")
+    return ("It runs when you ask and has no switch of its own. "
+            + _example_words(row)
+            + f" It is listed at {settings_path_words(row)}.")
+
+
+#: The Status line a PHONE-ONLY row shows. DISPLAY ONLY: `label_for()` keeps the
+#: owner-approved five-label mix, pinned to `contract/feature-controls.json` and
+#: to the same counts the two apps' feature lists render. But a phone-only row's
+#: Status line read "PC-Only Setting (Honest Refusal on Phone)" while the very
+#: same answer said "It is on the phone only" (2026-10-26, part B): the label was
+#: picked from the row's reason without looking at `surface`, and the two halves
+#: of one answer contradicted each other. The Status line is therefore derived
+#: from `surface` here, and from nothing else.
+PHONE_ONLY_DISPLAY_LABEL = "Phone-Only Setting (Changed in the phone's Settings)"
+
+
+def status_label(row: dict) -> str:
+    """The five-label kind as the Status line says it - `surface` first.
+
+    Only a phone-only row whose label is one of the two Settings-shaped labels
+    is reworded; every other row returns its contract label untouched, so the
+    counts and both apps' directories are exactly as approved. The phone lists'
+    own rendering of that label (a data-level change in both apps) is recorded
+    as a separate PR, not done here.
+    """
+    label = label_for(row)
+    if (str(row.get("surface") or "") == "phone"
+            and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY)):
+        return PHONE_ONLY_DISPLAY_LABEL
+    return label
+
+
 def explain_words(row: dict) -> str:
     """The exact facts, in plain words, made only from the row and the switches."""
     parts = [f"{row['title']}.", str(row.get("what") or "").strip(),
-             f"Status: {label_for(row)}.",
+             f"Status: {status_label(row)}.",
              f"Settings: {settings_path_words(row)}.", "",
              f"Where: {str(row.get('where') or '').strip()}",
              f"Does it ask first? {str(row.get('asks') or '').strip()}",
              f"The honest limit: {_limit_words(row)}"]
-    if _surface_words(row.get("surface")):
-        parts.append(_surface_words(row.get("surface")))
+    if surface_words(row):
+        parts.append(surface_words(row))
     rows = _switch_state_rows(row)
     clause = _state_clause(rows)
     if clause:
         parts.append(clause)
-    if len(rows) == 1:
-        setting = next((s for s in switches_for(row) if s.key == rows[0]["key"]), None)
-        if setting is not None:
-            parts.append(f"To change it, say \"turn on {rows[0]['label']}\" or "
-                         f"\"turn off {rows[0]['label']}\".")
+    parts.append(change_words(row))
     parts.append(f"(Feature list group: {row['group']}.)")
     return "\n\n".join(p for p in parts if p is not None and p != "").replace("\n\n\n", "\n\n")
 
@@ -671,6 +933,8 @@ def _feature_facts(row: dict) -> dict:
     out["covers"] = list(row.get("covers") or [])
     if row.get("surface_reason"):
         out["surface_reason"] = row["surface_reason"]
+    if row.get("aliases"):
+        out["aliases"] = list(row["aliases"])
     return out
 
 
@@ -697,6 +961,64 @@ def explain(words) -> dict:
         return {"ok": False, "kind": "ambiguous",
                 "candidates": [{"id": r["id"], "title": r["title"]} for r in got["rows"]],
                 "words": _ambiguous_words(got["rows"])}
+    return {"ok": False, "kind": "unknown", "groups": [g["group"] for g in groups()],
+            "words": unknown_words(words)}
+
+
+def change(words) -> dict:
+    """Can it be changed, and how? - the answer to "can I change <feature>".
+
+    Says which of the five owner-facing kinds it is, whether it has one switch,
+    several or none, and the exact phrase or Settings place. It changes
+    nothing: `switch_target()` and the fixed "turn on/off" phrase are the
+    write path, and they are untouched here.
+    """
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": ("The feature list is not installed on this PC, so I cannot "
+                          "read it. Nothing here was invented.")}
+    if _cloud_sync_asked(words):
+        return {"ok": True, "kind": "note", "state": None, "words": CLOUD_SYNC_WORDS}
+    got = find(words, loose=True)
+    if got["kind"] == "feature":
+        row = got["row"]
+        rows = _switch_state_rows(row)
+        words_out = (f"{row['title']}. Status: {status_label(row)}. "
+                     f"{change_words(row)}")
+        clause = _state_clause(rows)
+        if clause:
+            words_out += " " + clause
+        known = [r["state"] for r in rows if isinstance(r["state"], bool)]
+        return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                "label": status_label(row), "switches": rows,
+                "state": known[0] if len(set(known)) == 1 else None,
+                "words": words_out}
+    if got["kind"] == "ambiguous":
+        return {"ok": False, "kind": "ambiguous",
+                "candidates": [{"id": r["id"], "title": r["title"]} for r in got["rows"]],
+                "words": _ambiguous_words(got["rows"])}
+    setting, label = _setting_target(words)
+    if setting is None:
+        # A key is how the fixed phrase carries a plain switch it resolved
+        # itself (jarvis_quick's _feature_change_intent), not a name the owner
+        # said.
+        R = _registry()
+        raw_key = str(words or "").strip()
+        setting = next((b for b in getattr(R, "BOOL_SETTINGS", ())
+                        if b.key == raw_key), None) if R is not None else None
+        label = _setting_words(setting) if setting is not None else ""
+    if setting is not None:
+        value = read_state(setting.key)
+        section = getattr(setting, "section", None)
+        where = f"Settings, {section}" if section else "Settings"
+        clause = ("" if not isinstance(value, bool) else
+                  f" It is {ON_WORD if value else OFF_WORD} right now.")
+        return {"ok": True, "kind": "setting", "setting": setting.key, "label": label,
+                "state": value,
+                "words": (f"{label.capitalize()} is an on/off setting in {where}. "
+                          f"Say \"turn on {label}\" or \"turn off {label}\" and I will "
+                          f"do it; a change that loosens a rule still asks on a card "
+                          f"first.{clause}")}
     return {"ok": False, "kind": "unknown", "groups": [g["group"] for g in groups()],
             "words": unknown_words(words)}
 
@@ -763,13 +1085,17 @@ def state(words) -> dict:
                               f"I will not guess whether it is on.")}
         if len(known) == 1:
             value = known[0]["state"]
+            switch_name = str(known[0]["label"] or "")
+            aside = (f" ({switch_name})" if switch_name
+                     and switch_name.lower() not in row["title"].lower() else "")
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                     "state": value, "switches": rows,
                     "words": (f"\"{row['title']}\" is {ON_WORD if value else OFF_WORD} "
-                              f"right now.")}
+                              f"right now{aside}.")}
         return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                 "state": known[0]["state"] if len({r["state"] for r in known}) == 1 else None,
-                "switches": rows, "words": _state_clause(rows)}
+                "switches": rows,
+                "words": f"{row['title']}: " + _state_clause(rows)}
     if got["kind"] == "ambiguous":
         return {"ok": False, "kind": "ambiguous",
                 "candidates": [{"id": r["id"], "title": r["title"]} for r in got["rows"]],
@@ -806,10 +1132,13 @@ def how_to(words, on: bool) -> dict:
         base = (f"{row['title']}. Where: {str(row.get('where') or '').strip()} "
                 f"Does it ask first? {str(row.get('asks') or '').strip()}")
         if not rows:
+            # An ability with no switch is not a dead end: say which kind it is
+            # and how to use it, in the same words the "turn on <ability>"
+            # phrase already gives (2026-10-26).
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
                     "switches": [], "words": (base + " The feature list names no on/off "
                                               "switch for it, so there is nothing to turn "
-                                              "on or off there.")}
+                                              "on or off there. " + ability_explanation(row))}
         if len(rows) == 1:
             label = rows[0]["label"]
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
@@ -1309,14 +1638,33 @@ def _phrase(text: str) -> dict:
 
 
 _MATRIX_CACHE = None
+#: id -> matrix row, built on first use so `_matrix_row()` is a dict lookup
+#: rather than a 140-row scan per answer. Reset whenever the cache is rebuilt.
+_MATRIX_BY_ID = None
+#: True while `_build_matrix` runs. The matrix calls the real matcher, and the
+#: matcher can reach back into `label_for` (a "turn on <ability>" phrase becomes
+#: `switch_target` -> `ability_explanation` -> `label_for`). Without this guard
+#: the first such phrase rebuilt the matrix from inside its own build and the
+#: nested ask died on Python's recursion limit - swallowed by `_quick_intent`,
+#: so the row silently lost its typed-phrase intent. A nested ask now gets an
+#: empty table and the sentence it builds is thrown away; the outer build keeps
+#: going and the cached table is complete.
+_MATRIX_BUILDING = False
 
 
 def _matrix() -> list:
     """The cached control_matrix() - one build per process (it calls the real
     matcher ~500 times), so the directory/label helpers stay fast."""
-    global _MATRIX_CACHE
+    global _MATRIX_CACHE, _MATRIX_BUILDING, _MATRIX_BY_ID
     if _MATRIX_CACHE is None:
-        _MATRIX_CACHE = _build_matrix()
+        if _MATRIX_BUILDING:
+            return []
+        _MATRIX_BUILDING = True
+        try:
+            _MATRIX_CACHE = _build_matrix()
+            _MATRIX_BY_ID = None
+        finally:
+            _MATRIX_BUILDING = False
     return _MATRIX_CACHE
 
 
@@ -1593,11 +1941,77 @@ def _section_words(row: dict) -> str:
     return ", ".join(names)
 
 
+#: A Settings place is a SHORT NAME ("Connection", "A new conversation starts
+#: after"), never a sentence. These are the limits a path is held to when it is
+#: read out of a row's own `where` prose: the owner's list writes the setting
+#: place as `Settings, <Place>` and then carries on with a full stop, a dash or
+#: a second clause, and reading the whole of that as a place is what glued a
+#: fragment to "on this PC" (2026-10-26, part B: "It is changed at Settings, a
+#: new conversation starts after on this PC").
+_MAX_PLACE_WORDS = 6
+#: A place never opens like a clause of prose. Deliberately checked on the
+#: FIRST word only, and only for a place read out of `where` - the registry's
+#: own names ("the big model") are trusted as written.
+_PROSE_OPENERS = ("the", "a", "an", "it", "this", "that", "then", "and", "or",
+                  "when", "where", "what", "how", "if", "so")
+
+
+def _path_shaped(place: str) -> bool:
+    """Is this a Settings place, or a piece of prose that happens to follow a comma?
+
+    The guard exists because `where` is written for a person to read, not to be
+    split: "Settings, Appearance, then Open Faces on the PC." must yield
+    "Appearance", and "Settings, the first card on the page." must yield nothing
+    (it names a position, not a place) so the answer falls back to the directory
+    instead of inventing a path.
+    """
+    place = " ".join(str(place or "").split())
+    if not place:
+        return False
+    words = place.split()
+    if len(words) > _MAX_PLACE_WORDS:
+        return False
+    if any(ch in place for ch in '.;:!?,"()'):
+        return False
+    if words[0].lower().strip("'") in _PROSE_OPENERS:
+        return False
+    return True
+
+
+def _where_place(row: dict) -> str:
+    """The `<Place>` of the row's own opening "Settings, <Place>", or "".
+
+    Only the OPENING path is read, and only up to its own full stop, dash or
+    second comma - never the rest of the sentence. `_path_shaped` then decides
+    whether that really was a place.
+    """
+    where = " ".join(str(row.get("where") or "").split())
+    if not where.lower().startswith("settings,"):
+        return ""
+    rest = where[len("settings,"):].strip()
+    head = rest.split(".", 1)[0]
+    head = head.split(" - ", 1)[0]
+    head = head.split(",", 1)[0].strip()
+    return head if _path_shaped(head) else ""
+
+
 def settings_path_words(row: dict) -> str:
-    """The EXACT place the owner finds this feature, in Settings words."""
+    """The EXACT place the owner finds this feature, in Settings words.
+
+    The registry's section names come FIRST and are used as written: they are
+    the Settings cards this repository already knows how to open. When a row
+    covers no such card, its own `where` may still open with a path -
+    "Settings, Appearance, then Open Faces on the PC." - and that place is used
+    only if it passes `_path_shaped`. What is never used is the prose after the
+    first comma unexamined; when no path survives, the answer gives the
+    directory, which every feature really is listed at.
+    """
     sections = _section_words(row)
     if sections:
         return f"Settings, {sections}"
+    place = _where_place(row)
+    if place:
+        return f"Settings, {place}"
     return SETTINGS_DIRECTORY
 
 
@@ -1655,6 +2069,16 @@ def ability_explanation(row: dict) -> str:
     label = label_for(row)
     title = str(row.get("title") or row.get("id") or "That")
     path = settings_path_words(row)
+    # Same rule as change_words(): a phone-only row is changed on the phone, and
+    # the PC-Only label must never put its control "on this PC" (F3, 2026-10-26);
+    # a row BOTH apps have says the setting is the PC's, never that the phone
+    # lacks the feature (part B, 2026-10-26).
+    if (str(row.get("surface") or "") == "phone"
+            and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY)):
+        return (f"{title} is on the phone only: it is changed in "
+                f"{_phone_settings_words(row)} {_phone_pc_claim(row)}")
+    if str(row.get("surface") or "") == "both" and label == LABEL_PC_ONLY:
+        return f"{title} is a PC-Only Setting. {both_pc_change_words(row)}"
     if label == LABEL_ALWAYS_ON:
         why = str(row.get("what") or row.get("asks") or "").strip()
         extra = ALWAYS_ON_EXCEPTION.get(str(row.get("id") or ""))
@@ -1669,8 +2093,9 @@ def ability_explanation(row: dict) -> str:
         return (f"{title} is Settings-Only by your decision and is never typed "
                 f"or spoken. Open {path} on the PC.")
     why = str(row.get("what") or "").strip()
+    example = example_phrase_words(row).rstrip(".")
     return (f"{title} is a Command-Only ability (runs when you ask, no switch "
-            f"needed). {why} {example_phrase_words(row)}. It is listed at {path}.")
+            f"needed). {why} {example}. It is listed at {path}.")
 
 
 def ability_row(row: dict) -> dict:

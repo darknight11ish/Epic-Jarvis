@@ -187,16 +187,18 @@ def t_every_lesson_is_claimed_by_a_feature_row():
 
 
 def t_a_one_sided_claim_carries_its_reason():
-    """Rule 5, and the reason it covers one direction only.
+    """Rule 5, in both directions since 2026-10-26.
 
     An entry whose `surface` is `"phone"` tells the owner his PC is missing the
     feature. That is the claim that misinformed him three times (PC help,
     "What did I believe on this date?", the rush-latch banner - all three said
     `phone` while the desktop rendered them), so it must carry a sentence
-    saying why. The shape is all a checker can judge - it cannot tell whether a
-    sentence is TRUE - so these prove the three ways it bites:
-    a claim with no reason, a claim whose "reason" is the value said again, and
-    an exemption in REASON_PENDING that is no longer needed."""
+    saying why. A `"desktop"` entry makes the mirror claim about the phone, and
+    chat now says it out loud ("It is on the PC only: <reason>"), so it owes the
+    same sentence. The shape is all a checker can judge - it cannot tell whether
+    a sentence is TRUE - so these prove the ways it bites: a claim with no
+    reason, a claim whose "reason" is the value said again, and an exemption in
+    REASON_PENDING that is no longer needed."""
     def entry(**over):
         base = {"id": "z", "group": "Talking", "title": "t", "what": "w",
                 "where": "w", "asks": "a", "limit": "", "surface": "phone",
@@ -216,8 +218,14 @@ def t_a_one_sided_claim_carries_its_reason():
         "The phone's own display setting, which no PC control can change."))])
     check("a sentence a person wrote is accepted", good == [], good)
 
-    check("a `desktop` entry needs no reason (the rule is one-directional)",
-          C.field_problems([entry(surface="desktop")]) == [])
+    check("a `desktop` entry needs a reason too (both directions, 2026-10-26)",
+          any("z" in b and "no `surface_reason`" in b
+              and "the phone" in b
+              for b in C.field_problems([entry(surface="desktop")])),
+          C.field_problems([entry(surface="desktop")]))
+    check("...and its own sentence is accepted",
+          C.field_problems([entry(surface="desktop", surface_reason=(
+              "The copies are files on this PC, and a phone has no page for them."))]) == [])
 
     stale = C.pending_problems([entry(surface="both")])
     check("an exemption that is no longer needed FAILS, so the list empties itself",

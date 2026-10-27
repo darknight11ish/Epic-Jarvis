@@ -113,7 +113,7 @@ links**, only a list, so the "memory graph" rule stays true in spirit:
 - Parity row for `/api/memory/entities` changes from `no - by rule` to `ported`,
   with the desktop's Galaxy noted as picture-only there.
 
-**Standing rule changed (owner, 2026-09-30):** option B was chosen, so the phone reads `/api/memory/entities` for a plain "People and things" list (built: `net/Entities.kt`, `ui/screens/EntitiesPlate.kt`, `EntitiesTest.kt`); the phone still has no map, picture or links.
+**Standing rule changed (owner, 2026-09-30):** option B was chosen, so the phone reads `/api/memory/entities` for a plain "People and things" list (built: `net/Entities.kt`, `ui/screens/EntitiesPlate.kt`, `EntitiesTest.kt`); the phone got that list and no map or picture then (the connections followed on 2026-10-11 and the read-only picture on 2026-10-26, below).
 
 **Widened 2026-10-11 (owner): the phone gets the Galaxy's connections, in words.** The owner asked
 "can i see the galaxy on the android phone? I should be able to see it", and, offered a choice,
@@ -124,11 +124,25 @@ map's *edges* - who appears alongside whom - so the list now says them: tapping 
 `buildEntityGraph` uses (one fact naming both names, a fact naming more than
 `MAX_NAMES_PER_FACT` = 12 joins nothing), worked out from the `/api/memory/entities` read already
 in hand by intersecting `fact_ids`. **No new route, no `/api/graph`, no canvas and no write** -
-still no picture, no force layout, no dragging, no merge and no Forget/Erase/Pin from this screen.
+still no picture at the time, no force layout, no dragging, no merge and no Forget/Erase/Pin from this screen (the read-only picture followed on 2026-10-26; see the update below).
 What stays the desktop's: the drawing itself, the map's own floating search box and its hover,
 the names under each fact in the Memory tab, "About <name>", the "are these the same?" merge card,
 and the fact-words panel's paging that hangs off a dot. The map's information reaches the phone;
 the map does not.
+
+**Updated 2026-10-26 (owner): the phone draws a READ-ONLY picture of the Galaxy.** The owner asked
+for it - *"i want the android phone to have a picture B) also design a phone Galaxy picture"* - and
+approved breaking only the "no picture/canvas on the phone" part of the rule. Above the band and the
+list, `net/GalaxyPicture.kt` lays out the same names with the desktop's deterministic `zen-ring`
+layout: one centre, the others on R=108, growing outward at 24 pitch, capped at **48 names**
+(1 centre + 32 halo + 15 first ring). The positions are pinned to the desktop JavaScript at 1e-6 by
+a generated fixture, not merely similar. No name is drawn as text (at thumb size labels collide);
+every dot carries the band's own TalkBack line, and a tap opens the name's existing
+facts/connections view. It reads nothing new (`/api/memory/entities` only), writes nothing and adds
+no route, no card and no GL/AGSL. The desktop panel remains the interactive one: the constellation
+and its three flat presets, hover and drag, the floating search box, the merge card, the names under
+each fact and the fact-words paging that hangs off a dot all stay there. The phone's picture is a
+view, never a control.
 
 **A1 (2026-10-21, owner + Gemini approved): the list becomes easy to look through - still read-only.**
 The phone's plate gains four things, every one a VIEW of the same `/api/memory/entities` read and
@@ -168,12 +182,15 @@ labels (`Entities.mostConnected`, the same `sharedPartners` rule the rows use; a
 nothing is left out, ties go to fact count then name so the order never depends on what the PC
 sent). Each label reads as one line - "Priya, 4 facts, shares facts with 2 names" - and the labels
 are `Pill`s, not buttons, because nothing there is tappable. **No canvas, no animation, no GL/AGSL,
-no lines, no new read and no write**: counts and connections come from the two reads the plate
+no lines, no new read and no write in this band** (the separate picture above it, added 2026-10-26,
+is a canvas; the band itself keeps its words): counts and connections come from the two reads the plate
 already makes. It is hidden while the list shows a past date. The owner's other two options (a
-still picture, and the animated 8-preset canvas) were **not** taken: the signed 2026-10-21 ruling
-keeps the phone as a read-only list with zero canvas, and the desktop's five rich animated presets
-do not exist to adapt yet. Proven by `GalaxyBandTest.kt` (pure data) and the source pins in
-`PhoneGalaxyTest.kt`; the runtime look and TalkBack order are a field-test row.
+still picture, and the animated 8-preset canvas) were **not** taken at the time: the signed 2026-10-21
+ruling kept the phone read-only, and the owner reversed its zero-canvas part for the picture alone
+on 2026-10-26; the desktop's five rich animated presets do not exist to adapt yet. Proven by
+`GalaxyBandTest.kt` (pure data), the source pins in
+`PhoneGalaxyTest.kt`, and the picture's own `GalaxyPictureTest.kt` with its generated fixture;
+the runtime look, the TalkBack order and a real tap are field-test rows, not passes.
 
 ## 5. Gate, routes, parity summary
 
@@ -218,7 +235,8 @@ the as-of narrowing keeps the SAME list with each name's active-then ids, drops 
 with no active facts, says the plain line, and keeps retired facts apart for the muted
 section. `MemoryAsOfTest.kt` gains the id-keeping reader (`parseRows`) used for that
 count. `PhoneGalaxyTest.kt`'s existing hidden-mode, no-canvas and no-write pins still
-run unchanged.
+run unchanged; the picture added above is pinned separately by `GalaxyPictureTest.kt`
+against the generated desktop fixture (2026-10-26).
 The feature audit runs with the build (bugs, both apps or the written reason,
 fit).
 
@@ -243,7 +261,7 @@ this wins.)
 
 ## 8. Question for the owner
 
-**Question 1. The phone has no Galaxy picture (a standing rule). What should the
+**Question 1. The phone has no Galaxy picture (a standing rule at the time). What should the
 phone get for "facts behind this dot"?**
 
 - **Nothing; PC only** (recommended). Keeps the rule. The phone can already show
@@ -251,3 +269,9 @@ phone get for "facts behind this dot"?**
 - **A plain "People and things" list**, no picture, no links. Tap a name to see the
   facts that name it. This needs one written rule changed (the phone reads
   `/api/memory/entities`), and it hides itself with the other memory lists.
+
+**Answered 2026-09-30:** option B (the list), with the connections added in words on 2026-10-11.
+**Updated 2026-10-26:** the premise above expired for the picture alone - the owner asked for a
+picture and approved a read-only, deterministic one (48 names, no labels, a tap opens the existing
+facts view). The desktop panel remains the interactive map, and nothing on the phone can add, edit,
+delete, merge or drag a name.
