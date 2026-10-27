@@ -895,15 +895,18 @@ def t_the_route_reads_switches_and_deletes():
           and manifest.get("install") == "handler", manifest)
     check("...its loader position is a whole number of its own",
           isinstance(manifest.get("stack_order"), int)
-          # 153: after setup's drop-in landed, `sandbox` moved to 151, so this
+          # 154: after setup's drop-in landed, `sandbox` moved to 151, so this
           # folder took the first free slot after it (the stack-order suite
           # refuses a tie and would otherwise order the pair by folder name).
           # Moved up one more place on 2026-10-23, with `sandbox` (151 -> 152):
           # `no-expiry-cards.patch` is inserted at stack position 36, so every
           # GENERATED position after it moved up by one and the hand-numbered
           # block above had to follow, or media-index and `sandbox` would both
-          # have been ordered by folder name.
-          and manifest["stack_order"] == 153, manifest.get("stack_order"))
+          # have been ordered by folder name. Moved up once more on 2026-10-26:
+          # `update-in-chat.patch` is inserted at stack position 138, so every
+          # generated position after it moved up by one again and the same block
+          # followed (media-index 153 -> 154, `sandbox` 155 -> 156).
+          and manifest["stack_order"] == 154, manifest.get("stack_order"))
     check("...and the README says it replaces no patch", "replaces NO patch"
           in (plugin_dir / "README.md").read_text(encoding="utf-8"))
 

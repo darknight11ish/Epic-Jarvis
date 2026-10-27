@@ -1389,6 +1389,14 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _settings_adjust(s)
     if got is not None:
         return got
+    # --- "is there an update?", "what changed in the update?", "update Jarvis"
+    # (2026-10-26, the owner's ask: "can jarvis talk about an update if theres
+    # one availabale and the changes? and start the update process for me?").
+    # BEFORE the feature guide: "update Jarvis" must never be read as "update
+    # <a feature>", and "what changed in the update" names no feature anyway.
+    got = _update(s)
+    if got is not None:
+        return got
     # "What is <feature>?", "is <feature> on?", "how do I turn it on/off?" and
     # "turn on <feature>" (2026-10-20). AFTER the settings block on purpose:
     # every setting already worded keeps its own path, card rule and words, and
@@ -3281,6 +3289,67 @@ _P_QUERY = re.compile(
     r"|what\s+personalities\s+do\s+you\s+have"
     r"|(?:list|show)\s+(?:me\s+)?(?:your\s+)?(?:personalities|personality\s+presets)")
 
+#: "describe your personalities", "describe my personalities", "explain your
+#: personalities", "tell me about your personalities", "what does each
+#: personality do", "what are your personalities like" - ALL of them
+#: (2026-10-26). "my" is accepted as the owner says it: "describe my
+#: personalities" answers with the same nine (they are the personalities the
+#: chat has), and the saved "My Personalities" stay the separate ones the
+#: status answer names.
+#: One line per preset, every word from that preset's own `description`: the
+#: catalogue already says what each one is, so nothing is invented here.
+#:
+#: THE POSSESSIVE IS REQUIRED (2026-10-27, PR #876's CI failure). Without it
+#: these forms stole the feature guide's own aliases: "tell me about presets"
+#: and "tell me about personalities" are the owner asking WHERE to change
+#: them, and they must reach the rows that own them -
+#: backend/test_feature_guide.py's alias sweep, and its
+#: "where do i change the jarvis presets" test. Only a sentence that says
+#: WHOSE personalities are meant - your / the / my - asks to describe them.
+#: A bare "presets" is the layout presets, not the nine, so that noun is gone
+#: from these forms; "personality presets" (the whole phrase) still counts.
+#:
+#: Tried BEFORE the one-preset forms below, deliberately: "tell me about your
+#: personalities" also fits "tell me about <name>", and it must be the list,
+#: not a name that resolves to nothing. "What personality are you using?" and
+#: "what personalities do you have?" stay with `_P_QUERY` above, unchanged.
+_P_DESCRIBE_ALL = re.compile(
+    r"(?:describe|explain|tell\s+me\s+about)\s+(?:all\s+(?:of\s+)?)?"
+    r"(?:your|the|my)\s+"
+    r"(?:nine\s+)?(?:personalities|personality\s+presets|personas|characters)"
+    r"|(?:what|which)\s+(?:does|do)\s+each\s+(?:personality|persona|character)\s+do"
+    r"|what\s+(?:are|is)\s+(?:your|the|my)\s+(?:nine\s+)?(?:personalities|personas)"
+    r"\s+(?:like|for)"
+    r"|what\s+(?:do|does)\s+(?:all\s+(?:of\s+)?)?(?:your|the|my)\s+(?:nine\s+)?"
+    r"(?:personalities|personas)\s+do")
+
+#: "what does the Classic Butler personality do", "what is the Classic Butler
+#: personality", "describe the butler personality", "tell me about TARS",
+#: "what is TARS like" - ONE preset (2026-10-26), resolved through
+#: `jarvis_manner.normalize_personality_id()`, so titles, aliases and the
+#: owner's own saved names all work. A name that resolves to nothing returns
+#: None and the sentence stays with the model: "what does it do" and "tell me
+#: about yourself" are ordinary questions, not personality ones.
+#:
+#: Deliberately NOT a bare "what is <name>": several aliases are ordinary words
+#: ("brief", "normal", "quiet"), so that form would take "what is normal" from
+#: the model. These five shapes DO match an alias on its own - "what does the
+#: butler do", "what can TARS do", "what is brief like" - and that is intended,
+#: because naming a real preset is the point. The guard is the resolver, not
+#: the wording: the name must resolve through normalize_personality_id() to a
+#: built-in or a saved preset, so "what does it do", "tell me about yourself"
+#: and a bare "what is brief" stay with the model.
+_P_DESCRIBE_ONE = (
+    re.compile(r"(?:what|which)\s+(?:does|do|can)\s+(?P<who>.+?)\s+do"),
+    re.compile(r"what(?:'s|\s+is)\s+(?P<who>.+?)\s+(?:personality|persona|preset|character)"),
+    re.compile(r"what(?:'s|\s+is)\s+(?P<who>.+?)\s+like"),
+    re.compile(r"describe\s+(?P<who>.+)"),
+    re.compile(r"tell\s+me\s+about\s+(?P<who>.+)"),
+)
+
+#: The noun a question can hang on a name: "the butler PERSONALITY".
+_DESCRIBE_TAIL = re.compile(r"\s+(?:personality|persona|preset|character|mode)$")
+
 #: "be more ..." words -> what they mean: a whole preset where the blueprint
 #: treats it as one, a dial where it is really one of the four.
 _BE_MORE_PRESET = {
@@ -3330,12 +3399,47 @@ def _personality_dial(name: str, value) -> Optional[Intent]:
     return Intent("personality_dial", {"name": name, "value": value})
 
 
+def _personality_named(words: str) -> Optional[str]:
+    """The preset id `words` names, or None when it names none of them.
+
+    The same resolver the switch uses - every built-in id, title and alias,
+    plus the owner's own saved personalities by id or name - so what this
+    answers about is exactly what "switch to ..." would switch to."""
+    name = _DESCRIBE_TAIL.sub("", _clean_tail(words))
+    try:
+        import jarvis_manner
+        return jarvis_manner.normalize_personality_id(name)
+    except Exception:
+        return None
+
+
+def _personality_describe(s: str) -> Optional[Intent]:
+    """"describe your personalities" / "what does the Classic Butler do": the
+    question forms about what a preset IS, answered from the preset's own
+    `description`. Read-only, cardless and never the model - and None when the
+    sentence names nothing known, so "what does it do" and "tell me about
+    yourself" stay ordinary questions."""
+    if _P_DESCRIBE_ALL.fullmatch(s):
+        return Intent("personality_describe")
+    for pattern in _P_DESCRIBE_ONE:
+        m = pattern.fullmatch(s)
+        if m:
+            pid = _personality_named(m.group("who"))
+            if pid:
+                return Intent("personality_describe", {"personality": pid})
+    return None
+
+
 def _personality(s: str) -> Optional[Intent]:
     """"Switch personality to Classic Butler", "talk to me like TARS",
-    "be more sarcastic", "set humour to dry", "call me sir", and the question
-    forms. Whole sentences only, like the rest of this grammar."""
+    "be more sarcastic", "set humour to dry", "call me sir", the question
+    forms, and (2026-10-26) "what does each personality do" and "tell me about
+    TARS". Whole sentences only, like the rest of this grammar."""
     if _P_QUERY.search(s):
         return Intent("personality_status")
+    got = _personality_describe(s)
+    if got is not None:
+        return got
     for pattern in (_P_SWITCH, _P_SWITCH_MODE, _P_TALK_LIKE, _P_ACT_LIKE):
         m = pattern.fullmatch(s)
         if m:
@@ -4856,6 +4960,394 @@ _TYPED_DECISION = re.compile(
     r"|yes,?\s+please")
 
 
+# --------------------------------------------------------------------------
+#   "Is there an update?", "what changed?", "update Jarvis" (2026-10-26)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S REQUEST: "can jarvis talk about an update if theres one
+# availabale and the changes? and start the update process for me?" - "if i
+# ask in chat".
+#
+# WHO KNOWS WHAT, AND WHY IT IS SPLIT THIS WAY. The thing that can install a
+# desktop update is the Tauri shell (`update.rs`): it downloads the signed
+# release, checks its signature and replaces its own executable, and it is the
+# only party that knows which version is running. So the shell says so: every
+# `/api/chat` body it builds carries a top-level `desktop` object
+# (`{"version": "0.2.320", "can_update": true}`), added in Rust
+# (`commands.rs` `chat_extras`, and `hud_proxy.rs`'s `chat_payload` drops
+# anything a page tries to put there). This module reads it and answers from
+# the PUBLIC release manifest the app's own updater reads - one HTTPS GET, no
+# token, nothing about the owner in it - never from the model.
+#
+#   * no `desktop` facts  -> it cannot tell which build is asking, and says so;
+#   * `can_update` false  -> this build cannot verify a download, and says so;
+#   * the fetch failed    -> the CHECK failed, and says so;
+#   * same version        -> the newest published, and says so;
+#   * a newer version     -> the version, and what the release itself says
+#                            changed (its own notes - never invented);
+#   * this build newer    -> a development build, and says so.
+#
+# STARTING IT IS ONE CARD AND NOTHING ELSE. "Update Jarvis" raises ONE
+# approval card (`desktop_update`) through `jarvis_gate.check` - the same gate
+# every other change uses - and the card is in
+# `jarvis_owner_check.PC_ONLY_ACTIONS`, so only this PC can approve it and
+# Windows Hello comes first. NOTHING is downloaded before the yes: this module
+# never fetches an installer and never runs one. The card's approval is what
+# makes the DESKTOP shell run its own `update.rs` path (`commands.rs`
+# `answer_approval` sees the approved card's action), so there is ONE installer
+# and not a second one here. Before this feature the desktop updater was the
+# one self-modification path outside the gate (the self-improvement audit's
+# finding S3); a start from chat is now behind a card, while the Settings
+# window's own Install and "update both halves" buttons still call `update_both`
+# directly - S3 is improved for the new path, not closed for the old one.
+
+#: The manifest the app's own updater reads (`tauri.conf.json`
+#: `plugins.updater.endpoints`). `test_update_chat.py` holds the two equal.
+UPDATE_MANIFEST_URL = (
+    "https://github.com/darknight11ish/Epic-Jarvis/releases/download/"
+    "desktop-latest/latest.json")
+
+#: How long one manifest read may take, and how long its answer is reused.
+#: Short and small on purpose: this runs while the owner waits for a chat
+#: answer, and a release page that is slow is not worth a long hang.
+_UPDATE_TIMEOUT = 6.0
+_UPDATE_TTL = 120.0
+
+#: The gate's action name for the update card. One name, used by this module,
+#: the card words, `jarvis_owner_check.PC_ONLY_ACTIONS`, the framework's tier
+#: table and the desktop's `update.rs` - all six must agree.
+UPDATE_ACTION = "desktop_update"
+
+#: The last manifest answer, so two questions in a row are one fetch. Guarded
+#: by a lock because two chat turns can arrive together.
+_UPDATE_LAST = {"at": 0.0, "data": None}
+_UPDATE_LOCK = threading.Lock()
+
+_UPDATE_ASK = re.compile(
+    r"(?:is|are)\s+there\s+(?:any\s+|an?\s+)?(?:new\s+)?updates?"
+    r"(?:\s+(?:available|out|yet))?(?:\s+(?:for|to|of)\s+jarvis)?"
+    r"|(?:any|new)\s+updates?"
+    r"|(?:is|are)\s+(?:the\s+)?jarvis(?:\s+app)?\s+up\s+to\s+date"
+    r"|(?:do|does)\s+(?:i|jarvis)\s+need\s+(?:an?\s+)?update"
+    r"|what(?:'s|s| is)\s+the\s+(?:latest|newest)\s+(?:version|release)"
+    r"(?:\s+of\s+jarvis)?"
+    r"|what\s+version\s+(?:of\s+jarvis\s+)?(?:am\s+i|is\s+jarvis)\s+(?:on|running)"
+    r"|check\s+for\s+(?:an?\s+|any\s+)?(?:new\s+)?updates?"
+    r"|have\s+i\s+got\s+the\s+latest\s+jarvis")
+
+_UPDATE_NOTES = re.compile(
+    r"what(?:'s|s| is)\s+new\s+in\s+(?:the\s+|this\s+)?(?:new\s+|latest\s+)?"
+    r"(?:update|version|release)(?:\s+of\s+jarvis)?"
+    r"|what\s+changed\s+in\s+(?:the\s+|this\s+)?(?:new\s+|latest\s+)?"
+    r"(?:update|version|release)"
+    r"|what\s+did\s+the\s+(?:update|new\s+version|release)\s+change"
+    r"|what\s+does\s+the\s+(?:update|new\s+version|release)\s+(?:change|do|include)"
+    r"|(?:the\s+|any\s+)?(?:update|release)\s+notes"
+    r"|what(?:'s|s| is)\s+in\s+(?:the\s+|this\s+)?(?:new|latest)\s+"
+    r"(?:update|version|release)")
+
+_UPDATE_START = re.compile(
+    # "update" and "upgrade" on their own: `normalise` takes a TRAILING "jarvis"
+    # off as a vocative ("update, Jarvis"), so "update Jarvis" arrives here as
+    # "update" - which is also what someone typing just "update" means.
+    r"(?:update|upgrade)"
+    r"|(?:update|upgrade)\s+yourself"
+    r"(?:\s+(?:now|to\s+the\s+latest(?:\s+version)?))?"
+    r"|(?:start|begin|run|do|install|apply)\s+(?:the\s+|this\s+|that\s+|its\s+)?"
+    r"(?:jarvis\s+|desktop\s+)?update(?:\s+now)?"
+    r"|install\s+(?:the\s+|this\s+|that\s+|a\s+)?(?:new\s+|latest\s+)?(?:update|version)"
+    r"|update\s+now"
+    r"|(?:update|upgrade)\s+to\s+(?:the\s+)?(?:latest|newest)\s+(?:version|release)"
+    r"(?:\s+of\s+jarvis)?")
+
+
+def _update(s: str) -> Optional[Intent]:
+    """"is there an update?", "what changed in the update?", "update Jarvis".
+
+    Exact, whole-sentence patterns like every other block here, and the
+    near-misses are deliberate: "what's new" with no update/version/release in
+    it, "how do I update Jarvis", "when is the next update", "did the update
+    break anything" and "update my settings" all fall through to the model.
+    """
+    if _UPDATE_NOTES.fullmatch(s):
+        return Intent("update_notes")
+    if _UPDATE_START.fullmatch(s):
+        return Intent("update_start")
+    if _UPDATE_ASK.fullmatch(s):
+        return Intent("update_ask")
+    return None
+
+
+def _version_parts(version) -> Optional[tuple]:
+    """(0, 2, 320) for "0.2.320"; None for anything that is not a version.
+
+    The release stamps `major.minor.<run number>` (`desktop-release.yml`), so
+    numbers are compared as numbers and never as strings - "0.2.99" is older
+    than "0.2.100", which a string comparison gets backwards.
+    """
+    text = str(version or "").strip().lstrip("vV")
+    if not re.fullmatch(r"\d{1,9}(?:\.\d{1,9}){0,3}", text):
+        return None
+    parts = [int(p) for p in text.split(".")]
+    while len(parts) < 4:
+        parts.append(0)
+    return tuple(parts)
+
+
+def _desktop_build(desktop) -> Optional[dict]:
+    """The `desktop` facts this request carried, or None when it carried none
+    or carried nonsense. Anything unrecognised is "no facts": a client cannot
+    talk this module into believing a version it did not send properly."""
+    if not isinstance(desktop, dict):
+        return None
+    version = desktop.get("version")
+    if not isinstance(version, str) or _version_parts(version) is None:
+        return None
+    return {"version": version.strip(),
+            # Only a literal `true` is a yes. An older shell that omits the key
+            # is "cannot update", which is the fail-safe direction: it never
+            # leads to offering an install nobody can do.
+            "can_update": desktop.get("can_update") is True}
+
+
+def _release_manifest() -> tuple:
+    """(manifest, None) or (None, why). One HTTPS GET of the public manifest.
+
+    Standard library only, no token and no identifier: the same request the
+    app's own updater makes. Cached for `_UPDATE_TTL`; a failure is not cached,
+    so the next question tries again.
+    """
+    import urllib.request
+    with _UPDATE_LOCK:
+        cached = _UPDATE_LAST["data"]
+        if cached is not None and (time.time() - _UPDATE_LAST["at"]) < _UPDATE_TTL:
+            return dict(cached), None
+    request = urllib.request.Request(
+        UPDATE_MANIFEST_URL,
+        headers={"User-Agent": "Jarvis-desktop-update-check/1",
+                 "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=_UPDATE_TIMEOUT) as answer:
+            raw = answer.read(256 * 1024)
+        data = json.loads(raw.decode("utf-8", "replace"))
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    if not isinstance(data, dict) or _version_parts(data.get("version")) is None:
+        return None, "the release page answered without a version in it"
+    with _UPDATE_LOCK:
+        _UPDATE_LAST["data"] = dict(data)
+        _UPDATE_LAST["at"] = time.time()
+    return dict(data), None
+
+
+def _release_notes(manifest) -> str:
+    """What the release itself says changed, trimmed for a chat answer.
+
+    One string, exactly as published - never edited into claims of our own. An
+    empty field means the release does not say, and the answer says that rather
+    than inventing a list.
+    """
+    notes = manifest.get("notes")
+    if not isinstance(notes, str):
+        return ""
+    text = notes.strip()
+    if len(text) > 1500:
+        text = text[:1500].rstrip() + " ... (the rest is on the release page)"
+    return text
+
+
+def _range_note(current: str, available: str) -> str:
+    """The honest limit of a changelog: it covers ONE release.
+
+    The app's version is `major.minor.<run number>` and a build can be several
+    releases behind, but the manifest only ever describes the one being
+    published. Saying so is the difference between "what changed" and "what
+    changed in the newest release".
+    """
+    a, b = _version_parts(current), _version_parts(available)
+    if not a or not b:
+        return ""
+    if b[2] - a[2] > 1:
+        return (f" Those notes are for {available} only - they do not cover the "
+                f"releases between {current} and it.")
+    return ""
+
+
+def _update_facts(desktop, fetch=None) -> tuple:
+    """(state, facts) - the one place the check's outcome is decided.
+
+    States, and each is a different honest sentence:
+      "no-build"     no usable `desktop` facts (not the PC's own app);
+      "cannot"       a build with no update key;
+      "failed"       the release page could not be read - the CHECK failed;
+      "newer-here"   this build is newer than the published one (development);
+      "newest"       the published one is the running one;
+      "available"    a newer published version, with its notes.
+    """
+    build = _desktop_build(desktop)
+    if build is None:
+        return "no-build", {}
+    if not build["can_update"]:
+        return "cannot", {"current": build["version"]}
+    manifest, why = (fetch or _release_manifest)()
+    if manifest is None:
+        return "failed", {"why": why}
+    current = build["version"]
+    available = str(manifest.get("version") or "").strip()
+    here, there = _version_parts(current), _version_parts(available)
+    if there < here:
+        return "newer-here", {"current": current, "available": available}
+    if there == here:
+        return "newest", {"current": current}
+    return "available", {"current": current, "available": available,
+                         "notes": _release_notes(manifest)}
+
+
+def _update_words(kind: str, state: str, f: dict) -> Result:
+    """What each state says. One place, so the question and the start's
+    pre-flight cannot word the same fact two ways."""
+    if state == "no-build":
+        return Result(
+            "I can only check that from the Jarvis app on this PC: it is the thing "
+            "that knows which version is running, and this message did not say. "
+            "Open Jarvis there, then Settings, then Updates, and press Check now. "
+            "On the phone, Platform checks has its own update card.", kind)
+    if state == "cannot":
+        return Result(
+            f"This build of Jarvis ({f['current']}) has no update key, so it "
+            f"cannot check or install a download. Installing a signed release turns "
+            f"updates on.", kind)
+    if state == "failed":
+        return Result(
+            "I could not reach the release page, so the check failed and I cannot "
+            f"say whether there is an update. Nothing was changed. ({f['why']})", kind)
+    if state == "newer-here":
+        return Result(
+            f"This build is {f['current']}, and the newest published release is "
+            f"{f['available']}. Yours is the newer one (a development build), so "
+            f"there is nothing to install.", kind)
+    if state == "newest":
+        return Result(f"You are on {f['current']} - that is the newest published "
+                      f"version.", kind)
+    notes = f["notes"]
+    if kind == "update_notes":
+        if not notes:
+            return Result(
+                f"The release for {f['available']} does not say what changed, so I "
+                f"will not make something up. The release page for {f['available']} "
+                f"is on GitHub if you want to look.", kind)
+        return Result(f"What changed in {f['available']}, from its own release "
+                      f"notes: {notes}{_range_note(f['current'], f['available'])}",
+                      kind)
+    return Result(
+        f"Version {f['available']} is available. You are on {f['current']}. "
+        f"Say \"what changed in the update\" to hear what is in it, or "
+        f"\"update Jarvis\" to start it - nothing installs on its own.", kind)
+
+
+def _update_answer(kind: str, desktop, fetch=None) -> Result:
+    """The check's own answer. `kind` is "update_ask" or "update_notes"."""
+    state, f = _update_facts(desktop, fetch=fetch)
+    return _update_words(kind, state, f)
+
+
+def _update_tier(action: str) -> str:
+    """The tier `What asks first` has for the card, read before it is raised.
+
+    An unreadable framework answers "ask" - the same default
+    `jarvis_tool_updates` uses, and the safe direction: it never turns a card
+    into an automatic action.
+    """
+    try:
+        import jarvis_framework as fw
+        return str(fw.action_tier(action))
+    except Exception:
+        return "ask"
+
+
+def _update_gate(action: str, detail: dict, prompt: str):
+    """`jarvis_gate.check` - the one gate every card goes through."""
+    import jarvis_gate
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def _update_spawn(fn) -> None:
+    threading.Thread(target=fn, name="jarvis-update-card", daemon=True).start()
+
+
+def _update_card_thread(detail: dict, prompt: str, gate=None) -> None:
+    """Wait for the owner's answer, and nothing else.
+
+    A yes is what makes the DESKTOP shell run its own update (`commands.rs`
+    `answer_approval` sees this card's action and calls `update.rs`); this
+    thread must never download, install or start anything itself, and a denied,
+    timed-out or refused card simply ends here with nothing changed. The gate
+    records the card and its decision in the approvals store, which is the
+    audit line the desktop updater did not have before (S3).
+    """
+    gate = gate or _update_gate
+    try:
+        gate(UPDATE_ACTION, detail, prompt)
+    except Exception:
+        return
+
+
+def _run_update(intent: Intent, desktop) -> Result:
+    return _update_answer(intent.name, desktop)
+
+
+def _run_update_start(desktop, *, fetch=None, tier_of=None, spawn=None) -> Result:
+    """One card, or a plain reason there is nothing to card about.
+
+    Every refusal here changes nothing and says so. Nothing is downloaded before
+    the owner's yes, and the only thing this does after the yes is let the
+    desktop shell run the updater it already has.
+    """
+    kind = "update_start"
+    state, f = _update_facts(desktop, fetch=fetch)
+    # The check's own answer for every state but one: no facts, no update key, a
+    # failed check, nothing newer, a development build. A card for any of those
+    # would promise an install that cannot happen.
+    if state != "available":
+        return _update_words(kind, state, f)
+    tier_of = tier_of or _update_tier
+    tier = tier_of(UPDATE_ACTION)
+    if tier != "ask":
+        return Result(
+            f"An update needs a person to say yes, and updates are set to {tier!r} "
+            f"in What asks first, so I did not raise a card. Nothing was changed.",
+            kind)
+    available = f["available"]
+    detail = {
+        "text": (f"Update Jarvis on this PC: backend first, then Jarvis Desktop "
+                 f"{available}, then the app restarts."),
+        "what": ("patch the Python backend, then install the signed Jarvis Desktop "
+                 "release, then restart the app"),
+        # The download comes from GitHub, so this card does leave this PC - the
+        # same one GET the app's own check already makes.
+        "leaves_this_pc": True,
+    }
+    prompt = (
+        f"Jarvis wants to update itself on this PC. It patches the Python backend "
+        f"first (every patch, then its own test suites - this can take several "
+        f"minutes), then downloads Jarvis Desktop {available} and checks its "
+        f"signature, then the app restarts. Pace: Balanced. Nothing is downloaded, "
+        f"installed or changed before you approve this card. If a newer release is "
+        f"published before you approve, it installs that newest one instead. If the "
+        f"backend folder cannot be found, nothing is changed and neither half runs. "
+        f"This card can only be approved on this PC.")
+    try:
+        (spawn or _update_spawn)(lambda: _update_card_thread(detail, prompt))
+    except Exception:
+        return Result("I could not raise the approval card, so nothing was changed.",
+                      kind)
+    return Result(
+        f"One card is waiting for your yes. Approving it patches the backend first, "
+        f"then installs Jarvis Desktop {available}, then restarts the app. Nothing "
+        f"has been downloaded or changed yet, and nothing will be unless you "
+        f"approve it - on this PC.", kind)
+
+
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     the owner's request of 2026-10-10).
@@ -5309,6 +5801,19 @@ def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> R
     return Result(_from_now_on_said(manner, temporary), n)
 
 
+def _switch_words(title: str) -> str:
+    """The sentence that really switches to a preset - ONE copy for both
+    answers that offer it (the status words and the describe words).
+
+    Measured 2026-10-26 on all nine titles: `switch to <title>` alone matches
+    nothing, because `_P_SWITCH_MODE` needs the noun after the name, while
+    `switch to the <title> personality` switches every one of them - including
+    the two titles that carry an "&". Having the sentence in two places is how
+    the status answer came to offer one that did not work; one function keeps
+    them from drifting apart again."""
+    return f"switch to the {title} personality"
+
+
 def _personality_words() -> str:
     """The answer to "what personality are you using?" - the active preset, its
     dials, and the nine names (plus the owner's own saved ones), so the owner
@@ -5328,7 +5833,7 @@ def _personality_words() -> str:
     saved = jarvis_manner.user_personalities()
     if saved:
         words += " Your own: " + "; ".join(str(u.get("name") or u.get("id")) for u in saved) + "."
-    words += ' Say "switch to Classic Butler" or "talk to me like TARS" to change.'
+    words += f' Say "{_switch_words("Classic Butler")}" or "talk to me like TARS" to change.'
     return words
 
 
@@ -5398,6 +5903,48 @@ def _run_personality_dial(f: dict) -> Result:
 
 def _run_personality_status() -> Result:
     return Result(_personality_words(), "personality_status")
+
+
+PERSONALITY_MISSING = ("Your PC's Jarvis does not have personality presets yet - run "
+                       "apply-patches.ps1 on the PC.")
+
+
+def _personality_description_words(active: dict) -> str:
+    """One preset described in its own words: its title, the `description` the
+    contract already carries, and the sentence that switches to it. Nothing
+    here is new copy - the description IS the preset's."""
+    title = str(active.get("title") or active.get("id") or "")
+    line = str(active.get("description") or "").strip()
+    said = f"{title} - {line}" if line else title
+    return said.rstrip() + f' Say "{_switch_words(title)}" to use it.'
+
+
+def _run_personality_describe(f: dict) -> Result:
+    """"describe the butler personality" / "what does each personality do":
+    what a preset IS, in its own `description` - cardless and never the model,
+    listed in READ_ONLY_INTENTS so it never clears the "cancel that" record.
+    Nothing the owner can see is written; like every quick answer,
+    `answer()` still records its usual command-digest row for the scheduler.
+    One preset by title, alias or saved name; with no name, all nine in
+    contract order plus the dials and how to make one of your own.
+    The active preset is deliberately not repeated here: the status answer
+    already says which one that is."""
+    n = "personality_describe"
+    try:
+        import jarvis_manner
+    except Exception:
+        return Result(PERSONALITY_MISSING, n)
+    pid = f.get("personality")
+    if pid:
+        active = jarvis_manner.preset(pid)
+        if active is None:
+            return Result(_personality_words(), n)
+        return Result(_personality_description_words(active), n)
+    lines = [f"- {p['title']} - {p['description']}" for p in jarvis_manner._BUILTIN]
+    return Result("Here's what each personality does:\n" + "\n".join(lines) + "\n"
+                  "On top of the one you pick, four dials tune the wording - humour, answer "
+                  "length, formality and how I address you - and you can make your own by "
+                  'saying "make me a personality that ...".', n)
 
 
 def _timer_confirmation(seconds, text: str = "") -> str:
@@ -6027,7 +6574,7 @@ def _run_feature_change(f: dict) -> Result:
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
-        peer=None, local=None, messages=None) -> Optional[Result]:
+        peer=None, local=None, messages=None, desktop=None) -> Optional[Result]:
     """Do it. None hands the sentence to the model after all.
     `conversation`: the request's conversation_id ("cancel that" works only
     within one). `seen`: when the owner last talked to Jarvis before this
@@ -6037,6 +6584,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     jarvis_owner_check.PC_ONLY_ACTIONS can refuse a request that did not
     truly come from this PC (jarvis_settings_registry.py, 2026-09-27)."""
     n, f = intent.name, intent.f
+    # Updates in chat (2026-10-26): `desktop` is the app's own report of the
+    # build that asked (commands.rs `chat_extras`), never the page's words.
+    if n in ("update_ask", "update_notes"):
+        return _run_update(intent, desktop)
+    if n == "update_start":
+        return _run_update_start(desktop)
     if n == "where_put":
         return _run_where_put(f, now, temporary)
     if n == "widget_make":
@@ -6124,6 +6677,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_personality_dial(f)
     if n == "personality_status":
         return _run_personality_status()
+    if n == "personality_describe":
+        return _run_personality_describe(f)
     if n in ("thinking_set", "thinking_from_now_on"):
         return _run_thinking_set(f, temporary)
     if n == "thinking_when":
@@ -6554,7 +7109,7 @@ READ_ONLY_INTENTS = frozenset({
     "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",
     "open_app", "open_chat", "pc_help", "personality_create",
     "personality_create_failed", "personality_create_help",
-    "personality_create_refused", "personality_refine",
+    "personality_create_refused", "personality_describe", "personality_refine",
     "personality_refine_failed", "personality_show", "personality_show_missing",
     "personality_status", "project_log",
     "reach_list", "sayable_help", "screen_status", "search_explain", "settings_choice_bad",
@@ -6562,7 +7117,11 @@ READ_ONLY_INTENTS = frozenset({
     "settings_browser_mode_bad",
     "settings_open", "settings_unknown", "tellme_help", "thinking_status", "thinking_when",
     "time_now", "timer_status", "today_list", "todo_list", "weather_now", "wellbeing_me",
-    "wellbeing_now", "where_put"})
+    "wellbeing_now", "where_put",
+    # Updates in chat (2026-10-26): these two only read the public release
+    # manifest and answer. "update_start" is deliberately NOT here: it raises a
+    # card, so "cancel that" must not reach back past it.
+    "update_ask", "update_notes"})
 
 
 def _run_undo(f: dict, sched, now: float, conversation) -> Optional[Result]:
@@ -6896,7 +7455,7 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
 def answer(text, *, sched=None, now: Optional[float] = None,
            conversation: Optional[str] = None, seen: Optional[float] = None,
            temporary: bool = False, private: bool = False, peer=None, local=None,
-           messages=None) -> Optional[Result]:
+           messages=None, desktop=None) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
     in it; `seen`: when the owner last talked to Jarvis before this turn;
@@ -6938,7 +7497,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
         import jarvis_schedule
         sched = jarvis_schedule.get()
     res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary,
-             peer=peer, local=local, messages=messages)
+             peer=peer, local=local, messages=messages, desktop=desktop)
     if res is not None:
         try:
             sched.mark_command(text)
@@ -7121,11 +7680,16 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     # change in that chat only, never written to manner.json.
     temporary = _temporary_body(body)
     text = newest_own_words(body)
+    # `desktop`: the app's own report of the build that sent this chat, built
+    # in Rust (commands.rs `chat_extras`) and never by a page. The update
+    # answers need it, and nothing else reads it (2026-10-26).
+    desktop = body.get("desktop") if isinstance(body, dict) else None
     res = None if text is None else answer(text, sched=sched, now=now,
                                            conversation=conversation, seen=seen,
                                            temporary=temporary, private=private,
                                            peer=peer, local=local,
-                                           messages=body.get("messages"))
+                                           messages=body.get("messages"),
+                                           desktop=desktop)
     if res is None and conversation and not private:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.

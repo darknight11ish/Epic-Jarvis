@@ -1286,13 +1286,23 @@ def t_aliases_are_the_rows_own_names():
     check("every alias names its own row exactly, and only that row", not problems,
           problems[:8])
     # A row's alias is as usable as its title: the same four questions answer.
+    # 2026-10-27 (PR #876): "tell me about my personalities" is answered by
+    # `jarvis_quick`'s own `personality_describe` - the nine presets, each in
+    # its own words. That IS an explain answer for this one row, so it counts;
+    # "where is", "how do I use" and "can I change" still have to reach the
+    # feature guide, and every other row is unchanged. The bare
+    # "tell me about personalities"/"tell me about presets" forms stay with the
+    # guide, because `_P_DESCRIBE_ALL` now requires a possessive.
     bad = []
     for row in SOURCE:
         for alias in row.get("aliases") or []:
             for template in ("tell me about {}", "where is {}", "how do I use {}",
                              "can I change {}"):
+                allowed = ("feature_explain", "feature_change")
+                if row["id"] == "manner" and template == "tell me about {}":
+                    allowed = allowed + ("personality_describe",)
                 got = match(template.format(_flat(alias)))
-                if got is None or got.name not in ("feature_explain", "feature_change"):
+                if got is None or got.name not in allowed:
                     bad.append((row["id"], alias, template, got.name if got else None))
     check("...and every alias answers the explain, where, use and change questions",
           not bad, bad[:8])

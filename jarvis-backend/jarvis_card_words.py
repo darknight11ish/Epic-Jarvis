@@ -179,6 +179,7 @@ TITLES = {
     "enable_reading_tool": "offer a reading tool to the AI model",
     "check_tool_updates": "check online for tool updates",
     "modify_own_code": "change its own code",
+    "desktop_update": "update Jarvis itself - the backend first, then this app",
     "power_manage": "change its power mode (Active, Quiet or Standby)",
     "schedule_repeat": "set up something that repeats",
     # --- memory, learning and chat history
@@ -401,6 +402,8 @@ SUMMARY = {
     # --- Docker (jarvis_docker.py): Jarvis's OWN containers, never the owner's
     "docker_service_start": "start one of its containers",
     "docker_service_stop": "stop one of its containers",
+    # --- its own code (2026-10-26): one card, both halves, then a restart
+    "desktop_update": "update Jarvis, then restart it",
     # --- backups
     "restore_backup": "restore from a backup",
     # --- devices

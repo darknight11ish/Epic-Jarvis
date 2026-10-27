@@ -3,5 +3,5 @@
   "summary": "estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first.",
   "module": "jarvis_auto_router",
   "install": "none",
-  "stack_order": 147
+  "stack_order": 148
 }

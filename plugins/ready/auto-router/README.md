@@ -11,8 +11,8 @@ folder into the backend's `jarvis_plugins\` folder (or run
 - Module the loader calls: `jarvis_auto_router.install()` - called with **no
   arguments**, because this manifest says `install: "none"`
 - The patch this replaces: none
-- Position in the loader's order: 147, after the highest folder already there
-  (`skill-hub` at 144, `voiceprint` at 145 and `receipts` at 146)
+- Position in the loader's order: 148, after the highest folder already there
+  (`skill-hub` at 145, `voiceprint` at 146 and `receipts` at 147)
 
 ## The one sentence that matters
 
