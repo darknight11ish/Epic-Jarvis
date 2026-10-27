@@ -1246,6 +1246,15 @@ html[data-hud-shell="split-stage"] .bento-waiting{display:flex; flex-direction:c
   font-family:var(--f-mono); font-size:10.5px; color:var(--text);}
 .rem-form-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
 .rem-form-note{font-family:var(--f-mono); font-size:10px; color:var(--text-faint);}
+/* A reminder's own action (2026-10-27). "Then": what the reminder opens, or the
+   one task it may ask to run. The help line is a sentence, never a code. */
+.rem-form textarea{flex:1 1 100%; min-width:0; padding:6px 8px; border:1px solid var(--line);
+  border-radius:3px; background:var(--plate-2); color:var(--text); font-family:var(--f-mono);
+  font-size:11.5px; line-height:1.4; resize:vertical;}
+.rem-form textarea:focus{outline:none; border-color:var(--line-hot);}
+.rem-help{margin:0; font-family:var(--f-mono); font-size:10px; line-height:1.45;
+  color:var(--text-faint);}
+.rem-help[hidden]{display:none !important;}
 /* Phase 2 (2026-10-22): the inline row editor, the one Edit control and the
    keyboard Up/Down reorder. The same words/field model come from
    src/hud-actions.js; this is styling only. */
@@ -2432,6 +2441,45 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
           <input id="rem-notes" type="text" maxlength="300"
                  placeholder="optional; kept in the item's own words">
         </div>
+        <!-- A reminder's own action (2026-10-27, the owner's request: "a
+             reminder that opens a specific image or webpage ... or action cards
+             with actions that jarvis will perform after i approve a card").
+             Drawn ONLY when the PC's own GET /api/schedule says actions:true: an
+             older backend drops an action silently (handle_add pulls only the
+             keys it knows), and a reminder that opens nothing while looking
+             like it does is the one failure worth hiding the control over. -->
+        <div class="rem-form-row" id="rem-then-row" hidden>
+          <label for="rem-then">Then</label>
+          <select id="rem-then">
+            <option value="">Nothing</option>
+            <option value="show-note">Show a note</option>
+            <option value="open-webpage">Open a web page</option>
+            <option value="open-file">Open a file on this PC</option>
+            <option value="run-task">Do a task (one card)</option>
+          </select>
+        </div>
+        <div class="rem-form-row" id="rem-then-note-row" hidden>
+          <label for="rem-then-note">Note</label>
+          <textarea id="rem-then-note" rows="3" maxlength="500"
+                    placeholder="Take the blue folder and the form"></textarea>
+        </div>
+        <div class="rem-form-row" id="rem-then-url-row" hidden>
+          <label for="rem-then-url">Web page</label>
+          <input id="rem-then-url" type="text" maxlength="1024" placeholder="https://">
+        </div>
+        <div class="rem-form-row" id="rem-then-path-row" hidden>
+          <label for="rem-then-path">File</label>
+          <input id="rem-then-path" type="text" maxlength="1024"
+                 placeholder="C:\Users\you\Pictures\taxes.png">
+        </div>
+        <div class="rem-form-row" id="rem-then-task-row" hidden>
+          <label for="rem-then-task">Task</label>
+          <select id="rem-then-task">
+            <option value="briefing">Put my morning briefing together</option>
+            <option value="backup">Run a backup</option>
+          </select>
+        </div>
+        <p class="rem-help" id="rem-then-help" hidden></p>
         <div class="rem-form-actions">
           <button type="submit" class="act primary" id="rem-add">Add</button>
           <span class="rem-form-note">No card: adding an item only adds.</span>
@@ -6062,6 +6110,20 @@ subscribe();
   }
 
   /* ---- the read the page already makes -------------------------------- */
+  /* A reminder's one action, kept to the four kinds and their one payload
+     string. Anything else is dropped, exactly like an unknown field: the PC is
+     the authority and this page never guesses at a shape it was not given. */
+  var ACTION_KINDS = ["show-note", "open-webpage", "open-file", "run-task"];
+  var ACTION_KEY = { "show-note": "note", "open-webpage": "url",
+                     "open-file": "path", "run-task": "task" };
+  function actionOf(j) {
+    var a = j && typeof j.action === "object" && j.action ? j.action : null;
+    if (!a || ACTION_KINDS.indexOf(txt(a.kind)) < 0) return null;
+    var key = ACTION_KEY[txt(a.kind)];
+    var value = txt(a[key]);
+    if (!value) return null;
+    return { kind: txt(a.kind), value: value };
+  }
   function readSchedule(a) {
     var src = a && typeof a === "object" ? a : {};
     var available = src.available !== false && Array.isArray(src.jobs) && Array.isArray(src.todo);
@@ -6079,7 +6141,16 @@ subscribe();
                // machine rule for the editor's prefill.
                rank: Number.isInteger(j.rank) ? j.rank : null,
                duration: typeof j.duration === "number" ? j.duration : null,
-               rule: j && typeof j.rule === "object" && j.rule ? j.rule : null };
+               rule: j && typeof j.rule === "object" && j.rule ? j.rule : null,
+               // A reminder's own action (2026-10-27): the kind and its ONE
+               // payload string, the PC's own second check of it
+               // (`action_problem`: the file has gone, the folder is no longer
+               // listed), and whether it could not be read at all. Each is
+               // empty unless the PC said it, so a reminder without an action -
+               // every row written before today - draws exactly what it drew.
+               action: actionOf(j),
+               actionProblem: txt(j.action_problem),
+               actionUnreadable: j.action_unreadable === true };
     };
     var lists = Array.isArray(src.lists) ? src.lists.filter(function (l) {
       return l && typeof l === "object" && typeof l.name === "string" && l.name
@@ -6095,6 +6166,10 @@ subscribe();
       // Phase 2 is present only when the PC's own read says so: an older
       // backend never gets an Edit/Up/Down control (no fake controls).
       phase2: available && src.phase2 === true,
+      // The same contract for a reminder's action (2026-10-27): an older
+      // backend DROPS an action silently, so the form's whole "Then" row is
+      // hidden unless the PC says it can keep one - and the row says why.
+      actions: available && src.actions === true,
       hiddenCount: typeof src.hidden_count === "number" ? src.hidden_count : 0,
       jobs: available ? src.jobs.filter(ok).map(row) : [],
       todo: available ? src.todo.filter(ok).map(row) : [],
@@ -6114,6 +6189,10 @@ subscribe();
         }
         view = readSchedule(data);
         paint();
+        // The "Then" row's own visibility depends on what the PC said it can
+        // keep (`actions`), so it is settled after every read - never guessed
+        // at from a control that cannot work.
+        syncForm();
       });
     }).catch(function (e) {
       if (view === null) {
@@ -6148,7 +6227,29 @@ subscribe();
     if (job.missed) out.push("Went off late - the PC was off or asleep.");
     if (!job.hidden && job.list) out.push("List: " + job.list);
     if (job.wentOffAt) out.push("Went off at " + job.wentOffAt);
+    // A reminder's own action (2026-10-27), in full, BEFORE anything opens:
+    // the whole address or path, and never a shortened one. While the words are
+    // hidden none of this is drawn - the PC blanks the action too, and a line
+    // naming a file the owner may not see would be the leak the blanking is for.
+    if (!job.hidden && job.action) {
+      var a = job.action;
+      if (a.kind === "open-webpage") out.push("Opens " + a.value + " when you press Open");
+      else if (a.kind === "open-file") out.push("Opens " + a.value + " on this PC when you press Open");
+      else if (a.kind === "show-note") out.push("Note: " + a.value);
+      else if (a.kind === "run-task") out.push("Asks you once on a card before it " +
+        taskWords(a.value));
+    }
+    if (!job.hidden && job.actionProblem) out.push(job.actionProblem);
+    if (job.actionUnreadable) {
+      out.push("That reminder's action could not be read, so nothing will open.");
+    }
     return out.join(" · ");
+  }
+  /* What a `run-task` name does, in the same words the card uses. */
+  function taskWords(task) {
+    if (task === "backup") return "runs one backup";
+    if (task === "briefing") return "puts your briefing together";
+    return "does the task it names";
   }
   /* The PC's own refusal rules are the authority (jarvis_schedule.act):
    *   - a kind with no time of its own (`Kind.ends`, e.g. "remind me next
@@ -6534,6 +6635,8 @@ subscribe();
     row.append(el("p", "rem-title", rowTitle(job)));
     var meta = rowMeta(job);
     if (meta) row.append(el("p", "rem-meta", meta));
+    var openBtn = openButtonOf(job, wentOff);
+    if (openBtn) row.append(openBtn);
     var controls = controlsOf(job, groupJobs);
     if (controls) row.append(controls);
     var acts = actionsFor(job, wentOff);
@@ -6651,6 +6754,40 @@ subscribe();
     });
   }
 
+  /* ---- opening what a reminder points at (2026-10-27) ------------------ */
+  /* The Open button is the ONLY way anything opens, and pressing it IS the
+     approval: there is no card, because nothing is opened by itself and opening
+     writes nothing (the same reasoning jarvis_open.py gives for opening a
+     program with no card). A card would also be wrong on its own terms - it
+     dies after fifteen minutes, and "look at this when you get to it" has to
+     survive the shower. The command takes the job's ID and nothing else: the
+     PC reads the address or the path back from its own answer and checks it
+     again, so this page never chooses what Windows opens. */
+  function openButtonOf(job, wentOff) {
+    if (!wentOff || job.hidden || job.actionProblem || !job.action) return null;
+    if (job.action.kind !== "open-webpage" && job.action.kind !== "open-file") return null;
+    var b = el("button", "rem-btn rem-open", "Open");
+    b.type = "button";
+    b.setAttribute("data-rem-open", job.id);
+    b.addEventListener("click", function () { openTarget(job, b); });
+    return b;
+  }
+  function openTarget(job, button) {
+    if (busy) return;
+    busy = true;
+    if (button) button.disabled = true;
+    invoke("open_reminder_target", { id: job.id }).then(function (v) {
+      var opened = v && typeof v === "object" ? txt(v.opened) : "";
+      note.textContent = opened === "file" ? "Opened it on this PC."
+        : (opened === "page" ? "Opened it in your browser." : "Opened it.");
+      note.hidden = false;
+      askedAt = Date.now();
+    }).catch(showError).then(function () {
+      busy = false;
+      if (button) button.disabled = false;
+    });
+  }
+
   /* ---- the add form --------------------------------------------------- */
   function selectedDays() {
     var out = [];
@@ -6665,8 +6802,100 @@ subscribe();
     $("rem-repeat-row").hidden = !when;
     $("rem-minutes").hidden = kind !== "timer";
     $("rem-list-row").hidden = kind !== "todo";
+    // "Then" (2026-10-27) is drawn ONLY for a reminder AND only when the PC's
+    // own read says it can keep an action: an older backend drops one silently,
+    // and a reminder that looks like it opens something and does not is the one
+    // failure worth hiding the control over. A choice already made for another
+    // kind is cleared, so it can never ride along unseen.
+    var canAct = kind === "reminder" && !!(view && view.actions);
+    $("rem-then-row").hidden = !canAct;
+    if (!canAct) $("rem-then").value = "";
+    syncThen();
     var repeat = $("rem-repeat").value;
     $("rem-days").hidden = !(when && (repeat === "week" || repeat === "custom"));
+  }
+  /* The rows one "Then" choice reveals, and the plain sentence under them: what
+     will happen when the reminder goes off, in the words the owner will read.
+     Nothing here saves or sends anything. */
+  function syncThen() {
+    var kind = $("rem-then") ? $("rem-then").value : "";
+    $("rem-then-note-row").hidden = kind !== "show-note";
+    $("rem-then-url-row").hidden = kind !== "open-webpage";
+    $("rem-then-path-row").hidden = kind !== "open-file";
+    $("rem-then-task-row").hidden = kind !== "run-task";
+    var help = $("rem-then-help");
+    if (!help) return;
+    var words = thenHelp(kind);
+    if (words) help.textContent = words;
+    help.hidden = !words;
+  }
+  function thenHelp(kind) {
+    if (kind === "show-note") {
+      return "The note is shown with the reminder when it goes off. Nothing is " +
+        "opened and no card is raised.";
+    }
+    if (kind === "open-webpage") {
+      var url = $("rem-then-url").value.trim();
+      return (url ? "At its time it names " + url + " and waits for you to press Open."
+        : "A web address starts with https:// - copy it from your browser's address bar.")
+        + " Nothing opens on its own.";
+    }
+    if (kind === "open-file") {
+      var path = $("rem-then-path").value.trim();
+      return (path ? "At its time it names " + path + " and waits for you to press Open."
+        : "The whole path of a picture, PDF, text or Office file, in a folder " +
+          "Jarvis may look in (Settings, Folders).")
+        + " It opens on this PC, never on the phone, and nothing opens on its own.";
+    }
+    if (kind === "run-task") {
+      return "At its time Jarvis asks you ONCE on a card before it " +
+        taskWords($("rem-then-task").value) + ". Nothing happens unless you say yes, " +
+        "and if you say no the reminder stays in your list as it was.";
+    }
+    return "";
+  }
+  /* The action the form's own choices make, or null for "Nothing", or an Error
+     whose sentence is shown as it is. The PC checks all of this again - this is
+     only so the owner is told before anything is sent. */
+  function chosenAction() {
+    var kind = $("rem-then") ? $("rem-then").value : "";
+    if (!kind) return null;
+    if ($("rem-kind").value !== "reminder") {
+      return new Error("Only a reminder can carry an action. Choose Reminder, " +
+        "or Then: Nothing.");
+    }
+    if (kind === "show-note") {
+      var note = $("rem-then-note").value.trim();
+      if (!note) return new Error("Write the note first, or choose Nothing.");
+      if (note.length > 500) return new Error("A note is up to 500 characters.");
+      if (note.split("\n").length > 10) return new Error("A note is up to 10 lines.");
+      return { kind: "show-note", note: note };
+    }
+    if (kind === "open-webpage") {
+      var url = $("rem-then-url").value.trim();
+      if (!url) return new Error("Pick something to open first, or choose Nothing.");
+      if (url.slice(0, 8).toLowerCase() !== "https://") {
+        return new Error("A web address starts with https:// - copy it from your " +
+          "browser's address bar.");
+      }
+      if (/\s/.test(url)) return new Error("A web address cannot have a space in it.");
+      if (url.length > 1024) return new Error("A web address can be up to 1024 characters.");
+      return { kind: "open-webpage", url: url };
+    }
+    if (kind === "open-file") {
+      var path = $("rem-then-path").value.trim();
+      if (!path) return new Error("Pick something to open first, or choose Nothing.");
+      if (path.length > 1024) return new Error("A file's path can be up to 1024 characters.");
+      if (!/^[A-Za-z]:[\\/]/.test(path)) {
+        return new Error("A file needs its whole path, like " +
+          "C:\\Users\\you\\Pictures\\taxes.png.");
+      }
+      if (/["<>|]/.test(path)) {
+        return new Error("That is not a file path Jarvis will open.");
+      }
+      return { kind: "open-file", path: path };
+    }
+    return { kind: "run-task", task: $("rem-then-task").value || "briefing" };
   }
   function submitAdd(ev) {
     if (ev) ev.preventDefault();
@@ -6719,12 +6948,25 @@ subscribe();
       var list = $("rem-list").value.trim();
       if (list) args.list = list;
     }
+    var action = chosenAction();
+    if (action instanceof Error) {
+      showError(action);
+      return;
+    }
+    if (action) args.action = action;
     busy = true;
     $("rem-add").disabled = true;
     invoke("hud_schedule_add", args).then(function (v) {
       showSaid(v);
       $("rem-text").value = "";
       $("rem-notes").value = "";
+      // The action goes back to Nothing with the words, so the next item is
+      // never given the last one's target by accident.
+      $("rem-then").value = "";
+      $("rem-then-note").value = "";
+      $("rem-then-url").value = "";
+      $("rem-then-path").value = "";
+      syncThen();
     }).catch(showError).then(function () {
       busy = false;
       $("rem-add").disabled = false;
@@ -6737,6 +6979,14 @@ subscribe();
     if (!$("rail-reminders")) return;
     $("rem-kind").addEventListener("change", syncForm);
     $("rem-repeat").addEventListener("change", syncForm);
+    $("rem-then").addEventListener("change", syncThen);
+    $("rem-then-task").addEventListener("change", syncThen);
+    // The live sentence under the row: what will happen, in the owner's own
+    // words, before anything is sent. Typing changes it and nothing else.
+    ["rem-then-note", "rem-then-url", "rem-then-path"].forEach(function (id) {
+      var field = $(id);
+      if (field) field.addEventListener("input", syncThen);
+    });
     $("rem-form").addEventListener("submit", submitAdd);
     syncForm();
     refresh();

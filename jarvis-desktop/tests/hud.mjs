@@ -269,6 +269,21 @@ async function openHud(browser, status, pageOptions = {}) {
             if (!r.ok) throw new Error(body.error || `the server answered HTTP ${r.status}`);
             return body;
           }
+          // A reminder's own action (2026-10-27): ONE command, and it takes the
+          // job's ID and nothing else - never a URL and never a path. The real
+          // one reads the target back from the PC's own answer and checks it
+          // again (`reminder_open.rs`); this stand-in refuses anything but the
+          // id, so a page that tried to send a target would fail here.
+          case "open_reminder_target": {
+            const keys = Object.keys(args || {});
+            if (keys.length !== 1 || keys[0] !== "id") {
+              throw new Error("open_reminder_target takes the job id only");
+            }
+            if (!/^s[0-9a-f]{10}$/.test(String(args.id))) {
+              throw new Error("That is not one reminder's id.");
+            }
+            return { opened: "page", id: args.id };
+          }
           case "stop_everything":
             // The fixed HUD control (owner-approved 2026-10-22): the same
             // command the hotkey, tray and widget use. It stops only, approves
@@ -1971,7 +1986,15 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // H2 (2026-10-22, owner-approved 2026-10-21): EXACTLY ONE new grant -
       // this window's own layout write, saved by its own Edit mode. No other
       // write command is added, and the read grant above is not removed.
-      "hud-layout-write"]);
+      "hud-layout-write",
+      // A reminder's own action (2026-10-27, the OWNER ASKED for "a reminder
+      // that opens a specific image or webpage"): ONE command,
+      // `open_reminder_target`, and it takes the reminder's job ID and nothing
+      // else - never a URL and never a path. The PC reads the target back from
+      // its own answer and re-checks it at the tap, so the worst this page can
+      // do is open the one thing a reminder it can already read says to open.
+      // It opens nothing by itself: the click IS the approval.
+      "reminder-open"]);
   assert.equal(cap.permissions.includes("hud-layout-write"), true,
     "the HUD page's own Edit mode cannot save without the layout write grant");
   assert.equal(cap.permissions.includes("hud-layout-read"), true,
@@ -3438,6 +3461,98 @@ await check("a script in the page cannot POST a schedule write itself (audit M2)
   assert.deepEqual(direct, [], "a schedule write reached the backend without the shell");
   assert.deepEqual(scheduleWrites, [],
     "a direct POST reached the backend through the page");
+});
+
+await check("a reminder's action: the Then row is drawn only when the PC can keep one, and it round-trips", async () => {
+  // An older backend says nothing about actions. `handle_add` there pulls only
+  // the keys it knows, so an action would be DROPPED SILENTLY and the owner
+  // would get a reminder that opens nothing. The whole block is therefore
+  // hidden unless the PC's own read says `actions: true`.
+  const old = await openReminders(REMINDERS_SCHEDULE);
+  await old.page.selectOption("#rem-kind", "reminder");
+  const hidden = await old.page.evaluate(() => {
+    const row = document.querySelector("#rem-then-row");
+    return { exists: Boolean(row),
+             shown: Boolean(row && row.getBoundingClientRect().height > 0) };
+  });
+  await old.page.close();
+  assert.equal(hidden.exists, true, "the Then row is not in the form at all");
+  assert.equal(hidden.shown, false, "an older backend still drew the Then row");
+
+  const { page, problems } = await openReminders({
+    ...REMINDERS_SCHEDULE, actions: true,
+    went_off: [
+      // A reminder that has already gone off, with the whole target, exactly as
+      // the PC hands it out (the page never shortens it).
+      { id: "s012345678f", kind: "reminder", text: "Look at the invoice",
+        state: "fired", when: "07:00", went_off_at: "07:00", fired_at: 1,
+        action: { kind: "open-webpage", url: "https://example.com/invoice-42" } },
+      ...REMINDERS_SCHEDULE.went_off,
+    ],
+  });
+  await page.waitForTimeout(150);
+  // One choice of each: the field the choice reveals, and the sentence under it.
+  await page.selectOption("#rem-kind", "reminder");
+  await page.selectOption("#rem-then", "open-webpage");
+  await page.fill("#rem-then-url", "https://example.com/invoice-42");
+  const shownFields = await page.evaluate(() => ["rem-then-url-row", "rem-then-note-row",
+    "rem-then-task-row", "rem-then-path-row"].map((id) => {
+      const n = document.getElementById(id);
+      return [id, Boolean(n && n.getBoundingClientRect().height > 0)];
+    }));
+  const help = await page.evaluate(() => document.querySelector("#rem-then-help").textContent);
+  // A bad address is refused IN THE PAGE, with a sentence, and nothing is sent.
+  await page.fill("#rem-then-url", "http://example.com/invoice-42");
+  await page.fill("#rem-text", "Look at the invoice");
+  await page.fill("#rem-date", "2030-09-15");
+  await page.fill("#rem-time", "07:00");
+  await page.click("#rem-add");
+  await page.waitForTimeout(200);
+  const refused = await page.evaluate(() => ({
+    error: document.querySelector("#rem-error").textContent,
+    shown: !document.querySelector("#rem-error").hidden,
+    sends: window.__invokes.filter((c) => c[0] === "hud_schedule_add").length,
+  }));
+  // Now the real one: https, and the body carries ONE action block.
+  await page.fill("#rem-then-url", "https://example.com/invoice-42");
+  await page.click("#rem-add");
+  await page.waitForTimeout(350);
+  const calls = await page.evaluate(() => window.__invokes
+    .filter((c) => c[0] === "hud_schedule_add").map((c) => c[1]));
+  // The Open button on the fired row: the target in full, and the id only.
+  const openBtn = await page.evaluate(() => {
+    const b = document.querySelector('#reminders-body [data-rem-open="s012345678f"]');
+    const row = document.querySelector('#reminders-body [data-rem-id="s012345678f"]');
+    return { present: Boolean(b), label: b ? b.textContent : "",
+             meta: row ? row.querySelector(".rem-meta").textContent : "" };
+  });
+  if (openBtn.present) {
+    await page.evaluate(() => document.querySelector(
+      '#reminders-body [data-rem-open="s012345678f"]').click());
+    await page.waitForTimeout(250);
+  }
+  const opened = await page.evaluate(() => window.__invokes
+    .filter((c) => c[0] === "open_reminder_target").map((c) => c[1]));
+  await page.close();
+  assert.deepEqual(shownFields, [["rem-then-url-row", true], ["rem-then-note-row", false],
+    ["rem-then-task-row", false], ["rem-then-path-row", false]],
+  `the wrong fields were shown: ${JSON.stringify(shownFields)}`);
+  assert.ok(help.includes("https://example.com/invoice-42") && help.includes("press Open"),
+    `the live sentence does not say what will happen: ${help}`);
+  assert.equal(refused.shown, true, "an http:// address was not refused in the page");
+  assert.ok(/https/.test(refused.error), `the refusal is not a sentence about https: ${refused.error}`);
+  assert.equal(refused.sends, 0, "a refused form was still sent to the shell");
+  assert.equal(calls.length, 1, `the form sent ${JSON.stringify(calls)}`);
+  assert.deepEqual(calls[0].action,
+    { kind: "open-webpage", url: "https://example.com/invoice-42" },
+    `the action block is not the one the PC takes: ${JSON.stringify(calls[0])}`);
+  assert.equal(openBtn.present, true, "the fired reminder drew no Open button");
+  assert.equal(openBtn.label, "Open");
+  assert.ok(openBtn.meta.includes("https://example.com/invoice-42"),
+    `the row does not name the target in full: ${openBtn.meta}`);
+  assert.deepEqual(opened, [{ id: "s012345678f" }],
+    `the Open button sent more than the job's id: ${JSON.stringify(opened)}`);
+  assert.deepEqual(problems, []);
 });
 
 await check("three HUD copies are byte-identical, and the allowlist is schedule-read only", async () => {
