@@ -2535,15 +2535,23 @@ def _face_label(face_id: str) -> str:
     return str(face_id)
 
 
-def _face_now() -> str:
-    """The face in the stored document, in the spec's own words."""
+def _face_now():
+    """The face in the stored document, in the spec's own words.
+
+    None means the server cannot read it - the appearance patch is not
+    installed, the read raised, or the stored file is there but unreadable
+    just now. "no face chosen" is the different, definite answer: the document
+    WAS read and it names no face.
+    """
     fn = _hud_function("_appearance_view")
     if fn is None:
-        return "unknown"
+        return None
     try:
         view = fn() or {}
-    except Exception:                       # noqa: BLE001 - unknown is the answer
-        return "unknown"
+    except Exception:                       # noqa: BLE001 - cannot read is the answer
+        return None
+    if view.get("readable") is False:
+        return None
     face = str(view.get("face") or "")
     return _face_label(face) if face else "no face chosen"
 
@@ -2551,7 +2559,13 @@ def _face_now() -> str:
 def face_words() -> str:
     """The answer to "what face are you using?" - a read, never a guess."""
     now = _face_now()
-    if now in ("unknown", "no face chosen"):
+    if now is None:
+        # Cannot read is NOT "nothing chosen": on a PC that has not applied
+        # appearance.patch the face may still be stored by the clients, and
+        # the honest answer is the write path's (run apply-patches.ps1).
+        return ("This PC's Jarvis cannot read the face yet - run "
+                "apply-patches.ps1. I cannot say which face is stored.")
+    if now == "no face chosen":
         return ("No face has been chosen, so each app draws its own default. "
                 "Say \"change your face to Spiral\" to pick one.")
     return f"The face is {now}. The voice is separate and unchanged."
@@ -2977,7 +2991,7 @@ def control_current_words(setting: ChoiceSetting) -> str:
             view = JV.speaker_view() or {}
             return str(view.get("label") or view.get("choice") or "unknown")
         if key == "face":
-            return _face_now()
+            return _face_now() or "I could not read it"
         if key == "focus_preset":
             import jarvis_presets as JP
             chosen = JP.choice()

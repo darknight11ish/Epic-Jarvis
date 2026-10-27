@@ -28,6 +28,7 @@ refusal of a face that does not exist - with the REAL list, never a guess.
 import json
 import os
 import sys
+import threading
 import time
 import tempfile
 import types
@@ -59,6 +60,7 @@ def namespace(*, here, config_dir):
     """The appearance helpers, exec'd with a temp store and a real spec."""
     ns = {
         "json": json, "time": time, "Path": Path, "os": os,
+        "threading": threading,
         "CONFIG_DIR": config_dir, "HERE": here,
         "_publish": lambda kind, data: ns.setdefault("published", []).append((kind, data)),
     }
@@ -264,7 +266,14 @@ def t_without_the_patch_it_says_so():
     previous = install(ns3)
     try:
         sys.modules["jarvis_hud"]._appearance_set_face = None
+        sys.modules["jarvis_hud"]._appearance_view = None
         out = R.set_face("spiral")
+        cannot_read = R.face_words()
+        # A server WITH the patch, but a stored file it cannot read just now,
+        # is the same honest answer - not "no face has been chosen".
+        sys.modules["jarvis_hud"]._appearance_view = lambda: {
+            "face": None, "bindings": {}, "updated": 0.0, "readable": False}
+        unreadable = R.face_words()
     finally:
         if previous is not None:
             sys.modules["jarvis_hud"] = previous
@@ -273,6 +282,10 @@ def t_without_the_patch_it_says_so():
     assert not out.ok, out
     assert "apply-patches.ps1" in out.said, out.said
     assert "Nothing was changed" in out.said, out.said
+    assert "cannot read" in cannot_read.lower(), cannot_read
+    assert "apply-patches.ps1" in cannot_read, cannot_read
+    assert "No face has been chosen" not in cannot_read, cannot_read
+    assert "cannot read" in unreadable.lower(), unreadable
 
 
 check("a server that has not applied the patch answers in words, not a traceback",
