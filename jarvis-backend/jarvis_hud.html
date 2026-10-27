@@ -416,6 +416,20 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
   background:linear-gradient(180deg, rgb(var(--accent-rgb) / .055), rgb(var(--accent-rgb) / .015));
   border:1px solid rgb(var(--accent-rgb) / .17); border-left:2px solid var(--ice);
 }
+/* The per-answer speaker (the owner's ask of 2026-10-27: a read-aloud switch
+   in Settings that puts one on every answer he may hear). Drawn ONLY when that
+   switch is on AND private-speech.js says this answer may be read aloud, which
+   is the same rule the page's own automatic read-aloud obeys - so an answer
+   that has to stay on screen never shows one. Sized like the rail's buttons so
+   it reads as one of the page's controls, not a stray glyph. */
+.msg.jarvis .speak-answer{
+  align-self:flex-start; display:inline-flex; align-items:center; justify-content:center;
+  width:24px; height:24px; padding:0; border-radius:3px; cursor:pointer;
+  background:none; border:1px solid var(--line); color:var(--dim);
+}
+.msg.jarvis .speak-answer:hover{color:var(--text); border-color:var(--line-hot);}
+.msg.jarvis .speak-answer:focus-visible{outline:none; color:var(--ice); border-color:var(--line-hot);}
+.msg.jarvis .speak-answer svg{width:14px; height:14px;}
 .msg.system .body{
   background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
 }
@@ -2049,6 +2063,35 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         </svg>
         <span class="rt-label">Presets</span>
       </button>
+      <!-- Jarvis Live, from the left column (the owner's ask of 2026-10-27:
+           "a live mode button in the left column of the Jarvis HUD").
+
+           It is the SAME control the floating bar has, not a second idea of
+           Live: `hudRailLive` below sends the BAR'S commands (`live_start`
+           with `by: "button"` and the new chat's id, `live_stop`), carries the
+           bar's own name, its on/off title and its `aria-pressed`, and reads
+           its state from the same two sources the bar does (`live_status` on
+           opening and the shell's `live-status` event). Every guard lives in
+           Rust (`live.rs`: a stale link, App lock, and no microphone all
+           refuse) and it raises no approval card, exactly as the bar's does.
+
+           Hidden until the shell is there: Live is a desktop session, and a
+           plain browser has no microphone path from this page - the same
+           reason the "Jarvis bar" pill at the foot of this rail stays hidden. -->
+      <button type="button" class="rail-toolbar-btn" id="rail-live"
+              title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
+              aria-label="Jarvis Live" aria-pressed="false" hidden>
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/>
+        </svg>
+        <span class="rt-label">Live</span>
+      </button>
+      <!-- Why Live did not start, in the PC's own sentence (live.rs), for a
+           screen reader. The button's title carries the on/off wording; this
+           carries the refusal, which is the part that would otherwise be
+           silent. The same shape #hud-stop-status uses. -->
+      <span class="sr-only" id="rail-live-status" role="status" aria-live="polite"></span>
     </div>
 
     <div class="rail-section hide-sm rail-lanes" id="rail-lanes">
@@ -3870,6 +3913,124 @@ const voice = (() => {
 })();
 
 /* ==================================================================
+ * Read-aloud speakers on answers (the owner's ask of 2026-10-27)
+ *
+ * "a read out loud button i can enable in the settings which will add a read
+ *  out loud icon next to all chat boxes that i can click on and jarvis will
+ *  speak out loud the chat box in his chosen current voice"
+ *
+ * THREE THINGS THIS IS NOT, because each one would be a bug:
+ *
+ *  1. Not a second voice path. A click calls `voice.speak` above - the same
+ *     function the page's automatic read-aloud calls two hundred lines down -
+ *     so the voice, its rate, its pitch and the shell's local-voices-only rule
+ *     (`hud_bootstrap.js` wraps `getVoices`) are all unchanged.
+ *  2. Not a change to automatic read-aloud. The switch is read HERE and
+ *     nowhere else; with it off the page behaves exactly as it does today, and
+ *     turning it on speaks nothing by itself.
+ *  3. Not a way round the privacy rule. An answer is given a speaker only when
+ *     `private-speech.js`'s `mayReadAloud` says this window would already have
+ *     spoken it, judged on THAT answer's own route - and the shell's
+ *     `speechSynthesis.speak` wrapper refuses a kept-on-screen answer anyway,
+ *     drawing "It's on your screen." under it (bootstrap section 2e). Two
+ *     refusals, and this file loosens neither.
+ *
+ * The setting's key and its reading rule are ALSO in src/read-aloud-icons.js,
+ * which is what Settings writes and what `tests/hud-live-read-aloud.mjs` holds
+ * this copy to, value by value - the same arrangement hud_bootstrap.js has for
+ * OPEN_BAR_KEY. It is repeated here because this script has to read it while
+ * drawing an answer.
+ * ================================================================== */
+const READ_ALOUD_ICONS_KEY = "jarvis.hud.readAloudIcons";
+
+/** OFF unless this computer saved it on; OFF when storage cannot be read. */
+function readAloudIconsOn(){
+  try{
+    const v = localStorage.getItem(READ_ALOUD_ICONS_KEY);
+    if(v === null) return false;
+    return v === "true" || v === "on";
+  }catch(e){ return false; }
+}
+
+/* Every finished answer's words and route, by its own bubble element. A
+ * WeakMap and not a data- attribute: the words stay in memory with the page,
+ * so an answer that has to stay on screen is never copied into an attribute
+ * something else might read. Never written to disk. */
+const ANSWER_SAID = new WeakMap();
+
+/** Would this window already have read that answer aloud? Fails CLOSED if the
+ *  rule module cannot be loaded - deliberately stricter than the automatic
+ *  path below, whose `!rule` fallback speaks. A new button must not be the one
+ *  place a privacy check goes missing. */
+function answerMayBeSpoken(route){
+  return loadSpeechRule().then(rule => Boolean(rule) && rule.mayReadAloud(
+    { route: route || {}, toolsKnown: true }
+  ));
+}
+
+/** The one speaker for one answer, or nothing at all. */
+function paintSpeakButton(bubble){
+  if(!bubble) return;
+  const old = bubble.querySelector(".speak-answer");
+  if(old) old.remove();
+  const said = ANSWER_SAID.get(bubble);
+  if(!said || !readAloudIconsOn()) return;
+  answerMayBeSpoken(said.route).then(may => {
+    // Re-checked after the await: the switch may have gone off, the bubble may
+    // have been removed, or the module answered for a newer turn.
+    if(!may || !readAloudIconsOn() || !bubble.isConnected) return;
+    if(bubble.querySelector(".speak-answer")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "speak-answer";
+    btn.setAttribute("aria-label", "Read this answer aloud");
+    btn.title = "Read this answer aloud";
+    // Built node by node, NOT with innerHTML: this page is audited for HTML
+    // sinks (tests/csp-inline.mjs), and a glyph is no reason to add one. The
+    // three paths are the page's own speaker: the cone, then two arcs.
+    const SVG = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(SVG, "svg");
+    for (const [name, value] of Object.entries({
+      viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+      "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round",
+      "aria-hidden": "true", focusable: "false",
+    })) svg.setAttribute(name, value);
+    for (const d of ["M4 9v6h4l5 4V5L8 9H4Z", "M16.5 8.5a5 5 0 0 1 0 7", "M19 6a8.5 8.5 0 0 1 0 12"]) {
+      const path = document.createElementNS(SVG, "path");
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+    }
+    btn.appendChild(svg);
+    btn.addEventListener("click", () => {
+      // Said through the page's own speak path, so the shell's refusal and its
+      // "It's on your screen." line apply exactly as they do automatically.
+      voice.speak(ANSWER_SAID.get(bubble) ? ANSWER_SAID.get(bubble).text : "");
+    });
+    bubble.appendChild(btn);
+  }).catch(() => {});
+}
+
+/** Called once per FINISHED answer, with that answer's own route. */
+function offerSpeakButton(bubble, text, route){
+  if(!bubble) return;
+  ANSWER_SAID.set(bubble, { text: text || "", route: route || {} });
+  paintSpeakButton(bubble);
+}
+
+/** Repaint every answer on the page from what it remembered. Used when the
+ *  switch changes under a window that is already open, so turning it off
+ *  removes every speaker at once and turning it on adds them back. */
+function repaintSpeakButtons(){
+  document.querySelectorAll("#log .msg.jarvis").forEach(paintSpeakButton);
+}
+try{
+  window.addEventListener("storage", (e) => {
+    if(e && e.key && e.key !== READ_ALOUD_ICONS_KEY) return;
+    repaintSpeakButtons();
+  });
+}catch(e){ /* no storage events here: the switch still applies to new answers */ }
+
+/* ==================================================================
  * Retrieval trace - what the brain actually reached for
  * ================================================================== */
 async function traceFor(question){
@@ -4169,6 +4330,10 @@ async function send(){
       if(cutShort) node.textContent = full + " [answer cut short \u2014 ask \u201cgo on\u201d for the rest]";
       // Finished: the right/wrong mark (hud_bootstrap.js) may show now.
       node.parentElement.dataset.state = "done";
+      // ...and, if the owner's read-aloud switch is on, so may its speaker.
+      // `full` and not `node.textContent`: the bracketed "[answer cut short]"
+      // above is the page talking about the answer, not the answer.
+      offerSpeakButton(node.parentElement, full, turnRoute);
     } else {
       const j = await res.json();
       if(j.error){
@@ -4176,7 +4341,9 @@ async function send(){
         e.fromServer = true; throw e;
       }
       full = j.choices?.[0]?.message?.content || "(empty reply)";
-      addMessage("jarvis", full).parentElement.dataset.state = "done";
+      const answered = addMessage("jarvis", full);
+      answered.parentElement.dataset.state = "done";
+      offerSpeakButton(answered.parentElement, full, turnRoute);
       $("r-model").textContent = j.model || "—";
       if(j.usage) $("r-tokens").textContent = j.usage.total_tokens ?? "—";
       if(j.complexity){
@@ -6865,5 +7032,102 @@ mountHudPresets({
  * from the page's own #lanes buttons. The three reads are hud_proxy.rs's fixed
  * list, and there is no write, no command and no approval card here. */
 mountCurrentModels();
+
+/* ── Jarvis Live, from the left rail (the owner's ask of 2026-10-27:
+ *    "a live mode button in the left column of the Jarvis HUD") ────────────
+ *
+ * The BAR'S control, in this window - not a second idea of Live. Same two
+ * commands with the same arguments (`live_start` with `by: "button"` and the
+ * new chat's id, `live_stop`), the same name and the same on/off words, and
+ * the same state read: `live_status` when this runs, then the shell's
+ * `live-status` event, which is exactly what repaints the bar (main.js's own
+ * listener). Every guard is Rust's - `live.rs` refuses a start on a stale
+ * link, under App lock, or with no microphone - and, like the bar's, it
+ * raises no approval card.
+ *
+ * It lives in THIS module, and it spells BOTH rules the bar uses instead of
+ * importing them - on purpose, and this is the reason:
+ *
+ *   * the ids: the page ALREADY has its own `newConversationId` (the main
+ *     script above, the same routine as `chat-history.js`'s), so a Live chat
+ *     started here is named the way the bar names one and the PC can offer it
+ *     to the other device for "Move it here";
+ *   * "is the session on THIS device": `live-rules.js`'s `onHere` is one line
+ *     (`status.on === true && status.device === me`), and this window may not
+ *     import it. The browser HUD is served from a CLOSED whitelist
+ *     (`backend/jarvis_hud.py`, `backend/test_hud_static.py`), which this
+ *     change must not widen for a desktop-only button - so the page keeps the
+ *     one-line copy, the way it already keeps its own copy of OPEN_BAR_KEY and
+ *     of the read-aloud switch's rule. `tests/hud-live-read-aloud.mjs` drives
+ *     the status table through the real button (on/this PC, on the PHONE, off,
+ *     missing, not an object), so the copy cannot drift unnoticed.
+ */
+(function hudRailLive() {
+  const button = document.getElementById("rail-live");
+  const status = document.getElementById("rail-live-status");
+  if (!button) return;
+  const core = window.__TAURI__ && window.__TAURI__.core;
+  // A plain browser gets NO Live button: there is no shell to ask, and this
+  // page has no microphone path of its own (see this file's voice section).
+  // The same gate, for the same reason, as the shell's settings gear.
+  if (!core || typeof core.invoke !== "function") return;
+  button.hidden = false;
+  let busy = false;
+  const say = (words) => {
+    if (status) status.textContent = words;
+    button.removeAttribute("aria-busy");
+  };
+  /** The bar's own two states, in the bar's own words (main.js `paintLive`). */
+  const paint = (on) => {
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    button.title = on
+      ? "Jarvis Live is on - click to end it"
+      : "Jarvis Live: talk back and forth, no \"Hey Jarvis\" needed";
+  };
+  /** `live-rules.js`'s own rule, one line, kept here for the reason above:
+   *  `status.on === true && status.device === me`. Anything else - another
+   *  device, a status this page cannot read, no session - is off. */
+  const liveOnHere = (state) =>
+    Boolean(state) && typeof state === "object"
+    && state.on === true && state.device === "desktop";
+  /** A session that is on AND on THIS device - anything else is off here. */
+  const paintStatus = (answer) => {
+    const s = answer && typeof answer === "object" ? answer : {};
+    paint(liveOnHere(s.status));
+  };
+  button.addEventListener("click", () => {
+    // One click at a time, as the bar does (main.js `live.busy`).
+    if (busy) return;
+    busy = true;
+    button.setAttribute("aria-busy", "true");
+    const on = button.getAttribute("aria-pressed") === "true";
+    const asked = on
+      ? core.invoke("live_stop")
+      : core.invoke("live_start", { by: "button", conversationId: newConversationId() });
+    asked.then((answer) => {
+      paintStatus(answer);
+      // The PC's own sentence when it gave one (live.rs payload `say`).
+      say(answer && typeof answer.say === "string" ? answer.say : "");
+    }, (error) => {
+      // Refused: the PC's own words, and never a claim that Live started.
+      say("Jarvis Live could not start: " + String((error && error.message) || error));
+      // Ask the truth back rather than guessing from the refusal.
+      core.invoke("live_status").then(paintStatus, () => {});
+    }).then(() => {
+      busy = false;
+      button.removeAttribute("aria-busy");
+    });
+  });
+  // Opening: the state the PC has now. A refusal leaves the button at its
+  // resting "off" rather than claiming a session that is not there.
+  core.invoke("live_status").then(paintStatus, () => {});
+  // While the window is open: the same event the bar repaints from.
+  const events = window.__TAURI__ && window.__TAURI__.event;
+  if (events && typeof events.listen === "function") {
+    events.listen("live-status", (event) => {
+      paintStatus((event && event.payload) || {});
+    }).catch(() => {});
+  }
+}());
 </script>
 

@@ -1,5 +1,5 @@
 /**
- * Settings -> "The big HUD window": two per-computer cosmetic choices about
+ * Settings -> "The big HUD window": three per-computer cosmetic choices about
  * that window, in one card.
  *
  *  1. THE SWITCH (the owner's request of 2026-10-06): does the "Open the
@@ -11,13 +11,19 @@
  *     Planner, Minimal) plus the owner's own saved layouts ("My layouts",
  *     H3). The old three-way choice is migrated the first time the store has
  *     nothing saved, so an owner who picked Studio keeps Studio.
+ *  3. THE SPEAKERS ON ANSWERS (the owner's ask of 2026-10-27): whether the big
+ *     window draws a read-aloud speaker on each finished answer it may read
+ *     aloud (`read-aloud-icons.js` READ_ALOUD_ICONS_KEY). OFF to start; it
+ *     only adds the speakers, and speaks nothing by itself.
  *
  * WHERE IT IS KEPT. The layout is a document in the desktop settings store
  * through the Rust commands `get_hud_layout`/`set_hud_layout` - the same
  * appearance class as the theme, no backend, no pairing token, no approval
  * card. The same document carries the owner's saved layouts; this card lists
  * them and writes through the SAME one command (no new command, no new
- * grant). H3 renders the preset's own shell, density and opening tab.
+ * grant). H3 renders the preset's own shell, density and opening tab. The two
+ * switches are the same appearance class in this window's `localStorage`, and
+ * neither raises a card either.
  *
  * A SAVE THAT DID NOT HAPPEN IS SHOWN AS NOT SAVED. The status line is painted
  * from the store's answer, never from the click.
@@ -45,6 +51,11 @@ import {
   userLayouts,
 } from "./hud-layout.js";
 import { applyUserLayout } from "./hud-presets.js";
+import {
+  describeReadAloudIcons,
+  readAloudIconsOn,
+  saveReadAloudIcons,
+} from "./read-aloud-icons.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -56,6 +67,20 @@ function paintOpenBar() {
   if (box) box.checked = on;
   const line = $("hud-open-bar-status");
   if (line) line.textContent = describeOpenBar(on);
+}
+
+/* ── 1b. The read-aloud speakers on answers (2026-10-27) ─────────────────── */
+
+/* The same three-part shape as `paintOpenBar` above - it is the same card and
+ * the same kind of choice. The line is painted from the STORE, never from the
+ * click, which is this module's own rule: a save that did not happen is shown
+ * as not saved. `saveReadAloudIcons`'s answer is the only thing consulted. */
+function paintReadAloudIcons() {
+  const on = readAloudIconsOn();
+  const box = $("hud-read-aloud-icons");
+  if (box) box.checked = on;
+  const line = $("hud-read-aloud-icons-status");
+  if (line) line.textContent = describeReadAloudIcons(on);
 }
 
 /* ── 2. The HUD layout preset picker ─────────────────────────────────────── */
@@ -238,6 +263,16 @@ export function initHudWindowSettings() {
       paintOpenBar();
     });
   }
+  paintReadAloudIcons();
+  const aloud = $("hud-read-aloud-icons");
+  if (aloud) {
+    aloud.addEventListener("change", () => {
+      // The write first, then the paint - and the paint reads the store back,
+      // so a refused save shows Off rather than a tick that would not stick.
+      saveReadAloudIcons(aloud.checked);
+      paintReadAloudIcons();
+    });
+  }
   // `painted` guards the one-time row build; the async load repaints the
   // chosen row when the store answers (and reports an honest failure).
   const editButton = $("hud-edit-open");
@@ -261,3 +296,4 @@ if (typeof document !== "undefined") {
 }
 
 export { OPEN_BAR_KEY, openBarShown, saveOpenBarShown };
+export { READ_ALOUD_ICONS_KEY, readAloudIconsOn, saveReadAloudIcons } from "./read-aloud-icons.js";
