@@ -3,7 +3,7 @@
 > **Written, tested and ready to apply:** `backend/appearance.patch`. This page
 > is the contract; that patch is the implementation of it for `jarvis_hud.py`,
 > with nineteen checks in `backend/test_appearance.py` (the merge is in there)
-> and fifteen in `backend/test_appearance_command.py` (asking for a face).
+> and sixteen in `backend/test_appearance_command.py` (asking for a face).
 
 The desktop's Faces window edits which face Jarvis wears and how each of the
 eight states looks. That choice is **data, not drawing code**, which is the
@@ -132,6 +132,18 @@ the desktop was wearing. The desktop's own document has the same shape when no
 face is chosen. Now an absent key keeps its stored value, and only the request
 is validated, so a document already on disk that a newer spec would refuse
 cannot make a colour change fail.
+
+**Two narrow ways a save can still lose a half, recorded rather than claimed
+away.** The merge covers the ordinary partial document, not two rarer cases.
+The server is a `ThreadingHTTPServer` and the read-modify-write has no lock, so
+two saves that overlap inside the server can both read the same old document
+and the second write can carry the first one's stale other half. And
+`_appearance_view` cannot tell a corrupt file from one that is unreadable just
+now, so a save made in that moment merges onto an empty document and can lose
+the rest. Both were found by the independent review of 2026-10-26; closing
+them means a `threading.Lock` and a "could not read just now" refusal, and is
+the obvious next change if either is ever seen. The windows are small: one
+owner, two devices.
 
 **Clearing is explicit.** Because an absent key now means "leave it alone",
 forgetting something has to be said: `"face": null` (or `""`) clears the face,

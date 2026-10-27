@@ -856,6 +856,17 @@ not carry keeps its stored value, and only the request is validated. Clearing
 is explicit: `face: null` (or `""`) clears the face, `bindings: {}` clears the
 state bindings.
 
+**Two narrow limits remain, and they are written down rather than claimed
+away.** The merge fixes the ordinary partial document, not two rarer shapes.
+The server is a `ThreadingHTTPServer` and the read-modify-write has no lock, so
+two saves that overlap inside it can both read the same old document and the
+second write can carry the first one's stale other half. And a stored file that
+cannot be read for a moment is treated like a corrupt one (deliberately
+recoverable), so a save in that moment merges onto an empty document and can
+lose the rest. Both were found by the independent review of 2026-10-26; a
+`threading.Lock` and a "could not read just now" refusal are the obvious next
+change if either is ever seen. `appearance.patch`'s own docstring says the same.
+
 **It rejects rather than clamps.** An unknown pattern or colour comes back 400
 naming the offender. Silently dropping a bad binding would leave the picker
 showing a choice that is in effect nowhere, which is worse than refusing and
@@ -899,7 +910,7 @@ colour binding, a bindings-only save keeps the face, `null`/empty clear exactly
 what they name, an unknown field changes nothing, and the published event
 carries the merged document.
 
-Fifteen more in `test_appearance_command.py` for the asking path: that the
+Sixteen more in `test_appearance_command.py` for the asking path: that the
 face list is the spec's own, that the registry's list is the patch's (and the
 contract's is the measured one), that one face write keeps the colours and
 publishes the merged document, that an unknown face and a machine with no spec
