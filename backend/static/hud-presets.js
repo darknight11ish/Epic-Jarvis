@@ -954,6 +954,19 @@ export function mountHudPresets(options = {}) {
     menu.append(head, scroll, close);
     doc.body.appendChild(menu);
     menu.addEventListener("keydown", onMenuKeyDown);
+    // Escape closes the menu wherever the focus is (2026-10-27; hud.mjs at
+    // 150% DPI caught it): the menu's own keydown only fires while a menu item
+    // holds focus, and opening reads the PC's lists and re-renders the list,
+    // which can leave focus on the page - so Escape closed nothing, the next
+    // press on either door closed it instead, and the reveal check failed. A
+    // capture listener sees Escape first; the dialog opened FROM the menu keeps
+    // its own Escape, so an open dialog is left alone here.
+    doc.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !menu || menu.hidden) return;
+      if (doc.querySelector("dialog.hud-presets-dialog[open]")) return;
+      event.preventDefault();
+      closeMenu(true);
+    }, true);
     doc.addEventListener("pointerdown", (event) => {
       if (!menu || menu.hidden) return;
       const target = event.target;
