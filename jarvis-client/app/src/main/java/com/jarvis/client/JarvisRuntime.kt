@@ -7716,6 +7716,127 @@ object JarvisRuntime {
         }
     }
 
+    // ------------------------------------------- read aloud (TYPED answers)
+
+    private val _readAloud = MutableStateFlow<com.jarvis.client.voice.ReadAloud.Offer?>(null)
+
+    /**
+     * The one finished TYPED answer this phone may read aloud, with its
+     * fail-closed privacy facts ([com.jarvis.client.voice.ReadAloud.Facts]).
+     * Null before any answer, after one with no text, and while a new question
+     * is being sent. The desktop HUD already reads typed answers aloud under
+     * the owner's 2026-10-16 decision; this is the phone's half of that parity
+     * gap, spoken in the PC's chosen voice and never with a new route.
+     */
+    val readAloud: StateFlow<com.jarvis.client.voice.ReadAloud.Offer?> = _readAloud.asStateFlow()
+
+    private val _readingAloud = MutableStateFlow(false)
+
+    /** True while a read-aloud clip is playing (the control says Stop). */
+    val readingAloud: StateFlow<Boolean> = _readingAloud.asStateFlow()
+
+    /** The tool-run watch the voice path already uses, read the same way. */
+    private fun readAloudWatch(): com.jarvis.client.voice.PrivateAloud.Watch =
+        com.jarvis.client.voice.PrivateAloud.Watch(
+            runs = toolRuns,
+            drops = streamOpens,
+            live = _link.value == LinkState.CONNECTED && !_stale.value,
+            privateRuns = privateToolRuns,
+            screenRuns = screenReads,
+        )
+
+    /**
+     * One TYPED question, with the read-aloud facts recorded. A wrapper for
+     * [com.jarvis.client.net.ChatSession.send] so the phone knows which tool
+     * runs belonged to THIS answer - the facts the voice path gets from its
+     * own utterance reply. The watch is read before the send and after it
+     * returns, so a tool run between them fails the gate closed.
+     */
+    suspend fun sendTypedChat(
+        message: String,
+        picture: String? = null,
+        provenance: String = com.jarvis.client.net.Provenance.TYPED,
+        shared: String? = null,
+    ): String? {
+        _readAloud.value = null
+        val start = readAloudWatch()
+        var header: String? = null
+        val answer = chat.send(
+            message,
+            picture = picture,
+            provenance = provenance,
+            shared = shared,
+            onRoute = { route -> header = route },
+        )
+        val now = readAloudWatch()
+        val route = com.jarvis.client.voice.PrivateAloud.route(header)
+        val facts = com.jarvis.client.voice.ReadAloud.Facts(
+            hasRoute = route != null,
+            privateGate = route?.privateGate == true,
+            injectedFacts = route?.injectedFacts ?: 0,
+            injectedSensitive = route?.injectedSensitive ?: 0,
+            toolRan = com.jarvis.client.voice.PrivateAloud.toolRan(start, now),
+            toolsKnown = com.jarvis.client.voice.PrivateAloud.toolsKnown(start, now),
+            screenRead = com.jarvis.client.voice.PrivateAloud.screenRead(start, now),
+            stale = _link.value != LinkState.CONNECTED || _stale.value,
+            // A locked phone never speaks: the screen lock, or App lock
+            // wanting the fingerprint again (the rule "Hear it" already uses).
+            locked = screenLocked() || appLockWouldLock(SystemClock.elapsedRealtime(), settings.security.value),
+        )
+        val text = answer?.trim().orEmpty()
+        if (text.isNotEmpty()) {
+            _readAloud.value = com.jarvis.client.voice.ReadAloud.Offer(text, facts)
+        }
+        return answer
+    }
+
+    /**
+     * "Read aloud" on the last finished typed answer: the PC synthesises the
+     * answer in Jarvis's chosen voice ([com.jarvis.client.net.JarvisApi.say],
+     * one request per sentence, capped by
+     * [com.jarvis.client.voice.ReadAloud.READ_ALOUD_SENTENCE_CAP]) and it plays
+     * here. Returns the one sentence to show when it did not speak; "" when it
+     * (or was stopped on purpose).
+     */
+    suspend fun readAloudLastAnswer(): String {
+        val offer = _readAloud.value ?: return com.jarvis.client.voice.ReadAloud.NOTHING
+        if (!offer.mayRead) return offer.refusal ?: com.jarvis.client.voice.ReadAloud.ON_SCREEN
+        if (_readingAloud.value) return ""
+        if (voice.speakerBusy()) return com.jarvis.client.voice.ReadAloud.BUSY
+        val sentences = com.jarvis.client.voice.ReadAloud.sentences(offer.text)
+        if (sentences.isEmpty()) return com.jarvis.client.voice.ReadAloud.NOTHING
+        _readingAloud.value = true
+        try {
+            // `arm()` first: Speaker's `cancelled` is sticky, so a read after
+            // any Stop would otherwise do nothing at all.
+            voice.speaker.arm()
+            for (sentence in sentences) {
+                if (!_readingAloud.value) return ""
+                when (val said = api.say(sentence)) {
+                    is com.jarvis.client.net.ApiResult.Ok -> when (val clip = said.value) {
+                        is com.jarvis.client.net.SaidAloud.Audio -> voice.speaker.play(clip.wav)
+                        // No engine on the PC: never fall back to the phone's
+                        // own network voice for a typed answer - the words stay
+                        // on screen, said plainly.
+                        is com.jarvis.client.net.SaidAloud.NoEngine ->
+                            return com.jarvis.client.voice.ReadAloud.NO_ENGINE
+                    }
+                    is com.jarvis.client.net.ApiResult.Failed ->
+                        return com.jarvis.client.voice.ReadAloud.CANNOT
+                }
+            }
+            return ""
+        } finally {
+            _readingAloud.value = false
+        }
+    }
+
+    /** Stop a read-aloud in progress (the control says Stop while speaking). */
+    fun stopReadingAloud() {
+        _readingAloud.value = false
+        voice.speaker.stop()
+    }
+
     /** The microphone service is in the foreground (Android said yes), within a few seconds. */
     private suspend fun awaitLiveListening(): Boolean =
         withTimeoutOrNull(LIVE_LISTEN_WAIT_MS) {
