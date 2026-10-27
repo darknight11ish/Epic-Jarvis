@@ -10,7 +10,7 @@ you drop in and take out.
 
 - **27 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
-- **127 core patches**, which still go on through
+- **128 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 ## The drop-in modules
@@ -38,12 +38,12 @@ you drop in and take out.
 | 120 | `tutorials` | Tutorials and the FAQ, for both apps, with the owner's progress. | `tutorials.patch` |
 | 130 | `docker` | the containers on Jarvis's OWN list, and start/stop for them. | `docker.patch` |
 | 131 | `screen-attach` | "look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it. | `screen-attach.patch` |
-| 139 | `card-prefs` | how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it. | `card-prefs.patch` |
-| 140 | `picture-card` | "which card draws the pictures, and what the chat does about it". | `picture-card.patch` |
-| 142 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
-| 143 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
-| 150 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
-| 152 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
+| 140 | `card-prefs` | how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it. | `card-prefs.patch` |
+| 141 | `picture-card` | "which card draws the pictures, and what the chat does about it". | `picture-card.patch` |
+| 143 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
+| 144 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
+| 151 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
+| 153 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
 
 ## What stays in the core
 
@@ -170,6 +170,7 @@ stack's order and cannot be moved into a folder.
 | `gate-raise-rows.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `work.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `uncensored-optins.patch` | also adds 2 entry/entries to the approval gate's own tables, which decide whether the action needs a card |
+| `update-in-chat.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `gate-touches.patch` | edits lines the core already has; it cannot be applied out of order |
 | `big-coder.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `initiative-payload.patch` | edits lines the core already has; it cannot be applied out of order |

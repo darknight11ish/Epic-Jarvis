@@ -34,7 +34,8 @@ mechanism `plugins/ready/sandbox` uses.
 
 - Module the loader calls: `jarvis_media_index.install()` (takes the core's Handler)
 - The patch this replaces: none - it is born as a folder
-- Position in the loader's order: 153, the first free slot after `sandbox` (152)
+- Position in the loader's order: 154, the first free slot after every generated
+  folder (`secret-handoff` is the highest of those, at 153)
 
 The chat path needs none of this: `my_files`'s `search_media` action works as
 soon as the module is installed, with no plugin folder and no route.

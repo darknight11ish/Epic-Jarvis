@@ -1,5 +1,5 @@
 """test_update_chat.py - "is there an update?", "what changed?", "update Jarvis"
-(2026-10-26; backend/jarvis_quick.py; docs/JARVIS-API.md section 54).
+(2026-10-26; backend/jarvis_quick.py; docs/JARVIS-API.md section 158).
 
     python3 backend/test_update_chat.py
 
