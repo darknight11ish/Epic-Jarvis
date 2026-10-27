@@ -3919,6 +3919,16 @@ _FEATURE_WHERE = re.compile(
     # question, not the "how do I change" one below. The same exact-name gate
     # applies, so "where do I change my wifi password" is still the model's.
     r"|where\s+do\s+i\s+(?:change|set|edit|adjust)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    # "how do I change the presets?" - the SAME question asked the other way
+    # round (2026-10-26, part B). It is an alternative in this pattern, not a
+    # new one, so it resolves through the same alias path ("presets" is
+    # focus-presets' own alias) and gets the same full answer: the explain view
+    # already ends with change_words(), which names the exact phrase or Settings
+    # place. The change lane below keeps "can I change/adjust ...", "is it
+    # adjustable" and "how do I adjust/edit/configure ...". The gate is
+    # unchanged, so "how do I change my password" still falls through to the
+    # model rather than being hijacked.
+    r"|how\s+do\s+i\s+change\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
     r"|where\s+in\s+jarvis\s+is\s+(?:the\s+|my\s+)?(.+)")
 #: "can I change <feature>", "how do I change <feature>", "is it adjustable" -
 #: answered from the five owner-facing labels and the real switch table, never

@@ -3667,3 +3667,33 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     purpose - the phone sends no `private` flag and has no Private toggle or
     marker, because its private mode is Incognito - so "neither app" is the
     part that expired, not the phone's own choice.
+
+## 2026-10-26 — The owner approved a read-only Galaxy picture on the phone
+
+  * **The decision, in the owner's words.** *"i want the android phone to have
+    a picture B) also design a phone Galaxy picture"*. He approved breaking the
+    old "no map on the phone" rule for this one screen, on 2026-10-26. What he
+    got is the desktop's own deterministic zen-ring picture, at most 48 names
+    (1 centre + 32 on the halo + 15 on the first outward ring), drawn from the
+    same `/api/memory/entities` read the phone's list already makes. No name is
+    painted on the canvas; every dot carries a TalkBack line, and a tap opens
+    that name's existing facts/connections view.
+  * **What it replaces, and only that.** It replaces the "no picture / no
+    canvas on the phone" part of the 2026-09-30 rule as widened on 2026-10-11
+    and 2026-10-23 (`docs/GALAXY-PANEL-DESIGN.md`), and nothing else.
+    `/api/graph` stays off the phone and no new route is added. The desktop
+    panel remains the interactive map: the constellation and the three flat
+    presets, its hover and drag, the merge card and the names under each fact.
+  * **What still stands, unchanged.** The phone's memory graph is still
+    read-only: no add, edit, delete, merge, drag, pin, Forget or Erase from the
+    picture or the list, no approval card and no write of any kind. The picture
+    adds no route, no model call, no animation and no GL/AGSL, and it is hidden
+    with the other memory lists and while the list shows a past date.
+  * **What is not yet known.** No phone or emulator run has happened, so the
+    picture's look and a real tap are NOT-TESTABLE: CI compiled the app and ran
+    its JVM unit tests on 2026-10-26 (the `build` and `phone-unit-tests` jobs
+    passed on #869's head), and a green build is not a field test.
+    `docs/FIELD-TEST-MATRIX-2026-10-11.md` records the row as NOT-TESTABLE. The
+    layout itself is pinned to the real desktop JavaScript at 1e-6 by the
+    generated fixture and `GalaxyPictureTest.kt`; that is a test, not a run on
+    a phone.
