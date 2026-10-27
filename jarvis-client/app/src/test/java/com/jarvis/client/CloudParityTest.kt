@@ -89,6 +89,28 @@ class CloudParityTest {
 
     // --- the one read-only sentence ------------------------------------------
 
+    /**
+     * The Lead's server shape keeps `why` and `providers[]` additive for the
+     * desktop. This is the grep-testable expectation on the phone side: a cloud
+     * block with ONLY `provider` and `escalate.on` must parse and read exactly
+     * the same, and a missing `why` must never break the reader.
+     */
+    @Test
+    fun `a cloud block with only on and provider still reads`() {
+        val minimal = JarvisJson.parseToJsonElement(
+            """{"presets":[{"id":"fast","title":"Fast",
+                 "lane":{"key":"fast","card":"2080 SUPER","words":"the 2080 SUPER"},
+                 "apply":{"action":"Use this preset","apply_route":"/api/work/apply"}}],
+               "cloud":{"provider":"deepseek-flash","escalate":{"on":false}}}""",
+        ) as JsonObject
+        val view = requireNotNull(FocusPresets.parse(minimal)) { "the minimal cloud shape did not parse" }
+        val cloud = requireNotNull(view.cloud) { "the minimal cloud block was not read" }
+        assertEquals("deepseek-flash", cloud.provider)
+        assertFalse(cloud.escalateOn)
+        assertEquals("a missing why must not be invented", "", cloud.why)
+        assertTrue(FocusPresets.cloudLine(cloud).contains("set on your PC"))
+    }
+
     @Test
     fun `the cloud sentence says what the PC decided, and that it was set there`() {
         val on = FocusPresets.Cloud(provider = "deepseek-flash", escalateOn = true, why = "")
