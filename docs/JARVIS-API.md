@@ -21900,8 +21900,8 @@ Handler after its own origin and token checks, exactly as `jarvis_news.py`,
 `jarvis_sources.py` and `jarvis_goals.py` do it. **No patch is involved:**
 `plugins/ready/receipts/plugin.json` names `jarvis_receipts` with
 `"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
-have made. `stack_order` is 145 - after every folder the old patch stack had
-(the highest is `model-lanes` at 142).
+have made. `stack_order` is 147 - after every folder the old patch stack had
+(the highest is `model-lanes` at 144).
 
 The list answers `{"ok", "receipts", "count", "limit", "undo_action",
 "undo_tier", "waiting", "last", "words"}`. Each receipt carries its own
@@ -22325,8 +22325,8 @@ core's Handler after its own origin and token checks, exactly as
 `jarvis_receipts.py` (§132.5) does it. **No patch is involved:**
 `plugins/ready/skill-hub/plugin.json` names `jarvis_skill_hub` with
 `"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
-have made. `stack_order` is 143 - after every folder the old patch stack had
-(the highest of those is `model-lanes` at 142).
+have made. `stack_order` is 145 - after every folder the old patch stack had
+(the highest of those is `model-lanes` at 144).
 
 The first route answers twice, on the same path, and the two forms report
 failure differently - one HTTP status, one payload - which a client has to know.
@@ -25364,3 +25364,117 @@ slice does not invent one (see `docs/ARCHITECTURE.md` §8). The phone: the card
 is PC-only. No approval card is raised by this feature itself: the owner's
 typing is the approval, and the existing gate still governs the plan that
 asked.
+
+## 158. Updates in chat: "is there an update?", "what changed?", "update Jarvis" (added 2026-10-26)
+
+The owner's request, in their own words: *"can jarvis talk about an update if
+theres one availabale and the changes? and start the update process for me?"* -
+*"if i ask in chat"*. **No new route.** The two questions are answers from the
+`/api/chat` fast path (`backend/jarvis_quick.py`, no model), and starting the
+update is ONE approval card on the gate every other change already uses.
+
+### 158.1 What the desktop shell tells its backend: the `desktop` body field
+
+The only party that knows which version is running, and whether this build can
+verify a download, is the Tauri shell (`jarvis-desktop/src-tauri/src/update.rs`
+`desktop_chat_facts`). Both chat paths this app owns add a top-level field to
+the `POST /api/chat` body, **after** the field whitelist, so a page cannot set
+it:
+
+```json
+{ "messages": [...], "desktop": { "version": "0.2.320", "can_update": true } }
+```
+
+| field | type | meaning |
+|---|---|---|
+| `version` | string, `\d+\.\d+\.\d+(\.\d+)?` | the build actually running. Anything else is treated as absent |
+| `can_update` | boolean | `true` only when `tauri.conf.json` has a real `plugins.updater.pubkey`. A missing key, or a truthy non-boolean, is **not** a yes |
+
+It is additive and optional: a client that does not send it (the phone, a
+browser, an older desktop) gets honest words instead of a guess. The HUD page
+cannot supply it - `hud_proxy.rs`'s `chat_payload` keeps only the page's own
+fields and `hud_chat` inserts the shell's facts afterwards - and the quickbar's
+`stream_chat` adds the same value. It goes to the owner's own backend only,
+carries no identifier, and is not read by any other route.
+
+### 158.2 The answers, and what each state says
+
+Matched as whole sentences, like every other fast path: `update_ask` ("is
+there an update?", "any updates?", "is Jarvis up to date", "what version am I
+on", "check for updates"), `update_notes` ("what changed in the update?",
+"what's new in the update", "what does the update change", "the update notes")
+and `update_start` ("update Jarvis", "update", "start/do/install the update",
+"update to the latest version"). Bare "what's new", "how do I update Jarvis",
+"when is the next update", "did the update break anything" and "update my
+settings" are **not** ours and go to the model as before.
+
+| state | the answer says |
+|---|---|
+| no `desktop` field | it cannot tell which build is asking; points at Settings -> Updates on the PC and Platform checks on the phone |
+| `can_update: false` | this build has no update key, so it cannot check or install a download |
+| the manifest could not be read | **the check failed**, so it cannot say whether there is an update; nothing was changed |
+| same version | this is the newest published version |
+| this build newer | a development build, newer than the published release; nothing to install |
+| a newer version | the version, the running one, and how to hear what changed or start it |
+
+`update_notes` quotes the release's own `notes` from
+`desktop-latest/latest.json` (the same string Settings -> Updates shows), never
+a list of its own. An empty field says the release does not say. A gap of more
+than one version adds one sentence: the notes are for that release only and do
+not cover the releases in between. The notes are written by
+`jarvis-desktop/scripts/release-notes.mjs` from `changelog.d/` (and the rolled
+`CHANGELOG.md` bullets only when a roll has emptied the folder), one summary
+sentence per change, capped at 20 entries.
+
+### 158.3 Starting it: ONE card, and nothing before the yes
+
+`update_start` raises **one** approval card through `jarvis_gate.check`, action
+**`desktop_update`**:
+
+* tier `ask` in `jarvis-framework.toml` (an unlisted action would be `ask` too,
+  but the row is written down so a later edit to `unknown_action_tier` cannot
+  move it silently);
+* in `jarvis_owner_check.PC_ONLY_ACTIONS` - **only this PC can approve it**, and
+  Windows Hello comes first, whatever the tier table says. The phone shows the
+  card and its Approve is refused with the standard `pc_only` 403; the card's
+  own words say "only on this PC";
+* on the **What asks first** page (`jarvis_asks_first.py`, in "Jarvis's own
+  settings, memory and voice", and in its `HARD_LIMITS`/`MUST_ASK` sets), so the
+  owner can find it beside the other cards over Jarvis's own code, with no
+  switch: like everything there whose module refuses a looser tier, it can
+  never be changed to run without asking;
+* the card names both halves, the version, the restart, the pace (Balanced),
+  the signature check, and that nothing is downloaded, installed or changed
+  before the yes.
+
+**What the approval runs.** The owner's Approve goes through
+`decide_approval` (`POST /api/approve` with the token, the stale-link refusal
+and Windows Hello just as for any card). `commands.rs` `answer_approval` reads
+the card's own `action` from the pending queue it already holds **before** the
+decision is sent, and only when it is `desktop_update` does it call
+`update.rs` `run_approved_update`: a fresh check, then the SAME `update_both`
+the Settings button runs - backend first, then the signed desktop release,
+then a restart. A denial, a timeout, a stale link, a locked PC or a card that
+cannot be read starts nothing.
+
+**What deliberately does not exist.** No route downloads an installer, no page
+may start one (the HUD window still holds no update command in
+`capabilities/hud.json`), no timer or startup path reaches it, and the chat's
+"do it now" is still only the card.
+
+**What this does and does not close (S3).** The self-improvement audit's
+finding S3 named the desktop updater as the one self-modification path outside
+the gate. The CHAT-STARTED path now has the gate card, Windows Hello and the
+approvals row as its audit line. The Settings window's own Install and
+"update both halves" buttons are unchanged and are still direct `update_both`
+calls with only their own in-window question - S3 is improved for the new
+path, not closed for the old one, and closing it there is a separate decision.
+
+### 158.4 The two apps
+
+The desktop answers both questions and starts the update. The phone is
+**one-sided on purpose** (recorded in `docs/ARCHITECTURE.md` §8): a message from
+the phone carries no `desktop` field, so the reply says it can only check the
+PC's build from the PC's app and points at **Platform checks**, the phone's own
+update card, where the owner downloads its APK and Android's installer asks for
+the tap. Nothing installs itself on either device.
