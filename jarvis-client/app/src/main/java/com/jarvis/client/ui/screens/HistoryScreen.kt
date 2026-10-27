@@ -826,6 +826,7 @@ fun HistoryScreen(
                                 onAskDelete = {
                                     deleteFor = hit.row
                                     menuFor = null
+                                    moveFor = null
                                 },
                                 onOpen = {
                                     if (wanted != null) {
@@ -872,6 +873,7 @@ fun HistoryScreen(
                             onAskDelete = {
                                 deleteFor = row
                                 menuFor = null
+                                moveFor = null
                             },
                             onOpen = {
                                 if (wanted != null) {
