@@ -182,6 +182,11 @@ TITLES = {
     "desktop_update": "update Jarvis itself - the backend first, then this app",
     "power_manage": "change its power mode (Active, Quiet or Standby)",
     "schedule_repeat": "set up something that repeats",
+    # --- a reminder's own action (2026-10-27, reminder-actions.patch): the ONE
+    # card a reminder that asks to RUN something raises, at the moment it goes
+    # off. It says what it is - the reminder the owner set asked, and only a yes
+    # does it.
+    "schedule_action": "do what a reminder asked for",
     # --- memory, learning and chat history
     "learning_enable": "turn on learning",
     "learning_auto_enable": "turn on automatic learning",
@@ -371,6 +376,9 @@ SUMMARY = {
     "modify_own_code": "change its own code",
     "power_manage": "change its power mode",
     "schedule_repeat": "set up something that repeats",
+    # The same card, cut to a breath (see TITLES above): the yes is one tap and
+    # the sentence has to fit beside it.
+    "schedule_action": "do what a reminder asked for",
     # --- memory, learning and chat history
     "learning_enable": "turn on learning",
     "learning_auto_enable": "turn on automatic learning",

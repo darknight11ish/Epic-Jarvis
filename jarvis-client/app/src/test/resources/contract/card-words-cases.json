@@ -343,6 +343,10 @@
       "title": "Jarvis wants to run a small script that reads the files you listed"
     },
     {
+      "action": "schedule_action",
+      "title": "Jarvis wants to do what a reminder asked for"
+    },
+    {
       "action": "schedule_repeat",
       "title": "Jarvis wants to set up something that repeats"
     },
@@ -1432,6 +1436,18 @@
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "schedule_action",
+      "notice": {
+        "title": "Jarvis wants to do what a reminder asked for",
+        "summary": "Jarvis wants to do what a reminder asked for.",
+        "full": "does the one thing a reminder you set asked for, on this PC, only this once: puts your morning briefing together now, here; nothing is sent anywhere, nothing is deleted, and nothing happens without this card. nothing has happened yet.",
+        "body": "does the one thing a reminder you set asked for, on this PC, only this once: puts your morning briefing together now, here; nothing is sent anywhere, nothing is deleted, and nothing happens without this card. nothing has happened yet.",
+        "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
       }

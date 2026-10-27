@@ -44,6 +44,12 @@ fn main() {
             // Brain uses, held on a stale link, no card. HUD window only.
             "hud_schedule_add",
             "hud_schedule_act",
+            // A reminder's own action (2026-10-27, the owner's request): the
+            // Open button on a reminder that has gone off. The job's ID only -
+            // the PC reads the target back from its own answer and re-checks
+            // it, so no page ever chooses what Windows opens. Nothing opens by
+            // itself.
+            "open_reminder_target",
             // The HUD owner-secret hand-off card (2026-10-26): fill or cancel
             // ONE card with the token added in Rust. The page holds none and
             // its own POSTs stay refused; hud_proxy.rs owns the read.

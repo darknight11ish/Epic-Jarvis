@@ -1704,6 +1704,25 @@ $PATCHES = @(
     # re-anchored onto this block's last two printed lines (tools/check_plugins.py
     # checks that). The browser path is deliberately NOT wired (ARCHITECTURE 8).
     'secret-handoff.patch'
+    # 2026-10-27 merge note (#894 and #896): both PRs appended their new patch
+    # here, immediately before plugin-loader.patch. #896's
+    # f01-manual-lane-gate.patch must stay the LAST code patch and directly after
+    # cloud-escalate.patch - backend/test_hud_manual_lane_gate.py asserts both - so
+    # #894's reminder-actions.patch goes first of the three. All three add no
+    # install block and no route, so the loader's own anchor is untouched.
+    # reminder-actions.patch (2026-10-27, the owner's request): a reminder may
+    # carry ONE action - show a note, open a web page, open a file, or ask to
+    # put the morning briefing together. The whole feature is in the SHIPPED
+    # jarvis_schedule.py (the column, the two checks, the fire-time card); this
+    # patch adds only the ONE gate action a reminder that ACTS raises
+    # (`schedule_action`), in the gate's own words: a risk row saying plainly
+    # that it acts only on this PC and sends nothing, and a
+    # `_NO_RULE_FROM_DENIAL` line so denying it proposes no standing rule. No
+    # install block and no route. Its tier line (`schedule_action = "ask"`) is
+    # in the framework template, so it sits before plugin-loader.patch (which
+    # must stay LAST OF ALL) and changes nothing that patch anchors on.
+    'reminder-actions.patch'
+
     # cloud-escalate.patch (2026-10-27, the owner's decision): ONE cloud lane,
     # and a standing "escalate when the work is too complex" switch that no
     # client can fake. Three hunks, NO install block and no route of its own -

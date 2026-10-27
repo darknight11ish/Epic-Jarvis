@@ -2004,6 +2004,26 @@ permissions = [
   "allow-hud-schedule-act",
 ]
 
+# A reminder's own action (2026-10-27, the owner's request: "a reminder that
+# opens a specific image or webpage"). ONE command, and it takes the job's ID
+# and nothing else - never a URL and never a path. The PC reads the target back
+# from its own answer (`GET /api/schedule?id=`) and checks it again at the
+# moment of the tap (`reminder_open.rs`): the job must have gone off, the PC's
+# own second check must be clean, an address must be https, a file's extension
+# must be on the allow-list, and a file must still be there. So the worst a
+# script running in this page can do with it is open the one thing a reminder it
+# can already read says to open - it cannot choose what opens, and no path or
+# address ever crosses the IPC boundary from the page. It opens nothing by
+# itself: the click IS the approval, and opening writes nothing (the same
+# reasoning jarvis_open.py gives for opening a program with no card). Held on a
+# stale link, because opening is acting.
+[[set]]
+identifier = "reminder-open"
+description = "Open what ONE reminder that has already gone off points at - a web page or a file on this PC - from the job's id only. The PC reads and re-checks the target; nothing opens by itself, no address or path comes from the page, and it is held on a stale link."
+permissions = [
+  "allow-open-reminder-target",
+]
+
 # The HUD Presets menu's personalities (2026-10-27). The owner asked that menu
 # to list "the different personalities of jarvis that i can select", and the
 # page's own POST to /api/manner is refused by the bootstrap's fetch shim: the

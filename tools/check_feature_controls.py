@@ -429,15 +429,17 @@ def main(argv=None):
     # 2026-10-26 (later): Choose Jarvis's face became changeable by asking (one
     # named choice, no card), so it moved PC-Only -> Switchable/Adjustable:
     # 40 -> 41 and 16 -> 15. Measured from the contract, not chosen.
+    # 2026-10-27: the reminder-actions row joined as Command-Only, so 70 -> 71
+    # (141 features total). Measured from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 41, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 15,
-        LAB_COMMAND: 70, LAB_ALWAYS: 12,
+        LAB_COMMAND: 71, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 41/2/15/70/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 41/2/15/71/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 41/2/15/70/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 41/2/15/71/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.

@@ -370,6 +370,17 @@ fiction_roleplay_enable   = "ask"
 # up. A file without this line asks too (unknown_action_tier).
 schedule_repeat           = "ask"
 
+# --- A reminder's own action (jarvis_schedule.py, 2026-10-27) -------------
+# A reminder may carry ONE action: show a note, open a web page, open a file,
+# or put the morning briefing together. Opening is a notice with an Open button
+# and needs no card - nothing opens until the owner presses it, and opening
+# writes nothing. Asking to RUN something is acting, so it raises ONE card at
+# the moment the reminder goes off, every time it goes off, and nothing runs
+# without a yes. Must stay "ask": the code refuses any other tier outright
+# (`Scheduler._fire_action`), so a change here cannot make a reminder act on
+# its own. A file without this line asks too (unknown_action_tier).
+schedule_action           = "ask"
+
 # --- Web search (jarvis_search.py, the owner's decisions of 2026-09-25) -----
 # A search straight from your own question, in a conversation where Jarvis
 # has read nothing from outside, runs WITHOUT a card and does not read this

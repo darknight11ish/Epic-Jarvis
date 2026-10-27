@@ -673,6 +673,13 @@ def t_the_patch_and_the_lists():
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing referee.patch wrote.
              "secret-handoff.patch",
+             # reminder-actions.patch (2026-10-27) is appended after it,
+             # immediately before plugin-loader.patch: TWO hunks, both in
+             # jarvis_gate.py and both ADDED lines at the END of their tables (a
+             # `schedule_action` line in the "acts only on tier ask" set and one
+             # `_RISK` row). It removes no line at all, so it rewrites nothing
+             # referee.patch wrote.
+             "reminder-actions.patch",
              # update-in-chat.patch (2026-10-26): ONE hunk in jarvis_gate.py
              # that appends `desktop_update` to the END of _NO_RULE_FROM_DENIAL,
              # after uncensored-optins.patch's own last entry - it adds no tier

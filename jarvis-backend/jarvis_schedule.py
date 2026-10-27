@@ -217,6 +217,89 @@ DEFAULT_LIST_TITLE = "To-do list"
 #: The approval action for anything that repeats.
 ACTION = "schedule_repeat"
 
+#: The approval action for a reminder that asks to RUN something (2026-10-27).
+#: ONE name for the whole feature, so there is one title, one risk line and one
+#: tier: a reminder's `run-task` action is the only kind that acts, and it acts
+#: only after this card is approved, once per time it goes off.
+ACTION_SCHEDULE = "schedule_action"
+
+# ---- a reminder's action (2026-10-27, the owner's request) -----------------
+#
+# "id likee to set custom reminders that open something or do an action if i
+# ask jarvos to make a specific remonder" - so ONE reminder may carry ONE
+# action, and the whole design is built on one line:
+#
+#   Showing the owner something is not acting. Doing something is.
+#
+# A kind that only SHOWS (`show-note`, `open-webpage`, `open-file`) fires with
+# a notice and an Open button, and nothing happens until a person presses it -
+# no card, because nothing is opened by itself and opening writes nothing.
+# A kind that DOES something (`run-task`) raises ONE `schedule_action` card at
+# fire time and runs nothing without a yes (see `Scheduler._fire_action`).
+#
+# The block is additive: a reminder written before this has `action` NULL, no
+# payload key appears for it, and every old client ignores the field. There is
+# deliberately NO "run a command" kind and no free text (DESIGN section 2.3):
+# the target is a URL, a file on the allow-list, a note, or a name from the
+# closed list below.
+
+#: The four kinds this slice knows, exactly. Lower-case hyphenated words, never
+#: free text, so a client can switch on them.
+ACTION_KINDS = ("show-note", "open-webpage", "open-file", "run-task")
+
+#: The ONE payload key each kind carries, and no other. `app` (open-app) is
+#: reserved by the design and deliberately NOT shipped: the only resolver for a
+#: program is the desktop's Start-menu index (`open_app.rs`), so shipping it
+#: would mean duplicating that index in Python or adding a general exec path.
+ACTION_PAYLOAD = {"show-note": "note", "open-webpage": "url", "open-file": "path",
+                  "run-task": "task"}
+
+#: The kinds that ACT, and therefore raise the one card at fire time.
+ACTING_ACTION_KINDS = ("run-task",)
+
+#: The closed list of tasks a reminder may ask to run. Two names, both already
+#: one callable on this PC; adding a third is a code change with a test that
+#: pins the list. Nothing here is a program, a command or a path.
+#:
+#: `backup` is named by the design as the second target and is REFUSED when the
+#: action is saved - see `_task_problem`. A backup is encrypted with a fresh
+#: random recovery code (`jarvis_backup.generate_code`, "never logged, never
+#: written to a file, never kept by this module past the response that shows it
+#: once"), and a reminder that fired at 07:00 has nobody to show it to, so it
+#: would write an archive nobody could ever open. A backup that cannot be
+#: opened is worse than no backup at all, and putting the code in the card
+#: would write a credential to `approvals.db` in plain text. `briefing` has no
+#: such secret: it is built, kept and announced "ready" exactly as a briefing
+#: job's own on_fire does.
+ACTION_TASKS = ("briefing", "backup")
+
+#: Limits, each said in a sentence when it is reached.
+MAX_ACTION_BYTES = 4096
+MAX_ACTION_URL = 1024
+MAX_ACTION_PATH = 1024
+MAX_ACTION_NOTE = 500
+MAX_ACTION_LINES = 10
+
+#: What "open a file" may open. "Open a file" means "run whatever is registered
+#: for it", so the extension is the security boundary: `.lnk`, `.exe`, `.bat`,
+#: `.cmd`, `.ps1`, `.msi`, `.scr`, `.html` and `.svg` are never openable this
+#: way. The same list is checked again at the moment of opening.
+ACTION_FILE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".pdf",
+                    ".txt", ".md", ".docx", ".doc", ".xlsx", ".pptx", ".csv")
+
+#: The sentences. Each one is a whole sentence with no code in it, because
+#: every one of them is shown to the owner as it is.
+NOT_IN_FOLDERS = ("That file is not in a folder Jarvis may look in. Add its folder "
+                  "in Settings, Folders.")
+NOT_A_FILE = ("Jarvis can open pictures, PDFs, text and Office files. It will not "
+              "start a program from a file.")
+NOT_HTTPS = ("A web address starts with https:// - copy it from your browser's "
+             "address bar.")
+#: The one sentence a file that has gone gets, at save time and at the tap.
+FILE_GONE = "That file is not there any more."
+_NO_ACTION_KIND = ("An action is one of: show a note, open a web page, open a file, "
+                   "or do a task.")
+
 #: How many future times the card and the list show for a repeating job.
 NEXT_SHOWN = 3
 
@@ -484,7 +567,14 @@ _ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "
                   # way to know, and marking every old reminder tainted would
                   # latch on a job nobody read anything for. The latch is
                   # replayed once when the job fires (see `tick`).
-                  ("source_taint", "TEXT"))
+                  ("source_taint", "TEXT"),
+                  # A reminder's ONE action (2026-10-27): JSON, NULL for every
+                  # row that has none - which is every row written before this
+                  # and every job that is not a reminder. `_view` hands it out
+                  # only when it decodes to a known kind, and old code ignores
+                  # the column, so a code rollback stays safe: the same contract
+                  # `rank` was added under.
+                  ("action", "TEXT"))
 
 #: The one value `jobs.source_taint` holds. It is a value, not a boolean, so
 #: a later reason (a pasted-text job, say) can be added without a rewrite.
@@ -521,6 +611,15 @@ def _row_taint(row) -> str:
     by a caller that never constructed a Scheduler must not raise)."""
     try:
         return str(row["source_taint"] or "")
+    except (IndexError, KeyError):
+        return ""
+
+
+def _row_action(row) -> str:
+    """One row's stored action JSON, "" for none - the same guard `_row_taint`
+    makes, for the same reason (a row read before the migration ran)."""
+    try:
+        return str(row["action"] or "")
     except (IndexError, KeyError):
         return ""
 
@@ -1021,6 +1120,10 @@ class Scheduler:
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self.last_card: dict = {}      # job id -> outcome, for the list
+        # (job id, due) pairs a fire-time action has already asked about, so a
+        # retry inside this process can never ask or run twice. In memory only:
+        # a restart cannot re-fire anyway - the row is no longer 'active'.
+        self._acted: set = set()
         self.errors = 0
         self.fired = 0
         # The clock reading at the last tick, in memory only: a reading EARLIER
@@ -1110,7 +1213,8 @@ class Scheduler:
                 condition_kind: Optional[str] = None,
                 condition_target: Optional[str] = None,
                 rank: Optional[int] = None,
-                source_taint: Optional[str] = None) -> str:
+                source_taint: Optional[str] = None,
+                action: Optional[dict] = None) -> str:
         """The ONE insert. Every creation path (timer, alarm, reminder, to-do,
         repeat, both snooze copies) comes through here, so the creation-time
         taint mark is recorded in exactly one place.
@@ -1132,13 +1236,14 @@ class Scheduler:
                 rank = int(top) + 1
             c.execute("INSERT INTO jobs (id, kind, text, state, due, rule, duration, created, "
                       "changed, source, list_name, snooze_of, extra, context_bundle, trigger, "
-                      "condition_kind, condition_target, rank, source_taint) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      "condition_kind, condition_target, rank, source_taint, action) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (jid, kind, text, state, due,
                        json.dumps(rule) if rule else None, duration, now, now, source,
                        list_name, snooze_of, json.dumps(extra) if extra else None,
                        json.dumps(context_bundle) if context_bundle else None,
-                       trigger or "time", condition_kind, condition_target, rank, taint))
+                       trigger or "time", condition_kind, condition_target, rank, taint,
+                       json.dumps(action) if action else None))
         _audit("schedule.add", {"id": jid, "kind": kind, "repeats": bool(rule)})
         self._changed(jid, kind)
         return jid
@@ -1188,7 +1293,8 @@ class Scheduler:
     def add_at(self, kind: str, at: float, text: str = "", source: str = "app",
                extra: Optional[dict] = None, *, context_bundle: Optional[dict] = None,
                trigger: Optional[str] = None, condition_kind: Optional[str] = None,
-               condition_target: Optional[str] = None) -> dict:
+               condition_target: Optional[str] = None,
+               action: Optional[dict] = None) -> dict:
         """A one-off alarm, reminder or to-do with a time. No card. `extra`: a
         kind's own small state (the `extra` column), for a kind whose module
         keeps one (jarvis_next_time.py).
@@ -1199,7 +1305,13 @@ class Scheduler:
         `condition_kind`/`condition_target` are the optional read-only check
         ("no_email_reply_from": who should have replied; "decks_due"). The
         bundle is normalised by `scrub_context_bundle` before it is stored -
-        no raw path and no secret ever enters the database through here."""
+        no raw path and no secret ever enters the database through here.
+
+        REMINDERS ONLY, 2026-10-27: `action` is what this reminder opens, or
+        the one task it may ask to run (see `_clean_action`). It is checked
+        HERE, once, so a bad target is refused before a row exists; it is
+        checked again at the moment it is used (`_action_problem`, and the
+        desktop's own re-check before it opens anything)."""
         if kind not in KINDS or kind == "timer":
             raise ValueError("that kind of job needs a time: alarm, reminder or to-do")
         try:
@@ -1215,6 +1327,12 @@ class Scheduler:
         if kind != "reminder" and (context_bundle or trigger not in (None, "time")
                                    or condition_kind or condition_target):
             raise ValueError("only a reminder can carry context, a trigger or a condition")
+        if kind != "reminder" and action:
+            # The same one-line guard the context packet has: an action belongs
+            # to a reminder, and a timer or a to-do that carried one would be a
+            # target nothing can show, open or ask about.
+            raise ValueError("only a reminder can carry an action")
+        action = _clean_action(action)
         if trigger is not None and trigger not in TRIGGERS:
             raise ValueError("trigger is one of: " + ", ".join(TRIGGERS))
         with self._lock, self._db() as c:
@@ -1226,7 +1344,8 @@ class Scheduler:
                            trigger=trigger or "time",
                            condition_kind=str(condition_kind) if condition_kind else None,
                            condition_target=_clean_condition_target(condition_target)
-                           if condition_target else None)
+                           if condition_target else None,
+                           action=action)
         return self.job(jid)
 
     # ---- a kind's own small state (the `extra` column) --------------------------
@@ -1290,10 +1409,16 @@ class Scheduler:
                            duration=None, source=source, list_name=key)
         return self.job(jid)
 
-    def add_repeat(self, kind: str, rule, text: str = "", source: str = "app") -> dict:
+    def add_repeat(self, kind: str, rule, text: str = "", source: str = "app",
+                   action: Optional[dict] = None) -> dict:
         """A repeating job. A plain alarm, reminder or standby schedule
         (Kind.plain_repeat) is set up at once, with no card; any other kind
-        WAITS until one approval card is approved."""
+        WAITS until one approval card is approved.
+
+        `action` (2026-10-27): a repeating REMINDER may carry one action, and
+        then it goes off - and acts, or offers its Open button - EVERY time.
+        A repeating action reminder asks again at every occurrence, never once
+        and then silent: "never auto-approved" means every time is a decision."""
         k = KINDS.get(kind)
         window = bool(k is not None and k.window)
         if not _repeatable(kind) and not window:
@@ -1304,6 +1429,9 @@ class Scheduler:
         else:
             rule = check_rule(rule, now, window=window)
         text = self._clean_text(text, kind) if (k is None or k.has_text) else ""
+        if kind != "reminder" and action:
+            raise ValueError("only a reminder can carry an action")
+        action = _clean_action(action)
         with self._lock, self._db() as c:
             self._room(c, kind)
             if k.single and c.execute(
@@ -1329,10 +1457,10 @@ class Scheduler:
             # and under the job in Coming up, where the card used to list them.
             due = now if k.first_now else next_run(rule, now)
             jid = self._insert(kind, text=text, state="active", due=due, rule=rule,
-                               duration=None, source=source)
+                               duration=None, source=source, action=action)
             return self.job(jid)
         jid = self._insert(kind, text=text, state="waiting", due=None, rule=rule,
-                           duration=None, source=source)
+                           duration=None, source=source, action=action)
         # Read BEFORE the card is raised: a card answered at once (or a
         # refusal) removes the row, and the caller still needs to say what
         # was asked for.
@@ -1548,6 +1676,133 @@ class Scheduler:
         if not (allowed and outcome == "approved"):
             return finish(outcome if outcome in ("denied", "timed_out") else "refused")
         finish("approved")
+
+    # ---- a reminder's action, at the moment it goes off (2026-10-27) ------------
+
+    def _action_card_text(self, row, action: dict, now: float) -> str:
+        """The ONE card's words, in the shape of the repeat card: what the
+        reminder is, when it went off, and exactly what will happen.
+
+        The reminder's own words are in HERE (the owner reads them on screen,
+        and `decide()` NULLs the prompt the moment the card is answered); the
+        TARGET never is, and neither the URL nor the path is in `detail` - see
+        `_fire_action`. A repeating reminder also says it will ask again."""
+        words = str(row["text"] or "").strip()
+        due = row["fired_due"] if row["fired_due"] is not None else row["due"]
+        when = clock(float(due)) if due is not None else "now"
+        what = str(action.get("task") or "")
+        lines = ["A reminder you set wants to do something.", ""]
+        if words:
+            lines.append(f"Reminder: {words}")
+        lines.append(f"When: {when} today")
+        lines.append(f"What it will do: {_task_words(what)}")
+        lines.append("")
+        if row["rule"]:
+            lines.append("It repeats, so it will ask again next time.")
+        lines.append("It happens once, only if you say yes. Nothing happens before that.")
+        lines.append("If you say no, or nobody answers, nothing happens and the reminder "
+                     "stays in your list as it was.")
+        return "\n".join(lines)
+
+    def _fire_action(self, jid: str, due: float) -> None:
+        """ONE reminder's `run-task` action, raised as ONE card, on its own
+        thread (so a fifteen-minute wait never blocks the tick loop).
+
+        The shape is `_ask`'s, deliberately, and it refuses in the same order:
+        the tier must be "ask" (a config line is never the owner's yes), the
+        card must come back tier "ask" with outcome "approved", and anything
+        else - denied, timed out, refused, a gate that raised - runs NOTHING.
+
+        `detail` carries ids, the closed-list name, `due` and one boolean:
+        NEVER the reminder's words, the URL, the path or the note. Two reasons
+        that are facts about the gate: `_redact` returns `detail` VERBATIM when
+        `[logging].redact_private_content_in_logs` is off (jarvis_gate.py's own
+        `_redact`), so a target there would land in the audit log in the clear
+        the day someone turns redaction off to debug something; and `detail` is
+        handed to BOTH apps on `/api/pending`. The target that the owner needs
+        is in `prompt`, which is the card's own text."""
+        with self._lock, self._db() as c:
+            row = self._row(c, jid)
+        if row is None:
+            return
+        action = _decode_action(_row_action(row))
+        if not action or action["kind"] not in ACTING_ACTION_KINDS:
+            return
+        task = str(action.get("task") or "")
+        pair = (jid, float(due))
+        if pair in self._acted:
+            # A retry inside this process cannot run or ask twice. A restart
+            # cannot re-fire: the row is no longer 'active'.
+            return
+        self._acted.add(pair)
+        if self._tier_of(ACTION_SCHEDULE) != "ask":
+            # A config line is never the owner's yes.
+            _audit("schedule.action_refused", {"id": jid, "outcome": "refused"})
+            return
+        if _task_problem(task):
+            # Nothing can run for it (a task this build refuses). Never a card
+            # for something that would do nothing.
+            _audit("schedule.action_refused", {"id": jid, "outcome": "unknown"})
+            return
+        prompt = self._action_card_text(row, action, self.now())
+        detail = {"job": jid, "due": float(due), "what": "run-task", "task": task,
+                  "leaves_this_pc": False}
+        _audit("schedule.action_asked", {"id": jid, "kind": action["kind"], "what": task})
+        try:
+            verdict = self._gate(ACTION_SCHEDULE, detail, prompt)
+        except Exception:
+            _audit("schedule.action_refused", {"id": jid, "outcome": "refused"})
+            return
+        vtier = getattr(verdict, "tier", "unknown")
+        allowed = getattr(verdict, "allowed", False) is True
+        outcome = getattr(verdict, "outcome", None)
+        if outcome is None:
+            outcome = "approved" if (allowed and vtier == "ask") else "refused"
+        if vtier != "ask" or self._tier_of(ACTION_SCHEDULE) != "ask":
+            # allowed on "auto" or "notify" is not a person saying yes.
+            _audit("schedule.action_refused", {"id": jid, "outcome": "refused"})
+            return
+        if not (allowed and outcome == "approved"):
+            _audit("schedule.action_refused",
+                   {"id": jid, "outcome": outcome if outcome in ("denied", "timed_out")
+                    else "refused"})
+            return
+        # PA-6: the card named this row as it was. If it was changed or
+        # deleted while the card waited, the thing the owner approved is not
+        # the thing that would run, so nothing runs.
+        with self._lock, self._db() as c:
+            cur = self._row(c, jid)
+            if cur is None or _row_action(cur) != _row_action(row) \
+                    or float(cur["changed"]) != float(row["changed"]):
+                _audit("schedule.action_refused", {"id": jid, "outcome": "withdrawn"})
+                return
+        try:
+            self._run_task(task, jid)
+        except Exception as exc:
+            # The exception's NAME only: its message could quote a path.
+            _audit("schedule.action_failed",
+                   {"id": jid, "what": task, "error": type(exc).__name__})
+            return
+        _audit("schedule.action_ran", {"id": jid, "what": task})
+
+    def _run_task(self, task: str, jid: str) -> None:
+        """Run ONE name from `ACTION_TASKS`, through the callable that already
+        exists on this PC. Nothing else is reachable from here: no shell, no
+        command, no path and no free text.
+
+        `briefing` uses `jarvis_briefing.make` - NOT `build`, which the design
+        named: `build` returns one briefing and keeps it nowhere, so a reminder
+        that ran it would put a briefing together that neither app could ever
+        show. `make` is the half that keeps it as the latest, and the "ready"
+        ring is the same one `jarvis_briefing._on_fire` sends (that file's own
+        scheduled-briefing path), carrying this reminder's id so both apps can
+        read it and the briefing's own toast says it is ready."""
+        if task == "briefing":
+            import jarvis_briefing
+            jarvis_briefing.make(sched=self, source="schedule", job=jid)
+            self._publish("schedule", {"id": jid, "kind": "briefing", "state": "ready"})
+            return
+        raise ValueError("unknown task")
 
     # ---- changing one job ---------------------------------------------------------
 
@@ -2307,7 +2562,7 @@ class Scheduler:
                               "WHERE id = ?",
                               (now, row["due"], int(late), now, now, row["id"]))
                 went.append((row["id"], row["kind"], late, ended, past_end,
-                             _row_taint(row)))
+                             _row_taint(row), _row_action(row), float(row["due"])))
             # Housekeeping: what went off a day ago, and done to-dos a week old.
             c.execute("DELETE FROM jobs WHERE state = 'fired' AND fired_at < ?",
                       (now - FIRED_KEEP,))
@@ -2318,7 +2573,7 @@ class Scheduler:
             # BUNDLE_RETENTION_DAYS days - the bare reminder row stays, the
             # details that were only there to help do it do not.
             _expire_bundles(c, now)
-        for jid, kind, late, ended, past_end, taint in went:
+        for jid, kind, late, ended, past_end, taint, action_raw, due in went:
             self.fired += 1
             k = KINDS.get(kind)
             if past_end:
@@ -2353,6 +2608,20 @@ class Scheduler:
             if k is not None and k.on_fire is not None:
                 fn = k.on_fire
                 self._spawn(lambda fn=fn, jid=jid: _safe(fn, jid))
+            # A reminder's action (2026-10-27), LAST: after the taint replay,
+            # after the fired event and after the kind's own on_fire, so nothing
+            # this row can influence has already run. ONLY an acting kind does
+            # anything here: a display kind needs nothing, because both apps
+            # draw the notice from the job's own `action`, which they read by
+            # id. One occurrence spawns one card, and `_fire_action` keeps the
+            # (id, due) pair it has asked about, so a retry inside this process
+            # can never ask or run twice.
+            if action_raw:
+                fired_action = _decode_action(action_raw)
+                if fired_action and fired_action["kind"] in ACTING_ACTION_KINDS:
+                    self._spawn(lambda jid=jid, due=due: _safe_action(self, jid, due))
+                elif not fired_action:
+                    _audit("schedule.action_unreadable", {"id": jid})
         return [w[0] for w in went]
 
     def end(self, jid: str) -> bool:
@@ -2510,6 +2779,30 @@ class Scheduler:
             # an app/test can assert the owner-only rule without reading state.
             v["done"] = False
         v["lock_screen"] = k.lock_screen if k else "Jarvis: something is due."
+        # A reminder's ONE action (2026-10-27). Handed out only when it decodes
+        # to a known kind and exactly its one payload key, so a row without one
+        # grows NO key at all and an old payload is byte for byte what it was.
+        # `action_problem` is the second check (DESIGN section 3.4), and only on
+        # a row that has already gone off: the file may have moved, or its
+        # folder been removed from Settings since. One plain sentence, and the
+        # Open button is then not drawn - the owner is never invited to press
+        # something that cannot work. A damaged action is never handed out;
+        # `action_unreadable` says so in one boolean, so a client can say one
+        # line instead of pretending there was nothing there.
+        try:
+            raw_action = row["action"]
+        except (IndexError, KeyError):
+            raw_action = None
+        if raw_action:
+            action_here = _decode_action(raw_action)
+            if action_here:
+                v["action"] = action_here
+                if row["fired_at"] is not None:
+                    problem = _action_problem(action_here)
+                    if problem:
+                        v["action_problem"] = problem
+            else:
+                v["action_unreadable"] = True
         # GTD-1 (2026-10-18): additive, and only when there is something to
         # say - an old row (or a plain timer/alarm) grows no keys, so every
         # payload and every old test is byte-for-byte what it was. The bundle's
@@ -2641,7 +2934,15 @@ class Scheduler:
         return {# Phase 2 (2026-10-22): ONE additive boolean capability marker -
                 # a newer UI hides edit/move/reorder controls when it is absent
                 # (an older backend), and every old client ignores it.
-                "available": True, "phase2": True, "now": now, "tz": _tz_name(now),
+                "available": True, "phase2": True,
+                # A reminder's action (2026-10-27): the same kind of marker, for
+                # the same reason. `handle_add` pulls only the keys it knows, so
+                # an older backend would SILENTLY DROP an `action` and the owner
+                # would get a reminder that opens nothing - the one dangerous
+                # direction. A newer UI therefore hides the whole "Then" block
+                # when this is absent and says why, and every old client ignores
+                # the key. The same contract `phase2` has.
+                "actions": True, "now": now, "tz": _tz_name(now),
                 "jobs": self.listed(), "todo": self.todos(),
                 # 2026-09-25: what went off in the last hour (Snooze), and
                 # the named lists. An app from before them ignores both.
@@ -2671,6 +2972,16 @@ class Scheduler:
 def _safe(fn: Callable[[str], None], jid: str) -> None:
     try:
         fn(jid)
+    except Exception:
+        pass
+
+
+def _safe_action(sched, jid: str, due: float) -> None:
+    """A reminder's fire-time action card, on its own thread. Nothing it raises
+    reaches the tick loop - the same rule a kind's `on_fire` has, and for the
+    same reason: a card that waits fifteen minutes must never stop the clock."""
+    try:
+        sched._fire_action(jid, due)
     except Exception:
         pass
 
@@ -2885,6 +3196,9 @@ def handle_add(body: dict) -> tuple:
       {"kind": "alarm"|"reminder", "repeat": {...}, "text"?}   repeating: no card
       {"kind": "standby", "repeat": {"every", "at", "until"}}  no card
       {"kind": "briefing", "repeat": {...}}        repeating: ONE card
+      {"kind": "reminder", ..., "action": {"kind": "open-webpage", "url": "https://..."}}
+                                                   a reminder that opens something,
+                                                   or asks to run one task at its time
     200 {"ok", "job"} (a plain repeat also has `said`, with its next times),
     202 {"ok", "waiting": true, "job"} for a repeat that waits for its card."""
     if not isinstance(body, dict):
@@ -2905,7 +3219,8 @@ def handle_add(body: dict) -> tuple:
             # morning briefing, from its settings in either app).
             if body.get("repeat") is not None:
                 job = s.add_repeat(kind, body.get("repeat"), body.get("text") or "",
-                                   source="app")
+                                   source="app",
+                                   action=body.get("action") if kind == "reminder" else None)
                 return _repeat_answer(job, s.now())
             if kind in ("alarm", "reminder") and ("date" in body or "time" in body):
                 # "Photo to reminder" (2026-09-28, JARVIS-API section 83):
@@ -2985,6 +3300,232 @@ def handle_act(body: dict) -> tuple:
 def _sentence(exc: BaseException) -> str:
     t = str(exc).strip() or type(exc).__name__
     return t[0].upper() + t[1:] + ("" if t.endswith(".") else ".")
+
+
+# --------------------------------------------------------------------------
+#   A reminder's action (2026-10-27)
+# --------------------------------------------------------------------------
+# One reminder, one action; the target is a URL, a file on the allow-list, a
+# note, or a name from the closed list. Validation happens HERE, when the
+# reminder is saved, and again when the target is used: the row is plain
+# SQLite on the owner's own disk, and anything on that PC can edit it. The
+# rules are DESIGN section 3.2 and 3.4; the tests are
+# `backend/test_schedule_actions.py`.
+
+def _documents():
+    """`jarvis_documents` - the module that owns "a folder Jarvis may look in" -
+    or None when it is not beside this file.
+
+    Missing is refused rather than guessed at: the allow-list is a security
+    boundary, and a boundary this module cannot read is one it must not invent.
+    On the owner's PC it is SHIPPED beside `jarvis_hud.py`, and `_path_problem`
+    fails closed without it."""
+    try:
+        import jarvis_documents
+        return jarvis_documents
+    except Exception:
+        return None
+
+
+def _url_problem(url) -> str:
+    """'' when this is a web address a reminder may open, else one sentence.
+
+    https ONLY, though the desktop's own opener also allows http
+    (`validate_external_url`): an address written once and opened for months is
+    not the same risk as a link the owner just clicked in an answer, and a
+    plain-http page is the one an attacker on the same cafe Wi-Fi can rewrite.
+    The same checks are made again by the desktop at the moment of opening."""
+    if not isinstance(url, str) or not url.strip():
+        return "Pick a web address first, or choose Nothing."
+    url = url.strip()
+    if len(url) > MAX_ACTION_URL:
+        return f"A web address can be up to {MAX_ACTION_URL} characters."
+    if not url.lower().startswith("https://"):
+        return NOT_HTTPS
+    # Whitespace and control characters are how an argument becomes two, and
+    # how a URL stops being the one that was shown on the row.
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in url):
+        return NOT_HTTPS
+    host = url.split("//", 1)[1].split("/")[0].split("?")[0].split("#")[0] \
+        if "//" in url else ""
+    # `https://github.com@evil.example/` has a host of `evil.example`; the part
+    # before the `@` is userinfo and every resolver ignores it. A backslash is
+    # folded to `/` by the URL parser, so it could hide the real host.
+    if not host or "@" in host or "\\" in url:
+        return NOT_HTTPS
+    return ""
+
+
+def _path_problem(path) -> str:
+    """'' when this file may be opened by a reminder, else one sentence.
+
+    Two boundaries, in this order: the EXTENSION (so "open a file" can never
+    become "start a program" - `.lnk`, `.exe`, a script or an `.html` page is
+    never on `ACTION_FILE_EXTS`), then `jarvis_documents.allowed_path`, which
+    resolves links and junctions and refuses a path outside every listed
+    folder, a hidden folder on the way, a reserved Windows name and a
+    protected place."""
+    if not isinstance(path, str) or not path.strip():
+        return "Pick a file first, or choose Nothing."
+    path = path.strip()
+    if len(path) > MAX_ACTION_PATH:
+        return f"A file's path can be up to {MAX_ACTION_PATH} characters."
+    if any(ord(c) < 32 for c in path):
+        return NOT_IN_FOLDERS
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in ACTION_FILE_EXTS:
+        return NOT_A_FILE
+    docs = _documents()
+    if docs is None:
+        return NOT_IN_FOLDERS
+    got = docs.allowed_path(path)
+    if not got:
+        return NOT_IN_FOLDERS
+    real = got[0] if isinstance(got, tuple) else path
+    if not os.path.exists(real):
+        return FILE_GONE
+    return ""
+
+
+def _note_problem(note) -> str:
+    """'' when this is a note a reminder may show, else one sentence. Plain
+    text, never parsed as HTML: the notice and the row set it with
+    `textContent`, and the toast escapes it."""
+    if not isinstance(note, str) or not note.strip():
+        return "Write the note first, or choose Nothing."
+    if len(note) > MAX_ACTION_NOTE:
+        return f"A note is up to {MAX_ACTION_NOTE} characters."
+    if note.count("\n") + 1 > MAX_ACTION_LINES:
+        return f"A note is up to {MAX_ACTION_LINES} lines."
+    if any(ord(c) < 32 and c not in "\n\t" for c in note):
+        return "A note is plain words - that one has a character a note cannot hold."
+    return ""
+
+
+def _task_problem(task) -> str:
+    """'' when a reminder may ask for this task, else one sentence.
+
+    The closed list is two names and nothing else - never a program, a command
+    or a path. `backup` is on the list and refused HERE, with the reason: a
+    backup is locked with a fresh random recovery code that
+    `jarvis_backup.generate_code` never writes to a file ("never kept by this
+    module past the response that shows it once"), and a reminder that fired at
+    07:00 has nobody to show it to. An archive nobody can open is worse than no
+    archive, and putting the code in the card would write a credential to
+    `approvals.db` in plain text. `briefing` has no such secret.
+    """
+    if not isinstance(task, str) or not task.strip():
+        return "Pick what the reminder should do, or choose Nothing."
+    task = task.strip()
+    if task not in ACTION_TASKS:
+        return ("Jarvis can put your briefing together. That is all a reminder can do "
+                "on its own.")
+    if task == "backup":
+        return ("A reminder cannot make a backup: the file would be locked with a new "
+                "recovery code and nothing would show it to you. Run Back up now from "
+                "the Brain, and let the reminder remind you instead.")
+    return ""
+
+
+#: The one key each kind must carry, and the check that key must pass.
+_ACTION_CHECKS = {"show-note": ("note", _note_problem),
+                  "open-webpage": ("url", _url_problem),
+                  "open-file": ("path", _path_problem),
+                  "run-task": ("task", _task_problem)}
+
+
+def _clean_action(raw) -> Optional[dict]:
+    """A reminder's action, checked and normalised - None when there is none.
+
+    ValueError, in one plain sentence, for anything that is not exactly one
+    kind and its one payload key: no extra keys, no free text, no unknown kind.
+    Called from `add_at` and `add_repeat` (the two ways a reminder is made), so
+    a bad target is refused before a row exists."""
+    if raw is None or raw == "" or raw == {}:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(_NO_ACTION_KIND)
+    kind = raw.get("kind")
+    if not isinstance(kind, str) or kind not in ACTION_KINDS:
+        raise ValueError(_NO_ACTION_KIND)
+    key, check = _ACTION_CHECKS[kind]
+    extra = set(raw) - {"kind", key}
+    if extra:
+        # Exactly one payload key per kind, and no other keys at all: a block
+        # that carried two targets would be one the client could not draw and
+        # this code would have to guess which one to use.
+        raise ValueError(_NO_ACTION_KIND)
+    if key not in raw:
+        raise ValueError(_NO_ACTION_KIND)
+    value = raw.get(key)
+    problem = check(value)
+    if problem:
+        raise ValueError(problem)
+    value = value if key == "note" else value.strip()
+    if key == "note":
+        value = value.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    action = {"kind": kind, key: value}
+    if len(json.dumps(action)) > MAX_ACTION_BYTES:
+        raise ValueError("That is too much to keep with one reminder.")
+    return action
+
+
+def _decode_action(raw) -> dict:
+    """The stored action, or {} for anything that is not a JSON object with a
+    known kind and exactly its one payload key.
+
+    Never raises: a row is plain SQLite on the owner's own disk and anything on
+    that PC can edit it, so a damaged action must fire as an ordinary reminder
+    (its words, its notice, its toast) and open nothing (`_view` adds
+    `action_unreadable` and `tick` audits the id only)."""
+    if not raw:
+        return {}
+    try:
+        got = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+    if not isinstance(got, dict):
+        return {}
+    kind = got.get("kind")
+    if not isinstance(kind, str) or kind not in ACTION_KINDS:
+        return {}
+    key = ACTION_PAYLOAD[kind]
+    if set(got) != {"kind", key}:
+        return {}
+    if not isinstance(got[key], str) or not got[key].strip():
+        return {}
+    return {"kind": kind, key: got[key]}
+
+
+#: The plain words for each task, for the card and the HUD's help line.
+_TASK_WORDS = {"briefing": "put your morning briefing together now",
+               "backup": "run one backup"}
+
+
+def _task_words(task: str) -> str:
+    return _TASK_WORDS.get(str(task or ""), "do that")
+
+
+def _action_problem(action: dict) -> str:
+    """'' when a STORED action may still be used, else one plain sentence.
+
+    The second of the two checks (DESIGN section 3.4): the file may have moved,
+    been replaced by a shortcut, or the folder may have been removed from
+    Settings since the reminder was saved. Reported on fired rows as
+    `action_problem`, and the Open button is then not drawn - the owner is
+    never invited to press something that cannot work."""
+    if not action:
+        return ""
+    kind = action.get("kind")
+    if kind == "open-webpage":
+        return _url_problem(action.get("url"))
+    if kind == "open-file":
+        return _path_problem(action.get("path"))
+    if kind == "show-note":
+        return _note_problem(action.get("note"))
+    if kind == "run-task":
+        return _task_problem(action.get("task"))
+    return _NO_ACTION_KIND
 
 
 # --------------------------------------------------------------------------
@@ -3235,6 +3776,11 @@ def _reminder_extras(body) -> dict:
         out["condition_kind"] = str(body.get("condition_kind")).strip().lower()
     if body.get("condition_target"):
         out["condition_target"] = str(body.get("condition_target"))
+    # 2026-10-27: what this reminder opens, or the one task it may ask to run.
+    # Checked by `_clean_action` in `add_at`, which refuses anything that is not
+    # one known kind and its one payload key.
+    if body.get("action") is not None:
+        out["action"] = body.get("action")
     return out
 
 

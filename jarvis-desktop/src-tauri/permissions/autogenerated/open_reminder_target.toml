@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-reminder-target"
+description = "Enables the open_reminder_target command without any pre-configured scope."
+commands.allow = ["open_reminder_target"]
+
+[[permission]]
+identifier = "deny-open-reminder-target"
+description = "Denies the open_reminder_target command without any pre-configured scope."
+commands.deny = ["open_reminder_target"]

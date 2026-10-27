@@ -85,6 +85,13 @@ def t_the_patch_is_registered_last():
     # own `count=1` branch - and jarvis_gate.py not at all, so it cannot
     # rewrite the stale rows this patch removes either.
     later = {"screen-attach.patch", "prompt-coach.patch",
+             # reminder-actions.patch (2026-10-27): two hunks in jarvis_gate.py
+             # only - a `_NO_RULE_FROM_DENIAL` line and a `_RISK` row - both
+             # ADDED after the rows this patch removes, and it rewrites neither.
+             # It is written after every other patch and before
+             # plugin-loader.patch (which must stay last of all), so it cannot
+             # move a stale row this patch's own hunks look for.
+             "reminder-actions.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites none of the stale rows

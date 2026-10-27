@@ -414,6 +414,23 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                         if o.contains_key("about") {
                             o.insert("about".into(), serde_json::json!(""));
                         }
+                        // A reminder's ONE action (2026-10-27) is the owner's
+                        // words a third time: the web address he meant to open,
+                        // the file's path (which names a folder of his), or the
+                        // note's own text - and the Open button is drawn from
+                        // it. Every payload value is blanked and only the KIND
+                        // stays (a fixed word from a closed list, which says
+                        // nothing about him), so the page cannot draw a control
+                        // that would open what it may not show.
+                        if let Some(serde_json::Value::Object(action)) = o.get_mut("action") {
+                            let kind = action
+                                .get("kind")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            action.clear();
+                            action.insert("kind".into(), serde_json::json!(kind));
+                        }
                         o.insert("hidden".into(), serde_json::json!(true));
                         let named = o
                             .get("list")
@@ -622,6 +639,42 @@ pub(crate) fn today_body(text: &str, at: &str, days: &[u8]) -> Result<serde_json
     Ok(serde_json::json!({ "kind": "today", "text": t, "repeat": repeat }))
 }
 
+/// The ONE action a reminder may carry (2026-10-27), as the HUD's own form
+/// sends it: a checked SHAPE only.
+///
+/// The backend owns the security rules - `https` only, the folder allow-list,
+/// the extension list, the closed task list - and refuses anything it does not
+/// accept with one plain sentence, which the page shows as it is. The shape is
+/// checked here as well so a body this app cannot mean never leaves the app in
+/// the first place: one kind from the four, exactly its one payload key, and one
+/// non-empty string.
+fn action_body(action: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let obj = action
+        .as_object()
+        .ok_or_else(|| "That is not one reminder action.".to_string())?;
+    let kind = obj.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+    let key = match kind {
+        "show-note" => "note",
+        "open-webpage" => "url",
+        "open-file" => "path",
+        "run-task" => "task",
+        _ => return Err("Pick what the reminder should do, or Nothing.".to_string()),
+    };
+    if obj.len() != 2 || !obj.contains_key(key) {
+        return Err("A reminder has one action, and one thing it points at.".to_string());
+    }
+    let value = obj
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if value.is_empty() {
+        return Err("Pick the thing to open first, or choose Nothing.".to_string());
+    }
+    Ok(serde_json::json!({ "kind": kind, key: value }))
+}
+
 /// The HUD Reminders tab's form -> the body of `POST /api/schedule/add`.
 /// ONE item at a time, in the four plain kinds the form offers, and nothing
 /// the backend does not already take for them. `notes` is not a field of its
@@ -632,6 +685,10 @@ pub(crate) fn today_body(text: &str, at: &str, days: &[u8]) -> Result<serde_json
 /// existing one-job actions. Editing an item's words/time/list and
 /// reordering need backend actions and therefore a later deploy (Phase 2);
 /// this builder deliberately has no body for them.
+///
+/// `action` (2026-10-27) is the owner's "then open / then do" choice, and only
+/// a REMINDER may carry one - the same guard `jarvis_schedule.add_at` makes, so
+/// the refusal reads the same from either side.
 //
 // One argument per form field (see `hud_schedule_add`): the tests assert the
 // flat body each combination makes, and the fields are the page's own.
@@ -645,9 +702,13 @@ pub(crate) fn hud_add_body(
     time: Option<&str>,
     repeat: Option<&serde_json::Value>,
     list: Option<&str>,
+    action: Option<&serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let kind = kind.trim().to_ascii_lowercase();
     let words = joined_words(text, notes)?;
+    if action.is_some() && kind != "reminder" {
+        return Err("Only a reminder can carry an action.".to_string());
+    }
     match kind.as_str() {
         "todo" => todo_body(&words, list),
         "timer" => {
@@ -665,10 +726,17 @@ pub(crate) fn hud_add_body(
             Ok(body)
         }
         "alarm" | "reminder" => {
+            let checked = match action {
+                Some(raw) => Some(action_body(raw)?),
+                None => None,
+            };
             if let Some(rule) = repeat {
                 let mut body = serde_json::json!({ "kind": kind, "repeat": repeat_rule(rule)? });
                 if !words.is_empty() {
                     body["text"] = serde_json::json!(words);
+                }
+                if let Some(action) = checked {
+                    body["action"] = action;
                 }
                 return Ok(body);
             }
@@ -685,6 +753,9 @@ pub(crate) fn hud_add_body(
             let mut body = serde_json::json!({ "kind": kind, "date": date, "time": at });
             if !words.is_empty() {
                 body["text"] = serde_json::json!(words);
+            }
+            if let Some(action) = checked {
+                body["action"] = action;
             }
             Ok(body)
         }
@@ -1025,7 +1096,17 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     }
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
-    let (title, body) = toast_words(&kind, job.as_ref(), private);
+    let (title, mut body) = toast_words(&kind, job.as_ref(), private);
+    // A reminder that opens something (2026-10-27): the notice names the target
+    // IN FULL before anything opens, and the Open button carries the job id
+    // only. Nothing opens by itself. While App lock or the private lists are
+    // hidden there is no target to show, so there is no button either -
+    // `redact_list` blanks the action for the HUD, and `private` is what stops
+    // the toast drawing a control whose target the owner may not see.
+    let opening = open_notice(job.as_ref(), private);
+    if let Some((line, _)) = opening.as_ref() {
+        body = format!("{body} {line}");
+    }
     let age_s = job
         .as_ref()
         .and_then(|j| j.get("age_s"))
@@ -1050,7 +1131,56 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     let snooze = SNOOZABLE
         .contains(&kind.as_str())
         .then_some((id.as_str(), SNOOZE_LABEL));
-    show(&app, toast_kind, &title, &body, rings(&kind, &data), snooze);
+    show(
+        &app,
+        toast_kind,
+        &title,
+        &body,
+        rings(&kind, &data),
+        snooze,
+        opening.as_ref().map(|(_, job)| job.as_str()),
+    );
+}
+
+/// What ONE fired reminder's action opens, as the notice says it: the words to
+/// put in the toast's body, and the job id its Open button carries.
+///
+/// `None` when there is nothing to open - no action, a note, a task - and while
+/// the private lists are hidden: a button whose target cannot be shown must not
+/// be drawn, because a control that opens something the owner cannot see is the
+/// one thing this feature must never offer. The PC's own second check
+/// (`action_problem`, `jarvis_schedule._action_problem`) is honoured here too,
+/// so a file that has gone or a folder that was removed shows no button at all.
+pub(crate) fn open_notice(
+    job: Option<&serde_json::Value>,
+    private: bool,
+) -> Option<(String, String)> {
+    if private {
+        return None;
+    }
+    let job = job?;
+    let action = job.get("action")?.as_object()?;
+    let key = match action.get("kind")?.as_str()? {
+        "open-webpage" => "url",
+        "open-file" => "path",
+        _ => return None,
+    };
+    if job
+        .get("action_problem")
+        .and_then(|v| v.as_str())
+        .is_some_and(|p| !p.is_empty())
+    {
+        return None;
+    }
+    let target = action.get(key)?.as_str()?;
+    if target.is_empty() {
+        return None;
+    }
+    let id = job.get("id")?.as_str()?;
+    if !valid_id(id) {
+        return None;
+    }
+    Some((format!("This opens: {target}"), id.to_string()))
 }
 
 /// A "tell me when" matched (`{"id", "kind": "tellme", "state": "matched",
@@ -1112,6 +1242,7 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
         &body,
         rings("tellme", &data),
         None,
+        None,
     );
 }
 
@@ -1155,6 +1286,7 @@ pub async fn toast_broken(app: AppHandle, base: String, data: serde_json::Value)
         &body,
         false,
         None,
+        None,
     );
 }
 
@@ -1174,6 +1306,7 @@ fn show(
     body: &str,
     ring: bool,
     snooze: Option<(&str, &str)>,
+    open: Option<&str>,
 ) {
     if !notifications::may_post(app, kind) {
         return;
@@ -1185,12 +1318,12 @@ fn show(
             return;
         }
         if let Some((id, label)) = snooze {
-            crate::winrt_toast::notify_fired(app, title, body, id, label);
+            crate::winrt_toast::notify_fired(app, title, body, id, label, open);
             return;
         }
     }
     #[cfg(not(windows))]
-    let _ = (ring, snooze);
+    let _ = (ring, snooze, open);
     commands::notify(app, title, body);
 }
 
@@ -2008,6 +2141,89 @@ mod tests {
         assert!(!hidden.to_string().contains("o/r"));
     }
 
+    /// A reminder's own action is the owner's words a third time (2026-10-27):
+    /// the address he meant to open, the path that names a folder of his, or the
+    /// note's text. `redact_list` is the ONE place the private lists are blanked
+    /// (App lock and "Hide memory lists"), and a field it does not know is a
+    /// leak - so every payload value goes, only the KIND stays, and the page
+    /// then draws no Open button (its target is gone).
+    #[test]
+    fn a_reminder_s_action_is_blanked_with_its_words_and_keeps_only_the_kind() {
+        for action in [
+            serde_json::json!({"kind": "open-webpage", "url": "https://example.com/invoice-42"}),
+            serde_json::json!({"kind": "open-file",
+                "path": "C:\\Users\\pcadmin\\Pictures\\taxes.png"}),
+            serde_json::json!({"kind": "show-note", "note": "Take the blue folder"}),
+            serde_json::json!({"kind": "run-task", "task": "briefing"}),
+        ] {
+            let job = serde_json::json!({"id": "s0123456789", "kind": "reminder",
+                "text": "", "action": action, "fired_at": 1_793_000_000.0});
+            let hidden = redact_list(serde_json::json!({"jobs": [job], "todo": []}));
+            let text = hidden.to_string();
+            for word in [
+                "example.com",
+                "invoice-42",
+                "taxes.png",
+                "pcadmin",
+                "blue folder",
+                "briefing",
+            ] {
+                assert!(!text.contains(word), "{word} survived redaction: {text}");
+            }
+            assert!(
+                text.contains("open-webpage")
+                    || text.contains("open-file")
+                    || text.contains("show-note")
+                    || text.contains("run-task"),
+                "the kind is a fixed word and stays: {text}"
+            );
+            let row = &hidden["jobs"][0];
+            assert_eq!(row["hidden"], serde_json::json!(true));
+            assert!(row["action"]["kind"].as_str().is_some());
+            // Only the kind: the one payload key is gone altogether, so a button
+            // built from this row has no target to open.
+            let keys = row["action"].as_object().unwrap().len();
+            assert_eq!(
+                keys, 1,
+                "the action kept more than its kind: {}",
+                row["action"]
+            );
+        }
+    }
+
+    /// The Open button is drawn only when there IS something to open, the PC did
+    /// not refuse it, and the words are not hidden - and the notice names the
+    /// target in full before anything opens.
+    #[test]
+    fn the_notice_names_the_target_and_offers_open_only_when_it_can_work() {
+        let page = serde_json::json!({"id": "s0123456789", "kind": "reminder",
+            "fired_at": 1_793_000_000.0,
+            "action": {"kind": "open-webpage", "url": "https://example.com/invoice-42"}});
+        assert_eq!(
+            open_notice(Some(&page), false),
+            Some((
+                "This opens: https://example.com/invoice-42".to_string(),
+                "s0123456789".to_string()
+            ))
+        );
+        // Hidden words: no target to show, so no button.
+        assert_eq!(open_notice(Some(&page), true), None);
+        // The PC says it cannot work any more (the file has gone): no button.
+        let mut gone = page.clone();
+        gone["action_problem"] = serde_json::json!("That file is not there any more.");
+        assert_eq!(open_notice(Some(&gone), false), None);
+        // A note and a task open nothing; neither gets a button.
+        for action in [
+            serde_json::json!({"kind": "show-note", "note": "Take the blue folder"}),
+            serde_json::json!({"kind": "run-task", "task": "briefing"}),
+        ] {
+            let mut job = page.clone();
+            job["action"] = action;
+            assert_eq!(open_notice(Some(&job), false), None);
+        }
+        assert_eq!(open_notice(None, false), None);
+    }
+
     #[test]
     fn alarms_and_urgent_tell_me_whens_ring_until_dismissed() {
         let fired = serde_json::json!({"id": "s0123456789", "state": "fired"});
@@ -2050,6 +2266,7 @@ mod tests {
             None,
             None,
             Some("shopping"),
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -2068,6 +2285,7 @@ mod tests {
             Some("7:30"),
             None,
             None,
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -2077,7 +2295,18 @@ mod tests {
             "text": "Call Mum - about the trip"})
         );
 
-        let timer = hud_add_body("timer", None, None, Some(600.0), None, None, None, None).unwrap();
+        let timer = hud_add_body(
+            "timer",
+            None,
+            None,
+            Some(600.0),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(
             timer,
             serde_json::json!({"kind": "timer", "seconds": 600.0})
@@ -2091,6 +2320,7 @@ mod tests {
             None,
             None,
             Some(&serde_json::json!({"every": "weekday", "at": "8:05"})),
+            None,
             None,
         )
         .unwrap();
@@ -2111,6 +2341,7 @@ mod tests {
             Some(&serde_json::json!(
                                       {"every": "week", "at": "06:00", "days": [5, 0, 5]})),
             None,
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -2126,7 +2357,7 @@ mod tests {
         let err = |b: Result<serde_json::Value, String>| b.unwrap_err();
         assert_eq!(
             err(hud_add_body(
-                "todo", None, None, None, None, None, None, None
+                "todo", None, None, None, None, None, None, None, None,
             )),
             "Type what to add first."
         );
@@ -2139,7 +2370,8 @@ mod tests {
                 None,
                 None,
                 None,
-                None
+                None,
+                None,
             )),
             "Pick a date, like 2030-09-15."
         );
@@ -2152,7 +2384,8 @@ mod tests {
                 Some("2030-9-15"),
                 Some("07:30"),
                 None,
-                None
+                None,
+                None,
             )),
             "A date looks like 2030-09-15."
         );
@@ -2165,7 +2398,8 @@ mod tests {
                 Some("2030-09-15"),
                 Some("25:00"),
                 None,
-                None
+                None,
+                None,
             )),
             "Write the time as HH:MM, like 18:00."
         );
@@ -2178,7 +2412,8 @@ mod tests {
                 None,
                 None,
                 None,
-                None
+                None,
+                None,
             )),
             "A timer needs a positive number of seconds."
         );
@@ -2191,7 +2426,8 @@ mod tests {
                 None,
                 None,
                 None,
-                None
+                None,
+                None,
             )),
             "A timer is for today - at most 24 hours."
         );
@@ -2204,7 +2440,8 @@ mod tests {
                 None,
                 None,
                 None,
-                None
+                None,
+                None,
             )),
             REMINDERS_FORM_HINT
         );
@@ -2218,7 +2455,8 @@ mod tests {
                 None,
                 Some(&serde_json::json!({"every": "week", "at": "07:00",
                                                              "days": []})),
-                None
+                None,
+                None,
             )),
             "Pick at least one day."
         );
@@ -2232,7 +2470,8 @@ mod tests {
                 None,
                 Some(&serde_json::json!({"every": "week", "at": "07:00",
                                                              "days": [9]})),
-                None
+                None,
+                None,
             )),
             "A weekly repeat needs its days, 0 (Monday) to 6 (Sunday)."
         );
@@ -2246,7 +2485,8 @@ mod tests {
                 None,
                 Some(&serde_json::json!({"every": "day", "at": "07:00",
                                                              "until": "08:00"})),
-                None
+                None,
+                None,
             )),
             "Only a standby schedule has an end time."
         );
@@ -2259,7 +2499,8 @@ mod tests {
                 None,
                 None,
                 Some(&serde_json::json!({"every": "minutes"})),
-                None
+                None,
+                None,
             )),
             "A repeat is every day, every weekday, or every week on some days."
         );
@@ -2273,7 +2514,8 @@ mod tests {
                 None,
                 None,
                 None,
-                None
+                None,
+                None,
             )),
             format!("That is longer than {MAX_TEXT} characters - say it more briefly.")
         );
