@@ -1993,6 +1993,14 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // card, held on a stale link. Narrower than the Settings window's
       // get_manner/set_manner on purpose (no manner mode, no dials, no custom).
       "hud-personalities",
+      // H2 (2026-10-22, owner-approved 2026-10-21): EXACTLY ONE new grant -
+      // this window's own layout write, saved by its own Edit mode. No other
+      // write command is added, and the read grant above is not removed.
+      // This list matches capabilities/hud.json's own order. The #891 merge
+      // inserted hud-live AFTER hud-layout-write there, so the two are pinned
+      // in that order here; the order is the file's, not a claim about which
+      // grant came first.
+      "hud-layout-write",
       // The left rail's Live button (2026-10-27, the OWNER'S ASK: "a live mode
       // button in the left column of the Jarvis HUD"). The BAR'S own
       // live_start/live_stop plus live_status so the button can say truthfully
@@ -2001,10 +2009,6 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // live_mute and live_hold are NOT granted here. Every refusal is Rust's
       // (stale link, App lock, no microphone) and no card is raised.
       "hud-live",
-      // H2 (2026-10-22, owner-approved 2026-10-21): EXACTLY ONE new grant -
-      // this window's own layout write, saved by its own Edit mode. No other
-      // write command is added, and the read grant above is not removed.
-      "hud-layout-write",
       // A reminder's own action (2026-10-27, the OWNER ASKED for "a reminder
       // that opens a specific image or webpage"): ONE command,
       // `open_reminder_target`, and it takes the reminder's job ID and nothing
