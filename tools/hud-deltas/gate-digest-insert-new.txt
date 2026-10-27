@@ -2,11 +2,17 @@
                     # The digest covers the WHOLE request, including detail
                     # past the 4000 characters the row keeps (F-680-2).
                     target_digest = _pending_target(action, detail, prompt)
+                    # `raised` is stored WHOLE, with no length cap, unlike the
+                    # two fields above: it is JSON, and JSON cut mid-string is
+                    # not JSON - pending() then serves raised=None and every
+                    # client reads that as "not raised", leaving the swipe on
+                    # the one card the latch exists to slow down. chip_from()
+                    # already bounds every value, and the column is TEXT.
                     c.execute(
                         "INSERT INTO approvals (id,action,tier,detail,prompt,state,"
                         "created,raised,target_digest)"
                         " VALUES (?,?,?,?,?,'pending',?,?,?)",
                         (rid, action, tier, json.dumps(detail)[:4000],
                          (prompt or "")[:2000], now,
-                         json.dumps(raised)[:1000] if raised else None,
+                         json.dumps(raised) if raised else None,
                          target_digest))
