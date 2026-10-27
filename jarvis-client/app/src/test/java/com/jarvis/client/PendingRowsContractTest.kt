@@ -5,6 +5,7 @@ import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.decodePendingRows
 import com.jarvis.client.net.titleForAction
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.double
@@ -114,5 +115,89 @@ class PendingRowsContractTest {
     fun `an action name with nothing in it still gets a sentence`() {
         assertEquals("Jarvis is asking for your approval", titleForAction(null))
         assertEquals("Jarvis is asking for your approval", titleForAction("  "))
+    }
+
+    // --- the replaces guard's wire shape (measured 2026-10-27) -----------------
+    //
+    // `jarvis_gate.pending()` sets `replaces_kind` from
+    // `replaces_words_for(...).get("kind")`, which returns {} for an ordinary
+    // card - so the live `/api/pending` sends `"replaces_kind": null` on every
+    // ordinary card, while PendingItem declares the three replaces fields
+    // non-nullable. JarvisJson does not coerce input values, so before this fix
+    // the explicit null made the WHOLE decode throw and the phone counted every
+    // ordinary card as unreadable ("N waiting approval could not be read on
+    // this phone"). This row is the picture-mode card's shape from that night.
+
+    private fun ordinaryGateRow(id: String = "pic-1") = JsonObject(
+        mapOf(
+            "id" to JsonPrimitive(id),
+            "action" to JsonPrimitive("screen_picture_enable"),
+            "tier" to JsonPrimitive("ask"),
+            "detail" to JsonPrimitive(
+                """{"text":"read pictures of your screen using the main chip", "what":"x", "model":"minicpm-v"}""",
+            ),
+            "prompt" to JsonPrimitive("let it read pictures of your screen (slow, uses your main chip)"),
+            "created" to JsonPrimitive(1.0),
+            "raised" to JsonNull,
+            "risk" to JsonObject(
+                mapOf(
+                    "reversible" to JsonPrimitive("yes"),
+                    "reach" to JsonPrimitive("local"),
+                    "swipe_ok" to JsonPrimitive(false),
+                    "why" to JsonPrimitive(""),
+                    "classified" to JsonPrimitive(true),
+                ),
+            ),
+            "notice" to JsonObject(
+                mapOf(
+                    "title" to JsonPrimitive("Jarvis wants to read pictures of your screen"),
+                    "body" to JsonPrimitive("Slow, local, nothing saved."),
+                    "summary" to JsonPrimitive("let it read pictures of your screen"),
+                    "full" to JsonPrimitive("Slow, local, nothing saved."),
+                    "weight" to JsonPrimitive("normal"),
+                    "deny_ok" to JsonPrimitive(true),
+                    "approve_ok" to JsonPrimitive(false),
+                ),
+            ),
+            "replaces" to JsonPrimitive(false),
+            "replaces_kind" to JsonNull,
+            "replaces_heading" to JsonNull,
+            "replaces_note" to JsonNull,
+            "expires_in" to JsonPrimitive(120.0),
+        ),
+    )
+
+    @Test
+    fun `the PC's null replaces fields on an ordinary card no longer sink the row`() {
+        val got = decodePendingRows(listOf(ordinaryGateRow()), nowMs = 0L)
+        assertEquals(1, got.items.size)
+        assertEquals(0, got.skipped)
+        val item = got.items.single()
+        assertEquals("", item.replacesKind)
+        assertFalse(item.replaces)
+        assertEquals("Jarvis wants to read pictures of your screen", item.title)
+        assertTrue(item.summary.contains("read pictures of your screen"))
+    }
+
+    @Test
+    fun `a mixed read keeps the readable rows and counts only the ones with no id`() {
+        val secondPress = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive("restore-1"),
+                "action" to JsonPrimitive("restore_backup"),
+                "tier" to JsonPrimitive("ask"),
+                "replaces" to JsonPrimitive(true),
+                "replaces_kind" to JsonPrimitive("data"),
+                "replaces_heading" to JsonPrimitive("REPLACES CURRENT DATA"),
+                "replaces_note" to JsonPrimitive("the current backup is replaced"),
+                "expires_in" to JsonPrimitive(60.0),
+            ),
+        )
+        val noId = JsonObject(mapOf("action" to JsonPrimitive("run_shell_on_host")))
+        val got = decodePendingRows(listOf(ordinaryGateRow(), secondPress, noId), nowMs = 0L)
+        assertEquals(2, got.items.size)
+        assertEquals(1, got.skipped)
+        assertEquals("data", got.items.first { it.id == "restore-1" }.replacesKind)
+        assertTrue(got.items.first { it.id == "restore-1" }.replaces)
     }
 }

@@ -55,6 +55,14 @@ private val PrettyJson = Json { prettyPrint = true }
 private val DETAIL_TEXT_KEYS = listOf("diff", "command", "cmd", "preview", "content", "body", "text", "summary")
 
 /**
+ * The words the PC's replaces guard puts on a row that replaces or deletes what
+ * is already there (`jarvis_gate.pending()` -> `replaces_words_for`). All three
+ * are declared non-nullable in [PendingItem], and the PC sends `null` for the
+ * FIRST one on every card that replaces nothing - see [normalisePendingRow].
+ */
+private val REPLACES_TEXT_KEYS = listOf("replaces_kind", "replaces_heading", "replaces_note")
+
+/**
  * One wire row, rewritten into the shape [PendingItem] decodes. Null when the
  * row has no usable id - an item that cannot be named cannot be decided.
  *
@@ -92,6 +100,21 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
     val action = textOf(obj["action"])
     if (action == null) out.remove("action") else out["action"] = JsonPrimitive(action)
     out["tier"] = JsonPrimitive(textOf(obj["tier"]) ?: "ask")
+
+    // --- the replaces guard: the PC sends an explicit null for a card that
+    // replaces nothing. jarvis_gate.pending() sets
+    // `replaces_kind = replaces_words_for(action, detail).get("kind")`, and
+    // that returns {} for an ordinary card, so the wire carries
+    // `"replaces_kind": null` on EVERY ordinary card while PendingItem
+    // declares the three fields non-nullable. JarvisJson does not coerce
+    // input values, so the explicit null made the whole decode throw and the
+    // runtime counted the row as unreadable: "N waiting approval could not be
+    // read on this phone" for every ordinary card (measured 2026-10-27).
+    // A missing or empty kind means exactly what the null meant: this card
+    // replaces nothing, so say that with the shape the model declares.
+    for (key in REPLACES_TEXT_KEYS) {
+        if (textOf(out[key]) == null) out[key] = JsonPrimitive("")
+    }
 
     // --- detail and summary
     val rawDetail = obj["detail"]
