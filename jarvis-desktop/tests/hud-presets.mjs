@@ -12,6 +12,16 @@
  *   - a click posts /api/work/apply ONCE with {"preset": "<id>"} - the same
  *     route and body the bar's "Use this preset" sends - and after the PC
  *     answers the list is refetched and the highlight follows the contract;
+ *   - the Studio dock's Current Models button (the owner's ask of 2026-10-26)
+ *     opens a read-only panel with the PC's own model facts, and its lane
+ *     routes are the page's own #lanes buttons - the next chat body carries
+ *     the lane it clicked, and the panel marks only what the page marks;
+ *   - the panel says plainly when the PC has nothing loaded or did not answer,
+ *     and opening it reads exactly /api/models, /api/status and /api/presets -
+ *     no POST, no card, no model switch;
+ *   - #lanes and #current-models are still there and still work (the Studio
+ *     dock's panel and the page's own lane tests drive them), and the three
+ *     vendored copies of the page stay byte-identical.
  *   - the card decision really flows: while the apply waits, the PC's card
  *     appears in #approvals and Approve posts /api/approve, then the rail
  *     marks the applied preset;
@@ -25,9 +35,9 @@
  *   - with proxy:false, Cloud says plainly that the cloud lane is down, marks
  *     nothing, and the next chat body stays an ordinary local turn;
  *   - a PC without the presets route gets plain words, not invented presets;
- *   - #lanes and #lane-compact are still there and still work (the Studio
- *     dock's dropdown and the page's own lane tests drive them), and the
- *     three vendored copies of the page stay byte-identical.
+ *   - #lanes and #current-models are still there and still work (the Studio
+ *     dock's panel and the page's own lane tests drive them), and the three
+ *     vendored copies of the page stay byte-identical.
  *
  * NOT here: the real desktop window and WebView2 painting (a rebuild+install
  * is needed after merge), and what the PC does with the card itself - that is
@@ -134,6 +144,23 @@ async function openHud(browser, options = {}) {
     decisions: [],
     chats: [],
     lane: options.lane || "auto",
+    // The Current Models panel's three reads (2026-10-26). `/api/models` is
+    // answered like the real backend's body: `current`/`previous` plus the
+    // `offload` block gpu-offload.patch puts on it. `reads` records every
+    // /api/ request, so a test can prove the panel added no route and no write.
+    models: options.models || {
+      current: "qwen3.5:9b",
+      previous: "qwen2.5:14b",
+      installed: ["qwen3.5:9b"],
+      offload: {
+        available: true,
+        status: "gpu",
+        models: [{ name: "qwen3.5:9b", size_mb: 6100, vram_mb: 5900, on_gpu_percent: 97 }],
+      },
+    },
+    modelsAvailable: options.modelsAvailable !== false,
+    modelsEmpty: options.modelsEmpty === true,
+    reads: [],
   };
   const problems = [];
   const page = await browser.newPage({ viewport: options.viewport || { width: 1280, height: 820 } });
@@ -163,6 +190,14 @@ async function openHud(browser, options = {}) {
     if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     if (url.pathname === "/jarvis_hud.html" || url.pathname === "/") return file(route, { pathname: "/jarvis_hud.html" });
     if (url.pathname.startsWith("/api/")) {
+      state.reads.push({ method: req.method(), path: url.pathname });
+      if (url.pathname === "/api/models") {
+        if (!state.modelsAvailable) return json(route, 404, { error: "not found" });
+        const offload = state.modelsEmpty
+          ? { available: true, status: "idle", models: [] }
+          : state.models.offload;
+        return json(route, 200, { ...state.models, offload });
+      }
       if (url.pathname === "/api/status") {
         return json(route, 200, { ollama: true, proxy: state.proxy, lanes: CLOUD_LANES,
           default_model: "qwen3.5:9b", tools: 12, budget: null });
@@ -403,28 +438,158 @@ await check("a PC without the presets route gets plain words, not invented prese
   assert.deepEqual(problems, []);
 });
 
-await check("the tested ids survive: #lanes is still there (hidden) and the Studio dropdown still drives it", async () => {
-  const { page, problems } = await openHud(browser);
-  const kept = await page.evaluate(() => {
-    const lanes = document.getElementById("lanes");
-    const buttons = [...document.querySelectorAll("#lanes .lane")];
-    const select = document.getElementById("lane-compact");
-    const before = buttons.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane);
-    const want = select.options[select.options.length - 1].value;
-    select.value = want;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    const after = [...document.querySelectorAll("#lanes .lane")]
-      .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane);
-    return { lanes: !!lanes, hidden: lanes ? lanes.hidden : false,
-      buttons: buttons.length, options: select.options.length, before, after, want };
+/* ── The Studio dock's Current Models panel (the owner's ask, 2026-10-26) ── */
+
+/** Put the HUD in the Studio shell the way the shell's own event does - the
+ *  Current Models button lives in that shell's header. */
+async function useStudio(page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent("jarvis:hud-shell", {
+      detail: { shell_template: "split-stage", density: "comfortable", default_stage_tab: "galaxy" },
+    }));
   });
+  await page.waitForFunction(() =>
+    document.body.getAttribute("data-hud-shell") === "split-stage", null, { timeout: 5000 });
+  await page.waitForTimeout(150);
+}
+
+async function openCurrentModels(page) {
+  await useStudio(page);
+  await page.click("#current-models");
+  await page.waitForSelector("#current-models-panel:not([hidden])", { timeout: 5000 });
+  await page.waitForTimeout(600);          // the three reads land, then the panel re-renders
+}
+
+async function modelsReport(page) {
+  return page.evaluate(() => {
+    const box = document.getElementById("current-models-panel");
+    const groups = [...box.querySelectorAll(".hud-presets-group")].map((group) => ({
+      head: (group.querySelector(".hud-presets-head") || {}).textContent || "",
+      lines: [...group.querySelectorAll(".hud-models-fact, .hud-presets-empty")]
+        .map((p) => p.textContent),
+      routes: [...group.querySelectorAll(".hud-models-route")].map((b) => ({
+        lane: b.dataset.lane, pressed: b.getAttribute("aria-pressed"),
+      })),
+    }));
+    const group = (head) => groups.find((g) => g.head === head) || { lines: [], routes: [] };
+    return {
+      title: (box.querySelector(".hud-presets-title") || {}).textContent || "",
+      aria: box.getAttribute("aria-label"),
+      heads: groups.map((g) => g.head),
+      answering: group("Answering now").lines,
+      loaded: group("Loaded right now").lines,
+      focus: group("Chosen focus preset").lines,
+      routes: group("Route the next message").routes,
+      doorExpanded: document.getElementById("current-models").getAttribute("aria-expanded"),
+    };
+  });
+}
+
+await check("the Studio dock's button says Current Models and opens the PC's own model facts", async () => {
+  const { page, state, problems } = await openHud(browser, { chosen: "general" });
+  await useStudio(page);
+  const door = await page.evaluate(() => {
+    const b = document.getElementById("current-models");
+    return { text: b.textContent.trim(), label: b.getAttribute("aria-label"), title: b.title,
+      expanded: b.getAttribute("aria-expanded"), shown: getComputedStyle(b).display !== "none" };
+  });
+  state.reads.length = 0;                  // only what the panel itself asks for
+  await openCurrentModels(page);
+  const panel = await modelsReport(page);
+  const panelReads = [...state.reads];
   await page.close();
-  assert.equal(kept.lanes, true, "#lanes was removed");
-  assert.equal(kept.hidden, true, "#lanes is visible again (the presets took the rail)");
-  assert.ok(kept.buttons >= 2, "the lane buttons went away");
-  assert.equal(kept.options, kept.buttons, "the Studio dropdown and the lane buttons disagree");
-  assert.deepEqual(kept.after, [kept.want], "the Studio dropdown no longer chooses a lane");
+  assert.equal(door.shown, true, "the Studio dock does not show the Current Models button");
+  assert.equal(door.text, "Current Models", "the button's visible label is not Current Models");
+  assert.equal(door.label, "Current Models: what Jarvis is using and has loaded", door.label);
+  assert.equal(door.title, "Current Models: what Jarvis is using and has loaded", door.title);
+  assert.equal(door.expanded, "false", "the button starts claiming the panel is open");
+  assert.equal(panel.doorExpanded, "true", "opening the panel did not say so on the button");
+  assert.equal(panel.title, "Current Models", "the panel's heading does not name it");
+  assert.equal(panel.aria, "Current Models", "the panel's name for a screen reader is not Current Models");
+  assert.deepEqual(panel.heads,
+    ["Answering now", "Loaded right now", "Chosen focus preset", "Route the next message"],
+    `the panel's sections are not the owner's four: ${JSON.stringify(panel.heads)}`);
+  assert.deepEqual(panel.answering, ["qwen3.5:9b", "Before that: qwen2.5:14b"],
+    `the answering section is not the PC's own: ${JSON.stringify(panel.answering)}`);
+  assert.deepEqual(panel.loaded,
+    ["qwen3.5:9b \u2014 6100 MB in memory, 5900 MB of that on the graphics card, 97% on the GPU"],
+    `the loaded section is not the PC's own offload block: ${JSON.stringify(panel.loaded)}`);
+  assert.deepEqual(panel.focus, ["Chosen focus preset: General (qwen3.5:9b)"],
+    `the focus section is not the PC's own chosen preset: ${JSON.stringify(panel.focus)}`);
+  for (const path of ["/api/models", "/api/status", "/api/presets"]) {
+    const seen = panelReads.filter((r) => r.path === path);
+    assert.ok(seen.length >= 1, `the panel never read ${path}: ${JSON.stringify(panelReads)}`);
+    assert.equal(seen.length, 1, `the panel read ${path} ${seen.length} times`);
+  }
+  assert.deepEqual(panelReads.filter((r) => r.method !== "GET"), [],
+    "the panel sent a write - it is a read");
+  assert.equal(panelReads.filter((r) => r.path === "/api/models").length, 1,
+    "the panel read /api/models more than once (or not at all)");
   assert.deepEqual(problems, []);
+});
+
+await check("the panel's routes are the page's own lanes, and routing moves the NEXT message", async () => {
+  const { page, state, problems } = await openHud(browser);
+  await openCurrentModels(page);
+  const lanes = await page.evaluate(() => [...document.querySelectorAll("#lanes .lane")]
+    .map((b) => b.dataset.lane));
+  const panel = await modelsReport(page);
+  const want = panel.routes[panel.routes.length - 1].lane;   // a cloud lane (escalate/critic/bulk)
+  await page.click(`#current-models-panel .hud-models-route[data-lane="${want}"]`);
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => ({
+    pageLane: S.lane,
+    lanePressed: [...document.querySelectorAll("#lanes .lane")]
+      .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane),
+    panelPressed: [...document.querySelectorAll("#current-models-panel .hud-models-route")]
+      .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane),
+    chip: document.getElementById("chip-model").textContent,
+  }));
+  await sendChat(page, "route this one");
+  const body = state.chats[state.chats.length - 1] || {};
+  await page.close();
+  assert.deepEqual(panel.routes.map((r) => r.lane), lanes,
+    "the panel's routes are not the page's own lane list");
+  assert.deepEqual(panel.routes.filter((r) => r.pressed === "true").map((r) => r.lane), ["auto"],
+    "the panel did not mark the page's starting lane");
+  assert.equal(after.pageLane, want, "the panel's route did not change the page's lane");
+  assert.deepEqual(after.lanePressed, [want], "the page's own lane buttons did not follow");
+  assert.deepEqual(after.panelPressed, [want], "the panel's mark did not follow the page's");
+  assert.equal(after.chip, want.replace("jarvis-", ""), `the chip did not follow the route: ${after.chip}`);
+  assert.equal(body.lane, want, "the next chat body does not carry the lane the panel chose");
+  assert.equal(body.auto, false, "a routed turn must not be auto");
+  assert.equal(state.applyBody, null, "routing from the panel applied a preset");
+  assert.deepEqual(state.mannerPosts, [], "routing from the panel switched a personality");
+  assert.deepEqual(state.decisions, [], "routing from the panel approved something");
+  assert.equal(state.pending.length, 0, "routing from the panel raised an approval card");
+  assert.deepEqual(problems, []);
+});
+
+await check("the panel says plainly when nothing is loaded, or when the PC did not answer", async () => {
+  const empty = await openHud(browser, { modelsEmpty: true });
+  await openCurrentModels(empty.page);
+  const emptyPanel = await modelsReport(empty.page);
+  await empty.page.close();
+  assert.deepEqual(emptyPanel.loaded, ["The PC did not say any model is in memory right now."],
+    `an empty memory was filled in: ${JSON.stringify(emptyPanel.loaded)}`);
+  assert.deepEqual(emptyPanel.answering, ["qwen3.5:9b", "Before that: qwen2.5:14b"],
+    "an empty memory blanked the answering section");
+  assert.deepEqual(emptyPanel.focus, ["No preset chosen yet \u2014 the PC routes on its own."],
+    `a PC with no chosen preset was given one: ${JSON.stringify(emptyPanel.focus)}`);
+
+  const missing = await openHud(browser, { modelsAvailable: false });
+  await openCurrentModels(missing.page);
+  const missingPanel = await modelsReport(missing.page);
+  await missing.page.close();
+  assert.deepEqual(missingPanel.answering,
+    ["The PC did not answer when asked which model is answering."],
+    `a failed /api/models read was filled in: ${JSON.stringify(missingPanel.answering)}`);
+  assert.deepEqual(missingPanel.loaded, ["The PC did not answer when asked what is loaded."],
+    `a failed /api/models read invented a loaded model: ${JSON.stringify(missingPanel.loaded)}`);
+  // The other two reads still land, so their sections still tell the truth.
+  assert.deepEqual(missingPanel.focus, ["No preset chosen yet \u2014 the PC routes on its own."]);
+  assert.deepEqual(missing.problems, []);
+  assert.deepEqual(empty.problems, []);
 });
 
 await check("at 960x640 the cockpit rail does not overflow, and all three layouts still pick", async () => {

@@ -2632,6 +2632,37 @@ gap; the five model presets the menu adds are PC settings, and the phone
 reaches its own focus presets through the Brain screen's own row. No phone half
 was added for the menu.
 
+**The Studio dock's lane dropdown is the read-only "Current Models" panel now
+(2026-10-26).** The owner's words: *"under the button on the jarvis hud that says
+auto, theres several options including bulk, critic, escalate, can you just get
+rid of this button and replace it with a button that says "Current Models" and
+clicking it will show what models are being used and or loaded on jarvis?"* The
+`<select id="lane-compact">` in `jarvis_hud.html`'s stage bar (shown in
+`split-stage` only) is a `#current-models` button in the same slot, with the same
+plate, border, radius and mono type as the chip it replaced and the same
+Studio-only visibility. It opens `hud-presets.js`'s second panel - the Presets
+menu's own popover classes, so there is one panel look - with three READ
+sections and the lanes. **Answering now:** `GET /api/models`'s `current` and, as
+"before that", its `previous`, plus `GET /api/status`'s `default_model` only when
+it differs. **Loaded right now:** `/api/models`'s `offload.models`, each with
+`size_mb`, `vram_mb` and `on_gpu_percent`, or the owner's exact sentence "The PC
+did not say any model is in memory right now." when `offload.available` is false,
+the list is empty, or the PC has no offload block at all - never an invented
+model. **Chosen focus preset:** `GET /api/presets`'s `chosen_preset` and
+`chosen_model` (the title from `presets[]`), or "No preset chosen yet - the PC
+routes on its own." **Route the next message:** the Auto / model / cloud lanes,
+built from the page's own `#lanes .lane` buttons and clicking them - so the lane
+routing the old dropdown offered still exists, there is still ONE list of lanes,
+and the panel marks only what the page marks (never the click). That is routing
+only: no card, no model switch, no install, no new route and no new command.
+`/api/models` joins `hud_proxy.rs`'s fixed read list (`allowed_get`) as a plain
+GET while `/api/models/switch`, `/api/models/install`, `/api/models/rollback` and
+`?recommend=1` stay refused; the panel re-reads all three on every open and on
+Refresh, and a read that fails says the PC did not answer and changes nothing. A
+plain browser reads the same three routes with `X-Jarvis-Client: hud`. Desktop
+HUD only, like the rest of this section: the phone has no HUD window and no
+`/api/models` panel was added to it.
+
 **The HUD Reminders tab is the desktop HUD's, on purpose** (2026-10-21; the
 owner's dedicated Reminders menu). The HUD page (`jarvis_hud.html`, vendored
 byte-for-byte in three copies: `jarvis-desktop/src/`, `backend/` and

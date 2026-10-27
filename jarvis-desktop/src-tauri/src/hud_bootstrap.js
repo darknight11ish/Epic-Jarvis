@@ -828,8 +828,10 @@
    * for anything under /api/ and hands it to src-tauri/src/hud_proxy.rs:
    *
    *   - a GET goes to `hud_get`, which allows only the page's own reads
-   *     (/api/status, /graph, /pending, /initiative, /memory/pending and
-   *     /retrieve?q=) and refuses every other path before sending anything;
+   *     (the fixed list in `hud_proxy.rs`'s `allowed_get`: status, graph,
+   *     pending, initiative, memory/pending, presets, schedule,
+   *     secret-handoff/pending, models, and /retrieve?q=) and refuses every
+   *     other path before sending anything;
    *   - POST /api/chat goes to `hud_chat`, streamed back over a channel and
    *     rebuilt into a streaming Response, so the page reads the answer as
    *     it always has. Its AbortController still stops it (`hud_chat_cancel`).
