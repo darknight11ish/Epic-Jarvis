@@ -1,0 +1,7 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -199,3 +199,4 @@ _NO_RULE_FROM_DENIAL = frozenset({
+     "uncensored_models_enable",  # jarvis_optin_models.py acts only on tier "ask": ONE card to offer the abliterated models already on this PC as choices (uncensored-optins.patch)
+     "fiction_roleplay_enable",  # jarvis_optin_models.py acts only on tier "ask": ONE card to turn on the separate fiction and role-play lane (uncensored-optins.patch)
++    "desktop_update",  # jarvis_quick.py acts only on tier "ask": ONE card per start of an update, which only the desktop's own update.rs can run - so a "no" here answers that one card, never a standing rule (update-in-chat.patch)
+ })

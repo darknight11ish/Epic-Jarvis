@@ -90,6 +90,12 @@ def t_the_patch_is_registered_last():
              # hunk in jarvis_gate.py - so it rewrites none of the stale rows
              # this patch removes.
              "secret-handoff.patch",
+             # update-in-chat.patch (2026-10-26): ONE hunk in jarvis_gate.py
+             # that appends `desktop_update` to the END of _NO_RULE_FROM_DENIAL,
+             # after uncensored-optins.patch's own last entry - and no hunk in
+             # the _RISK table, so it rewrites none of the stale rows this patch
+             # removes.
+             "update-in-chat.patch",
              "tasks.patch", "retrieve-count.patch",
              # attention-settings.patch (2026-10-08) comes after it as well: ONE
              # route in jarvis_hud.py (POST /api/attention/settings), anchored on

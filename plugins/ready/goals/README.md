@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_goals.install()` (takes the core's Handler)
 - The patch this replaces: `backend/goals.patch`
-- Position in the old patch stack: 85 of 154
+- Position in the old patch stack: 85 of 155
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_goals.py`), copied into the backend by

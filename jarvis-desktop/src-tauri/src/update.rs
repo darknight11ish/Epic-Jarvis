@@ -47,10 +47,11 @@
 //!
 //! Since 2026-10-13 the same card also updates the **Python backend**, which had
 //! never been driven by anything but the owner's own hands. [`update_both`] runs
-//! the two halves in one deliberate order and is reachable only from the one
-//! button; [`crate::backend_update`] owns the backend half and its own refusals.
-//! The order, and why it is that order, is written out on [`update_both`]
-//! itself.
+//! the two halves in one deliberate order; it runs from the Settings button and,
+//! since 2026-10-26, from `run_approved_update` after an answered
+//! `desktop_update` card - never from a page, a timer or a setting.
+//! [`crate::backend_update`] owns the backend half and its own refusals. The
+//! order, and why it is that order, is written out on [`update_both`] itself.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -505,8 +506,9 @@ fn claim_update_both() -> Option<UpdateBothGuard> {
 }
 
 ///
-/// Never automatic: this is a `#[tauri::command]` reachable only from the one
-/// button, nothing spawns it, and there is no setting anywhere that turns it
+/// Never automatic: this is a `#[tauri::command]` reachable from the Settings
+/// button and, since 2026-10-26, from `run_approved_update` after an answered
+/// `desktop_update` card - never from a page, a timer or a setting that turns it
 /// into a background job.
 #[tauri::command]
 pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, String> {
@@ -567,10 +569,7 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
          time). This can take several minutes - it applies every patch and then runs the \
          test suites."
     );
-    let _ = app.emit(
-        crate::events::UPDATE_STEP,
-        step_starting(STEP_BACKEND, Some(&opening)),
-    );
+    announce_step(&app, &step_starting(STEP_BACKEND, Some(&opening)));
     let backend = crate::backend_update::run(&app, &mode, &mode_label).await;
     // `proven` is its own answer rather than a flavour of done: a backend that
     // patched but skipped its own checks is patched, and is not a pass.
@@ -582,7 +581,7 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         Step::partial(STEP_BACKEND, backend.detail.clone())
     }
     .with_log(backend.log_dir.clone(), backend.tail.clone());
-    let _ = app.emit(crate::events::UPDATE_STEP, backend_step.clone());
+    announce_step(&app, &backend_step);
     let backend_ok = backend.ok;
     let backend_stopped = backend.stopped;
     steps.push(backend_step);
@@ -592,7 +591,7 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         // as many words rather than being left to infer it from a green line
         // that is not there.
         let skipped = Step::skipped(STEP_DESKTOP, DESKTOP_SKIPPED_DETAIL);
-        let _ = app.emit(crate::events::UPDATE_STEP, skipped.clone());
+        announce_step(&app, &skipped);
         steps.push(skipped);
         return Ok(BothOutcome {
             updated_both: both_updated(&steps),
@@ -604,10 +603,7 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
     }
 
     // ---- 2. the executable ---------------------------------------------
-    let _ = app.emit(
-        crate::events::UPDATE_STEP,
-        step_starting(STEP_DESKTOP, None),
-    );
+    announce_step(&app, &step_starting(STEP_DESKTOP, None));
     let desktop_step = match install_now(&app).await {
         Ok(version) => Step::ok(
             STEP_DESKTOP,
@@ -622,7 +618,7 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         ),
     };
     let installed = desktop_step.state == "ok";
-    let _ = app.emit(crate::events::UPDATE_STEP, desktop_step.clone());
+    announce_step(&app, &desktop_step);
     steps.push(desktop_step);
 
     let outcome = BothOutcome {
@@ -633,6 +629,92 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         restart_needed: installed || backend_stopped,
     };
     Ok(outcome)
+}
+
+/// The update a chat message asked for, after its ONE card was approved.
+///
+/// HOW IT IS REACHED, AND WHY THAT IS THE GATE. The backend's chat fast path
+/// raises one approval card (`jarvis_quick.py`, action `desktop_update`,
+/// PC-only and therefore Windows Hello) and downloads nothing. The owner's
+/// Approve is sent by [`crate::commands::answer_approval`], which reads the
+/// card it is answering from the queue it already holds and, only when that
+/// card's action is the update one, calls this. So the path is:
+///
+///   chat message -> ONE card -> the owner's yes -> this function -> the
+///   SAME `update_both` the Settings button uses.
+///
+/// Nothing here can be started by a timer, a startup path, a page, the model
+/// or the backend on its own: no card, no call. That is what stops the desktop
+/// updater being the one self-modification path outside the gate (the
+/// self-improvement audit's finding S3).
+///
+/// It re-checks before it starts, because the card may have waited a while and
+/// the published release can move: if there is nothing newer now, nothing is
+/// changed and the chat says so. A failure anywhere is said in the chat and
+/// never painted as done.
+pub async fn run_approved_update(app: AppHandle) {
+    let status = look(&app).await;
+    if let Some(err) = status.error.clone() {
+        say_in_hud(
+            &app,
+            "failed",
+            format!("The update was not started: {err} Nothing was changed."),
+        );
+        return;
+    }
+    if status.available.is_none() {
+        say_in_hud(
+            &app,
+            "skipped",
+            "There is no newer version to install now, so nothing was changed.",
+        );
+        return;
+    }
+    match update_both(app.clone(), "responsive".to_string()).await {
+        Ok(outcome) if outcome.updated_both => {
+            say_in_hud(
+                &app,
+                "ok",
+                "Both halves are updated. Restarting Jarvis now.",
+            );
+            // Let the line reach the page before the process goes; the restart
+            // is what the card promised, and the new executable only runs
+            // after it (`restart_app`'s own comment says why this call is safe
+            // from a background task).
+            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+            app.request_restart();
+        }
+        Ok(outcome) => {
+            // Each half has already said its own words in the chat; this adds
+            // the one sentence a half-updated machine must never lose.
+            let not_done: Vec<&str> = outcome
+                .steps
+                .iter()
+                .filter(|s| s.state != "ok")
+                .map(|s| s.step.as_str())
+                .collect();
+            let needs_restart = if outcome.restart_needed {
+                " Jarvis needs a restart before the backend is back; Settings, then \
+                 Updates, has the Restart button."
+            } else {
+                ""
+            };
+            say_in_hud(
+                &app,
+                "failed",
+                if not_done.is_empty() {
+                    format!("Not everything updated. Nothing was restarted.{needs_restart}")
+                } else {
+                    format!(
+                        "Not everything updated ({}). Nothing was restarted - the \
+                         lines above say what each half did.{needs_restart}",
+                        not_done.join(" and ")
+                    )
+                },
+            );
+        }
+        Err(err) => say_in_hud(&app, "failed", err),
+    }
 }
 
 /// The placeholder a step emits when it starts, so the card can say which half
@@ -674,6 +756,66 @@ pub fn restart_app(app: AppHandle) {
     app.request_restart();
 }
 
+/// What the app tells its own backend about this build, on every chat request
+/// (`commands.rs` `chat_extras`, `hud_proxy.rs` `hud_chat`).
+///
+/// The update answers in `backend/jarvis_quick.py` need exactly two facts the
+/// shell alone has: which version is running, and whether this build carries
+/// an update key. A page cannot supply either - the HUD's chat payload keeps
+/// only the fields the page sends, and this is added in Rust after it.
+pub fn desktop_chat_facts(app: &AppHandle) -> serde_json::Value {
+    chat_facts(&version(app), configured(app))
+}
+
+/// The shape [`desktop_chat_facts`] sends, kept pure so the test can read it.
+pub fn chat_facts(version: &str, can_update: bool) -> serde_json::Value {
+    serde_json::json!({ "version": version, "can_update": can_update })
+}
+
+/// Whether a pending approval row is the update card ("update Jarvis").
+///
+/// The action is the backend's own name for the card
+/// (`jarvis_quick.UPDATE_ACTION`), never the page's words: this is what decides
+/// whether an approval makes this shell run its updater.
+pub fn is_update_card(item: &serde_json::Value) -> bool {
+    item.get("action").and_then(|a| a.as_str()) == Some("desktop_update")
+}
+
+/// One line for the HUD's chat, pushed on the feed's `update` channel.
+///
+/// The HUD page is the backend's own and this shell does not fork it, so
+/// progress is delivered the way every other shell message is (`lib.rs`
+/// `push_to_hud`) and the bootstrap puts it in the page's log.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWord {
+    /// `running`, `ok`, `partial`, `failed`, `skipped`, or `word` for a plain
+    /// sentence that is not a half's state.
+    pub state: String,
+    /// Plain words. Always says what happened, never "updated" about a half
+    /// that was not.
+    pub detail: String,
+}
+
+/// Says one line in the HUD's chat, when that window is open.
+fn say_in_hud(app: &AppHandle, state: &str, detail: impl Into<String>) {
+    crate::push_to_hud(
+        app,
+        "update",
+        &UpdateWord {
+            state: state.to_string(),
+            detail: detail.into(),
+        },
+    );
+}
+
+/// One half's step, to every window (the Settings listener) and to the HUD's
+/// chat (the owner may have started this from a chat message).
+fn announce_step(app: &AppHandle, step: &Step) {
+    let _ = app.emit(crate::events::UPDATE_STEP, step.clone());
+    crate::push_to_hud(app, "update", step);
+}
+
 /// The startup look, if the owner has left it on.
 ///
 /// Spawned and forgotten: a slow or unreachable endpoint must not hold up the
@@ -705,9 +847,76 @@ pub fn spawn_startup_check(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        both_updated, claim_update_both, friendly, step_starting, Step, DESKTOP_SKIPPED_DETAIL,
-        STEP_BACKEND, STEP_DESKTOP,
+        both_updated, chat_facts, claim_update_both, friendly, is_update_card, step_starting, Step,
+        DESKTOP_SKIPPED_DETAIL, STEP_BACKEND, STEP_DESKTOP,
     };
+
+    // ---- what the chat answers read (2026-10-26) --------------------------
+
+    #[test]
+    fn the_chat_facts_carry_the_running_version_and_whether_it_can_update() {
+        let yes = chat_facts("0.2.320", true);
+        assert_eq!(yes["version"], "0.2.320");
+        assert_eq!(yes["can_update"], true);
+        // A build with no update key says so rather than offering an install
+        // nobody can do.
+        assert_eq!(chat_facts("0.2.320", false)["can_update"], false);
+    }
+
+    /// The decision path: the approve command reads the answered card's action
+    /// BEFORE the decision leaves, and only the update card starts an install.
+    /// A source pin, because there is no `AppHandle` in `cargo test` and this
+    /// is the one wiring a later edit could quietly move.
+    #[test]
+    fn only_an_approved_update_card_starts_an_install() {
+        let src = include_str!("commands.rs");
+        let at = src
+            .find("async fn answer_approval(")
+            .expect("commands.rs has no answer_approval");
+        let body = &src[at..];
+        let read = body
+            .find("let start_update = approved && waiting_update(&app, id);")
+            .expect("answer_approval no longer reads the answered card's action");
+        let sent = body
+            .find("let endpoint = if approved")
+            .expect("answer_approval no longer sends an approve/deny");
+        assert!(
+            read < sent,
+            "the card is read AFTER the decision is sent - it must be read first"
+        );
+        assert!(
+            body.contains("crate::update::run_approved_update(handle).await"),
+            "an approved update card no longer starts the updater"
+        );
+        // ...and the update is started only inside that `if`.
+        let start = body
+            .find("if start_update {")
+            .expect("no start_update gate");
+        let call = body
+            .find("crate::update::run_approved_update(handle).await")
+            .expect("no updater call");
+        assert!(
+            start < call,
+            "the updater is called outside the start_update gate"
+        );
+        // A deny never starts it.
+        assert!(body.contains("let start_update = approved &&"));
+    }
+
+    #[test]
+    fn only_the_update_cards_action_counts() {
+        // The action is the backend's own name for the card, never the words
+        // on it: this is what decides whether an approval starts the updater.
+        assert!(is_update_card(
+            &serde_json::json!({"id": "abc", "action": "desktop_update"})
+        ));
+        assert!(!is_update_card(
+            &serde_json::json!({"id": "abc", "action": "send_email"})
+        ));
+        assert!(!is_update_card(&serde_json::json!({"id": "abc"})));
+        assert!(!is_update_card(&serde_json::json!({"action": 7})));
+        assert!(!is_update_card(&serde_json::json!(null)));
+    }
 
     #[test]
     fn a_missing_release_is_explained_rather_than_numbered() {

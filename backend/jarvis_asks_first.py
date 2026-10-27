@@ -427,6 +427,10 @@ HARD_LIMITS = frozenset({
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
+    # Updating Jarvis itself (2026-10-26): the module refuses anything but a
+    # person's yes, and the card replaces this PC's executable and patches the
+    # folder Jarvis runs from. It must never become a standing yes.
+    "desktop_update",
     "app_merge_change",
     "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
@@ -455,7 +459,8 @@ MUST_ASK = frozenset({
     "obscura_enable", "big_model_enable", "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
-    "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
+    "restore_backup", "check_tool_updates", "desktop_update", "run_plan",
+    "phone_notifications_read",
     "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
@@ -631,6 +636,13 @@ GROUPS = (
         "lower_the_voice_check_bar",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
         "check_tool_updates",
+        # "Update Jarvis" asked in chat (2026-10-26; jarvis_quick.py's
+        # `desktop_update` card, run by the desktop's own update.rs): the one
+        # card that replaces this app and patches the folder Jarvis runs from.
+        # It sits here with the other cards over Jarvis's own code. Its module
+        # refuses any tier but "ask", so it is in MUST_ASK too, and it has no
+        # switch on this page for that reason - it can never become instant.
+        "desktop_update",
         # Learning from a Reject click (the owner's decision of 2026-10-10;
         # jarvis_gate.py's _propose_constraint_from_denial). It raises no card
         # of its own - a "no" is the decision - so this is a fixed row, and the
