@@ -1654,6 +1654,26 @@ def t_the_cdp_reader_hands_back_the_box_it_already_worked_out():
                "box": (0, 0, 5, 5)}))[0].values()))
 
 
+def t_the_record_shape_is_pinned_where_ci_can_see_it():
+    """The live suite asserts this exact key set against the real CDP reader,
+    but it self-skips in every CI job (no Playwright there), so a new key in
+    _elements_from_cdp() re-broke it silently from 2026-10-15 (`box`). This is
+    that assertion on hand-built CDP data, which CI does run: when a key is
+    added, this goes red and BOTH suites must be updated together."""
+    made, _ = names_of(page_nodes(
+        {"bid": 10, "parent": 2, "tag": "button", "role": "button", "name": "One",
+         "box": (0, 0, 5, 5)},
+        {"bid": 11, "parent": 2, "tag": "input", "role": "textbox", "name": "Two",
+         "box": (0, 10, 50, 20), "attrs": {"type": "password"}}))
+    check("a record's keys are exactly the ten the live suite asserts "
+          "(a new key must be added in BOTH suites)",
+          len(made) == 2 and all(set(e) == {"role", "name", "text", "enabled",
+                                            "interactive", "sensitive", "password",
+                                            "within_role", "within_name", "box"}
+                                 for e in made.values()),
+          repr([sorted(e) for e in made.values()]))
+
+
 def t_outright_refusal_refuses_ticker_trades_and_allows_own_account():
     """The D-2 outright refusal must see a bare ticker/crypto trade, while an
     owner's own account is not third-party account access."""
@@ -1784,7 +1804,8 @@ if __name__ == "__main__":
                t_scroll_is_a_step_plan_makes_too,
                t_outright_refusal_refuses_ticker_trades_and_allows_own_account,
                t_a_ticker_trade_goal_is_refused_by_plan_run_and_run_steps,
-               t_the_cdp_reader_hands_back_the_box_it_already_worked_out):
+               t_the_cdp_reader_hands_back_the_box_it_already_worked_out,
+               t_the_record_shape_is_pinned_where_ci_can_see_it):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
