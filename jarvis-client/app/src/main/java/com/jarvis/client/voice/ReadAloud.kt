@@ -17,11 +17,11 @@ package com.jarvis.client.voice
  * could not say, a stale link, a locked phone. The refusal words say only that
  * it is on screen - never why, never the answer, never a fact.
  *
- * THE WORDS ARE PENDING THE HUD SLICE. The desktop read-aloud work (Lead's lane,
- * in flight) will send the exact sentence-cap, refusal wording and
- * sensitive-skip rules; until that link lands, [ON_SCREEN]/[LABEL]/[STOP] mirror
- * [PrivateAloud.ON_SCREEN] and the proposed phone wording, marked here so the
- * one place to change is obvious.
+ * THE WORDS AND THE CAP ARE DECIDED (2026-10-27). [ON_SCREEN] is
+ * [PrivateAloud.ON_SCREEN]'s own sentence, [LABEL] and [STOP] are the desktop
+ * read-aloud setting's own name and its while-speaking word, and
+ * [READ_ALOUD_SENTENCE_CAP] is the one number the HUD read-aloud slice adopts.
+ * This object stays the one place to change all four.
  */
 object ReadAloud {
 
@@ -44,10 +44,10 @@ object ReadAloud {
     const val CANNOT = "That answer could not be read aloud just now."
 
     /**
-     * Refusal words when a privacy rule keeps the answer on screen (pending HUD
-     * link). Kept as a literal - never a reference - so this object stays pure
-     * Kotlin and its test can run off-device; the wiring test pins that it is
-     * exactly `PrivateAloud.ON_SCREEN`'s sentence.
+     * Refusal words when a privacy rule keeps the answer on screen. Kept as a
+     * literal - never a reference - so this object stays pure Kotlin and its
+     * test can run off-device; the wiring test pins that it is exactly
+     * `PrivateAloud.ON_SCREEN`'s sentence.
      */
     const val ON_SCREEN = "It's on your screen."
 
@@ -112,6 +112,21 @@ object ReadAloud {
                 stale -> OFFLINE
                 else -> ON_SCREEN
             }
+
+        /**
+         * The ONE sentence to SHOW beside the answer when a read is withheld for
+         * privacy; null when it may be read, and null when the reason is not
+         * privacy (locked, offline - those are not what "It's on your screen."
+         * says, and this project shows no invented sentence).
+         *
+         * A control that is not drawn at all is silent about why, and a control
+         * that does nothing when pressed is worse (the Lead's ruling of
+         * 2026-10-27: show the one sentence, and nothing beyond it). The phone
+         * therefore draws this sentence where the Read aloud control would have
+         * been.
+         */
+        val withheld: String?
+            get() = if (!mayRead && refusal == ON_SCREEN) ON_SCREEN else null
     }
 
     /**
@@ -122,6 +137,9 @@ object ReadAloud {
     data class Offer(val text: String, val facts: Facts) {
         val mayRead: Boolean get() = facts.mayRead
         val refusal: String? get() = facts.refusal
+
+        /** See [Facts.withheld]: the one sentence to show when the read is withheld. */
+        val withheld: String? get() = facts.withheld
     }
 
     /**

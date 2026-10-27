@@ -93,11 +93,11 @@ class PresetsLandingTest {
         assertTrue("the Galaxy entry is gone, so there is nothing to sit beside", galaxyAt > 0)
         assertTrue("Home has no one-tap \"Presets →\" entry", presetsAt > galaxyAt)
 
-        // Beside the Galaxy, in the same row of doors under the face: nothing
-        // conditional and no More dialog sits between the two labels, so the
-        // new entry is drawn with the same `if (showCaption)` that draws the
-        // Galaxy - one tap from Home, not a new screen and not a second copy
-        // behind the More button (which stays as well).
+        // Beside the Galaxy, in the same row of doors ([ModelDoorsRow]): nothing
+        // conditional and no More dialog sits between the two labels, and since
+        // 2026-10-27 the row is drawn with the face AND without it (Face size
+        // Hidden, keyboard up) - one tap from Home, not a new screen and not a
+        // second copy behind the More button (which stays as well).
         val between = home.substring(galaxyAt, presetsAt)
         assertTrue("the Presets entry is not beside the Galaxy", between.length < 1400)
         assertFalse("a second condition gates the Presets entry", between.contains("if ("))
