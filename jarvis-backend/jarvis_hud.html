@@ -930,6 +930,36 @@ html.hud-window-hidden *::after{
 .quickbar-pill:hover{border-color:var(--gold); color:var(--gold);}
 .quickbar-pill[hidden]{display:none !important;}
 
+/* ---- the rail's own toolbar (the owner's request, 2026-10-26) --------- *
+ *  "where are the presets ... add a button in the left column. and move the
+ *  settings from the top right to the left column." The Layouts door and the
+ *  settings gear live in THIS group and in no other, because the Studio shell
+ *  (split-stage) hides .rail-nav, .rail-lanes and .rail-systems below - the
+ *  sections the presets and the settings would otherwise have to live in.
+ *  Nothing here is a second menu or a second command: #rail-presets opens the
+ *  one Layouts menu hud-presets.js owns (the same menu the "Layout:" badge
+ *  opens), and #hud-settings is still the shell's own gear, injected into this
+ *  group by hud_bootstrap.js and never written into this vendored page.
+ *  NAMED rail-toolbar* AND NOT rail-tools*: `#rail-tools` is the RIGHT rail's
+ *  "Abilities used" card (`hud-edit.js`'s CARD_REGISTRY names the same
+ *  selector), so a second element with that id would quietly steal it.
+ * --------------------------------------------------------------------- */
+.rail-toolbar{
+  display:flex; align-items:center; gap:6px; flex-shrink:0;
+  padding:10px 10px 8px; border-bottom:1px solid var(--line);
+}
+.rail-toolbar-btn{
+  flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:8px;
+  padding:6px 9px; border:1px solid var(--line); border-radius:3px;
+  background:transparent; color:var(--dim); cursor:pointer; white-space:nowrap;
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.05em;
+  transition:color .15s, border-color .15s, background .15s;
+}
+.rail-toolbar-btn:hover{color:var(--text); border-color:var(--line-hot);}
+.rail-toolbar-btn:focus-visible{outline:none; color:var(--ice); border-color:var(--line-hot);}
+.rail-toolbar-btn[aria-expanded="true"]{color:var(--ice); border-color:var(--line-hot);}
+.rail-toolbar-btn .glyph{width:14px; height:14px; flex:0 0 auto;}
+
 .bento-empty{
   display:none; margin:2px 0 4px; font-family:var(--f-mono); font-size:11px;
   color:var(--text-faint);
@@ -1072,6 +1102,23 @@ html[data-hud-shell="split-stage"] .rail-systems{display:none;}
 html[data-hud-shell="split-stage"] .rail-foot{padding:8px 6px 12px;}
 html[data-hud-shell="split-stage"] .quickbar-pill{justify-content:center; padding:9px 0;}
 html[data-hud-shell="split-stage"] .quickbar-pill .qp-label{display:none;}
+/* The rail's own toolbar in the narrow Studio rail: two square icon buttons in
+   the SAME 42x38 box the dock above them uses, so the two controls the owner
+   asked for sit under the dock this shell does show. The label is hidden here
+   and the title/aria-label carry the words, exactly as the Jarvis-bar pill
+   above does with its own label. */
+html[data-hud-shell="split-stage"] .rail-toolbar{
+  flex-direction:column; gap:6px; padding:8px 0 0; border-bottom:none;
+}
+html[data-hud-shell="split-stage"] .rail-toolbar-btn{
+  width:42px; height:38px; flex:0 0 auto; padding:0; justify-content:center;
+  border-color:transparent; background:transparent;
+}
+html[data-hud-shell="split-stage"] .rail-toolbar-btn .rt-label{display:none;}
+html[data-hud-shell="split-stage"] .rail-toolbar-btn .glyph{width:16px; height:16px;}
+html[data-hud-shell="split-stage"] .rail-toolbar-btn:hover{
+  color:var(--text); background:rgb(var(--accent-rgb) / .07);
+}
 html[data-hud-shell="split-stage"] .rail.right{display:none;}
 html[data-hud-shell="split-stage"] #stage{
   display:grid; min-height:0;
@@ -1939,6 +1986,37 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         <span aria-hidden="true">&#9889;&#xFE0E;</span>
       </button>
     </nav>
+
+    <!-- The rail's own two controls (the owner's request, 2026-10-26: "where
+         are the presets ... add a button in the left column. and move the
+         settings from the top right to the left column"). In their OWN
+         toolbar because this is the one rail block no shell hides: the Studio
+         shell (split-stage) hides .rail-nav, .rail-lanes and .rail-systems
+         below, which is where the presets and the settings could not be found.
+         #rail-presets opens the ONE Layouts menu hud-presets.js owns - the
+         same `jarvis:hud-presets-open` door the "Layout: <name>" badge uses -
+         and opens it beside this button, never as a second menu. The settings
+         gear is NOT written here: the page is vendored byte-identical from
+         the backend folder, so the shell injects its gear into #rail-toolbar
+         (hud_bootstrap.js), exactly as it always injected it into the stage
+         bar. A page served on its own in a plain browser therefore still has
+         no gear, and this button needs no shell to work.
+         NOTE THE NAME: `#rail-tools` is already the RIGHT rail's "Abilities
+         used" card (hud-edit.js maps that id), so nothing here may reuse it. -->
+    <div class="rail-toolbar" id="rail-toolbar">
+      <button type="button" class="rail-toolbar-btn" id="rail-presets"
+              title="Presets: the HUD's layouts"
+              aria-label="Presets: the HUD's layouts"
+              aria-haspopup="menu" aria-expanded="false">
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" aria-hidden="true" focusable="false">
+          <rect x="3" y="4" width="18" height="5" rx="1"/>
+          <rect x="3" y="11" width="18" height="4" rx="1"/>
+          <rect x="3" y="17" width="12" height="3" rx="1"/>
+        </svg>
+        <span class="rt-label">Presets</span>
+      </button>
+    </div>
 
     <div class="rail-section hide-sm rail-lanes" id="rail-lanes">
       <div class="hud-label">Focus presets</div>

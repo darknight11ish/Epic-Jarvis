@@ -1782,24 +1782,36 @@
    * otherwise, so that sentence has been corrected in
    * capabilities/hud.json rather than left to contradict the code.
    *
-   * WHERE IT SITS, AND WHAT IT CALLS. The HUD has no title bar of its own
-   * (it is an ordinary decorated window, so the OS draws one); its own
-   * controls live on the stage bar at the top of the conversation view. The
-   * gear goes there, immediately before the page's own "Telemetry" button,
-   * so it reads as part of the window's chrome rather than of the
-   * conversation. It calls exactly what the Jarvis bar's gear and the
-   * widget's gear call - plain_errors.rs's `open_fix_place {place:
-   * "settings"}`, navigation only, through the app lock like every other way
-   * in - so there is NO new Tauri command and no new Rust code. It carries
-   * the same gear glyph and the same "Jarvis settings" name for a screen
-   * reader, so all three gears look and read alike.
+   * WHERE IT SITS, AND WHAT IT CALLS. The owner's request of 2026-10-26, in
+   * their own words: "move the settings from the top right to the left
+   * column". The HUD has no title bar of its own (it is an ordinary decorated
+   * window, so the OS draws one); its own controls live on the stage bar at
+   * the top of the conversation view, and that is where this gear was put on
+   * 2026-10-10 - the top-right row the owner has now asked to move it out of.
+   * It goes into the page's own `.rail-toolbar` in the left rail, beside
+   * the Presets button (`#rail-presets`): that toolbar is the one rail block
+   * no shell hides. (`#rail-tools` was already taken by the RIGHT rail's
+   * "Abilities used" card, which hud-edit.js maps - so nothing here reuses
+   * it.) The Studio shell the owner runs (split-stage) draws a 60px
+   * icon rail and hides `.rail-nav`, `.rail-lanes` and `.rail-systems` by CSS,
+   * so the left column is where the two controls can be found together, and
+   * in every other shell the toolbar is in the same place. It calls exactly
+   * what the Jarvis bar's gear and the widget's gear call - plain_errors.rs's
+   * `open_fix_place {place: "settings"}`, navigation only, through the app
+   * lock like every other way in - so there is NO new Tauri command and no
+   * new Rust code. It carries the same gear glyph and the same "Jarvis
+   * settings" name for a screen reader, so all three gears look and read
+   * alike.
    *
    * WHY IT IS ADDED HERE rather than in the page: jarvis_hud.html is
    * vendored byte-identical from the backend folder, and section 2b below
    * says why that matters (a new copy from the backend must need no
    * re-patching). This script is how the shell adapts the page without
-   * forking it, and it adds no buttons on its own - the one control it
-   * already adds is beside the chat box.
+   * forking it: it adds no buttons of its own beyond two - the "Open the
+   * Jarvis bar" control beside the chat box, and this gear. The Presets
+   * button it now sits beside is the PAGE's, because it only has to
+   * dispatch the page's own `jarvis:hud-presets-open` event - no shell
+   * command, no grant, nothing a browser-served page cannot do.
    *
    * THE ACL CHANGE THIS NEEDED, deliberately: `open-fix-place` (the set that
    * holds `allow-open-fix-place`) is now granted to this window in
@@ -1829,25 +1841,33 @@
   }
   window.__jarvisOpenSettings = settingsFromHud;
 
-  /* Adds the gear, once, onto the stage bar. Silent if the page has no stage
-   * bar (an older or newer copy of the vendored page). */
+  /* Adds the gear, once, into the left rail's own toolbar - beside the
+   * page's Presets button (2026-10-26). Silent if the page has no such group
+   * (an older or newer copy of the vendored page): the gear is chrome the
+   * shell adds to a page it does not fork, never a control the page is made
+   * to carry. */
   function addSettingsGear() {
-    var bar = document.querySelector(".stage-bar");
-    if (!bar || document.getElementById("hud-settings")) return;
+    var railToolbar = document.querySelector(".rail-toolbar");
+    if (!railToolbar || document.getElementById("hud-settings")) return;
     var gear = document.createElement("button");
     gear.type = "button";
     gear.id = "hud-settings";
     gear.className = "ghost hud-settings";
     gear.title = GEAR_SAID;
     // The page's `.ghost` pads for a word; this one is a square icon button,
-    // so it is sized here. 26px matches the page's own small controls (the
-    // Telemetry toggle beside it), not the 44px composer buttons.
+    // so it is sized here. 26px is the size the page's own small controls use
+    // (the Telemetry toggle this gear used to sit beside), not the 44px
+    // composer buttons.
     gear.style.width = "26px";
     gear.style.height = "26px";
     gear.style.padding = "0";
     gear.style.display = "flex";
     gear.style.alignItems = "center";
     gear.style.justifyContent = "center";
+    // The pill above it is as tall as a row; a 26px square centred beside it
+    // keeps the group one line in the wide rails and one column in the
+    // Studio rail, without the gear changing size or shape.
+    gear.style.flex = "0 0 auto";
     gear.setAttribute("aria-label", GEAR_SAID);
     // The SAME gear glyph the Jarvis bar's gear and the widget's gear draw
     // (index.html #open-settings, widget.html #btn-settings), so the three
@@ -1858,11 +1878,10 @@
       '<path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />' +
       "</svg>";
     gear.addEventListener("click", settingsFromHud);
-    // Before "Telemetry", which the media query above only shows on a narrow
-    // window - so on a wide one the gear is the last thing on the bar.
-    var telemetry = document.getElementById("rail-toggle");
-    if (telemetry && telemetry.parentNode === bar) bar.insertBefore(gear, telemetry);
-    else bar.appendChild(gear);
+    // After the page's own Presets button, so the group reads "Presets, then
+    // settings" in every shell. Exactly one gear: the id check above is the
+    // guard, and the page itself never carries one (bar-chrome.mjs pins that).
+    railToolbar.appendChild(gear);
   }
 
   /* Only with the shell (window.__TAURI__): the page served on its own, in a
