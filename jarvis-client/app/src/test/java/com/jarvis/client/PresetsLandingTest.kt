@@ -9,6 +9,7 @@ import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.screens.BrainSections
 import com.jarvis.client.ui.screens.MoreMenuWords
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,6 +83,60 @@ class PresetsLandingTest {
         assertTrue("the anchor never calls its consume callback", brain.contains("onDone = onSectionConsumed"))
         assertTrue("the anchor walk is gone", brain.contains("ScrollToKeyOnce("))
         assertTrue("the anchor no longer names the plate key", brain.contains("initialSection?.let { plateKeyAt(it) }"))
+    }
+
+    @Test
+    fun `Home offers a one-tap Presets entry beside the Galaxy`() {
+        val home = source("ui/screens/HomeScreen.kt")
+        val galaxyAt = home.indexOf("\"The Galaxy →\"")
+        val presetsAt = home.indexOf("\"Presets →\"")
+        assertTrue("the Galaxy entry is gone, so there is nothing to sit beside", galaxyAt > 0)
+        assertTrue("Home has no one-tap \"Presets →\" entry", presetsAt > galaxyAt)
+
+        // Beside the Galaxy, in the same row of doors under the face: nothing
+        // conditional and no More dialog sits between the two labels, so the
+        // new entry is drawn with the same `if (showCaption)` that draws the
+        // Galaxy - one tap from Home, not a new screen and not a second copy
+        // behind the More button (which stays as well).
+        val between = home.substring(galaxyAt, presetsAt)
+        assertTrue("the Presets entry is not beside the Galaxy", between.length < 1400)
+        assertFalse("a second condition gates the Presets entry", between.contains("if ("))
+        assertFalse("the Presets entry is in the More dialog, not Home's row", between.contains("MoreMenu"))
+
+        // It calls the SAME action the More row calls - the one MainActivity
+        // wires to Brain + hardware - and declares no action of its own.
+        val button = home.substring(presetsAt, minOf(home.length, presetsAt + 700))
+        assertTrue(
+            "the Presets entry does not call Home's one presets action",
+            button.contains(".pressable(onClick = actions.onOpenPresets)"),
+        )
+        assertEquals(
+            "the More row and the Home entry must use the same one action",
+            2,
+            home.split("actions.onOpenPresets").size - 1,
+        )
+        assertEquals(
+            "the Home entry must not add an action of its own",
+            1,
+            home.split("val onOpenPresets: () -> Unit").size - 1,
+        )
+        assertTrue(
+            "the More row must stay - the new entry is the easily accessible one, not a replacement",
+            home.contains("MoreMenuWords.PRESETS"),
+        )
+
+        // TalkBack is given a name, not the arrow glyph read as punctuation.
+        assertTrue(
+            "the Presets entry has no read-aloud name",
+            button.contains("contentDescription = \"Jarvis presets\""),
+        )
+
+        // Navigation only: no read, no route, no write, no apply button.
+        assertFalse("the Presets entry names a route", button.contains("/api/"))
+        assertFalse("the Presets entry posts", button.contains("api.post"))
+        for (w in listOf("applyPreset", "focusPresetApply", "installModel", "switchModel")) {
+            assertFalse("the Presets entry calls $w", button.contains(w))
+        }
     }
 
     @Test
