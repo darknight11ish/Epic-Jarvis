@@ -90,16 +90,35 @@ const REAP_TIMEOUT: Duration = Duration::from_secs(2);
 /// slow to boot, and the event stream will connect whenever it is ready.
 const STARTUP_WAIT: Duration = Duration::from_secs(25);
 /// Timeout for the port probe and the shutdown request.
-const PROBE_TIMEOUT: Duration = Duration::from_millis(1_500);
+///
+/// 5 s, not 1.5 s (owner's decision, 2026-10-26). A cold first probe costs
+/// about 3.0 s because `hello()` builds the voice sessions, so 1.5 s made a
+/// genuinely-answering backend look unreachable.
+const PROBE_TIMEOUT: Duration = Duration::from_millis(5_000);
 
 /// How often the watchdog (feasibility I98) looks at the backend it started.
+///
+/// This is the SLEEP between checks, not the whole cycle: each check then
+/// spends up to `PROBE_TIMEOUT` waiting for `/api/version` to answer.
 const WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
 /// Consecutive failed `/api/version` checks, on a process that has NOT
 /// exited, before it counts as **hung** rather than merely slow to answer
-/// one request. `HANG_THRESHOLD * WATCHDOG_INTERVAL` = 45s — long enough
-/// that a slow model load or a heavy turn already in flight is never
-/// mistaken for a hang.
-const HANG_THRESHOLD: u32 = 3;
+/// one request — long enough that a slow model load or a heavy turn already
+/// in flight is never mistaken for a hang. The 45 s this replaced (3 x 15s)
+/// cut off a real 37-38 s answer on 2026-10-26 (owner's decision).
+///
+/// **The real wait, and why the naive arithmetic is wrong.** Only a port
+/// that REFUSES the connection costs `HANG_THRESHOLD * WATCHDOG_INTERVAL` =
+/// 150 s, because the probe fails instantly. The hang this exists for is a
+/// backend that is LISTENING but silent, so every failed check first sleeps
+/// 15 s and then waits the whole 5 s probe:
+/// `HANG_THRESHOLD * (WATCHDOG_INTERVAL + PROBE_TIMEOUT)` = 10 x 20 s =
+/// 200 s (three minutes twenty), because the worst case already includes the
+/// sleep before the first failed probe. The owner-facing sentences in
+/// docs/INSTALL.md and settings.html round that up to "about three and a
+/// half minutes" and `the_watchdog_waits_three_and_a_half_minutes_at_most`
+/// pins it.
+const HANG_THRESHOLD: u32 = 10;
 /// The cap feasibility idea I98 asks for in so many words: "at most 3
 /// restarts in 10 minutes, then stop and say so clearly ... never silently
 /// loop forever."
@@ -107,7 +126,18 @@ const MAX_RESTARTS: usize = 3;
 /// The trailing window the cap above counts restarts within. It slides —
 /// three crashes at 09:00, 09:04 and 09:12 counts only the last two against
 /// the cap once the clock reaches 09:11, not "3 total, ever".
-const RESTART_WINDOW: Duration = Duration::from_secs(10 * 60);
+///
+/// **15 minutes, not the 10 minutes I98 named (2026-10-26).** With the
+/// longer patience above, a persistent silent hang is noticed within about
+/// 200 s and restarted, so three such restarts span about 600 s. A 600 s
+/// window could never hold all three: by the time the fourth attempt
+/// arrived, the first had aged out, the cap never tripped, and the app would
+/// restart a wedged backend forever without ever telling the owner. 900 s
+/// holds three worst-case cycles with room to spare, so the cap does what it
+/// says. `a_persistent_slow_hang_still_trips_the_cap` pins that
+/// relationship, not the bare number, so raising the patience again cannot
+/// silently break the cap.
+const RESTART_WINDOW: Duration = Duration::from_secs(15 * 60);
 
 /// What to run, and where.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -803,7 +833,9 @@ pub fn watch_startup(app: AppHandle) {
 // ---------------------------------------------------------------------------
 // The watchdog (feasibility I98: "restart the Python backend if it crashes
 // or hangs, but with a hard cap: at most 3 restarts in 10 minutes, then stop
-// and say so clearly ... never silently loop forever")
+// and say so clearly ... never silently loop forever"). The window is 15
+// minutes since 2026-10-26 so the cap can still hold three slow-hang cycles —
+// see `RESTART_WINDOW` for the arithmetic.
 // ---------------------------------------------------------------------------
 //
 // Gated on the taint fix, Security G1 ("taint survives a restart") — checked
@@ -937,7 +969,9 @@ impl WatchdogState {
 ///   [`ensure_backend`]'s own comment on exactly this case, which this
 ///   function relies on to do the actual restart.)
 /// - **hung** — the process has NOT exited, but has failed to answer
-///   `/api/version` for `HANG_THRESHOLD` checks in a row (45s).
+///   `/api/version` for `HANG_THRESHOLD` checks in a row (150 s if the port
+///   refuses, up to 200 s if it silently swallows each probe — see
+///   [`HANG_THRESHOLD`]).
 ///
 /// **The cap**: at most `MAX_RESTARTS` restarts in any trailing
 /// `RESTART_WINDOW`. Past it, this stops trying for the rest of this run of
@@ -1026,12 +1060,13 @@ pub fn spawn_watchdog(app: AppHandle) {
                     // "Start". It names Jarvis, as every other screen does,
                     // not "the backend".
                     let msg = format!(
-                        "Jarvis {} {} times in 10 minutes, so Jarvis Desktop stopped restarting \
-                         it. Why: the end of backend.log (Settings, More options, Open the log \
-                         folder). To start it again: tray icon, Stop the backend if it is \
-                         shown, then Start the backend.",
+                        "Jarvis {} {} times in {} minutes, so Jarvis Desktop stopped \
+                         restarting it. Why: the end of backend.log (Settings, More options, \
+                         Open the log folder). To start it again: tray icon, Stop the \
+                         backend if it is shown, then Start the backend.",
                         if hung { "stopped answering" } else { "crashed" },
                         MAX_RESTARTS,
+                        RESTART_WINDOW.as_secs() / 60,
                     );
                     logfile::log(&format!("[jarvis] watchdog: {msg}"));
                     winrt_toast::notify_quiet(&app, "Jarvis — backend", &msg);
@@ -1180,7 +1215,7 @@ mod tests {
         assert!(w.try_reserve_restart(t0));
         assert!(w.try_reserve_restart(t0 + Duration::from_secs(1)));
         assert!(w.try_reserve_restart(t0 + Duration::from_secs(2)));
-        // A fourth, still well inside the 10-minute window: refused.
+        // A fourth, still well inside the window: refused.
         assert!(!w.try_reserve_restart(t0 + Duration::from_secs(3)));
         // mark_given_up() is true exactly once, so the caller notifies once.
         assert!(w.mark_given_up());
@@ -1197,7 +1232,7 @@ mod tests {
         assert!(w.try_reserve_restart(t0 + Duration::from_secs(60)));
         // A fourth right after the third: refused, still 3 in the window.
         assert!(!w.try_reserve_restart(t0 + Duration::from_secs(61)));
-        // Once the FIRST restart has aged out of the 10-minute window, one
+        // Once the FIRST restart has aged out of the window, one
         // slot frees up again - this is not "3 restarts, ever, for this run".
         let past_window = t0 + RESTART_WINDOW + Duration::from_secs(1);
         assert!(w.try_reserve_restart(past_window));
@@ -1226,6 +1261,66 @@ mod tests {
         assert_eq!(w.bump_unreachable(), 3);
         w.reset_unreachable();
         assert_eq!(w.bump_unreachable(), 1);
+    }
+
+    // -- how long the watchdog waits (owner's decision, 2026-10-26) --------
+
+    /// Pins the patience itself, because the numbers ARE the fix. On
+    /// 2026-10-26 a real answer ("tell me about the Galaxy") ran 37-38 s and
+    /// was restarted mid-turn by a watchdog that only allowed 45 s; a cold
+    /// first probe costs about 3.0 s because `hello()` builds the voice
+    /// sessions, so the old 1.5 s probe also read a live backend as gone.
+    ///
+    /// The honest worst case is NOT `HANG_THRESHOLD * WATCHDOG_INTERVAL`: a
+    /// silent (listening, not answering) backend makes every failed check wait
+    /// out the whole probe too.
+    #[test]
+    fn the_watchdog_waits_three_and_a_half_minutes_at_most() {
+        assert_eq!(WATCHDOG_INTERVAL, Duration::from_secs(15));
+        assert_eq!(HANG_THRESHOLD, 10);
+        // A port that REFUSES each probe fails instantly: 10 x 15 s = 150 s.
+        let refused = WATCHDOG_INTERVAL * HANG_THRESHOLD;
+        assert_eq!(refused, Duration::from_secs(150));
+        // A port that SILENTLY swallows each probe costs the probe as well:
+        // 10 x (15 s sleep + 5 s probe) = 200 s. The worst-case phase (a hang
+        // starting right after a check) is already inside that first sleep.
+        assert_eq!(PROBE_TIMEOUT, Duration::from_millis(5_000));
+        let silent = (WATCHDOG_INTERVAL + PROBE_TIMEOUT) * HANG_THRESHOLD;
+        assert_eq!(silent, Duration::from_secs(200));
+        // The owner-facing sentence in docs/INSTALL.md and settings.html says
+        // "about three and a half minutes"; do not let the constants drift past
+        // what that promises.
+        assert!(silent <= Duration::from_secs(3 * 60 + 30));
+    }
+
+    /// The cap has to be able to trip for the failure mode this patience
+    /// change was made for. With a 600 s window it could not: three slow
+    /// hangs are noticed ~200 s apart, so by the fourth attempt the first had
+    /// aged out, the reservation succeeded, and the app would restart a wedged
+    /// backend every ~3.5 minutes forever without ever saying so (found by
+    /// review before merge, 2026-10-26).
+    #[test]
+    fn a_persistent_slow_hang_still_trips_the_cap() {
+        // One worst-case silent-hang cycle: 10 checks that each sleep 15 s and
+        // then wait the full 5 s probe.
+        let cycle = (WATCHDOG_INTERVAL + PROBE_TIMEOUT) * HANG_THRESHOLD;
+        assert_eq!(cycle, Duration::from_secs(200));
+        // The window must hold three such cycles, or the cap can never fill:
+        // the fourth attempt arrives about three cycles after the first.
+        assert!(
+            RESTART_WINDOW > cycle * 3,
+            "RESTART_WINDOW {RESTART_WINDOW:?} cannot hold three {cycle:?} slow-hang cycles, \
+             so the restart cap would never trip and the app would loop silently"
+        );
+        let w = WatchdogState::default();
+        let t0 = Instant::now();
+        assert!(w.try_reserve_restart(t0));
+        assert!(w.try_reserve_restart(t0 + cycle));
+        assert!(w.try_reserve_restart(t0 + cycle * 2));
+        // The fourth, three cycles after the first: refused, not allowed by
+        // the first having aged out.
+        assert!(!w.try_reserve_restart(t0 + cycle * 3));
+        assert!(w.mark_given_up());
     }
 }
 
