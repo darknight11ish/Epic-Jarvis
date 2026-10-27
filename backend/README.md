@@ -807,7 +807,7 @@ buttons should change from *"saved on this machine only"* to *"saved to Jarvis
 | | |
 |---|---|
 | `GET /api/appearance` | The stored document. Joins the existing desktop-only surfaces, so it carries the same origin and token checks as `/api/models` and `/api/config`. |
-| `POST /api/appearance` | Writes it. Joins the existing gated-action tuple and dispatches through `_desktop_action`, like every other write. |
+| `POST /api/appearance` | Writes it. Joins the existing gated-action tuple and dispatches through `_desktop_action`, like every other write. **It merges** - see below. |
 | `~/.openjarvis/appearance.json` | Where it lives — beside `config.toml`, not inside it. |
 | an `appearance` event | Published on save, so a client that is already open repaints. Clients that do not know the kind ignore it. |
 
@@ -819,6 +819,28 @@ It does not touch anything else. No existing route changes behaviour.
 It approves nothing, starts nothing and reveals nothing, so it needs no
 approval and should never grow one. If a field would ever change *behaviour*
 rather than appearance, it belongs on a different route.
+
+**A partial save MERGES.** This was a real defect before 2026-10-26, not a
+style: the write replaced the whole document, and the three writers send three
+different shapes. The phone sends `bindings` on every push and a `face` only
+once its owner has picked one (`AppearanceStore.toSyncDocument` leaves a blank
+face out), so the first colour change from a fresh phone wrote `face: null` and
+erased the face the desktop was wearing; a desktop document with no face chosen
+has the same shape. Now a key the request carries is replaced and a key it does
+not carry keeps its stored value, and only the request is validated. Clearing
+is explicit: `face: null` (or `""`) clears the face, `bindings: {}` clears the
+state bindings.
+
+**Two narrow limits remain, and they are written down rather than claimed
+away.** The merge fixes the ordinary partial document, not two rarer shapes.
+The server is a `ThreadingHTTPServer` and the read-modify-write has no lock, so
+two saves that overlap inside it can both read the same old document and the
+second write can carry the first one's stale other half. And a stored file that
+cannot be read for a moment is treated like a corrupt one (deliberately
+recoverable), so a save in that moment merges onto an empty document and can
+lose the rest. Both were found by the independent review of 2026-10-26; a
+`threading.Lock` and a "could not read just now" refusal are the obvious next
+change if either is ever seen. `appearance.patch`'s own docstring says the same.
 
 **It rejects rather than clamps.** An unknown pattern or colour comes back 400
 naming the offender. Silently dropping a bad binding would leave the picker
@@ -851,11 +873,15 @@ weight and should not sit behind that review.
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_appearance.py
 ```
 
-Fourteen checks against the real `jarvis-visual-spec.json`: that all fifty
+Nineteen checks against the real `jarvis-visual-spec.json`: that all fifty
 colours are found, that an unknown colour is refused rather than dropped, that
 `banked` is accepted, that a refused save leaves the stored document untouched,
-that a save publishes an event, that a machine without the spec says so, and
-that a corrupt file reports itself instead of taking the surface down.
+that a save publishes an event, that a machine without the spec says so, that a
+corrupt file reports itself instead of taking the surface down, and - since the
+2026-10-26 merge - that a face-only save keeps every colour binding, a
+bindings-only save keeps the face, `null`/empty clear exactly what they name, an
+unknown field changes nothing, and the published event carries the merged
+document.
 
 Two of those exist because `python -m py_compile` passed while the patch was
 broken twice: `time` was never imported, so every save would have raised
