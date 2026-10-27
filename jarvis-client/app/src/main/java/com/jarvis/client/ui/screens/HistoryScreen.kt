@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +58,7 @@ import com.jarvis.client.net.ChatFork
 import com.jarvis.client.net.ChatLog
 import com.jarvis.client.net.ChatMark
 import com.jarvis.client.net.ChatTags
+import com.jarvis.client.net.HistoryView
 import com.jarvis.client.net.PlainErrors
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.parts.Gap
@@ -68,6 +70,8 @@ import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.parts.pressable
+import com.jarvis.client.ui.parts.rememberTickingNow
+import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -114,6 +118,19 @@ private const val FILING_BANNER_MS = 10 * 60 * 1000L
  * Everything is read from the PC when the screen opens and dropped when it
  * is left. The phone keeps no history of its own.
  *
+ * The DeepSeek-shaped list (the owner's ask of 2026-10-27): the search box is
+ * the first thing on the screen, beside a Sort control (Newest first, Oldest
+ * first, Title A-Z) and a "New chat" action; below them the rows are grouped
+ * - **Pinned** first, then one collapsible section per tag (the owner's
+ * projects) with its icon and count, then the chats in no project. A row
+ * shows its type's icon, its title and its age ("25min", "7d"), and says
+ * "You're here" on the chat Home is in. A long section shows only five rows
+ * and one "Show N more" over what is already loaded; "Load older" still
+ * brings more from the PC. Each row's overflow menu carries Open, Pin/Unpin,
+ * Move to and Delete. Pinning is metadata (only the chat's id and the wanted
+ * state are sent, no approval card); a refusal says so and leaves the row
+ * exactly where it was.
+ *
  * "Hide memory lists and chat history" (Security) hides the list and any open conversation
  * until Show is confirmed, the same as Brain's memory lists. The settings
  * stay visible: they say nothing about what was said.
@@ -124,6 +141,13 @@ fun HistoryScreen(
     /** The link is up and fresh. Only turning the switch ON waits for it. */
     canAct: Boolean,
     onBack: () -> Unit,
+    /**
+     * "New chat": the SAME thing the idle timer does (a new conversation with
+     * a new id, Home's chat cleared) - [ChatSession.newConversationSaid] in
+     * MainActivity - then Home. No new route, no request to the PC: the next
+     * question starts the new conversation there.
+     */
+    onNewChat: () -> Unit = {},
     privateHidden: Boolean = false,
     onShowPrivate: () -> Unit = {},
     showPrivateBusy: Boolean = false,
@@ -165,6 +189,19 @@ fun HistoryScreen(
     var closed by remember { mutableStateOf(viewPrefs.closed()) }
     // The row whose "Move to" list is open.
     var moveFor by remember { mutableStateOf<String?>(null) }
+    // ---- The DeepSeek-shaped list (the owner's ask of 2026-10-27) ----
+    // The sort order ("Show" and the tag chips still narrow the list). Kept
+    // over a rotation; it is a view choice and holds no word of a chat.
+    var sort by rememberSaveable { mutableStateOf(HistoryView.Sort.NEWEST.id) }
+    // Which long sections were opened with "Show N more": section ids joined
+    // by commas ("pinned,t3"). A view choice only, like the folded flags.
+    var revealed by rememberSaveable { mutableStateOf("") }
+    // The row whose overflow menu is open, and the row a pin request is out for.
+    var menuFor by remember { mutableStateOf<String?>(null) }
+    var pinning by remember { mutableStateOf<String?>(null) }
+    // The row Delete was picked on, waiting for its confirm; and the request.
+    var deleteFor by remember { mutableStateOf<ChatLog.Summary?>(null) }
+    var deleteBusy by remember { mutableStateOf(false) }
     var filing by remember(fileUnder) { mutableStateOf(fileUnder) }
     // The "file it under" request does not outlive this visit: it goes when
     // the screen is left (a rotation is not leaving) and after ten quiet
@@ -183,10 +220,36 @@ fun HistoryScreen(
         filing = null
         onFileUnderDone()
     }
+    // Hiding the lists closes any row menu, delete confirm or move list, so
+    // nothing about a chat comes back into view with them.
+    LaunchedEffect(privateHidden) {
+        if (privateHidden) {
+            menuFor = null
+            moveFor = null
+            deleteFor = null
+        }
+    }
     // "History settings", folded until opened: the list comes first.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var status by remember { mutableStateOf<ChatLog.Status?>(null) }
     var rows by remember { mutableStateOf<List<ChatLog.Summary>?>(null) }
+    // The DeepSeek list's view state: the sort order, the chat Home is in,
+    // the sections opened with "Show N more", and the clock the ages are read
+    // against. All view choices - no word of a chat, nothing sent anywhere.
+    val sortOrder = HistoryView.sortOf(sort)
+    val homeChatId = remember(reads) { JarvisRuntime.homeKeptChatId() }
+    val nowSeconds = rememberTickingNow(rows, 15_000L) / 1000L
+    val revealedKeys = remember(revealed) {
+        revealed.split(',').filter { it.isNotEmpty() }.toSet()
+    }
+    fun revealSection(id: String) {
+        revealed = (revealedKeys + id).joinToString(",")
+    }
+    fun toggleSection(prefsKey: Int) {
+        val next = if (prefsKey in closed) closed - prefsKey else closed + prefsKey
+        closed = next
+        viewPrefs.saveClosed(next)
+    }
     var mayHaveOlder by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
     var loadingOlder by remember { mutableStateOf(false) }
@@ -313,10 +376,16 @@ fun HistoryScreen(
         }
     }
 
-    // Back closes an open conversation first, then leaves History.
+    // Back closes an open conversation first, then a row's menu or delete
+    // confirm, then leaves History.
     val open = openId
-    BackHandler(enabled = open != null || editorOpen) {
-        if (open != null) openId = null else editorOpen = false
+    BackHandler(enabled = open != null || editorOpen || menuFor != null || deleteFor != null) {
+        when {
+            open != null -> openId = null
+            editorOpen -> editorOpen = false
+            menuFor != null -> menuFor = null
+            else -> deleteFor = null
+        }
     }
 
     // Files ONE chat (or unfiles it with a null tag). The row is updated here
@@ -344,13 +413,84 @@ fun HistoryScreen(
         }
     }
 
+    // Pin or unpin ONE chat (the owner's ask of 2026-10-27). The PC's answer
+    // is the only thing that moves the row: a refusal says so and leaves it
+    // where it was, with the same tag and the same place in the list.
+    fun pinChat(row: ChatLog.Summary) {
+        if (pinning != null) return
+        val want = !row.pinned
+        pinning = row.id
+        listSaid = null
+        scope.launch {
+            try {
+                val w = JarvisRuntime.pinChat(row.id, want)
+                if (w.ok) {
+                    val nowPinned = w.pinned ?: want
+                    rows = rows?.let { HistoryView.withPin(it, row.id, nowPinned) }
+                    found = found?.let { HistoryView.withPin(it, row.id, nowPinned) }
+                    listSaid = HistoryView.pinSaid(nowPinned)
+                    if (nowPinned && HistoryView.PINNED_KEY in closed) {
+                        // A section folded shut must not swallow the pin that was
+                        // just made: Pinned opens so the row is where the sentence says.
+                        val next = closed - HistoryView.PINNED_KEY
+                        closed = next
+                        viewPrefs.saveClosed(next)
+                    }
+                } else {
+                    listSaid = w.said ?: ChatLog.PIN_REFUSED
+                }
+            } finally {
+                pinning = null
+                menuFor = null
+            }
+        }
+    }
+
+    // Delete ONE chat from a row's overflow menu, after the confirm shown at
+    // the top of the list. The same request (and the same confirm words) as
+    // Delete inside a conversation; the row goes only after the PC says yes.
+    fun deleteChat(row: ChatLog.Summary) {
+        if (deleteBusy) return
+        deleteBusy = true
+        deleteFor = null
+        listSaid = null
+        scope.launch {
+            try {
+                val (gone, sentence) = JarvisRuntime.deleteHistory(row.id)
+                if (gone) {
+                    rows = rows?.filterNot { it.id == row.id }
+                    found = found?.let { f -> f.copy(found = f.found.filterNot { it.row.id == row.id }) }
+                    listSaid = sentence
+                    moveFor = null
+                    menuFor = null
+                    // The PC's list and the tag counts changed; the chat Home
+                    // is in may be the one that just went (the runtime said so).
+                    reads += 1
+                    tagReads += 1
+                } else {
+                    listSaid = sentence
+                }
+            } finally {
+                deleteBusy = false
+            }
+        }
+    }
+
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         TopBar(
             if (open != null) "Conversation" else if (editorOpen) ChatTags.EDITOR_TITLE else "History",
             onBack = { if (openId != null) openId = null else if (editorOpen) editorOpen = false else onBack() },
             subtitle = "Chat history, kept on your PC",
         ) {
-            if (open == null && !editorOpen) Quiet("Refresh", onClick = { reads += 1 })
+            if (open == null && !editorOpen) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The same mechanism the idle timer uses: a new
+                    // conversation on the phone, no route, no request - the
+                    // next question starts the new chat on the PC.
+                    Quiet("New chat", color = chrome.textMid, onClick = onNewChat)
+                    Quiet("Refresh", onClick = { reads += 1 })
+                }
+            }
         }
 
         if (open != null) {
@@ -423,6 +563,39 @@ fun HistoryScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // The search box is the FIRST thing on the screen (the owner's ask
+            // of 2026-10-27, the DeepSeek look), with the sort control beside
+            // it. Nothing about a chat is shown while the private lists are
+            // hidden, so neither is this.
+            if (!privateHidden) {
+                item(key = "search") {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        TextInput(
+                            value = search,
+                            onValueChange = { search = it },
+                            placeholder = ChatLog.SEARCH_PLACEHOLDER,
+                            // Its name for TalkBack (the chat audit: it had none).
+                            modifier = Modifier.weight(1f).semantics {
+                                contentDescription = ChatLog.SEARCH_LABEL
+                            },
+                        )
+                        // One tap cycles Newest first -> Oldest first -> Title A-Z.
+                        // A view choice only: the PC is not asked, nothing is saved.
+                        Quiet(
+                            sortOrder.short,
+                            color = chrome.textMid,
+                            modifier = Modifier.semantics {
+                                contentDescription = HistoryView.sortTitle(sortOrder)
+                            },
+                            onClick = { sort = HistoryView.nextSort(sortOrder).id },
+                        )
+                    }
+                }
+            }
             // Whether History is on, at the TOP: "waiting for your approval" and
             // "nothing new is being kept" used to sit under the folded settings
             // at the very bottom (the second chat audit, phone worst-three #2).
@@ -556,16 +729,6 @@ fun HistoryScreen(
                             })
                         }
                         Gap(6)
-                        if (shown != null && shown.isNotEmpty()) {
-                            TextInput(
-                                value = search,
-                                onValueChange = { search = it },
-                                placeholder = ChatLog.SEARCH_PLACEHOLDER,
-                                // Its name for TalkBack (the chat audit: it had none).
-                                modifier = Modifier.semantics { contentDescription = ChatLog.SEARCH_LABEL },
-                            )
-                            Gap(8)
-                        }
                         when {
                             shown == null -> Text(
                                 if (err != null) "Couldn't read your chat history: $err" else "Reading…",
@@ -625,6 +788,36 @@ fun HistoryScreen(
                         }
                     }
                 }
+                // Delete from a row's menu asks here, at the top where it cannot
+                // scroll away from the row it is about. The same words and the
+                // same request as Delete inside an opened conversation.
+                deleteFor?.let { row ->
+                    item(key = "delete-confirm") {
+                        Plate {
+                            Text(
+                                "\u201C${row.title}\u201D",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = chrome.textHi,
+                                maxLines = 2,
+                            )
+                            Gap(4)
+                            Text(
+                                ChatLog.DELETE_CONFIRM,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.warnInk,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Quiet(
+                                    if (deleteBusy) "Deleting…" else "Yes, delete it",
+                                    color = chrome.badInk,
+                                    enabled = !deleteBusy,
+                                    onClick = { deleteChat(row) },
+                                )
+                                Quiet("Keep it", enabled = !deleteBusy, onClick = { deleteFor = null })
+                            }
+                        }
+                    }
+                }
                 if (wordSearch && !searching) {
                     val f = found
                     if (f != null && f.queryOk) {
@@ -638,6 +831,24 @@ fun HistoryScreen(
                             FoundRow(
                                 hit,
                                 tag = view?.tags?.firstOrNull { it.id == hit.row.tagId },
+                                tags = if (wanted == null) view?.tags.orEmpty() else emptyList(),
+                                current = hit.row.id == homeChatId,
+                                menuOpen = menuFor == hit.row.id,
+                                moveOpen = moveFor == hit.row.id,
+                                pinBusy = pinning == hit.row.id,
+                                nowSeconds = nowSeconds,
+                                menuAllowed = wanted == null,
+                                onToggleMenu = {
+                                    menuFor = if (menuFor == hit.row.id) null else hit.row.id
+                                    moveFor = null
+                                },
+                                onPin = { pinChat(hit.row) },
+                                onToggleMove = { moveFor = if (moveFor == hit.row.id) null else hit.row.id },
+                                onMove = { tagId -> fileChat(hit.row.id, tagId, fromBanner = false) },
+                                onAskDelete = {
+                                    deleteFor = hit.row
+                                    menuFor = null
+                                },
                                 onOpen = {
                                     if (wanted != null) {
                                         fileChat(hit.row.id, wanted.tagId, fromBanner = true)
@@ -663,9 +874,23 @@ fun HistoryScreen(
                             row,
                             tag = here,
                             tags = if (wanted == null) view?.tags.orEmpty() else emptyList(),
+                            current = row.id == homeChatId,
+                            menuOpen = menuFor == row.id,
                             moveOpen = moveFor == row.id,
+                            pinBusy = pinning == row.id,
+                            nowSeconds = nowSeconds,
+                            menuAllowed = wanted == null,
+                            onToggleMenu = {
+                                menuFor = if (menuFor == row.id) null else row.id
+                                moveFor = null
+                            },
+                            onPin = { pinChat(row) },
                             onToggleMove = { moveFor = if (moveFor == row.id) null else row.id },
                             onMove = { tagId -> fileChat(row.id, tagId, fromBanner = false) },
+                            onAskDelete = {
+                                deleteFor = row
+                                menuFor = null
+                            },
                             onOpen = {
                                 if (wanted != null) {
                                     fileChat(row.id, wanted.tagId, fromBanner = true)
@@ -676,29 +901,39 @@ fun HistoryScreen(
                             },
                         )
                     }
-                    if (view != null && groupedTags && !wordSearch) {
-                        // Sections, one per tag in the owner's order, newest
-                        // first inside, Untagged last. Each header says its
-                        // name, icon and count, and folds shut.
-                        // A "Show" kind or title words narrow the list: then a header
-                        // counts the rows shown, not the PC's whole number (the desktop's rule).
+                    if (!wordSearch) {
+                        // Sections in the DeepSeek order (the owner's ask of
+                        // 2026-10-27): Pinned first, one per tag in the owner's
+                        // order with its icon and count, Untagged last. A pinned
+                        // chat appears once, in Pinned; a long section shows five
+                        // rows and "Show N more" over what is already loaded.
+                        // A "Show" kind or title words narrow the list: then a
+                        // header counts the rows shown, not the PC's whole number.
+                        // A PC with no tags gets one "Chats" section.
                         val narrowed = kind.isNotEmpty() || search.isNotBlank()
-                        val sections = ChatTags.group(
-                            visible, view.tags, view.untagged, ChatTags.filterKey(tagFilter), exact = !narrowed,
+                        val sections = HistoryView.sections(
+                            visible,
+                            view?.tags.orEmpty(),
+                            view?.untagged ?: 0,
+                            ChatTags.filterKey(tagFilter),
+                            exact = !narrowed,
+                            sort = sortOrder,
                         )
                         sections.forEach { sec ->
-                            val isOpen = sec.key !in closed
-                            val count = sec.count
-                            item(key = "sec-${sec.key}") {
-                                TagSectionHeader(sec.tag, count, isOpen, onToggle = {
-                                    val next = if (isOpen) closed + sec.key else closed - sec.key
-                                    closed = next
-                                    viewPrefs.saveClosed(next)
-                                })
+                            val prefsKey = HistoryView.prefsKey(sec)
+                            val isOpen = prefsKey !in closed
+                            item(key = "sec-${sec.id}") {
+                                if (sec.pinned) {
+                                    PinnedSectionHeader(sec.count, isOpen) { toggleSection(prefsKey) }
+                                } else {
+                                    TagSectionHeader(sec.tag, sec.count, isOpen, title = sec.title) {
+                                        toggleSection(prefsKey)
+                                    }
+                                }
                             }
                             if (isOpen) {
                                 if (sec.rows.isEmpty()) {
-                                    item(key = "sec-${sec.key}-none") {
+                                    item(key = "sec-${sec.id}-none") {
                                         Text(
                                             ChatTags.NONE_LOADED,
                                             style = MaterialTheme.typography.bodySmall,
@@ -706,11 +941,26 @@ fun HistoryScreen(
                                         )
                                     }
                                 }
-                                items(sec.rows, key = { "c-" + it.id }) { row -> rowContent(row) }
+                                val opened = sec.id in revealedKeys
+                                items(HistoryView.shown(sec, opened), key = { "c-" + it.id }) { row ->
+                                    rowContent(row)
+                                }
+                                val more = HistoryView.hidden(sec, opened)
+                                if (more > 0) {
+                                    item(key = "more-${sec.id}") {
+                                        Quiet(
+                                            HistoryView.showMore(more),
+                                            color = chrome.textMid,
+                                            modifier = Modifier.semantics {
+                                                contentDescription =
+                                                    HistoryView.showMoreTitle(sec.title, more)
+                                            },
+                                            onClick = { revealSection(sec.id) },
+                                        )
+                                    }
+                                }
                             }
                         }
-                    } else {
-                        items(visible, key = { "c-" + it.id }) { row -> rowContent(row) }
                     }
                     if (mayHaveOlder && shown != null && shown.isNotEmpty()) {
                         item(key = "older") {
@@ -876,58 +1126,231 @@ fun HistoryScreen(
     }
 }
 
-/** One row of the list: the title, when and where, and its marks in words. */
+/**
+ * One row of the list, in the DeepSeek shape the owner asked for on
+ * 2026-10-27: the conversation's type icon, its title and its age ("25min",
+ * "7d"), then when/where and its marks in words, with the overflow menu on
+ * the right. "You're here" marks the chat Home is in; a drawn pin and the
+ * Pinned section both say a pinned row's place.
+ */
 @Composable
 private fun ConversationRow(
     row: ChatLog.Summary,
     tag: ChatTags.Tag?,
     tags: List<ChatTags.Tag>,
+    current: Boolean,
+    menuOpen: Boolean,
     moveOpen: Boolean,
+    pinBusy: Boolean,
+    nowSeconds: Long,
+    menuAllowed: Boolean,
+    onToggleMenu: () -> Unit,
+    onPin: () -> Unit,
     onToggleMove: () -> Unit,
     onMove: (Int?) -> Unit,
+    onAskDelete: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    ChatRowCard(
+        row = row,
+        tag = tag,
+        tags = tags,
+        current = current,
+        menuOpen = menuOpen,
+        moveOpen = moveOpen,
+        pinBusy = pinBusy,
+        nowSeconds = nowSeconds,
+        menuAllowed = menuAllowed,
+        onToggleMenu = onToggleMenu,
+        onPin = onPin,
+        onToggleMove = onToggleMove,
+        onMove = onMove,
+        onAskDelete = onAskDelete,
+        onOpen = onOpen,
+    )
+}
+
+/**
+ * The one row both the list and the PC's search results draw, so a pinned,
+ * current or deleted row behaves the same in either. [snippet] is a search
+ * result's marked piece of the conversation; [hits] its count of matches.
+ */
+@Composable
+private fun ChatRowCard(
+    row: ChatLog.Summary,
+    tag: ChatTags.Tag?,
+    tags: List<ChatTags.Tag>,
+    current: Boolean,
+    menuOpen: Boolean,
+    moveOpen: Boolean,
+    pinBusy: Boolean,
+    nowSeconds: Long,
+    menuAllowed: Boolean,
+    snippet: AnnotatedString? = null,
+    hits: Int? = null,
+    onToggleMenu: () -> Unit,
+    onPin: () -> Unit,
+    onToggleMove: () -> Unit,
+    onMove: (Int?) -> Unit,
+    onAskDelete: () -> Unit,
     onOpen: () -> Unit,
 ) {
     val chrome = LocalChrome.current
+    val accent = LocalAccent.current
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
-    Column(Modifier.fillMaxWidth()) {
-        Plate(Modifier.pressable(onClick = onOpen)) {
-            Text(row.title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi, maxLines = 2)
-            Gap(2)
-            Text(
-                ChatLog.rowLine(row, zone, today),
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textLo,
+    // The row's tap opens the chat; with the menu open it closes that first.
+    val open = {
+        if (menuOpen) onToggleMenu()
+        onOpen()
+    }
+    Plate(
+        Modifier.fillMaxWidth(),
+        // The chat Home is in gets the raised tone and a focus hairline, AND
+        // the words "You're here" below - never the colour alone.
+        tone = if (current) chrome.surface2 else null,
+        outline = if (current) chrome.hairlineFocus else null,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().pressable(onClick = open),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ConversationKindIcon(row.kind, chrome.textMid)
+            Column(Modifier.weight(1f)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (row.pinned) PinMark(accent)
+                    Text(
+                        row.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = chrome.textHi,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                    )
+                    val age = HistoryView.rowAge(row, nowSeconds)
+                    if (age.isNotEmpty()) {
+                        Text(age, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                    }
+                }
+                Gap(2)
+                Text(
+                    listOfNotNull(
+                        ChatLog.rowLine(row, zone, today),
+                        hits?.let { ChatLog.hitsLine(it) },
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo,
+                )
+                if (snippet != null) {
+                    Gap(4)
+                    Text(snippet, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                }
+                RowMarks(row, tag, current)
+            }
+            // The overflow menu's trigger. TalkBack names the row it belongs to.
+            // Hidden while a "file it under" banner is up: there a tap on the
+            // row files it, and a second menu would be two meanings for one row.
+            if (menuAllowed) {
+                Quiet(
+                    if (menuOpen) "\u25B4" else "\u22EE",
+                    color = chrome.textLo,
+                    modifier = Modifier.semantics {
+                        contentDescription = HistoryView.actionsFor(row.title)
+                    },
+                    onClick = onToggleMenu,
+                )
+            }
+        }
+        if (menuAllowed && menuOpen) {
+            ChatActions(
+                row = row,
+                tags = tags,
+                pinBusy = pinBusy,
+                onOpen = open,
+                onPin = onPin,
+                onMove = {
+                    onToggleMenu()
+                    onToggleMove()
+                },
+                onDelete = onAskDelete,
             )
-            RowMarks(row, tag)
         }
         // "Move to": the tags and "No tag" - only when the PC has tags, and not
-        // while the "file it" banner is up (a tap on the row files it then).
-        if (tags.isNotEmpty()) {
-            Quiet(
-                if (moveOpen) ChatTags.CANCEL else ChatTags.MOVE_TO,
-                color = chrome.textMid,
-                modifier = Modifier.semantics {
-                    contentDescription = (if (moveOpen) "Close move list for " else "${ChatTags.MOVE_TO}: ") + row.title
-                },
-                onClick = onToggleMove,
-            )
-            if (moveOpen) MoveToList(tags, row.tagId, onPick = onMove)
+        // while the overflow menu is open. The row's own tag is marked.
+        if (moveOpen && tags.isNotEmpty()) {
+            Gap(6)
+            Text(ChatTags.MOVE_TO, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            MoveToList(tags, row.tagId, onPick = onMove)
         }
+    }
+}
+
+/** The row's overflow menu: Open, Pin/Unpin, Move to, Delete - in that order. */
+@Composable
+private fun ChatActions(
+    row: ChatLog.Summary,
+    tags: List<ChatTags.Tag>,
+    pinBusy: Boolean,
+    onOpen: () -> Unit,
+    onPin: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        HistoryView.menu(tags, filing = false).forEach { action ->
+            MenuAction(
+                HistoryView.actionLabel(action, row.pinned),
+                color = if (action == HistoryView.Action.DELETE) chrome.badInk else chrome.textHi,
+                enabled = !pinBusy,
+                onClick = {
+                    when (action) {
+                        HistoryView.Action.OPEN -> onOpen()
+                        HistoryView.Action.PIN -> onPin()
+                        HistoryView.Action.MOVE -> onMove()
+                        HistoryView.Action.DELETE -> onDelete()
+                    }
+                },
+            )
+        }
+    }
+}
+
+/** One line of a row's menu: a full-width 48dp target, left-aligned. */
+@Composable
+private fun MenuAction(
+    text: String,
+    color: androidx.compose.ui.graphics.Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .pressable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = color)
     }
 }
 
 /**
  * A row's marks in words: what kind of conversation it is (a Live session
- * says so in its line instead - "Live · 12 min · Today 14:05"), said aloud,
- * read outside text.
+ * says so in its line instead - "Live · 12 min · Today 14:05"), the chat's
+ * tag, and "You're here" on the chat Home is in.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RowMarks(row: ChatLog.Summary, chatTag: ChatTags.Tag? = null) {
+private fun RowMarks(row: ChatLog.Summary, chatTag: ChatTags.Tag? = null, current: Boolean = false) {
     val chrome = LocalChrome.current
     val tag = ChatLog.KIND_TAG[row.kind].orEmpty().takeIf { row.kind != "live" && it.isNotEmpty() }
-    if (tag == null && chatTag == null && !row.hasVoice && !row.tainted) return
+    if (tag == null && chatTag == null && !row.hasVoice && !row.tainted && !current) return
     Gap(4)
     // FlowRow: a tag chip beside the kind and voice marks wraps rather than squeezes.
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -936,6 +1359,7 @@ private fun RowMarks(row: ChatLog.Summary, chatTag: ChatTags.Tag? = null) {
         if (tag != null) {
             Pill(tag, modifier = Modifier.semantics { contentDescription = ChatLog.KIND_TITLE[row.kind].orEmpty() })
         }
+        if (current) Pill(HistoryView.CURRENT, color = chrome.textHi)
         if (row.hasVoice) Pill(ChatLog.VOICE_MARK)
         if (row.tainted) Pill(ChatLog.TAINT_MARK, color = chrome.warnInk)
     }
@@ -951,10 +1375,23 @@ private fun hitStyle(current: Boolean = false): SpanStyle = SpanStyle(
 
 /** One search result: the row, then the snippet with the search words marked. */
 @Composable
-private fun FoundRow(hit: ChatLog.Found, tag: ChatTags.Tag?, onOpen: () -> Unit) {
-    val chrome = LocalChrome.current
-    val zone = remember { ZoneId.systemDefault() }
-    val today = LocalDate.now(zone)
+private fun FoundRow(
+    hit: ChatLog.Found,
+    tag: ChatTags.Tag?,
+    tags: List<ChatTags.Tag>,
+    current: Boolean,
+    menuOpen: Boolean,
+    moveOpen: Boolean,
+    pinBusy: Boolean,
+    nowSeconds: Long,
+    menuAllowed: Boolean,
+    onToggleMenu: () -> Unit,
+    onPin: () -> Unit,
+    onToggleMove: () -> Unit,
+    onMove: (Int?) -> Unit,
+    onAskDelete: () -> Unit,
+    onOpen: () -> Unit,
+) {
     val marked = hitStyle()
     val snippet = remember(hit, marked) {
         buildAnnotatedString {
@@ -966,18 +1403,25 @@ private fun FoundRow(hit: ChatLog.Found, tag: ChatTags.Tag?, onOpen: () -> Unit)
             if (hit.snippet.cutAfter) append("…")
         }
     }
-    Plate(Modifier.pressable(onClick = onOpen)) {
-        Text(hit.row.title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi, maxLines = 2)
-        Gap(2)
-        Text(
-            listOfNotNull(ChatLog.rowLine(hit.row, zone, today), ChatLog.hitsLine(hit.hits)).joinToString(" · "),
-            style = MaterialTheme.typography.labelSmall,
-            color = chrome.textLo,
-        )
-        Gap(4)
-        Text(snippet, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-        RowMarks(hit.row, tag)
-    }
+    ChatRowCard(
+        row = hit.row,
+        tag = tag,
+        tags = tags,
+        current = current,
+        menuOpen = menuOpen,
+        moveOpen = moveOpen,
+        pinBusy = pinBusy,
+        nowSeconds = nowSeconds,
+        menuAllowed = menuAllowed,
+        snippet = snippet,
+        hits = hit.hits,
+        onToggleMenu = onToggleMenu,
+        onPin = onPin,
+        onToggleMove = onToggleMove,
+        onMove = onMove,
+        onAskDelete = onAskDelete,
+        onOpen = onOpen,
+    )
 }
 
 /**

@@ -1898,6 +1898,15 @@ class JarvisApi(
     /** `POST /api/history/tags/suggest`: [json] is [TagSuggest.body], exactly `{"enabled": bool}`. */
     suspend fun tagSuggestPost(json: String): ApiResult<Pair<Int, JsonObject?>> = historyWrite(TagSuggest.PATH, json)
 
+    /**
+     * `POST /api/history/pin` (the shared contract, 2026-10-27): [json] is
+     * [ChatLog.pinBody], exactly `{"id", "pinned"}`. The status and body come
+     * back whole so the PC's own sentence reaches the owner; only ids this
+     * phone checked as real are sent. Same rules as [forkPost] - the pairing
+     * token and `X-Jarvis-Client: hud`, and the token is never logged.
+     */
+    suspend fun historyPin(json: String): ApiResult<Pair<Int, JsonObject?>> = historyWrite(ChatLog.PIN_PATH, json)
+
     /** One JSON POST to a History route, the answer whole (status and body), like [forkPost]. */
     private suspend fun historyWrite(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
         withContext(Dispatchers.IO) {
