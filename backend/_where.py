@@ -795,6 +795,10 @@ SHIPPED = (
     "static/hud-safety.js",
     "static/hud-edit.js",
     "static/hud-presets.js",
+    # The History sidebar (2026-10-27): the page loads it with a plain
+    # `<script src="hud-history.js" defer>`, so a browser HUD needs it beside
+    # the server like the other files the page asks for.
+    "static/hud-history.js",
     # The Galaxy's looks (2026-10-27): the HUD's look switcher loads this module
     # with a dynamic import(), so the page's closed whitelist has to serve it
     # from beside the server like the modules above.

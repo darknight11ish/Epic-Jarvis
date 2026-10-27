@@ -4182,7 +4182,8 @@ is compacted with `VACUUM` after a delete, at most once an hour.
  "keep_days": 0, "encrypted": true, "kind": null,
  "conversations": [{"id": "...", "title": "...", "started": 1790000000,
    "updated": 1790000300, "turns": 6, "device": "phone",
-   "has_voice": true, "tainted": false, "kind": "chat", "project": null}]}
+   "has_voice": true, "tainted": false, "kind": "chat", "project": null,
+   "tag_id": null, "pinned": false}]}
 ```
 
 Newest first. `limit` 1-100, default 30; `before` pages to older ones
@@ -4196,11 +4197,30 @@ Since 2026-09-30 every row also carries `"tag_id": int | null` (the chat's
 one tag, section 99) and `&tag=<id>` or `&tag=none` filters to one tag or to
 the untagged chats; a nonsense value is ignored, like `kind`.
 
+Since 2026-10-27 every row also carries `"pinned": true|false` and
+`"pinned_at": <unix seconds>|null` - BOTH always present, and false/null for
+a chat that was never pinned, so an app that has never heard of pinning reads
+exactly the rows it always did. The list itself is still newest-first by
+`updated`: a pin is not a sort the PC applies to this route, it is one flag
+`pinned` plus the moment it was set `pinned_at`, and the apps draw the Pinned
+group from them in ONE order - **`pinned_at DESC, updated_at DESC`** (the
+newest pin first; two pins in the same second newest-chat first). The route
+that changes it is `POST /api/history/pin`, below.
+
+**While App lock or "Hide memory lists and chat history" is on, this route
+withholds EVERY row - a pinned one included.** The answer keeps the switch,
+the counts and `"hidden": true` with `"hidden_count": n`, and its
+`conversations` is empty, so no caller can read a title (or learn that a chat
+exists) from a locked PC. `POST /api/history/pin` refuses too, with `423`
+(see below), for every id - a locked PC must not answer "found" versus "not
+found".
+
 `GET /api/history/conversation?id=<id>`
 
 ```json
 {"id": "...", "title": "...", "tainted": false,
  "kind": "chat", "project": null, "started": 1790000000, "updated": 1790000300,
+ "tag_id": null, "pinned": false,
  "continuable": true, "continue_why": "",
  "forkable": true, "fork_why": "",
  "turns": [{"idx": 0, "role": "user", "text": "...", "at": 1790000000,
@@ -4243,6 +4263,53 @@ and the owner unticks any to keep; ONE approval card (action
 `memory_forget_range`, tier `ask`) lists every item in full and is decided
 by a tap, never by voice; and for 10 minutes afterwards one tap on Undo puts
 everything back. Nothing else deletes in bulk.
+
+`POST /api/history/pin {"id": "<conversation id>", "pinned": true|false}`
+
+Pins one chat to the top of History, or (`false`) takes the pin off. Added
+2026-10-27 for the owner's "pinnable chats" in the desktop HUD's History
+sidebar and the phone's chat list; §18.3 is the whole contract, and the
+phone lane implements the same route.
+
+- **The body is exactly these two keys.** `id` is a conversation id the
+  list just sent. `pinned` must be a JSON boolean: `"yes"`, `1` and `null`
+  are all refused, because an app that sent the wrong type would otherwise
+  silently do the opposite of what it meant.
+- `200 {"ok": true, "id": "<id>", "pinned": true|false, "pinned_at":
+  <unix seconds>|null}` - the state the chat now has, not the state that was
+  asked for. Pinning twice is pinning once, and answers 200 both times;
+  `pinned_at` keeps the FIRST moment it was pinned, so a second pin cannot
+  move a chat above one that was pinned after it.
+- `400 {"ok": false, "error": "bad_request", "message": "<one plain
+  sentence>"}` - the body is not exactly `{"id", "pinned"}`, `pinned` is not
+  a boolean, or `id` is not a string, is empty, or is longer than 128
+  characters.
+- `404 {"ok": false, "error": "not_found", "message": "<one plain
+  sentence>"}` - no such conversation (it may have been deleted). **Nothing
+  is written, and no row is created**: a pin can never invent a chat.
+- `423 {"ok": false, "error": "locked", "message": "<App lock, or Hide
+  memory lists and chat history, is on>"}` - the private view is hidden, and
+  this is the answer for EVERY id, whether the chat exists or not: while it
+  is locked there is no 200-versus-404 oracle. Nothing is written.
+- `503` when the history cannot be opened at all, the same answer the other
+  History routes give.
+- **Metadata only, and no approval card.** A pin stores no text, opens no
+  chat, changes no `updated` (a pin is not an edit), and takes nothing
+  away. It is the owner's own tidying, the same class of change as filing a
+  chat under a tag (§99) - so it raises no card, and the one audit line it
+  writes says which way the flag went and nothing else.
+- The flag lives in the SAME history file every other History fact lives
+  in, as a plain `pinned` column (1 or empty), so it survives a restart on
+  the PC and both apps read it back from `GET /api/history`. Neither app
+  keeps a pin list of its own, which is what keeps the phone and the PC
+  agreeing: a chat pinned on the phone is pinned on the PC, and the other
+  way round.
+- `GET /api/history` rows carry it, `GET /api/history/conversation` carries
+  it, and `GET /api/history/search` rows carry it. A fork keeps its
+  source's pin, the same way it keeps its tag and project.
+- A PC without this route answers 404 and nothing was written, so an app
+  that gets one shows Pin as unavailable rather than retrying: the same
+  way both apps already read a missing newer History feature.
 
 `POST /api/history/settings` - one setting per request:
 

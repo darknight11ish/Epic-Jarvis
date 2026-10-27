@@ -38,7 +38,7 @@
  
 +        if route in ("/api/history/delete", "/api/history/settings",
 +                     "/api/history/tags", "/api/history/tags/suggest", "/api/history/tag",
-+                     "/api/history/fork", "/api/history/mark"):
++                     "/api/history/fork", "/api/history/mark", "/api/history/pin"):
 +            # chat-history.patch (jarvis_chat_log.py).
 +            #   delete {"id": "<conversation id>"}: that one conversation is
 +            #   deleted. One per request; there is no delete-all.

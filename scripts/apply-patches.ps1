@@ -2086,6 +2086,12 @@ $SHIPPED = @(
     'static/hud-safety.js'
     'static/hud-edit.js'
     'static/hud-presets.js'
+    # The History sidebar (2026-10-27): the page loads it with a plain
+    # `<script src="hud-history.js" defer>`, so it has to sit beside the
+    # server too (served at /hud-history.js) or a browser HUD loses the
+    # button silently. backend/test_hud_static.py fails if this copy drifts
+    # from jarvis-desktop/src/hud-history.js.
+    'static/hud-history.js'
     # The Galaxy's looks (2026-10-27): the HUD's look switcher loads this module
     # with a dynamic import(), so it has to sit beside the server (served at
     # /galaxy-presets.js) like the modules above. backend/test_hud_static.py

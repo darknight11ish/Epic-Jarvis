@@ -172,6 +172,12 @@ BESIDE = (
      "a module the page imports; served at /hud-edit.js"),
     ("hud-presets.js", "{repo}/backend/static/hud-presets.js",
      "a module the page imports; served at /hud-presets.js"),
+    # The History sidebar (2026-10-27): the page loads it with a plain
+    # `<script src="hud-history.js" defer>`, so the browser HUD needs it
+    # beside the server as well - a deploy that leaves it out hands a browser
+    # a page whose History button never appears, silently.
+    ("hud-history.js", "{repo}/backend/static/hud-history.js",
+     "the History sidebar the page loads at /hud-history.js (2026-10-27)"),
     ("galaxy-presets.js", "{repo}/backend/static/galaxy-presets.js",
      "the module the Galaxy's look switcher imports; served at /galaxy-presets.js"),
     ("private-speech.js", "{repo}/backend/static/private-speech.js",

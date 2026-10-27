@@ -2228,6 +2228,11 @@ STATIC_ASSETS = {
     "/hud-safety.js": ("hud-safety.js", "text/javascript; charset=utf-8"),
     "/hud-edit.js": ("hud-edit.js", "text/javascript; charset=utf-8"),
     "/hud-presets.js": ("hud-presets.js", "text/javascript; charset=utf-8"),
+    # The History sidebar (2026-10-27, the owner's ask for a History button
+    # in the HUD's left column and a panel like the DeepSeek Harness's): a
+    # classic script with no imports, loaded by the page with defer. It reads
+    # the same History routes this server already answers (section 18).
+    "/hud-history.js": ("hud-history.js", "text/javascript; charset=utf-8"),
     # The Galaxy's looks (2026-10-27): the page's look switcher loads this one
     # with a dynamic import(), so a browser HUD that cannot fetch it shows no
     # switcher (the page catches the failure) instead of a broken picture. It is
@@ -4323,7 +4328,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if route in ("/api/history/delete", "/api/history/settings",
                      "/api/history/tags", "/api/history/tags/suggest", "/api/history/tag",
-                     "/api/history/fork", "/api/history/mark"):
+                     "/api/history/fork", "/api/history/mark", "/api/history/pin"):
             # chat-history.patch (jarvis_chat_log.py).
             #   delete {"id": "<conversation id>"}: that one conversation is
             #   deleted. One per request; there is no delete-all.
