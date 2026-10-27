@@ -81,41 +81,54 @@ async function check(name, fn) {
 
 const ACCESSOR = (text) => text.replace(/\s+/g, " ").trim();
 
-/* ── 1. The button that replaced the dropdown ────────────────────────────── */
+/* ── 1. The model name is the door (2026-10-27) ──────────────────────────── */
 
-await check("the old lane dropdown is gone, and the dock's one control says Current Models", () => {
+await check("the separate Current Models button is gone, and the model chip is the door", () => {
   assert.equal(page.includes("lane-compact"), false,
     "the old lane-compact selector is still in the page");
-  assert.equal(/<select[^>]*id="current-models"/.test(page), false,
-    "the Current Models control is still a <select>");
-  const tag = /<button[^>]*id="current-models"[^>]*>/.exec(page);
-  assert.ok(tag, "the page has no #current-models button");
+  assert.equal(/#current-models\b/.test(page), false,
+    "the separate #current-models control is still in the page");
+  assert.equal(page.includes('class="current-models"'), false,
+    "the .current-models slot class is still in the page");
+  const tag = /<button[^>]*id="chip-model-door"[^>]*>/.exec(page);
+  assert.ok(tag, "the page has no #chip-model-door button");
   const button = ACCESSOR(tag[0]);
   assert.match(button, /type="button"/, "the door is not a plain button");
-  assert.match(button, /class="current-models"/, "the door does not take the dock's own slot class");
+  assert.match(button, /class="chip-door"/, "the door does not take the chip-door class");
   assert.match(button, /aria-haspopup="dialog"/, "the door does not say it opens a dialog");
   assert.match(button, /aria-expanded="false"/, "the door starts claiming to be open");
   assert.match(button, /aria-label="Current Models: what Jarvis is using and has loaded"/,
     "the door's accessible name is not the owner's ask");
   assert.match(button, /title="Current Models: what Jarvis is using and has loaded"/,
     "the door's tooltip is not the owner's ask");
-  const visible = /id="current-models"[^>]*>([^<]*)</.exec(page);
-  assert.equal((visible && visible[1]) || "", "Current Models",
-    "the visible label is not Current Models");
+  // The chip stays a span INSIDE the door: ten assignments write its text and
+  // class after a turn, and none of them may erase the door (HUD audit P1-1).
+  assert.match(page, /<button[^>]*id="chip-model-door"[^>]*>\s*<span[^>]*class="chip"[^>]*id="chip-model"/,
+    "the chip is not a span INSIDE the door");
+  // No `className` write may ever reach the chip or the door again.
+  assert.equal(/chip-model"\)\.className/.test(page), false,
+    "a writer still assigns className on the chip (it must use classList)");
+  assert.equal(/chip-model-door"\)\.className/.test(page), false,
+    "a writer assigns className on the door");
 });
 
-await check("the button takes the dropdown's exact slot: Studio shows it, Ambient hides it", () => {
-  assert.match(page, /\.current-models\{[\s\S]*?display:none;/, "the slot class does not start hidden");
-  assert.match(page, /html\[data-hud-shell="split-stage"\] \.current-models\{display:block;\}/,
-    "Studio (split-stage) does not show the button");
-  assert.match(page, /html\[data-hud-shell="center-core"\] \.current-models\{display:none;\}/,
-    "Ambient (center-core) does not hide the button");
-  // The chip it sits beside: the same plate, border, radius and mono type - so
-  // it cannot grow into a second, louder control in the stage bar.
-  const rule = /\.current-models\{([\s\S]*?)\}/.exec(page)[1];
-  for (const token of ["var(--plate-2)", "var(--line)", "border-radius:3px", "var(--f-mono)", "font-size:11px"]) {
-    assert.ok(rule.includes(token), `the button left the chip's tokens: ${token}`);
-  }
+await check("the chip door is the chip's own size, and Ambient has a door of its own", () => {
+  assert.match(page, /\.chip-door\{[^}]*background:none;[^}]*border:0;/,
+    "the door keeps the browser's button chrome instead of the chip's own look");
+  assert.match(page, /\.chip-door:focus-visible\{outline:2px solid var\(--ice\)/,
+    "the door has no visible focus ring");
+  // Ambient (center-core) hides the stage bar's chip, so without a second door
+  // that shell could not open the panel at all (HUD audit P1-2).
+  assert.match(page, /html\[data-hud-shell="center-core"\] #chip-model-door,/,
+    "the stage bar's door is not hidden by name in Ambient (an empty box would stay clickable)");
+  assert.match(page, /<button[^>]*id="chip-model-door-ambient"[^>]*>[\s\S]*?<span id="as-model">/,
+    "Ambient's pill has no door to the Current Models panel");
+  const ambient = /<div id="ambient-status"[^>]*>/.exec(page);
+  assert.ok(ambient, "the Ambient pill is gone");
+  assert.equal(/aria-hidden="true"/.test(ambient[0]), false,
+    "the Ambient pill is aria-hidden while it holds a real button");
+  assert.match(page, /\.as-model-door\{[^}]*background:none;/,
+    "Ambient's door keeps the browser's button chrome");
 });
 
 /* ── 2. The panel is the page's existing popover, and it is mounted ──────── */
@@ -143,14 +156,30 @@ await check("the page mounts exactly one Current Models panel, from its module b
     "the page does not call the mount at page level");
 });
 
-await check("the button is a door, not a second lane control: nothing switches on click", () => {
+await check("both doors only open the one panel, and the panel listens for both", () => {
+  // The doors are a loop over BOTH ids, so neither can be left un-wired.
+  assert.ok(section.includes('const DOOR_IDS = ["chip-model-door", "chip-model-door-ambient"]'),
+    "the panel does not name both doors");
+  assert.match(section, /for \(const door of doors\) \{[\s\S]*?door\.addEventListener\("click"/,
+    "the doors are not wired in one loop");
   const click = /door\.addEventListener\("click", \(\) => \{([\s\S]*?)\}\);/.exec(section);
-  assert.ok(click, "the button has no click handler");
-  assert.ok(/open\(\)/.test(click[1]), "the button does not open the panel");
+  assert.ok(click, "the doors have no click handler");
+  assert.ok(/close\(true\)/.test(click[1]) && /open\(door\)/.test(click[1]),
+    "a door click does not toggle the panel under that door");
   assert.equal(/\.click\(\)/.test(click[1]), false,
-    "the button itself clicks a lane - it must only open the panel");
-  assert.equal(/invoke\(|fetch\(/.test(click[1]), false,
-    "the button sends a request of its own");
+    "a door itself clicks a lane - it must only open the panel");
+  assert.equal(/invoke\(/.test(click[1]), false,
+    "a door invokes a command of its own");
+  // Escape is heard from the DOCUMENT, not the panel (P2-5).
+  assert.match(section, /doc\.addEventListener\("keydown", \(event\) => \{[\s\S]*?event\.key !== "Escape"/,
+    "the panel's Escape is not on the document");
+  assert.equal(/panel\.addEventListener\("keydown"/.test(section), false,
+    "the panel still owns a keydown Escape, which its own re-render makes dead");
+  // Focus preserved across the re-render the open itself causes.
+  assert.match(section, /const keepLane = active && scroll\.contains\(active\)/,
+    "the panel does not remember the focused route across a re-render");
+  assert.match(section, /if \(again && typeof again\.focus === "function"\)/,
+    "the panel does not put focus back on the same route");
 });
 
 /* ── 3. The three reads ──────────────────────────────────────────────────── */

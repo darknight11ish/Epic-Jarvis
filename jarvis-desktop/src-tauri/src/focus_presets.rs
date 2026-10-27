@@ -2,15 +2,24 @@
 //! successor, PRs #603/#611): the five presets, the hardware block and the ONE
 //! approval-gated apply.
 //!
-//! Two commands, granted to the quickbar and Settings:
+//! Three commands, granted to the quickbar, Settings and the HUD:
 //!
 //! * [`get_focus_presets`] - `GET /api/work`, passed on as it is. The route is
 //!   the existing work route; a backend that still answers the old five-setup
 //!   shape is reported as needing an update, never guessed at.
-//! * [`apply_focus_preset`] - `POST /api/work/apply {"preset": "<id>"}`. This
-//!   approves nothing itself: the backend starts the named lane on demand and
-//!   raises the ONE existing `switch_model` ask card. A stale link is refused
-//!   before anything is sent (rule 4), like every other card-raising write.
+//! * [`apply_focus_preset`] - `POST /api/work/apply {"preset": "<id>"}`, with an
+//!   OPTIONAL `provider` for the Presets menu's Cloud row (2026-10-27: picking
+//!   an API service is the same apply with one more field, never a second
+//!   route). This approves nothing itself: the backend starts the named lane on
+//!   demand and raises the ONE existing `switch_model` ask card. A stale link is
+//!   refused before anything is sent (rule 4), like every other card-raising
+//!   write.
+//! * [`hud_cloud_escalate`] - `POST /api/work/cloud-escalate {"on": true|false}`:
+//!   the HUD Presets menu's "Escalate to the cloud when the work is too complex"
+//!   switch. ONE boolean, and the PC decides: ON is a loosening and the PC
+//!   raises its ONE `change_own_config` card, OFF is instant. The page holds no
+//!   token, so this exists rather than a page POST - and it is deliberately its
+//!   own narrow command, not a grant of `set_manner`/the Settings window.
 //!
 //! Both answers are the PC's own: a 2xx JSON object is handed on unchanged;
 //! a refusal is the backend's own `error`/`message` sentence (or a plain line
@@ -33,10 +42,16 @@ use crate::commands::{
 /// `GET` the presets; the apply POST sits under it.
 pub(crate) const FOCUS_PRESETS_PATH: &str = "/api/work";
 pub(crate) const FOCUS_PRESETS_APPLY_PATH: &str = "/api/work/apply";
+/// The HUD's own escalate switch (2026-10-27): one boolean, one POST.
+pub(crate) const CLOUD_ESCALATE_PATH: &str = "/api/work/cloud-escalate";
 
 /// What an older backend is told to do about it.
 const PRESETS_UPDATE: &str = "This PC's Jarvis does not have the focus presets yet. \
      Update the backend by running apply-patches.ps1, then open this again.";
+
+/// The same advice for a backend that has no escalate switch yet.
+const CLOUD_ESCALATE_MISSING: &str = "This PC's Jarvis does not have the cloud \
+     escalation switch yet. Update the backend by running apply-patches.ps1, then try again.";
 
 /// The words while the event stream is stale. Applying can change the chat lane,
 /// so it is held until the link is live again.
@@ -108,6 +123,59 @@ pub(crate) fn preset_id(preset: &str) -> Result<&str, String> {
     Ok(id)
 }
 
+/// An API service id from the PC's own provider list (`deepseek_api`, ...).
+/// The same narrow shape [`crate::plain_errors::manner_change_body`] gives a
+/// personality id: 1-64 characters, lowercase letters, digits, `_`, `-`. What a
+/// provider MEANS is still the PC's business.
+pub(crate) fn provider_id(provider: &str) -> Result<&str, String> {
+    let id = provider.trim();
+    let shape = (1..=64).contains(&id.len())
+        && id.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
+    if !shape {
+        return Err("That is not an API service this PC offers.".to_string());
+    }
+    Ok(id)
+}
+
+/// The body of one apply. With no provider it is byte-for-byte the body every
+/// preset click has always sent (`{"preset": "<id>"}`); the Cloud row adds the
+/// ONE provider id and nothing else (2026-10-27).
+pub(crate) fn model_apply_body(
+    preset: &str,
+    provider: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::Map::new();
+    body.insert("preset".into(), serde_json::json!(preset));
+    if let Some(provider) = provider {
+        body.insert("provider".into(), serde_json::json!(provider_id(provider)?));
+    }
+    Ok(serde_json::Value::Object(body))
+}
+
+/// The body of one escalate change: ONE boolean, so a caller cannot smuggle a
+/// lane, a provider or a "yes" for one turn into a stored setting.
+pub(crate) fn cloud_escalate_body(on: bool) -> serde_json::Value {
+    serde_json::json!({ "on": on })
+}
+
+/// [`hud_cloud_escalate`]'s reading: 2xx object passed on; a missing route says
+/// so; every other refusal is the backend's own sentence.
+pub(crate) fn cloud_escalate_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| "Jarvis answered, but not in a way this app can read.".to_string());
+    }
+    if missing(status, body) {
+        return Err(CLOUD_ESCALATE_MISSING.to_string());
+    }
+    Err(backend_refusal(status, body))
+}
+
 /// What the PC has to offer: `GET /api/work` (`jarvis_presets`).
 ///
 /// Quickbar and Settings both draw it. Read-only - no stale-link hold, nothing
@@ -126,7 +194,8 @@ pub async fn get_focus_presets(app: AppHandle) -> Result<serde_json::Value, Stri
     presets_answer(status, &body)
 }
 
-/// The ONE action: `POST /api/work/apply {"preset": "<id>"}`.
+/// The ONE action: `POST /api/work/apply {"preset": "<id>"}` - and the ONE
+/// optional `provider` the Cloud row adds.
 ///
 /// Nothing is approved here. The backend starts exactly one named lane on
 /// demand and raises the existing `switch_model` ask card; the answer is the
@@ -135,8 +204,10 @@ pub async fn get_focus_presets(app: AppHandle) -> Result<serde_json::Value, Stri
 pub async fn apply_focus_preset(
     app: AppHandle,
     preset: String,
+    provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let preset = preset_id(&preset)?;
+    let body = model_apply_body(preset, provider.as_deref())?;
     if app.state::<crate::stream::StreamState>().link().stale {
         return Err(STALE.to_string());
     }
@@ -144,13 +215,39 @@ pub async fn apply_focus_preset(
     let response = jarvis_client(Some(APPLY_TIMEOUT))?
         .post(format!("{base}{FOCUS_PRESETS_APPLY_PATH}"))
         .headers(jarvis_headers(&app)?)
-        .json(&serde_json::json!({ "preset": preset }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| backend_unreachable(&e, &base))?;
     let status = response.status().as_u16();
-    let body = response.text().await.unwrap_or_default();
-    apply_answer(status, &body)
+    let text = response.text().await.unwrap_or_default();
+    apply_answer(status, &text)
+}
+
+/// The HUD Presets menu's escalate switch (2026-10-27):
+/// `POST /api/work/cloud-escalate {"on": true|false}`.
+///
+/// ONE boolean. The PC is the decider: ON is a loosening and raises its ONE
+/// `change_own_config` card (so this can wait as long as an apply), OFF is
+/// instant. Held on a stale link like every other write (rule 4). Nothing is
+/// stored or decided in this window - the answer is the PC's, and the page
+/// draws the checkbox from a REFETCH of the PC's own contract.
+#[tauri::command]
+pub async fn hud_cloud_escalate(app: AppHandle, on: bool) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(STALE.to_string());
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPLY_TIMEOUT))?
+        .post(format!("{base}{CLOUD_ESCALATE_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&cloud_escalate_body(on))
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    cloud_escalate_answer(status, &text)
 }
 
 #[cfg(test)]
@@ -211,5 +308,80 @@ mod tests {
         assert!(preset_id("").is_err());
         assert!(preset_id("bad\nid").is_err());
         assert!(preset_id(&"x".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn no_provider_sends_exactly_the_body_every_preset_click_sent_before() {
+        // 2026-10-27: the provider field is additive, and an older call must
+        // produce byte-for-byte the body it always did - no `provider` key at
+        // all, not a null.
+        let body = model_apply_body("coding", None).expect("a real preset");
+        assert_eq!(body, serde_json::json!({ "preset": "coding" }));
+        assert!(body.get("provider").is_none());
+    }
+
+    #[test]
+    fn the_cloud_row_carries_the_one_provider_it_was_given() {
+        let body = model_apply_body("cloud", Some("deepseek_api")).expect("a real provider");
+        assert_eq!(
+            body,
+            serde_json::json!({ "preset": "cloud", "provider": "deepseek_api" })
+        );
+        // Trimmed, like the preset id.
+        assert_eq!(
+            model_apply_body("cloud", Some("  groq_api ")).unwrap()["provider"],
+            serde_json::json!("groq_api")
+        );
+    }
+
+    #[test]
+    fn an_unusable_provider_id_never_reaches_the_network() {
+        assert!(provider_id("deepseek_api").is_ok());
+        assert!(provider_id("").is_err());
+        assert!(provider_id("DeepSeek").is_err());
+        assert!(provider_id("bad id").is_err());
+        assert!(provider_id("bad\nid").is_err());
+        assert!(provider_id(&"x".repeat(65)).is_err());
+        assert!(model_apply_body("cloud", Some("bad/id")).is_err());
+    }
+
+    #[test]
+    fn the_escalate_command_sends_one_boolean_and_nothing_else() {
+        // The whole point of `hud_cloud_escalate`: a stored setting, so the
+        // body cannot carry a lane, a provider or a one-turn "yes".
+        assert_eq!(cloud_escalate_body(true), serde_json::json!({ "on": true }));
+        assert_eq!(
+            cloud_escalate_body(false),
+            serde_json::json!({ "on": false })
+        );
+        let body = cloud_escalate_body(true);
+        assert_eq!(body.as_object().map(|object| object.len()), Some(1));
+        assert_eq!(CLOUD_ESCALATE_PATH, "/api/work/cloud-escalate");
+    }
+
+    #[test]
+    fn the_escalate_answer_is_the_pcs_own_and_a_missing_route_says_so() {
+        let got = cloud_escalate_answer(200, r#"{"ok":true,"on":true}"#).expect("the PC's answer");
+        assert_eq!(got["on"], serde_json::json!(true));
+        // A 409 refusal is the PC's sentence, never a made-up success.
+        let refused = cloud_escalate_answer(
+            409,
+            r#"{"ok":false,"changed":false,"error":"the card was refused"}"#,
+        )
+        .unwrap_err();
+        assert!(
+            refused.to_lowercase().contains("the card was refused"),
+            "{refused}"
+        );
+        // An older backend, and a 200 that is not an object.
+        assert_eq!(
+            cloud_escalate_answer(404, "{}").unwrap_err(),
+            CLOUD_ESCALATE_MISSING
+        );
+        assert_eq!(
+            cloud_escalate_answer(503, r#"{"available":false}"#).unwrap_err(),
+            CLOUD_ESCALATE_MISSING
+        );
+        assert!(cloud_escalate_answer(200, "[]").is_err());
     }
 }
