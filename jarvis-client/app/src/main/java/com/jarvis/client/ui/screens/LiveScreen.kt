@@ -49,7 +49,6 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalRadii
 import com.jarvis.client.voice.BargeIn
-import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveMicGate
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.VoiceSession
@@ -173,10 +172,9 @@ private fun LiveFacePane(face: LiveFace, modifier: Modifier = Modifier) {
  *   camera switch appears only when the PC says it is ready - it is off until
  *   the 12 GB graphics card is in and passes the photo test.
  * - The Live extras (the owner's decisions of 2026-09-28): which microphone
- *   it listens through (a Bluetooth headset's is preferred), what the
- *   headset button does, and text shared with "Talk about this in Live" -
- *   held here as a "Shared text" chip and sent, tagged "shared" (outside
- *   text), only when the owner taps Send.
+ *   it listens through (a Bluetooth headset's is preferred), and text shared
+ *   with "Talk about this in Live" - held here as a "Shared text" chip and
+ *   sent, tagged "shared" (outside text), only when the owner taps Send.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -488,13 +486,16 @@ fun LiveScreen(
                 }
             }
 
-            // What the owner should know while Live is on: App lock ends it
-            // (the review's #3), and interrupting by voice needs an echo
-            // canceller on this phone and the PC's voice check.
+            // What the owner should know while Live is on: which microphone is
+            // in use, App lock ends it (the review's #3), and interrupting by
+            // voice needs an echo canceller on this phone and the PC's voice
+            // check. The long headset-button explanation that used to open this
+            // plate was removed on the owner's request of 2026-10-26 ("get rid
+            // of the long explanation on jarvis live"): the button still does
+            // the same things, it is just not explained on screen any more.
             if (on) {
                 val notes = buildList {
                     mic?.let { add(it) }
-                    add(LiveExtras.HEADSET_HINT)
                     if (security.appLock) {
                         add(
                             if (security.liveEnd == LiveEnd.SCREEN_LOCK) {
