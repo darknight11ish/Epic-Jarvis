@@ -231,12 +231,18 @@ jobs:
           msi="dist/jarvis-desktop_${VERSION}_x64_en-US.msi"
           msi_args=()
           if [ -f "$msi" ] && [ -f "$msi.sig" ]; then msi_args=(--msi "$msi"); fi
+          # "What changed?", from the repository's own changelog (2026-10-26).
+          # This is the SAME text the chat answers read back through
+          # jarvis_quick.py, so the two cannot say different things.
+          notes=$(node scripts/release-notes.mjs \
+            --version "$VERSION" --commit "$GITHUB_SHA" --branch "$GITHUB_REF_NAME")
+          printf '%s\n' "$notes" > dist/notes.txt
           node scripts/updater-manifest.mjs \
             --version "$VERSION" \
             --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" \
             --nsis "dist/jarvis-desktop_${VERSION}_x64-setup.exe" \
             ${msi_args[@]+"${msi_args[@]}"} \
-            --notes "Jarvis Desktop ${VERSION}, built from commit ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Install it from Settings -> Updates; nothing installs on its own." \
+            --notes "$notes" \
             --out dist/latest.json
           cat dist/latest.json
 
@@ -252,8 +258,12 @@ jobs:
         run: |
           set -euo pipefail
           short="${GITHUB_SHA::7}"
+          # The same notes `latest.json` carries (the notes file was written by
+          # the step above), then the three lines that only belong on the
+          # release page. One source, so the page and the app cannot disagree.
+          changes=$(cat dist/notes.txt)
           notes=$(printf '%s\n' \
-            "Jarvis Desktop **$VERSION**, from commit \`$short\` on \`$GITHUB_REF_NAME\`." \
+            "$changes" \
             "" \
             "Already installed and signed? Settings -> Updates -> Check now, then Install. Jarvis never installs an update on its own." \
             "" \

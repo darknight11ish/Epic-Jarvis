@@ -3297,6 +3297,24 @@ wipe memory, the taint table is in memory only (a backend restart clears it),
 the card has 180 seconds, and no real UIA window or Playwright page has been
 driven in this container - the wiring is unit-proven only.
 
+**Updates in chat are desktop-only for starting, and the phone keeps its own
+update card** (2026-10-26; JARVIS-API section 158). "Is there an update?" and
+"what changed?" are answered to any client from the public release manifest,
+but a message from the phone carries no `desktop` field (the two facts the
+answer needs - the version running and whether this build can verify a
+download - are the Tauri shell's, `update.rs` `desktop_chat_facts`), so the
+phone's reply says it can only check the PC's build from the PC's app and
+points at **Platform checks**, the phone's own update card
+(`net/UpdateCheck.kt`, `platform/UpdateChecker.kt`), where the owner downloads
+the APK and Android's own installer asks for the tap. Starting is PC-only for a
+reason, not by omission: the update patches THIS PC's backend folder and
+replaces THIS PC's signed executable, and the phone cannot perform either; the
+card is in `jarvis_owner_check.PC_ONLY_ACTIONS`, so a phone Approve gets the
+standard `pc_only` 403 with nothing changed rather than a card that promises an
+install nothing would do. No route is added, so `tools/check_parity.py` has
+nothing new to classify; the phone's own check-and-install screen already
+exists and is unchanged.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

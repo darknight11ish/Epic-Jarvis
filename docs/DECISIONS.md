@@ -3697,6 +3697,93 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     layout itself is pinned to the real desktop JavaScript at 1e-6 by the
     generated fixture and `GalaxyPictureTest.kt`; that is a test, not a run on
     a phone.
+## 2026-10-26 — Jarvis can talk about an update in chat, and start one only through ONE card
+
+  * **The owner asked, in their own words:** *"can jarvis talk about an update
+    if theres one availabale and the changes? and start the update process for
+    me?"* - and then *"if i ask in chat"*. Two questions and one action, in the
+    window the owner already talks to Jarvis in.
+  * **Who answers, and why it is split.** The Tauri shell is the only party
+    that knows which version is running and whether this build can verify a
+    download (it owns `update.rs` and the signed release). So both chat paths
+    the app owns add an optional top-level `desktop` field -
+    `{"version": "0.2.320", "can_update": true}` - to the `/api/chat` body, in
+    Rust after the page's field whitelist, so no page can set it. The Python
+    fast path (`backend/jarvis_quick.py`, no model) reads it and answers from
+    the SAME public manifest the app's updater reads
+    (`desktop-latest/latest.json`): no report of the running build, a build
+    with no update key, a failed check, the newest version, a development build
+    ahead of the release page, or an update available - each with its own
+    sentence, and "what changed" quotes the release's own notes, never an
+    invented list. An empty notes field says the release does not say; a gap of
+    more than one version says the notes cover only that release.
+  * **The changes have a machine-readable source now.** The release workflow
+    writes `latest.json`'s `notes` (and the release body) from
+    `jarvis-desktop/scripts/release-notes.mjs`: the `changelog.d/` fragments,
+    one summary sentence each, newest first, capped at 20 - and the rolled
+    `CHANGELOG.md` bullets only when a roll has emptied the folder, never both
+    at once (mixing them would put six weeks of already-shipped changes into
+    one build's notes). Until this, that field was one sentence naming the
+    commit, so Settings -> Updates showed nothing worth reading. **Honest
+    limit:** the desktop version is `major.minor.<run number>` and moves far
+    more often than the changelog's numbered versions, so a bullet that was in
+    an earlier desktop build can appear again after a roll. The text says
+    "from the changelog" and the chat answer says which release the notes are
+    for; it is a list of recorded changes, not a promise of the exact delta
+    between two builds.
+  * **Starting it is ONE card and nothing else.** "Update Jarvis" raises one
+    approval card, action `desktop_update`, through `jarvis_gate.check` - tier
+    `ask` written into `jarvis-framework.toml`, added to
+    `jarvis_owner_check.PC_ONLY_ACTIONS` (only this PC can approve it, and
+    Windows Hello comes first), and listed on the **What asks first** page in
+    "Jarvis's own settings, memory and voice" with no switch, so it can never
+    be loosened to run without asking. `backend/test_asks_first.py` caught that
+    row missing on the first pass - the page promises every action a card can
+    name, and that is exactly the kind of gap the feature audit exists for. The card names both halves, the version, the
+    restart and the pace, and says nothing is downloaded, installed or changed
+    before the yes. The owner's Approve goes through the same
+    `decide_approval` every card uses (stale-link refusal, App lock, Windows
+    Hello); `commands.rs` reads the answered card's own action from the queue
+    it already holds BEFORE sending the decision, and only for that action
+    does it call `update.rs` `run_approved_update`: a fresh check, then the
+    SAME `update_both` the Settings button runs - backend first, then the
+    signed release, then a restart. A deny, a timeout, a stale link, a locked
+    PC or an unreadable card starts nothing, and the HUD window gained no
+    update command (`capabilities/hud.json` is unchanged): the progress it
+    shows arrives pushed from Rust, as system lines in the chat.
+  * **Why this improves the gate rather than widening it - and what it does
+    NOT close.** The self-improvement audit's finding S3 was that the desktop
+    updater was the one self-modification path outside the gate: a plain
+    command with no gate call, no Windows Hello and no audit line. The
+    CHAT-STARTED path now has all three - a gate card, PC-only means Windows
+    Hello, and the approvals row is the audit line - and its card is the only
+    thing that starts an install ("do it now" in a chat message changes
+    nothing). **The Settings button is untouched and is still a direct
+    `update_both` call with only its own in-window question, no gate card, no
+    Windows Hello and no approvals row.** S3 is therefore improved for the new
+    path and still true for the old one; closing it for the Settings button is
+    a separate decision the owner has not been asked for, and this change does
+    not pretend otherwise.
+  * **Both apps.** The desktop answers and starts. The phone is deliberately
+    one-sided (recorded in `docs/ARCHITECTURE.md` §8): a phone message carries
+    no `desktop` field, so its reply points at **Platform checks**, the phone's
+    own update card, where the owner downloads the APK and Android's installer
+    needs the tap. The card is PC-only, so a phone Approve gets the standard
+    `pc_only` 403 with nothing changed. No route is added,
+    `tools/check_parity.py` has nothing new to classify, and the phone's own
+    check-and-install is unchanged.
+  * **Proven by:** `backend/test_update_chat.py` (the phrasings and
+    near-misses, every state's own sentence, exactly one card and no card in
+    every other state, the card's words, PC-only + ask, the twin, and the
+    manifest URL equal to `tauri.conf.json`'s),
+    `jarvis-desktop/tests/update-chat.mjs` (the HUD draws the shell's words as
+    system lines and holds no update command), `jarvis-desktop/tests/
+    release-notes.mjs` (the notes quote the record and invent nothing), the
+    existing Rust tests including the new `chat_facts`/`is_update_card` ones,
+    and the three two-file checks. **Not proven here:** a real signed release
+    installed by the card - the updater's own installer path was not run in
+    this container, and that is the owner's field test, never a pass.
+>>>>>>> 69371df40 (Updates in chat: talk about one, and start it only through one card)
 
 ## 2026-10-27 — a reminder may carry one action, and opening is never a card
 

@@ -673,6 +673,12 @@ def t_the_patch_and_the_lists():
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing referee.patch wrote.
              "secret-handoff.patch",
+             # update-in-chat.patch (2026-10-26): ONE hunk in jarvis_gate.py
+             # that appends `desktop_update` to the END of _NO_RULE_FROM_DENIAL,
+             # after uncensored-optins.patch's own last entry - it adds no tier
+             # row, no _RISK row and no _TOOL_ACTIONS line, so it rewrites
+             # nothing referee.patch's hunks anchor on.
+             "update-in-chat.patch",
              "gate-action-name.patch", "tutorials.patch", "readpage.patch",
              "chatbot-limits.patch", "chatbot-limits-hud.patch",
              "gate-risk-rows.patch", "accounts.patch",

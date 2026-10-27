@@ -282,6 +282,13 @@ enable_reading_tool       = "ask"
 # remembers the answer itself (tool_updates.json), not this line.
 check_tool_updates        = "ask"
 modify_own_code           = "ask"        # additional gate — see [self_modification]
+# Updating Jarvis itself from chat (2026-10-26; `jarvis_quick.py`'s
+# `desktop_update` card, run by `jarvis-desktop/src-tauri/src/update.rs`).
+# Always "ask": it replaces the executable and patches the backend folder, so
+# it must never become a standing yes. It is ALSO in
+# jarvis_owner_check.PC_ONLY_ACTIONS, which adds Windows Hello and refuses any
+# device but this PC whatever this line says.
+desktop_update            = "ask"
 post_to_external_service  = "never"
 open_public_tunnel        = "never"      # see [security].allow_public_tunnel
 

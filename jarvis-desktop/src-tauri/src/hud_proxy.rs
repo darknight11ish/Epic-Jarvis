@@ -116,6 +116,11 @@ pub fn allowed_get(path: &str) -> Option<String> {
 /// The body of `POST /api/chat` the HUD may send: only the fields the page
 /// itself sends, each only in its own shape. Anything else is left out, so
 /// a script in the page cannot use this to send fields the page never does.
+///
+/// `desktop` is deliberately NOT among them: the shell adds its own build's
+/// facts in [`hud_chat`], after this whitelist, so a page cannot tell the
+/// backend it is a different version than it is (`update.rs`
+/// `desktop_chat_facts`, 2026-10-26).
 pub fn chat_payload(body: &serde_json::Value) -> Result<serde_json::Value, String> {
     let body = body
         .as_object()
@@ -269,7 +274,13 @@ pub async fn hud_chat(
     body: serde_json::Value,
     on_event: Channel<String>,
 ) -> Result<(), String> {
-    let payload = chat_payload(&body)?;
+    let mut payload = chat_payload(&body)?;
+    // This build's own facts, added here and never taken from the page (see
+    // `chat_payload`): the update answers in the backend need the version
+    // that is really running and whether it can verify a download.
+    if let Some(map) = payload.as_object_mut() {
+        map.insert("desktop".into(), crate::update::desktop_chat_facts(&app));
+    }
     let cancel = app.state::<HudChatState>().0.begin();
     let base = jarvis_base(&app);
     let headers = jarvis_headers(&app)?;

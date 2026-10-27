@@ -4,5 +4,5 @@
   "module": "jarvis_picture_card",
   "install": "handler",
   "replaces_patch": "picture-card.patch",
-  "stack_order": 140
+  "stack_order": 141
 }

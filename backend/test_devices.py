@@ -560,6 +560,13 @@ def t_the_hunk_comes_before_every_token_ok():
                                 "progress.patch", "tutorials.patch", "topics.patch", "referee.patch",
                                 "tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
                                 "secret-handoff.patch",
+                                # update-in-chat.patch (2026-10-26): ONE hunk in
+                                # jarvis_gate.py that appends `desktop_update` to
+                                # the END of _NO_RULE_FROM_DENIAL, after
+                                # uncensored-optins.patch's own last entry. No
+                                # tier row, no _RISK row, no _TOOL_ACTIONS line,
+                                # and it rewrites nothing devices.patch wrote.
+                                "update-in-chat.patch",
                                 # gate-action-name.patch (2026-10-03) rewrites one line
                                 # inside jarvis_gate.py's action_for_tool() and leaves
                                 # devices.patch's register_approval_key lines alone.

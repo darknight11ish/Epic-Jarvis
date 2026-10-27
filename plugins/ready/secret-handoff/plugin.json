@@ -4,5 +4,5 @@
   "module": "jarvis_secret_handoff_wiring",
   "install": "handler",
   "replaces_patch": "secret-handoff.patch",
-  "stack_order": 152
+  "stack_order": 153
 }

@@ -1458,6 +1458,24 @@ $PATCHES = @(
     # is changed - the safe failure this script already has. A tree that
     # differs on purpose can skip the patch and paste the four lines by hand;
     # plugins/loader/README.md prints them.
+    # --- updates in chat (2026-10-26, update-in-chat.patch) -------------------
+    # "Is there an update?", "what changed in the update?" and "update Jarvis"
+    # (the owner's request; docs/JARVIS-API.md section 158). The two questions
+    # are answered from the same release manifest the app's own updater reads,
+    # and starting one raises ONE card (`desktop_update`, tier "ask", PC only
+    # with Windows Hello in jarvis_owner_check.PC_ONLY_ACTIONS) that the desktop
+    # shell's own update.rs then runs - nothing is downloaded before the yes.
+    # ONE hunk in jarvis_gate.py: the action joins the "a no is not a standing
+    # rule" set, at the END of the list, right after uncensored-optins.patch's
+    # own last entry, which is where every patch that adds an entry puts it (see
+    # the note on chatbot-limits.patch above). So it goes after
+    # uncensored-optins.patch and BEFORE gate-touches.patch, which
+    # backend/test_gate_touches.py requires to be the last patch writing
+    # jarvis_gate.py. No route, no new module and no settings line: the module
+    # (jarvis_quick.py) and the action's [autonomy.tiers] line are shipped whole
+    # in this repository, so this patch only puts the action's name in the
+    # gate's own table, where a "no" on that one card stops proposing a rule.
+    'update-in-chat.patch'
     # gate-touches.patch (2026-10-10). THE GATE READ THE CARD, NOT THE ACTION.
     # Its first rule - the one above the tier table, that stops anything
     # rewriting the policy or the gate itself - searched the whole PROMPT it
