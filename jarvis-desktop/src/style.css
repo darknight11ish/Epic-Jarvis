@@ -483,13 +483,17 @@ html[data-state="approval"] .reactor::after {
   gap: 6px;
   height: 26px;
   padding: 0 10px;
-  border-radius: var(--radius-chip);
+  /* The HUD's .chip (jarvis_hud.html:300-304): 2-3 px plate, mono 10 px,
+     uppercase, .08em tracking. No 999 px pill (owner, 2026-10-27). */
+  border-radius: 3px;
   border: 1px solid var(--accent-dim);
   background: var(--accent-faint);
   color: var(--accent-text);
-  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   white-space: nowrap;
   transition:
     border-color 200ms var(--ease),
@@ -510,10 +514,14 @@ html[data-state="approval"] .reactor::after {
   font-weight: 400;
 }
 
+/* A model id keeps its own case ("qwen3:8b", not "QWEN3:8B") - only the
+   tier word beside it is uppercased with the chip. */
 .route-model {
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-2xs);
   font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
   opacity: 0.92;
 }
 
@@ -546,7 +554,10 @@ html[data-state="approval"] .reactor::after {
   height: 26px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 8px;
+  /* The HUD's plate radius (`.rail-toolbar-btn`, jarvis_hud.html:951-957):
+     the bar's second row is a row of plates, not a row of pills (owner,
+     2026-10-27). */
+  border-radius: 3px;
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
@@ -556,31 +567,31 @@ html[data-state="approval"] .reactor::after {
     border-color 140ms var(--ease);
 }
 
+/* Line glyphs, like every glyph on the HUD's rail.
+
+   The HUD draws its glyphs on a 24-unit grid at stroke-width 1.8 and shows
+   them at 14 px, so a line on screen is 1.8 x 14/24 = 1.05 px wide. Every
+   glyph in this bar is drawn on a 16-unit grid (the bar's own drawing
+   system), so the CSS stroke is tuned per DISPLAY size to land on that same
+   1.05 px: 1.2 x 14/16 = 1.05 for these 14 px utility glyphs, and 1.05 x
+   16/16 = 1.05 for the 16 px mode-row glyphs below. That is what "the same
+   line weight" means; copying the raw 1.8 here would render 1.58 px and
+   read heavier than the HUD. */
 .icon-button svg {
   width: 14px;
   height: 14px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-/* "What can I say?" is a text question mark rather than a drawn icon: it is
-   a question, not a picture, and 13 px bold is the smallest size that stays
-   legible without turning the bar's compact toolbar into a row of words. */
-.sayable-mark {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-#pin svg,
-#mic svg,
-#voice-auto svg {
-  fill: currentColor;
-  stroke: none;
-}
+/* The "?" help button and the filled #pin are gone (owner, 2026-10-27), and
+   with them every FILLED glyph in the bar: Voice and Auto were silhouettes
+   whose paths only read as a drawing when filled, so index.html now draws
+   both as line glyphs on the same 16-unit grid as the rest. Nothing here
+   overrides fill or stroke for a chip any more - one drawing language. */
 
 /* Recording reuses the same pressed-state accent every other toggled
    icon-button already gets ([aria-pressed="true"], just above) - one less
@@ -615,10 +626,14 @@ html[data-state="approval"] .reactor::after {
   border-color: var(--hairline);
 }
 
+/* The HUD's "this local thing is on" language (jarvis_hud.html:222-225):
+   ice text and an ice-edged border. It is deliberately NOT the old glow, and
+   NOT red - red is the HUD's stop/recording colour (#hud-stop, the mic while
+   recording), so a working Live or Watch session must never wear it. */
 .icon-button[aria-pressed="true"] {
   color: var(--accent);
   background: var(--accent-faint);
-  border-color: var(--accent-dim);
+  border-color: var(--border-accent);
 }
 
 .hint {
@@ -1103,16 +1118,6 @@ html[data-state="error"] .pulse {
   margin: 0 0 10px;
   font-size: var(--text-xs);
   color: var(--text);
-}
-
-.primer-chats {
-  margin: 4px 0 8px;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.chat-ended-note {
-  margin-left: 8px;
 }
 
 /* --------------------------------------------------------------------------
@@ -2416,116 +2421,14 @@ html[data-state="approval"] .pulse {
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   The primer
+   The primer (removed 2026-10-27)
    --------------------------------------------------------------------------
-   What the bar can do, shown when the bar is doing nothing. It replaces a
-   four-hotkey strip that lived in the card footer and was therefore invisible
-   until the user had already done the thing the hotkeys were for.
+   The "Things you can say" panel, its tappable sayable list, its note-app
+   rows and its palette hint button all left with the "?" door (owner's
+   decision, 2026-10-27). Nothing else in the bar or the command palette
+   opened it, so the markup, the JS that filled it and these rules went too.
+   The same words are still in Settings' Brain tab, "Tutorials and the FAQ".
    -------------------------------------------------------------------------- */
-
-.primer {
-  padding: 12px 16px 13px;
-  border-top: 1px solid var(--hairline);
-}
-
-.primer-list {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-/* A chord is one unit, so the keys share a cell rather than the grid pulling
-   Alt, Shift and S into three columns of their own. */
-.primer-list li {
-  display: grid;
-  grid-template-columns: 11.5em 1fr;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.primer-keys {
-  white-space: nowrap;
-}
-
-/* A combination the OS refused. Said in words, not implied by a colour: the
-   alternative is a key chip that looks exactly like the working ones and does
-   nothing when pressed. */
-.primer-unbound {
-  margin-left: 6px;
-  font-family: var(--font-ui);
-  font-size: var(--text-2xs);
-  color: var(--bad-text);
-  white-space: nowrap;
-}
-
-.primer-list kbd,
-.primer-list code {
-  padding: 1px 5px;
-  border: 1px solid var(--hairline);
-  border-radius: 5px;
-  background: var(--surface-raised);
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  color: var(--text);
-}
-
-.primer-foot {
-  margin: 11px 0 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--hairline);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  color: var(--text-faint);
-}
-
-/* "Things you can say" (sayable.js): a tappable line per sentence. A
-   <button>, not a link or a plain row, because it does something on click -
-   fills #prompt, never sends - and a button says that to a screen reader
-   without extra markup. */
-.sayable-list {
-  display: grid;
-  gap: 4px;
-  margin: 0 0 10px;
-  padding: 0;
-  list-style: none;
-}
-
-.sayable-item {
-  display: block;
-  width: 100%;
-  padding: 5px 9px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    color 140ms var(--ease),
-    border-color 140ms var(--ease),
-    background 140ms var(--ease);
-}
-
-.sayable-item:hover,
-.sayable-item:focus-visible {
-  color: var(--text);
-  border-color: var(--hairline);
-  background: rgb(var(--sheen-rgb) / 0.05);
-}
-
-.sayable-foot {
-  margin-top: 2px;
-  padding-top: 8px;
-  border-top: 1px solid var(--hairline);
-  font-size: var(--text-xs);
-  color: var(--text-faint);
-}
 
 /* --------------------------------------------------------------------------
    The command palette (palette-ui.js, palette.js)
@@ -2540,32 +2443,6 @@ html[data-state="approval"] .pulse {
    answer cannot squeeze the rows to nothing.
    -------------------------------------------------------------------------- */
 
-.palette-hint-row {
-  margin: 0 0 10px;
-}
-
-.palette-hint {
-  padding: 4px 10px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition:
-    color 140ms var(--ease),
-    border-color 140ms var(--ease),
-    background 140ms var(--ease);
-}
-
-.palette-hint:hover,
-.palette-hint:focus-visible {
-  color: var(--text);
-  border-color: var(--border-accent);
-  background: rgb(var(--sheen-rgb) / 0.05);
-}
-
 .palette {
   display: flex;
   flex-direction: column;
@@ -2579,9 +2456,9 @@ html[data-state="approval"] .pulse {
   display: none;
 }
 
-/* While the palette is open it is the surface: the primer and the card below
-   are still in the stack, and both would otherwise push the rows out of the
-   window at the 720px clamp. */
+/* While the palette is open it is the surface: the card below is still in
+   the stack and would otherwise push the rows out of the window at the 720px
+   clamp. */
 .shell[data-palette="open"] .stack {
   max-height: 180px;
   overflow-y: auto;
@@ -2784,9 +2661,9 @@ html[data-state="approval"] .pulse {
   display: none;
 }
 
-/* While the drawer is open it is the surface: the primer and any answer card
-   below are still in the stack, and both would otherwise push the rows out of
-   the window at the 720px clamp. Same rule the palette uses. */
+/* While the drawer is open it is the surface: any answer card below is still
+   in the stack and would otherwise push the rows out of the window at the
+   720px clamp. Same rule the palette uses. */
 .shell[data-clipboard="open"] .stack {
   max-height: 140px;
   overflow-y: auto;
@@ -3114,9 +2991,10 @@ html[data-state="approval"] .pulse {
 .jarvis-live-actions button[hidden] {
   display: none;
 }
-#jarvis-live-toggle[aria-pressed="true"] {
-  color: var(--bad);
-}
+/* Live is ON while it is working, not stopping: it takes the same ice
+   pressed state as every other mode (owner, 2026-10-27). The red that used
+   to be here is the HUD's stop/recording colour and stays reserved for it -
+   see the dot on Live's own strip below. */
 /* The Live button says "Live" beside its icon (the review: an unlabelled
    icon that only turned red). */
 .icon-button.live-toggle {
@@ -3589,13 +3467,17 @@ thead .st-cell {
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--border-accent);
-  border-radius: var(--radius-chip);
+  /* Same plate family as the route badge and the mode chips (owner,
+     2026-10-27): 3 px, mono, never a 999 px pill. The words stay the PC's
+     own preset name, so no uppercase here. */
+  border-radius: 3px;
   background: var(--surface-1);
   color: var(--text);
   font: inherit;
-  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3864,12 +3746,12 @@ thead .st-cell {
   min-width: 0;
 }
 
-/* A mode chip: 16px icon + one visible word, the same pill family as the
-   route badge next to it. The word is aria-hidden because each button's
-   accessible name is its own existing one (an aria-label, or the sr-only
-   label main.js rewrites) - the label here is for the eye, not a second name.
-   At rest the chip is a faint wash so the row reads as five controls, not as
-   loose words; pressed uses the bar's existing accent treatment. */
+/* A mode chip: 16px line glyph + one visible word, drawn as the HUD's flat
+   plate (`.rail-toolbar-btn`, jarvis_hud.html:951-957) instead of a pill:
+   3 px corners and the raised plate colour, not a white wash. The word is
+   aria-hidden because each button's accessible name is its own existing one
+   (an aria-label, or the sr-only label main.js rewrites) - the label here is
+   for the eye, not a second name. */
 .icon-button.mode-chip {
   display: inline-flex;
   align-items: center;
@@ -3877,29 +3759,41 @@ thead .st-cell {
   width: auto;
   height: 28px;
   padding: 0 9px;
-  border-radius: var(--radius-chip);
-  background: rgb(var(--sheen-rgb) / 0.045);
+  border-radius: 3px;
+  background: var(--surface-2);
   border-color: var(--border);
 }
 
+/* 1.05 x 16/16 = the HUD's rendered 1.05 px line (see .icon-button svg). */
 .icon-button.mode-chip svg {
   width: 16px;
   height: 16px;
+  stroke-width: 1.05;
 }
 
+/* The plate's `border-color: var(--border)` above is later in this file than
+   the generic pressed rule and wins at the same specificity (0,2,0), which
+   would leave a pressed mode with a neutral edge. The owner's decision of
+   2026-10-27 wants the HUD's ice edge on a pressed chip, so say it here. */
+.icon-button.mode-chip[aria-pressed="true"] {
+  border-color: var(--border-accent);
+}
+
+/* The HUD's label type (`.hud-label`, jarvis_hud.html:153-156): mono, 10 px,
+   uppercase, tracked. `textContent` is unchanged, so the words a test reads
+   are still Voice / Hey Jarvis / Live / Watch / Incognito. */
 .chip-label {
+  font-family: var(--font-mono);
   font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
-/* A pressed mode gets the bar's existing "this control is active" treatment
-   (the [aria-pressed="true"] rule further up) plus one soft glow, so the
-   active mode is visible from across the desk instead of only by colour. */
-.icon-button.mode-chip[aria-pressed="true"] {
-  box-shadow: 0 0 14px -6px var(--accent-dim);
-}
+/* The old pressed rule added a soft glow here. The owner's decision of
+   2026-10-27 removed it: pressed is the HUD's ice colour + ice-edged border
+   only (the [aria-pressed="true"] rule above). */
 
 /* Temporary chat is a state of the whole chat, not a mode that tints the
    bar: it keeps the pressed pill but the bar's own dashed outline (the
@@ -3915,25 +3809,9 @@ thead .st-cell {
   border-left: 1px solid var(--border);
 }
 
-/* The one documented keyboard shortcut the bar has (Esc hides it, the same
-   command the close button calls). A badge, not a second button: it takes no
-   focus and no click, and the button's own title still names the key. */
-.key-badge {
-  display: grid;
-  place-items: center;
-  min-width: 24px;
-  height: 18px;
-  padding: 0 4px;
-  margin-left: 2px;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  background: var(--surface-1);
-  color: var(--text-faint);
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  line-height: 1;
-}
+/* The bar has no keycap badge any more: the Esc chip left with the pin and
+   the "?" (owner, 2026-10-27). Esc still hides the bar; the close button's
+   own tooltip is where that key is named now. */
 
 /* ── The primary action: the submit keycap on the input row ──────────────── */
 
@@ -3960,7 +3838,6 @@ thead .st-cell {
   .reactor,
   .reactor::after,
   .utility-cluster,
-  .key-badge,
   #submit-hint {
     border-color: ButtonBorder;
     forced-color-adjust: auto;

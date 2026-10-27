@@ -77,31 +77,37 @@ check("buildSayableList never sends: no invoke/fetch/submit in its own body", ()
     + "what tapping it does");
 });
 
-/* ── The bar: replaces the 10 rows, points at Settings -> Shortcuts ──────── */
+/* ── The bar: the primer left with its door (owner's decision, 2026-10-27) ─ */
 
-check("index.html's primer holds #sayable-list, and no <kbd> hotkey chips remain", () => {
+check("the bar's primer is gone: no #sayable-list, no note-prefix chips in index.html", () => {
   const html = page("index.html");
-  assert.match(html, /id="sayable-list"/, "the primer has nowhere for sayable.js to render into");
-  const primer = html.slice(html.indexOf('id="primer"'), html.indexOf("</section>",
-    html.indexOf('id="primer"')));
-  assert.doesNotMatch(primer, /data-hotkey=/, "a kbd-chip row is still hardcoded in the primer");
-  // The note-app prefixes are not keyboard shortcuts, and stay: they have no
-  // other home in either app today.
+  assert.doesNotMatch(html, /id="sayable-list"/, "the removed list still has a place to render into");
+  assert.doesNotMatch(html, /id="primer"/, "the removed primer is still in the page");
+  assert.doesNotMatch(html, /data-note-target=/, "a note-prefix chip is still hardcoded in the page");
+  // The note-prefix FEATURE the primer explained still works: main.js parses
+  // the prefixes and the bar's chip names the target (bar-primer.mjs owns that
+  // shape). This file only holds that the words and the list are not orphaned.
+  const main = page("main.js");
   for (const target of ["logseq", "joplin", "obsidian"]) {
-    assert.match(primer, new RegExp(`data-note-target="${target}"`), target);
+    assert.match(main, new RegExp(`target: "${target}"`), `${target} prefix is no longer parsed`);
   }
 });
 
-check("main.js renders the list at startup and fills #prompt on a tap, never sends", () => {
+check("main.js no longer renders the sayable list - nothing points at the removed box", () => {
   const main = page("main.js");
-  assert.match(main, /import\s*\{\s*buildSayableList\s*\}\s*from\s*"\.\/sayable\.js"/);
-  assert.match(main, /renderSayableList\(\)/, "the list is never rendered");
-  const fn = main.slice(main.indexOf("function renderSayableList"));
-  const body = fn.slice(0, fn.indexOf("\n}"));
-  assert.match(body, /dom\.prompt\.value\s*=\s*sentence/, "a tap does not fill #prompt");
-  assert.doesNotMatch(body, /invoke\(|stream_chat|\.send\(/, "a tap does more than fill the box");
-  assert.doesNotMatch(main, /function syncPrimerKeys/, "the old hardcoded-vs-live check is dead "
-    + "code now the chips are gone");
+  // The removal is described in comments (that is how the file keeps its
+  // history), so look at the CODE only: strip block and line comments first.
+  const code = main.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  assert.doesNotMatch(code, /buildSayableList/, "a dead import of the removed list is left behind");
+  assert.doesNotMatch(code, /renderSayableList|renderPaletteHint/, "a dead renderer for the removed list is left behind");
+  assert.doesNotMatch(code, /syncPrimerKeys|primerOpen|dom\.primer/, "dead primer code is left behind");
+  assert.match(main, /removed with its "\?" door/, "the file no longer records why the primer left");
+  // The words are still reachable: desktop-help.js reuses sayable.js's own
+  // HELP_TITLE/HELP_BODY for Settings' Brain tab, "Tutorials and the FAQ".
+  const help = page("desktop-help.js");
+  assert.match(help, /from "\.\/sayable\.js"/, "desktop-help no longer reuses the words");
+  assert.match(help, /HELP_TITLE/);
+  assert.match(help, /HELP_BODY/);
 });
 
 check("settings.html's Shortcuts card is where the footer line points", () => {

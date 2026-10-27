@@ -1,23 +1,30 @@
 /**
- * The quickbar opens compact (owner, 2026-10-19: "the jarvis bar is huge now, i
- * want it back to its compact size").
+ * The bar's primer is GONE (owner's decision, 2026-10-27), and the bar is
+ * still compact. This file used to pin the "Things you can say" panel, its
+ * "?" door, its disclosure/aria-expanded contract and its compact default.
  *
- * What happened: the primer ("What you can do here / Things you can say") was
- * the empty state shown on every summon. Its served sayable list is ~11 rows,
- * so the bar grew to 577 px instead of its 80 px input row. It is useful help;
- * it is not what the bar should be every time it opens.
+ * The owner removed the door and the panel from the bar, so those checks
+ * cannot describe the product any more. They are replaced by the NEW truth,
+ * not weakened:
+ *   1. neither the "?" button nor the panel is in the DOM (not hidden -
+ *      absent), and neither is anything that only lived inside it;
+ *   2. no JS that filled it survives (no syncPrimer, renderSayableList,
+ *      renderPaletteHint, primerOpen, dom.primer or dom.sayableToggle), so
+ *      nothing can throw on a missing #primer;
+ *   3. no CSS addresses the removed panel, its list, its palette hint, its
+ *      chat-ended note or the removed Esc badge;
+ *   4. the bar still opens at its 80px input row, and its height still comes
+ *      from the one measurement every surface calls;
+ *   5. the help and palette the panel used to carry are still reachable, by
+ *      the doors that really exist: Settings' Brain tab reuses sayable.js's
+ *      HELP_TITLE/HELP_BODY, and "/" in an empty box still opens the palette;
+ *   6. Esc still hides the bar - through the document keydown handler, which
+ *      is what the removed badge only *named*;
+ *   7. the note-prefix feature the panel explained still works: the note chip
+ *      is on the bar and main.js still parses the prefixes.
  *
- * These checks are structural and behavioural, like bar-chrome.mjs, and for the
- * same reason: there is no browser in CI. They pin the facts that make the
- * compact default real and announce it correctly:
- *   1. the primer starts hidden in the markup;
- *   2. a visible control opens it, and that control is a disclosure: it carries
- *      aria-expanded, never aria-pressed, and its state is the panel's actual
- *      visibility - a card or busy surface that hides the panel also makes the
- *      button say "collapsed", even while primerOpen is still true (the
- *      standing feature audit flagged the old aria-pressed for this);
- *   3. main.js's one visibility function keeps it closed unless the owner
- *      opened it, and every summon resets that.
+ * Structural, like bar-chrome.mjs, and for the same reason: there is no
+ * browser needed to hold the shape of a file.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -31,6 +38,8 @@ const read = (p) => readFileSync(p, "utf8");
 const indexHtml = read(join(SRC, "index.html"));
 const mainJs = read(join(SRC, "main.js"));
 const styleCss = read(join(SRC, "style.css"));
+const paletteUi = read(join(SRC, "palette-ui.js"));
+const desktopHelp = read(join(SRC, "desktop-help.js"));
 
 const fails = [];
 const check = (name, fn) => {
@@ -38,193 +47,92 @@ const check = (name, fn) => {
   catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
 };
 
-/** The text of one function or listener block, by marker. */
-function blockFor(source, marker, span = 900) {
-  const at = source.indexOf(marker);
-  assert.notEqual(at, -1, `${marker} is not in the file`);
-  return source.slice(at, at + span);
-}
+/** Ids that were the primer's, or existed only inside it. */
+const PRIMER_IDS = [
+  "primer",
+  "sayable-toggle",
+  "sayable-list",
+  "palette-hint",
+  "earlier-chats-primer",
+  "chat-ended-note",
+  "note-targets-line",
+];
 
-/** The whole source of one named function, closing brace included. */
-function functionSource(source, name) {
-  const opening = source.match(new RegExp(`function\\s+${name}\\s*\\([^)]*\\)\\s*\\{`));
-  assert.ok(opening, `main.js has no function ${name}`);
-  const start = opening.index;
-  let depth = 0;
-  for (let i = start; i < source.length; i += 1) {
-    if (source[i] === "{") depth += 1;
-    else if (source[i] === "}") {
-      depth -= 1;
-      if (depth === 0) return source.slice(start, i + 1);
-    }
+check("neither the \"?\" door nor the primer panel is in the DOM", () => {
+  for (const id of PRIMER_IDS) {
+    assert.doesNotMatch(indexHtml, new RegExp(`id="${id}"`),
+      `#${id} is still in index.html - the owner removed the primer and its door (2026-10-27)`);
   }
-  throw new Error(`${name} never closes`);
-}
-
-/** One `<button>` element, so `aria-pressed` on a neighbour cannot satisfy it. */
-function elementFor(html, id) {
-  const at = html.indexOf(`id="${id}"`);
-  assert.notEqual(at, -1, `#${id} is not in index.html`);
-  const start = html.lastIndexOf("<button", at);
-  assert.notEqual(start, -1, `#${id} is not a <button>`);
-  const end = html.indexOf("</button>", at);
-  assert.notEqual(end, -1, `#${id} never closes`);
-  return html.slice(start, end + "</button>".length);
-}
-
-/** The block that starts with `starter` after `marker`, braces balanced. */
-function blockStartingAt(source, marker, starter) {
-  const markerAt = source.indexOf(marker);
-  assert.notEqual(markerAt, -1, `${marker} is not in the file`);
-  const start = source.indexOf(starter, markerAt);
-  assert.notEqual(start, -1, `${starter} is not after "${marker}"`);
-  let depth = 0;
-  for (let i = start; i < source.length; i += 1) {
-    if (source[i] === "{") depth += 1;
-    else if (source[i] === "}") {
-      depth -= 1;
-      if (depth === 0) return source.slice(start, i + 1);
-    }
-  }
-  throw new Error(`${starter} never closes`);
-}
-
-check("the primer starts hidden in the markup", () => {
-  assert.match(indexHtml, /<section class="primer" id="primer"[^>]*\bhidden\b/,
-    "the primer must start hidden, or the bar opens huge on every summon");
+  assert.doesNotMatch(indexHtml, /class="primer"|class="primer-|data-note-target/,
+    "a primer-only element is still in index.html");
+  assert.doesNotMatch(indexHtml, /class="key-badge"/,
+    "the Esc key badge is still in the bar - it left with the \"?\" and the pin");
+  assert.doesNotMatch(indexHtml, /id="pin"/,
+    "the pin button is still in the bar");
 });
 
-check("the bar has a named, disclosure-style door to the primer", () => {
-  const button = elementFor(indexHtml, "sayable-toggle");
-  assert.match(button, /aria-expanded="false"/,
-    "the button must start collapsed, because the bar starts compact");
-  assert.doesNotMatch(button, /aria-pressed/,
-    "a disclosure button must not carry aria-pressed");
-  assert.match(button, /aria-controls="primer"/,
-    "the button must say which panel it controls");
-  assert.match(button, /title="What can I say\?"/,
-    "the button's tooltip must keep its visible name");
-  assert.match(button, /<span class="sr-only">What can I say\?<\/span>/,
-    "the ? button needs a name for a screen reader");
-});
-
-check("syncPrimer computes the final visibility once and reports it", () => {
-  const block = functionSource(mainJs, "syncPrimer");
-  assert.match(block, /const hidden = busy \|\| !primerOpen;/,
-    "syncPrimer must combine its busy check with the owner's primerOpen flag once");
-  assert.match(block, /dom\.primer\.hidden = hidden;/,
-    "the primer's hidden property must be that one computed state");
-  assert.match(block, /dom\.sayableToggle\.setAttribute\("aria-expanded", String\(!hidden\)\);/,
-    "aria-expanded must follow the computed visibility, not primerOpen alone");
-  assert.doesNotMatch(block, /aria-pressed/,
-    "the ? button is a disclosure: it must not set aria-pressed");
-});
-
-/** A dom stub just wide enough for syncPrimer, with one optional busy surface. */
-function primerDom(busySurface) {
-  const attrs = {};
-  return {
-    attrs,
-    card: { hidden: busySurface !== "card" },
-    attention: { hidden: busySurface !== "attention" },
-    approval: { hidden: busySurface !== "approval" },
-    parked: { hidden: busySurface !== "parked" },
-    attachments: { hidden: busySurface !== "attachments" },
-    primer: { hidden: null },
-    sayableToggle: { setAttribute(name, value) { attrs[name] = value; } },
-  };
-}
-
-/** Runs the real syncPrimer, lifted from main.js, against that stub. */
-function runSyncPrimer(primerOpen, busySurface = null) {
-  const dom = primerDom(busySurface);
-  new Function("dom", "primerOpen", `${functionSource(mainJs, "syncPrimer")}
-return syncPrimer();`)(dom, primerOpen);
-  return dom;
-}
-
-check("syncPrimer announces the visibility a screen reader actually gets", () => {
-  const closed = runSyncPrimer(false);
-  assert.equal(closed.primer.hidden, true, "an unopened primer must be hidden");
-  assert.equal(closed.attrs["aria-expanded"], "false",
-    "an unopened primer must announce itself collapsed");
-
-  const opened = runSyncPrimer(true);
-  assert.equal(opened.primer.hidden, false, "an opened primer must be visible");
-  assert.equal(opened.attrs["aria-expanded"], "true",
-    "a visible primer must announce itself expanded");
-
-  for (const surface of ["card", "attention", "approval", "parked", "attachments"]) {
-    const busied = runSyncPrimer(true, surface);
-    assert.equal(busied.primer.hidden, true,
-      `a visible ${surface} must keep the primer hidden`);
-    assert.equal(busied.attrs["aria-expanded"], "false",
-      `a visible ${surface} must announce the primer collapsed even though primerOpen is true`);
+check("no JS that filled the primer survives", () => {
+  for (const gone of ["function syncPrimer", "function renderSayableList",
+                      "function renderPaletteHint", "let primerOpen",
+                      "dom.primer", "dom.sayableToggle",
+                      "buildSayableList", "buildPaletteHint"]) {
+    assert.ok(!mainJs.includes(gone),
+      `main.js still carries \`${gone}\` - it can only throw or do nothing now`);
   }
+  // The chat-ended WORDS still reach a screen reader; only the visible span
+  // that lived in the primer is gone.
+  assert.match(mainJs, /announce\(line\)/, "the chat-ended line is no longer announced at all");
+  assert.match(mainJs, /const line = endedPrivate \? PRIVATE_ENDED : endedTemporary \? ENDED_TEMPORARY : ENDED_SAVED;/,
+    "the chat-ended words were lost with the primer instead of moving to the announcer");
+});
 
-  for (const dom of [closed, opened]) {
-    assert.ok(!("aria-pressed" in dom.attrs),
-      "syncPrimer must never set aria-pressed on the disclosure button");
+check("no CSS addresses the removed panel or the removed badge", () => {
+  for (const gone of [".primer", ".sayable-", ".palette-hint", ".key-badge"]) {
+    assert.ok(!styleCss.includes(gone),
+      `style.css still styles \`${gone}\`, which no element uses any more`);
   }
 });
 
-check("the ? button toggles the primer and resizes the bar", () => {
-  const block = blockFor(mainJs, '// "What can I say?" - the door to the "Things you can say" primer.');
-  assert.match(block, /addEventListener\("click"/,
-    "the ? button must have a click handler");
-  assert.match(block, /primerOpen = !primerOpen;/,
-    "the handler must toggle primerOpen");
-  assert.match(block, /syncWindowHeight\(\)/,
-    "the bar must re-measure after the panel opens or closes");
-  assert.match(functionSource(mainJs, "syncWindowHeight"), /syncPrimer\(\);/,
-    "the click's resize path must run syncPrimer, or the announced state goes stale");
+check("the bar still opens at its 80px input row", () => {
+  assert.match(styleCss, /--bar-height:\s*80px/, "the bar's height constant moved");
+  assert.match(styleCss, /\.shell\s*\{[^}]*max-height:\s*720px/s,
+    "the shell's 720px clamp moved");
+  assert.match(mainJs, /function syncWindowHeight\(\)/,
+    "the one height measurement every surface calls is gone");
 });
 
-check("the extracted click handler really toggles and re-measures", () => {
-  const handlerSource = blockStartingAt(
-    mainJs,
-    '// "What can I say?" - the door to the "Things you can say" primer.',
-    "if (dom.sayableToggle)",
-  );
-  let registered = null;
-  let resizes = 0;
-  const dom = {
-    sayableToggle: {
-      addEventListener(type, handler) {
-        assert.equal(type, "click", "the ? button must listen for clicks");
-        registered = handler;
-      },
-    },
-  };
-  const state = new Function(
-    "dom",
-    "syncWindowHeight",
-    "primerOpen",
-    `${handlerSource}
-return { open: () => primerOpen };`,
-  )(dom, () => { resizes += 1; }, false);
-
-  assert.equal(typeof registered, "function", "the ? button never registered a click handler");
-  registered();
-  assert.equal(state.open(), true, "the first click must open the primer");
-  registered();
-  assert.equal(state.open(), false, "the second click must close it again");
-  assert.equal(resizes, 2, "each click must re-measure the bar through syncWindowHeight");
+check("the help words still have a home outside the bar", () => {
+  // The removed primer's "Things you can say" list is sayable.js's HELP_BODY;
+  // the Brain's Tutorials and the FAQ reuse it verbatim.
+  assert.match(desktopHelp, /import \{ HELP_BODY, HELP_TITLE \} from "\.\/sayable\.js"/,
+    "the FAQ no longer reuses the sayable help, so the removed panel's words are gone from the app");
 });
 
-check("every summon starts compact", () => {
-  const block = blockFor(mainJs, 'listen("focus-input"');
-  assert.match(block, /primerOpen = false;/,
-    "a new summon must reset the panel, not inherit the last one");
+check("the palette still has its keyboard door", () => {
+  assert.match(paletteUi, /event\.key === "\/"/,
+    "typing \"/\" no longer opens the palette, and the removed Find button was its other door");
+  assert.match(mainJs, /mountPalette\(\{/,
+    "the palette is no longer mounted, so \"/\" has nothing to open");
 });
 
-check("the ? mark has its own small style", () => {
-  assert.match(styleCss, /\.sayable-mark\s*\{[^}]*font-size:\s*13px;/s,
-    "the ? needs the compact toolbar size");
+check("Esc still hides the bar, through the handler rather than the badge", () => {
+  const at = mainJs.indexOf('document.addEventListener("keydown", (event) => {\n  if (event.key === "Escape")');
+  assert.notEqual(at, -1, "main.js no longer has the document-level Escape handler");
+  const block = mainJs.slice(at, at + 900);
+  assert.match(block, /dismiss\(\)/, "Escape no longer dismisses the bar");
+  assert.match(mainJs, /await invoke\("hide_quickbar"\)/,
+    "dismiss no longer calls hide_quickbar");
+});
+
+check("the note-prefix feature the panel explained still works", () => {
+  assert.match(indexHtml, /id="note-chip"/, "the live note chip left with the primer");
+  assert.match(mainJs, /function syncNoteChip\(\)/, "main.js no longer mirrors the note prefix");
+  assert.match(mainJs, /parseNotePrefix\(dom\.prompt\.value\)/,
+    "the note prefix is no longer parsed, so #log/#joplin/#obs would stop filing");
 });
 
 if (fails.length) {
   console.log(`\n${fails.length} failed`);
   process.exit(1);
 }
-console.log("\nall passed");
+console.log("\nthe primer is gone and the bar is still compact");

@@ -24,41 +24,52 @@ const check = async (name, fn) => {
 
 const OFFLINE = { connected: false, error: "connection refused. Is jarvis_hud.py running?" };
 
-/* ── The primer: the window says what it can do before you use it ────────── */
+/* ── The bar keeps no help panel; the help has one home in the Brain ─────── */
 
-await check("a compact bar opens what it can do on request", async () => {
-  // The bar opens at its input row; the primer is behind the "?" button
-  // (owner, 2026-10-19: "the jarvis bar is huge now, i want it back to its
-  // compact size"). The first-run help is still there, one click away, and
-  // is the only in-app explanation of the note-app prefixes.
-  const page = await K.open(browser, base, "index.html", {});
-  assert.equal(await page.locator("#primer").isVisible(), false,
-    "the bar opens with the full help primer instead of its compact input row");
-  await page.locator("#sayable-toggle").click();
-  await page.waitForTimeout(250);
-  assert.equal(await page.locator("#primer").isVisible(), true,
-    "the ? button does not open what the bar can do");
-  const text = await page.locator("#primer").innerText();
-  for (const key of ["Set a timer for 10 minutes.", "What did I miss?", "right-click the "
-    + "Jarvis icon", "#log", "#joplin"]) {
-    assert.ok(text.includes(key), `the primer never mentions ${key}`);
-  }
+await check("a compact bar opens at its input row and carries no help primer", async () => {
+  // The owner's decision of 2026-10-27 removed the "?" door and its primer:
+  // the bar keeps only the ask box, the model/route row, the mode chips, the
+  // gear and the close. The first-run help still exists where Settings sends
+  // it - the Brain's "Tutorials and the FAQ" - and the note-prefix words are
+  // what the bar no longer explains anywhere.
+  const page = await K.open(browser, base, "index.html", {}, { width: 750, height: 300 });
+  const got = await page.evaluate(() => ({
+    barH: Math.round(document.getElementById("bar").getBoundingClientRect().height),
+    primer: document.querySelector("#primer"),
+    door: document.querySelector("#sayable-toggle"),
+    sayable: document.querySelector(".sayable-item"),
+    helpLink: Boolean(document.querySelector("#primer .palette-hint")),
+  }));
   await page.close();
+  assert.equal(got.barH, 80, `the bar opens ${got.barH}px tall, not its 80px input row`);
+  assert.equal(got.primer, null, "the primer is back in the bar");
+  assert.equal(got.door, null, "the \"?\" door is back in the bar");
+  assert.equal(got.sayable, null, "a sayable row is still rendered in the bar");
+  assert.equal(got.helpLink, false);
+  // The same words are reachable: the FAQ row reuses sayable.js's help
+  // verbatim (checked at the source so this does not need the whole Brain).
+  assert.match(read("src/desktop-help.js"), /import \{ HELP_BODY, HELP_TITLE \} from "\.\/sayable\.js"/,
+    "the Help/FAQ no longer carries the words the removed primer showed");
 });
 
-await check("tapping a sayable line fills the box and never sends", async () => {
+await check("the note-prefix help left with the primer, but the prefix still files", async () => {
+  // This check used to tap a sayable line. Both the sayable list and the
+  // note-prefix help lived in the primer; the feature they explained - typing
+  // "#log ..." - is still on the bar, and its live chip is what this pins now.
   const page = await K.open(browser, base, "index.html", {});
-  await page.locator("#sayable-toggle").click();
-  await page.waitForTimeout(250);
-  const items = page.locator(".sayable-item");
-  const first = await items.first().textContent();
-  await items.first().click();
-  const value = await page.locator("#prompt").inputValue();
-  assert.equal(value, first, "the tap did not fill the box with its own sentence");
+  await page.locator("#prompt").fill("#log buy milk");
+  await page.waitForTimeout(150);
+  const chip = await page.evaluate(() => {
+    const el = document.getElementById("note-chip");
+    return { hidden: el.hidden, target: el.dataset.target || "", text: el.textContent.trim() };
+  });
   const calls = await page.evaluate(() => window.__calls.map((c) => c[0]));
-  assert.ok(!calls.includes("stream_chat"),
-    "tapping a sayable line sent a turn instead of only filling the box");
   await page.close();
+  assert.equal(chip.hidden, false, "typing a note prefix no longer shows where the note goes");
+  assert.equal(chip.target, "logseq");
+  assert.match(chip.text, /Logseq/);
+  assert.ok(!calls.includes("stream_chat"),
+    "filling the box sent a turn instead of only showing the target");
 });
 
 await check("Settings -> Shortcuts names the hotkeys Rust actually binds", async () => {
@@ -153,7 +164,10 @@ await check("the route badge starts with no model name", async () => {
   const page = await K.open(browser, base, "index.html", {});
   assert.equal(await page.locator("#route-model").isVisible(), false,
     "the badge is asserting a model before the server has named one");
-  assert.equal(await page.locator("#route-tier").innerText(), "Local");
+  // innerText is the RENDERED text, and the plate family is uppercase now
+  // (owner, 2026-10-27) - the textContent is still "Local".
+  assert.equal(await page.locator("#route-tier").innerText(), "LOCAL");
+  assert.equal(await page.locator("#route-tier").textContent(), "Local");
   await page.close();
 });
 
