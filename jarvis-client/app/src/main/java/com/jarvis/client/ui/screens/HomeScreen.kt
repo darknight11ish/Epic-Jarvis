@@ -1274,7 +1274,6 @@ fun HomeScreen(
             FaceBlock(
                 state, actions, micLevel, speechLevel,
                 speechMouth = speechMouth,
-                showCaption = true,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
             VoiceBar(
@@ -1290,13 +1289,29 @@ fun HomeScreen(
                 // No face at all: the conversation takes the whole room, and
                 // there is no split, so no handle either. Nothing about the
                 // face is composed, so its frame loop does not run.
-                ConversationList(
-                    state = state,
-                    actions = actions,
-                    reply = reply,
-                    listState = listState,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
+                //
+                // The three Brain doors used to live inside the face's caption
+                // strip, so hiding the face took them away with it - and with
+                // them the Model door the owner asked for on 2026-10-27 ("the
+                // model name should be the button that opens the current-models
+                // menu"). They are drawn here as well as in FaceBlock, from the
+                // same composable, so the doors outlive the face.
+                Column(Modifier.weight(1f).fillMaxWidth()) {
+                    ModelDoorsRow(
+                        actions = actions,
+                        color = LocalChrome.current.textLo,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                    ConversationList(
+                        state = state,
+                        actions = actions,
+                        reply = reply,
+                        listState = listState,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                }
             } else {
                 Layout(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -1304,9 +1319,6 @@ fun HomeScreen(
                         FaceBlock(
                             state, actions, micLevel, speechLevel,
                             speechMouth = speechMouth,
-                            // A face made small keeps what little room it has for
-                            // itself and the lane, not for a caption.
-                            showCaption = !shrunk,
                             modifier = Modifier.layoutId(PANE_FACE),
                         )
 
@@ -2284,7 +2296,6 @@ private fun FaceBlock(
     micLevel: State<Float>,
     speechLevel: State<Float?>,
     speechMouth: (FloatArray) -> Boolean,
-    showCaption: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -2418,85 +2429,106 @@ private fun FaceBlock(
                 // 2026-10-25 for it to go: the navigation row's Brain button
                 // and the face tap (when the owner allows it) are the same
                 // door, and the caption was a second, redundant way in.
-                if (!showCaption) {
-                    Gap(6)
-                }
-                // The Galaxy, one tap from Home (the owner's request of
-                // 2026-10-11). ALWAYS drawn, not only while the face-tap is on:
-                // the owner may turn "tap the face opens the Brain" off without
-                // meaning to shut this door, and a door that disappears when a
-                // setting changes is the confusing part. It reuses the Brain's
-                // own "people-and-things" plate, so the "Hide memory lists and
-                // chat history" guard inside that plate is what decides whether
-                // names are shown: tapping while the lists are hidden opens the
-                // plate and the plate prompts ("Hidden. Tap Show and confirm it
-                // is you.") - this button adds no way around it.
-                if (showCaption) {
-                    Gap(2)
-                    // Three doors to three Brain plates, side by side and both
-                    // one tap from Home: the Galaxy ("people-and-things"), the
-                    // focus presets ("hardware") and the model list ("models").
-                    // Same shape, same tokens, one Row - so each is a
-                    // first-class neighbour rather than a row nobody notices.
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            "The Galaxy →",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = wellChrome.textLo,
-                            modifier = Modifier
-                                .clip(LocalRadii.current.insetShape)
-                                .pressable(onClick = actions.onOpenGalaxy)
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                        // Jarvis Presets, one tap from Home (the owner's ask of
-                        // 2026-10-26: "also i want a presets button easily
-                        // accessibler on the phone app"). It calls the SAME
-                        // action the More menu's "Jarvis Presets" row calls, so
-                        // it opens the one Brain Hardware plate where
-                        // FocusPresetsSection is drawn - the destination
-                        // OpenPlace names for "open focus presets". Navigation
-                        // only: it reads nothing, adds no route, and choosing a
-                        // preset still raises the contract's ONE approval card.
-                        // The More row stays, for anyone who looks there first.
-                        Text(
-                            "Presets →",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = wellChrome.textLo,
-                            modifier = Modifier
-                                .clip(LocalRadii.current.insetShape)
-                                .pressable(onClick = actions.onOpenPresets)
-                                // Read aloud as what it opens, not as an arrow.
-                                .semantics { contentDescription = "Jarvis presets" }
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                        // The model list, one tap from Home - the owner's ask of
-                        // 2026-10-27: the model name should be the button that
-                        // opens the current-models menu. The lane pill is the
-                        // first door (when the PC's status names a lane/model),
-                        // but this phone's PC sends neither, so the pill is not
-                        // drawn - this is the door that always exists. It calls
-                        // the same action the plain-word model errors use and
-                        // only navigates: switching or installing still raises
-                        // the plate's existing approval card.
-                        Text(
-                            "Model →",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = wellChrome.textLo,
-                            modifier = Modifier
-                                .clip(LocalRadii.current.insetShape)
-                                .pressable(onClick = actions.onOpenModelChoices)
-                                // Read aloud as what it opens, not as an arrow.
-                                .semantics { contentDescription = "Jarvis model" }
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                    }
-                    Gap(2)
-                }
+                Gap(2)
+                // The three doors live in [ModelDoorsRow] because the same row is
+                // drawn in TWO places on Home: here, under the lane pill, and in
+                // HomeScreen's `faceSize.hidden` branch above, so the doors outlive
+                // the face. It is deliberately not gated on a caption any more: a
+                // face made small (the keyboard shrinking it) used to take the row
+                // away, and that took the Model door the owner asked for on
+                // 2026-10-27 with it.
+                ModelDoorsRow(actions, color = wellChrome.textLo)
+                Gap(2)
             }
         }
+    }
+}
+
+/**
+ * The three doors to the Brain's plates: the Galaxy ("people-and-things"), the
+ * focus presets ("hardware") and the model list ("models"). One Row, one set of
+ * words, drawn in TWO places on Home:
+ *
+ *  - inside [FaceBlock], under the lane pill, whenever the face is drawn;
+ *  - in [HomeScreen]'s `faceSize.hidden` branch, directly above the
+ *    conversation, so the doors outlive the face.
+ *
+ * They used to live inside the face's caption strip, which was drawn only while
+ * the face kept its caption (a face made small by the keyboard lost it), so a
+ * small face and a Face size of Hidden both took the row away - and with them the
+ * door the owner asked for on 2026-10-27 ("the model name should be the button
+ * that opens the current-models menu"). This phone's PC sends no lane/model in
+ * GET /api/status, so the lane pill cannot be that button here; this door is
+ * what makes the ask true, so it may not depend on the face.
+ *
+ * The Galaxy door is drawn whether or not "tap the face opens the Brain" is on
+ * (the owner may turn that off without meaning to shut this door, and a door
+ * that disappears when a setting changes is the confusing part). It opens the
+ * Brain's own "people-and-things" plate, so the "Hide memory lists and chat
+ * history" guard inside that plate decides whether names are shown: tapping
+ * while the lists are hidden opens the plate and the plate prompts ("Hidden.
+ * Tap Show and confirm it is you.") - this button adds no way around it.
+ *
+ * Every door calls one existing action and only navigates - no route, no write,
+ * no card. Choosing a preset, switching a model or installing one still raises
+ * the plate's existing approval card.
+ *
+ * [color] is the face well's dark ink when the row is drawn inside the well, and
+ * the normal chrome ink when it is drawn outside it (the face-hidden branch).
+ */
+@Composable
+private fun ModelDoorsRow(
+    actions: HomeActions,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "The Galaxy →",
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            modifier = Modifier
+                .clip(LocalRadii.current.insetShape)
+                .pressable(onClick = actions.onOpenGalaxy)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+        // Jarvis Presets, one tap from Home (the owner's ask of 2026-10-26:
+        // "also i want a presets button easily accessibler on the phone app").
+        // It calls the SAME action the More menu's "Jarvis Presets" row calls, so
+        // it opens the one Brain Hardware plate where FocusPresetsSection is
+        // drawn - the destination OpenPlace names for "open focus presets".
+        // Navigation only: it reads nothing and adds no route. The More row stays,
+        // for anyone who looks there first.
+        Text(
+            "Presets →",
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            modifier = Modifier
+                .clip(LocalRadii.current.insetShape)
+                .pressable(onClick = actions.onOpenPresets)
+                // Read aloud as what it opens, not as an arrow.
+                .semantics { contentDescription = "Jarvis presets" }
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+        // The model list, one tap from Home - the owner's ask of 2026-10-27. It
+        // calls the same action the plain-word model errors use, and only
+        // navigates: switching or installing still raises the plate's existing
+        // approval card.
+        Text(
+            "Model →",
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            modifier = Modifier
+                .clip(LocalRadii.current.insetShape)
+                .pressable(onClick = actions.onOpenModelChoices)
+                // Read aloud as what it opens, not as an arrow.
+                .semantics { contentDescription = "Jarvis model" }
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
     }
 }
 
