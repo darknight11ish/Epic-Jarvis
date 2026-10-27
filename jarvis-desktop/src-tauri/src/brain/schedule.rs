@@ -2179,7 +2179,7 @@ mod tests {
             );
             let row = &hidden["jobs"][0];
             assert_eq!(row["hidden"], serde_json::json!(true));
-            assert_eq!(row["action"]["kind"].as_str().is_some(), true);
+            assert!(row["action"]["kind"].as_str().is_some());
             // Only the kind: the one payload key is gone altogether, so a button
             // built from this row has no target to open.
             let keys = row["action"].as_object().unwrap().len();
