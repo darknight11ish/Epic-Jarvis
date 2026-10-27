@@ -95,6 +95,16 @@ const STOP_PREFIX: &str = "jarvis-stop:";
 /// is the same word, and the two read as one control rather than two.
 pub(crate) const STOP_LABEL: &str = "Stop";
 
+/// The argv marker the Open button carries on a reminder that opens something
+/// (2026-10-27, the owner's request): the SAME job id only, never the address
+/// or the path. The PC reads the target back from its own answer and checks it
+/// again (`reminder_open.rs`), so a launch argument cannot choose what opens.
+const OPEN_PREFIX: &str = "jarvis-openjob:";
+
+/// The word on that button. "Open", never "Continue" or "Go": it says what
+/// happens before it happens, and it is the same word the HUD's own row uses.
+pub(crate) const OPEN_LABEL: &str = "Open";
+
 /// True when this exe is sitting in a cargo output directory rather than
 /// where an installer put it - `…\target\debug\jarvis-desktop.exe` or
 /// `…\target\release\…`.
@@ -633,12 +643,19 @@ pub fn decide_denied_at_startup(app: &AppHandle) {
 /// more, later, and needs no card (the owner's rule for a one-off). A stop is
 /// not one either: it answers nothing and changes nothing, taking this one
 /// notification away. Both buttons carry the job id only, never the words.
-pub fn notify_fired(app: &AppHandle, title: &str, body: &str, id: &str, label: &str) {
+pub fn notify_fired(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+    id: &str,
+    label: &str,
+    open: Option<&str>,
+) {
     if is_uninstalled_build() {
         crate::commands::notify(app, title, body);
         return;
     }
-    if let Err(e) = try_notify_fired(title, body, id, label) {
+    if let Err(e) = try_notify_fired(title, body, id, label, open) {
         crate::logfile::log(&format!(
             "[jarvis] snooze toast failed, falling back to a plain one: {e}"
         ));
@@ -655,7 +672,22 @@ pub fn notify_fired(app: &AppHandle, title: &str, body: &str, id: &str, label: &
 /// had gone off could only be snoozed or clicked through into the app, and
 /// **22 of the 22 "went off" toasts in the owner's own Windows store carried
 /// Snooze and no other action** - no dismiss, nothing to take it away.
-fn fired_xml(title: &str, body: &str, id: &str, label: &str) -> String {
+fn fired_xml(title: &str, body: &str, id: &str, label: &str, open: Option<&str>) -> String {
+    // A reminder that opens something (2026-10-27) gets ONE more button, before
+    // Snooze and Stop: it carries the job id only, and pressing it opens what
+    // the notice names - never anything else. It is drawn only when the PC's own
+    // answer says the target is still good (`brain/schedule.rs` `open_notice`),
+    // so a button that cannot work is never offered.
+    let open_action = match open {
+        Some(job) => format!(
+            r#"
+    <action content="{label}" arguments="{prefix}{id}" activationType="foreground"/>"#,
+            label = OPEN_LABEL,
+            prefix = OPEN_PREFIX,
+            id = escape_xml(job),
+        ),
+        None => String::new(),
+    };
     format!(
         r#"<toast activationType="foreground" launch="jarvis-open">
   <visual>
@@ -664,7 +696,7 @@ fn fired_xml(title: &str, body: &str, id: &str, label: &str) -> String {
       <text>{body}</text>
     </binding>
   </visual>
-  <actions>
+  <actions>{open_action}
     <action content="{label}" arguments="{prefix}{id}" activationType="foreground"/>
     <action content="{stop_label}" arguments="{stop_prefix}{id}" activationType="foreground"/>
   </actions>
@@ -676,11 +708,18 @@ fn fired_xml(title: &str, body: &str, id: &str, label: &str) -> String {
         id = escape_xml(id),
         stop_label = STOP_LABEL,
         stop_prefix = STOP_PREFIX,
+        open_action = open_action,
     )
 }
 
-fn try_notify_fired(title: &str, body: &str, id: &str, label: &str) -> windows::core::Result<()> {
-    let xml = fired_xml(title, body, id, label);
+fn try_notify_fired(
+    title: &str,
+    body: &str,
+    id: &str,
+    label: &str,
+    open: Option<&str>,
+) -> windows::core::Result<()> {
+    let xml = fired_xml(title, body, id, label, open);
     let doc = XmlDocument::new()?;
     doc.LoadXml(&HSTRING::from(xml))?;
     let toast = ToastNotification::CreateToastNotification(&doc)?;
@@ -748,11 +787,46 @@ pub fn snooze_detached(app: &AppHandle, id: &str) {
 /// because a change is refused while the link is stale.
 pub fn snooze_at_startup(app: &AppHandle) {
     let argv: Vec<String> = std::env::args().collect();
+    // An Open click arrives on the same launch path and must be answered FIRST:
+    // it acts (it opens a page or a file), where Snooze only sets a time.
+    if let Some(id) = open_id_from_argv(&argv) {
+        crate::logfile::log(&format!("[jarvis] Open reached from a cold start: {id}"));
+        open_detached(app, id);
+        return;
+    }
     let Some(id) = snooze_id_from_argv(&argv) else {
         return;
     };
     crate::logfile::log(&format!("[jarvis] Snooze reached from a cold start: {id}"));
     snooze_detached(app, id);
+}
+
+/// An Open click's job id out of a launch's argv - `None` for every other
+/// launch. The same `s`-and-ten-hex-digits id the other two take, and the same
+/// "the prefix must lead the argument" rule.
+pub fn open_id_from_argv(argv: &[String]) -> Option<&str> {
+    argv.iter()
+        .find_map(|a| a.strip_prefix(OPEN_PREFIX))
+        .filter(|id| crate::brain::schedule::valid_id(id))
+}
+
+/// Sends the open on its own task: the window is very likely not open when a
+/// toast button is pressed. It goes through the SAME command the HUD's Open
+/// button uses ([`crate::reminder_open::open_reminder_target`]), so both doors
+/// re-read the job and re-check the target in exactly one place - and both are
+/// held on a stale link, because opening is acting.
+pub fn open_detached(app: &AppHandle, id: &str) {
+    let app = app.clone();
+    let id = id.to_string();
+    tauri::async_runtime::spawn(async move {
+        let _ = link_came_up(&app).await;
+        if let Err(e) = crate::reminder_open::open_reminder_target(app.clone(), id).await {
+            // One sentence, in a toast: a click that did nothing would read as
+            // a broken button ("a silent failure looks like a broken feature",
+            // open_app.rs). The same words the HUD shows.
+            crate::commands::notify(&app, "Jarvis", &e);
+        }
+    });
 }
 
 /// A Stop click's job id out of a launch's argv - `None` for every other
@@ -926,6 +1000,7 @@ mod tests {
             "Jarvis: your timer is done.",
             "s0123456789",
             "Snooze 10 minutes",
+            None,
         );
         assert!(xml.contains(r#"<action content="Snooze 10 minutes" arguments="jarvis-snooze:s0123456789" activationType="foreground"/>"#));
         assert!(xml.contains(r#"<action content="Stop" arguments="jarvis-stop:s0123456789" activationType="foreground"/>"#));
@@ -936,6 +1011,54 @@ mod tests {
         // already rung once and must not start ringing now.
         assert!(!xml.contains("scenario="));
         assert!(!xml.contains("Looping"));
+    }
+
+    /// A reminder that opens something (2026-10-27): ONE more button, carrying
+    /// the job id only - never the address or the path - and it can approve
+    /// nothing. The target is named in the notice, so the owner reads what will
+    /// open BEFORE pressing it.
+    #[test]
+    fn a_reminder_that_opens_something_offers_an_open_button_with_the_id_only() {
+        let xml = fired_xml(
+            "Reminder",
+            "Open this invoice. This opens: https://example.com/invoice-42",
+            "s0123456789",
+            "Snooze 10 minutes",
+            Some("s0123456789"),
+        );
+        assert!(xml.contains(&format!(
+            r#"<action content="{OPEN_LABEL}" arguments="{OPEN_PREFIX}s0123456789" activationType="foreground"/>"#
+        )));
+        assert!(xml.contains("https://example.com/invoice-42"));
+        // Open, Snooze and Stop - and no fourth thing.
+        assert_eq!(xml.matches("<action ").count(), 3);
+        assert!(!xml.contains(r#"content="""#));
+        assert!(!xml.contains(DENY_PREFIX) && !xml.to_lowercase().contains("approve"));
+        // No open id, no Open button: the timer and alarm toasts are unchanged.
+        let plain = fired_xml("Timer done", "Done.", "s0123456789", "Snooze", None);
+        assert!(!plain.contains(OPEN_PREFIX));
+        assert_eq!(plain.matches("<action ").count(), 2);
+    }
+
+    #[test]
+    fn an_open_click_yields_one_job_id_and_nothing_else_does() {
+        let argv = vec![
+            "jarvis-desktop.exe".to_string(),
+            "jarvis-openjob:s0123456789".to_string(),
+        ];
+        assert_eq!(open_id_from_argv(&argv), Some("s0123456789"));
+        // Never a made-up id, and never one the prefix does not lead.
+        for bad in [
+            "jarvis-openjob:not-an-id",
+            "xjarvis-openjob:s0123456789",
+            "jarvis-openjob:",
+            "jarvis-snooze:s0123456789",
+            "https://example.com",
+            "C:\\Users\\pcadmin\\Pictures\\taxes.png",
+        ] {
+            let argv = vec!["jarvis-desktop.exe".to_string(), bad.to_string()];
+            assert_eq!(open_id_from_argv(&argv), None, "{bad}");
+        }
     }
 
     #[test]

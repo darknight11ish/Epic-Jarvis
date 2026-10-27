@@ -6114,8 +6114,11 @@ pub fn notify_user(app: AppHandle, title: Option<String>, body: String) {
 /// Rejects anything that is not a plain, well-formed http(s) URL.
 ///
 /// Links in the answer card are authored by a language model, so this is
-/// untrusted input on its way to a process spawn.
-fn validate_external_url(url: &str) -> Result<(), String> {
+/// untrusted input on its way to a process spawn. `pub(crate)` since
+/// 2026-10-27: a reminder's own `open-webpage` target is checked by the same
+/// function (`reminder_open.rs`), so there is ONE set of URL rules rather than
+/// two that can drift apart.
+pub(crate) fn validate_external_url(url: &str) -> Result<(), String> {
     if url.len() > 2_048 {
         return Err("refusing to open an implausibly long URL".to_string());
     }
@@ -6177,6 +6180,32 @@ pub fn open_external_url(url: String) -> Result<(), String> {
 
     #[cfg(all(unix, not(target_os = "macos")))]
     return spawn_opener("xdg-open", url);
+}
+
+/// Opens ONE FILE on this PC in whatever Windows has registered for it.
+///
+/// A reminder's own action (`jarvis_schedule`'s `open-file`) is the only caller.
+/// The path never comes from a page: it comes from the PC's own answer to
+/// `GET /api/schedule?id=`, after two checks - the folder allow-list when the
+/// reminder was saved AND again when the job was read, and
+/// [`crate::reminder_open`]'s extension allow-list at the moment of the tap. So
+/// this cannot become "start a program": `.lnk`, `.exe`, `.bat`, `.ps1`,
+/// `.html` and `.svg` never reach it.
+///
+/// `ShellExecuteExW` takes the path as ONE string and parses no shell, which is
+/// exactly why it is the right call here and `cmd /C start` is not.
+pub(crate) fn open_document(path: &str) -> Result<(), String> {
+    if path.is_empty() || path.chars().any(|c| c.is_control() || c == '"') {
+        return Err("that is not a file path Jarvis will hand to Windows".to_string());
+    }
+    if !std::path::Path::new(path).is_absolute() {
+        return Err("a file to open needs its whole path".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    return open_with_shell(path);
+
+    #[cfg(not(target_os = "windows"))]
+    Err("opening a file happens on your PC, not on this one.".to_string())
 }
 
 /// Hands a URL to the shell with `ShellExecuteExW`.

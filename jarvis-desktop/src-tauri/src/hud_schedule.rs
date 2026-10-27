@@ -48,6 +48,7 @@ pub async fn hud_schedule_add(
     time: Option<String>,
     repeat: Option<serde_json::Value>,
     list: Option<String>,
+    action: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     brain::require_link_live(&app)?;
     let body = hud_add_body(
@@ -59,6 +60,7 @@ pub async fn hud_schedule_add(
         time.as_deref(),
         repeat.as_ref(),
         list.as_deref(),
+        action.as_ref(),
     )?;
     post(&app, "/api/schedule/add", body).await
 }

@@ -72,6 +72,9 @@ pub mod proctree;
 pub mod prompt_coach;
 pub mod pyfind;
 pub mod reach;
+// A reminder's own action (2026-10-27): the ONE command that opens what a
+// reminder points at, taking the job's id and nothing else (reminder_open.rs).
+pub mod reminder_open;
 pub mod sandbox_exec;
 pub mod screen_work;
 pub mod selection;
@@ -949,6 +952,12 @@ pub fn run() {
             // routes the Brain uses, held on a stale link. HUD window only.
             hud_schedule::hud_schedule_add,
             hud_schedule::hud_schedule_act,
+            // A reminder's own action (2026-10-27, the owner's request): the
+            // Open button on a reminder that went off. The id ONLY - never a
+            // URL or a path from the page - so the PC reads the target back
+            // from its own answer (`GET /api/schedule?id=`) and checks it again
+            // at the moment of the tap. It opens nothing by itself.
+            reminder_open::open_reminder_target,
             // The HUD owner-secret hand-off card (2026-10-26): fill or cancel
             // ONE card with the token added in Rust. The page holds none and
             // its own POSTs stay refused; hud_proxy.rs still owns the read.
