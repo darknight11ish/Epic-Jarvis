@@ -1747,10 +1747,20 @@ def t_how_do_i_change_asks_the_same_question_as_where_do_i_change():
                    "how do i change my wifi password",
                    "Jarvis, how do i change my password",
                    "how do i change my password in chrome",
-                   "how do i change the layout presets",
-                   "how do i change the voice speed"):
+                   "how do i change the layout presets"):
         got = match(phrase)
         check(f'"{phrase}" is not hijacked by the feature list', got is None, got)
+    # THE ONE THE RULING MOVED (Q6 Step A, 2026-10-26). "voice speed" is a
+    # registry CHOICE_SETTING, not a feature row; the settings-name fallback
+    # now answers it with the real Settings place and a real phrase instead of
+    # handing it to the model. It is still NOT a feature answer, which is what
+    # this test is about.
+    got = match("how do i change the voice speed")
+    check('"how do i change the voice speed" reaches the settings registry, '
+          "not the feature list",
+          got is not None and got.name == "setting_explain"
+          and got.f.get("kind") == "choice"
+          and got.f.get("key") == "voice_speed", got)
     for phrase, fid in (("can i change the presets", "focus-presets"),
                         ("how can i adjust the presets", "focus-presets"),
                         ("is the prompt coach adjustable", "prompt-coach")):

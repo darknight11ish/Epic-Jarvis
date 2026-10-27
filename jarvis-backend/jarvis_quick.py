@@ -3865,18 +3865,21 @@ def _settings_adjust(s: str) -> Optional[Intent]:
             on, name = False, g[5]
         # THE PAGE-ONLY ANSWER IS DECIDED FIRST, ON THE SAME FILLER-TOLERANT
         # WORDS THE SWITCH MATCHER USES (2026-10-26). This guard used to be the
-        # exact `find_not_by_asking`, so one natural filler word defeated it:
+        # exact spoken lookup, so one natural filler word defeated it:
         # "turn off the windows hello for memory lists and chat history
         # setting" missed the page-only row, fell to `find_bool_setting_words`,
         # and that matcher read `chat_history` inside the SAME words - turning
         # chat-history retention off at once, with no card, for a switch this
-        # backend has no route for. `find_not_by_asking_words` strips the same
-        # filler the switch matcher strips, so the named refusal is what filler
-        # phrasings get, and it runs BEFORE any switch is resolved. No second
-        # exact check is needed below: the tolerant lookup is a superset.
-        dom_id = R.find_not_by_asking_words(name)
+        # backend has no route for. `page_only_asked` strips the same filler the
+        # switch matcher strips AND refuses when the sentence names ANY
+        # page-only row, so two of them ("the app lock and windows hello for
+        # memory lists and chat history") can no longer fall through to a switch
+        # either. It runs BEFORE any switch is resolved; no second exact check
+        # is needed below, because the tolerant lookup is a superset.
+        dom_id, mixed = R.page_only_asked(name)
         if dom_id is not None:
-            return Intent("settings_not_by_asking", {"dom_id": dom_id})
+            return Intent("settings_not_by_asking",
+                          {"dom_id": dom_id, "mixed": bool(mixed)})
         setting = R.find_bool_setting(name)
         if setting is None:
             # THE OWNER'S OWN WORDS FOR A REAL SWITCH (D5, the live campaign of
@@ -4145,12 +4148,58 @@ def _feature_context_ok(raw, explicit: bool = False) -> bool:
     return bool(explicit) or _feature_says_jarvis(raw)
 
 
+def _setting_guide_intent(target: str):
+    """The settings-registry answer for a question whose subject is no feature.
+
+    THE SETTINGS-NAME FALLBACK (Gemini principal-architect ruling Q6 Step A,
+    2026-10-26). `personality`, `voice speed` and `focus preset` are registry
+    CHOICE_SETTINGS rows, and `theme` / `hud layout` are desktop-only controls
+    inside a Settings card - none is a title or alias among the 140 catalogue
+    rows, so "how do i change the personality?" missed every fixed phrase and
+    reached the local model, which has no settings tool. When no feature
+    matched, the SAME sentence is tried against the registry's own names; a
+    hit answers here with the real Settings place and a real example phrase,
+    with no model turn and no card. A subject the registry does not own still
+    returns None, so an unknown name falls through exactly as before.
+
+    A page-only row comes back as the existing `settings_not_by_asking`
+    intent, so its refusal keeps one wording and one runner - including the
+    `mixed` flag that offers "ask for it separately" when the sentence named
+    another setting too.
+    """
+    if not target:
+        return None
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    try:
+        found = R.find_explain_setting(target)
+    except Exception:
+        return None
+    if not found:
+        return None
+    if found.get("kind") == "page":
+        return Intent("settings_not_by_asking",
+                      {"dom_id": found.get("dom_id"),
+                       "mixed": bool(found.get("mixed"))})
+    return Intent("setting_explain", found)
+
+
 def _feature_explain_intent(s: str, raw, target: str, explicit: bool = False):
     row = _feature_lookup_exact(target)
     if row is None and _feature_context_ok(raw, explicit):
         row = _feature_lookup(_feature_without_context(target))
     if row is not None:
         return Intent("feature_explain", {"id": row["id"]})
+    # NO FEATURE BY THAT NAME: try the settings registry (ruling Q6 Step A).
+    # The context word ("my settings", "Jarvis") is not part of a setting's
+    # name, so the cleaned subject is tried too - it is the same subject the
+    # feature lookup above was allowed to use loosely.
+    got = (_setting_guide_intent(_feature_without_context(target))
+           or _setting_guide_intent(target))
+    if got is not None:
+        return got
     # "I do not have that one" needs BOTH: the sentence said it is Jarvis's
     # own ("Jarvis", "here", "my settings", the feature guide) AND said the
     # word feature/option. A general "what is <something>" never receives
@@ -4165,9 +4214,10 @@ def _feature_change_intent(s: str, raw, target: str, explicit: bool = False):
     """The intent behind "can I change <feature>?" - resolved, never guessed.
 
     A FEATURE first (its five-label kind is what the answer is built from), then
-    a plain switch the registry already names exactly, then the honest unknown
-    answer under the same gate as every other fixed phrase: explicit Jarvis
-    context AND the word feature/option.
+    a plain switch the registry already names exactly, then the settings-name
+    fallback (CHOICE_SETTINGS and the desktop-only areas, ruling Q6 Step A),
+    then the honest unknown answer under the same gate as every other fixed
+    phrase: explicit Jarvis context AND the word feature/option.
     """
     row = _feature_lookup_exact(target)
     if row is not None:
@@ -4184,6 +4234,13 @@ def _feature_change_intent(s: str, raw, target: str, explicit: bool = False):
         if setting is not None:
             return Intent("feature_change",
                           {"key": setting.key, "name": setting.names[0]})
+    # NO FEATURE AND NO PLAIN SWITCH BY THAT NAME: the settings registry is
+    # the last thing tried before the honest unknown answer (ruling Q6 Step A),
+    # so "can I change the personality?" answers instead of reaching the model.
+    got = (_setting_guide_intent(_feature_without_context(target))
+           or _setting_guide_intent(target))
+    if got is not None:
+        return got
     if _feature_context_ok(raw, explicit) and (_feature_explicit(s) or explicit):
         return Intent("feature_unknown",
                       {"words": _feature_target(_feature_without_context(target))})
@@ -5745,12 +5802,23 @@ def _run_settings_not_by_asking(f: dict) -> Result:
 
     Nothing is changed, no card is raised and no model is used: the answer says
     where the switch really lives, so the owner is not left believing it was
-    done. See jarvis_settings_registry.NOT_BY_ASKING for the ten and why."""
+    done. See jarvis_settings_registry.NOT_BY_ASKING for the ten and why.
+
+    A MIXED SENTENCE gets one extra sentence (2026-10-26): when the same turn
+    also named a setting Jarvis CAN change, the refusal says so and asks for
+    that one separately - instead of silently dropping half of what the owner
+    said. It is appended only when the registry proves the second setting is
+    really named (`page_only_asked`'s `mixed` flag), so the plain refusal -
+    including every hyphenated and filler form - is byte-for-byte unchanged."""
     import jarvis_settings_registry as R
     dom_id = f.get("dom_id") or ""
     if not dom_id:
         return Result(SETTINGS_MISSING, "settings_not_by_asking")
-    return Result(R.not_by_asking_sentence(dom_id), "settings_not_by_asking")
+    said = R.not_by_asking_sentence(dom_id)
+    if f.get("mixed"):
+        said += (" (If you also want to change another setting, ask for it "
+                 "separately.)")
+    return Result(said, "settings_not_by_asking")
 
 
 def _run_settings_unknown() -> Result:
@@ -5956,6 +6024,22 @@ def _run_feature_change(f: dict) -> Result:
     return Result(str(out.get("words") or ""), "feature_change")
 
 
+def _run_setting_explain(f: dict) -> Result:
+    """The settings-registry answer to a how/where/explain question (Q6 Step A).
+
+    Read-only by construction: the words come from
+    `jarvis_settings_registry.explain_setting_words`, which only reads the
+    tables and never calls a setter. `setting_explain` is in READ_ONLY_INTENTS,
+    so it raises no card, changes nothing and cannot take back what "cancel
+    that" would.
+    """
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return Result(SETTINGS_MISSING, "setting_explain")
+    return Result(R.explain_setting_words(f), "setting_explain")
+
+
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
@@ -6040,6 +6124,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_feature_howto_setting(f)
     if n == "feature_change":
         return _run_feature_change(f)
+    if n == "setting_explain":
+        return _run_setting_explain(f)
     if n == "feature_switch":
         return _run_settings_bool({"key": f["key"], "on": f["on"]}, peer, local)
     if n == "feature_switch_refused":
@@ -6478,7 +6564,7 @@ READ_ONLY_INTENTS = frozenset({
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     "feature_change", "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",
-    "feature_unknown",
+    "feature_unknown", "setting_explain",
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
     "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",

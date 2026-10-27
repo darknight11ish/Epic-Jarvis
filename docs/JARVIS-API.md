@@ -21679,6 +21679,7 @@ grammar learned the rest of the questions a person actually asks:
 | "where is <feature>" / "where do I find" / "where do I change" | `feature_explain` | the same `where` line, plus the phone's own copy of the list |
 | "how do I turn on/off <feature>" / "enable/disable" / "how to" / "where do I" | `feature_howto` | the row's `where` and `asks`, the exact phrase that would change the ONE switch, and the current state |
 | "can I change <feature>" / "how do I change" / "is it adjustable" | `feature_change` (new) | which of the five owner-facing kinds it is, whether it has one switch, several or none, and the exact phrase or Settings place - **changing nothing** |
+| "how/where do I change <a setting's own name>" / "tell me about <a setting>" | `setting_explain` (new, 2026-10-26) | when NO feature title or alias matched: the settings registry's own name, its real Settings card and one real example phrase - or the page-only refusal. No model turn, no card, nothing changed |
 | "is <feature> on?" / "off" / "enabled" / "right now" / "what is the state of" | `feature_state` | the switch's real value, read from the module that owns it, or "I could not read it" |
 | "what features do you have?" / "list the features" | `features_list` | the 9 groups with real counts |
 | a group's name | `features_group` | that group's rows |
@@ -21688,6 +21689,21 @@ Every explain answer is assembled by one renderer (`jarvis_feature_guide.explain
 model turn and a fixed phrase cannot say different things. "Can I change it?" is read-only:
 it is in `jarvis_quick.READ_ONLY_INTENTS`, so "cancel that" never takes back something it
 did not do, and the test suite proves no `BoolSetting.set` runs for any of the 140 rows.
+
+**A SETTINGS NAME ANSWERS TOO (2026-10-26, ruling Q6 Step A).** Five names the owner uses are
+not catalogue titles: `personality`, `voice speed` and `focus preset` are
+`jarvis_settings_registry.CHOICE_SETTINGS` rows, and `theme` / `hud layout` are desktop-only
+controls inside the Appearance and "The big HUD window" Settings cards. "how do i change the
+personality?" therefore missed every fixed phrase and reached the local model (~2 s), which
+has no settings tool. When no feature title or alias matches, the same sentence is now tried
+against the registry's own names and answered on the same fast path (`setting_explain`): the
+`CHOICE_SETTINGS` three name their real card and one real `set ... to ...` phrase; the two
+desktop-only areas name their card and the `open ... settings` phrase and say plainly that
+they cannot be changed by asking. A page-only row still refuses FIRST, including hyphen,
+slash and filler forms and a sentence naming two of them - a page-only name is never a
+licence to change a switch whose words the sentence happens to contain. An unknown name
+still falls through to the model. `backend/test_setting_alias_phrasing.py` proves each of
+these, including that every example phrase the answer offers really routes.
 
 **The list learned two fields (2026-10-26).** `features/features.json` rows may carry
 `aliases` - the owner's other names for ONE feature, e.g. "customer support" for the row

@@ -2194,16 +2194,56 @@ NOT_BY_ASKING: dict = {
 }
 
 
-def find_not_by_asking(words: str) -> Optional[str]:
-    """The `SETTINGS_ROWS` id `words` names exactly and cannot be changed by
-    asking, or None. Exact names only - this is the SPOKEN grammar's lookup,
-    and a half-heard sentence must fall through rather than be answered as a
-    switch nobody named. The model's own wording uses the tolerant form below."""
-    bare = _bare(words)
+def _page_only_hits(words: str) -> dict:
+    """`dom_id -> the name that matched` for every page-only row `words` names.
+
+    ONE normaliser for both page-only lookups and the switch matcher that runs
+    after them: `_setting_words` lower-cases, turns every non-alphanumeric
+    character into a space, and strips the filler a model puts around a name.
+    That is what makes "memory-lists" and "memory lists" the same words, so a
+    hyphen or slash can never let the page-only refusal be beaten by the switch
+    matcher reading a word inside it (2026-10-26).
+
+    Two rules, the same two the switch matcher keeps:
+      1. the stripped words ARE a stripped name, exactly; else
+      2. the request CONTAINS every word of one name - one direction only, the
+         request being more specific than the name.
+
+    Returned as a dict rather than one id because the CALLER decides what an
+    ambiguous sentence means. The model-text helper below refuses more than
+    one; the spoken guard must refuse ANY page-only name before a switch can
+    be touched, and a sentence naming two of them is still a sentence naming a
+    page-only switch, not a licence to change a different one."""
+    text = _setting_words(words)
+    if not text:
+        return {}
+    exact: dict = {}
     for dom_id, names in NOT_BY_ASKING.items():
-        if any(bare == _bare(n) for n in names):
-            return dom_id
-    return None
+        for name in names:
+            if text == _setting_words(name):
+                exact[dom_id] = name
+    if exact:
+        return exact
+    if len(text.split()) < 2:
+        return {}
+    theirs = set(text.split())
+    found: dict = {}
+    for dom_id, names in NOT_BY_ASKING.items():
+        # THE LONGEST contained name wins, not the first. A row can carry a
+        # short alias and a longer one that contains it ("windows hello for
+        # memory lists" and "... and chat history"); keeping the short one
+        # would leave "chat history" in the remainder, and `page_only_asked`
+        # would report the plain sentence as MIXED because the switch matcher
+        # finds those leftover words. Removing the longest name leaves only
+        # what the owner really said beside it.
+        best, best_len = "", 0
+        for name in names:
+            mine = set(_setting_words(name).split())
+            if mine and mine <= theirs and len(mine) > best_len:
+                best, best_len = name, len(mine)
+        if best:
+            found[dom_id] = best
+    return found
 
 
 def _one_dom(ids) -> Optional[str]:
@@ -2219,12 +2259,12 @@ def find_not_by_asking_words(words: str) -> Optional[str]:
     """The `SETTINGS_ROWS` id `words` names in the MODEL's own wording, or None.
 
     THE SAME FILLER RULES `find_bool_setting_words` USES (2026-10-26), and for
-    the same reason. `find_not_by_asking` above is exact, so one natural filler
-    word defeated it - "turn off the windows hello for memory lists and chat
-    history setting" missed the page-only row, fell to the tolerant SWITCH
-    matcher, and that matcher read `chat_history` inside the same words and
-    turned chat-history retention off AT ONCE, with no card. The owner had named
-    a switch this backend has no route for, and a privacy setting changed
+    the same reason. The exact spoken lookup this replaced, so one natural
+    filler word defeated it - "turn off the windows hello for memory lists and
+    chat history setting" missed the page-only row, fell to the tolerant
+    SWITCH matcher, and that matcher read `chat_history` inside the same words
+    and turned chat-history retention off AT ONCE, with no card. The owner had
+    named a switch this backend has no route for, and a privacy setting changed
     instead. So the page-only lookup gets the model's own rules too:
 
       1. the stripped words ARE a stripped name, exactly; else
@@ -2233,31 +2273,49 @@ def find_not_by_asking_words(words: str) -> Optional[str]:
          matcher's own safety comment explains.
 
     Ambiguity between two page-only rows is refused (`_one_dom`), never guessed
-    at. `None` means "no single page-only row is named" - the caller may then
-    look for a switch, which is the safe order because no switch's own name
-    contains a page-only name (checked when this was written: `chat_history` is
-    the only alias on either side of that relation, and it is inside the
-    page-only row, not the other way round)."""
-    text = _setting_words(words)
-    if not text:
-        return None
-    exact: dict = {}
-    for dom_id, names in NOT_BY_ASKING.items():
-        for name in names:
-            exact.setdefault(_setting_words(name), set()).add(dom_id)
-    if text in exact:
-        return _one_dom(exact[text])
-    if len(text.split()) < 2:
-        return None
-    theirs = set(text.split())
-    found: set = set()
-    for dom_id, names in NOT_BY_ASKING.items():
-        for name in names:
-            mine = set(_setting_words(name).split())
-            if mine and mine <= theirs:
-                found.add(dom_id)
-                break
-    return _one_dom(found)
+    at. This is the form the MODEL's own text uses; the spoken grammar calls
+    `page_only_asked` below, which refuses the same way but also says when the
+    sentence named something else beside the page-only row."""
+    return _one_dom(_page_only_hits(words))
+
+
+def page_only_asked(words: str) -> tuple:
+    """`(dom_id, mixed)` for the SPOKEN grammar's page-only guard.
+
+    `dom_id` is the page-only row the sentence names - ANY one, not only an
+    unambiguous single one. That is deliberately stronger than the model-text
+    lookup above (2026-10-26, found while adding the setting-alias fallback):
+    a sentence naming TWO page-only rows ("turn off the app lock and windows
+    hello for memory lists and chat history") used to return no page-only row
+    at all, fall to the tolerant switch matcher, and turn `chat_history` off
+    at once - the same privacy failure the single-row fix closed, one row
+    further along. A page-only name is a refusal, never a licence to change a
+    different switch.
+
+    `mixed` is True when the sentence also names another setting the owner
+    could change - a second page-only row, a switch, or a named choice. The
+    refusal's own wording then offers the one next step a person needs: ask
+    for that other setting separately. It is False for a plain page-only
+    sentence (including the hyphenated and filler forms), so the pinned
+    refusal sentence is unchanged for them."""
+    hits = _page_only_hits(words)
+    if not hits:
+        return None, False
+    ids = list(hits)
+    dom_id = ids[0]
+    if len(ids) > 1:
+        return dom_id, True
+    rest = list(_setting_words(words).split())
+    for word in _setting_words(hits[dom_id]).split():
+        if word in rest:
+            rest.remove(word)
+    leftover = " ".join(rest)
+    if not leftover:
+        return dom_id, False
+    mixed = (find_bool_setting_words(leftover) is not None
+             or find_choice_setting_words(leftover) is not None
+             or bool(_page_only_hits(leftover)))
+    return dom_id, mixed
 
 
 def not_by_asking_sentence(dom_id: str) -> str:
@@ -2862,6 +2920,134 @@ def choice_bad_words(setting: ChoiceSetting) -> str:
     return (f"That is not one of the choices for "
             f"{setting.names[0] if setting.names else setting.key}. "
             f"Say one of: {options}.")
+
+
+# --------------------------------------------------------------------------
+#   "How/where do I change <a setting>?" - the settings-NAME fallback
+#   (Gemini principal-architect ruling Q6 Step A, 2026-10-26)
+# --------------------------------------------------------------------------
+#
+# THE GAP. The feature-talk fast path answers a how/where/explain question from
+# the 140-row feature catalogue. Five names the owner really uses are NOT a
+# catalogue title: `personality` ("the personality"), `voice speed` and
+# `focus preset` are CHOICE_SETTINGS rows, `theme` and `hud layout` are
+# desktop-only controls inside a Settings card. "how do i change the
+# personality?" matched nothing, so it went to the local model (~2 s) instead
+# of the fast path (<0.1 s), and the model has no settings tool to answer it.
+#
+# THE FIX THE RULING ASKED FOR. When no feature title or alias answers, match
+# the subject against this registry's own names/aliases and answer HERE, with
+# the real Settings place and a real example phrase - no model, no card,
+# nothing changed. Only a name this file already owns may answer; an unknown
+# subject still falls through to the model.
+#
+# ORDER IS SAFETY ORDER. A page-only row comes first: its refusal must beat a
+# switch whose words the sentence happens to contain (the 2026-10-26 privacy
+# failure). Then a plain switch, then a named choice, then the two desktop-only
+# areas. The switch/choice/area lookups are exact aliases, like the spoken
+# grammar everywhere else; the page-only guard keeps the tolerant form, so
+# filler and a hyphen cannot defeat it.
+
+#: Desktop-only controls that are NOT BOOL_SETTINGS/CHOICE_SETTINGS rows: each
+#: lives inside a Settings card and is saved by the desktop itself, so this
+#: backend has no setter and no route. Names only answer WHERE it is - never a
+#: claim that a sentence changed it. (`theme` is the radio list inside
+#: Appearance; `hud layout` is the "HUD layouts" fieldset inside The big HUD
+#: window. Both were checked against jarvis-desktop/src/settings.html, which
+#: draws them, and against jarvis_settings_registry.SECTIONS, which owns the
+#: card.)
+DESKTOP_ONLY_AREAS = (
+    (("theme", "themes", "the theme", "the themes"),
+     "appearance-card", "the theme"),
+    (("hud layout", "hud layouts", "the hud layout", "the hud layouts"),
+     "hud-window", "the HUD layout"),
+)
+
+
+def find_explain_setting(words: str) -> Optional[dict]:
+    """The ONE setting a how/where/explain question names, or None.
+
+    A small descriptor, never a sentence and never an action:
+      {"kind": "page", "dom_id": ..., "mixed": bool}  a switch with no route
+      {"kind": "bool", "key": ...}                    a plain on/off switch
+      {"kind": "choice", "key": ...}                  a named-choice setting
+      {"kind": "area", "section": ..., "control": ...} a desktop-only control
+
+    `None` means no single registry name is the subject, and the caller keeps
+    its old behaviour (unknown feature answer, or the model)."""
+    dom_id, mixed = page_only_asked(words)
+    if dom_id is not None:
+        return {"kind": "page", "dom_id": dom_id, "mixed": bool(mixed)}
+    setting = find_bool_setting(words)
+    if setting is not None:
+        return {"kind": "bool", "key": setting.key}
+    choice = find_choice_setting(words)
+    if choice is not None:
+        return {"kind": "choice", "key": choice.key}
+    bare = _bare(words)
+    for names, section_id, control in DESKTOP_ONLY_AREAS:
+        if any(bare == _bare(name) for name in names):
+            return {"kind": "area", "section": section_id, "control": control}
+    return None
+
+
+def _section_place(section_id: Optional[str]) -> str:
+    """`Settings, <the card's own first name>` - or plain `Settings`."""
+    section = section_by_id(section_id or "")
+    if section is not None and section.names:
+        return f"Settings, {section.names[0]}"
+    return "Settings"
+
+
+def _start_sentence(words: str) -> str:
+    """Capitalise the FIRST letter only - `capitalize()` would lowercase an
+    acronym the owner reads in the UI ("HUD layout" -> "Hud layout")."""
+    text = str(words or "")
+    return text[:1].upper() + text[1:] if text else text
+
+
+def explain_setting_words(found: dict) -> str:
+    """The ruled answer: the real Settings place and one real example phrase.
+
+    Built from the same tables the setters use, so the phrase it offers is a
+    phrase jarvis_quick already routes and the place is the card the real
+    control is drawn in. It says only what it can prove: a setting with no
+    route is the page-only refusal, and a desktop-only control is named with
+    the sentence that says it cannot be changed by asking."""
+    kind = str((found or {}).get("kind") or "")
+    if kind == "page":
+        return not_by_asking_sentence(str(found.get("dom_id") or ""))
+    if kind == "bool":
+        setting = next((b for b in BOOL_SETTINGS if b.key == found.get("key")), None)
+        if setting is None:
+            return ""
+        label = setting.names[0] if setting.names else setting.key
+        return (f'"{label}" is an on/off setting in {_section_place(setting.section)}. '
+                f'Say "turn on {label}" or "turn off {label}" and I will do it; a '
+                f'change that loosens a rule still asks on a card first.')
+    if kind == "choice":
+        setting = next((c for c in CHOICE_SETTINGS if c.key == found.get("key")), None)
+        if setting is None:
+            return ""
+        label = setting.names[0] if setting.names else setting.key
+        options = sorted(set(setting.options().keys()))
+        where = _section_place(setting.where)
+        if not options:
+            return (f"{_start_sentence(label)} is a choice in {where}. There is no "
+                    f'choice to name on this PC yet, so ask "what are the choices '
+                    f'for {label}?" to check.')
+        return (f"{_start_sentence(label)} is a choice in {where}. Say \"set {label} "
+                f'to {options[0]}\" and I will do it; a change that needs approval '
+                f'still asks on a card first. To hear every value, ask "what are '
+                f'the choices for {label}?".')
+    if kind == "area":
+        control = str(found.get("control") or "that control")
+        where = _section_place(str(found.get("section") or ""))
+        name = where.split(", ", 1)[1] if ", " in where else ""
+        open_phrase = f"open {name} settings" if name else "open Settings"
+        return (f"{_start_sentence(control)} is in {where}, on this PC only. Say "
+                f'"{open_phrase}" to go there; I cannot change it by asking.')
+    return ""
 
 
 # --------------------------------------------------------------------------
