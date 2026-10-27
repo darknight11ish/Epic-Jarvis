@@ -88,6 +88,18 @@ py -3 tools/reconcile_live_backend.py --backend-path "<live backend folder>" --a
 Exit codes: 0 success, 1 a plug-in or route probe failed, 2 refused before
 writing.
 
+**The backup journal names the tree it deployed (2026-10-27).** An `--apply`
+writes `source_ref`, `source_commit_sha` and `source_tree_sha` into the backup
+folder's `_journal.json`, the last being `git rev-parse <ref>^{tree}`. A tree
+hash is **content-addressed**: it names the files, not the history, so a rebase,
+a squash or a merge that rewrites the commit SHA leaves it unchanged. That is
+what makes "the files on the live PC are the files the reviewer approved"
+checkable later with one command, `git rev-parse <candidate>^{tree}` against
+`source_tree_sha`, instead of trusting a note. The keys are additive - a journal
+written by the older tool has none of them and still loads and rolls back - and a
+ref git cannot peel is **refused with nothing written** rather than journaled
+without the proof.
+
 **Verified on 2026-10-20 (Area 12, no `--apply`).** Dry run against the live
 backend folder: exit 0, **0 refusals**, `$SHIPPED` 218 files all unchanged, 188
 of 189 HUD patch/file deltas already present (the one to insert is DEF-002's
@@ -95,8 +107,8 @@ route, below), 9 ready plug-ins present and 0 to add, planned changes 153 (1 HUD
 route insert + 152 stale `.pyc` files; "DRY RUN, nothing written"). A second dry
 run half an hour later planned 168 for the same two reasons (the running server
 keeps writing `.pyc`, so only the 1 HUD route insert is stable). Its own
-suite, `backend/test_reconcile_live_backend.py`, passes (144 checks, all on
-temporary folders). As an extra read-only check (Area 12), its `run_probes()`
+suite, `backend/test_reconcile_live_backend.py`, passes (334 checks as of
+2026-10-27, all on temporary folders). As an extra read-only check (Area 12), its `run_probes()`
 was called directly against `http://127.0.0.1:4719` - no `--apply`, nothing
 written - and all four probes PASS (setup 200, media-index 200, app-control 409
 while off, voice 200).

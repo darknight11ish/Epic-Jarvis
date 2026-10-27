@@ -47,6 +47,19 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
     `--rollback <backup folder>` command (a running server is not un-deployed
     underneath the operator). `--rollback` restores a backup folder's journal
     without deploying anything.
+
+    The journal also records WHICH TREE this apply came from: `source_ref`,
+    `source_commit_sha` and `source_tree_sha`. The tree hash is
+    `git rev-parse <ref>^{tree}`, content-addressed, so it survives a rebase, a
+    squash or a merge that rewrites the commit SHA - two commits with the same
+    files have the same tree. That makes "the bytes on the live PC are the tree
+    of the commit the reviewer approved" a check anyone can repeat from a
+    journal: `git rev-parse <candidate>^{tree}` against `source_tree_sha`. It is
+    resolved BEFORE the backup folder exists, so an unresolvable ref refuses
+    with nothing written instead of journaling a deploy it cannot name. The keys
+    are ADDITIVE: a version-1 journal written by an older tool has no source
+    keys, still loads, and still rolls back (`load_journal` reads only `version`,
+    `live` and `entries`; rollback ignores the rest).
     2. HUD DELTAS for the five patched base files (`jarvis_hud.py`, `jarvis_gate.py`,
        `jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py`). Those files are
        never replaced, because the live copies are newer than the published base. For
@@ -650,6 +663,15 @@ PATCH_SCRIPT = "scripts/apply-patches.ps1"
 BACKUP_PREFIX = "_jarvis-deploy-backup-tool-"
 JOURNAL_NAME = "_journal.json"
 
+#: The keys a `--apply` journal carries. `version`, `live` and `entries` are the
+#: version-1 contract a rollback reads and MUST NOT change meaning; the three
+#: `source_*` keys are additive proof of which tree was deployed and are absent
+#: from a journal an older tool wrote (which stays readable - see `load_journal`).
+#: The tree SHA is the airtight half: `git rev-parse <ref>^{tree}` names the bytes
+#: only, so it is stable across a rebase or a squash that rewrites the commit SHA.
+JOURNAL_KEYS = ("version", "live", "source_ref", "source_commit_sha",
+                "source_tree_sha", "entries")
+
 CLIENT_HEADER = "X-Jarvis-Client"
 TOKEN_HEADER = "X-Jarvis-Token"
 CLIENT_VALUE = "hud"
@@ -825,6 +847,28 @@ def worktree_and_ref_shas(repo: Path, ref: str) -> tuple:
             f"{exc}. This checkout is at {head_sha}; fetch {ref} (git fetch origin) or "
             f"pass --ref <commit> to deploy a commit this checkout already knows") from exc
     return head_sha, ref_sha
+
+
+def source_identity(repo: Path, ref: str) -> dict:
+    """The `source_*` journal keys for a deploy of `ref`: ref, commit and TREE.
+
+    The tree SHA comes from `git rev-parse <ref>^{tree}` and is the proof a later
+    reader can check without trusting this tool: a tree hash is content-addressed,
+    so every commit holding the same files names the same tree however its history
+    was rebased, squashed or merged. The commit SHA is recorded beside it so a
+    journal read months later still says which ref produced the tree.
+
+    Refused (never a partial record) when git cannot resolve either half - the
+    caller resolves this BEFORE creating the backup folder, so a journal that
+    cannot name its tree is never written.
+    """
+    try:
+        commit_sha = git_rev_parse(repo, f"{ref}^{{commit}}")
+        tree_sha = git_rev_parse(repo, f"{ref}^{{tree}}")
+    except Refused as exc:
+        raise Refused(f"cannot record the source tree of {ref}: {exc}") from exc
+    return {"source_ref": str(ref), "source_commit_sha": commit_sha,
+            "source_tree_sha": tree_sha}
 
 
 def check_worktree_at_ref(repo: Path, ref: str,
@@ -1334,7 +1378,12 @@ def _restore_entries(live: Path, root: Path, entries: list) -> tuple:
 
 
 def load_journal(backup_root: Path) -> dict:
-    """Read one deploy journal. Raises Refused on anything unsafe or unreadable."""
+    """Read one deploy journal. Raises Refused on anything unsafe or unreadable.
+
+    Only `version`, `live` and `entries` are read, so a journal written before the
+    `source_*` keys existed still loads and still rolls back; the source keys are
+    carried in the returned dict for a caller that wants the proof, never required.
+    """
     path = Path(backup_root) / JOURNAL_NAME
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
@@ -1375,14 +1424,22 @@ class Backup:
 
     `start()` is called before the first live write (the deploy prints it); a
     direct `save()` still works for the unit tests and creates the folder lazily.
+
+    `source` is the `source_*` dict `source_identity` returns. It is copied into
+    the journal on every flush and is optional on purpose: a test or an older
+    caller that has no ref to name writes the version-1 journal unchanged (no
+    `source_*` keys at all rather than null ones), which is the shape an older
+    tool's journal has and `load_journal` must keep reading.
     """
 
-    def __init__(self, live: Path, stamp: Optional[str] = None):
+    def __init__(self, live: Path, stamp: Optional[str] = None,
+                 source: Optional[dict] = None):
         self.live = Path(live)
         stamp = stamp or time.strftime("%Y%m%d-%H%M%S")
         self.root = self.live / f"{BACKUP_PREFIX}{stamp}"
         self.saved = []
         self.entries = []
+        self.source = dict(source or {})
         self.journal = self.root / JOURNAL_NAME
         self.started = False
 
@@ -1400,7 +1457,9 @@ class Backup:
         if not self.started:
             self.root.mkdir(parents=True, exist_ok=True)
             self.started = True
-        doc = {"version": 1, "live": str(self.live.resolve()), "entries": self.entries}
+        doc = {"version": 1, "live": str(self.live.resolve())}
+        doc.update(self.source)
+        doc["entries"] = self.entries
         tmp = self.journal.with_name(self.journal.name + ".tmp")
         tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
         os.replace(tmp, self.journal)
@@ -1752,6 +1811,7 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
                allow_worktree_mismatch: bool = False,
                show: Optional[Callable] = None, out: Optional[Callable] = None,
                resolve_shas: Optional[Callable] = None,
+               resolve_source: Optional[Callable] = None,
                probe_client: Optional[Callable] = None,
                token_reader: Optional[Callable] = None,
                plugin_runner: Optional[Callable] = None,
@@ -1882,10 +1942,20 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
 
     # 5. Write: shipped bytes, then the staged HUD files. The backup folder and
     # its journal are created and PRINTED before the first live write, so a
-    # failure half-way through always has a named recovery point.
+    # failure half-way through always has a named recovery point. The journal
+    # names the tree being deployed; that is resolved first, so a ref git cannot
+    # peel refuses with NOTHING written rather than journaling an unnamed deploy.
+    try:
+        source = (resolve_source or source_identity)(repo, ref)
+    except Refused as exc:
+        out(f"REFUSED: {exc}")
+        return 2
+    out(f"SOURCE: {source.get('source_ref')} "
+        f"commit {source.get('source_commit_sha')} "
+        f"tree {source.get('source_tree_sha')}")
     has_writes = bool(adds or updates or inserts or plan.pycache
                       or (not skip_plugins and plan.plugins_missing))
-    backup = Backup(live, stamp=stamp)
+    backup = Backup(live, stamp=stamp, source=source)
     written = []
     try:
         if has_writes:

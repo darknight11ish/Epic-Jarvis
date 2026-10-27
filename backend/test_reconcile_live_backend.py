@@ -35,7 +35,12 @@ real PC:
      failure is rolled back from it (old bytes restored, new files removed), a probe
      failure after a COMPLETE write keeps the files and names the backup/journal
      instead, and `rollback_backup`/`--rollback` restores a partial state from the
-     journal - all on temporary folders;
+     journal - all on temporary folders. An `--apply` journal also records WHICH TREE
+     it deployed (`source_ref`, `source_commit_sha`, `source_tree_sha` =
+     `git rev-parse <ref>^{tree}`), proved against a REAL temporary git repository;
+     an unresolvable ref refuses with nothing written, a dry run writes no journal at
+     all, and a version-1 journal written by an older tool (no `source_*` keys) still
+     loads and still rolls back;
  10. the ref guard: a checkout whose HEAD is not the commit `--ref` names is refused
      (exit 2) with both SHAs and the fix printed, nothing is staged, and
      `--allow-worktree-mismatch` proceeds to the normal dry-run output; an empty
@@ -223,6 +228,12 @@ $PATCHES = @(
 #: a real git repository; the guard's real `git rev-parse` path is proved by its own
 #: test against a real temporary git repository.
 FIXTURE_HEAD = "1" * 40
+
+#: The tree the stubbed source resolver reports for the fixture PC. Deliberately a
+#: different 40-hex string from FIXTURE_HEAD, so a journal that records the commit
+#: where the tree belongs fails visibly. The REAL `git rev-parse <ref>^{tree}` path
+#: is proved against a real temporary git repository (see section 9 below).
+FIXTURE_TREE = "2" * 40
 
 
 def patch_text(name: str) -> bytes:
@@ -865,6 +876,12 @@ def run_fixture(repo: Path, live: Path, *, apply: bool, out_lines=None,
                         allow_worktree_mismatch=kw.pop("allow_worktree_mismatch", False),
                         resolve_shas=kw.pop(
                             "resolve_shas", lambda _repo, _ref: (FIXTURE_HEAD, FIXTURE_HEAD)),
+                        # A fixture is not a git repository, so the source resolver is
+                        # stubbed by default too. Pass `resolve_source=None` to run the
+                        # tool's own `source_identity` (the real-git test does).
+                        resolve_source=kw.pop("resolve_source", lambda _repo, _ref: {
+                            "source_ref": str(_ref), "source_commit_sha": FIXTURE_HEAD,
+                            "source_tree_sha": FIXTURE_TREE}),
                         show=kw.pop("show", fake_show),
                         out=out, probe_client=client,
                         token_reader=lambda _live: TOKEN,
@@ -885,6 +902,9 @@ def t_end_to_end_and_idempotent():
         check("a dry run writes nothing", after == before)
         check("... and creates no backup folder",
               not any(p.name.startswith("_jarvis-deploy-backup-tool-") for p in live.iterdir()))
+        check("... and writes no journal at all", not list(live.rglob(R.JOURNAL_NAME)))
+        check("... and does not resolve or print a source tree",
+              not any(l.startswith("SOURCE:") for l in lines), lines[-5:])
         check("... and does not probe", not any("ROUTE PROBES" in l for l in lines), lines[-5:])
         check("... and prints no BLOCKED LIVE DELTAS (the traces record is retired)",
               "BLOCKED LIVE DELTAS" not in "\n".join(lines), lines[-8:])
@@ -906,6 +926,13 @@ def t_end_to_end_and_idempotent():
         check("a backup folder was made with the old files",
               len(backups) == 1 and (backups[0] / "jarvis_agent.py").is_file(), backups)
         check("the probes ran and passed", "RESULT: PASS" in text2, text2[-6:])
+        journal = backups[0] / R.JOURNAL_NAME
+        doc = json.loads(journal.read_text(encoding="utf-8"))
+        check("the journal records the source tree and commit of the apply",
+              doc.get("source_tree_sha") == FIXTURE_TREE
+              and doc.get("source_commit_sha") == FIXTURE_HEAD, doc)
+        check("... and the run printed the tree it recorded",
+              f"tree {FIXTURE_TREE}" in text2, text2[-1000:])
 
         lines3 = []
         code3 = run_fixture(repo, live, apply=True, out_lines=lines3)
@@ -2387,6 +2414,159 @@ def t_cli_rollback_restores_from_a_backup_folder():
 
 
 # --------------------------------------------------------------------------
+#   9b. the journal's source proof: which TREE the apply came from
+#
+# The 2026-10-27 permanent control (Gemini packet #8, ruling Q1): an --apply
+# journal names the tree it deployed, so the bytes on the live PC can be matched
+# to the approved commit by tree hash - content-addressed, so it survives a
+# rebase or a squash that rewrites the commit SHA. The real
+# `git rev-parse <ref>^{tree}` path is proved against a REAL temporary git
+# repository; nothing here touches the owner's live folder.
+# --------------------------------------------------------------------------
+
+def make_real_git_fixture_pc(root: Path):
+    """`make_fixture_pc`, then a REAL git repository at HEAD (no stub for the tree)."""
+    repo, live, _show = make_fixture_pc(root)
+    shutil.rmtree(repo / ".git", ignore_errors=True)
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    _git(repo, "config", "user.name", "Reconcile Test")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "fixture tree")
+    return repo, live
+
+
+def t_an_apply_journal_records_the_source_tree_sha():
+    """CONTROL A: `source_tree_sha` IS `git rev-parse <ref>^{tree}`, and a dry run
+    writes neither the journal nor anything else."""
+    root = tmpdir()
+    try:
+        repo, live = make_real_git_fixture_pc(root)
+        expected_commit = _git(repo, "rev-parse", "HEAD")
+        expected_tree = _git(repo, "rev-parse", "HEAD^{tree}")
+        check("the fixture commit and its tree are different 40-hex values",
+              expected_tree != expected_commit
+              and len(expected_tree) == len(expected_commit) == 40,
+              (expected_commit, expected_tree))
+
+        # The dry run comes first, on the same real repo and the same ref: it must
+        # leave no journal behind and must not even resolve the tree.
+        before = _live_bytes(live)
+        dry = []
+        code0 = run_fixture(repo, live, apply=False, out_lines=dry, ref="HEAD",
+                            resolve_source=None)
+        check("a dry run against a real ref succeeds", code0 == 0, (code0, dry[-5:]))
+        check("... writes no journal and no backup folder",
+              not list(live.rglob(R.JOURNAL_NAME)), list(live.rglob("*journal*")))
+        check("... and writes nothing to the live folder", _live_bytes(live) == before)
+        check("... and does not print a SOURCE line",
+              not any(l.startswith("SOURCE:") for l in dry), dry[-5:])
+
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines, ref="HEAD",
+                           resolve_source=None)   # the tool's own resolver, real git
+        check("the apply succeeds", code == 0, (code, lines[-8:]))
+        journals = list(live.rglob(R.JOURNAL_NAME))
+        check("the apply left exactly one journal", len(journals) == 1, journals)
+        doc = json.loads(journals[0].read_text(encoding="utf-8"))
+        check("source_tree_sha is exactly `git rev-parse <ref>^{tree}`",
+              doc.get("source_tree_sha") == expected_tree,
+              (doc.get("source_tree_sha"), expected_tree))
+        check("... source_commit_sha is the commit that tree belongs to",
+              doc.get("source_commit_sha") == expected_commit,
+              (doc.get("source_commit_sha"), expected_commit))
+        check("... and source_ref is the ref the operator passed",
+              doc.get("source_ref") == "HEAD", doc.get("source_ref"))
+        check("every older key keeps its meaning (version 1, live, entries)",
+              doc.get("version") == 1 and doc.get("live") == str(live.resolve())
+              and isinstance(doc.get("entries"), list) and len(doc["entries"]) > 0,
+              {k: doc.get(k) for k in ("version", "live")})
+        text = "\n".join(lines)
+        check("the run printed the tree it recorded",
+              f"tree {expected_tree}" in text, text[-900:])
+        check("... and the journal sits in the folder the report named",
+              str(journals[0].parent) in text, text[-900:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_an_unresolvable_source_tree_refuses_with_nothing_written():
+    """A ref git cannot peel is a REFUSAL before the backup exists - never a
+    journal that cannot name its tree."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)   # deliberately not a git repo
+        before = _live_bytes(live)
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines, ref="no-such-ref",
+                           resolve_source=R.source_identity)
+        text = "\n".join(lines)
+        check("an apply whose ref git cannot peel exits 2", code == 2, (code, lines[-6:]))
+        check("... and says the source tree could not be recorded",
+              "REFUSED" in text and "cannot record the source tree" in text,
+              text[-700:])
+        check("... and creates no backup folder and no journal",
+              not any(p.name.startswith(R.BACKUP_PREFIX) for p in live.iterdir())
+              and not list(live.rglob(R.JOURNAL_NAME)), list(live.iterdir()))
+        check("... and leaves every live byte untouched", _live_bytes(live) == before)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_journal_from_an_older_tool_still_loads_and_rolls_back():
+    """The new keys are ADDITIVE: a version-1 journal with no `source_*` keys is
+    what an older tool wrote, and it must still read and still restore."""
+    root = tmpdir()
+    try:
+        live = root / "live"
+        live.mkdir()
+        write(live / "a.py", "this run's bytes")
+        old_root = live / f"{R.BACKUP_PREFIX}older-tool"
+        write(old_root / "a.py", "before the deploy")
+        old_doc = {"version": 1, "live": str(live.resolve()),
+                   "entries": [{"path": "a.py", "existed": True,
+                                "backup": "a.py", "kind": "file"}]}
+        write(old_root / R.JOURNAL_NAME, json.dumps(old_doc, indent=2) + "\n")
+        loaded = R.load_journal(old_root)
+        check("a journal written by an older tool still loads",
+              loaded["entries"] == old_doc["entries"], loaded)
+        check("... and carries no source_* key at all",
+              not any(k.startswith("source_") for k in loaded), sorted(loaded))
+        code = R.rollback_backup(live, old_root)
+        check("... and still rolls the live folder back", code == 0
+              and (live / "a.py").read_text(encoding="utf-8") == "before the deploy")
+
+        # What each Backup writes: untouched without a source, exactly additive with one.
+        other = root / "other"
+        write(other / "b.py", "x")
+        plain = R.Backup(other, stamp="plain")
+        plain.start()
+        plain_doc = json.loads((plain.root / R.JOURNAL_NAME).read_text(encoding="utf-8"))
+        check("a Backup with no source writes the old version-1 shape",
+              set(plain_doc) == {"version", "live", "entries"}, sorted(plain_doc))
+        sourced = R.Backup(other, stamp="sourced",
+                           source={"source_ref": "r", "source_commit_sha": "c",
+                                   "source_tree_sha": "t"})
+        sourced.start()
+        sourced.save(other / "b.py")
+        sourced_doc = json.loads(
+            (sourced.root / R.JOURNAL_NAME).read_text(encoding="utf-8"))
+        check("a Backup with a source adds exactly the three keys and keeps the rest",
+              set(sourced_doc) == set(R.JOURNAL_KEYS)
+              and sourced_doc["source_tree_sha"] == "t"
+              and sourced_doc["version"] == 1
+              and sourced_doc["live"] == str(other.resolve())
+              and [e["path"] for e in sourced_doc["entries"]] == ["b.py"],
+              sorted(sourced_doc))
+        write(other / "b.py", "changed after the backup")
+        check("a source-bearing journal still rolls back (the keys are ignored)",
+              R.rollback_backup(other, sourced.root) == 0
+              and (other / "b.py").read_text(encoding="utf-8") == "x")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------
 #   private-chat.patch: the multi-region HUD patch (2026-10-26)
 #
 # The patch that unblocked tonight's live deploy. It changes `jarvis_hud.py` in
@@ -2620,7 +2800,10 @@ def main():
                t_a_mid_apply_failure_rolls_back_and_prints_the_backup,
                t_a_plugin_failure_rolls_back_the_already_written_files,
                t_a_probe_failure_keeps_the_complete_write_and_names_the_backup,
-               t_cli_rollback_restores_from_a_backup_folder):
+               t_cli_rollback_restores_from_a_backup_folder,
+               t_an_apply_journal_records_the_source_tree_sha,
+               t_an_unresolvable_source_tree_refuses_with_nothing_written,
+               t_a_journal_from_an_older_tool_still_loads_and_rolls_back):
         fn()
     print()
     if FAILED:
