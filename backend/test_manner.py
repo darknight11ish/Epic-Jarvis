@@ -1281,8 +1281,10 @@ def t_personality_timer_confirmation_bite4():
 
 def t_personality_describe_bite6():
     # Bite 6 (2026-10-26, the owner's ask: "talk about what each one does" in
-    # the chat). A cardless, 0-ms, read-only answer built from the preset's own
-    # `description` - never new copy, never the model, never a state change.
+    # the chat). A cardless, 0-ms, READ_ONLY_INTENTS answer built from the
+    # preset's own `description` - never new copy, never the model, and no
+    # owner-visible state written: like every quick answer, `answer()` still
+    # records its usual command-digest row (`sched.mark_command`).
     with Folder():
         # 1. ONE preset: the title, the alias "TARS", and "tell me about <name>".
         for text, pid in [("what does the Classic Butler personality do", "classic_butler"),
@@ -1302,19 +1304,32 @@ def t_personality_describe_bite6():
             check(f"the reply is that preset's own description: {text!r}",
                   got is not None and want in got.reply
                   and M.preset(pid)["title"] in got.reply, got and got.reply)
-            check(f"and the sentence that switches to it: {text!r}",
+            check(f"the reply offers the sentence that really switches: {text!r}",
                   got is not None
-                  and f'switch to {M.preset(pid)["title"]}'.lower() in got.reply.lower(),
-                  got and got.reply)
+                  and f'switch to the {M.preset(pid)["title"]} personality'.lower()
+                  in got.reply.lower(), got and got.reply)
+            # The offered sentence must WORK, not just read right: feed it back
+            # through the grammar. "switch to <title>" with no "the ... personality"
+            # is measured (2026-10-26, all nine) to match nothing, so this is what
+            # catches that wording coming back.
+            said = re.findall(r'Say "([^"]+)"', got.reply if got is not None else "")
+            back = Q.match(said[0]) if said else None
+            check(f"and that sentence really switches, fed back in: {text!r}",
+                  back is not None and back.name == "personality_set"
+                  and back.f.get("personality") == pid,
+                  (said, back and (back.name, back.f)))
             check(f"cardless and no model: {text!r}",
                   got is not None and "card" not in got.reply.lower()
                   and "request_id" not in got.reply)
         # 2. ALL of them: every title and every description, contract order,
-        #    one line each, and short.
+        #    one line each, and short. "describe my personalities" is the
+        #    owner's own possessive (F4): the same nine, and the reply still
+        #    says it is describing what each personality does.
         titles = [p["title"] for p in M._BUILTIN]
         for text in ("describe your personalities", "explain your personalities",
                      "tell me about your personalities", "what does each personality do",
-                     "what are your personalities like"):
+                     "what are your personalities like",
+                     "describe my personalities", "tell me about my personalities"):
             intent = Q.match(text)
             check(f"describe-all matched: {text!r}", intent is not None
                   and intent.name == "personality_describe"
@@ -1326,7 +1341,7 @@ def t_personality_describe_bite6():
             lines = body.split("\n")
             listed = [ln[2:].split(" - ")[0] for ln in lines if ln.startswith("- ")]
             check(f"all nine, in contract order, one line each: {text!r}",
-                  len(M._BUILTIN) == 9 and listed == titles,
+                  bool(titles) and listed == titles,
                   listed)
             check(f"every line is that preset's own description: {text!r}",
                   all(f'- {p["title"]} - {p["description"]}' in lines
@@ -1335,6 +1350,23 @@ def t_personality_describe_bite6():
                   all(w in body for w in ("humour", "answer length", "formality",
                                           "address you", "make me a personality")), body)
             check(f"and it stays short: {text!r}", len(lines) <= 15, len(lines))
+        # 2b. What the one-preset comment now says, pinned by behaviour: an
+        #     alias alone IS enough inside these five shapes (the resolver is
+        #     the guard, not the wording), while a bare "what is <alias>" is
+        #     not one of the shapes at all.
+        for text, pid in [("what does the butler do", "classic_butler"),
+                          ("what can TARS do", "dry_wit"),
+                          ("what is brief like", "tactical_ops")]:
+            intent = Q.match(text)
+            check(f"an alias alone is enough in a question shape: {text!r}",
+                  intent is not None and intent.name == "personality_describe"
+                  and intent.f.get("personality") == pid, intent)
+        src = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
+        check("the one-preset comment no longer promises a title or the word "
+              "'personality' in every form",
+              "names the preset by its title or with the" not in src)
+        check("and it states the real guard: the resolver",
+              "The guard is the resolver, not" in src)
         # 3. The old question is untouched: still personality_status, still the
         #    nine titles, never the describe form.
         status_before = Q.run(Q.match("what personality are you using?"), None, time.time())
@@ -1343,11 +1375,30 @@ def t_personality_describe_bite6():
             intent = Q.match(text)
             check(f"the old question still answers itself: {text!r}",
                   intent is not None and intent.name == "personality_status", intent)
-        check("the status answer is unchanged: the active preset and the nine titles",
+        check("the status answer keeps its shape: the active preset and the nine titles",
               status_before is not None and status_before.intent == "personality_status"
               and "You're using" in status_before.reply
               and all(t in status_before.reply for t in titles),
               status_before and status_before.reply)
+        # 3b. The SAME wrong sentence lived in the older status answer (F1);
+        #     its switch example must really switch too, fed back in the way an
+        #     owner would say it.
+        quoted = re.findall(r'Say "([^"]+)"',
+                            status_before.reply if status_before is not None else "")
+        back = Q.match(quoted[0]) if quoted else None
+        check("the status answer's switch example really switches",
+              back is not None and back.name == "personality_set"
+              and back.f.get("personality") == "classic_butler",
+              (quoted, back and (back.name, back.f)))
+        # 3c. The docstring lists forms this function handles (F3): "what does
+        #     each one do" is not one of them and matches nothing.
+        forms = Q._personality.__doc__ or ""
+        check("the docstring names 'what does each personality do', which it handles",
+              "what does each personality do" in forms
+              and Q.match("what does each personality do") is not None, forms)
+        check("and no longer lists 'what does each one do', which matches nothing",
+              "what does each one do" not in forms
+              and Q.match("what does each one do") is None, forms)
         # 4. A sentence that names no preset is left to the model - including
         #    an alias word asked as an ordinary question ("what is brief").
         for text in ("tell me about yourself", "what does it do", "tell me about my day",
@@ -1364,9 +1415,36 @@ def t_personality_describe_bite6():
               and intent.f.get("personality") == saved["id"]
               and saved["custom_trait"] in (got.reply if got is not None else ""),
               got and got.reply)
-        # 6. Read-only, so "cancel that" keeps meaning the last real change.
+        said = re.findall(r'Say "([^"]+)"', got.reply if got is not None else "")
+        back = Q.match(said[0]) if said else None
+        check("and its offered sentence switches to the saved one, fed back in",
+              back is not None and back.name == "personality_set"
+              and back.f.get("personality") == saved["id"],
+              (said, back and (back.name, back.f)))
+        # 6. Read-only (F5): "cancel that" keeps meaning the last real change,
+        #    and the only thing this answer writes is the usual command digest
+        #    every quick answer writes - no note_set, no forget_set.
         check("personality_describe is in READ_ONLY_INTENTS",
               "personality_describe" in Q.READ_ONLY_INTENTS)
+
+        class Recorder:
+            def __init__(self):
+                self.calls = []
+
+            def mark_command(self, text):
+                self.calls.append(("mark", text))
+
+            def note_set(self, *a, **k):
+                self.calls.append(("note", a))
+
+            def forget_set(self, conversation):
+                self.calls.append(("forget", conversation))
+
+        rec = Recorder()
+        Q.answer("describe your personalities", sched=rec, now=time.time(),
+                 conversation="a-conversation")
+        check("a describe answer records only its command digest, nothing else",
+              rec.calls == [("mark", "describe your personalities")], rec.calls)
 
 
 #: The EXACT wire payloads the open desktop/PWA personality panel (#769,
