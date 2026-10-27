@@ -10,7 +10,7 @@ you drop in and take out.
 
 - **27 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
-- **127 core patches**, which still go on through
+- **128 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 ## The drop-in modules
@@ -179,6 +179,7 @@ stack's order and cannot be moved into a folder.
 | `presets.patch` | edits lines the core already has; it cannot be applied out of order |
 | `app-control.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `private-chat.patch` | edits lines the core already has; it cannot be applied out of order |
+| `reminder-actions.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one

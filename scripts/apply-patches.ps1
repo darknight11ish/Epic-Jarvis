@@ -1686,6 +1686,18 @@ $PATCHES = @(
     # re-anchored onto this block's last two printed lines (tools/check_plugins.py
     # checks that). The browser path is deliberately NOT wired (ARCHITECTURE 8).
     'secret-handoff.patch'
+    # reminder-actions.patch (2026-10-27, the owner's request): a reminder may
+    # carry ONE action - show a note, open a web page, open a file, or ask to
+    # put the morning briefing together. The whole feature is in the SHIPPED
+    # jarvis_schedule.py (the column, the two checks, the fire-time card); this
+    # patch adds only the ONE gate action a reminder that ACTS raises
+    # (`schedule_action`), in the gate's own words: a risk row saying plainly
+    # that it acts only on this PC and sends nothing, and a
+    # `_NO_RULE_FROM_DENIAL` line so denying it proposes no standing rule. No
+    # install block and no route. Its tier line (`schedule_action = "ask"`) is
+    # in the framework template, so it sits before plugin-loader.patch (which
+    # must stay LAST OF ALL) and changes nothing that patch anchors on.
+    'reminder-actions.patch'
     'plugin-loader.patch'
 )
 

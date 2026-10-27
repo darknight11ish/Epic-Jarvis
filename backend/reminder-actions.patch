@@ -1,0 +1,17 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -162,3 +162,4 @@
+     "models_create",          # jarvis_hardware.py acts only on tier "ask" (hardware.patch)
+     "schedule_repeat",        # jarvis_schedule.py acts only on tier "ask" (schedule.patch)
++    "schedule_action",        # jarvis_schedule.py acts only on tier "ask" (reminder-actions.patch)
+     "search_the_web",         # jarvis_agent.py: this card asks about ONE search's words (web-search.patch)
+@@ -818,2 +818,9 @@
+     "schedule_repeat": ("yes", "local", "sets up a morning briefing, which reads your calendar and email if they are set up, or a \"tell me when\", which looks at your own mail server or Home Assistant, or at one web page you named, each time; the card says exactly what each run reads, what it finds goes only to your own apps, and deleting it is immediate"),
++    # reminder-actions.patch (jarvis_schedule.py, 2026-10-27): a reminder may
++    # carry ONE action ("open this invoice at 07:00"), and the kind that ACTS
++    # - `run-task`, which puts the morning briefing together - raises this
++    # ONE card at the moment the reminder goes off, every time it goes off.
++    # It acts only on this PC and sends nothing anywhere, so "yes"/"local":
++    # a routine card, no Windows Hello and no signed approval from the phone.
++    "schedule_action": ("yes", "local", "does the one thing a reminder you set asked for, on this PC, only this once: puts your morning briefing together now, here; nothing is sent anywhere, nothing is deleted, and nothing happens without this card"),
+     # asks-first.patch (jarvis_asks_first.py, the owner's decision of
