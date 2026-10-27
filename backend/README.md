@@ -3640,13 +3640,13 @@ for the same local server stand in for "our site" and "a foreign site").
 **It skips cleanly** (and counts as passing) when Playwright or its Chromium
 is not installed, which is the normal state on your PC today.
 
-**Where this has and has not run.** Both suites passed in the Linux dev
-container with Playwright 1.63.0 and Chromium 141, headless. Not yet run on
-Windows, not with the visible browser window the module really uses, and
-not against a real customer-service widget. The first real session - on a
-page you control, with `allowed_domains` set, watching the actual browser
-window it opens - is still worth doing once, deliberately, before this is
-ever added to `[tools].enabled`.
+**Where this has and has not run.** Both suites passed on Windows 11 on
+2026-10-27: `test_browser_control_live.py` 66 checks against Playwright 1.64.1
+and Chromium 156.0.8078.4, headless. It has still not been run with the visible
+browser window the module really uses, and not against a real customer-service
+widget. The first real session - on a page you control, with `allowed_domains`
+set, watching the actual browser window it opens - is still worth doing once,
+deliberately, before this is ever added to `[tools].enabled`.
 
 ---
 
