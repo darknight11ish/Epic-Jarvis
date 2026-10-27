@@ -23,6 +23,10 @@ import java.io.File
  * phone" forbids unless he says otherwise. He has now said otherwise for this
  * one screen, and no further.
  *
+ * His decision of 2026-10-26 adds a read-only, deterministic picture of the
+ * Galaxy above the list and its "at a glance" band, reversing only the
+ * no-canvas part of the rule and leaving read-only unchanged.
+ *
  * Four things are held here, in the two house styles:
  *
  *  * **Reachable** ([thePlateIsUnderAHeadingAndTwoTapsFromTheTop]): the plate
@@ -229,7 +233,10 @@ class PhoneGalaxyTest {
         val body = functionBody(plate, "internal fun PeopleAndThingsSection(")
         assertTrue("the grouped names are not drawn", body.contains("Entities.groups(shown)"))
         assertTrue("a row's words are not drawn", body.contains("Entities.rowLine(e)"))
-        assertTrue("a row cannot be opened", body.contains("onClick = { openId = e.id }"))
+        // The row's tap sets the one open name. (The wiring gained a second
+        // assignment in 2026-10-26 - a row-opened name is NOT the picture's -
+        // so the pin is the open id itself, which is what "can be opened" means.)
+        assertTrue("a row cannot be opened", body.contains("openId = e.id"))
     }
 
     @Test
@@ -389,7 +396,10 @@ class PhoneGalaxyTest {
         // against the call that draws a name's facts.
         val gateAt = body.indexOf("if (privateHidden) {")
         val readAt = body.indexOf("JarvisRuntime.memoryEntities()")
-        val openAt = body.indexOf("EntityFacts(open, shown, perFact)")
+        // Any call that draws a name's facts panel counts; it gained a second
+        // argument shape in 2026-10-26 (a picture-opened name reads the
+        // unfiltered list), so the pin is the call, not one exact line.
+        val openAt = body.indexOf("EntityFacts(open,")
         assertTrue("the gate must be before the read", gateAt in 1 until readAt)
         assertTrue("the gate must be before the panel is opened", gateAt in 1 until openAt)
         assertTrue(
