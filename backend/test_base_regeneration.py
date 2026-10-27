@@ -114,6 +114,10 @@ def t_the_rule_is_the_readme_s_rule():
                      "lipsync.js", "sky.js", "season.js",
                      "face-words.js", "jarvis-link.js",
                      "card-words.js", "replace-confirm.js",
+                     # ... and the HUD's offline 3D library (2026-10-27):
+                     # three.js r128, carried now and served when the approved
+                     # "exact Gemini cosmos" port adds its page and whitelist key
+                     "three.min.js",
                      # ... and the seven woff2 faces and the three icons, which are BYTES
                      "chakra-petch-400.woff2", "chakra-petch-500.woff2",
                      "chakra-petch-600.woff2", "chakra-petch-700.woff2",

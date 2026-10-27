@@ -3453,6 +3453,19 @@ carried live by two literal deltas in `tools/reconcile_live_backend.py`'s
 `DELTA_TABLE` (`tools/hud-deltas/hud-static-*.txt`), because the live
 `jarvis_hud.py` is never replaced.
 
+**The HUD's 3D library is vendored before the page that draws with it
+(2026-10-27).** The owner approved the "exact Gemini cosmos" port, and the HUD
+must work with no CDN, so three.js r128 - the official MIT build,
+`three.min.js`, 603,445 bytes, SHA-256
+`9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2` - is
+vendored byte-identically in `backend/static/`, `jarvis-desktop/src/` and the
+published base, and registered in both `$SHIPPED` lists and the `BESIDE` table
+described above. It is deliberately NOT a `STATIC_ASSETS` key in this change:
+no page loads it yet, `backend/test_hud_static.py` refuses a key nothing
+loads, and the port PR adds the page's `<script>` and the key together.
+`backend/test_vendored_three.py` pins the real-r128 bytes in all three copies;
+`THIRD-PARTY-NOTICES.txt` has the provenance and the MIT licence.
+
 **A local test run writes nothing into the owner's home folder - the audit log
 included (2026-10-20).** `backend/run_suites.py` gives every run a throwaway
 config folder, HOME and audit log, and `apply-patches.ps1` gets the same
