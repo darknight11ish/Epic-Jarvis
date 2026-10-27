@@ -1736,6 +1736,7 @@ def t_how_do_i_change_asks_the_same_question_as_where_do_i_change():
         got_how, got_where = match(how), match(where)
         check(f'"{how}" reaches {fid}, exactly as "{where}" does',
               got_how is not None and got_where is not None
+              and got_how.name == got_where.name == "feature_explain"
               and got_how.f.get("id") == got_where.f.get("id") == fid,
               (got_how, got_where))
     out = say(match("how do i change the presets"))
