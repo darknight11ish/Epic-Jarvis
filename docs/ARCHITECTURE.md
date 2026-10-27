@@ -3289,6 +3289,33 @@ install nothing would do. No route is added, so `tools/check_parity.py` has
 nothing new to classify; the phone's own check-and-install screen already
 exists and is unchanged.
 
+**The standing cloud-escalation switch and the cloud provider choice are the
+PC's, on purpose** (2026-10-27; the owner's decision, `docs/DECISIONS.md` that
+date; `backend/jarvis_presets.py`, `backend/cloud-escalate.patch`). Turning
+"escalate to the cloud when the work is too complex" ON is a loosening - from
+then on Jarvis may send a hard question to the chosen service with no
+per-question yes - so it follows every loosening in this program: ONE
+`change_own_config` card, answered by a physical click on the machine the
+setting belongs to, and nothing written before that answer. Choosing WHICH
+service is an apply for the same reason plus rule 3: the key lives in this PC's
+Credential Manager and is added on the PC only, so a service chosen from the
+phone could be one the phone cannot see the state of. The phone therefore
+**reads** both and never writes either: `GET /api/work` (its `FocusPresets`
+reader already gets the whole answer and reads named keys, so the two new ones
+`cloud_preset` and `cloud` are ignored by a phone that has not been taught
+them) carries `cloud.provider`, `cloud.providers` and `cloud.escalate`. There
+is **no** phone route for either write, and adding one would need its own
+scoped decision - turning it OFF from the phone would be safe (it is instant)
+and is still left out, because a second write path to a privacy switch is a
+second thing to prove. `tools/check_parity.py` records
+`POST /api/work/cloud-escalate` as `deliberate` **once the desktop's
+`hud_cloud_escalate` command exists** (the checker refuses a `deliberate` row
+for a route no desktop source calls yet, so the row is written out as a comment
+in that table for the desktop session to paste with its Rust half);
+`POST /api/work/apply` already carries its `deliberate` row. What the phone is
+meant to say, once the phone session adds it, is one line on the chat: "The
+cloud may answer hard questions - set on your PC", read from
+`cloud.escalate.on`. What it must NOT offer is the switch itself.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

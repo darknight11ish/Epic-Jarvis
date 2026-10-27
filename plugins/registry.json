@@ -939,22 +939,16 @@
       "why": "also adds 2 entry/entries to the approval gate's own tables, which decide whether the action needs a card"
     },
     {
-      "patch": "update-in-chat.patch",
-      "bucket": "core",
-      "order": 138,
-      "why": "adds lines to the core (routes, gate tables or a function) but removes none"
-    },
-    {
       "patch": "gate-touches.patch",
       "bucket": "core",
-      "order": 139,
+      "order": 138,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "name": "card-prefs",
       "patch": "card-prefs.patch",
       "bucket": "plug-in",
-      "order": 140,
+      "order": 139,
       "module": "jarvis_card_summary",
       "install": "handler",
       "summary": "how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.",
@@ -964,7 +958,7 @@
       "name": "picture-card",
       "patch": "picture-card.patch",
       "bucket": "plug-in",
-      "order": 141,
+      "order": 140,
       "module": "jarvis_picture_card",
       "install": "handler",
       "summary": "\"which card draws the pictures, and what the chat does about it\".",
@@ -973,14 +967,14 @@
     {
       "patch": "big-coder.patch",
       "bucket": "core",
-      "order": 142,
+      "order": 141,
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
       "name": "pictures",
       "patch": "pictures.patch",
       "bucket": "plug-in",
-      "order": 143,
+      "order": 142,
       "module": "jarvis_pictures",
       "install": "handler",
       "summary": "\"ask for a picture, and keep it\" (the owner's decision of 2026-09-27: *\"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca",
@@ -990,7 +984,7 @@
       "name": "model-lanes",
       "patch": "model-lanes.patch",
       "bucket": "plug-in",
-      "order": 144,
+      "order": 143,
       "module": "jarvis_model_lanes",
       "install": "handler",
       "summary": "the button that starts the model lane that is down.",
@@ -999,44 +993,44 @@
     {
       "patch": "initiative-payload.patch",
       "bucket": "core",
-      "order": 145,
+      "order": 144,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "patch": "hud-origin-module.patch",
       "bucket": "core",
-      "order": 146,
+      "order": 145,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "patch": "hud-exclusive-bind.patch",
       "bucket": "core",
-      "order": 147,
+      "order": 146,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "patch": "hud-request-gate.patch",
       "bucket": "core",
-      "order": 148,
+      "order": 147,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "patch": "presets.patch",
       "bucket": "core",
-      "order": 149,
+      "order": 148,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "patch": "app-control.patch",
       "bucket": "core",
-      "order": 150,
+      "order": 149,
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
       "name": "setup",
       "patch": "setup.patch",
       "bucket": "plug-in",
-      "order": 151,
+      "order": 150,
       "module": "jarvis_setup",
       "install": "handler",
       "summary": "the setup questionnaire: a guided path through settings that already exist.",
@@ -1045,18 +1039,24 @@
     {
       "patch": "private-chat.patch",
       "bucket": "core",
-      "order": 152,
+      "order": 151,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "name": "secret-handoff",
       "patch": "secret-handoff.patch",
       "bucket": "plug-in",
-      "order": 153,
+      "order": 152,
       "module": "jarvis_secret_handoff_wiring",
       "install": "handler",
       "summary": "the host half of the owner-secret hand-off.",
       "why": "adds one startup call to jarvis_secret_handoff_wiring.install(); nothing else"
+    },
+    {
+      "patch": "cloud-escalate.patch",
+      "bucket": "core",
+      "order": 153,
+      "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "patch": "plugin-loader.patch",

@@ -3783,4 +3783,66 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     and the three two-file checks. **Not proven here:** a real signed release
     installed by the card - the updater's own installer path was not run in
     this container, and that is the owner's field test, never a pass.
->>>>>>> 69371df40 (Updates in chat: talk about one, and start it only through one card)
+
+## 2026-10-27 — The "no standing grant" rule is changed by the owner: cloud escalation becomes a switch
+
+The rule that this replaces, in `jarvis_router.choose()`'s own words, was the
+owner's decision of 2026-09-24: cloud use is "per use, with permission ... and
+asks. **No standing grant.**" Every gate below gate 6 still runs first and can
+still only push a turn back to local; what changed is **who says yes**, and
+there is now a third answer besides "the owner clicked for this one question"
+and "nobody".
+
+**What the owner asked for, 2026-10-27.** A checkbox in the Presets menu -
+"escalate to the cloud when the work is too complex" - which, once on, lets
+Jarvis send a hard question to the one cloud provider he has chosen without
+asking him first. He also asked for the Cloud row itself to sit in that menu
+beside General/Coding/Agentic+Vision/Fast, with the six connected API services
+under it, and for the three lane names (`jarvis-escalate`, `jarvis-critic`,
+`jarvis-bulk`) to become one.
+
+**Why it is not simply a loosening nobody can see.** Four things bound it, and
+each is proved rather than described:
+
+  * **ONE card, at ON, and nothing before it.** `POST /api/work/cloud-escalate`
+    raises one `change_own_config` card; a refused card writes nothing. Turning
+    it OFF is a tightening and is instant - the same asymmetry every other
+    switch in this program keeps.
+  * **The PC's own file is the only source of the standing yes.** It is read by
+    `jarvis_router.standing_escalation()` at gate 6 and from nowhere else - no
+    request body, no header and no client flag. The HUD page's own `cloud_yes`
+    counts only while that file says on, so a page that has not refreshed
+    cannot defeat the switch. Another client's `cloud_yes` (the phone's "Try
+    the cloud model") is the per-question tap it already was and is unchanged.
+  * **"Escalate this" typed in the message is a yes for that turn only.**
+    A fixed phrase list, evaluated at gate 6, after every privacy gate. Nothing
+    is stored; the next message has to ask again.
+  * **Every gate is untouched and still first.** Lockdown, a tainted
+    conversation, a picture, the words off the screen, a private topic, a
+    pasted secret, the monthly money limit: a turn refused by any of them stays
+    local, and `backend/test_cloud_escalate_setting.py` drives each one with the
+    switch ON and the phrase present.
+
+**What this does NOT authorise, said plainly.** No new route reaches the
+cloud. No key can be typed, pasted or sent from either app (rule 3): the
+provider list carries the command line to run on the PC, and nothing else. The
+phone reads the setting and never writes it - turning it on needs the card, and
+the card lives on the PC (`docs/ARCHITECTURE.md` §8). One provider at a time.
+The money limit still decides whether a message can be sent at all.
+
+**One honest limitation, measured not assumed.** The questions that escalate
+are the ones the cloud most often answers with its working-out instead of an
+answer: four of four measured escalated turns came back
+`finish_reason: "length"` with empty `content`
+(`docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md`). On a turn the owner did not
+click for, that working-out is **not** shown; the PC answers it instead, under
+one line saying the cloud did not answer. That is a real change in what he
+sees on those turns, and it is recorded here because the alternative - a page
+of a model's private reasoning offered as an answer to a question nobody asked
+to send anywhere - is worse than an honest sentence.
+
+**What this replaces, and only that.** The 2026-09-24 "no standing grant" rule,
+in the one place it governs cloud escalation. Nothing else moves: the
+per-question yes both apps already had, the offer gate, the taint latch, the
+private-topic backstop and the secret scan are all as they were, and
+`docs/ARCHITECTURE.md` §11's cloud paragraph is amended to point here.

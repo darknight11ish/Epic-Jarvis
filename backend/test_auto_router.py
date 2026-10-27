@@ -195,7 +195,9 @@ def clean(**over):
 #: answer is worth worrying about.
 HARD = ("Explain, step by step, how the scheduler decides which job runs first, "
         "and describe the trade-offs in detail.")
-#: The same, but asking for a REVIEW - which is `jarvis-critic`'s job.
+#: The same, but asking for a REVIEW - the shape a second, stronger lane used
+#: to exist for. It is ONE lane since 2026-10-27; the review words still size
+#: the expected ANSWER (`REVIEW_ANSWER_TOKENS`) and nothing else.
 REVIEW = "Review this: explain, step by step, the trade-offs in the design."
 #: Short and private. `jarvis_router.choose()` must refuse this one on gate
 #: "private", and this module must agree.
@@ -684,7 +686,7 @@ def t_delegation_property_over_a_table():
     check("delegation property: NO prompt this module recommends is refused by jarvis_router.choose()",
           not escapes, "\n".join(str(e) for e in escapes))
     check("delegation property: every recommendation named a real cloud lane",
-          all(lane in (AR.LANE_ESCALATE, AR.LANE_CRITIC) for _t, lane in recommended),
+          all(lane == AR.LANE_ESCALATE for _t, lane in recommended),
           repr(recommended[:3]))
 
 
@@ -853,24 +855,31 @@ def t_complexity_clamped_and_bounded():
 
 
 # ==========================================================================
-#   10. the review lane and the category
+#   10. the ONE lane, and the category
 # ==========================================================================
 
-def t_review_goes_to_the_critic():
+def t_review_is_the_same_one_lane():
+    """`jarvis-critic` is gone (2026-10-27): a review is a longer ANSWER, not a
+    second lane. This replaced `t_review_goes_to_the_critic`, and it keeps the
+    bite that matters - the module cannot offer a lane that no longer exists,
+    and a review still gets a suggestion rather than nothing."""
     with stubs(**clean()):
         out = AR.evaluate_route(REVIEW, context_tokens=3000, active_project=PROJECT_OK)
-    check("review: a review task is offered jarvis-critic, not jarvis-escalate",
-          out["recommended"] is True and out["lane"] == AR.LANE_CRITIC, repr(out))
+    check("review: a review task is offered the ONE lane, jarvis-escalate",
+          out["recommended"] is True and out["lane"] == AR.LANE_ESCALATE, repr(out))
+    check("review: the module has no critic lane to offer any more",
+          not hasattr(AR, "LANE_CRITIC") and not hasattr(AR, "_REVIEW"),
+          [n for n in ("LANE_CRITIC", "_REVIEW") if hasattr(AR, n)])
     with stubs(**clean()):
         out = AR.evaluate_route(HARD, context_tokens=3000, active_project=PROJECT_OK)
-    check("review: an ordinary hard task is offered jarvis-escalate",
+    check("review: an ordinary hard task is offered the same lane",
           out["lane"] == AR.LANE_ESCALATE, repr(out))
 
 
 def t_review_detection():
     check("review: 'Review this' is a review", AR.is_review("Review this, step by step."))
-    check("review: 'what's wrong with this code' is a review",
-          AR.is_review("What's wrong with this code, in detail?"))
+    check("review: a coding job is one too, because the ANSWER is long",
+          AR.is_review("Write a script that renames every file in this folder."))
     check("review: an ordinary explain is not", not AR.is_review("Explain the scheduler."))
     check("review: a caller may say the turn being reviewed IS a review",
           AR.is_review("Explain it.", {"kind": "review"}))

@@ -106,13 +106,26 @@ def t_the_router_never_calls_a_cloud_model_local():
                   f"never 'stays on this machine'",
                   "refused" in d.reason and "ollama.com" in d.reason
                   and "stays on this machine" not in d.reason, d.reason)
-    # Controls: a local model keeps every gate it had.
-    d = R.choose(q, local_model="jarvis-primary", lanes=["x"], conversation_tainted=True)
+    # Controls: a local model keeps every gate it had. The lane list has to
+    # name a REAL cloud lane since 2026-10-27: `choose()` keeps only
+    # `CLOUD_LANE` (jarvis-escalate) and drops every other name, so a made-up
+    # name is an EMPTY list - gate "unavailable", which fires before taint and
+    # before a picture. That is the point of the one-lane change (a stray name
+    # from an old config must not become "the cloud"), so these two controls
+    # drive the gate they are about with a lane that exists.
+    d = R.choose(q, local_model="jarvis-primary", lanes=[R.CLOUD_LANE],
+                 conversation_tainted=True)
     check("CONTROL: a local everyday model, a tainted turn: gate taint, memory on",
           d.gate == "taint" and d.inject_memory is True, d.as_dict())
-    d = R.choose(q, local_model="my-cloudless-model", lanes=["x"], has_image=True)
+    d = R.choose(q, local_model="my-cloudless-model", lanes=[R.CLOUD_LANE], has_image=True)
     check("CONTROL: a local model whose name merely has 'cloud' in it is not refused",
           d.gate == "image", d.as_dict())
+    # ... and a lane name that is not the one is dropped, not substituted.
+    d = R.choose(q, local_model="jarvis-primary", lanes=["x"], conversation_tainted=True)
+    check("CONTROL: an unknown lane name is dropped, so gate 0 says 'no cloud lane was "
+          "offered' rather than 'the cloud' being some other name",
+          d.gate == "unavailable" and d.lane == "jarvis-primary" and d.offer == "",
+          d.as_dict())
 
 
 def _turn(model, url, *, lane_choice=None):

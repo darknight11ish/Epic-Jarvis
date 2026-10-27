@@ -18,9 +18,11 @@ moment?" It SENDS NOTHING, WRITES NOTHING, APPROVES NOTHING, LOGS NOTHING AND
 REACHES NO NETWORK. It returns a plain dict whose `lane` is either
 
   * `"local"` - keep it here; `gate` and `reason` name the rule that said so; or
-  * `"jarvis-escalate"` / `"jarvis-critic"` - a SUGGESTION, carrying
+  * `"jarvis-escalate"` - a SUGGESTION, carrying
     `advisory: True`, reached ONLY when all four gates below pass AND the
-    shipped `choose()` would also allow a cloud turn for this text.
+    shipped `choose()` would also allow a cloud turn for this text. It was one
+    of two names until 2026-10-27; `jarvis-critic` went with the owner's
+    decision to keep ONE cloud lane, so a review is offered the same lane.
 
 THAT LAST CLAUSE IS ENFORCED BY DELEGATION, NOT BY COPYING. `_router_allows()`
 calls the real `jarvis_router.choose()` with `owner_said_yes=True` - "if the
@@ -81,12 +83,12 @@ from typing import Any, Optional
 #   Names, thresholds and weights
 # --------------------------------------------------------------------------
 
-#: The two cloud lanes this module may SUGGEST. `jarvis-escalate` is the cheap
-#: current model for an ordinary hard question; `jarvis-critic` is the stronger
-#: one, whose own job in `jarvis_chatbot_api.CLOUD_LANES` is to check an answer
-#: (jarvis_chatbot_api.py:1906-1908) - so it is what a review task is offered.
+#: The ONE cloud lane this module may SUGGEST. It was two until 2026-10-27:
+#: `jarvis-critic` was the stronger model a review was offered, and it went
+#: with the owner's decision of that day to keep one lane
+#: (`jarvis_chatbot_api.CLOUD_LANES` says the same). A review is still a longer
+#: answer (`REVIEW_ANSWER_TOKENS`); it is simply not a second lane.
 LANE_ESCALATE = "jarvis-escalate"
-LANE_CRITIC = "jarvis-critic"
 
 #: `local` is the only other answer this module ever gives.
 LOCAL_LANE = "local"
@@ -141,13 +143,13 @@ _ARCHITECTURE = re.compile(
     re.I,
 )
 
-#: Words that ask for a REVIEW of something, which is `jarvis-critic`'s job
-#: rather than `jarvis-escalate`'s.
-_REVIEW = re.compile(
-    r"\b(?:re-?view|critique|critic\w*|audit|proof[-\s]?read|second opinion|"
-    r"pull (?:this|it|that) apart|find (?:the )?(?:bugs|problems|faults|flaws)|"
-    r"what(?:'s| is) wrong with|check (?:this|my|the) "
-    r"(?:code|answer|plan|work|design))\b",
+#: Words that mean the ANSWER will be long rather than short - a review, an
+#: audit or a coding job. Since 2026-10-27 they only size the wait: there is
+#: ONE cloud lane, so a review is offered `jarvis-escalate` like every other
+#: hard question, and `_REVIEW` (which chose `jarvis-critic`) is gone with it.
+_LONG_ANSWER = re.compile(
+    r"\b(?:re-?view|critique|critic\w*|audit|proof[-\s]?read|"
+    r"second opinion|cod(?:e|ing)|program\w*|script\w*)\b",
     re.I,
 )
 
@@ -584,25 +586,26 @@ def _answer_tokens(category: str) -> float:
     for. A review or a coding job is longer than an ordinary question; an
     unrecognised category is an ordinary question."""
     text = str(category or "").lower()
-    if _REVIEW.search(text) or "review" in text or "critic" in text:
-        return REVIEW_ANSWER_TOKENS
-    if "cod" in text or "program" in text or "script" in text:
+    if _LONG_ANSWER.search(text):
         return float(REVIEW_ANSWER_TOKENS)
     return float(ANSWER_TOKENS)
 
 
 def is_review(prompt, last_turn=None) -> bool:
-    """Is this a REVIEW task - the kind `jarvis-critic` exists for?
+    """Is this a REVIEW task - an answer that will be long because it checks
+    something rather than answers it?
 
     True when the owner's words ask for one, or when the caller says the turn
     being reviewed is itself a review (`last_turn` with `kind: "review"`).
+    It no longer picks a lane: `jarvis-critic` went on 2026-10-27, and a
+    review is offered the one cloud lane like every other hard question.
     """
     if isinstance(last_turn, dict):
         if str(last_turn.get("kind") or "").strip().lower() == "review":
             return True
     if not isinstance(prompt, str):
         return False
-    return bool(_REVIEW.search(prompt))
+    return bool(_LONG_ANSWER.search(prompt))
 
 
 def est_local_seconds(prompt, context_tokens=0, category: str = "general",
@@ -704,7 +707,7 @@ def evaluate_route(prompt, context_tokens=0, active_project=None,
 
     Returns a plain dict. The keys a caller may act on:
 
-        lane                  "local", "jarvis-escalate" or "jarvis-critic"
+        lane                  "local" or "jarvis-escalate"
         recommended           True only when `lane` is a cloud lane
         advisory              always True - this is advice, never a permission
         gate / reason         which rule decided; "cost" when advice was given
@@ -730,7 +733,9 @@ def evaluate_route(prompt, context_tokens=0, active_project=None,
     rate, rate_why = measured_rate(speed_stats)
     seconds = est_local_seconds(text, context, category, rate)
     score = complexity_score(text, context, last_turn)
-    lane = LANE_CRITIC if is_review(text, last_turn) else LANE_ESCALATE
+    # ONE lane since 2026-10-27. `jarvis-critic` was what a review was
+    # offered; it is gone, and a review is a cost estimate now, not a lane.
+    lane = LANE_ESCALATE
 
     out = {
         "lane": LOCAL_LANE,

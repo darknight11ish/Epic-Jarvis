@@ -2411,9 +2411,12 @@ def route_for_turn(prompt: str, *, context_tokens: int = 0,
             "advice": advice}
 
 
-#: The only two lanes a turn may be advised onto. Anything else - including
-#: whatever a future router might invent - reads as local.
-CLOUD_LANES = ("jarvis-escalate", "jarvis-critic")
+#: The only cloud lane a turn may be advised onto. Anything else - including
+#: whatever a future router might invent - reads as local. It was two names
+#: until 2026-10-27 (`jarvis-critic` went with the owner's decision to keep ONE
+#: cloud lane), and the tuple is kept rather than replaced by a bare string so
+#: the membership test above reads exactly as it did.
+CLOUD_LANES = ("jarvis-escalate",)
 
 
 def auto_route_card(name: str) -> str:

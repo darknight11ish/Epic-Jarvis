@@ -10104,6 +10104,47 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}
 
 
+def answer_here(messages: list, model: str, *, ollama_url: str,
+                request: Optional[dict] = None,
+                enabled_tools: Optional[set] = None) -> str:
+    """One local answer, as TEXT, for a caller with no socket to stream to.
+
+    WHY THIS EXISTS (2026-10-27). A turn the PC escalated to the cloud with no
+    click - the standing switch in the Presets menu, or "send this to the
+    cloud" typed in the message - can come back with no usable answer at all:
+    DeepSeek's thinking is billed inside the answer cap, and the measured
+    behaviour on exactly the questions that escalate is `finish_reason:
+    "length"` with empty `content` (four of four, docs/FIELD-TEST-CLOUD-
+    ESCALATION-2026-10-14.md). Showing the model's private working-out to
+    somebody who did not ask for it reads as a broken answer, so the honest
+    thing is to answer on this PC and say so - which needs the local answer as
+    a string, from a function that has already opened the cloud's response.
+
+    THE SAME TURN EVERY CHAT USES. This calls `run_local_turn`, not a second
+    request builder: the persona rules, thinking off, the tool list and the
+    reading-short warning are all whatever the local lane does today. `stream=
+    False`, so no SSE is produced at all, and `stream_out` collects the one
+    body and throws it away. No tools are offered unless the caller names them
+    (`enabled_tools` is passed through as given, and None means none), so this
+    can raise no approval card from inside another turn.
+
+    "" WHEN THERE IS NO ANSWER, and never an exception: a failed local turn
+    writes an `{"error": ...}` payload and puts nothing in `answer` (`fail()`
+    above), so a model that is down, busy or missing reads as no answer rather
+    than as a sentence this caller would show as one.
+    """
+    collected: list = []
+    try:
+        out = run_local_turn(list(messages or []), model, ollama_url=ollama_url,
+                             stream_out=collected.append, stream=False,
+                             request=request, enabled_tools=enabled_tools)
+    except Exception:
+        return ""
+    if not isinstance(out, dict) or out.get("client_gone"):
+        return ""
+    return str(out.get("answer") or "").strip()
+
+
 def _nothing_done_line(text: str, steps: list, *, spoken: bool = False) -> str:
     """The plain line for an answer that claims an action no tool took
     (jarvis_claims.unbacked_claim), or "". A missing or broken

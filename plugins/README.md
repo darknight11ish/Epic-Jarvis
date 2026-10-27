@@ -180,6 +180,7 @@ stack's order and cannot be moved into a folder.
 | `presets.patch` | edits lines the core already has; it cannot be applied out of order |
 | `app-control.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `private-chat.patch` | edits lines the core already has; it cannot be applied out of order |
+| `cloud-escalate.patch` | edits lines the core already has; it cannot be applied out of order |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one
