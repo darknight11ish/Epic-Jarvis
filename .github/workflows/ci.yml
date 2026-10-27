@@ -1885,7 +1885,7 @@ jobs:
       # the debt and exits 0, which is how it gets RUN on every PR instead of
       # being switched off in a week. A tool nobody runs is a document.
       #
-      # `audit` is already informational and not one of the six required
+      # `audit` is already informational and not one of the required
       # checks, so nothing here can block a merge either way.
       #
       # The gate is at the desk: `python -B tools/check_stale_area.py --all
@@ -1922,7 +1922,7 @@ jobs:
   #
   # WHY (2026-10-11). A Kotlin change could merge with its tests never run. The
   # unit tests live in jarvis-client.yml's `build` job, which is PATH-FILTERED
-  # and is not one of the six required checks - so a pull request that touches
+  # and is not one of the required checks - so a pull request that touches
   # none of its paths never runs them at all.
   #
   # A required check that can be ABSENT is worse than no check: a `build` job was
