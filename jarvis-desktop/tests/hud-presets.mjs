@@ -1,12 +1,12 @@
 /**
- * The HUD's left rail: the owner's five focus presets + ONE Cloud button
+ * The HUD's left rail: the owner's nine focus presets + ONE Cloud button
  * (owner request 2026-10-21, replacing the "BRAIN IN USE" lane boxes).
  *
  *   node tests/hud-presets.mjs
  *
  * WHAT IS PROVEN, in the real page (jarvis_hud.html) with the PC stubbed:
  *
- *   - the rail lists the PC's five presets in the contract's order/titles
+ *   - the rail lists the PC's nine presets in the contract's order/titles
  *     (`backend/fixtures/work_presets.json`, generated from jarvis_presets.py),
  *     and marks the one `chosen_preset` names - never one before that;
  *   - a click posts /api/work/apply ONCE with {"preset": "<id>"} - the same
@@ -23,7 +23,7 @@
  *   - the panel says plainly when the PC has nothing loaded or did not answer,
  *     and opening it reads exactly /api/models, /api/status and /api/presets -
  *     no POST, no card, no model switch;
- *   - the Cloud section: the row sits after the five, opens a provider
+ *   - the Cloud section: the row sits after the nine, opens a provider
  *     submenu (no POST), picking a ready provider posts ONE apply with the
  *     provider id, a provider with no key is words and its PC command and posts
  *     nothing, and the mark comes from the refetched `cloud.provider`;
@@ -88,7 +88,7 @@ function fixturePayload(chosen = null) {
   const presets = JSON.parse(JSON.stringify(FIXTURE.presets));
   const chosenPreset = chosen ? presets.find((p) => p.id === chosen) || null : null;
   return {
-    found: "5 focus presets",
+    found: `${presets.length} focus presets`,
     presets,
     chosen: chosen,
     chosen_preset: chosen,
@@ -367,11 +367,12 @@ async function sendChat(page, text = "hello there") {
 
 const browser = await launch();
 
-await check("the rail lists the PC's five presets in the contract's order, titles and models", async () => {
+await check("the rail lists the PC's nine presets in the contract's order, titles and models", async () => {
   const { page, problems } = await openHud(browser);
   const rows = await presetRows(page);
   await page.close();
-  assert.equal(rows.length, 5, "the rail does not show five presets");
+  assert.equal(rows.length, FIXTURE.presets.length,
+    `the rail's row count drifted from the contract (got ${rows.length}, the fixture has ${FIXTURE.presets.length})`);
   assert.deepEqual(rows.map((r) => r.id), FIXTURE.presets.map((p) => p.id), "preset order drifted from the PC's contract");
   assert.deepEqual(rows.map((r) => r.title), FIXTURE.presets.map((p) => p.title), "preset titles drifted");
   // A heavy preset cannot run, so its model line is the PC's own refusal
@@ -946,7 +947,7 @@ await check("a refused model preset leaves nothing marked, and says why", async 
  *    coder/general/fast, listing "the API providers the PC has connected",
  *    plus "Escalate to the cloud when the work is too complex") ──────────── */
 
-await check("the Cloud row sits after the five and opens the PC's providers without posting", async () => {
+await check("the Cloud row sits after the nine and opens the PC's providers without posting", async () => {
   const { page, state, problems } = await openHud(browser);
   await openPresetMenu(page);
   const closed = await menuReport(page);
@@ -1073,7 +1074,9 @@ await check("the Cloud row is only drawn when the PC sends one - never invented"
   const menu = await menuReport(page);
   await page.close();
   assert.equal(menu.cloudRow, null, "a Cloud row appeared without the PC's own cloud answer");
-  assert.equal(menu.model.length, 4, "the five presets changed when the cloud answer went missing");
+  const applicable = FIXTURE.presets.filter((p) => p.heavy_mode !== true).length;
+  assert.equal(menu.model.length, applicable,
+    `the menu's preset rows changed when the cloud answer went missing (got ${menu.model.length}, expected ${applicable})`);
   assert.deepEqual(problems, []);
 });
 

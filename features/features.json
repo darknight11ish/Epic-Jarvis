@@ -1927,7 +1927,7 @@
     "id": "focus-presets",
     "group": "The PC itself",
     "title": "Focus presets",
-    "what": "Five presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose.",
+    "what": "Nine presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
     "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
     "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
     "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands.",

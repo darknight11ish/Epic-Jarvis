@@ -1,4 +1,4 @@
-"""The four focus presets: ids, lanes, honest measurements, one rendered contract."""
+"""The nine focus presets: ids, lanes, honest measurements, one rendered contract."""
 import json
 import sys
 from pathlib import Path
@@ -53,8 +53,10 @@ def t_the_live_route_matches_the_generated_contract():
 
 def main() -> int:
     fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(encoding="utf-8"))
-    check("exactly five presets, in the owner's order",
-          [p["id"] for p in fixture["presets"]] == ["general", "general_uncensored", "coding", "agentic_vision", "fast"],
+    check("exactly nine presets, in the owner's order",
+          [p["id"] for p in fixture["presets"]]
+          == ["general", "general_uncensored", "coding", "agentic_vision", "fast",
+              "reflect", "pictures", "documents", "browser"],
           [p["id"] for p in fixture["presets"]])
     check("the five old ids are named as replaced",
           fixture["old_ids_replaced"] == ["everyday", "coding", "admin", "long", "specialist"])
@@ -80,9 +82,11 @@ def main() -> int:
     check("... its words say heavy mode evicts lanes and lane support is arriving",
           "evicts" in cod.cost and "pooled both-GPU lane" in cod.worse
           and "lane support arriving" in cod.worse and "No single-card" in cod.worse)
-    check("Fast is qwen3:8b on the coding lane at 16,384",
-          P.by_id("fast").model == "qwen3:8b" and P.by_id("fast").lane == "coding"
-          and P.by_id("fast").context == 16384)
+    check("Fast is qwen3.5:4b on the 2080 SUPER's coding lane at 16,384",
+          P.by_id("fast").model == "qwen3.5:4b" and P.by_id("fast").lane == "coding"
+          and P.by_id("fast").context == 16384
+          and P.by_id("fast").measured["tok_s"] == 77.1
+          and P.by_id("fast").measured["context"] == 65536)
     gu = P.by_id("general_uncensored")
     check("General Uncensored now names the measured abliterated Qwen3.5 ref",
           gu.pending is False
@@ -116,13 +120,30 @@ def main() -> int:
     check("... and both honest words say pictures are accepted",
           "accepts pictures" in av["cost"])
 
+    caps = {pid: P.by_id(pid) for pid in ("reflect", "pictures", "documents", "browser")}
+    check("the four capability rows are all qwen3.5:9b on the 2060 (the long-context card)",
+          [(p.model, p.lane, p.context) for p in caps.values()]
+          == [("qwen3.5:9b", "main", 196608), ("qwen3.5:9b", "main", 32768),
+              ("qwen3.5:9b", "main", 196608), ("qwen3.5:9b", "main", 196608)])
+    check("... only the row whose window was measured carries measured figures",
+          caps["pictures"].measured is None
+          and caps["reflect"].measured["tok_s"] == 44.9
+          and caps["documents"].measured["tok_s"] == 44.9
+          and caps["browser"].measured["tok_s"] == 44.9)
+    check("Reflective Coach is a model choice only, never a therapist claim",
+          "not a therapist" in caps["reflect"].worse
+          and "no therapy record" in caps["reflect"].worse)
+    rec3 = P.recommendations()["by_gpu_count"]["3"]
+    check("every preset has a 3-GPU recommendation row (the id-keyed GPU dicts cover the catalogue)",
+          set(rec3) == set(P.PRESET_IDS), sorted(rec3))
+
     hw = fixture["hardware"]
     check("hardware: detected cards come from detect() and carry name/VRAM/index",
           hw["detected"]["source"] == "jarvis_hardware.detect()"
           and isinstance(hw["detected"]["count"], int)
           and all(set(c) == {"index", "name", "vram_gib", "uuid"} for c in hw["detected"]["cards"]),
           hw["detected"])
-    check("questionnaire: the five focus ids and the four priorities",
+    check("questionnaire: the nine focus ids and the four priorities",
           hw["questionnaire"]["focus_choices"] == [p["id"] for p in fixture["presets"]]
           and hw["questionnaire"]["priority_choices"] == ["speed", "quality", "long_context", "vision"]
           and hw["questionnaire"]["answers"] is None, hw["questionnaire"])

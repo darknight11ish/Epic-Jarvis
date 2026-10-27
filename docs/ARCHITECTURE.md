@@ -2627,7 +2627,7 @@ others".
 layouts"*, and *"i also want the presets to include all the ideal local ai
 presets that are made (like coder, or general, etc) along with the different
 personalities of jarvis that i can select"*. Above the saved layouts, the SAME
-one menu now draws the five local-AI focus presets from `GET /api/presets` and
+one menu now draws the nine local-AI focus presets from `GET /api/presets` and
 the nine personalities plus the owner's own from `GET /api/manner`, each marked
 current only from the PC's own `chosen_preset` / `personality`. The two kinds
 keep their existing permission rules: **a model preset is a loosening** -

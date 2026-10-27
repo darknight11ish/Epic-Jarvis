@@ -21,13 +21,13 @@ import java.io.File
  * The focus-presets contract (net/FocusPresets.kt), against the REAL generated
  * fixture `backend/fixtures/work_presets.json` (tools/gen_work_presets.py from
  * backend/jarvis_presets.py - never hand-edited). The merged answer carries the
- * five rows plus `hardware`/`questionnaire`/`recommendations`, and the saved
+ * nine rows plus `hardware`/`questionnaire`/`recommendations`, and the saved
  * `chosen` id when the PC has one; this test reads that whole shape.
  *
  * The list is deliberately generic: the owner added a fifth preset
  * (general_uncensored), and Agentic+Vision's model may change after a
  * measurement, so the parser must not hardcode a count or a model; the fixture
- * test still pins the five rows the screens actually draw.
+ * test still pins the nine rows the screens actually draw.
  */
 class FocusPresetsTest {
 
@@ -70,7 +70,7 @@ class FocusPresetsTest {
         requireNotNull(
             FocusPresets.parse(
                 buildJsonObject {
-                    put("found", "5 focus presets")
+                    put("found", "${rows.size} focus presets")
                     put("presets", JsonArray(rows))
                     put("hardware", hardware["detected"]!!)
                     put("questionnaire", hardware["questionnaire"]!!)
@@ -92,13 +92,17 @@ class FocusPresetsTest {
 
     @Test
     fun `the contract is one list, parsed generically - no id or count hardcoded`() {
-        // At least the owner's five named presets are present, in the PC's order.
+        // At least the owner's nine named presets are present, in the PC's order.
         val ids = view.presets.map { it.id }
         assertTrue("General", "general" in ids)
         assertTrue("General Uncensored", "general_uncensored" in ids)
         assertTrue("Coding", "coding" in ids)
         assertTrue("Agentic+Vision", "agentic_vision" in ids)
         assertTrue("Fast", "fast" in ids)
+        assertTrue("Reflective Coach", "reflect" in ids)
+        assertTrue("Pictures & Screens", "pictures" in ids)
+        assertTrue("Long Documents", "documents" in ids)
+        assertTrue("Browser & Forms", "browser" in ids)
         assertEquals("the fixture's own order is kept", ids, view.presets.map { it.id })
 
         // A client never invents the list: one extra unknown preset parses too.
@@ -117,17 +121,20 @@ class FocusPresetsTest {
     }
 
     @Test
-    fun `the merged answer carries five rows and the hardware, questionnaire and recommendations blocks`() {
+    fun `the merged answer carries nine rows and the hardware, questionnaire and recommendations blocks`() {
         // The chip and the plate render one row per preset; the merged contract
-        // has exactly the owner's five today.
-        assertEquals(5, view.presets.size)
+        // has exactly the owner's nine today.
+        assertEquals(9, view.presets.size)
 
         val hardware = requireNotNull(view.hardware) { "hardware block missing" }
         assertTrue("detected" in hardware)
         assertTrue("questionnaire" in hardware)
         val q = requireNotNull(view.questionnaire) { "questionnaire missing" }
         assertEquals(
-            listOf("general", "general_uncensored", "coding", "agentic_vision", "fast"),
+            listOf(
+                "general", "general_uncensored", "coding", "agentic_vision", "fast",
+                "reflect", "pictures", "documents", "browser",
+            ),
             (q["focus_choices"] as JsonArray).map { (it as JsonPrimitive).content },
         )
         assertEquals(
@@ -164,7 +171,7 @@ class FocusPresetsTest {
 
     @Test
     fun `the live GET answer - hardware, questionnaire, chosen, active lane and paths - parses`() {
-        assertEquals(5, live.presets.size)
+        assertEquals(9, live.presets.size)
         assertEquals("coding", live.chosen)
         assertEquals("Coding", FocusPresets.chipLabel(live))
         assertEquals("main", (live.activeLane!!["key"] as JsonPrimitive).content)
@@ -246,9 +253,9 @@ class FocusPresetsTest {
     }
 
     @Test
-    fun `Fast is qwen3_8b on the 2080 SUPER, and Coding is the heavy both-card preset`() {
+    fun `Fast is qwen3_5_4b on the 2080 SUPER, and Coding is the heavy both-card preset`() {
         val fast = requireNotNull(view.preset("fast"))
-        assertEquals("qwen3:8b", fast.model)
+        assertEquals("qwen3.5:4b", fast.model)
         assertEquals("coding", fast.lane.key)
         assertEquals("RTX 2080 SUPER", fast.lane.card)
         assertEquals(16384, fast.context)

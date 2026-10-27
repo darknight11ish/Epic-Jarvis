@@ -184,10 +184,10 @@
       "id": "fast",
       "title": "Fast",
       "focus": "the quickest short answers",
-      "what": "The quickest preset: qwen3:8b on the fast card at 16k, while the 2060 keeps the general model warm for when you switch back.",
-      "cost": "16,384 tokens is its ceiling and it is the weakest measured explainer; the 2060's model stays loaded beside it, for the same measured -1.9% off the main model's speed.",
-      "worse": "Weakest answer quality of the measured models and the shortest conversation; chosen for waiting less, not for care.",
-      "model": "qwen3:8b",
+      "what": "The quickest preset: qwen3.5:4b on the 2080 SUPER at the 16,384-token window its lane serves, while the 2060 keeps the general model warm for when you switch back.",
+      "cost": "Measured 2026-10-10 on this same card: 77.1 tokens a second and 4.15 GB of video memory at a 65,536-token window (the file is 3.16 GB on disk). The Fast lane starts at 16,384 tokens today, so this row keeps that window; the bigger measurement is why the card has room to spare.",
+      "worse": "The small model: fastest measured writer here, and the bench's three short prompts were only called broadly correct rather than scored. Chosen for waiting less, not for care; its first request after a cold load is slow on this card.",
+      "model": "qwen3.5:4b",
       "lane": {
         "key": "coding",
         "card": "RTX 2080 SUPER",
@@ -202,10 +202,12 @@
         "tools": []
       },
       "measured": {
-        "tok_s": 64.0,
-        "size_gib": 4.87,
-        "vram_gib": 5.84,
-        "spill_gib": 0.0
+        "tok_s": 77.1,
+        "size_gib": 3.16,
+        "vram_gib": 4.15,
+        "spill_gib": 0.0,
+        "context": 65536,
+        "source": "measured 2026-10-10 at 65,536 tokens on the RTX 2080 SUPER (repo restatement: docs/WORK-SETUPS.md:29, jarvis_work.py:262); the Fast lane serves 16,384"
       },
       "pending": false,
       "heavy_mode": false,
@@ -214,6 +216,154 @@
         "switch_route": "/api/models/switch",
         "apply_route": "/api/work/apply",
         "lane_start": true,
+        "auto": false
+      }
+    },
+    {
+      "id": "reflect",
+      "title": "Reflective Coach",
+      "focus": "talking a difficult thought through",
+      "what": "For talking something through: a calm listener that reflects what you said first and asks one gentle question at a time. It is the same measured model as General, on the 12 GB card with the same full window, so a conversation is not cut off.",
+      "cost": "Same measured setup as General: qwen3.5:9b on the 2060 at 196,608 tokens, 44.9 tokens a second, 9.17 of the 12 GB, no spill. No model on this PC has been measured for empathy or reflective quality, and nothing here claims it; pair it with a matching manner in How Jarvis talks once that wording is approved.",
+      "worse": "A model choice only - it changes no wording by itself. It is not a therapist: it gives no diagnosis, keeps no therapy record and the crisis help stays exactly where it already is.",
+      "model": "qwen3.5:9b",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 196608,
+      "helper": null,
+      "policy": {
+        "prompt": "balanced",
+        "diet": "balanced",
+        "tools": []
+      },
+      "measured": {
+        "tok_s": 44.9,
+        "size_gib": 6.1,
+        "vram_gib": 9.17,
+        "spill_gib": 0.0
+      },
+      "pending": false,
+      "heavy_mode": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "pictures",
+      "title": "Pictures & Screens",
+      "focus": "reading a screenshot or a picture",
+      "what": "For looking at a picture or a screenshot and talking about it: qwen3.5:9b, whose vision capability is documented on this PC, on the 12 GB card. Agentic + Vision is the version that also drives tools.",
+      "cost": "Same model and card as General at a 32,768-token window. Vision is documented (the model reports completion/vision/tools/thinking and its CLIP encoder runs on the 12 GB card); this row's window and speed are not separately measured. The 2026-10-18 picture test belongs to Agentic + Vision, not this row.",
+      "worse": "Picture quality through this row is not measured. Live phone-camera frames are explicitly unmeasured, and the old qwen3-vl fallback (which gave no answer on the desktop UI) is not used here.",
+      "model": "qwen3.5:9b",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 32768,
+      "helper": null,
+      "policy": {
+        "prompt": "balanced",
+        "diet": "balanced",
+        "tools": [
+          "pictures"
+        ]
+      },
+      "measured": null,
+      "pending": false,
+      "heavy_mode": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "documents",
+      "title": "Documents & Notes",
+      "focus": "long reading, notes and study",
+      "what": "For long documents, notes and study material: the same measured setup as General - qwen3.5:9b on the 2060 with the full 196,608-token window - named so long reading, note synthesis and study guides are one click instead of remembering which preset has the big window.",
+      "cost": "Same measured setup as General: 44.9 tokens a second, 9.17 of the 12 GB, no spill. The window is the point - it is what stops a long document being cut before the model sees it.",
+      "worse": "Not the quickest; fine for reading, not for waiting. Same model as General, so this row adds a named choice and the full window, not a different model.",
+      "model": "qwen3.5:9b",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 196608,
+      "helper": null,
+      "policy": {
+        "prompt": "balanced",
+        "diet": "balanced",
+        "tools": []
+      },
+      "measured": {
+        "tok_s": 44.9,
+        "size_gib": 6.1,
+        "vram_gib": 9.17,
+        "spill_gib": 0.0
+      },
+      "pending": false,
+      "heavy_mode": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "browser",
+      "title": "Browser & Forms",
+      "focus": "long pages and multi-step web work",
+      "what": "For long web pages and multi-step form work: the long-context model on the 12 GB card with the full 196,608-token window, so a whole page plus its steps fit. Agentic + Vision stays the short tool-loop setup.",
+      "cost": "Same measured setup as General: qwen3.5:9b on the 2060 at 196,608 tokens, 44.9 tokens a second, 9.17 of the 12 GB, no spill.",
+      "worse": "Browser and form work has not been measured through this row, and no tool-success rate is claimed; the model is the same one Agentic + Vision already uses.",
+      "model": "qwen3.5:9b",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 196608,
+      "helper": null,
+      "policy": {
+        "prompt": "agentic",
+        "diet": "agentic",
+        "tools": [
+          "browser",
+          "forms"
+        ]
+      },
+      "measured": {
+        "tok_s": 44.9,
+        "size_gib": 6.1,
+        "vram_gib": 9.17,
+        "spill_gib": 0.0
+      },
+      "pending": false,
+      "heavy_mode": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
+        "lane_start": false,
         "auto": false
       }
     }
@@ -237,7 +387,11 @@
         "general_uncensored",
         "coding",
         "agentic_vision",
-        "fast"
+        "fast",
+        "reflect",
+        "pictures",
+        "documents",
+        "browser"
       ],
       "priority_choices": [
         "speed",
@@ -297,10 +451,54 @@
         },
         "fast": {
           "preset": "fast",
-          "model": "qwen3:8b",
+          "model": "qwen3.5:4b",
           "card_index": 0,
           "card": "card 0",
           "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "reflect": {
+          "preset": "reflect",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "pictures": {
+          "preset": "pictures",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 32768,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "documents": {
+          "preset": "documents",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "browser": {
+          "preset": "browser",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
@@ -354,14 +552,58 @@
         },
         "fast": {
           "preset": "fast",
-          "model": "qwen3:8b",
+          "model": "qwen3.5:4b",
           "card_index": 1,
           "card": "card 1",
           "context": 16384,
-          "tok_s": 64.0,
+          "tok_s": 77.1,
           "measured": true,
           "best_effort_not_tested": false,
           "note": "the agreed 2-GPU mapping: Fast on the fast card"
+        },
+        "reflect": {
+          "preset": "reflect",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": 44.9,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "pictures": {
+          "preset": "pictures",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 32768,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "documents": {
+          "preset": "documents",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": 44.9,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "browser": {
+          "preset": "browser",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": 44.9,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
         }
       },
       "3": {
@@ -411,14 +653,58 @@
         },
         "fast": {
           "preset": "fast",
-          "model": "qwen3:8b",
+          "model": "qwen3.5:4b",
           "card_index": 1,
           "card": "card 1",
           "context": 16384,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3:8b"
+          "note": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3.5:4b"
+        },
+        "reflect": {
+          "preset": "reflect",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "2060 12 GB (card 0): Reflective Coach, qwen3.5:9b, 196,608 window"
+        },
+        "pictures": {
+          "preset": "pictures",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 32768,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "2060 12 GB (card 0): Pictures & Screens, qwen3.5:9b with images, 32,768 window"
+        },
+        "documents": {
+          "preset": "documents",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "2060 12 GB (card 0): Documents & Notes, qwen3.5:9b, 196,608 window"
+        },
+        "browser": {
+          "preset": "browser",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "2060 12 GB (card 0): Browser & Forms, qwen3.5:9b, 196,608 window"
         }
       }
     },

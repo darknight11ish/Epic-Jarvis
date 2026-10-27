@@ -165,7 +165,7 @@ def t_get_work_serves_the_new_contract():
           code == 200 and "presets" in seen[-1][1]
           and "setup_ids" not in seen[-1][1], seen[-1][1] if seen else None)
     body = seen[-1][1]
-    check("... it carries five presets with the apply contract",
+    check("... it carries nine presets with the apply contract",
           [p["id"] for p in body["presets"]] == list(P.PRESET_IDS)
           and body["presets"][0]["apply"]["apply_route"] == "/api/work/apply")
     check("... and the hardware/questionnaire/recommendations blocks",

@@ -3,7 +3,7 @@
  *
  * The real contract is `backend/fixtures/work_presets.json`, generated from
  * `backend/jarvis_presets.py`; this test reads that file itself so the UI
- * cannot drift from the PC's own five presets and hardware block. The fixture
+ * cannot drift from the PC's own nine presets and hardware block. The fixture
  * is the contract half: it has no apply route yet, so the one action must be
  * disabled with the waiting line, not silently enabled. The test also injects
  * a contract route and an app-side wiring flag separately, proving BOTH are
@@ -53,12 +53,16 @@ const withApplyRoute = (value) => {
   return other;
 };
 
-await check("the reading takes the contract's five presets, in its order", async () => {
+await check("the reading takes the contract's nine presets, in its order", async () => {
   const read = Focus.normaliseReading(clone(FIXTURE));
   assert.equal(read.available, true);
   assert.deepEqual(read.presets.map((p) => p.id), FIXTURE.presets.map((p) => p.id));
   assert.deepEqual(read.presets.map((p) => p.name), FIXTURE.presets.map((p) => p.title));
-  assert.equal(read.presets.length, 5);
+  assert.equal(
+    read.presets.length,
+    FIXTURE.presets.length,
+    `the reading's preset count drifted from the contract (got ${read.presets.length}, the fixture has ${FIXTURE.presets.length})`,
+  );
   assert.equal(read.presets[0].description, FIXTURE.presets[0].what);
   assert.equal(read.presets[0].focus, FIXTURE.presets[0].focus);
   assert.equal(read.chosen, null, "the contract half does not name a chosen preset yet");

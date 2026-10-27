@@ -297,14 +297,14 @@ MENUS: tuple = (
        (DESKTOP,), names=("chatbot api keys", "the api keys", "chatbot keys")),
     _m("settings.hardware", "Hardware and models", "Your graphics cards and the three setups.",
        group="graphics-cards", names=("hardware", "hardware and models")),
-    # "Focus presets" (the owner's preset selector, 2026-10-18): the five
+    # "Focus presets" (the owner's preset selector, 2026-10-18): the nine
     # presets the PC sends, with the model, graphics card, context, cost and
     # the honest "worse at" line. BOTH apps have it: the desktop draws the
     # Settings card and command-bar chip, the phone draws FocusPresetsSection
     # inside HardwarePlate. It is not a fold of its own on either app, so it
     # is never hideable - hiding Hardware hides the phone's copy.
     _m("settings.focus-presets", "Focus presets",
-       "The five presets the PC sends, with the model, card, cost and what each is worse at.",
+       "The nine presets the PC sends, with the model, card, cost and what each is worse at.",
        names=("focus presets", "the focus presets", "presets",
               "the preset selector", "choose a focus preset"),
        hide=False, why="Drawn inside the Hardware card on the phone and above Hardware and models on the PC; neither app has a separate row to hide."),
