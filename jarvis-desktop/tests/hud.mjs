@@ -120,6 +120,10 @@ async function openHud(browser, status, pageOptions = {}) {
   // What the Reminders tab sent through its two HUD commands (2026-10-21).
   const scheduleWrites = [];
   const hudLayoutWrites = [];
+  // The Presets menu's escalate switch and cloud apply (2026-10-27): what the
+  // page asked the PC for, recorded at the backend so the body is the real one.
+  const cloudEscalateWrites = [];
+  const presetApplyWrites = [];
   // Requests that reached the backend WITHOUT the token the shell adds - so
   // made by the page itself, not by the shell (apps security audit M2).
   const direct = [];
@@ -197,6 +201,33 @@ async function openHud(browser, status, pageOptions = {}) {
             return null;
           }
           case "hud_chat_cancel": return null;
+          // The Presets menu's PC lists (2026-10-27). The same GETs and POSTs
+          // Rust makes, with the shell's token, so a write that reached the
+          // backend without the shell is still a failure (audit M2).
+          case "get_focus_presets": {
+            const r = await origFetch(backend + "/api/presets", { headers: shellHeaders });
+            if (!r.ok) throw new Error(`the PC answered ${r.status}`);
+            return r.json();
+          }
+          case "apply_focus_preset": {
+            const body = { preset: args.preset };
+            if (args.provider) body.provider = args.provider;
+            const r = await origFetch(backend + "/api/work/apply", { method: "POST",
+              headers: { ...shellHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify(body) });
+            const reply = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(reply.error || `the server answered HTTP ${r.status}`);
+            return reply;
+          }
+          case "hud_cloud_escalate": {
+            // ONE boolean, exactly as focus_presets.rs sends it.
+            const r = await origFetch(backend + "/api/work/cloud-escalate", { method: "POST",
+              headers: { ...shellHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify({ on: args.on }) });
+            const reply = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(reply.error || `the server answered HTTP ${r.status}`);
+            return reply;
+          }
           // The Reminders tab's two writes (2026-10-21, the owner's dedicated
           // menu): the SAME POSTs `hud_schedule.rs` makes, with the shell's
           // token, so a write that reached the backend without the shell is
@@ -363,6 +394,40 @@ async function openHud(browser, status, pageOptions = {}) {
         return route.fulfill({ status: 200, headers: cors,
           json: { available: true, pending: status.pending || [], history: [] } });
       }
+      if (url.pathname === "/api/presets" || url.pathname === "/api/work") {
+        // The Presets menu's own answer (2026-10-27). Only a scenario that asks
+        // for one gets it; every other test keeps the old 404 path, so the
+        // menu's honest "the PC did not list" words still hold where they did.
+        if (!status.presets) {
+          return route.fulfill({ status: 404, headers: cors, json: { error: "not found" } });
+        }
+        return route.fulfill({ status: 200, headers: cors, json: status.presets });
+      }
+      if (url.pathname === "/api/work/apply" && req.method() === "POST") {
+        presetApplyWrites.push(JSON.parse(req.postData() || "{}"));
+        return route.fulfill({ status: 200, headers: cors,
+          json: { ok: true, changed: true, preset: { id: "general", title: "General" } } });
+      }
+      if (url.pathname === "/api/work/cloud-escalate" && req.method() === "POST") {
+        // The escalate switch. ONE boolean reaches here, or the test fails on
+        // the body it recorded.
+        const body = JSON.parse(req.postData() || "{}");
+        cloudEscalateWrites.push(body);
+        if (status.escalateRefuse) {
+          return route.fulfill({ status: 409, headers: cors,
+            json: { ok: false, changed: false, error: status.escalateRefuse } });
+        }
+        if (status.escalateWaiting) {
+          return route.fulfill({ status: 200, headers: cors,
+            json: { ok: false, waiting: true, said: "The PC is waiting for you to answer its card." } });
+        }
+        if (status.presets && status.presets.cloud && status.presets.cloud.escalate) {
+          status.presets.cloud.escalate.on = body.on === true;
+        }
+        return route.fulfill({ status: 200, headers: cors,
+          json: { ok: true, changed: true, on: body.on === true,
+            said: body.on === true ? "Escalating when the work is complex is on." : "Escalating is off." } });
+      }
       if (url.pathname === "/api/chat") {
         chats.push(JSON.parse(req.postData() || "{}"));
         // A case from chat-stream-cases.json: the body AND Content-Type the
@@ -429,7 +494,7 @@ async function openHud(browser, status, pageOptions = {}) {
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
   await page.waitForTimeout(800);
   return { page, problems, chats, marks, decisions, memoryReads, memoryWrites, direct,
-           faceAsks, scheduleWrites, hudLayoutWrites };
+           faceAsks, scheduleWrites, hudLayoutWrites, cloudEscalateWrites, presetApplyWrites };
 }
 
 
@@ -1968,6 +2033,11 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // card, held on a stale link. Narrower than the Settings window's
       // get_manner/set_manner on purpose (no manner mode, no dials, no custom).
       "hud-personalities",
+      // The Presets menu's Cloud escalate switch (2026-10-27, the owner asked
+      // for a "Cloud" preset and a real "Escalate to the cloud when the work is
+      // too complex" checkbox): ONE boolean, ON raises the PC's ONE card, OFF
+      // is instant, held on a stale link. It stores nothing in this window.
+      "hud-cloud-escalate",
       // H2 (2026-10-22, owner-approved 2026-10-21): EXACTLY ONE new grant -
       // this window's own layout write, saved by its own Edit mode. No other
       // write command is added, and the read grant above is not removed.
@@ -1978,12 +2048,12 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
     "the H2 change must not take the H1 read grant away");
   const writeish = cap.permissions.filter((name) => [
     "hud-layout-write", "hud-approvals", "focus-presets", "hud-voice", "hud-schedule",
-    "hud-personalities",
+    "hud-personalities", "hud-cloud-escalate",
   ].includes(name));
   assert.deepEqual(writeish.sort(),
-    ["focus-presets", "hud-approvals", "hud-layout-write", "hud-personalities",
+    ["focus-presets", "hud-approvals", "hud-cloud-escalate", "hud-layout-write", "hud-personalities",
       "hud-schedule", "hud-voice"],
-    "the HUD window gained a write command beyond its own layout, Reminders and the wording-only personality switch");
+    "the HUD window gained a write command beyond its own layout, Reminders, the wording-only personality switch and the cloud escalate switch");
   assert.match(cap.description, /hud-layout-write/);
   assert.match(cap.description, /owner-approved/);
   assert.match(cap.description, /holds NO pairing token/);
@@ -2222,11 +2292,18 @@ for (const r of FIXTURE.route_headers) {
     const chip = await page.evaluate(() => ({
       text: document.getElementById("chip-model").textContent,
       hot: document.getElementById("chip-model").classList.contains("hot"),
+      // P1-1: the turn writes the chip, and must not touch the DOOR around it.
+      doorClass: document.getElementById("chip-model-door").className,
+      doorTitle: document.getElementById("chip-model-door").title,
     }));
     await page.close();
     assert.equal(chip.text, r.expect.lane);
     assert.equal(chip.hot, r.expect.where === "cloud",
       "gold is for an answer that left this PC, and only that");
+    assert.equal(chip.doorClass, "chip-door",
+      "a turn replaced the chip door's own class - the chip and the door are one element again");
+    assert.match(chip.doorTitle, /Current Models/,
+      "a turn erased the door's tooltip, so the button no longer says what it does");
   });
 }
 
@@ -2254,7 +2331,8 @@ const KEPT_IDS = [
   "r-gate", "r-complexity", "r-meter", "r-why", "tools-used", "r-facts",
   "r-docs", "r-ents", "r-tools", "r-mem", "r-rpm", "r-rpd", "r-stt", "r-tts",
   "r-level", "hud-layout-badge", "stage-tabs", "history-toggle", "core-expand",
-  "rail-quickbar", "current-models", "appr-badge", "ambient-status", "studio-dock",
+  "rail-quickbar", "chip-model-door", "chip-model-door-ambient", "appr-badge",
+  "ambient-status", "studio-dock",
   // The owner's two rail controls (2026-10-26). `hud-settings` is the shell's,
   // added into the rail's tools group by hud_bootstrap.js - it is in this list
   // because every view shape must keep it, exactly like the page's own ids.
@@ -2495,6 +2573,76 @@ await check("the owner's two rail controls: Presets opens the one Presets menu, 
   assert.deepEqual(problems, []);
 });
 
+/* ── The PC's own escalate switch and the page's cloud yes (2026-10-27) ──── */
+
+/** A /api/presets answer with the Cloud section the server is adding. */
+function presetsAnswer(escalateOn) {
+  return {
+    available: true,
+    chosen_preset: "general",
+    chosen_model: "qwen3.5:9b",
+    presets: [
+      { id: "general", title: "General", focus: "everyday", model: "qwen3.5:9b", heavy_mode: false },
+      { id: "coding", title: "Coding", focus: "code", model: "qwen3.5:14b", heavy_mode: true },
+    ],
+    cloud: {
+      provider: "",
+      providers: [{ id: "deepseek_api", name: "DeepSeek (API)", host: "api.deepseek.com",
+        model: "deepseek-flash", key_saved: true, ready: true, why: "" }],
+      escalate: { on: escalateOn, why: "" },
+    },
+  };
+}
+
+await check("a chat turn carries cloud_yes ONLY while the PC's own escalate switch is on", async () => {
+  // The owner's rule (2026-10-27): the page sends cloud_yes only when the PC's
+  // own answer said `cloud.escalate.on`. It is a yes, never a lane - and with
+  // the switch off the body must be exactly what it always was.
+  const off = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
+    presets: presetsAnswer(false) });
+  await send(off.page, "hello on the PC");
+  const offBody = off.chats[off.chats.length - 1] || {};
+  await off.page.close();
+  assert.equal(offBody.cloud_yes, undefined,
+    "the page sent a cloud yes with the PC's switch off");
+
+  const on = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
+    presets: presetsAnswer(true) });
+  await send(on.page, "hello on the PC");
+  const onBody = on.chats[on.chats.length - 1] || {};
+  await on.page.close();
+  assert.equal(onBody.cloud_yes, true,
+    "the page did not carry the PC-approved cloud yes");
+  assert.equal(onBody.auto, true, "an escalate turn is still a routed turn (auto:true)");
+  assert.equal(onBody.lane, null, "the page picked a lane itself - the PC is the decider");
+  assert.deepEqual(off.problems, []);
+  assert.deepEqual(on.problems, []);
+});
+
+await check("Space on a Presets row picks the row - it does not start the microphone", async () => {
+  // P2-4: the page's document Space handler used to preventDefault() every
+  // Space outside #input, so a keyboard user's Space on a menu item never
+  // activated it. A focused control owns its own Space key now.
+  const { page, problems, presetApplyWrites } = await openHud(browser, {
+    jarvis: false, ollama: true, proxy: false, presets: presetsAnswer(false),
+  });
+  await page.click("#rail-presets");
+  await page.waitForSelector("#hud-presets-menu:not([hidden])", { timeout: 5000 });
+  await page.waitForTimeout(700);
+  await page.focus('#hud-presets-menu [data-preset="general"]');
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(900);
+  const focused = await page.evaluate(() => ({
+    inMenu: Boolean(document.activeElement.closest("#hud-presets-menu")),
+    label: document.activeElement.textContent.trim(),
+  }));
+  await page.close();
+  assert.deepEqual(presetApplyWrites, [{ preset: "general" }],
+    `Space did not activate the preset row: ${JSON.stringify(presetApplyWrites)}`);
+  assert.equal(focused.inMenu, true, `focus left the menu after Space: ${JSON.stringify(focused)}`);
+  assert.deepEqual(problems, []);
+});
+
 await check("Cockpit: the Bento inspector mirrors the cards and the turn", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   // No cards: a calm count, and the six telemetry rows stay out of the way
@@ -2590,7 +2738,7 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
       tabsShown: shown("stage-tabs"),
       dockShown: shown("studio-dock"),
       railHidden: getComputedStyle(document.getElementById("rail-right")).display === "none",
-      modelsShown: shown("current-models"),
+      modelsShown: shown("chip-model-door"),
       titleHidden: getComputedStyle(document.getElementById("stage-title")).display === "none",
     };
   });
@@ -2606,10 +2754,10 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
     synced: [...document.querySelectorAll('[data-hud-tab-choice="memory"]')]
       .every((b) => b.getAttribute("aria-selected") === "true"),
   }));
-  // The Current Models button opens the panel, and a route in it clicks the
-  // page's own lane button - the same lanes the compact dropdown listed.
+  // The model name (the door the owner asked for) opens the panel, and a route
+  // in it clicks the page's own lane button.
   const lanes = await page.evaluate(() => {
-    document.getElementById("current-models").click();
+    document.getElementById("chip-model-door").click();
     const panel = document.getElementById("current-models-panel");
     const buttons = [...document.querySelectorAll("#lanes .lane")];
     const routes = [...panel.querySelectorAll(".hud-models-route")];
@@ -2633,7 +2781,7 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
   assert.equal(split.tabsShown, true, "the Inspector Stage tabs are not drawn");
   assert.equal(split.dockShown, true, "the Studio icon dock is not drawn");
   assert.equal(split.railHidden, true, "the full telemetry rail is drawn in the split view");
-  assert.equal(split.modelsShown, true, "Studio has no Current Models button");
+  assert.equal(split.modelsShown, true, "Studio does not show the model-name door");
   assert.equal(split.titleHidden, true, "the stage title takes the Studio header's room");
   assert.equal(memoryTab.tab, "memory");
   assert.equal(memoryTab.railShown, true, "the Memory tab did not open a stage panel");
@@ -2641,7 +2789,7 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
   assert.equal(memoryTab.telemetryShown, false, "the Memory panel also shows the telemetry");
   assert.equal(memoryTab.brainShown, false, "the Galaxy map stayed up behind the Memory panel");
   assert.equal(memoryTab.synced, true, "the dock and the stage tab bar disagree about the chosen tab");
-  assert.equal(lanes.panelOpen, true, "the Current Models button did not open its panel");
+  assert.equal(lanes.panelOpen, true, "the model-name door did not open the Current Models panel");
   assert.deepEqual(lanes.routes, lanes.buttons, "the panel and the lane buttons disagree");
   assert.notDeepEqual(routed.lanes, lanes.before, "choosing a route in the panel changed nothing");
   assert.deepEqual(routed.lanes, [lanes.want], "the panel chose a lane the page does not use");

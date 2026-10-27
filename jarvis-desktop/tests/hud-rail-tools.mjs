@@ -275,8 +275,9 @@ check("the menu is called Presets, and the PC's own lists come first", () => {
     "the menu still titles itself HUD layouts");
   // The owner's two new kinds sit above the layouts they used to be the only
   // content of; "My personalities" is conditional, so its section function
-  // exists but is only appended when the PC lists one.
-  const order = ["Model presets", "Personality", "My personalities", "Built-in layouts"];
+  // exists but is only appended when the PC lists one. "Focus presets" is the
+  // ONE name this feature has everywhere else (contract audit F5).
+  const order = ["Focus presets", "Personality", "My personalities", "Built-in layouts"];
   let at = -1;
   for (const heading of order) {
     const next = PRESETS.indexOf(`section("${heading}")`);
@@ -291,12 +292,12 @@ check("a model preset raises the PC's ONE card, and nothing is marked before the
   assert.match(PRESETS,
     /Applying one asks the PC for ONE approval card - nothing is chosen until you answer it\./,
     "the section does not say the card rule in words");
-  assert.match(PRESETS, /await applyFocusPresetOnPc\(win, id\);/,
+  assert.match(PRESETS, /await applyFocusPresetOnPc\(win, id, provider\);/,
     "a model-preset click does not go through the apply road");
   // The mark comes from the REFETCHED contract's chosen_preset - never from
   // the click. Both halves are read from the code so a future edit that marks
   // optimistically fails here instead of looking finished.
-  const afterApply = between(PRESETS, "await applyFocusPresetOnPc(win, id);",
+  const afterApply = between(PRESETS, "await applyFocusPresetOnPc(win, id, provider);",
     "} catch (error) {", 900);
   assert.match(afterApply, /await readFocusPresetsOnPc\(win\)/,
     "a preset is marked without refetching the PC's contract");
@@ -348,6 +349,36 @@ check("the HUD window is granted the two commands the menu calls, and Settings i
     assert.ok(build.includes(`"${command}"`), `build.rs does not export ${command} to the ACL`);
     assert.ok(lib.includes(`plain_errors::${command}`), `lib.rs does not register ${command}`);
   }
+});
+
+check("the Cloud escalate switch is ONE narrow command, granted by its own set", () => {
+  // 2026-10-27: the HUD Presets menu's "Escalate to the cloud when the work is
+  // too complex". ONE boolean, ON raises the PC's ONE card, OFF is instant.
+  const capability = JSON.parse(read(join(TAURI, "capabilities", "hud.json")));
+  assert.equal(capability.permissions.filter((name) => name === "hud-cloud-escalate").length, 1,
+    "capabilities/hud.json does not grant exactly one hud-cloud-escalate set");
+  assert.match(capability.description, /hud-cloud-escalate/,
+    "the capability's own record does not say what the escalate grant is");
+  const surfaces = read(join(TAURI, "permissions", "surfaces.toml"));
+  const start = surfaces.indexOf('identifier = "hud-cloud-escalate"');
+  assert.notEqual(start, -1, "surfaces.toml has no hud-cloud-escalate set");
+  const set = surfaces.slice(start, start + 900);
+  assert.match(set, /"allow-hud-cloud-escalate"/, "the set misses allow-hud-cloud-escalate");
+  assert.doesNotMatch(set, /allow-set-manner|allow-get-manner|allow-set-hud-layout/,
+    "the cloud set was widened to another surface's commands");
+  const build = read(join(TAURI, "build.rs"));
+  const lib = read(join(TAURI, "src", "lib.rs"));
+  assert.ok(build.includes('"hud_cloud_escalate"'),
+    "build.rs does not export hud_cloud_escalate to the ACL");
+  assert.ok(lib.includes("focus_presets::hud_cloud_escalate"),
+    "lib.rs does not register hud_cloud_escalate");
+  const command = read(join(TAURI, "src", "focus_presets.rs"));
+  assert.match(command, /pub async fn hud_cloud_escalate\([^)]*on: bool,?[^)]*\)/,
+    "the command does not take exactly one boolean");
+  assert.match(command, /CLOUD_ESCALATE_PATH: &str = "\/api\/work\/cloud-escalate"/,
+    "the command does not post the documented route");
+  assert.match(command, /cloud_escalate_body\(on\)/,
+    "the command does not send the ONE-boolean body");
 });
 
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nall checks passed");

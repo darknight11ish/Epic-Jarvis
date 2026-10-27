@@ -12,32 +12,40 @@
  *   - a click posts /api/work/apply ONCE with {"preset": "<id>"} - the same
  *     route and body the bar's "Use this preset" sends - and after the PC
  *     answers the list is refetched and the highlight follows the contract;
- *   - the Studio dock's Current Models button (the owner's ask of 2026-10-26)
- *     opens a read-only panel with the PC's own model facts, and its lane
- *     routes are the page's own #lanes buttons - the next chat body carries
- *     the lane it clicked, and the panel marks only what the page marks;
+ *   - a SUCCESSFUL apply re-renders the page's lanes without throwing (P1-3 of
+ *     the 2026-10-27 HUD audit: the three old lane modes are gone, but
+ *     renderLanes() is still called from the apply and #lanes must stay);
+ *   - Coding, which the PC always refuses (heavy mode), is NOT a button: it is
+ *     drawn with the phone's own sentence, and the stub refuses it as the real
+ *     PC does (contract audit F1 - the old stub pinned a fiction);
+ *   - the top-right model name is the door to the Current Models panel, and
+ *     Ambient's pill is a second door to the same panel (HUD audit P1-1/P1-2);
  *   - the panel says plainly when the PC has nothing loaded or did not answer,
  *     and opening it reads exactly /api/models, /api/status and /api/presets -
  *     no POST, no card, no model switch;
- *   - #lanes and #current-models are still there and still work (the Studio
- *     dock's panel and the page's own lane tests drive them), and the three
- *     vendored copies of the page stay byte-identical.
+ *   - the Cloud section: the row sits after the five, opens a provider
+ *     submenu (no POST), picking a ready provider posts ONE apply with the
+ *     provider id, a provider with no key is words and its PC command and posts
+ *     nothing, and the mark comes from the refetched `cloud.provider`;
+ *   - the escalate checkbox is drawn from the PC's `cloud.escalate.on`, never
+ *     from the click; a click posts ONE boolean, a refused card leaves it
+ *     unticked after the refetch, and the rest of the menu stays usable;
+ *   - #lanes still exists and the three vendored copies of the page stay
+ *     byte-identical.
  *   - the card decision really flows: while the apply waits, the PC's card
  *     appears in #approvals and Approve posts /api/approve, then the rail
  *     marks the applied preset;
  *   - the NEXT chat body is an ordinary routed turn: auto:true and no lane
  *     override (bar/phone send the same; the applied preset lives on the PC,
- *     which is why /api/presets' own chosen_preset/active_lane is the record);
+ *     which is why /api/presets' own chosen_preset/active_lane is the record) -
+ *     and it carries `cloud_yes` ONLY while the PC's escalate switch is on;
  *   - Cloud routes the next message through the lane mechanism the rail
  *     always had: the next chat body carries lane:"jarvis-escalate",
  *     auto:false, and the button is marked active - only while
  *     /api/status says proxy:true;
  *   - with proxy:false, Cloud says plainly that the cloud lane is down, marks
  *     nothing, and the next chat body stays an ordinary local turn;
- *   - a PC without the presets route gets plain words, not invented presets;
- *   - #lanes and #current-models are still there and still work (the Studio
- *     dock's panel and the page's own lane tests drive them), and the three
- *     vendored copies of the page stay byte-identical.
+ *   - a PC without the presets route gets plain words, not invented presets.
  *
  * NOT here: the real desktop window and WebView2 painting (a rebuild+install
  * is needed after merge), and what the PC does with the card itself - that is
@@ -54,7 +62,9 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 const SRC = join(HERE, "..", "src");
 const FIXTURE = JSON.parse(
   readFileSync(join(HERE, "..", "..", "backend", "fixtures", "work_presets.json"), "utf8"));
-const CLOUD_LANES = ["jarvis-escalate", "jarvis-critic", "jarvis-bulk"];
+// The ONE lane name the PC keeps (2026-10-27): escalate / critic / bulk are no
+// longer modes, and only jarvis-escalate still exists for the Cloud button.
+const CLOUD_LANES = ["jarvis-escalate"];
 const PERSONALITIES = JSON.parse(
   readFileSync(join(HERE, "..", "..", "contract", "personalities.json"), "utf8"));
 
@@ -92,6 +102,28 @@ function fixturePayload(chosen = null) {
     apply_path: "/api/work/apply",
     switch_path: "/api/models/switch",
     auto: false,
+    // The Cloud section (2026-10-27): the shape the server is adding - one
+    // chosen provider, the services it has keys for, and the PC's own
+    // escalate switch. Two rows: one ready and one with no key, so the menu's
+    // "not a button" rule is proved against a real answer.
+    cloud: {
+      provider: "",
+      providers: [
+        { id: "deepseek_api", short: "deepseek", name: "DeepSeek (API)",
+          company: "DeepSeek", host: "api.deepseek.com", model: "deepseek-flash",
+          key_saved: true, ready: true, why: "", chosen: false,
+          money: { company: "DeepSeek", limit: "$10.00", left: "$9.10", spent: "$0.90",
+            until: "2026-11-01", reached: false },
+          key_line: "py -3 jarvis_chatbot_api.py key deepseek",
+          key_where: "https://platform.deepseek.com/api_keys" },
+        { id: "groq_api", short: "groq", name: "Groq (API)",
+          company: "Groq", host: "api.groq.com", model: "llama-3.3-70b",
+          key_saved: false, ready: false, why: "no key is saved on this PC", chosen: false,
+          money: null, key_line: "py -3 jarvis_chatbot_api.py key groq",
+          key_where: "https://console.groq.com/keys" },
+      ],
+      escalate: { on: false, why: "" },
+    },
   };
 }
 
@@ -139,7 +171,12 @@ async function openHud(browser, options = {}) {
     mannerPosts: [],
     applyMode: options.applyMode || "ok",       // ok | hold | refuse
     applyBody: null,
+    applyPosts: [],
     applyWait: null,                            // resolves when hold is released
+    // The PC's own escalate switch (2026-10-27): its mode is how the synthetic
+    // PC answers, never what the page may assume.
+    escalateMode: options.escalateMode || "ok", // ok | refuse | waiting
+    escalatePosts: [],
     pending: [],
     decisions: [],
     chats: [],
@@ -162,6 +199,7 @@ async function openHud(browser, options = {}) {
     modelsEmpty: options.modelsEmpty === true,
     reads: [],
   };
+  if (options.noCloud) delete state.payload.cloud;
   const problems = [];
   const page = await browser.newPage({ viewport: options.viewport || { width: 1280, height: 820 } });
   page.on("pageerror", (e) => problems.push(String(e)));
@@ -226,10 +264,35 @@ async function openHud(browser, options = {}) {
       }
       if (url.pathname === "/api/work/apply" && req.method() === "POST") {
         state.applyBody = JSON.parse(req.postData() || "{}");
+        state.applyPosts.push(state.applyBody);
         const chosen = state.applyBody.preset;
+        if (chosen === "cloud") {
+          // The server's own refusal shape: a provider is required, and a
+          // service with no key cannot be chosen.
+          const provider = (state.payload.cloud.providers || [])
+            .find((row) => row.id === state.applyBody.provider);
+          if (!provider) {
+            return json(route, 400, { ok: false, changed: false,
+              error: "Name one of the API services this PC has: deepseek_api, groq_api." });
+          }
+          if (!provider.key_saved) {
+            return json(route, 409, { ok: false, changed: false,
+              error: "no key is saved on this PC for Groq (API); nothing was changed." });
+          }
+          state.payload.cloud.provider = provider.id;
+          return json(route, 200, { ok: true, changed: true, preset: { id: "cloud" } });
+        }
         if (state.applyMode === "refuse") {
           return json(route, 409, { ok: false, changed: false,
             error: "the Coding preset is being prepared; nothing was changed" });
+        }
+        // The REAL PC's refusal for a heavy preset (contract audit F1): both
+        // cards as one pooled lane is not built, so `coding` always answers
+        // 409. The stub must not pretend otherwise, or the suite pins a
+        // fiction.
+        if (chosen === "coding") {
+          return json(route, 409, { ok: false, changed: false,
+            error: "heavy mode needs the both-card lane, arriving later; nothing was changed." });
         }
         if (state.applyMode === "hold") {
           // The PC raises its ONE card and the POST waits for the owner. The
@@ -240,10 +303,27 @@ async function openHud(browser, options = {}) {
           await new Promise((resolve) => { state.applyWait = resolve; });
           state.pending = [];
         }
-        state.payload = fixturePayload(chosen);
+        state.payload = { ...state.payload, ...fixturePayload(chosen) };
         return json(route, 200, { ok: true, changed: true, preset: state.payload.presets.find((p) => p.id === chosen),
           lane: state.payload.lane, base_url: "http://127.0.0.1:11436",
           model: state.payload.chosen_model, previous_preset: null });
+      }
+      if (url.pathname === "/api/work/cloud-escalate" && req.method() === "POST") {
+        // The PC's own escalate switch (2026-10-27): ONE boolean.
+        const body = JSON.parse(req.postData() || "{}");
+        state.escalatePosts.push(body);
+        if (state.escalateMode === "refuse") {
+          return json(route, 409, { ok: false, changed: false,
+            error: "the approval card was refused; nothing was changed." });
+        }
+        if (state.escalateMode === "waiting") {
+          // The card is still open on the PC: nothing written yet.
+          return json(route, 200, { ok: false, waiting: true,
+            said: "The PC is waiting for you to answer its card." });
+        }
+        state.payload.cloud.escalate.on = body.on === true;
+        return json(route, 200, { ok: true, changed: true, on: body.on === true,
+          said: body.on === true ? "Escalating when the work is complex is on." : "Escalating is off." });
       }
       if ((url.pathname === "/api/approve" || url.pathname === "/api/deny") && req.method() === "POST") {
         state.decisions.push({ path: url.pathname, body: JSON.parse(req.postData() || "{}") });
@@ -294,7 +374,11 @@ await check("the rail lists the PC's five presets in the contract's order, title
   assert.equal(rows.length, 5, "the rail does not show five presets");
   assert.deepEqual(rows.map((r) => r.id), FIXTURE.presets.map((p) => p.id), "preset order drifted from the PC's contract");
   assert.deepEqual(rows.map((r) => r.title), FIXTURE.presets.map((p) => p.title), "preset titles drifted");
-  assert.deepEqual(rows.map((r) => r.model), FIXTURE.presets.map((p) => p.model), "models drifted");
+  // A heavy preset cannot run, so its model line is the PC's own refusal
+  // instead of a model it can never load (contract audit F1).
+  assert.deepEqual(rows.map((r) => r.model),
+    FIXTURE.presets.map((p) => (p.heavy_mode === true ? "needs both cards" : p.model)),
+    "models drifted");
   assert.deepEqual(problems, []);
 });
 
@@ -320,14 +404,35 @@ await check("the chosen preset is the highlighted one, with its model on the sta
 
 await check("a click posts /api/work/apply once with the right preset id, then marks the PC's answer", async () => {
   const { page, state, problems } = await openHud(browser);
-  await page.click('#presets .preset[data-preset="coding"]');
+  await page.click('#presets .preset[data-preset="general"]');
   await page.waitForTimeout(700);
   const rows = await presetRows(page);
   const words = await page.evaluate(() => document.getElementById("preset-words").textContent);
   await page.close();
-  assert.equal(state.applyBody && state.applyBody.preset, "coding", "the apply body did not name the clicked preset");
-  assert.deepEqual(rows.filter((r) => r.pressed === "true").map((r) => r.id), ["coding"], "the rail did not mark the preset the PC now names chosen");
-  assert.match(words, /Now using Coding/, words);
+  assert.equal(state.applyBody && state.applyBody.preset, "general", "the apply body did not name the clicked preset");
+  assert.deepEqual(rows.filter((r) => r.pressed === "true").map((r) => r.id), ["general"], "the rail did not mark the preset the PC now names chosen");
+  assert.match(words, /Now using General/, words);
+  assert.deepEqual(problems, []);
+});
+
+await check("Coding is drawn, but it cannot be applied: the PC always refuses heavy mode", async () => {
+  // Contract audit F1: the PC answers 409 for `coding` (both cards as one
+  // pooled lane is not built), so neither the rail nor the menu may offer the
+  // click. The stub refuses it too, so nothing here can pin a fiction.
+  const { page, state, problems } = await openHud(browser);
+  const coding = await page.evaluate(() => {
+    const b = document.querySelector('#presets .preset[data-preset="coding"]');
+    return { disabled: b.disabled, title: b.title, label: b.getAttribute("aria-label"),
+      model: b.querySelector(".preset-model").textContent };
+  });
+  await page.click('#presets .preset[data-preset="coding"]', { force: true }).catch(() => {});
+  await page.waitForTimeout(400);
+  await page.close();
+  assert.equal(coding.disabled, true, "Coding is still a live apply button");
+  assert.match(coding.title, /needs both cards at once as one pooled lane/,
+    `Coding does not say why it cannot be used: ${coding.title}`);
+  assert.match(coding.model, /needs both cards/, "Coding still advertises a model it cannot run");
+  assert.equal(state.applyBody, null, "a disabled heavy preset still reached the PC");
   assert.deepEqual(problems, []);
 });
 
@@ -369,16 +474,18 @@ await check("the PC's card really flows: it paints in #approvals, Approve decide
 
 await check("the NEXT chat body is an ordinary routed turn (auto, no lane override), like the bar and phone", async () => {
   const { page, state, problems } = await openHud(browser);
-  await page.click('#presets .preset[data-preset="coding"]');
+  await page.click('#presets .preset[data-preset="general"]');
   await page.waitForTimeout(700);
   await sendChat(page, "what is this preset doing");
   const body = state.chats[state.chats.length - 1] || {};
   await page.close();
-  assert.equal(state.applyBody && state.applyBody.preset, "coding", "the apply never happened");
+  assert.equal(state.applyBody && state.applyBody.preset, "general", "the apply never happened");
   assert.equal(body.auto, true, "the next turn is not a routed turn (auto:true)");
   assert.equal(body.lane, null, "the page kept its own lane override after applying a preset - it would override the PC's active lane");
   assert.equal(body.device, "hud");
   assert.equal(body.stream, true);
+  assert.equal(body.cloud_yes, undefined,
+    "the page sent a cloud yes while the PC's escalate switch is off");
   assert.deepEqual(problems, []);
 });
 
@@ -438,10 +545,9 @@ await check("a PC without the presets route gets plain words, not invented prese
   assert.deepEqual(problems, []);
 });
 
-/* ── The Studio dock's Current Models panel (the owner's ask, 2026-10-26) ── */
+/* ── The Current Models panel, opened by the model name itself (2026-10-27) ── */
 
-/** Put the HUD in the Studio shell the way the shell's own event does - the
- *  Current Models button lives in that shell's header. */
+/** Put the HUD in the Studio shell the way the shell's own event does. */
 async function useStudio(page) {
   await page.evaluate(() => {
     window.dispatchEvent(new CustomEvent("jarvis:hud-shell", {
@@ -453,15 +559,25 @@ async function useStudio(page) {
   await page.waitForTimeout(150);
 }
 
-async function openCurrentModels(page) {
-  await useStudio(page);
-  await page.click("#current-models");
+async function useAmbient(page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent("jarvis:hud-shell", {
+      detail: { shell_template: "center-core", density: "comfortable", default_stage_tab: "talk" },
+    }));
+  });
+  await page.waitForFunction(() =>
+    document.body.getAttribute("data-hud-shell") === "center-core", null, { timeout: 5000 });
+  await page.waitForTimeout(150);
+}
+
+async function openCurrentModels(page, door = "chip-model-door") {
+  await page.click(`#${door}`);
   await page.waitForSelector("#current-models-panel:not([hidden])", { timeout: 5000 });
   await page.waitForTimeout(600);          // the three reads land, then the panel re-renders
 }
 
-async function modelsReport(page) {
-  return page.evaluate(() => {
+async function modelsReport(page, door = "chip-model-door") {
+  return page.evaluate((doorId) => {
     const box = document.getElementById("current-models-panel");
     const groups = [...box.querySelectorAll(".hud-presets-group")].map((group) => ({
       head: (group.querySelector(".hud-presets-head") || {}).textContent || "",
@@ -480,30 +596,31 @@ async function modelsReport(page) {
       loaded: group("Loaded right now").lines,
       focus: group("Chosen focus preset").lines,
       routes: group("Route the next message").routes,
-      doorExpanded: document.getElementById("current-models").getAttribute("aria-expanded"),
+      routesWords: group("Route the next message").lines,
+      doorExpanded: document.getElementById(doorId).getAttribute("aria-expanded"),
     };
-  });
+  }, door);
 }
 
-await check("the Studio dock's button says Current Models and opens the PC's own model facts", async () => {
+await check("the top-right model name IS the door, and it opens the PC's own model facts", async () => {
   const { page, state, problems } = await openHud(browser, { chosen: "general" });
-  await useStudio(page);
   const door = await page.evaluate(() => {
-    const b = document.getElementById("current-models");
+    const b = document.getElementById("chip-model-door");
     return { text: b.textContent.trim(), label: b.getAttribute("aria-label"), title: b.title,
-      expanded: b.getAttribute("aria-expanded"), shown: getComputedStyle(b).display !== "none" };
+      expanded: b.getAttribute("aria-expanded"), shown: getComputedStyle(b).display !== "none",
+      chipInside: Boolean(b.querySelector("#chip-model")) };
   });
   state.reads.length = 0;                  // only what the panel itself asks for
   await openCurrentModels(page);
   const panel = await modelsReport(page);
   const panelReads = [...state.reads];
   await page.close();
-  assert.equal(door.shown, true, "the Studio dock does not show the Current Models button");
-  assert.equal(door.text, "Current Models", "the button's visible label is not Current Models");
+  assert.equal(door.shown, true, "the model name is not on screen in the Cockpit shell");
+  assert.equal(door.chipInside, true, "the door does not hold the page's own #chip-model span");
   assert.equal(door.label, "Current Models: what Jarvis is using and has loaded", door.label);
   assert.equal(door.title, "Current Models: what Jarvis is using and has loaded", door.title);
-  assert.equal(door.expanded, "false", "the button starts claiming the panel is open");
-  assert.equal(panel.doorExpanded, "true", "opening the panel did not say so on the button");
+  assert.equal(door.expanded, "false", "the door starts claiming the panel is open");
+  assert.equal(panel.doorExpanded, "true", "opening the panel did not say so on the door");
   assert.equal(panel.title, "Current Models", "the panel's heading does not name it");
   assert.equal(panel.aria, "Current Models", "the panel's name for a screen reader is not Current Models");
   assert.deepEqual(panel.heads,
@@ -523,18 +640,75 @@ await check("the Studio dock's button says Current Models and opens the PC's own
   }
   assert.deepEqual(panelReads.filter((r) => r.method !== "GET"), [],
     "the panel sent a write - it is a read");
-  assert.equal(panelReads.filter((r) => r.path === "/api/models").length, 1,
-    "the panel read /api/models more than once (or not at all)");
   assert.deepEqual(problems, []);
 });
 
-await check("the panel's routes are the page's own lanes, and routing moves the NEXT message", async () => {
+await check("a successful apply keeps the chip door: no turn may overwrite the door", async () => {
+  // P1-1: ten assignments write #chip-model's text/class/title. After a turn
+  // and after a preset apply the door must still be the door.
+  const { page, problems } = await openHud(browser, { chosen: "general" });
+  await sendChat(page, "hello there");
+  const afterTurn = await page.evaluate(() => {
+    const door = document.getElementById("chip-model-door");
+    const chip = document.getElementById("chip-model");
+    return { cls: door.className, title: door.title, label: door.getAttribute("aria-label"),
+      chipCls: chip.className, chipText: chip.textContent };
+  });
+  // A successful preset apply: the page repaints the chip and renders the
+  // lanes - and must not throw (P1-3), with #lanes still in the document.
+  await page.click('#presets .preset[data-preset="general"]');
+  await page.waitForTimeout(900);
+  const afterApply = await page.evaluate(() => {
+    const lanes = document.getElementById("lanes");
+    const door = document.getElementById("chip-model-door");
+    return { laneButtons: lanes ? [...lanes.querySelectorAll(".lane")].map((b) => b.dataset.lane) : null,
+      laneIds: lanes ? lanes.id : "",
+      doorCls: door.className, doorTitle: door.title,
+      words: document.getElementById("preset-words").textContent };
+  });
+  await page.close();
+  assert.equal(afterTurn.cls, "chip-door", "a turn replaced the door's class");
+  assert.equal(afterTurn.title, "Current Models: what Jarvis is using and has loaded",
+    "a turn erased the door's tooltip");
+  assert.equal(afterTurn.chipCls, "chip", `a turn replaced the chip's own class: ${afterTurn.chipCls}`);
+  assert.equal(afterTurn.label, "Current Models: what Jarvis is using and has loaded",
+    "a turn erased the door's accessible name");
+  // The old three modes are gone from what #lanes draws; the element stays.
+  assert.deepEqual(afterApply.laneButtons, ["auto", "local"],
+    `#lanes draws more than the two real routes: ${JSON.stringify(afterApply.laneButtons)}`);
+  assert.equal(afterApply.doorCls, "chip-door", "a successful preset apply replaced the door's class");
+  assert.equal(afterApply.doorTitle, "Current Models: what Jarvis is using and has loaded",
+    "a successful preset apply erased the door's tooltip");
+  assert.match(afterApply.words, /Now using/, `the apply did not say what happened: ${afterApply.words}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("Ambient has its own door, and it opens the same panel", async () => {
+  const { page, problems } = await openHud(browser);
+  await useAmbient(page);
+  const doors = await page.evaluate(() => ({
+    bar: getComputedStyle(document.getElementById("chip-model-door")).display,
+    pill: getComputedStyle(document.getElementById("chip-model-door-ambient")).display,
+    label: document.getElementById("chip-model-door-ambient").getAttribute("aria-label"),
+  }));
+  await openCurrentModels(page, "chip-model-door-ambient");
+  const panel = await modelsReport(page, "chip-model-door-ambient");
+  await page.close();
+  assert.equal(doors.bar, "none", "the stage bar's chip door is still drawn in Ambient");
+  assert.notEqual(doors.pill, "none", "Ambient's pill door is not on screen");
+  assert.equal(doors.label, "Current Models: what Jarvis is using and has loaded");
+  assert.equal(panel.doorExpanded, "true", "Ambient's door does not say the panel is open");
+  assert.ok(panel.heads.includes("Answering now"), "Ambient's door did not open the same panel");
+  assert.deepEqual(problems, []);
+});
+
+await check("the panel's routes are the page's own lanes - only auto and the local model now", async () => {
   const { page, state, problems } = await openHud(browser);
   await openCurrentModels(page);
   const lanes = await page.evaluate(() => [...document.querySelectorAll("#lanes .lane")]
     .map((b) => b.dataset.lane));
   const panel = await modelsReport(page);
-  const want = panel.routes[panel.routes.length - 1].lane;   // a cloud lane (escalate/critic/bulk)
+  const want = panel.routes[panel.routes.length - 1].lane;   // the local model
   await page.click(`#current-models-panel .hud-models-route[data-lane="${want}"]`);
   await page.waitForTimeout(300);
   const after = await page.evaluate(() => ({
@@ -544,19 +718,28 @@ await check("the panel's routes are the page's own lanes, and routing moves the 
     panelPressed: [...document.querySelectorAll("#current-models-panel .hud-models-route")]
       .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane),
     chip: document.getElementById("chip-model").textContent,
+    cloudButton: document.getElementById("preset-cloud").getAttribute("aria-pressed"),
   }));
   await sendChat(page, "route this one");
   const body = state.chats[state.chats.length - 1] || {};
   await page.close();
+  assert.deepEqual(lanes, ["auto", "local"],
+    `the page draws the old cloud modes again: ${JSON.stringify(lanes)}`);
   assert.deepEqual(panel.routes.map((r) => r.lane), lanes,
     "the panel's routes are not the page's own lane list");
   assert.deepEqual(panel.routes.filter((r) => r.pressed === "true").map((r) => r.lane), ["auto"],
     "the panel did not mark the page's starting lane");
+  // The cloud is NOT one of these rows any more; the panel says where it is.
+  assert.equal(panel.routes.some((r) => /jarvis-/.test(r.lane)), false,
+    "a cloud lane is still drawn as a route");
+  assert.match(panel.routesWords.join(" "), /Cloud button/,
+    `the panel does not say where the cloud went: ${JSON.stringify(panel.routesWords)}`);
   assert.equal(after.pageLane, want, "the panel's route did not change the page's lane");
   assert.deepEqual(after.lanePressed, [want], "the page's own lane buttons did not follow");
   assert.deepEqual(after.panelPressed, [want], "the panel's mark did not follow the page's");
-  assert.equal(after.chip, want.replace("jarvis-", ""), `the chip did not follow the route: ${after.chip}`);
-  assert.equal(body.lane, want, "the next chat body does not carry the lane the panel chose");
+  assert.equal(after.chip, "qwen3.5:9b", `the chip did not follow the route: ${after.chip}`);
+  assert.equal(after.cloudButton, "false", "the Cloud button is marked while the page routes locally");
+  assert.equal(body.lane, "qwen3.5:9b", "the next chat body does not carry the lane the panel chose");
   assert.equal(body.auto, false, "a routed turn must not be auto");
   assert.equal(state.applyBody, null, "routing from the panel applied a preset");
   assert.deepEqual(state.mannerPosts, [], "routing from the panel switched a personality");
@@ -641,17 +824,46 @@ async function menuReport(page) {
         chosen: b.getAttribute("aria-current") === "true",
         preset: b.dataset.preset || "",
         personality: b.dataset.personality || "",
+        disabled: b.disabled === true,
       })),
       notes: [...group.querySelectorAll(".hud-presets-empty")].map((p) => p.textContent),
+      // A heavy preset is drawn as words, not as a button (contract audit F1).
+      blocked: [...group.querySelectorAll(".hud-presets-empty[data-preset]")]
+        .map((p) => ({ preset: p.dataset.preset, text: p.textContent })),
     }));
     const rows = (heading) => (groups.find((g) => g.heading === heading) || { items: [] }).items;
+    const blocked = (heading) => (groups.find((g) => g.heading === heading) || { blocked: [] }).blocked;
     const line = menu.querySelector(".hud-presets-line");
+    const cloudBox = document.getElementById("hud-presets-cloud-menu");
+    const cloudRow = menu.querySelector('[data-cloud-action="open"]');
+    const checkbox = document.getElementById("hud-escalate-cloud");
     return {
       title: (menu.querySelector(".hud-presets-title") || {}).textContent || "",
       aria: menu.getAttribute("aria-label"),
       headings: groups.map((g) => g.heading),
       groups,
-      model: rows("Model presets"),
+      model: rows("Focus presets").filter((row) => row.preset),
+      blocked: blocked("Focus presets"),
+      cloudRow: cloudRow ? {
+        text: cloudRow.textContent.trim(),
+        chosen: cloudRow.getAttribute("aria-current") === "true",
+        expanded: cloudRow.getAttribute("aria-expanded"),
+      } : null,
+      providers: cloudBox ? [...cloudBox.querySelectorAll("[data-provider]")].map((b) => ({
+        id: b.dataset.provider,
+        text: b.textContent.trim(),
+        chosen: b.getAttribute("aria-current") === "true",
+        disabled: b.disabled === true,
+      })) : [],
+      providerNotes: cloudBox ? [...cloudBox.querySelectorAll(".hud-presets-empty")].map((p) => p.textContent) : [],
+      keyLines: cloudBox ? [...cloudBox.querySelectorAll(".hud-presets-key")].map((p) => p.textContent) : [],
+      submenuOpen: Boolean(cloudBox && !cloudBox.hidden),
+      checkbox: checkbox ? {
+        checked: checkbox.checked, disabled: checkbox.disabled,
+        label: (checkbox.closest("label") || {}).textContent || "",
+        describedBy: checkbox.getAttribute("aria-describedby"),
+      } : null,
+      why: (document.getElementById("hud-escalate-cloud-why") || {}).textContent || "",
       people: rows("Personality"),
       mine: rows("My personalities"),
       layouts: rows("Built-in layouts").length,
@@ -660,20 +872,28 @@ async function menuReport(page) {
   });
 }
 
-await check("the menu is called Presets and lists the PC's five model presets and nine personalities", async () => {
-  const { page, problems } = await openHud(browser, { chosen: "coding" });
+await check("the menu is called Presets and lists the PC's focus presets and nine personalities", async () => {
+  const { page, problems } = await openHud(browser, { chosen: "general" });
   await openPresetMenu(page);
   const menu = await menuReport(page);
   await page.close();
   assert.equal(menu.title, "Presets", "the menu did not take the owner's name for it");
   assert.equal(menu.aria, "Presets", "the menu's name for a screen reader is not Presets");
-  assert.deepEqual(menu.headings.slice(0, 3), ["Model presets", "Personality", "Built-in layouts"],
+  // One name everywhere: the phone's title, Settings, the bar and JARVIS-API
+  // all say "Focus presets" (contract audit F5).
+  assert.deepEqual(menu.headings.slice(0, 3), ["Focus presets", "Personality", "Built-in layouts"],
     `the PC's own lists do not come before the layouts: ${JSON.stringify(menu.headings)}`);
-  assert.deepEqual(menu.model.map((r) => r.preset), FIXTURE.presets.map((p) => p.id),
-    "the menu does not list the PC's five model presets in its order");
+  // Coding is drawn as the PC's refusal, not as a row that always 409s (F1).
+  const live = FIXTURE.presets.filter((p) => p.heavy_mode !== true);
+  assert.deepEqual(menu.model.map((r) => r.preset), live.map((p) => p.id),
+    "the menu does not list the PC's applicable presets in its order");
   assert.deepEqual(menu.model.map((r) => r.text.replace(/ \(chosen\)$/, "")),
-    FIXTURE.presets.map((p) => p.title), "the model presets' titles are not the PC's own");
-  assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["coding"],
+    live.map((p) => p.title), "the presets' titles are not the PC's own");
+  assert.deepEqual(menu.blocked.map((r) => r.preset), ["coding"],
+    `the heavy preset is not drawn as unavailable: ${JSON.stringify(menu.blocked)}`);
+  assert.match(menu.blocked[0].text, /needs both cards at once as one pooled lane/,
+    `the PC's own heavy-mode sentence is missing: ${menu.blocked[0].text}`);
+  assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["general"],
     "the chosen mark is not the PC's chosen_preset");
   assert.deepEqual(menu.people.map((r) => r.personality),
     PERSONALITIES.personalities.map((p) => p.id),
@@ -682,7 +902,7 @@ await check("the menu is called Presets and lists the PC's five model presets an
     PERSONALITIES.personalities.map((p) => p.title),
     "the personalities' titles are not the PC's own");
   assert.equal(menu.mine.length, 0, "a My personalities section appeared with no saved ones");
-  const modelRule = (menu.groups.find((g) => g.heading === "Model presets") || { notes: [] }).notes.join(" ");
+  const modelRule = (menu.groups.find((g) => g.heading === "Focus presets") || { notes: [] }).notes.join(" ");
   assert.match(modelRule, /ONE approval card/i,
     `the menu does not say the model cards' rule: ${modelRule}`);
   assert.equal(menu.line, "", "the menu said something before any action ran");
@@ -692,30 +912,168 @@ await check("the menu is called Presets and lists the PC's five model presets an
 await check("a model preset click asks the PC, and the chosen mark follows the REFETCHED contract", async () => {
   const { page, state, problems } = await openHud(browser);
   await openPresetMenu(page);
-  await page.click('#hud-presets-menu [data-preset="coding"]');
+  await page.click('#hud-presets-menu [data-preset="general"]');
   await page.waitForTimeout(900);
   const menu = await menuReport(page);
   await page.close();
-  assert.equal(state.applyBody && state.applyBody.preset, "coding",
+  assert.equal(state.applyBody && state.applyBody.preset, "general",
     "the model-preset click did not ask the PC to apply it");
-  assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["coding"],
+  assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["general"],
     "the menu did not mark the preset the PC's refetched contract now names chosen");
-  assert.match(menu.line, /Now using Coding/, `the menu does not say what the PC did: ${menu.line}`);
+  assert.match(menu.line, /Now using General/, `the menu does not say what the PC did: ${menu.line}`);
   assert.deepEqual(problems, []);
 });
 
 await check("a refused model preset leaves nothing marked, and says why", async () => {
   const { page, state, problems } = await openHud(browser, { applyMode: "refuse" });
   await openPresetMenu(page);
-  await page.click('#hud-presets-menu [data-preset="coding"]');
+  await page.click('#hud-presets-menu [data-preset="general"]');
   await page.waitForTimeout(900);
   const menu = await menuReport(page);
   await page.close();
-  assert.equal(state.applyBody && state.applyBody.preset, "coding", "the click never reached the PC");
+  assert.equal(state.applyBody && state.applyBody.preset, "general", "the click never reached the PC");
   assert.equal(menu.model.filter((r) => r.chosen).length, 0,
     "a preset was marked chosen although the PC refused it");
   assert.match(menu.line, /did not work|prepared|nothing was changed/i,
     `the refusal is not said in plain words: ${menu.line}`);
+  // A refused card must not leave the rows dead (P2-3).
+  assert.equal(menu.model.some((r) => r.disabled), false,
+    `a refused card left the presets disabled: ${JSON.stringify(menu.model)}`);
+  assert.deepEqual(problems, []);
+});
+
+/* ── The Cloud section (the owner, 2026-10-27: a "Cloud" preset beside
+ *    coder/general/fast, listing "the API providers the PC has connected",
+ *    plus "Escalate to the cloud when the work is too complex") ──────────── */
+
+await check("the Cloud row sits after the five and opens the PC's providers without posting", async () => {
+  const { page, state, problems } = await openHud(browser);
+  await openPresetMenu(page);
+  const closed = await menuReport(page);
+  await page.click('[data-cloud-action="open"]');
+  await page.waitForTimeout(250);
+  const open = await menuReport(page);
+  await page.close();
+  assert.ok(closed.cloudRow, "the menu has no Cloud row");
+  assert.match(closed.cloudRow.text, /^Cloud/, closed.cloudRow.text);
+  assert.equal(closed.cloudRow.expanded, "false", "the Cloud row starts saying the submenu is open");
+  assert.equal(closed.submenuOpen, false, "the provider submenu is drawn before the row is pressed");
+  assert.equal(open.submenuOpen, true, "pressing Cloud did not open the provider submenu");
+  assert.equal(open.cloudRow.expanded, "true", "the Cloud row does not say the submenu is open");
+  // Drawing the submenu is a READ: no write of any kind.
+  assert.deepEqual(state.applyPosts, [], "opening the Cloud section posted an apply");
+  assert.deepEqual(state.escalatePosts, [], "opening the Cloud section posted the escalate switch");
+  assert.deepEqual(open.providers.map((p) => p.id), ["deepseek_api", "groq_api"],
+    `the submenu does not list the PC's providers: ${JSON.stringify(open.providers)}`);
+  assert.deepEqual(open.providers.filter((p) => p.chosen).map((p) => p.id), [],
+    "a provider was marked chosen before the PC named one");
+  assert.match(open.providerNotes.join(" "), /no key is saved on this PC/i,
+    `the PC's own reason for the unusable service is missing: ${JSON.stringify(open.providerNotes)}`);
+  assert.deepEqual(open.keyLines, ["py -3 jarvis_chatbot_api.py key groq"],
+    "the PC's own command for adding a key is not shown");
+  assert.match(open.providerNotes.join(" "), /Add the key on your PC/,
+    "the submenu does not say a key is added on the PC");
+  assert.deepEqual(problems, []);
+});
+
+await check("picking a provider is ONE apply with the provider id, marked from the refetched answer", async () => {
+  const { page, state, problems } = await openHud(browser);
+  await openPresetMenu(page);
+  await page.click('[data-cloud-action="open"]');
+  await page.waitForTimeout(200);
+  await page.click('#hud-presets-cloud-menu .hud-presets-item[data-provider="deepseek_api"]');
+  await page.waitForTimeout(900);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.deepEqual(state.applyPosts, [{ preset: "cloud", provider: "deepseek_api" }],
+    `the provider click did not post exactly one cloud apply: ${JSON.stringify(state.applyPosts)}`);
+  assert.deepEqual(menu.providers.filter((p) => p.chosen).map((p) => p.id), ["deepseek_api"],
+    "the chosen provider is not the PC's refetched `cloud.provider`");
+  assert.equal(menu.cloudRow.chosen, true, "the Cloud row is not marked from the PC's answer");
+  assert.match(menu.cloudRow.text, /DeepSeek \(API\)/, menu.cloudRow.text);
+  // It is an APPLY, so it asks for the PC's ONE card; the page approves nothing.
+  assert.deepEqual(state.decisions, [], "the page approved the card itself");
+  assert.deepEqual(problems, []);
+});
+
+await check("a provider with no key is not a button: the PC's command and no post", async () => {
+  const { page, state, problems } = await openHud(browser);
+  await openPresetMenu(page);
+  await page.click('[data-cloud-action="open"]');
+  await page.waitForTimeout(200);
+  const groq = await page.evaluate(() => {
+    const button = document.querySelector('#hud-presets-cloud-menu .hud-presets-item[data-provider="groq_api"]');
+    const line = document.querySelector("#hud-presets-cloud-menu .hud-presets-key");
+    return { button: Boolean(button), line: line ? line.textContent : "" };
+  });
+  await page.close();
+  assert.equal(groq.button, false, "a service with no key is still an apply button");
+  assert.match(groq.line, /jarvis_chatbot_api\.py key groq/, "the key command is not shown");
+  assert.deepEqual(state.applyPosts, [], "the keyless row posted an apply");
+  assert.deepEqual(problems, []);
+});
+
+await check("the escalate checkbox is drawn from the PC, and a click posts ONE boolean", async () => {
+  const { page, state, problems } = await openHud(browser);
+  await openPresetMenu(page);
+  await page.click('[data-cloud-action="open"]');
+  await page.waitForTimeout(200);
+  const before = await menuReport(page);
+  await page.click("#hud-escalate-cloud");
+  await page.waitForTimeout(900);
+  const after = await menuReport(page);
+  await sendChat(page, "a hard one");
+  const body = state.chats[state.chats.length - 1] || {};
+  await page.close();
+  assert.ok(before.checkbox, "the Cloud section has no escalate checkbox");
+  assert.equal(before.checkbox.checked, false, "the box was ticked while the PC said off");
+  assert.match(before.checkbox.label, /Escalate to the cloud when the work is too complex/,
+    before.checkbox.label);
+  assert.equal(before.checkbox.describedBy, "hud-escalate-cloud-why",
+    "the checkbox does not point at its own explanation");
+  assert.match(before.why, /When off, every question is answered on this PC first/,
+    `the off state is not explained: ${before.why}`);
+  assert.deepEqual(state.escalatePosts, [{ on: true }],
+    `the click did not post exactly one boolean: ${JSON.stringify(state.escalatePosts)}`);
+  assert.equal(after.checkbox.checked, true, "the refetched PC answer did not tick the box");
+  assert.equal(after.checkbox.disabled, false, "the box is still disabled after the answer");
+  assert.match(after.line, /Escalating when the work is complex is on/, after.line);
+  // The chat body says yes ONLY because the PC's own answer now says on.
+  assert.equal(body.cloud_yes, true, "the turn did not carry the PC-approved cloud yes");
+  assert.deepEqual(problems, []);
+});
+
+await check("a refused escalate card leaves the box UNTICKED, says so, and keeps the menu usable", async () => {
+  const { page, state, problems } = await openHud(browser, { escalateMode: "refuse" });
+  await openPresetMenu(page);
+  await page.click('[data-cloud-action="open"]');
+  await page.waitForTimeout(200);
+  await page.click("#hud-escalate-cloud");
+  await page.waitForTimeout(900);
+  const menu = await menuReport(page);
+  await sendChat(page, "a hard one");
+  const body = state.chats[state.chats.length - 1] || {};
+  await page.close();
+  assert.deepEqual(state.escalatePosts, [{ on: true }], "the click never reached the PC");
+  assert.equal(menu.checkbox.checked, false,
+    "a refused card left the box ticked - the tick must come from the PC");
+  assert.equal(menu.checkbox.disabled, false, "a refused card left the box dead");
+  assert.match(menu.line, /did not work|refused|nothing was changed/i,
+    `the refusal is not said in plain words: ${menu.line}`);
+  assert.deepEqual(menu.model.filter((r) => r.disabled), [],
+    "a refused escalate card disabled the preset rows");
+  assert.equal(body.cloud_yes, undefined,
+    "the page sent a cloud yes although the PC's setting is still off");
+  assert.deepEqual(problems, []);
+});
+
+await check("the Cloud row is only drawn when the PC sends one - never invented", async () => {
+  const { page, problems } = await openHud(browser, { noCloud: true });
+  await openPresetMenu(page);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.equal(menu.cloudRow, null, "a Cloud row appeared without the PC's own cloud answer");
+  assert.equal(menu.model.length, 4, "the five presets changed when the cloud answer went missing");
   assert.deepEqual(problems, []);
 });
 
@@ -744,7 +1102,7 @@ await check("My personalities appears only when the PC lists one", async () => {
   const menu = await menuReport(page);
   await page.close();
   assert.deepEqual(menu.headings.slice(0, 4),
-    ["Model presets", "Personality", "My personalities", "Built-in layouts"],
+    ["Focus presets", "Personality", "My personalities", "Built-in layouts"],
     `My personalities is missing or out of order: ${JSON.stringify(menu.headings)}`);
   assert.deepEqual(menu.mine.map((r) => r.text), ["Calm Helper"]);
   // The PC's own list already carries the saved one (builtin: false); it must
@@ -761,7 +1119,7 @@ await check("a PC without the presets route gets honest words, and no invented p
   const menu = await menuReport(page);
   await page.close();
   assert.equal(menu.model.length, 0, "model presets appeared without the PC's contract");
-  const group = menu.groups.find((g) => g.heading === "Model presets") || { notes: [] };
+  const group = menu.groups.find((g) => g.heading === "Focus presets") || { notes: [] };
   assert.match(group.notes.join(" "), /did not list/i,
     `no honest words for a backend without the route: ${JSON.stringify(group.notes)}`);
   assert.deepEqual(problems, []);
