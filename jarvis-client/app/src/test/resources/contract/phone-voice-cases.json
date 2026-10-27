@@ -773,6 +773,7 @@
       },
       "route": {
         "no_cloud_lane": {
+          "auto": false,
           "complexity": 0.067,
           "gate": "unavailable",
           "inject_memory": true,
@@ -782,6 +783,7 @@
           "tainted": false
         },
         "plain": {
+          "auto": false,
           "complexity": 0.033,
           "gate": "complexity",
           "inject_memory": true,
@@ -791,6 +793,7 @@
           "tainted": false
         },
         "private": {
+          "auto": false,
           "complexity": 0.067,
           "gate": "private",
           "inject_memory": true,

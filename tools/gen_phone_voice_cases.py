@@ -224,6 +224,19 @@ class World:
         speaker_dir = missing_models("voice-models", "speaker")
         ps = [
             mock.patch.object(S, "_config_dir", return_value=d),
+            # The owner's CHOSEN PERSONALITY must not come from this machine.
+            # jarvis_speech.tts_voice() asks jarvis_manner.voice_for_speech()
+            # first, and that reads the real config folder (this world
+            # redirects jarvis_speech's and jarvis_voices' only) - so a PC with
+            # a personality chosen changes `moment_key()`, which is the
+            # `flow.moment.key` in this fixture. Measured 2026-10-27: the
+            # owner's PC (classic_butler, fallback bm_george, speed 1.02)
+            # answered (9, 1.02) and a runner with no personality answers
+            # (0, 1.0), so the same tree gave key 81cda4b04304 here and
+            # 34c972a65e5f on CI, and `--check` failed on one but not the
+            # other. This world's own config folder is temporary and holds no
+            # personality, so None is the answer it already means to describe.
+            mock.patch.object(S, "_personality_voice", lambda: None),
             mock.patch.object(V, "PROFILE_PATH", profile),
             mock.patch.object(W, "model_dir",
                               return_value=missing_models("voice-models", "wakeword")),
@@ -566,14 +579,20 @@ def strict_cases():
     # PC, not in this repository). A question the private-topic list
     # catches is kept local by gate "private" - only reached when a cloud
     # lane is offered; with none, the gate is "unavailable".
+    #
+    # The lane has to be the one the router really keeps: since 2026-10-27
+    # `choose()` drops any name but `jarvis_router.CLOUD_LANE` (three lane
+    # names became one) and answers "unavailable" for the rest. The old
+    # stand-in "cloud-lane" therefore turned all three cases below into
+    # "unavailable", which is how this fixture went stale.
     import jarvis_router as R
     answers["route"] = {
         "private": R.choose("Read me the latest email from my bank", local_model="jarvis-primary",
-                            lanes=["cloud-lane"]).as_dict(),
+                            lanes=[R.CLOUD_LANE]).as_dict(),
         "no_cloud_lane": R.choose("Read me the latest email from my bank",
                                   local_model="jarvis-primary", lanes=[]).as_dict(),
         "plain": R.choose("What time is it?", local_model="jarvis-primary",
-                          lanes=["cloud-lane"]).as_dict(),
+                          lanes=[R.CLOUD_LANE]).as_dict(),
     }
 
     with World("both") as w:

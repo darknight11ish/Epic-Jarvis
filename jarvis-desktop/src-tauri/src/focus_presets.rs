@@ -135,7 +135,7 @@ pub(crate) fn provider_id(provider: &str) -> Result<&str, String> {
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
     if !shape {
-        return Err("That is not an API service this PC offers.".to_string());
+        return Err("That is not a cloud service this PC offers.".to_string());
     }
     Ok(id)
 }

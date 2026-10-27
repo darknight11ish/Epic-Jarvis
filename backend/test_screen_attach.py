@@ -602,7 +602,21 @@ def t_hygiene():
              # tool-list switch, the header, the deny-all gate and the write
              # guards). No gate list entry, no tier row, no _RISK row, and
              # no line this patch writes - ordering safe.
-             "private-chat.patch"}
+             "private-chat.patch",
+             # cloud-escalate.patch (2026-10-27) is appended after it and before
+             # plugin-loader.patch: three hunks, all in jarvis_hud.py and none of them
+             # near this patch's own POST /api/screen wrapper (6506) - the HUD page's
+             # `cloud_yes` counts only while this PC's own escalation file says on,
+             # the cloud reply's reader is told when a turn was escalated with no
+             # click, and `_lane_names()` asks jarvis_presets.cloud_lanes(). So the
+             # request body is still read once, and still by this wrapper.
+             "cloud-escalate.patch",
+             # f01-manual-lane-gate.patch (2026-10-27, F-01) is the last code patch,
+             # immediately before plugin-loader.patch: five hunks, all in
+             # jarvis_hud.py - the chat turn's lane-picking block and `_manual_decision`,
+             # none of them near the POST /api/screen wrapper this patch installs, so
+             # the request body is still read once, and still by this wrapper.
+             "f01-manual-lane-gate.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")
