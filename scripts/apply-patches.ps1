@@ -1735,6 +1735,21 @@ $PATCHES = @(
     #      hunk whose context is text only the owner's PC holds, and
     #      backend/_stack.py's RATCHET records it (58 -> 60, with hunk 2).
     'cloud-escalate.patch'
+
+    # f01-manual-lane-gate.patch (2026-10-27, F-01): a lane the owner picks by
+    # hand (`{"lane": "<cloud lane>", "auto": false}`) used to reach a cloud
+    # model with private memory text, a tainted conversation, a picture or the
+    # owner's screen attached, because the manual path built its decision
+    # itself and ran NO privacy gate. Both paths now come through the ONE
+    # jarvis_router.choose() call, the pick stands in for the owner's yes, and
+    # a pick the router would not have escalated stays on the local model with
+    # a plain reason (`_manual_lane()`, in the same `X-Jarvis-Route` field a
+    # refused automatic decision already uses). It touches the chat turn's
+    # lane-picking block and `_manual_decision` only - no install block, no
+    # gate row, no tier line - so it sits last of the code patches, immediately
+    # before plugin-loader.patch, whose anchor ("Before the main socket") is
+    # untouched by it.
+    'f01-manual-lane-gate.patch'
     'plugin-loader.patch'
 )
 

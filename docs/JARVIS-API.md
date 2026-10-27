@@ -652,6 +652,30 @@ Pressing it resends the exact same question with `cloud_yes: true`; nothing
 else from the conversation goes with it. Apps that do not know `offer`
 read the turn as local, which it is.
 
+**A lane you pick by hand runs the same gates** (`f01-manual-lane-gate.patch`,
+2026-10-27; F-01). `POST /api/chat` with `"auto": false` and a `"lane"` is a
+MANUAL pick, and until this patch it skipped every routing gate: any client
+could send `{"lane": "<cloud lane>", "auto": false}` and have the turn answered
+on a cloud model with private memory text, a tainted conversation, a picture or
+the owner's screen attached. Both paths now go through the ONE
+`jarvis_router.choose()` call. A pick of the local model is unchanged. A pick of
+any other lane is a CLOUD pick and is used only when the decision the automatic
+path would have made for this same turn landed on a cloud lane - the pick stands
+in for the owner's yes for that one question (`owner_said_yes`), and every
+privacy, availability and budget gate still runs first, in the same order
+(including the complexity threshold and the cloud budget: what may leave this
+PC is the router's answer, never the pick). A pick the router would not have
+escalated is answered on the LOCAL model, and the header carries the router's
+own `gate` (`"taint"`, `"image"`, `"screen"`, `"private"`, `"secret"`,
+`"budget"`, `"complexity"`, `"lockdown"`, `"unavailable"`, `"cloud_model"`) with
+`reason` in one plain sentence: `you chose <lane>, but this turn stays local:
+<why>`. No field was added - a refused pick looks exactly like a refused
+automatic turn, `where` is `"local"`, and both apps already draw every `gate`
+except `"escalate"` as local. A lane this PC does not offer (the names
+`_lane_names()` reads) and a PC with no `jarvis_router.py` both stay local too,
+and a pick of the local model is answered with memory exactly as before.
+`backend/test_hud_manual_lane_gate.py` is the proof.
+
 **`second_card` in `X-Jarvis-Route`** (`second-card.patch`, 2026-09-24): on a
 turn the second graphics card answered, `where` is still `"local"` (it is
 this PC), `lane` is the model really answering (e.g. `"qwen3:8b"`), and

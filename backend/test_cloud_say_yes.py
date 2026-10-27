@@ -564,9 +564,12 @@ def t_the_patch():
         check("the inserted region is still valid Python", True)
     # This choose() call only exists inside the auto-routing branch
     # (`if ROUTING and body.get("auto", True):` - the fixture's own first
-    # line) - the manual-lane branch a few lines below builds its Decision
+    # line) - the manual-lane branch a few lines below built its Decision
     # with `_manual_decision`, a wholly different call this patch's hunk
-    # never touches, with no privacy gating at all. Whether anything OTHER
+    # never touches. That manual path had NO privacy gating at all until
+    # `f01-manual-lane-gate.patch` (F-01, 2026-10-27), which is a LATER patch
+    # in the stack and not this one's business: this fixture is `_PRE`, so
+    # nothing here can see it. Whether anything OTHER
     # than the intended lines changed is already proven above: reversing
     # the patch reproduced `_PRE` byte for byte, which a stray
     # edit anywhere else in the hunk could not have survived.
