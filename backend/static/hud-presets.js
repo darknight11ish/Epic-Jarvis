@@ -57,6 +57,21 @@
  * the browser-only menu/dialog wiring. The card arrangement itself is still
  * H2's `applyAction` - this module only chooses which saved document is active.
  *
+ * THE STUDIO DOCK'S "CURRENT MODELS" PANEL IS THE SECOND MENU HERE (the owner's
+ * ask, 2026-10-26: "under the button on the jarvis hud that says auto, theres
+ * several options including bulk, critic, escalate, can you just get rid of this
+ * button and replace it with a button that says \"Current Models\" and clicking
+ * it will show what models are being used and or loaded on jarvis?"). It
+ * replaced the compact lane dropdown in the Studio header with a button that
+ * opens a READ-ONLY panel: `GET /api/models`'s `current`/`previous` and its
+ * `offload.models` (what is really in memory), `/api/status`'s `default_model`
+ * when it differs, and `/api/presets`'s chosen preset. Its route buttons are
+ * built from the page's own `#lanes .lane` buttons - the same one source of
+ * truth the dropdown used - so the lanes are still routable and no list of lane
+ * names is copied here. `/api/models` joined `hud_proxy.rs`'s fixed read list
+ * for this panel; there is NO write, NO approval card, NO model switch and NO
+ * new route (the model presets' apply stays the Presets menu's own).
+ *
  * @module hud-presets
  */
 
@@ -1278,4 +1293,395 @@ export function mountHudPresets(options = {}) {
   return start();
 }
 
-export { MENU_ID, STATUS_ID };
+/* ── 5. The Current Models panel (the owner's ask, 2026-10-26) ───────────── */
+
+/**
+ * The three reads behind the panel, in the order it shows them. All three are
+ * on `hud_proxy.rs`'s fixed read list (`allowed_get`), so in the desktop shell
+ * the bootstrap's fetch shim sends each one to `hud_get` with Rust's token; in
+ * a plain browser they are the routes themselves, with the page's own
+ * `X-Jarvis-Client: hud` header. `/api/models` was NOT on the list before this
+ * panel: it is read-only model facts, never a switch (`/api/models/switch`
+ * stays refused, and so does every other write).
+ */
+export const CURRENT_MODELS_READS = ["/api/models", "/api/status", "/api/presets"];
+
+/** One GET of one HUD read, on whichever road this page has. Throws with a
+ *  plain sentence; the caller turns that into "the PC did not answer". */
+export async function readHudPath(win, path) {
+  const response = await win.fetch(apiUrlFor(win, path), {
+    cache: "no-store",
+    headers: apiHeadersFor(win),
+  });
+  if (!response.ok) throw new Error(`the PC answered ${response.status}`);
+  return response.json();
+}
+
+/**
+ * Read the panel's three facts from the PC. Each read settles on its own, so
+ * one route the PC cannot answer (an older backend with no `/api/models`, or a
+ * failed status) leaves the other two sections telling the truth instead of
+ * blanking the whole panel. Nothing here is retried, guessed or cached.
+ */
+export async function readCurrentModelsOnPc(win) {
+  const settled = (path) => readHudPath(win, path).then(
+    (value) => ({ ok: true, value }),
+    (error) => ({ ok: false, error: errorTextOf(error) }),
+  );
+  const answers = await Promise.all(CURRENT_MODELS_READS.map(settled));
+  return { models: answers[0], status: answers[1], presets: answers[2] };
+}
+
+const objectOf = (value) => (value && typeof value === "object" && !Array.isArray(value)
+  ? value : {});
+const stringOf = (value) => (typeof value === "string" ? value.trim() : "");
+const numberOrNull = (value) => (typeof value === "number" && Number.isFinite(value)
+  ? value : null);
+
+/** The one sentence the owner asked for, exactly, when the PC names nothing. */
+export const NO_MODEL_IN_MEMORY = "The PC did not say any model is in memory right now.";
+
+/** `No preset chosen yet - the PC routes on its own.`, with an em dash. */
+export const NO_PRESET_CHOSEN = "No preset chosen yet \u2014 the PC routes on its own.";
+
+/**
+ * The panel's three read sections, in plain words, from the PC's own answers.
+ * PURE: no DOM, no fetch, no clock - so every honest empty state is proved in
+ * node, and the panel itself only places these lines.
+ *
+ * Each section is a list of `{text, dim}` lines: `dim` is an absence or a
+ * refusal (the panel draws it in the page's grey "empty" style), not a fact.
+ * A fact is only ever built from a field the PC actually sent.
+ */
+export function currentModelsWords(reads) {
+  return {
+    answering: answeringWords(reads && reads.models, reads && reads.status),
+    loaded: loadedWords(reads && reads.models),
+    focus: focusWords(reads && reads.presets),
+  };
+}
+
+function answeringWords(models, status) {
+  const lines = [];
+  if (!models || !models.ok) {
+    lines.push({ text: "The PC did not answer when asked which model is answering.", dim: true });
+    return lines;
+  }
+  const body = objectOf(models.value);
+  const current = stringOf(body.current);
+  const previous = stringOf(body.previous);
+  if (current) lines.push({ text: current, dim: false });
+  else lines.push({ text: "The PC did not name a model it is answering with.", dim: true });
+  if (previous && previous !== current) {
+    lines.push({ text: `Before that: ${previous}`, dim: true });
+  }
+  const fallback = status && status.ok ? stringOf(objectOf(status.value).default_model) : "";
+  if (current && fallback && fallback !== current) {
+    lines.push({ text: `The PC's default model is ${fallback}.`, dim: true });
+  } else if (current && status && !status.ok) {
+    lines.push({
+      text: "The PC did not answer when asked for its status, so whether it has a "
+        + "different default model is unknown.",
+      dim: true,
+    });
+  }
+  return lines;
+}
+
+function loadedWords(models) {
+  if (!models || !models.ok) {
+    return [{ text: "The PC did not answer when asked what is loaded.", dim: true }];
+  }
+  const offload = objectOf(objectOf(models.value).offload);
+  const rows = (Array.isArray(offload.models) ? offload.models : [])
+    .filter((row) => row && typeof row === "object");
+  if (offload.available === false || !rows.length) {
+    return [{ text: NO_MODEL_IN_MEMORY, dim: true }];
+  }
+  return rows.map((row) => {
+    const name = stringOf(row.name) || "(the PC did not name it)";
+    const size = numberOrNull(row.size_mb);
+    const vram = numberOrNull(row.vram_mb);
+    const onGpu = numberOrNull(row.on_gpu_percent);
+    const bits = [];
+    if (size !== null) bits.push(`${size} MB in memory`);
+    if (vram !== null) bits.push(`${vram} MB of that on the graphics card`);
+    if (onGpu !== null) bits.push(`${onGpu}% on the GPU`);
+    return { text: bits.length ? `${name} \u2014 ${bits.join(", ")}` : name, dim: false };
+  });
+}
+
+function focusWords(presets) {
+  if (!presets || !presets.ok) {
+    return [{ text: "The PC did not answer when asked which focus preset is chosen.", dim: true }];
+  }
+  const body = objectOf(presets.value);
+  if (body.available === false) {
+    return [{ text: stringOf(body.why) || "This PC's Jarvis cannot list focus presets.", dim: true }];
+  }
+  const chosen = stringOf(body.chosen_preset);
+  if (!chosen) return [{ text: NO_PRESET_CHOSEN, dim: false }];
+  const rows = Array.isArray(body.presets) ? body.presets : [];
+  const row = rows.find((item) => item && typeof item === "object" && item.id === chosen);
+  const title = (row && stringOf(row.title)) || chosen;
+  const model = stringOf(body.chosen_model) || (row && stringOf(row.model)) || "";
+  return [{
+    text: model ? `Chosen focus preset: ${title} (${model})` : `Chosen focus preset: ${title}`,
+    dim: false,
+  }];
+}
+
+const PANEL_ID = "current-models-panel";
+
+function nodeOf(doc, tag, className, text) {
+  const made = doc.createElement(tag);
+  if (className) made.className = className;
+  if (text !== undefined) made.textContent = text;
+  return made;
+}
+
+/**
+ * Mount the Studio dock's "Current Models" button and its read-only panel.
+ * The page calls this once.
+ *
+ * WHAT IT IS: one READ of the PC's own model facts, plus the SAME lane route
+ * the compact lane dropdown in that slot always offered. Clicking a route
+ * clicks the page's own `#lanes .lane` button - so `S.lane`, the chip, the
+ * Cloud button and the chat body all move exactly as they did before - and the
+ * mark is then read back off `#lanes`, never set from the click. There is no
+ * POST, no command, no approval card, no model switch and no new route.
+ *
+ * WHEN THE PC DOES NOT ANSWER: each of the three sections says so in its own
+ * words and changes nothing; no value is invented.
+ */
+export function mountCurrentModels(options = {}) {
+  const doc = options.document || globalThis.document;
+  const win = options.window || globalThis.window || globalThis;
+  if (!doc || !doc.body) return null;
+  const door = doc.getElementById("current-models");
+  if (!door) return null;
+  if (door.dataset.currentModels === "1") return globalThis.__jarvisCurrentModels || null;
+
+  let panel = null;
+  let reading = false;
+  let readings = null;
+
+  const lanesBox = () => doc.getElementById("lanes");
+
+  /** The page's own lane buttons, as the panel's routes: one source of truth,
+   *  re-read every render so a lane `renderLanes()` added or removed shows up
+   *  here and the pressed mark is the PAGE's, never this panel's. */
+  function routeRows() {
+    const box = lanesBox();
+    const buttons = box ? Array.from(box.querySelectorAll(".lane")) : [];
+    return buttons.map((source) => {
+      const label = source.querySelector("span");
+      const tag = source.querySelector(".tag");
+      return {
+        lane: source.dataset.lane || "",
+        label: (label && label.textContent) || source.dataset.lane || "",
+        tag: (tag && tag.textContent) || "",
+        pressed: source.getAttribute("aria-pressed") === "true",
+        source,
+      };
+    });
+  }
+
+  function section(heading) {
+    const group = nodeOf(doc, "div", "hud-presets-group");
+    group.appendChild(nodeOf(doc, "p", "hud-presets-head", heading));
+    return group;
+  }
+
+  function line(parent, text, dim) {
+    parent.appendChild(nodeOf(doc, "p", dim ? "hud-presets-empty" : "hud-models-fact", text));
+  }
+
+  function renderRoutes(group) {
+    line(group, "The next message only: it raises no card and switches no model.", true);
+    line(group, "To change the model itself instead, open the Presets menu - that asks ONE card.", true);
+    const rows = routeRows();
+    if (!rows.length) {
+      line(group, "This page has no lanes to route, so there is nothing to choose here.", true);
+      return;
+    }
+    for (const row of rows) {
+      const button = nodeOf(doc, "button", "hud-presets-item hud-models-route");
+      button.type = "button";
+      button.dataset.lane = row.lane;
+      button.setAttribute("aria-pressed", row.pressed ? "true" : "false");
+      if (row.pressed) button.title = "The next message goes this way now.";
+      button.appendChild(nodeOf(doc, "span", "", row.label));
+      if (row.tag) button.appendChild(nodeOf(doc, "span", "tag", row.tag));
+      button.addEventListener("click", () => {
+        const again = routeRows().find((item) => item.lane === row.lane);
+        if (!again) return;
+        // The PAGE's button does the routing; this panel only asked for it.
+        again.source.click();
+        // Re-read #lanes after the page has repainted it: the mark follows the
+        // page's own aria-pressed, so a route that the page refused cannot be
+        // marked here as if it had happened.
+        render();
+        const moved = Array.from(panel.querySelectorAll(".hud-models-route"))
+          .find((item) => item.dataset.lane === row.lane);
+        if (moved) moved.focus();
+      });
+      group.appendChild(button);
+    }
+  }
+
+  function render() {
+    if (!panel) return;
+    const scroll = panel.querySelector(".hud-presets-scroll");
+    if (!scroll) return;
+    const words = readings ? currentModelsWords(readings) : null;
+    scroll.textContent = "";
+
+    const heading = section("Answering now");
+    if (words) for (const row of words.answering) line(heading, row.text, row.dim);
+    else line(heading, reading ? "Reading the PC..." : "Open this panel to read the PC.", true);
+    scroll.appendChild(heading);
+
+    const loaded = section("Loaded right now");
+    if (words) for (const row of words.loaded) line(loaded, row.text, row.dim);
+    else line(loaded, reading ? "Reading the PC..." : "Open this panel to read the PC.", true);
+    scroll.appendChild(loaded);
+
+    const focus = section("Chosen focus preset");
+    if (words) for (const row of words.focus) line(focus, row.text, row.dim);
+    else line(focus, reading ? "Reading the PC..." : "Open this panel to read the PC.", true);
+    scroll.appendChild(focus);
+
+    const routes = section("Route the next message");
+    renderRoutes(routes);
+    scroll.appendChild(routes);
+
+    const refreshButton = panel.querySelector("#current-models-refresh");
+    if (refreshButton) {
+      refreshButton.disabled = reading;
+      refreshButton.textContent = reading ? "Refreshing..." : "Refresh";
+    }
+  }
+
+  function ensurePanel() {
+    if (panel && panel.isConnected) return panel;
+    // The panel wears the Presets menu's own popover classes (`hud-presets-*`):
+    // one panel look, one set of tokens, nothing new to keep in step.
+    panel = nodeOf(doc, "div", "hud-presets-menu hud-models-panel");
+    panel.id = PANEL_ID;
+    panel.hidden = true;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Current Models");
+    panel.appendChild(nodeOf(doc, "p", "hud-presets-title", "Current Models"));
+    panel.appendChild(nodeOf(doc, "div", "hud-presets-scroll"));
+    const actions = nodeOf(doc, "div", "hud-models-actions");
+    // Q3 (Gemini packet #8, 2026-10-26): the panel answers "what is Jarvis
+    // using"; switching the model preset or the Cloud lane stays ONE click
+    // away in the rail's own Presets menu, which already owns both. This door
+    // only asks that page's own button to open - it copies no lane list, sends
+    // nothing and changes no model itself.
+    const presetsButton = nodeOf(doc, "button", "hud-presets-small", "Open Presets menu");
+    presetsButton.type = "button";
+    presetsButton.id = "current-models-presets";
+    presetsButton.setAttribute("aria-label", "Open the Presets menu to switch the model preset");
+    presetsButton.addEventListener("click", () => {
+      close(false);
+      const rail = doc.getElementById("rail-presets");
+      if (rail) rail.click();
+    });
+    const refreshButton = nodeOf(doc, "button", "hud-presets-small", "Refresh");
+    refreshButton.type = "button";
+    refreshButton.id = "current-models-refresh";
+    refreshButton.addEventListener("click", () => { refresh(); });
+    const closeButton = nodeOf(doc, "button", "hud-presets-close", "Close");
+    closeButton.type = "button";
+    closeButton.setAttribute("aria-label", "Close the Current Models panel");
+    closeButton.addEventListener("click", () => close(true));
+    actions.append(presetsButton, refreshButton, closeButton);
+    panel.appendChild(actions);
+    doc.body.appendChild(panel);
+    panel.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(true);
+      }
+    });
+    doc.addEventListener("pointerdown", (event) => {
+      if (!panel || panel.hidden) return;
+      if (panel.contains(event.target) || door.contains(event.target)) return;
+      close(false);
+    }, true);
+    return panel;
+  }
+
+  /** Under the button, kept inside the window - the same placement rule the
+   *  Presets menu uses for its own doors. */
+  function place() {
+    const rect = door.getBoundingClientRect();
+    const width = Math.min(352, Math.max(240, win.innerWidth - 16));
+    const left = Math.max(8, Math.min(win.innerWidth - width - 8, rect.left));
+    panel.style.left = `${Math.round(left)}px`;
+    panel.style.top = `${Math.round(rect.bottom + 6)}px`;
+  }
+
+  async function refresh() {
+    if (reading) return;
+    reading = true;
+    render();
+    try {
+      readings = await readCurrentModelsOnPc(win);
+    } finally {
+      reading = false;
+      render();
+    }
+  }
+
+  function open() {
+    ensurePanel();
+    render();
+    panel.hidden = false;
+    panel.setAttribute("aria-hidden", "false");
+    door.setAttribute("aria-expanded", "true");
+    place();
+    const first = panel.querySelector(".hud-models-route") || panel.querySelector("button");
+    if (first) first.focus();
+    // Always a fresh read: the PC's loaded model can change between openings.
+    refresh();
+  }
+
+  function close(returnFocus) {
+    if (!panel || panel.hidden) return;
+    panel.hidden = true;
+    panel.setAttribute("aria-hidden", "true");
+    door.setAttribute("aria-expanded", "false");
+    if (returnFocus) door.focus();
+  }
+
+  // The page's own lane changes (a click in the rail, the Cloud button, a
+  // preset apply) repaint #lanes; the panel follows that, and only that.
+  const lanes = lanesBox();
+  if (lanes && typeof globalThis.MutationObserver === "function") {
+    const observer = new globalThis.MutationObserver(() => {
+      if (panel && !panel.hidden) render();
+    });
+    observer.observe(lanes, { childList: true, subtree: true, attributes: true });
+  }
+
+  door.dataset.currentModels = "1";
+  door.addEventListener("click", () => {
+    if (panel && !panel.hidden) close(true);
+    else open();
+  });
+
+  const controller = {
+    open,
+    close: () => close(false),
+    refresh,
+    panel: () => panel,
+    get readings() { return readings; },
+  };
+  try { globalThis.__jarvisCurrentModels = controller; } catch { /* ignore */ }
+  return controller;
+}
+
+export { MENU_ID, PANEL_ID, STATUS_ID };
