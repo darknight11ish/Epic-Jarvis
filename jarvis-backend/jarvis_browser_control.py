@@ -1659,7 +1659,11 @@ def _default_act(step: Step) -> Optional[str]:
         return None
     locator = _locate(page, step)
     if step.action == "click":
-        locator.click(timeout=_ACT_TIMEOUT_MS)
+        # no_wait_after: a click that leaves the fence is answered with a 204
+        # (see _make_guard), a navigation Playwright never sees finish - with
+        # the default wait the click sits out the whole timeout and raises
+        # instead of falling through to run()'s after-step fence check.
+        locator.click(timeout=_ACT_TIMEOUT_MS, no_wait_after=True)
         _settle(page, "click")
     elif step.action == "type":
         locator.fill(step.value or "", timeout=_ACT_TIMEOUT_MS)
