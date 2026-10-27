@@ -1152,7 +1152,16 @@ class MainActivity : FragmentActivity() {
             val activity = this@MainActivity
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                 if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
-                    JarvisRuntime.stopReadingAloud()
+                    // A rotation stops and restarts the activity, and ON_STOP
+                    // fires for it (there is no `configChanges` on this
+                    // activity in AndroidManifest.xml). That is not "away":
+                    // the screen is still in front of the owner, so the read
+                    // carries on. The same test onStop() already uses for the
+                    // lock session. The Lead ruled 2026-10-27 that rotation must
+                    // NOT stop a read: a configuration change is not leaving.
+                    if (!activity.isChangingConfigurations) {
+                        JarvisRuntime.stopReadingAloud()
+                    }
                 }
             }
             activity.lifecycle.addObserver(observer)

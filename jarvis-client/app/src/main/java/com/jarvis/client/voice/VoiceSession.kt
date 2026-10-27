@@ -899,6 +899,15 @@ class VoiceSession(
      */
     fun speakerBusy(): Boolean = voiceBusy() || tryPlaying
 
+    /**
+     * A QUESTION is starting - not a sample being stopped. The read-aloud of a
+     * typed answer, if one is playing, stops before the microphone opens: the
+     * phone speaks one track at a time, and the clip would be recorded into
+     * the question. [com.jarvis.client.JarvisRuntime] installs the stop at
+     * startup, because the read lives there; a JVM test leaves it null.
+     */
+    @Volatile var onQuestionStarting: (() -> Unit)? = null
+
     /** Bumped by every turn that starts; see [playTry]. */
     private val turnsStarted = java.util.concurrent.atomic.AtomicLong(0)
 
@@ -912,23 +921,36 @@ class VoiceSession(
      * A question is starting - the talk button, "hey Jarvis" heard (called
      * by [com.jarvis.client.service.WakeWordService] the moment the phrase
      * is heard, before the rest is recorded), or Train my voice: a "Try it"
-     * clip playing stops now, so the microphone does not hear it. Stops
-     * nothing else: no answer is playing, or the turn would not be starting.
+     * clip playing stops now, so the microphone does not hear it, and a
+     * read-aloud of a typed answer stops too ([onQuestionStarting]). The one
+     * speaker belongs to this question from here on.
      */
     fun turnStarting() {
         turnsStarted.incrementAndGet()
-        if (!tryPlaying) return
-        tryCut = true
-        speaker.stop()
+        // Before the "Try it" cut below: an ordinary turn has no clip, and a
+        // read-aloud must still stop (the review's F1, 2026-10-27).
+        onQuestionStarting?.invoke()
+        cutTryClip()
     }
 
     /**
      * The Voices screen was left: a "Try it" or "Hear it" clip still playing
      * stops now instead of running on for its last few seconds over whatever
-     * the owner went to (bug audit 2026-09-29). Does the same as
-     * [turnStarting], which is what stops one for a question.
+     * the owner went to (bug audit 2026-09-29). The same clip cut as
+     * [turnStarting] - but NOT a question, so a read-aloud started on Home is
+     * deliberately left alone ([onQuestionStarting] is not called here).
      */
-    fun stopSamples() = turnStarting()
+    fun stopSamples() {
+        turnsStarted.incrementAndGet()
+        cutTryClip()
+    }
+
+    /** Cuts a "Try it"/"Hear it" clip that is playing. A turn also bumps [turnsStarted]. */
+    private fun cutTryClip() {
+        if (!tryPlaying) return
+        tryCut = true
+        speaker.stop()
+    }
 
     /**
      * Opens the microphone.

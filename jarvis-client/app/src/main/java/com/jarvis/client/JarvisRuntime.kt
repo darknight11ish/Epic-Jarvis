@@ -924,6 +924,12 @@ object JarvisRuntime {
         // Jarvis Live: a call ringing or starting while Jarvis talks takes
         // the audio focus - Jarvis stops, and Live pauses for the call.
         voiceSession.speaker.onFocusLost = { liveFocusLost() }
+        // A question that starts ends a read-aloud that is still playing (the
+        // review's F1, 2026-10-27): the recorder has no echo canceller, so the
+        // clip would enter the question as Jarvis's own voice. Guarded, because
+        // `Speaker.stop()` stops WHICHEVER path is playing - this must never
+        // cut the voice path's own speech.
+        voiceSession.onQuestionStarting = { if (readingAloud.value) stopReadingAloud() }
         stream = EventStream(jarvisApi)
         started = true
 
@@ -7708,6 +7714,13 @@ object JarvisRuntime {
         val text = words.trim()
         val held = shared?.takeIf { it.isNotBlank() }
         if (text.isEmpty() && held == null) return
+        // This is a typed question too, and it does not go through
+        // [sendTypedChat]: a read-aloud of the previous typed answer stops here
+        // for the same reason (the review's F2), and the offer is cleared by
+        // the same rule, so Home cannot offer to read an answer that is no
+        // longer the newest one.
+        if (readingAloud.value) stopReadingAloud()
+        _readAloud.value = null
         scope.launch {
             // The conversation goes on: the PC's quiet clock starts again
             // (the review's B4 - 90 s of typing used to end Live).
@@ -7758,6 +7771,14 @@ object JarvisRuntime {
         provenance: String = com.jarvis.client.net.Provenance.TYPED,
         shared: String? = null,
     ): String? {
+        // A new question owns the one speaker from here (the review's F2,
+        // 2026-10-27). Clearing the offer alone stopped NOTHING: the OLD answer
+        // kept being read, and Home draws the control only for the answer the
+        // runtime holds and only when nothing is streaming - so from Send until
+        // the new answer finished there was no way to stop it, and the control
+        // then said "Stop" for the answer before this one. Guarded so a typed
+        // question sent over a SPOKEN answer does not cut the voice's speech.
+        if (readingAloud.value) stopReadingAloud()
         _readAloud.value = null
         val start = readAloudWatch()
         var header: String? = null
