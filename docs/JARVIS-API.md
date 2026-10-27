@@ -21482,25 +21482,55 @@ refusal, it looked like success (`.dsh-scratch/settings-reachability-audit.md`).
 made the refusal honest and reached eight more switches; this is the other half.
 
 **What it is.** One tool, `change_setting`, with two arguments: `setting` (the owner's
-own words for the switch - any wording; the model does the matching, not a fixed phrase)
-and `value` (`"on"` or `"off"`). It reaches every switch in
-`jarvis_settings_registry.BOOL_SETTINGS` - 21 of them - and nothing else.
+own words for the setting - any wording; the model does the matching, not a fixed phrase)
+and `value`. The value is `"on"` or `"off"` for an on/off switch, and one of the
+setting's OWN values for a setting whose value is a name (the voice speed, the
+personality, the captcha hand-off and so on). Since 2026-10-26 the value is a free
+string rather than the old two-word enum, because the enum made every named-choice
+setting impossible for the tool to change while the phrase grammar could change it.
+
+It reaches three kinds of setting, and nothing else:
+
+- every switch in `jarvis_settings_registry.BOOL_SETTINGS` - **31** of them;
+- every setting in `jarvis_settings_registry.CHOICE_SETTINGS` - **6** of them, whose
+  value is one of that setting's own names;
+- the two real routes that are not table rows at all, because the contract pins those
+  table keys: the PC's "hey Jarvis" wake word (`jarvis_speech.set_wake_enabled`) and
+  which browser Jarvis uses (`jarvis_browser_engine.handle_post`). Neither was
+  reachable by the tool before 2026-10-26 even though both are real Settings controls.
 
 **Which tree / which tier.** It is deliberately NOT put to `jarvis_gate.check()` in
 `jarvis_agent._one_call`, for the same reason `SCHEDULE_TOOLS` and `web_search` are not:
 its gate already exists, and it is better placed. Every setting's rule lives in ONE
-function, `BoolSetting.set`, and that function is what a spoken sentence runs.
-`change_setting` CALLS THAT SAME FUNCTION. So:
+function - a switch's `BoolSetting.set`, a named choice's own setter, the wake word's
+`set_wake_enabled` or the browser's `handle_post` - and that function is what a spoken
+sentence runs. `change_setting` CALLS THAT SAME FUNCTION. So:
 
-| setting | ON | OFF |
+| on/off setting | ON | OFF |
 |---|---|---|
 | background learning, the sensitive-topics switch, lights without asking, web search, the watch switch, the phone-notification switch, picture mode, the headless browser, senders in the briefing, the big coder, the better voice | one card | at once |
 | asking before every web search (the REVERSED pair) | at once | one card |
 | the prompt coach, making pictures, the five PC-notification switches, humour, voice-follows-the-face | at once | at once |
+| the PC's "hey Jarvis" wake word (`jarvis_speech.set_wake_enabled`) | one card | at once |
+
+The six settings whose value is a name go through their own setters, so the card is
+their own too - and for two of them only ONE value asks, because that value loosens
+something:
+
+| named choice | the value that asks | the value that applies at once |
+|---|---|---|
+| the captcha hand-off (`jarvis_handoff_mode.request`) | "keep offering it" - one card, and the card is PC-only | "stop early" |
+| the captcha window (`jarvis_handoff_front.request`) | "bring it to the front" - one card, PC-only | "leave it where it is" |
+| the focus preset (`jarvis_presets.apply_from_body`) | every apply raises its one `switch_model` card | - |
+| the voice speed, the built-in voice, the personality | none - there is no card either way | every value |
+
+Which browser Jarvis uses (`auto`, `visible` or `headless`) is applied at once with NO
+card either way: it picks the engine that does the work and never widens what Jarvis may
+reach (both engines go through the same gate and the same card).
 
 Because the card is the setting's OWN, it carries that setting's own risk text, its own
 Windows Hello rule and its own PC rule: no second card is ever raised for one change, and
-no generic action name has to stand in for 21 different risk texts. The tool's own name
+no generic action name has to stand in for 31 different risk texts. The tool's own name
 maps to `change_own_config` in `jarvis_gate._TOOL_ACTIONS` - a row added on 2026-10-14 by
 `backend/gate-entries.patch` (with its previous version recorded in
 `backend/patch-history/`), because `test_agent.py` requires every tool's lookup name to be
@@ -21515,7 +21545,12 @@ depends on the setting.
 nothing is changed and NO card is raised, because a card for something that cannot
 happen is a lie in card form. It never guesses - changing a switch the owner did not name
 is worse than changing nothing. A switch that is on the Settings page but has no route at
-all (`NOT_BY_ASKING`) gets a sentence naming the screen and the row.
+all (`NOT_BY_ASKING`) gets a sentence naming the screen and the row. That page-only
+refusal is decided FIRST, and on filler-tolerant words: "turn off the windows hello for
+memory lists and chat history setting" names a page-only row, so it gets that sentence -
+it is never read as `chat_history`, which those same words contain. The phrase grammar
+and the "that setting is not available" correction run the same guard, so all three
+entrances agree and none of them changes anything.
 
 **Stricter than the spoken path, in one place.** A turn shaped by outside text - a
 reading tool ran in THAT turn, the newest message is not the owner's own words, the app

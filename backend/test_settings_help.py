@@ -154,6 +154,11 @@ _MUST_APPEAR = [
     ("menu", "menu visibility"),
     ("thinks before answering", "the thinking level"),
     ("Lockdown", "Lockdown"),
+    # 2026-10-26: the two switches that are not BOOL_SETTINGS/CHOICE_SETTINGS
+    # rows. If either stops being counted, the answer understates what can be
+    # changed - the exact failure the 13 -> 42 fix above was about.
+    ("wake word", "the wake word (\"hey Jarvis\")"),
+    ("which browser Jarvis uses", "which browser Jarvis uses"),
 ]
 for needle, label in _MUST_APPEAR:
     check(f"the answer mentions {label}",
@@ -182,6 +187,9 @@ _REACHABLE_BY = [
     ("from now on, be plainer", "the manner"),    ("hide the finance menu", "menu visibility"),
     ("turn on lockdown", "Lockdown"),
     ("switch to exa for search", "the web search provider"),
+    # 2026-10-26 - the two that are not table rows.
+    ("turn on the wake word", "the wake word"),
+    ("set the browser to headless", "which browser Jarvis uses"),
 ]
 for phrase, label in _REACHABLE_BY:
     m = Q.match(phrase)
