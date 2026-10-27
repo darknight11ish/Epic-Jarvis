@@ -3993,3 +3993,12 @@ field-test row, not a pass.
     backend through a real `/api/chat` request (this session works on a copy
     and starts no server), a card approved or denied on a phone, and any of the
     four excluded switches - they are deliberately outside this lane.
+
+
+## 2026-10-27 — A read-aloud refusal stops at once when the phone leaves the app, and the withheld sentence is finally drawn
+
+**Decided:** three corrections to the 2026-10-27 typed read-aloud, all phone-side, no new route and no new control. **It fails closed on an unknown route:** the wiring asked `PrivateAloud.route(header) != null` for "do we know the route?", but `route()` answers `SILENT_ROUTE` for a missing or unreadable header and can never answer null - so `ReadAloud.Facts.mayRead`'s "unknown is never spoken" branch was dead code and an answer whose route facts were unknown could be read aloud. `routeOrNull(header)` is the null-able reader now; `route()` delegates to it and keeps its old meaning for the voice path. **It stops when the phone leaves the app:** `MainActivity` observes `ON_STOP` (the phone locking, HOME, another app) and stops the read at once, and the read loop re-asks the live lock before every sentence, because the "locked" fact was a snapshot taken when the answer arrived. **The withheld sentence is drawn:** the one fixed sentence "It's on your screen." appears where the Read aloud control would have been, and nothing beyond it, when a privacy rule withholds the read; a locked phone or a stale link draws nothing. That last clause corrects the earlier 2026-10-27 typed-read-aloud entry, which said a locked phone and a stale link keep their words on screen with that sentence - the shipped screen shows it only for privacy, and the other two cases are not what that sentence says.
+
+**Why:** an audit of #892 found the gate's fail-closed branch dead and the promised refusal sentence unshowable, so the record said something the screen could not do. The Lead ruled on 2026-10-27 that leaving the app stops a read immediately rather than pausing it, and that a refusal is one sentence on screen rather than silence.
+
+**Proven by:** `ReadAloudRouteFailClosedTest` (the wiring asks a reader that can say it does not know, and `routeOrNull`'s null path), `ReadAloudTest` (the one sentence, and nothing offered beside it) and `ReadAloudWiringTest` (the `ON_STOP` stop and the live lock re-read), all run off-device by the full `:app:testDebugUnitTest` suite. The phone drive is a field-test row, not a pass: no APK built from the fix has been driven.

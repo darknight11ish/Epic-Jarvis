@@ -17,11 +17,11 @@ package com.jarvis.client.voice
  * could not say, a stale link, a locked phone. The refusal words say only that
  * it is on screen - never why, never the answer, never a fact.
  *
- * THE WORDS ARE PENDING THE HUD SLICE. The desktop read-aloud work (Lead's lane,
- * in flight) will send the exact sentence-cap, refusal wording and
- * sensitive-skip rules; until that link lands, [ON_SCREEN]/[LABEL]/[STOP] mirror
- * [PrivateAloud.ON_SCREEN] and the proposed phone wording, marked here so the
- * one place to change is obvious.
+ * THE WORDS AND THE CAP ARE DECIDED (2026-10-27). [ON_SCREEN] is
+ * [PrivateAloud.ON_SCREEN]'s own sentence, [LABEL] and [STOP] are the desktop
+ * read-aloud setting's own name and its while-speaking word, and
+ * [READ_ALOUD_SENTENCE_CAP] is the one number the HUD read-aloud slice adopts.
+ * This object stays the one place to change all four.
  */
 object ReadAloud {
 
@@ -44,10 +44,10 @@ object ReadAloud {
     const val CANNOT = "That answer could not be read aloud just now."
 
     /**
-     * Refusal words when a privacy rule keeps the answer on screen (pending HUD
-     * link). Kept as a literal - never a reference - so this object stays pure
-     * Kotlin and its test can run off-device; the wiring test pins that it is
-     * exactly `PrivateAloud.ON_SCREEN`'s sentence.
+     * Refusal words when a privacy rule keeps the answer on screen. Kept as a
+     * literal - never a reference - so this object stays pure Kotlin and its
+     * test can run off-device; the wiring test pins that it is exactly
+     * `PrivateAloud.ON_SCREEN`'s sentence.
      */
     const val ON_SCREEN = "It's on your screen."
 
