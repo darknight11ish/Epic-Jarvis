@@ -99,6 +99,24 @@ class ReadAloudTest {
         assertEquals("It's on your screen.", ReadAloud.ON_SCREEN)
     }
 
+    @Test
+    fun `a withheld read shows the one sentence, and only for the privacy reasons`() {
+        // The owner's 2026-10-27 ruling: when a read is withheld, SHOW the one
+        // fixed sentence - no dead control, nothing else. Locked/offline are not
+        // what that sentence says, so they draw nothing (their own screens carry
+        // their own truth).
+        assertEquals(ReadAloud.ON_SCREEN, facts(privateGate = true).withheld)
+        assertEquals(ReadAloud.ON_SCREEN, facts(injectedFacts = 1).withheld)
+        assertEquals(ReadAloud.ON_SCREEN, facts(injectedSensitive = 1).withheld)
+        assertEquals(ReadAloud.ON_SCREEN, facts(toolRan = true).withheld)
+        assertEquals(ReadAloud.ON_SCREEN, facts(screenRead = true).withheld)
+        assertEquals(ReadAloud.ON_SCREEN, facts(toolsKnown = false).withheld)
+        assertEquals(ReadAloud.ON_SCREEN, facts(hasRoute = false).withheld)
+        assertNull("a readable answer must not show a refusal", facts().withheld)
+        assertNull("a locked phone is not the privacy sentence", facts(locked = true).withheld)
+        assertNull("a stale link is not the privacy sentence", facts(stale = true).withheld)
+    }
+
     // --- the sentences ------------------------------------------------------
 
     @Test

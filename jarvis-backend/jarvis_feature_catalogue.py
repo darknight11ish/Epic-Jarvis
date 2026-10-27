@@ -3,7 +3,7 @@
 The owner's feature list, as data: 141 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 38f655ac90aa5b8d2ace1da9e80be2706ccb40fc96d07ce53bce058a49fd1bbf); the apps' Features pages read their own
+`features/features.json` (sha256 9b33d814ca66d54ea8800dd441763fdc70d7a88a955c8ae958c57eaa1cf98a77); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "38f655ac90aa5b8d2ace1da9e80be2706ccb40fc96d07ce53bce058a49fd1bbf"
+SOURCE_SHA256 = "9b33d814ca66d54ea8800dd441763fdc70d7a88a955c8ae958c57eaa1cf98a77"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1089,8 +1089,8 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Choose Jarvis's face",
         "what": "Twenty faces - five of them animals or a robot - drawn live.",
-        "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance. The HUD's face page also shows in a browser on the PC.",
-        "asks": "The first time you pick an animal face, one line asks whether to use its own voice. A face never changes the voice by itself, and an approval never gets a wave or anything cute.",
+        "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance. The HUD's face page also shows in a browser on the PC. Or just ask - \"change your face to Spiral\", \"use the Orbit face\".",
+        "asks": "The first time you pick an animal face in the Faces window, one line asks whether to use its own voice; asking for a face in chat changes the face on both apps at once and leaves the voice alone, and the answer says so. A face never changes the voice by itself, and an approval never gets a wave or anything cute.",
         "limit": "Animal voices are Jarvis's own voices, blends and pitch - never a real person's.",
         "surface": "both",
         "covers": ["faces"],

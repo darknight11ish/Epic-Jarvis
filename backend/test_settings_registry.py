@@ -91,6 +91,28 @@ os.environ["JARVIS_FRAMEWORK_TOML"] = str(_TOML_COPY)
 for _mod in (AF, AL, WN, BR, WS, MN):
     _mod._config_dir = lambda _tmp=TMP: _tmp
 
+# THE FACE'S CHOICES ARE THE OWNER'S PC DATA - `jarvis-visual-spec.json`, read
+# from beside the server (`jarvis_settings_registry._face_choices`). A staged
+# run of this suite (the way run_suites.py and CI run it) holds the shipped
+# MODULES only, so that file is not beside them and the face's options would be
+# {} - a fact about the staging, not about the grammar this file proves. Point
+# the registry's file fallback at this repository's own measured spec (the same
+# file test_appearance.py pins) so every check below runs on real face names;
+# the EMPTY case - a PC with no spec at all - is proved in words by
+# t_a_pc_with_no_face_spec_says_why, which stubs it back out itself.
+def _repo_face_rows():
+    import json
+    spec = json.loads((REPO / "jarvis-desktop" / "src" / "jarvis-visual-spec.json")
+                      .read_text(encoding="utf-8"))
+    return [{"id": str(row["id"]), "name": str(row.get("name") or row["id"])}
+            for row in spec.get("faces") or []
+            if isinstance(row, dict) and row.get("id")]
+
+
+_FACE_ROWS_FROM_THE_SPEC = _repo_face_rows()
+R._face_rows = lambda: _FACE_ROWS_FROM_THE_SPEC
+
+
 FAILED, PASSED = [], []
 
 
@@ -791,6 +813,42 @@ def t_every_bool_setting_resolves_on_and_off_and_reaches_its_own_setter():
                   calls == [(want_on, "peer-a", True)], calls)
             check(f"...and reports the setter's own sentence ({b.key})",
                   out is not None and out.reply == "spy", out)
+
+
+def t_a_pc_with_no_face_spec_says_why():
+    """A PC with no visual spec has no faces to choose - and must SAY SO.
+
+    MEASURED 2026-10-27, through the staged runner: with no spec beside the
+    backend the generic control refusal read "That is not one of the values for
+    face's face. Say one of: ." - an empty list of choices, which is worse than
+    no answer. The face is the one choice setting whose list is a file
+    (`_face_choices`), so it is the one that can have no choices at all on a
+    real PC; the fix words that case instead of printing an empty list.
+    """
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    saved = R._face_rows
+    R._face_rows = lambda: []
+    try:
+        check("a PC with no visual spec has no face choices at all",
+              R._face_choices() == {}, R._face_choices())
+        got = Q.match("set the face to red panda")
+        check("...so that sentence is a refusal, not a guess",
+              got is not None and got.name == "control_bad", got)
+        refused = (Q._run_control_bad(dict(got.f))
+                   if got is not None and got.name == "control_bad" else None)
+        replied = refused.reply if refused is not None else ""
+        check("...and the refusal names the file that would supply the faces",
+              "jarvis-visual-spec.json" in replied, replied)
+        check("...and never prints an empty 'Say one of:' list",
+              "say one of: ." not in replied.lower(), replied)
+        check("...and says nothing was changed",
+              "nothing was changed" in replied.lower(), replied)
+        said = R.choice_bad_words(R._choice("face"))
+        check("the settings-choice refusal path says the same thing",
+              "jarvis-visual-spec.json" in said, said)
+    finally:
+        R._face_rows = saved
 
 
 def t_every_choice_setting_resolves_its_options_and_reaches_its_own_setter():

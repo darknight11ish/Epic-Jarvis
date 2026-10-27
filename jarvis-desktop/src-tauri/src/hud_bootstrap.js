@@ -736,8 +736,10 @@
    *    typed answers at all, so **on the owner's instruction of
    *    2026-10-16 - "Gate it - keep sensitive answers on screen in the HUD
    *    too" - that exception is removed HERE and nowhere else.** It is a
-   *    decision, not an oversight: the bar, the widget and the phone are
-   *    unchanged, and the one fixed line below is the bar's own sentence.
+   *    decision, not an oversight: the bar and the widget are
+   *    unchanged, and the phone did not read typed answers then. It has its
+   *    own tap-only typed read-aloud since 2026-10-27, a separate, narrower
+   *    decision. The one fixed line below is the bar's own sentence.
    *    A route this window does not have (an older PC, a chat that failed)
    *    gates nothing, which is the same reading the bar makes of a missing
    *    route.

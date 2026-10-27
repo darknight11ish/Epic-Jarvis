@@ -7769,7 +7769,14 @@ object JarvisRuntime {
             onRoute = { route -> header = route },
         )
         val now = readAloudWatch()
-        val route = com.jarvis.client.voice.PrivateAloud.route(header)
+        // routeOrNull, NOT route: null is "the PC did not say", and the gate must
+        // fail CLOSED on it. `route(header)` always answers a Route (SILENT_ROUTE
+        // for a missing header), so `route != null` could never be false and the
+        // `!hasRoute` branch of ReadAloud.Facts was dead - a fail-open this
+        // feature's own decision says must not exist (docs/DECISIONS.md,
+        // 2026-10-27). The voice path keeps using route(): it must still speak
+        // the answer, it just must not read a private one aloud.
+        val route = com.jarvis.client.voice.PrivateAloud.routeOrNull(header)
         val facts = com.jarvis.client.voice.ReadAloud.Facts(
             hasRoute = route != null,
             privateGate = route?.privateGate == true,
@@ -7781,7 +7788,7 @@ object JarvisRuntime {
             stale = _link.value != LinkState.CONNECTED || _stale.value,
             // A locked phone never speaks: the screen lock, or App lock
             // wanting the fingerprint again (the rule "Hear it" already uses).
-            locked = screenLocked() || appLockWouldLock(SystemClock.elapsedRealtime(), settings.security.value),
+            locked = readAloudLockedNow(),
         )
         val text = answer?.trim().orEmpty()
         if (text.isNotEmpty()) {
@@ -7812,6 +7819,17 @@ object JarvisRuntime {
             voice.speaker.arm()
             for (sentence in sentences) {
                 if (!_readingAloud.value) return ""
+                // A locked phone never speaks, and the lock can arrive DURING a
+                // read: the `locked` fact recorded when the answer came in is a
+                // snapshot, so the live question is asked again before every
+                // sentence (the Lead's ruling of 2026-10-27: stop immediately,
+                // privacy first). MainActivity also stops the read the moment the
+                // app leaves the screen - the phone locking, HOME, another app -
+                // which covers a lock landing in the middle of one clip.
+                if (readAloudLockedNow()) {
+                    stopReadingAloud()
+                    return ""
+                }
                 when (val said = api.say(sentence)) {
                     is com.jarvis.client.net.ApiResult.Ok -> when (val clip = said.value) {
                         is com.jarvis.client.net.SaidAloud.Audio -> voice.speaker.play(clip.wav)
@@ -7836,6 +7854,14 @@ object JarvisRuntime {
         _readingAloud.value = false
         voice.speaker.stop()
     }
+
+    /**
+     * True when a read must not speak NOW: the screen is locked, or App lock
+     * would ask for the fingerprint again. Read live, not once per answer - see
+     * [readAloudLastAnswer]'s loop.
+     */
+    private fun readAloudLockedNow(): Boolean =
+        screenLocked() || appLockWouldLock(SystemClock.elapsedRealtime(), settings.security.value)
 
     /** The microphone service is in the foreground (Android said yes), within a few seconds. */
     private suspend fun awaitLiveListening(): Boolean =

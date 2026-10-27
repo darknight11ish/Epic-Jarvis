@@ -110,11 +110,35 @@ class ModelDoorTest {
         listOf("/api/", "api.post", "postCard", "installModel", "switchModel", "rollbackModel").forEach {
             assertFalse("the model pill gained a write: $it", chip.contains(it))
         }
-        // And it is drawn with the rest of the caption strip, not behind it.
-        assertTrue(
-            "the pill is drawn after the caption row's condition",
-            home.indexOf("LaneChip(state.status") < home.indexOf("if (showCaption)"),
+        // Drawn unconditionally: neither the pill nor the doors may sit behind a
+        // caption condition again (that gate is what hid Home's Model door
+        // whenever the face was made small, or set to Hidden - see the test
+        // below).
+        assertFalse("a caption gate came back around the model doors", home.contains("showCaption"))
+    }
+
+    @Test
+    fun `the doors are drawn with the face and without it`() {
+        // One row, one set of words, drawn in exactly two places: FaceBlock
+        // (with the face) and the face-hidden branch (without it). Definition
+        // plus the two calls is three.
+        assertEquals(
+            "the three doors are not drawn from the two expected places",
+            3,
+            home.split("ModelDoorsRow(").size - 1,
         )
+        val face = home.substringAfter("private fun FaceBlock(").substringBefore("private fun ModelDoorsRow(")
+        assertTrue("FaceBlock does not draw the three doors", face.contains("ModelDoorsRow("))
+        val hiddenAt = home.indexOf("if (state.faceSize.hidden) {")
+        assertTrue("Home has no face-hidden branch any more", hiddenAt > 0)
+        val hidden = home.substring(hiddenAt, minOf(home.length, hiddenAt + 1400))
+        assertTrue(
+            "the three doors - including the Model door - do not exist while the face is Hidden",
+            hidden.contains("ModelDoorsRow("),
+        )
+        // The owner's own setting is Face size Hidden: a door drawn only with
+        // the face is not the door he asked for on 2026-10-27.
+        assertFalse("the caption gate that hid the doors is back", home.contains("showCaption"))
     }
 
     @Test

@@ -44,13 +44,15 @@ class FeatureDirectoryTest {
             assertTrue("unapproved label: $label",
                 expectedPrefixes.any { label.startsWith(it) })
         }
-        // The counts the PC sends (labels 40/2/16/71/12; corrected 2026-10-23 by
+        // The counts the PC sends (labels 41/2/15/71/12; corrected 2026-10-23 by
         // the adjustment-truth pass, Command-Only 69 -> 70 by the desktop
-        // Private chat row on 2026-10-26, and 70 -> 71 by the reminder-actions
-        // row on 2026-10-27), so a wrong label is caught.
-        assertEquals(40, rows.count { it.label.startsWith("Switchable / Adjustable") })
+        // Private chat row on 2026-10-26, and Choose Jarvis's face
+        // PC-Only -> Switchable/Adjustable by the face-by-asking work, same
+        // day: 40 -> 41 and 16 -> 15; Command-Only 70 -> 71 by the
+        // reminder-actions row on 2026-10-27), so a wrong label is caught.
+        assertEquals(41, rows.count { it.label.startsWith("Switchable / Adjustable") })
         assertEquals(2, rows.count { it.label.startsWith("Settings-Only") })
-        assertEquals(16, rows.count { it.label.startsWith("PC-Only Setting") })
+        assertEquals(15, rows.count { it.label.startsWith("PC-Only Setting") })
         assertEquals(71, rows.count { it.label.startsWith("Command-Only") })
         assertEquals(12, rows.count { it.label.startsWith("Always On") })
     }
@@ -111,7 +113,7 @@ class FeatureDirectoryTest {
     fun `no row reaches the phone as a fake control`() {
         // A PC-Only row is shown with its honest refusal, never as a switch.
         val pcOnly = rows.filter { it.label.startsWith("PC-Only Setting") }
-        assertEquals(16, pcOnly.size)
+        assertEquals(15, pcOnly.size)
         assertTrue("a PC-Only row never offers a phone switch",
             pcOnly.all { it.switchKeys.isEmpty() && !it.isToggle })
     }

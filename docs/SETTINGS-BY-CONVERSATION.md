@@ -117,12 +117,14 @@ Added by `feat/models-on-d-and-storage-tiers` (PR #229):
 The adjustment-truth audit found that the first control matrix over-claimed. The follow-up
 fix (task-118, same PR) makes the claim smaller and checkable:
 
-- **Counts are now 40 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 70 Command-Only,
+- **Counts are now 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 70 Command-Only,
   12 Always-On (140 features).** The desktop Private chat row joined Command-Only on
-  2026-10-26. The previous 42/2/13/70/12 was wrong: `picture-mode`
+  2026-10-26, and Choose Jarvis's face moved PC-Only -> Switchable/Adjustable the same
+  day when it became changeable by asking (one named choice, no card). The previous
+  42/2/13/70/12 was wrong: `picture-mode`
   really sets `screen_picture` (so it is Switchable/Adjustable), and `calendar`,
   `phone-notifications` and `phone-watch` are PC-only controls (so they are PC-Only).
-  Only 10 of the 40 switchable rows are fully enforced; 30 are planned and carry a
+  Only 11 of the 41 switchable rows are fully enforced; 30 are planned and carry a
   **Planned** badge and "Typed phrase: planned - not wired yet" - never a fake "Try:".
 - **The feature phrase must be its own.** The guide no longer copies a section's
   representative sentence into every feature that covers the section (that made
