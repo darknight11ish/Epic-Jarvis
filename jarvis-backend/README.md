@@ -55,7 +55,9 @@ plus these six files:
     flattened to its leaf name because jarvis_hud.py reads it beside itself:
         theme.css, fonts.css, and seven *.woff2 faces     from backend/static/
         lane-warning.js, hud-actions.js, hud-safety.js,   from backend/static/
-        hud-edit.js, hud-presets.js, private-speech.js,
+        hud-edit.js, hud-presets.js,
+        galaxy-presets.js (the Galaxy's looks, 2026-10-27),
+        private-speech.js,
         face-voice.js, face-moments.js, face-tuning.js,
         animal-shared.js, hud-layout.js, hud-layout-store.js,
         hud-web-bridge.js (PWA Slice 2's browser bridge),
@@ -69,7 +71,7 @@ and one file this repository DERIVES rather than copies:
     _where.py                backend/_where.py, plus a trailer that says what it is
 ```
 
-The 43 static files above are the closed-world whitelist
+The 44 static files above are the closed-world whitelist
 `jarvis_hud.py`'s `STATIC_ASSETS` serves at `GET /theme.css`, `/fonts/*`,
 `/<module>.js`, `/faces.html`, `/manifest.webmanifest`, `/sw.js` and `/icons/*`:
 without them the page loads in a browser and every file it

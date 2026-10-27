@@ -13623,9 +13623,11 @@ function select(node) {
    Layout presets (Phase G0 of the Galaxy rework, 2026-10-23)
 
    The Galaxy keeps the constellation that ships today as its DEFAULT view. This
-   section only adds three FLAT layouts beside it - star map, clean tree and zen
-   ring - from the pure `galaxy-presets.js` module, plus the chips in the Galaxy
-   bar and the 6/7/8 hotkeys.
+   section adds the eight FLAT layouts beside it - planetary orbit, neural arbor,
+   nebula, DNA helix and radar dome (2026-10-27, the owner asked for "an easy way
+   to change the appearance of the jarvis galaxy to the other models"), plus star
+   map, clean tree and zen ring - from the pure `galaxy-presets.js` module, with
+   the chips in the Galaxy bar and the 1-8 hotkeys.
 
    The rules this section keeps:
    - the default view is untouched: it is still the same physics constellation
@@ -13637,8 +13639,9 @@ function select(node) {
      and the 240-node bound all stay exactly what `galaxy-view.js` decided;
    - it is a local display choice: no route, no server write, no dependency, no
      3D, no remote asset;
-   - the five rich presets are shown disabled as "not built yet" (blueprint
-     phase G4), never silently missing and never pretending to exist.
+   - every look the module builds is a chip and a hotkey; a look that is PLANNED
+     but not built would be shown disabled as "not built yet" rather than
+     silently missing - there is none today, all eight are built.
    ========================================================================== */
 
 let galaxyPreset = { id: DEFAULT_PRESET, saved: null, layout: null };
@@ -13826,7 +13829,7 @@ function buildPresetMenu() {
     } else {
       chip.setAttribute("aria-pressed", "false");
       chip.title = meta.id === DEFAULT_PRESET
-        ? "The current constellation (default). Press 6, 7 or 8 for a flat layout."
+        ? "The current constellation (default). Press 1 to 8 for a layout."
         : `${meta.hint}. Press ${meta.key}; press it again for the constellation.`;
       chip.addEventListener("click", () => applyGalaxyPreset(meta.id));
     }
