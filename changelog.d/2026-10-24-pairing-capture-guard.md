@@ -1,1 +1,0 @@
-- **A pairing code stays hidden from screen capture even after an app-lock unlock (2026-10-24, desktop).** The pairing panel's capture guard is now a reason inside the one lock rule instead of a second writer, so the unlock sweep can no longer clear it while the code is still valid. While a code is shown, the Jarvis windows stay out of any screen share or recorder.

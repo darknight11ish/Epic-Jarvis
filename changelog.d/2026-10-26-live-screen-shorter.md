@@ -1,1 +1,0 @@
-- **The Jarvis Live screen is shorter.** The long headset-button explanation that sat under the microphone line is gone, at the owner's request of 2026-10-26; the button works exactly as before, and the one-line "Microphone: this phone's" note stays.
