@@ -1281,6 +1281,27 @@ class MainActivity : FragmentActivity() {
         // one (LinkWords.vpnOffLine). A hint only; it decides nothing.
         val vpnUp by JarvisRuntime.vpnUp.collectAsState()
         val savedHost by JarvisRuntime.settings.host.collectAsState()
+        // The phone's own pinned chat messages (the owner's request of
+        // 2026-10-27: "a pin message button that pins the message and remembers
+        // it and can be found easily in a new menu"). A private
+        // SharedPreferences file, read once per host and written through on
+        // every change - no route, nothing sent to the PC. Re-read when the
+        // paired PC changes, because the store refuses another PC's list.
+        val pinStore = remember { com.jarvis.client.data.PinnedChatStore(this@MainActivity) }
+        // A MutableState held in a `val`, not a `by remember(key)`: the actions
+        // below are built once inside `remember { HomeActions(...) }`, so a
+        // lambda can only ever capture the state OBJECT. A keyed delegate would
+        // hand a fresh object to the screen while the old one kept taking the
+        // writes, and a pin would land nowhere.
+        val pinnedMessages = remember {
+            mutableStateOf(pinStore.load(JarvisRuntime.settings.host.value))
+        }
+        // Re-read when the paired PC changes: the store refuses another PC's list.
+        LaunchedEffect(savedHost) { pinnedMessages.value = pinStore.load(savedHost) }
+        // "Open chat" on a pinned message: the one conversation History should
+        // open when it next appears. Consumed by HistoryScreen and cleared, so
+        // a later visit lands on the list as always.
+        var historyOpenChat by rememberSaveable { mutableStateOf<String?>(null) }
         val vpnLine = LinkWords.vpnOffLine(savedHost, link, vpnUp)
         val stale by JarvisRuntime.stale.collectAsState()
         val activity by JarvisRuntime.activity.collectAsState()
@@ -2991,7 +3012,37 @@ class MainActivity : FragmentActivity() {
                             filingTag = null
                             filingQuery = ""
                         },
+                        // "Open chat" from a pinned message (the owner's
+                        // request of 2026-10-27): open THAT conversation rather
+                        // than the list. Consumed once, so a later visit is a
+                        // normal one.
+                        openChatId = historyOpenChat,
+                        onOpenChatDone = { historyOpenChat = null },
                         modifier = root,
+                    )
+
+                    // "Pinned messages" (the owner's request of 2026-10-27).
+                    // Read-only apart from Unpin, which is a local edit; "Open
+                    // chat" goes through History's own read. "Hide memory lists
+                    // and chat history" is the same guard History uses.
+                    Screen.PINS -> com.jarvis.client.ui.screens.PinnedScreen(
+                        pins = pinnedMessages.value,
+                        onUnpin = { key ->
+                            val next = com.jarvis.client.data.ChatPins.unpin(pinnedMessages.value, key)
+                            if (next !== pinnedMessages.value) {
+                                pinnedMessages.value = next
+                                pinStore.save(next, savedHost)
+                            }
+                        },
+                        onOpenChat = { id ->
+                            historyOpenChat = id
+                            nav.go(Screen.HISTORY)
+                        },
+                        onBack = { nav.back() },
+                        modifier = root,
+                        privateHidden = privateHidden,
+                        onShowPrivate = ::showPrivateLists,
+                        showPrivateBusy = ownerCheckBusy.value,
                     )
 
                     Screen.LIVE -> com.jarvis.client.ui.screens.LiveScreen(
@@ -3381,6 +3432,18 @@ class MainActivity : FragmentActivity() {
                             stillAnimal = stillAnimal,
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
+                            // The per-message menu's pin half (the owner's
+                            // request of 2026-10-27). `chatId` is the kept chat
+                            // this answer belongs to, so a pin can open that
+                            // chat in History later; `pinnedKeys` is every pin
+                            // this phone holds, ids only, so the row knows
+                            // whether to say "Pin" or "Unpin". A temporary chat
+                            // - or a game the PC made temporary - may not be
+                            // pinned at all, and `pinsAllowed` says so.
+                            chatId = JarvisRuntime.homeKeptChatId(),
+                            pinnedKeys = pinnedMessages.value.map { it.key }.toSet(),
+                            pinsFull = com.jarvis.client.data.ChatPins.full(pinnedMessages.value),
+                            pinsAllowed = !temporaryChat && !gameChat,
                             conversationTurns = conversation.size,
                             // The pairs above the one on screen.
                             thread = com.jarvis.client.net.ChatHistory.threadBefore(
@@ -3784,6 +3847,42 @@ class MainActivity : FragmentActivity() {
                                 onMarkAnswer = { turnId, mark ->
                                     JarvisRuntime.markAnswerDetached(turnId, mark)
                                 },
+                                // Pin ONE message on this phone (the owner's
+                                // request of 2026-10-27). Local only: the row
+                                // goes into the private preference file, the
+                                // screen is redrawn from the new list, and
+                                // Home says it happened in the app's own
+                                // notice. Nothing is sent to the PC, and the
+                                // cap refuses rather than dropping an older pin
+                                // (the menu says so in words).
+                                onPinMessage = { chatId, chatLabel, text ->
+                                    val next = com.jarvis.client.data.ChatPins.pin(
+                                        pinnedMessages.value,
+                                        chatId,
+                                        chatLabel,
+                                        text,
+                                        System.currentTimeMillis(),
+                                    )
+                                    if (next !== pinnedMessages.value) {
+                                        pinnedMessages.value = next
+                                        pinStore.save(next, savedHost)
+                                        JarvisRuntime.setNotice(com.jarvis.client.data.ChatPins.PIN_DONE)
+                                    } else if (com.jarvis.client.data.ChatPins.full(pinnedMessages.value)) {
+                                        JarvisRuntime.setNotice(com.jarvis.client.data.ChatPins.full())
+                                    }
+                                },
+                                onUnpinMessage = { key ->
+                                    val next = com.jarvis.client.data.ChatPins.unpin(
+                                        pinnedMessages.value,
+                                        key,
+                                    )
+                                    if (next !== pinnedMessages.value) {
+                                        pinnedMessages.value = next
+                                        pinStore.save(next, savedHost)
+                                        JarvisRuntime.setNotice(com.jarvis.client.data.ChatPins.UNPIN_DONE)
+                                    }
+                                },
+                                onOpenPins = { nav.go(Screen.PINS) },
                                 // "Try the cloud model": a genuinely new
                                 // turn, the same shape as onSend below, so
                                 // it runs on this composable's own scope

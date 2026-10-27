@@ -4377,3 +4377,81 @@ field-test row, not a pass.
 **The honesty limits, said plainly.** The long-window capability rows share the measured General setup; **no model on this PC has been measured for reflective quality**, and this entry claims none. **Reflective Coach is a model choice only:** it is not a therapist, gives no diagnosis, keeps no therapy record, and carries no store, no route and no network - crisis help stays exactly where it already is. A matching tenth personality's wording is a separate owner decision and is **not** part of this change. Fast's 77.1 tokens a second is a measurement at a 65,536-token window while its lane serves 16,384, so it is evidence of the card's headroom rather than a promise at the served window.
 
 **A preset the owner chooses is the mechanism.** There is no automatic per-feature model switching, and this change adds none: applying a preset is the only way a model changes, and an apply that needs a different model raises the existing ONE approval card (`switch_model`, the SAME card the model switch already used); if that model is already the one loaded, the switch reports nothing to change and the choice is saved without a card. Two things were deliberately left out because they need no preset: Live and Medical already pin their own models and lanes, and Reminders, the research/price radar and crisis help call no model at all.
+
+
+## 2026-10-27 — A phone answer's Right/Wrong moves behind a chevron, pins are kept on the phone, and the chat says where its other chats are
+
+**The owner's request, in their own words:** *"also, i dont want a 'was this
+answer right' on every response from jarvis. put a carrot that opens a menu on
+each chat that has this, along with a pin message button that pins the message
+and remembers it and can be found easily in a new menu. also where can i find
+old jarvis chats? and how do i open new ones?"*
+
+**Decided: the always-visible mark block goes, and a per-message menu carries
+it instead.** The persistent "Was this right?" row under every finished answer
+on Home is removed. Each Jarvis answer - the one on screen AND each answer
+folded into the thread above it - now carries a drawn chevron at the end of
+its own "Jarvis" line; that chevron opens a small dialog that is about that
+ONE message and holds exactly two things: the same Right / Wrong pair (`feedback.patch`,
+unchanged - one mark per answer, the chosen one tapped again takes it back, a
+mark never changes memory, and the desktop's own unavailable, busy and
+not-connected sentences are kept word for word) and **Pin message / Unpin
+message**. A folded answer has no `turn_id` in the thread (the thread keeps words),
+so its menu carries the pin and no marks: the chevron is never a dead control.
+The mark still goes out over the same `/api/feedback/mark` route; no route, request or server
+behaviour changed.
+
+**Decided: a pin is the phone's own bookmark, not the PC's.** The pinned
+words, the chat they came from (the conversation id and the owner's question,
+which is what makes "which chat" readable) and when it was pinned are kept on
+THIS PHONE in a private `SharedPreferences` file (`data/ChatPins.kt` holds the pure rules, `data/PinnedChatStore.kt` is the thin
+store) - no new backend route, nothing sent to the PC, and the desktop's kept
+chat history is untouched. A new **Pinned messages** screen, opened from the
+chat's More menu, lists them newest first, each row with Unpin and Open chat;
+Open chat opens History at that one conversation rather than copying History.
+The list hides under "Hide memory lists and chat history" through the same `HiddenSection`
+every other memory list uses, survives a restart, holds at most 100 pins, and
+**refuses rather than dropping an older pin** - the menu says the cap in words
+instead of silently forgetting something the owner saved. A temporary chat
+(and a game the PC made temporary) may not be pinned at all, because the PC
+keeps nothing of it and the phone must not keep a copy either.
+
+**Decided: the old chats and a new chat are named where the owner looks.** The
+shared More menu now leads with **New chat**, a labelled **Earlier chats**
+(the row that already existed, until now with nothing under it saying where it
+goes) and **Pinned messages**; "New chat" is the idle timer's own reset (`ChatSession.newConversationSaid`)
+and not a second mechanism, and it is the same word the row under a finished
+answer now uses. An empty chat says once, above the box, that the old chats
+are in More and that a new chat is there too - he asked both questions on the
+same day, so the answer is written where he was already looking. History stays
+one screen: nothing is duplicated.
+
+**Why.** The owner had said three times over that the feedback pair was noise
+on every answer, and could not find History from the chat even though the row
+had been in the More menu since 2026-10-25 - a row with no line under it, in a
+menu he had never opened, is not a door. Pins are deliberately phone-local
+because the alternative (a new route plus a PC-side store) would have been a
+backend change to serve a bookmark, against the project's rule that a client
+adds no route it does not need; keeping them local also means the same "hide
+the memory lists" switch governs them, with no second privacy model to keep in
+step.
+
+**Proven by:** `data/ChatPinsTest` (JVM: one pin per message however it was reached, newest
+first, the cap refusing instead of dropping, the cut at 2000 characters, a
+corrupt file costing only the rows it damaged, ages that never read backwards,
+and the words a temporary chat is refused with) and `ChatMenuTest` (source pins: the old
+block is gone from `Reply`, the menu holds the marks and the pin, every answer row
+has the named chevron, the pin store has no route and says it is kept on the
+phone, the list is behind `HiddenSection`, History is opened at one chat and not copied,
+the chat rows are in the More menu in order, and the chevron is named and
+48dp). The existing `LearningTest` (`Feedback.viewFor`, `nextMark`, the mark body) and `ChatMarkTest` are unchanged and
+still pass, because the mark's own rules did not move. **Proven at the desk,
+2026-10-27:** the whole `:app:testDebugUnitTest` suite was run on this PC against this branch (JDK
+17, the cached Gradle 9.6.0 and Android SDK 36, `--offline`), so - unlike most phone
+changes in this project - this one is compiled and tested before CI rather
+than by CI. **Not proven, and not claimed:** the menu, the chevron and the new
+screen have not been driven on a phone - no field-test row was added and none
+is claimed as a pass; and pins are not shown on the desktop HUD, which has no
+feedback control either - the one-sided-on-purpose reason is written down in
+`docs/ARCHITECTURE.md` section 8, beside the HUD chat box's existing limits (no History, no
+Incognito, no New conversation).

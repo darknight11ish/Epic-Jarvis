@@ -132,6 +132,16 @@ fun HistoryScreen(
     /** "Forget a time frame…": the Brain's plate. */
     onOpenForgetRange: () -> Unit = {},
     /**
+     * Open ONE conversation straight away rather than the list - set by
+     * "Open chat" on a pinned message (the owner's request of 2026-10-27), so
+     * that list can point at a chat without becoming a second History.
+     * Null for an ordinary visit. Consumed once: [onOpenChatDone] tells the
+     * caller it can forget the request, so leaving History and coming back
+     * lands on the list as always.
+     */
+    openChatId: String? = null,
+    onOpenChatDone: () -> Unit = {},
+    /**
      * "Label my chat about the boiler as Home": open with [ChatTags.FileUnder]'s
      * search filled in and a banner; a tap on a chat files it (nothing is
      * filed before that). Null for a normal visit.
@@ -202,6 +212,18 @@ fun HistoryScreen(
     var forkNote by remember { mutableStateOf<Pair<String, String>?>(null) }
     LaunchedEffect(openId) {
         if (openId == null) forkNote = null
+    }
+    // "Open chat" on a pinned message: open THAT conversation, through the
+    // ordinary read the list already does (no second route, no second screen).
+    // The request is handed back straight away, so a later visit to History -
+    // even after a rotation - lands on the list, not inside an old chat.
+    LaunchedEffect(openChatId) {
+        val wanted = openChatId ?: return@LaunchedEffect
+        if (com.jarvis.client.net.ChatHistory.validConversationId(wanted)) {
+            openId = wanted
+            editorOpen = false
+        }
+        onOpenChatDone()
     }
     var listSaid by remember { mutableStateOf<String?>(null) }
     // The search box (docs/JARVIS-API.md section 71). Two letters or more:
