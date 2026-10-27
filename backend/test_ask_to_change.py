@@ -34,10 +34,10 @@ No model, no network, no port, and nothing here writes a setting for real.
 """
 from __future__ import annotations
 
+import ast
 import dataclasses
 import inspect
 import sys
-import traceback
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -537,16 +537,46 @@ check("the apply intent is NOT read-only, so 'cancel that' knows something "
       "feature_change_apply" not in Q.READ_ONLY_INTENTS)
 
 # The whole module has exactly ONE gate door - the update lane's own nested
-# `_gate` helper - and the change lane is not it. A second `import jarvis_gate`
-# appearing is the failure this pins.
-quick_src = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
-check("the module has exactly one gate import, and it is the update lane's",
-      quick_src.count("import jarvis_gate") == 1
-      and "jarvis_gate" not in apply_src,
-      quick_src.count("import jarvis_gate"))
+# `_gate` helper - and the change lane is not it. Walked as an AST rather than
+# read as text, because a text pin goes red on a rename and stays green when
+# the behaviour is wrong (tools/check_no_source_pins.py's own rule).
+QUICK_AST = ast.parse((HERE / "jarvis_quick.py").read_text(encoding="utf-8"))
+
+
+def _gate_imports(tree):
+    """Every Import/ImportFrom that brings `jarvis_gate` into the module."""
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(alias.name.split(".")[0] == "jarvis_gate" for alias in node.names):
+                found.append(node)
+        elif isinstance(node, ast.ImportFrom):
+            if (node.module or "").split(".")[0] == "jarvis_gate":
+                found.append(node)
+    return found
+
+
+def _function_node(tree, name):
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    return None
+
+
+GATE_IMPORTS = _gate_imports(QUICK_AST)
+APPLY_NODE = _function_node(QUICK_AST, "_run_feature_change_apply")
+check("the change lane's own function is there to be inspected",
+      APPLY_NODE is not None)
+check("the module has exactly one gate import, and the change lane has none",
+      len(GATE_IMPORTS) == 1
+      and not [n for n in ast.walk(APPLY_NODE or ast.Module(body=[], type_ignores=[]))
+               if isinstance(n, ast.Name) and n.id == "_gate"],
+      [getattr(n, "lineno", None) for n in GATE_IMPORTS])
 check("the change lane never reaches that gate door",
-      "_gate(" not in apply_src, [ln for ln in apply_src.splitlines()
-                                  if "_gate(" in ln])
+      not [n for n in ast.walk(APPLY_NODE or ast.Module(body=[], type_ignores=[]))
+           if (isinstance(n, ast.Name) and n.id in ("_gate", "jarvis_gate"))
+           or (isinstance(n, ast.Attribute) and n.attr in ("check", "decide", "approve"))],
+      "a gate name or a decision call appeared inside _run_feature_change_apply")
 
 # A private chat refuses the change before any writer can run.
 fake = FakeSetting("prompt_coach", outcome=outcome(said="never used"),
