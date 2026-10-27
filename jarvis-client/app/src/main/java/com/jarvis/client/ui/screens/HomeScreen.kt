@@ -2419,15 +2419,46 @@ private fun FaceBlock(
                 // is you.") - this button adds no way around it.
                 if (showCaption) {
                     Gap(2)
-                    Text(
-                        "The Galaxy →",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = wellChrome.textLo,
-                        modifier = Modifier
-                            .clip(LocalRadii.current.insetShape)
-                            .pressable(onClick = actions.onOpenGalaxy)
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
+                    // Two doors to two Brain plates, side by side and both one
+                    // tap from Home: the Galaxy ("people-and-things") and the
+                    // focus presets ("hardware"). Same shape, same tokens, one
+                    // Row - so the new one is a first-class neighbour rather
+                    // than a second row nobody notices.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "The Galaxy →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = wellChrome.textLo,
+                            modifier = Modifier
+                                .clip(LocalRadii.current.insetShape)
+                                .pressable(onClick = actions.onOpenGalaxy)
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                        // Jarvis Presets, one tap from Home (the owner's ask of
+                        // 2026-10-26: "also i want a presets button easily
+                        // accessibler on the phone app"). It calls the SAME
+                        // action the More menu's "Jarvis Presets" row calls, so
+                        // it opens the one Brain Hardware plate where
+                        // FocusPresetsSection is drawn - the destination
+                        // OpenPlace names for "open focus presets". Navigation
+                        // only: it reads nothing, adds no route, and choosing a
+                        // preset still raises the contract's ONE approval card.
+                        // The More row stays, for anyone who looks there first.
+                        Text(
+                            "Presets →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = wellChrome.textLo,
+                            modifier = Modifier
+                                .clip(LocalRadii.current.insetShape)
+                                .pressable(onClick = actions.onOpenPresets)
+                                // Read aloud as what it opens, not as an arrow.
+                                .semantics { contentDescription = "Jarvis presets" }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
                     Gap(2)
                 }
             }
