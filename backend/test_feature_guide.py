@@ -1507,18 +1507,14 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
               FG.change_words(row))
 
 
-#: The four rows BOTH apps have whose SETTING CONTROL is the PC's, and the exact
+#: The rows BOTH apps have whose SETTING CONTROL is the PC's, and the exact
 #: sentence each now answers "how do I change it?" with (2026-10-26, part B).
 #: Pinned word for word so a reword cannot drift what a reviewer checked; the
 #: comma-fragment garble they replace read "It is changed at Settings, a new
 #: conversation starts after on this PC; the phone says so rather than pretending
-#: it changed".
-#:
-#: `faces` and `appearance` no longer carry the blanket sentence: the phone's
-#: Appearance screen really does write the shared appearance document (2026-10-26
-#: semantic read, finding 3), so each says which half the phone changes. The two
-#: that really are the PC's keep it - and the places are now written the way the
-#: Settings card writes them ("Settings, Connection", not "Settings, connection").
+#: it changed". Pins for the two that really are the PC's: the places are written
+#: the way the Settings card writes them ("Settings, Connection", not
+#: "Settings, connection").
 BOTH_PC_ONLY_SENTENCES = {
     "chat-thread": ("Its setting is in Settings, A new conversation starts after. "
                     "It is changed on the PC; the phone has the feature but cannot "
@@ -1526,16 +1522,34 @@ BOTH_PC_ONLY_SENTENCES = {
     "connection": ("Its setting is in Settings, Connection. It is changed on the PC; "
                    "the phone has the feature but cannot change the PC's setting."),
 }
-#: The two rows whose shared document the phone writes. Pinned exactly too, so
-#: neither can drift back to "cannot change the PC's setting".
+#: The row whose SHARED document the phone writes: `appearance` is still a
+#: PC-Only-labelled setting with no typed control, and the phone's Appearance
+#: screen really does change the same face and state colours (2026-10-26
+#: semantic read, finding 3). Pinned exactly, so it cannot drift back to "cannot
+#: change the PC's setting".
+#:
+#: `faces` was the second row here until this branch gave it a typed control
+#: ("change your face to Spiral"): `contract/feature-controls.json` now labels it
+#: "Switchable / Adjustable (Typed & Settings)" with `surface: both`, so
+#: `change_words()` names the phrase instead of the PC's Settings. The phone half
+#: is NOT dropped - BOTH_TYPED_SENTENCES below pins that its answer still says
+#: both apps, still names the phone's Appearance place, and never says the phone
+#: cannot change it.
 BOTH_PHONE_WRITE_SENTENCES = {
-    "faces": ("Its setting is in Settings, Appearance. On the phone, Appearance "
-              "picks the same face and sends it to the PC, so either app can "
-              "change it."),
     "appearance": ("Its setting is in Settings, Appearance. On the phone, "
                    "Appearance changes the same face and state colours and sends "
                    "them to the PC; the theme itself stays on each device."),
 }
+#: The both-apps row that is TYPED on the PC since this branch, and the exact
+#: sentence it now answers "how do I change it?" with - the phrase the contract's
+#: `adjust` list pins first, not an invented one.
+BOTH_TYPED_SENTENCES = {
+    "faces": 'To change it, say "set the face to arc".',
+}
+#: Every both-apps row that is still PC-Only-labelled, exactly (2026-10-26): the
+#: two PC-Only sentences above, plus the one phone-write row that keeps that
+#: label. `faces` left this set when the contract gave it a typed control.
+BOTH_PC_ONLY_IDS = ("appearance", "chat-thread", "connection")
 #: The garble shape itself: a Settings path swallowed by " on this PC" in the same
 #: clause. It is what `settings_path_words()` produced when a prose `where` was
 #: split at its first comma and glued together.
@@ -1581,7 +1595,7 @@ def t_the_galaxy_is_both_apps_and_its_answer_says_so():
 
 
 def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
-    """Part B (2026-10-26): four rows BOTH apps have read as PC-only settings.
+    """Part B (2026-10-26): rows BOTH apps have read as PC-only settings.
 
     `_label_from` maps the row's `reason` (app-local / credentials) to PC-Only
     without looking at `surface`, and `change_words` believed the label's own
@@ -1589,13 +1603,18 @@ def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
     at Settings, <a comma-split fragment> on this PC; the phone says so rather
     than pretending it changed" for features both apps have. The sentence is now
     built from `surface`: the PC's Settings is named as a place, and the phone is
-    not said to lack the feature. The four are pinned exactly.
+    not said to lack the feature.
+
+    The set is pinned exactly, and it is three since this branch: asking for a
+    face by name works on both apps, so `faces` has a real typed control and the
+    contract labels it "Switchable / Adjustable (Typed & Settings)". It moved to
+    BOTH_TYPED_SENTENCES rather than being dropped, and its phone half is still
+    checked below.
     """
     both_pc = [row for row in SOURCE if row["surface"] == "both"
                and FG.label_for(row) == FG.LABEL_PC_ONLY]
-    check("exactly the four pinned rows are both-apps PC-Only settings",
-          sorted(r["id"] for r in both_pc)
-          == sorted(list(BOTH_PC_ONLY_SENTENCES) + list(BOTH_PHONE_WRITE_SENTENCES)),
+    check("exactly the three pinned rows are both-apps PC-Only settings",
+          sorted(r["id"] for r in both_pc) == list(BOTH_PC_ONLY_IDS),
           [r["id"] for r in both_pc])
     for fid, want in BOTH_PC_ONLY_SENTENCES.items():
         row = FG.row_by_id(fid)
@@ -1607,10 +1626,10 @@ def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
         words = FG.explain_words(row)
         check(f"{fid}'s whole answer carries that sentence and both apps",
               want in words and "It is in both apps" in words, words[:200])
-    # The two rows the phone really does write (finding 3): the sentence names
-    # the phone's own Appearance screen and never says it cannot change the
-    # shared document. Pinned word for word in both the change sentence and the
-    # whole answer.
+    # The row the phone really does write (finding 3): the sentence names the
+    # phone's own Appearance screen and never says it cannot change the shared
+    # document. Pinned word for word in both the change sentence and the whole
+    # answer.
     for fid, want in BOTH_PHONE_WRITE_SENTENCES.items():
         row = FG.row_by_id(fid)
         check(f"{fid} says the phone writes the shared document too",
@@ -1622,6 +1641,25 @@ def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
         words = FG.explain_words(row)
         check(f"{fid}'s whole answer carries that sentence and both apps",
               want in words and "It is in both apps" in words, words[:200])
+    # `faces` is typed on the PC since this branch, so its change sentence names
+    # the phrase the contract pins first - and the phone is still not taken away:
+    # the answer names the phone's Appearance place, says the feature is in both
+    # apps, and never says the phone cannot change it.
+    for fid, want in BOTH_TYPED_SENTENCES.items():
+        row = FG.row_by_id(fid)
+        check(f"{fid} carries the label the contract now gives it",
+              FG.label_for(row) == FG.LABEL_SWITCH_ADJUST, FG.label_for(row))
+        check(f"{fid} names the phrase instead of the PC's setting",
+              FG.change_words(row) == want, FG.change_words(row))
+        ability = FG.ability_explanation(row)
+        check(f"{fid} never puts that control 'on this PC' alone",
+              "on this PC" not in ability
+              and "cannot change the PC's setting" not in ability, ability)
+        words = FG.explain_words(row)
+        check(f"{fid}'s whole answer carries that sentence and both apps",
+              want in words and "It is in both apps" in words, words[:200])
+        check(f"{fid} still names the phone's Appearance place",
+              "On the phone, Appearance" in words, words[:200])
     # No BOTH-APPS row may carry the garble shape, in either the change sentence
     # or the whole explain answer. (A desktop-only row may still say "on this PC" -
     # that is true for it - but its place is never swallowed by that phrase.)
