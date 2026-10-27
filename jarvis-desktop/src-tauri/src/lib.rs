@@ -214,8 +214,9 @@ pub mod events {
     pub const UPDATE_PROGRESS: &str = "update-progress";
     /// Payload: [`crate::update::Step`] — one half of the two-half update, as
     /// it starts, ends, or is skipped. Emitted only from `update_both`, which
-    /// is reachable only from its own button; like `UPDATE_STATUS`, nothing
-    /// that receives this starts, resumes or approves anything. The `running`
+    /// runs from its own button and from the approved-update path; like
+    /// `UPDATE_STATUS`, nothing that receives this starts, resumes or approves
+    /// anything. The `running`
     /// state is why it exists: the backend half takes minutes, and a card that
     /// said nothing for that long would look like a button that did nothing.
     pub const UPDATE_STEP: &str = "update-step";

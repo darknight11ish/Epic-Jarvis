@@ -4694,7 +4694,9 @@ _TYPED_DECISION = re.compile(
 # `answer_approval` sees the approved card's action), so there is ONE installer
 # and not a second one here. Before this feature the desktop updater was the
 # one self-modification path outside the gate (the self-improvement audit's
-# finding S3); now it is behind a card like every other change.
+# finding S3); a start from chat is now behind a card, while the Settings
+# window's own Install and "update both halves" buttons still call `update_both`
+# directly - S3 is improved for the new path, not closed for the old one.
 
 #: The manifest the app's own updater reads (`tauri.conf.json`
 #: `plugins.updater.endpoints`). `test_update_chat.py` holds the two equal.

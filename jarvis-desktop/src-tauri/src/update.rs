@@ -47,10 +47,11 @@
 //!
 //! Since 2026-10-13 the same card also updates the **Python backend**, which had
 //! never been driven by anything but the owner's own hands. [`update_both`] runs
-//! the two halves in one deliberate order and is reachable only from the one
-//! button; [`crate::backend_update`] owns the backend half and its own refusals.
-//! The order, and why it is that order, is written out on [`update_both`]
-//! itself.
+//! the two halves in one deliberate order; it runs from the Settings button and,
+//! since 2026-10-26, from `run_approved_update` after an answered
+//! `desktop_update` card - never from a page, a timer or a setting.
+//! [`crate::backend_update`] owns the backend half and its own refusals. The
+//! order, and why it is that order, is written out on [`update_both`] itself.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -505,8 +506,9 @@ fn claim_update_both() -> Option<UpdateBothGuard> {
 }
 
 ///
-/// Never automatic: this is a `#[tauri::command]` reachable only from the one
-/// button, nothing spawns it, and there is no setting anywhere that turns it
+/// Never automatic: this is a `#[tauri::command]` reachable from the Settings
+/// button and, since 2026-10-26, from `run_approved_update` after an answered
+/// `desktop_update` card - never from a page, a timer or a setting that turns it
 /// into a background job.
 #[tauri::command]
 pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, String> {
