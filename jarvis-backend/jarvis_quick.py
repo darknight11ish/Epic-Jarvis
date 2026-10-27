@@ -4432,6 +4432,249 @@ def _feature_switch_intent(raw, target: str, on: bool, explicit: bool = False):
     return Intent("feature_switch_refused", {"words": why})
 
 
+# --------------------------------------------------------------------------
+#   Changing a setting by asking for it ON or OFF (2026-10-27)
+#
+#   THE GAP THIS CLOSES, measured through match() on 2026-10-27 rather than
+#   assumed. "Make the prompt coach off", "set web search to off", "change the
+#   prompt coach to off", "I want the prompt coach off" and "the prompt coach
+#   should be off" - the plainest way there is to ask for a change - each
+#   matched NOTHING in this file and went to the model, which has no settings
+#   tool and cannot flip one. The two doors that did work are "turn on/off
+#   <name>" (the settings block, `_settings_adjust`) and "can I change <name>"
+#   (this block, which only explains). So the sentence the owner is most likely
+#   to say was the one sentence that did nothing, which is the failure this
+#   slice exists to remove.
+#
+#   WHAT THIS IS ALLOWED TO DO: one thing. For the settings named in
+#   `CHANGE_BY_ASKING`, call the SAME `BoolSetting.set` the Settings switch,
+#   the HUD route and the "turn on/off" phrase already call
+#   (`_run_feature_change_apply`). That setter owns the card, the tier, the
+#   PC-only refusal and the wording, so this grammar can add no permission of
+#   its own - it is a second DOOR to the same gate, never a second gate.
+#
+#   WHAT IT IS NOT ALLOWED TO DO, and where each refusal comes from:
+#     * a name that is a real setting NOT on the list -> `feature_change`, the
+#       guide's own change sentence, word for word. That is the answer "can I
+#       change <it>" already gives, so nothing new is promised and #884's
+#       wording is not touched.
+#     * a page-only setting ("app lock", "autostart") -> `NOT_BY_ASKING`'s own
+#       sentence, through `settings_not_by_asking` - the same intent and the
+#       same words the "turn off <name>" phrase already gets.
+#     * a password, a key, a token, deep config, or something that cannot be
+#       undone -> ONE plain sentence from `_CHANGE_NEVER`, and nothing changed.
+#     * anything else -> None, exactly as today (the model).
+#
+#   A CARD IS NEVER APPROVED HERE. There is no `jarvis_gate` call in this file
+#   at all: the setter raises its card, and this lane reports only what the
+#   setter said ("waiting") or what TWO real reads of the setting agree on.
+# --------------------------------------------------------------------------
+
+#: The settings this lane may change by asking, and ONLY these (2026-10-27).
+#:
+#: One entry per `jarvis_settings_registry.BOOL_SETTINGS` row that passes all
+#: three tests below. Each exclusion is deliberate, and the reasons are the
+#: slice's safety argument rather than a preference:
+#:
+#:   1. its writer IS a table entry (`BoolSetting.set`), so the change goes
+#:      through the exact function the Settings switch, the HUD route and the
+#:      spoken "turn on/off" phrase call. No second implementation, no route of
+#:      its own, no card of its own.
+#:   2. `jarvis_feature_guide.read_state` answers a real True/False for it, so
+#:      the receipt is a READ and never a claim. The three `second_card_*`
+#:      switches are EXCLUDED for exactly this reason: measured 2026-10-27,
+#:      `read_state` returns None for all three (that card's features are not
+#:      measured yet - CLAUDE.md), so a receipt for them would be a guess. Any
+#:      setting added later without a reader stays out by the same rule.
+#:   3. its card is NOT one only the PC may approve. `lights_without_card` is
+#:      EXCLUDED: its card is `loosen_what_asks_first`, which
+#:      `jarvis_owner_check.PC_ONLY_ACTIONS` refuses on any other device, so
+#:      starting it from chat would make this lane depend on the phone/PC
+#:      distinction it deliberately does not make. Its own "turn off lights
+#:      without asking" phrase still works, with its own card, unchanged.
+#:
+#: Every entry is reversible: it is a stored on/off value, and the same
+#: sentence the other way round is the undo. Where a module's own rule says one
+#: direction must ask, that card is the module's - `_run_feature_change_apply`
+#: never reports "waiting" as done.
+CHANGE_BY_ASKING = frozenset({
+    # Immediate either way, and cosmetic or local: each one's own setter says
+    # so in its docstring (jarvis_settings_registry.set_prompt_coach,
+    # set_humor, set_voice_follows_face, set_pictures).
+    "prompt_coach", "humor", "voice_follows_face", "pictures",
+    # The five PC-notification switches. They ride `jarvis_limits.change`, and
+    # all seven of those rows are `loosening="none"` on purpose: a switch that
+    # only decides whether this PC shows its owner a toast may not wait behind
+    # a card, because an alarm must never fail to ring (the registry's own
+    # header says this at `_NOTIFY_LIMIT`).
+    "pc_alarm_sounds", "pc_reminder_sounds", "pc_briefing_notification",
+    "pc_handoff_notification", "pc_quiet_hours",
+    # Everything below asks on ONE direction through its OWN module's card
+    # (and is immediate on the narrowing direction). The lane does not decide
+    # that - the setter does, exactly as it does for the Settings switch.
+    "ask_before_every_search", "background_learning", "learn_sensitive_topics",
+    "web_search", "smartwatch_notifications", "phone_notifications",
+    "screen_picture", "headless_browser", "sandbox_exec", "media_index",
+    "briefing_senders", "big_coder", "better_voice", "chat_history",
+    "write_like_me", "big_model", "big_model_wiki",
+    "big_model_deep_questions",
+})
+
+
+#: The four words a described state can wear. "enabled"/"disabled" are here
+#: because the owner says them ("the prompt coach should be disabled"), not
+#: because they are a second grammar: each maps to one bool below.
+_CHANGE_STATE_WORD = r"(?:on|off|enabled|disabled)"
+#: The change ask with the wanted STATE in it. "turn/switch/enable/disable"
+#: are deliberately NOT here: the settings block (`_ADJUST_ONOFF`) owns those
+#: words for EVERY switch and must keep owning them, or a phrase that works
+#: today would change hands. What is here is the shapes measured above as
+#: falling to the model.
+#:
+#: The "make sure"/"ensure" alternative is FIRST because "make" would otherwise
+#: match first and read "sure the prompt coach is" as the name.
+_CHANGE_SAYS_STATE = re.compile(
+    r"(?:make\s+sure|ensure)\s+(?:the\s+|my\s+|a\s+|an\s+)?(?P<e>.+?)\s+"
+    r"(?:is|are|stays?|remains?)\s+(?:turned\s+|switched\s+)?"
+    r"(?P<eon>" + _CHANGE_STATE_WORD + r")"
+    r"|(?:make|set|put)\s+(?:the\s+|my\s+|a\s+|an\s+)?(?P<a>.+?)\s+"
+    r"(?:to\s+)?(?P<aon>" + _CHANGE_STATE_WORD + r")"
+    r"|(?:change|adjust|alter|switch|turn)\s+(?:the\s+|my\s+|a\s+|an\s+)?"
+    r"(?P<b>.+?)\s+to\s+(?P<bon>" + _CHANGE_STATE_WORD + r")"
+    r"|(?:i\s+(?:want|need|would\s+like)|i'd\s+like)\s+(?:you\s+to\s+)?"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(?P<c>.+?)\s+(?:to\s+be\s+|be\s+)?"
+    r"(?:turned\s+|switched\s+)?(?P<con>" + _CHANGE_STATE_WORD + r")"
+    r"|(?:the\s+|my\s+)?(?P<d>.+?)\s+(?:should|must|needs?\s+to)\s+"
+    r"(?:be|stay|remain)\s+(?:turned\s+|switched\s+)?"
+    r"(?P<don>" + _CHANGE_STATE_WORD + r")")
+#: A change ask that names a setting and does NOT say which state is wanted:
+#: "change the prompt coach", "toggle web search", "adjust the prompt coach".
+#: It is answered with ONE question and nothing else - never a guess, and never
+#: a card. "set"/"switch" are here for the same reason as above: the settings
+#: block claims "set <choice> to <value>" and "switch on/off <name>" first, so
+#: by the time these lines run those sentences are gone.
+_CHANGE_SAYS_NOTHING = re.compile(
+    r"(?:change|adjust|alter|toggle|switch|set)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+#: A state word ANYWHERE in the name the change ask left behind. Used only to
+#: NOT read a two-part sentence (see `_change_by_asking_intent`): "I want the
+#: prompt coach off and the lights on" must never be read as one switch.
+_CHANGE_STATE_SEEN = re.compile(r"\b(?:on|off|enabled|disabled)\b")
+#: Four kinds of ask this lane must refuse in ONE plain sentence, because there
+#: is no switch behind them and no undo after them. Each pattern is matched
+#: against the name ONLY, after the sentence has already been resolved to
+#: nothing this file knows - so it cannot take a real setting's words away.
+_CHANGE_NEVER = (
+    (re.compile(r"\b(?:pass\s?word|passcode|pin)\b"),
+     "I never change a password from chat - that stays with you, on the PC."),
+    (re.compile(r"\b(?:api\s*keys?|keys?|tokens?|secrets?|credentials?"
+                r"|pairing|fingerprints?|windows\s+hello|biometrics?)\b"),
+     "I never change a key, a token or a credential from chat, and I never "
+     "would - that stays on the PC."),
+    (re.compile(r"\b(?:config|configuration|settings?\s+file|jarvis[- ]framework"
+                r"|framework\.toml|toml|approval\s+(?:tiers?|rules?)|tiers?"
+                r"|the\s+gate|gate\s+rules?|auto[- ]?approv\w*)\b"),
+     "That is deep configuration, not a simple switch - I only change on/off "
+     "settings from chat, and that one stays in the config file on the PC."),
+    (re.compile(r"\b(?:wipe|erase|factory\s+reset|uninstall|reinstall"
+                r"|delete\s+(?:everything|all)|forget\s+everything"
+                r"|clear\s+everything)\b"),
+     "That cannot be undone, so I do not do it from chat - open the screen that "
+     "owns it and I will walk you through it there."),
+)
+
+
+def _change_name(setting) -> str:
+    """The switch's own first name, or its key when it has none."""
+    names = getattr(setting, "names", ()) or ()
+    return str(names[0]) if names else str(getattr(setting, "key", "") or "")
+
+
+def _change_never_words(target: str) -> Optional[str]:
+    """ONE plain sentence when `target` names something this lane must refuse,
+    or None. Checked only after no setting and no page-only row matched, so a
+    real setting's own name can never be swallowed by it."""
+    text = " ".join(str(target or "").lower().split())
+    if text.startswith(("the ", "my ", "a ", "an ")):
+        text = text.split(" ", 1)[1]
+    for pattern, words in _CHANGE_NEVER:
+        if pattern.search(text):
+            return words
+    return None
+
+
+def _change_by_asking_intent(target: str, on):
+    """The intent behind "make <setting> on/off" and "change <setting>".
+
+    `on` is True/False when the sentence said the state, None when it did not.
+    Never a guess: the name must be one the registry itself resolves (exact, or
+    its own filler-tolerant form), and the state must be IN the sentence.
+    """
+    target = _feature_target(target)
+    if not target:
+        return None
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - no registry, no lane
+        return None
+    # A PAGE-ONLY SETTING IS DECIDED FIRST, on the same filler-tolerant words
+    # the settings block uses (2026-10-26's lesson): a page-only name must get
+    # its own refusal, and no switch may be read inside those words.
+    dom_id = R.find_not_by_asking_words(target)
+    if dom_id is not None:
+        return Intent("settings_not_by_asking", {"dom_id": dom_id})
+    # Then a name this lane must never act on: refused in ONE plain sentence
+    # before anything else can read a switch inside it, so "set my password to
+    # something new" cannot fall past the "to" guard below to the model, which
+    # would answer it as though it could.
+    words = _change_never_words(target)
+    if words:
+        return Intent("feature_change_refused", {"words": words})
+    if on is None and re.search(r"\s+to\s+", target):
+        # "set the prompt coach to medium": a VALUE is being given, and it is
+        # not on/off. That is a different lane's question (or the model's), and
+        # asking "on or off?" here would be answering a question nobody asked.
+        return None
+    setting = R.find_bool_setting(target)
+    if setting is None and _CHANGE_STATE_SEEN.search(target):
+        # MORE THAN ONE STATE IN THE SENTENCE. "I want the prompt coach off and
+        # the lights on" leaves a target of "the prompt coach off and the
+        # lights", which CONTAINS a switch's whole name - so the tolerant
+        # matcher would read the FIRST clause and act on the state word at the
+        # END of the sentence, i.e. the wrong direction. One write per sentence
+        # is the rule, so a multi-part sentence is not read here at all; it
+        # goes to the model exactly as it did before. An EXACT name that
+        # happens to contain "on" ("one bigger model on both cards") resolved
+        # above and is unaffected, which is why this test is on "did not
+        # resolve", not on the words alone.
+        return None
+    if setting is None and on is not None:
+        # The tolerant form is for a state the owner DID say ("make learning in
+        # the background off"). With no state said, only the exact name gets
+        # the one question back: "change the prompt coach to medium" must not
+        # become "on or off?" just because those words contain a switch's name.
+        setting = R.find_bool_setting_words(target)
+    if setting is not None:
+        name = _change_name(setting)
+        if setting.key in CHANGE_BY_ASKING and isinstance(on, bool):
+            return Intent("feature_change_apply", {"key": setting.key, "on": on})
+        if setting.key in CHANGE_BY_ASKING:
+            # A real switch, named, with no state wanted: ONE question back.
+            return Intent("feature_change_ask", {"key": setting.key, "name": name})
+        # Real, named, and deliberately not in this lane: the guide's own
+        # change sentence, the same words "can I change <it>" already gives.
+        return Intent("feature_change", {"key": setting.key, "name": name})
+    return None
+
+
+def _change_says_state(m) -> tuple:
+    """(target, True/False) from `_CHANGE_SAYS_STATE`'s own group names."""
+    for who, state in (("e", "eon"), ("a", "aon"), ("b", "bon"),
+                       ("c", "con"), ("d", "don")):
+        if m.group(who) is not None:
+            return m.group(who), m.group(state) in ("on", "enabled")
+    return "", None
+
+
 #: "from your feature guide", "in the guide", "according to the feature
 #: guide" - the tail that says WHICH guide to answer from, not part of a
 #: feature's name (D1b, 2026-10-25). Anchored at the end of the sentence.
@@ -4563,6 +4806,22 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
         if not target:
             return None
         return _feature_explain_intent(s, raw, target, said_guide)
+    # CHANGING A SETTING BY ASKING FOR IT ON OR OFF (2026-10-27). BEFORE the
+    # "can I change" pattern on purpose, and AFTER every pattern above it, so
+    # the sentences those already own keep their own answer: no pattern above
+    # starts with a bare "make/set/change/toggle", and none of these patterns
+    # can match "how do I ...", "where do I ..." or "is ... on".
+    m = _CHANGE_SAYS_STATE.fullmatch(s)
+    if m:
+        target, on = _change_says_state(m)
+        got = _change_by_asking_intent(target, on)
+        if got is not None:
+            return got
+    m = _CHANGE_SAYS_NOTHING.fullmatch(s)
+    if m:
+        got = _change_by_asking_intent(m.group(1), None)
+        if got is not None:
+            return got
     m = _FEATURE_CHANGE.fullmatch(s)
     if m:
         target = _feature_target(next(g for g in m.groups() if g is not None))
@@ -6503,6 +6762,121 @@ def _run_feature_change(f: dict) -> Result:
     return Result(str(out.get("words") or ""), "feature_change")
 
 
+def _run_feature_change_refused(f: dict) -> Result:
+    """One plain sentence for the four asks this lane must never act on, and
+    nothing changed. See `_CHANGE_NEVER`."""
+    return Result(str(f.get("words") or ""), "feature_change_refused")
+
+
+def _run_feature_change_ask(f: dict) -> Result:
+    """"Change the prompt coach" - ONE question back, and nothing else.
+
+    The ask itself is the answer: no card, no write, no second question. It
+    names the phrase that works, because a bare "off" as the next message is
+    not a sentence this grammar can take, and the owner should not have to
+    discover that.
+    """
+    name = str(f.get("name") or f.get("key") or "").strip()
+    if not name:
+        return Result("That is an on/off setting - do you want it on or off?",
+                      "feature_change_ask")
+    return Result(f"Do you want {name} on or off? Say \"turn on {name}\" or "
+                  f"\"turn off {name}\" and I will do it, through its own card "
+                  f"if it asks for one.", "feature_change_ask")
+
+
+def _run_feature_change_apply(f: dict, peer, local) -> Result:
+    """Change ONE allow-listed setting through its OWN writer, then READ IT BACK.
+
+    THE WHOLE POINT OF THIS LANE. `setting.set` below is the exact function the
+    Settings switch, the HUD route and the spoken "turn on <name>" phrase call
+    (`_run_settings_bool`). It owns the card, the tier, the PC-only refusal and
+    the sentence, so this runner never decides any of those - and it never
+    touches the config file, a route, the approval gate or a file directly.
+
+    THE FOUR OUTCOMES, and why each says what it says:
+      1. the state could not be READ first -> say so and change nothing. A lane
+         that cannot read a value must not write it, because the receipt after
+         the write would be a guess too.
+      2. it is ALREADY the wanted value -> say "already", zero setter calls,
+         zero cards. Asking twice must not raise a second card.
+      3. the setter is WAITING on its card -> the setter's own words, never
+         "done". Nothing has been written at this point.
+      4. the setter APPLIED it -> re-read with `read_state`, and claim success
+         only when the new value agrees. A disagreement is said plainly and is
+         not dressed up as a change.
+    """
+    import jarvis_settings_registry as R
+    key = str(f.get("key") or "")
+    setting = next((b for b in R.BOOL_SETTINGS if b.key == key), None)
+    FG = _guide()
+    if setting is None or FG is None:
+        return Result(SETTINGS_MISSING, "feature_change_apply")
+    name = _change_name(setting)
+    if not isinstance(f.get("on"), bool):
+        # FAIL CLOSED on an intent that does not carry a state. Only the
+        # resolver makes this intent, and it always sets a bool - so this line
+        # can only be reached by a mistake, and a mistake must never be read as
+        # "off" (which is what `bool(None)` would do).
+        return Result(f"I did not catch whether you want {name} on or off, so "
+                      f"nothing was changed. Say \"turn on {name}\" or \"turn "
+                      f"off {name}\".", "feature_change_apply")
+    want = bool(f.get("on"))
+    want_word = "on" if want else "off"
+    other_word = "off" if want else "on"
+    if key not in CHANGE_BY_ASKING:
+        # Belt and braces: the resolver only makes this intent for the list,
+        # and test_ask_to_change.py pins that. If it ever arrives otherwise,
+        # answer the explanation and write NOTHING.
+        out = FG.change(key)
+        return Result(str(out.get("words") or ""), "feature_change")
+    before = FG.read_state(key)
+    if not isinstance(before, bool):
+        return Result(f"I cannot read whether {name} is on right now on this PC, "
+                      f"so I will not change it. Nothing was changed.",
+                      "feature_change_apply")
+    if before == want:
+        return Result(f"{name[:1].upper() + name[1:]} is already {want_word}. "
+                      f"Nothing was changed.", "feature_change_apply")
+    try:
+        out = setting.set(bool(want), peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"{name[:1].upper() + name[1:]} could not be changed "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "feature_change_apply")
+    said = str(getattr(out, "said", "") or "").strip()
+    if getattr(out, "waiting", False):
+        # The module's own card is up. Its sentence normally says so; when a
+        # setter's words do not mention approval at all, add the one fact the
+        # owner needs rather than leaving "waiting" implicit.
+        if not re.search(r"approv|a card", said, re.I):
+            said = (said + " " if said else "") + (
+                "A card is waiting for your approval. Nothing has changed yet.")
+        return Result(said, "feature_change_apply")
+    if not getattr(out, "ok", False):
+        # A refusal from the module itself, in its own words - the PC-only
+        # sentence, a tier that is wrong, a module that is missing.
+        return Result(said or "That did not work, so nothing was changed.",
+                      "feature_change_apply")
+    after = FG.read_state(key)
+    # `_say` falls back to a bare "Done." when a module's own writer returns no
+    # sentence (jarvis_prompt_coach.set_enabled is one). The receipt below says
+    # more than that fallback does, so the fallback is dropped rather than
+    # printed in front of a verified old/new pair.
+    said = "" if said == "Done." else said
+    if not isinstance(after, bool):
+        return Result((said + " " if said else "") +
+                      f"I asked the PC to turn {name} {want_word}, but I could not "
+                      f"read it back afterwards, so I will not say it worked.",
+                      "feature_change_apply")
+    if after != want:
+        return Result(f"I asked the PC to turn {name} {want_word}, but it still "
+                      f"reads {want_word if after else other_word}. Nothing was "
+                      f"changed.", "feature_change_apply")
+    return Result((said + " " if said else "") +
+                  f"I checked: {name} reads {want_word} now - it was {other_word} "
+                  f"before.", "feature_change_apply")
+
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
@@ -6593,6 +6967,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_feature_howto_setting(f)
     if n == "feature_change":
         return _run_feature_change(f)
+    # Changing a setting by asking for it ON or OFF (2026-10-27). `apply` is
+    # the ONLY one of the three that can write, it is reachable only for
+    # `CHANGE_BY_ASKING`, and it writes through the setting's own writer.
+    # `ask` and `refused` change nothing and are in READ_ONLY_INTENTS.
+    if n == "feature_change_apply":
+        return _run_feature_change_apply(f, peer, local)
+    if n == "feature_change_ask":
+        return _run_feature_change_ask(f)
+    if n == "feature_change_refused":
+        return _run_feature_change_refused(f)
     if n == "feature_switch":
         return _run_settings_bool({"key": f["key"], "on": f["on"]}, peer, local)
     if n == "feature_switch_refused":
@@ -7031,7 +7415,8 @@ UNDO_NOTHING_SAID = "Nothing of mine to cancel."
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
-    "feature_change", "feature_explain", "feature_howto", "feature_howto_setting",
+    "feature_change", "feature_change_ask", "feature_change_refused",
+    "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown",
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
