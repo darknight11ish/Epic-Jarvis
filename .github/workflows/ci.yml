@@ -81,24 +81,30 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
 
-  # Sharded 2026-10-23: the 219 desktop suites are independent processes with
+  # Sharded 2026-10-23: the desktop suites are independent processes with
   # no shared state, and running them one after another in this one job had
   # grown to about 71 minutes (measured 71m12s and 72m42s that month), which
-  # made every merge conflict cost a full re-run. Four shards split them by
+  # made every merge conflict cost a full re-run. The shards split them by
   # their position in the sorted tests/*.mjs list, so each suite runs exactly
-  # once, and the wall clock is about a quarter. The required ruleset check is
+  # once, and the wall clock is about a fraction. The required ruleset check is
   # still named "frontend": the fan-in job lower in this workflow owns that
-  # name and passes only when all four shards succeeded. A shard that finds no
+  # name and passes only when every shard succeeded. A shard that finds no
   # suites fails on purpose, so a broken split cannot pass by running nothing.
+  #
+  # THE SHARD COUNT HAS ONE DEFINITION: the `matrix.shard` list below. The
+  # number is not typed again anywhere - the job name and the shell's SHARDS
+  # both read `strategy.job-total`, which GitHub sets from that list - so a
+  # matrix of four can no longer run with a SHARDS of five and silently drop
+  # every fifth suite (the failure mode found by the 2026-10-27 test audit).
   frontend-shard:
-    name: frontend-shard (${{ matrix.shard }}/4)
+    name: frontend-shard (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
     # 60 is generous for one shard (about 18 minutes when the split was made);
-    # the old single job needed 90 because it ran all ~219 suites in sequence.
+    # the old single job needed 90 because it ran every suite in sequence.
     timeout-minutes: 60
     defaults:
       run:
@@ -140,9 +146,15 @@ jobs:
       # three used to run here. Playwright is not a dependency of the app
       # (tests/README.md says why), so it is installed for this job only.
       # uikit.mjs is the harness, not a suite; shots.mjs only writes
-      # screenshots. Every suite runs exactly once across the four shards, and
-      # every suite in a shard runs even after one fails, so one red run lists
-      # every failure in that shard at once.
+      # screenshots. poll-hygiene-measure.mjs and make-before-overlay.mjs are
+      # NOT suites either (2026-10-27 test audit): the first prints one JSON
+      # object and is documented "not part of npm run test:*", the second is
+      # labelled "Scratch only" and copies src/ to src-old/. Neither asserts
+      # anything and neither has an exit path, so counting them as passing
+      # suites was a green that was never a check. Every suite runs exactly
+      # once across the matrix's shards, and every suite in a shard runs even
+      # after one fails, so one red run lists every failure in that shard at
+      # once.
       - name: Install Playwright's Chromium (for the page tests only)
         shell: bash
         run: |
@@ -153,7 +165,10 @@ jobs:
         shell: bash
         env:
           SHARD: ${{ matrix.shard }}
-          SHARDS: "4"
+          # The ONE place this number is not a literal: strategy.job-total is
+          # the length of the matrix.shard list above, so SHARDS cannot drift
+          # from the matrix and silently skip a shard's worth of suites.
+          SHARDS: ${{ strategy.job-total }}
         run: |
           set -uo pipefail
           failed=()
@@ -161,7 +176,9 @@ jobs:
           i=0
           for f in tests/*.mjs; do
             name=$(basename "$f")
-            case "$name" in uikit.mjs|shots.mjs) continue ;; esac
+            case "$name" in
+              uikit.mjs|shots.mjs|poll-hygiene-measure.mjs|make-before-overlay.mjs) continue ;;
+            esac
             i=$((i+1))
             if [ $(( (i-1) % SHARDS )) -ne $(( SHARD-1 )) ]; then continue; fi
             ran=$((ran+1))
@@ -181,8 +198,8 @@ jobs:
 
   # This is the required check named "frontend". It does no work of its own:
   # it exists so the ruleset's check name survives sharding. GitHub aggregates
-  # a matrix job's result into needs.<job>.result, so "success" here means all
-  # four shards passed; a failed or cancelled shard turns this job red.
+  # a matrix job's result into needs.<job>.result, so "success" here means
+  # every shard passed; a failed or cancelled shard turns this job red.
   frontend:
     name: frontend
     needs: [frontend-shard]
@@ -199,16 +216,20 @@ jobs:
             echo "::error::one or more frontend shards did not succeed (${result})"
             exit 1
           fi
-          echo "All four frontend shards succeeded."
+          echo "All frontend shards succeeded."
 
 
   backend:
     # The backend suites, including every contract test (the ones that read
     # the phone's Kotlin and the desktop's Rust and JS and check them against
-    # the real Python). About twenty suites test a patch against the owner's
+    # the real Python). Twelve suites test a patch against the owner's
     # own jarvis_hud.py / jarvis_gate.py / jarvis_extract.py, which are not in
     # this repository - backend/run_suites.py SKIPS those by name, with the
-    # files each is waiting for, and fails on anything else. The voice suites
+    # files each is waiting for, and fails on anything else. (It was sixteen
+    # until 2026-10-27: the four whose checks can run without those files -
+    # test_bitemporal, test_extraction_wiring, test_gate_push,
+    # test_import_history - were measured against a staged backend and are now
+    # run by this job, gaining 61 checks.) The voice suites
     # (test_speech, test_voice_contract, test_wakeword) need the three voice
     # packages from backend/requirements.txt, and test_chat_log needs
     # `cryptography` (chat history is encrypted); nothing else from it is needed,
@@ -247,6 +268,41 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+      # FAIL FAST (2026-10-27): NO job ever PARSED this folder. At the
+      # 2026-10-27 audit run_suites.py skipped 16 backend suites by name
+      # because the file they test exists only on the owner's PC, and 14 of
+      # those 16 were not in backend-windows' explicit array either - 364
+      # checks whose syntax a pull request never compiled. A broken one stayed
+      # green here and surfaced during the owner's update, where
+      # apply-patches.ps1 runs the suites directly. (Four of those 14 now run
+      # in this job; this gate is what covers the rest.) This compiles every
+      # .py file in the three Python folders, in memory, and fails in seconds -
+      # before the pip install and the ~35-minute sweep.
+      #
+      # IT IS NOT `compileall` OR `py_compile`, ON PURPOSE. Both WRITE
+      # __pycache__ even under `-B` and PYTHONDONTWRITEBYTECODE=1 (measured
+      # 2026-10-27: 1,090 .pyc files in a copy of these folders), and a job
+      # that dirties its own checkout is a trap for the next step that looks
+      # at the tree. `compile()` on the bytes writes nothing, and its output
+      # is one summary line - not a bytecode line per file.
+      - name: Every Python file parses (fail fast, writes nothing)
+        run: |
+          python - <<'PY'
+          import pathlib
+          import sys
+
+          seen = 0
+          for folder in ("backend", "jarvis-backend", "tools"):
+              for path in sorted(pathlib.Path(folder).rglob("*.py")):
+                  seen += 1
+                  try:
+                      compile(path.read_bytes(), str(path), "exec")
+                  except (SyntaxError, ValueError) as exc:
+                      print(f"::error file={path}::{type(exc).__name__}: {exc}")
+                      print(f"{seen} Python file(s) parsed before the first syntax error; stopping.")
+                      sys.exit(1)
+          print(f"{seen} Python file(s) parsed, 0 syntax error(s)")
+          PY
       # Exact versions, the ones backend/requirements.lock pins for Python 3.12
       # (numpy 2.5.3 and onnxruntime 1.30.0 are that file's picks for 3.12; the
       # lock is hash-checked, this line is not - so at least the version is fixed,
