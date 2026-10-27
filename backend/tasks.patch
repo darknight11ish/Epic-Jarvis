@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -2756,7 +2756,26 @@
+@@ -2763,7 +2763,26 @@
              except Exception as exc:
                  return self._send(503, {"available": False,
                                          "error": f"{type(exc).__name__}: {exc}"})
@@ -27,7 +27,7 @@
          if path == "/api/notes/capture":
              # note-capture.patch - how a note the owner filed ended (waiting,
              # filed, not filed and why, failed), never its text; with no id,
-@@ -3793,7 +3793,46 @@
+@@ -3800,7 +3800,46 @@
                  except Exception:
                      pass
              return self._send(code, out)
