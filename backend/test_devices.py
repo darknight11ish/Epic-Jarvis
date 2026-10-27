@@ -560,6 +560,16 @@ def t_the_hunk_comes_before_every_token_ok():
                                 "progress.patch", "tutorials.patch", "topics.patch", "referee.patch",
                                 "tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
                                 "secret-handoff.patch",
+                                # reminder-actions.patch (2026-10-27) is
+                                # appended after it, immediately before
+                                # plugin-loader.patch: TWO hunks, both in
+                                # jarvis_gate.py and both ADDED lines at the END
+                                # of their tables (a `schedule_action` line in
+                                # the "acts only on tier ask" set and one `_RISK`
+                                # row). It removes no line at all, so it rewrites
+                                # nothing devices.patch wrote - and the
+                                # later_rewriting() half below proves it.
+                                "reminder-actions.patch",
                                 # update-in-chat.patch (2026-10-26): ONE hunk in
                                 # jarvis_gate.py that appends `desktop_update` to
                                 # the END of _NO_RULE_FROM_DENIAL, after

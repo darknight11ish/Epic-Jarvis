@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 140 rows from features/features.json.
+The owner's feature list, as data: 141 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 2955e310231cfaf1fd4c72c42670d4b7c18119c1e69d8a6534505a49149525ce); the apps' Features pages read their own
+`features/features.json` (sha256 38f655ac90aa5b8d2ace1da9e80be2706ccb40fc96d07ce53bce058a49fd1bbf); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "2955e310231cfaf1fd4c72c42670d4b7c18119c1e69d8a6534505a49149525ce"
+SOURCE_SHA256 = "38f655ac90aa5b8d2ace1da9e80be2706ccb40fc96d07ce53bce058a49fd1bbf"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1493,6 +1493,19 @@ FEATURES = (
         "surface_reason": "The copies are files on this PC, and a phone has no page for them (the row's own limit).",
         "aliases": ["file history", "version history"],
         "covers": ["guardian_history"],
+    },
+    {
+        "id": "reminder-actions",
+        "group": "The PC itself",
+        "title": "A reminder that opens something, or asks to do one task",
+        "what": "One reminder can carry one action: show a note, open a web page, open a file on this PC, or ask to put the morning briefing together.",
+        "where": "PC: Reminders, Then. Phone: shows a note and the one card; no way to create or edit one.",
+        "asks": "Opening something asks nothing: the reminder names the whole address or file and nothing opens until you press Open. A task is one card when the reminder goes off, every time, and nothing runs without your yes.",
+        "limit": "One action per reminder, and no shell, command, script, webhook or program to run: a page, a file inside a folder Jarvis may look in, a note, or the briefing. A backup is refused, because its recovery code would be shown to nobody. Opening is this PC's.",
+        "surface": "desktop",
+        "surface_reason": "Creating one is the desktop HUD's alone, for now, because a file target has to be a path inside a folder the PC lists and the phone cannot read the PC's folders; opening the target is the PC's, because the file is on the PC and the page opens in the PC's browser, and the phone still shows the note and approves the one task card.",
+        "aliases": ["reminder action", "open a page from a reminder", "open a file from a reminder", "reminder that opens", "run a task from a reminder"],
+        "covers": [],
     },
     {
         "id": "approvals",

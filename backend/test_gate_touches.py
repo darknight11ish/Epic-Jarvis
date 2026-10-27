@@ -691,6 +691,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing this patch wrote.
              "secret-handoff.patch",
+             # reminder-actions.patch (2026-10-27) is appended after it,
+             # immediately before plugin-loader.patch: TWO hunks, both in
+             # jarvis_gate.py and both ADDED lines at the END of their tables (a
+             # `schedule_action` line in the "acts only on tier ask" set and one
+             # `_RISK` row) - a different list from the two `_PROTECTED` ones and
+             # check()'s call this patch writes, and it removes no line at all.
+             "reminder-actions.patch",
              # picture-card.patch (2026-10-11) is the first patch to take that
              # advice: it sits immediately BEFORE plugin-loader.patch, and it
              # touches jarvis_gate.py not at all (ONE hunk, in jarvis_hud.py, on

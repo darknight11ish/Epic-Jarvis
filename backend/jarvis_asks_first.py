@@ -425,6 +425,11 @@ HARD_LIMITS = frozenset({
     "big_model_enable", "custom_voice",
     "better_voice_enable", "download_model", "switch_model", "models_create",
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
+    # reminder-actions.patch (2026-10-27): Scheduler._fire_action refuses any
+    # tier but "ask" for a reminder's own action, the same shape as
+    # schedule_repeat above - a looser line switches the action off, not the
+    # card - so it is never loosened from an app.
+    "schedule_action",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
     # Updating Jarvis itself (2026-10-26): the module refuses anything but a
@@ -453,6 +458,9 @@ MUST_ASK = frozenset({
     "send_email", "tidy_inbox", "run_shell_on_host", "control_computer", "control_phone", "control_browser",
     "home_control", "web_research", "research_authenticated", "write_notes_after_outside_text",
     "search_the_web", "stop_asking_before_every_web_search", "web_search_enable", "schedule_repeat",
+    # reminder-actions.patch (2026-10-27): the toml's own "Must stay 'ask'"
+    # line for schedule_action, and the scheduler refuses anything else.
+    "schedule_action",
     "models_create", "second_card_enable", "second_card_browser_enable",
     "second_card_combined_enable", "second_card_third_assign", "chat_card_pin",
     "screen_picture_enable",
@@ -516,7 +524,16 @@ GROUPS = (
                             # itself). The plan route raises NO card at all.
                             "import_notion_export", "organize_obsidian_vault"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
-                              "referee_tick", "schedule_repeat"]),
+                              "referee_tick", "schedule_repeat",
+                              # reminder-actions.patch (2026-10-27): a reminder
+                              # may carry ONE action, and the kind that ACTS
+                              # (`run-task`, the morning briefing) raises this
+                              # ONE card at the moment the reminder goes off,
+                              # every time it goes off - so the page promises
+                              # to name it. Its toml line says "Must stay 'ask'"
+                              # and the scheduler refuses any other tier, so it
+                              # is in MUST_ASK and HARD_LIMITS as well.
+                              "schedule_action"]),
     ("Your smart home", ["fixed:lights", "home_control"]),
     # Projects (the owner's decision of 2026-09-28; jarvis_projects.py). Its
     # two cards are change_own_config cards, decided in the code; these rows

@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 140,
+  "feature_count": 141,
   "features": [
     {
       "id": "typing",
@@ -7680,6 +7680,57 @@
       ],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "reminder-actions",
+      "name": "A reminder that opens something, or asks to do one task",
+      "group": "The PC itself",
+      "surface": "desktop",
+      "where": "PC: Reminders, Then. Phone: shows a note and the one card; no way to create or edit one.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on A reminder that opens something, or asks to do one task",
+        "turn_off": "turn off A reminder that opens something, or asks to do one task",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "PC: Reminders, Then.",
+        "search": [
+          "A reminder that opens something, or asks to do one task"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Phone: shows a note and the one card; no way to create or edit one.",
+        "search": [
+          "A reminder that opens something, or asks to do one task"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "remind me to open my invoice at seven",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -11252,7 +11303,7 @@
       "reason": "Always on by design: canonical safety allowlist (owner + Gemini Q8), no off switch."
     }
   ],
-  "label_legend": "Exactly five labels (owner + Gemini Q8, 2026-10-22): Switchable / Adjustable (Typed & Settings) [{'planned': 30, 'enforced': 10}] · Settings-Only (By Design — Security Boundary) [{'open-only': 2}] · PC-Only Setting (Honest Refusal on Phone) [{'pc-only': 16}] · Command-Only (Runs When You Ask — No Switch Needed) [{'not-a-setting': 70}] · Always On (Core Safety Rule — Cannot Be Turned Off) [{'not-a-setting': 12}]",
+  "label_legend": "Exactly five labels (owner + Gemini Q8, 2026-10-22): Switchable / Adjustable (Typed & Settings) [{'planned': 30, 'enforced': 10}] · Settings-Only (By Design — Security Boundary) [{'open-only': 2}] · PC-Only Setting (Honest Refusal on Phone) [{'pc-only': 16}] · Command-Only (Runs When You Ask — No Switch Needed) [{'not-a-setting': 71}] · Always On (Core Safety Rule — Cannot Be Turned Off) [{'not-a-setting': 12}]",
   "choice_settings": [
     {
       "key": "handoff_mode",
@@ -11500,7 +11551,7 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 70
+      "not-a-setting": 71
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 30,
@@ -11520,8 +11571,8 @@
     "Switchable / Adjustable (Typed & Settings)": 40,
     "Settings-Only (By Design — Security Boundary)": 2,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
-    "Command-Only (Runs When You Ask — No Switch Needed)": 70,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 71,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12
   },
-  "label_count_note": "Owner-approved 2026-10-23 counts, plus the desktop Private chat row added 2026-10-26: 40 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 70 Command-Only, 12 Always-On (140 total). Changes from the 2026-10-22 mix (42/2/13/70/12): picture-mode moved to Switchable/Adjustable (ADJ-Q1); calendar, phone-notifications and phone-watch moved to PC-Only (ADJ-Q1); private-chat added as Command-Only (2026-10-26)."
+  "label_count_note": "Owner-approved 2026-10-23 counts, plus the desktop Private chat row added 2026-10-26 and the reminder-actions row added 2026-10-27: 40 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 71 Command-Only, 12 Always-On (141 total). Changes from the 2026-10-22 mix (42/2/13/70/12): picture-mode moved to Switchable/Adjustable (ADJ-Q1); calendar, phone-notifications and phone-watch moved to PC-Only (ADJ-Q1); private-chat added as Command-Only (2026-10-26); reminder-actions added as Command-Only (2026-10-27)."
 }

@@ -293,6 +293,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Set up the morning briefing or a \"tell me when\" alert"
+      },
+      {
+       "action": "schedule_action",
+       "fixed": false,
+       "id": "schedule_action",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Do what a reminder asked for"
       }
      ],
      "title": "Timers and reminders"
@@ -1567,6 +1576,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Set up the morning briefing or a \"tell me when\" alert"
+      },
+      {
+       "action": "schedule_action",
+       "fixed": false,
+       "id": "schedule_action",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Do what a reminder asked for"
       }
      ],
      "title": "Timers and reminders"
@@ -2838,6 +2856,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Set up the morning briefing or a \"tell me when\" alert"
+      },
+      {
+       "action": "schedule_action",
+       "fixed": false,
+       "id": "schedule_action",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Do what a reminder asked for"
       }
      ],
      "title": "Timers and reminders"
@@ -4102,6 +4129,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Set up the morning briefing or a \"tell me when\" alert"
+      },
+      {
+       "action": "schedule_action",
+       "fixed": false,
+       "id": "schedule_action",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Do what a reminder asked for"
       }
      ],
      "title": "Timers and reminders"
@@ -5366,6 +5402,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Set up the morning briefing or a \"tell me when\" alert"
+      },
+      {
+       "action": "schedule_action",
+       "fixed": false,
+       "id": "schedule_action",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Do what a reminder asked for"
       }
      ],
      "title": "Timers and reminders"
@@ -6642,6 +6687,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Set up the morning briefing or a \"tell me when\" alert"
+      },
+      {
+       "action": "schedule_action",
+       "fixed": false,
+       "id": "schedule_action",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Do what a reminder asked for"
       }
      ],
      "title": "Timers and reminders"
@@ -7913,6 +7967,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Set up the morning briefing or a \"tell me when\" alert"
+      },
+      {
+       "action": "schedule_action",
+       "fixed": false,
+       "id": "schedule_action",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Do what a reminder asked for"
       }
      ],
      "title": "Timers and reminders"

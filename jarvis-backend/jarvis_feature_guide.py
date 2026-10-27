@@ -1417,6 +1417,10 @@ NO_COMMAND_REASON = {
     "rush-latch": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "outside-text": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "settings-entry": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
+    # reminder-actions.patch (2026-10-27): the ONE action a reminder may carry
+    # is data the owner types into that reminder, not a stored setting - there
+    # is nothing to switch on, and the kind that acts raises its own card.
+    "reminder-actions": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,
