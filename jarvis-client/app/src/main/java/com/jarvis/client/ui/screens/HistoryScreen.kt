@@ -788,36 +788,10 @@ fun HistoryScreen(
                         }
                     }
                 }
-                // Delete from a row's menu asks here, at the top where it cannot
-                // scroll away from the row it is about. The same words and the
-                // same request as Delete inside an opened conversation.
-                deleteFor?.let { row ->
-                    item(key = "delete-confirm") {
-                        Plate {
-                            Text(
-                                "\u201C${row.title}\u201D",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = chrome.textHi,
-                                maxLines = 2,
-                            )
-                            Gap(4)
-                            Text(
-                                ChatLog.DELETE_CONFIRM,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = chrome.warnInk,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Quiet(
-                                    if (deleteBusy) "Deleting…" else "Yes, delete it",
-                                    color = chrome.badInk,
-                                    enabled = !deleteBusy,
-                                    onClick = { deleteChat(row) },
-                                )
-                                Quiet("Keep it", enabled = !deleteBusy, onClick = { deleteFor = null })
-                            }
-                        }
-                    }
-                }
+                // Delete from a row's menu asks in that row, where the owner is
+                // looking; the same words and the same request as Delete inside
+                // an opened conversation. (No confirm is drawn for a row the
+                // notice cannot see, so nothing can be confirmed blind.)
                 if (wordSearch && !searching) {
                     val f = found
                     if (f != null && f.queryOk) {
@@ -838,6 +812,10 @@ fun HistoryScreen(
                                 pinBusy = pinning == hit.row.id,
                                 nowSeconds = nowSeconds,
                                 menuAllowed = wanted == null,
+                                deleteOpen = deleteFor?.id == hit.row.id,
+                                deleteBusy = deleteBusy,
+                                onDelete = { deleteChat(hit.row) },
+                                onKeep = { deleteFor = null },
                                 onToggleMenu = {
                                     menuFor = if (menuFor == hit.row.id) null else hit.row.id
                                     moveFor = null
@@ -880,6 +858,10 @@ fun HistoryScreen(
                             pinBusy = pinning == row.id,
                             nowSeconds = nowSeconds,
                             menuAllowed = wanted == null,
+                            deleteOpen = deleteFor?.id == row.id,
+                            deleteBusy = deleteBusy,
+                            onDelete = { deleteChat(row) },
+                            onKeep = { deleteFor = null },
                             onToggleMenu = {
                                 menuFor = if (menuFor == row.id) null else row.id
                                 moveFor = null
@@ -1144,11 +1126,15 @@ private fun ConversationRow(
     pinBusy: Boolean,
     nowSeconds: Long,
     menuAllowed: Boolean,
+    deleteOpen: Boolean,
+    deleteBusy: Boolean,
     onToggleMenu: () -> Unit,
     onPin: () -> Unit,
     onToggleMove: () -> Unit,
     onMove: (Int?) -> Unit,
     onAskDelete: () -> Unit,
+    onDelete: () -> Unit,
+    onKeep: () -> Unit,
     onOpen: () -> Unit,
 ) {
     ChatRowCard(
@@ -1161,11 +1147,15 @@ private fun ConversationRow(
         pinBusy = pinBusy,
         nowSeconds = nowSeconds,
         menuAllowed = menuAllowed,
+        deleteOpen = deleteOpen,
+        deleteBusy = deleteBusy,
         onToggleMenu = onToggleMenu,
         onPin = onPin,
         onToggleMove = onToggleMove,
         onMove = onMove,
         onAskDelete = onAskDelete,
+        onDelete = onDelete,
+        onKeep = onKeep,
         onOpen = onOpen,
     )
 }
@@ -1186,6 +1176,8 @@ private fun ChatRowCard(
     pinBusy: Boolean,
     nowSeconds: Long,
     menuAllowed: Boolean,
+    deleteOpen: Boolean,
+    deleteBusy: Boolean,
     snippet: AnnotatedString? = null,
     hits: Int? = null,
     onToggleMenu: () -> Unit,
@@ -1193,6 +1185,8 @@ private fun ChatRowCard(
     onToggleMove: () -> Unit,
     onMove: (Int?) -> Unit,
     onAskDelete: () -> Unit,
+    onDelete: () -> Unit,
+    onKeep: () -> Unit,
     onOpen: () -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -1285,6 +1279,25 @@ private fun ChatRowCard(
             Gap(6)
             Text(ChatTags.MOVE_TO, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
             MoveToList(tags, row.tagId, onPick = onMove)
+        }
+        // Delete asks in the row it is about, in the same words as an opened
+        // conversation's confirm; nothing is deleted before the yes.
+        if (deleteOpen) {
+            Gap(8)
+            Text(
+                ChatLog.DELETE_CONFIRM,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.warnInk,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Quiet(
+                    if (deleteBusy) "Deleting…" else "Yes, delete it",
+                    color = chrome.badInk,
+                    enabled = !deleteBusy,
+                    onClick = onDelete,
+                )
+                Quiet("Keep it", enabled = !deleteBusy, onClick = onKeep)
+            }
         }
     }
 }
@@ -1385,11 +1398,15 @@ private fun FoundRow(
     pinBusy: Boolean,
     nowSeconds: Long,
     menuAllowed: Boolean,
+    deleteOpen: Boolean,
+    deleteBusy: Boolean,
     onToggleMenu: () -> Unit,
     onPin: () -> Unit,
     onToggleMove: () -> Unit,
     onMove: (Int?) -> Unit,
     onAskDelete: () -> Unit,
+    onDelete: () -> Unit,
+    onKeep: () -> Unit,
     onOpen: () -> Unit,
 ) {
     val marked = hitStyle()
@@ -1413,6 +1430,8 @@ private fun FoundRow(
         pinBusy = pinBusy,
         nowSeconds = nowSeconds,
         menuAllowed = menuAllowed,
+        deleteOpen = deleteOpen,
+        deleteBusy = deleteBusy,
         snippet = snippet,
         hits = hit.hits,
         onToggleMenu = onToggleMenu,
@@ -1420,6 +1439,8 @@ private fun FoundRow(
         onToggleMove = onToggleMove,
         onMove = onMove,
         onAskDelete = onAskDelete,
+        onDelete = onDelete,
+        onKeep = onKeep,
         onOpen = onOpen,
     )
 }
