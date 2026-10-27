@@ -21186,7 +21186,7 @@ style on the owner's behalf. "Show everything" on its own deliberately stays
 
 ## 128. Work setups: five model combinations for a kind of work (added 2026-10-10)
 
-**SUPERSEDED for `GET /api/work` (2026-10-19).** The public read route now serves the five FOCUS PRESETS in section 145 (`jarvis_presets.py`); the five work setups below remain only inside `jarvis_work.py` for the old `POST /api/work/recommend` and `POST /api/work/choose` compatibility paths, and are no longer what either app reads. The preset UI contract is section 145.
+**SUPERSEDED for `GET /api/work` (2026-10-19).** The public read route now serves the nine FOCUS PRESETS in section 145 (`jarvis_presets.py`); the five work setups below remain only inside `jarvis_work.py` for the old `POST /api/work/recommend` and `POST /api/work/choose` compatibility paths, and are no longer what either app reads. The preset UI contract is section 145.
 
 The owner asked (2026-10-10):
 
