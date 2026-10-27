@@ -32,6 +32,31 @@ class ReadAloudWiringTest {
 
     private val runtime: String by lazy { source("JarvisRuntime.kt") }
 
+    /**
+     * The text of one function, from its signature to the brace that closes it.
+     * The pins below are about WHERE a line sits inside a function - before an
+     * early return, before the question is sent - and a plain `contains` cannot
+     * see that.
+     */
+    private fun body(text: String, signature: String): String {
+        val start = text.indexOf(signature)
+        assertTrue("$signature is gone; re-anchor this test", start >= 0)
+        var depth = 0
+        var opened = false
+        val out = StringBuilder()
+        for (ch in text.substring(start)) {
+            out.append(ch)
+            if (ch == '{') {
+                depth++
+                opened = true
+            } else if (ch == '}') {
+                depth--
+                if (opened && depth == 0) return out.toString()
+            }
+        }
+        error("$signature has no closing brace")
+    }
+
     @Test
     fun `one typed answer is remembered with its facts, and a new question clears it`() {
         assertTrue(
@@ -159,6 +184,100 @@ class ReadAloudWiringTest {
         assertTrue(
             "the refused answer's one sentence is not in the read path",
             runtime.contains("ReadAloud.ON_SCREEN"),
+        )
+    }
+
+    @Test
+    fun `a voice question starting stops a read-aloud still playing`() {
+        // The review's F1 (2026-10-27): the read refused to START over a voice
+        // turn, but nothing stopped one already playing - and the talk button's
+        // recorder takes its clip on VOICE_RECOGNITION with no echo canceller
+        // (audio/Recorder.kt), so Jarvis's own reading could be recorded as the
+        // owner's question. Pinned: the stop runs on EVERY turn (not only one
+        // that has a "Try it" clip), the runtime installs it, it is guarded so
+        // it cannot cut a spoken answer, the old KDoc is gone, and leaving the
+        // Voices screen is not a question.
+        val voice = source("voice/VoiceSession.kt")
+        val turn = body(voice, "fun turnStarting() {")
+        val hook = turn.indexOf("onQuestionStarting?.invoke()")
+        assertTrue("a question starting does not stop a read-aloud", hook > 0)
+        assertFalse(
+            "the read's stop sits after the try-clip early return, so an ordinary turn never reaches it",
+            turn.substring(0, hook).contains("if (!tryPlaying)"),
+        )
+        val install = runtime.lines()
+            .firstOrNull { it.contains("onQuestionStarting =") }
+            .orEmpty()
+        assertTrue("nothing installs the read's stop on the voice path", install.isNotEmpty())
+        assertTrue("the installed hook does not call the stop", install.contains("stopReadingAloud()"))
+        assertTrue(
+            "the installed hook is not guarded, so it would cut a spoken answer too",
+            install.contains("readingAloud.value"),
+        )
+        assertFalse(
+            "the KDoc still claims no answer can be playing when a turn starts",
+            voice.contains("Stops nothing else: no answer is playing"),
+        )
+        val samples = body(voice, "fun stopSamples() {")
+        assertFalse(
+            "leaving the Voices screen stops a read-aloud that Home started",
+            samples.contains("onQuestionStarting"),
+        )
+    }
+
+    @Test
+    fun `a new typed question stops the read before the answer is asked for`() {
+        // The review's F2 (2026-10-27): `_readAloud.value = null` alone left the
+        // OLD answer being read. From Send until the new answer finished there
+        // was no control on screen (Home draws it only for the answer the
+        // runtime holds, and only when nothing is streaming), and the control
+        // then said "Stop" for the answer before it.
+        val send = body(runtime, "suspend fun sendTypedChat(")
+        val stop = send.indexOf("stopReadingAloud()")
+        val clear = send.indexOf("_readAloud.value = null")
+        val ask = send.indexOf("val answer = chat.send(")
+        assertTrue("a new typed question does not stop the read-aloud", stop > 0)
+        assertTrue("the offer is not cleared by the new question", clear > 0)
+        assertTrue("this wrapper no longer asks the question; re-anchor this test", ask > 0)
+        assertTrue("the read is stopped after the offer is already cleared", stop < clear)
+        assertTrue("the read is stopped after the new question is sent", stop < ask)
+        assertTrue(
+            "the stop is not guarded on a read actually playing, so a typed question " +
+                "sent over a spoken answer would cut the voice path's own speech",
+            send.contains("if (readingAloud.value) stopReadingAloud()") ||
+                send.contains("if (_readingAloud.value) stopReadingAloud()"),
+        )
+    }
+
+    @Test
+    fun `a typed question on the Live screen stops the read too`() {
+        // F2b: the Live screen's box is a SECOND typed funnel - it
+        // calls chat.send itself, so the wrapper above does not cover it.
+        val live = body(runtime, "fun liveType(words: String, shared: String? = null) {")
+        assertTrue(
+            "the Live screen's typed question leaves a read-aloud playing",
+            live.contains("stopReadingAloud()"),
+        )
+    }
+
+    @Test
+    fun `a rotation does not stop a read that is still on screen`() {
+        // F3 is MANDATED (the Lead's 2026-10-27 ruling): rotation is not "away":
+        // ON_STOP also fires for a configuration change - there is no
+        // `configChanges` on MainActivity in AndroidManifest.xml - so turning
+        // the phone sideways used to cut a read still in front of the owner.
+        val activity = source("MainActivity.kt")
+        val from = activity.indexOf("LifecycleEventObserver")
+        val to = activity.indexOf("activity.lifecycle.addObserver(observer)")
+        assertTrue("the ON_STOP observer is gone", from > 0 && to > from)
+        val observer = activity.substring(from, to)
+        assertTrue(
+            "the observer no longer stops the read at all",
+            observer.contains("JarvisRuntime.stopReadingAloud()"),
+        )
+        assertTrue(
+            "a configuration change (a rotation) stops a read that is still on screen",
+            observer.contains("isChangingConfigurations"),
         )
     }
 }
