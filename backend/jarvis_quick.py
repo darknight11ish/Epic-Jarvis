@@ -3291,19 +3291,29 @@ _P_QUERY = re.compile(
 #: One line per preset, every word from that preset's own `description`: the
 #: catalogue already says what each one is, so nothing is invented here.
 #:
+#: THE POSSESSIVE IS REQUIRED (2026-10-27, PR #876's CI failure). Without it
+#: these forms stole the feature guide's own aliases: "tell me about presets"
+#: and "tell me about personalities" are the owner asking WHERE to change
+#: them, and they must reach the rows that own them -
+#: backend/test_feature_guide.py's alias sweep, and its
+#: "where do i change the jarvis presets" test. Only a sentence that says
+#: WHOSE personalities are meant - your / the / my - asks to describe them.
+#: A bare "presets" is the layout presets, not the nine, so that noun is gone
+#: from these forms; "personality presets" (the whole phrase) still counts.
+#:
 #: Tried BEFORE the one-preset forms below, deliberately: "tell me about your
 #: personalities" also fits "tell me about <name>", and it must be the list,
 #: not a name that resolves to nothing. "What personality are you using?" and
 #: "what personalities do you have?" stay with `_P_QUERY` above, unchanged.
 _P_DESCRIBE_ALL = re.compile(
     r"(?:describe|explain|tell\s+me\s+about)\s+(?:all\s+(?:of\s+)?)?"
-    r"(?:your\s+|the\s+|my\s+)?"
-    r"(?:nine\s+)?(?:personalities|personality\s+presets|personas|characters|presets)"
-    r"|(?:what|which)\s+(?:does|do)\s+each\s+(?:personality|persona|preset|character)\s+do"
-    r"|what\s+(?:are|is)\s+(?:your|the|my)\s+(?:nine\s+)?(?:personalities|personas|presets)"
+    r"(?:your|the|my)\s+"
+    r"(?:nine\s+)?(?:personalities|personality\s+presets|personas|characters)"
+    r"|(?:what|which)\s+(?:does|do)\s+each\s+(?:personality|persona|character)\s+do"
+    r"|what\s+(?:are|is)\s+(?:your|the|my)\s+(?:nine\s+)?(?:personalities|personas)"
     r"\s+(?:like|for)"
     r"|what\s+(?:do|does)\s+(?:all\s+(?:of\s+)?)?(?:your|the|my)\s+(?:nine\s+)?"
-    r"(?:personalities|personas|presets)\s+do")
+    r"(?:personalities|personas)\s+do")
 
 #: "what does the Classic Butler personality do", "what is the Classic Butler
 #: personality", "describe the butler personality", "tell me about TARS",
