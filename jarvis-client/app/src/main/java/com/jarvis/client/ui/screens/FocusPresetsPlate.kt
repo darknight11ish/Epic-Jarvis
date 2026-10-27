@@ -172,6 +172,16 @@ internal fun FocusPresetsSection(canAct: Boolean) {
         Gap(6)
         Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk, modifier = Modifier.liveStatus())
     }
+    // The PC's cloud setting, said once and read-only: the phone has no switch
+    // for it (turning escalation on is a loosening that needs the PC's card).
+    view.cloud?.let { cloud ->
+        Gap(6)
+        Text(
+            FocusPresets.cloudLine(cloud),
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+        )
+    }
 }
 
 @Composable
