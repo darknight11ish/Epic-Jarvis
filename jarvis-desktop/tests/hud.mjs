@@ -1767,7 +1767,13 @@ await check("the HUD page holds no token, and every request it makes goes throug
   assert.deepEqual(direct, [], `the page reached the backend by itself: ${JSON.stringify(direct)}`);
   assert.equal(chats.length, 1, "the chat did not reach the backend through the shell");
   assert.ok(log.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."), JSON.stringify(log));
-  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout", "get_lock_flags"].includes(c)), [],
+  // The shell commands this page is known to call. `live_status` joined the
+  // list on 2026-10-27 with the owner's Live button in the left rail: it is a
+  // READ of the session's own state (which device owns it, whether it is on),
+  // granted by `hud-live` in surfaces.toml, and it carries no words of anyone's.
+  // A command NOT named here is still a failure - that is what this check is for.
+  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout",
+    "get_lock_flags", "live_status"].includes(c)), [],
     `the HUD called ${JSON.stringify(held.invoked)}`);
   // Every read is one hud_proxy.rs allows (HUD_GET_PATHS and /api/retrieve).
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
@@ -1898,8 +1904,12 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
     pressed: document.getElementById("mic").getAttribute("aria-pressed"),
   }));
   await page.close();
+  // The load-time shell calls are not this check's subject: the page's reads,
+  // the layout read, the two lock answers, and (2026-10-27) the rail's Live
+  // button asking once for the session's state. What the MIC does is the rest.
   assert.deepEqual(after.invokes.map((c) => c[0])
-    .filter((c) => c !== "hud_get" && c !== "get_hud_layout" && c !== "get_lock_flags"),
+    .filter((c) => c !== "hud_get" && c !== "get_hud_layout" && c !== "get_lock_flags"
+      && c !== "live_status"),
     ["summon_push_to_talk"],
     "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
   assert.equal(after.listening, false, "the page's own (browser) recogniser started");
@@ -1968,6 +1978,14 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // card, held on a stale link. Narrower than the Settings window's
       // get_manner/set_manner on purpose (no manner mode, no dials, no custom).
       "hud-personalities",
+      // The left rail's Live button (2026-10-27, the OWNER'S ASK: "a live mode
+      // button in the left column of the Jarvis HUD"). The BAR'S own
+      // live_start/live_stop plus live_status so the button can say truthfully
+      // whether the session is on - the same three verbs the bar's toggle uses,
+      // and deliberately not the bar's whole set: live_act (more time, carry on),
+      // live_mute and live_hold are NOT granted here. Every refusal is Rust's
+      // (stale link, App lock, no microphone) and no card is raised.
+      "hud-live",
       // H2 (2026-10-22, owner-approved 2026-10-21): EXACTLY ONE new grant -
       // this window's own layout write, saved by its own Edit mode. No other
       // write command is added, and the read grant above is not removed.
