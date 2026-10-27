@@ -10,7 +10,7 @@ you drop in and take out.
 
 - **27 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
-- **128 core patches**, which still go on through
+- **129 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 ## The drop-in modules
