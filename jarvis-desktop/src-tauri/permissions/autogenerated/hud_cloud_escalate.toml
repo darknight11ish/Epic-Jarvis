@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-cloud-escalate"
+description = "Enables the hud_cloud_escalate command without any pre-configured scope."
+commands.allow = ["hud_cloud_escalate"]
+
+[[permission]]
+identifier = "deny-hud-cloud-escalate"
+description = "Denies the hud_cloud_escalate command without any pre-configured scope."
+commands.deny = ["hud_cloud_escalate"]

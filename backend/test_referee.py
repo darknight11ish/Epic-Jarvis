@@ -856,7 +856,23 @@ def t_the_patch_and_the_lists():
              # tool-list switch, the header, the deny-all gate and the write
              # guards). No gate list entry, no tier row, no _RISK row, and
              # no line this patch writes - ordering safe.
-             "private-chat.patch"}
+             "private-chat.patch",
+             # cloud-escalate.patch (2026-10-27) is appended after it and before
+             # plugin-loader.patch: three hunks, all in jarvis_hud.py (the HUD page's
+             # `cloud_yes` counts only while this PC's own escalation file says on,
+             # the cloud reply's reader is told when a turn was escalated with no
+             # click, and `_lane_names()` asks jarvis_presets.cloud_lanes() instead of
+             # reading litellm-proxy.yaml). It touches jarvis_gate.py not at all - no
+             # gate list entry, no tier row, no _RISK row - so it rewrites nothing
+             # referee.patch wrote.
+             "cloud-escalate.patch",
+             # f01-manual-lane-gate.patch (2026-10-27, F-01) is the last code patch,
+             # immediately before plugin-loader.patch: five hunks, all in
+             # jarvis_hud.py - the chat turn's lane-picking block and `_manual_decision`,
+             # so a lane the owner picks by hand runs the router's gates. It touches
+             # jarvis_gate.py not at all - no gate list entry, no tier row, no _RISK
+             # row - so it rewrites nothing referee.patch wrote.
+             "f01-manual-lane-gate.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

@@ -1,0 +1,188 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -4737,7 +4737,18 @@ class Handler(BaseHTTPRequestHandler):
+         jarvis_side_memory = jarvis_injects_memory()
+ 
+         # ---- pick the lane ------------------------------------------------
+-        if ROUTING and body.get("auto", True):
++        # f01-manual-lane-gate.patch: BOTH ways of picking a lane now come
++        # through the ONE jarvis_router.choose() call below, so a gate added
++        # to it reaches both by construction. They used to have one each: the
++        # automatic path ran every gate, and the manual path (`else:`, below)
++        # built a Decision of its own and ran none - so
++        # `{"lane": "<cloud lane>", "auto": false}` reached a cloud model with
++        # private memory text, a tainted conversation, a picture or the
++        # owner's screen attached (F-01, 2026-10-27). `manual_pick` is the
++        # manual path's own flag; `_manual_decision()` at the bottom applies
++        # the router's answer to it, and the rule is in `_manual_lane()`.
++        if ROUTING:
++            manual_pick = not body.get("auto", True)
+             budget = jarvis_router.Budget.load()
+             tainted = _history_tainted(messages, body)
+             decision = jarvis_router.choose(
+@@ -4759,6 +4770,14 @@ class Handler(BaseHTTPRequestHandler):
+                 # tainted or picture turn out - it only ever turns gate 6
+                 # from "offer" into "escalate" for a question that had
+                 # already cleared every other gate on its own merits.
++                # f01-manual-lane-gate.patch: a manual pick IS the owner's yes
++                # for THIS one question - choosing the lane in the app is the
++                # same gesture as pressing "Try the cloud model" - and that is
++                # what lets the gates above answer the only question that
++                # matters here: may this turn use a cloud lane AT ALL? Every
++                # gate still runs, in the same order; the pick answers gate 6
++                # and nothing else. Without a pick this is the line
++                # cloud-say-yes.patch added, read exactly as before.
+                 # cloud-escalate.patch (2026-10-27): the HUD page sends
+                 # `cloud_yes` while the PC's escalation box is on, so from
+                 # the HUD it is a STANDING yes and counts only while this
+@@ -4769,10 +4788,12 @@ class Handler(BaseHTTPRequestHandler):
+                 # per-question tap it always was. The standing switch
+                 # itself is read by jarvis_router.choose(), never from
+                 # anything a client sent.
+-                owner_said_yes=(bool(body.get("cloud_yes")) and (
+-                    str((getattr(self, "headers", None) or {}).get(
+-                        "X-Jarvis-Client") or "").strip().lower() != "hud"
+-                    or bool(__import__("jarvis_presets").escalate_on()))),
++                owner_said_yes=(
++                    (bool(body.get("cloud_yes")) and (
++                        str((getattr(self, "headers", None) or {}).get(
++                            "X-Jarvis-Client") or "").strip().lower() != "hud"
++                        or bool(__import__("jarvis_presets").escalate_on())))
++                    or manual_pick),
+                 # screen.patch: a turn carrying the owner's screen never
+                 # leaves this PC - not when it is long, not when a cloud lane
+                 # is offered, not when the owner said yes to the cloud for
+@@ -4782,6 +4803,18 @@ class Handler(BaseHTTPRequestHandler):
+             if jarvis_side_memory and decision.gate == "unavailable":
+                 decision.reason = "escalation off while Jarvis injects memory itself"
+                 decision.gate = "privacy"
++            if manual_pick:
++                # f01-manual-lane-gate.patch: the pick itself, and nothing
++                # else. A pick of the local model is exactly what it was
++                # before this patch. A pick of any other lane is a CLOUD pick
++                # and is used only when the decision above landed on a cloud
++                # lane; otherwise the turn stays on the local model and the
++                # reason says why, in the same `X-Jarvis-Route` field a
++                # refused automatic decision already uses. `_manual_lane()`
++                # is the rule, and it never sends a turn out "just because
++                # the owner picked the lane".
++                decision = _manual_decision(body.get("lane") or local_model,
++                                            local_model, decision, lanes)
+         else:
+             tainted = _history_tainted(messages, body)
+             chosen = body.get("lane") or local_model
+@@ -6145,24 +6178,105 @@ def _lane_names() -> list:
+         return []
+ 
+ 
+-def _manual_decision(chosen: str, local_model: str):
+-    """You picked the lane yourself. Memory still only rides along locally."""
+-    is_local = chosen == local_model
++def _manual_lane(decide, chosen, local_model: str, lanes=None):
++    """(lane, reason, gate) for a lane the owner picked by hand - THE GATE.
++
++    Pure on purpose: it reads no module, no file and no request, so the rule
++    below is proved by calling it rather than by driving a running HUD
++    (`backend/test_hud_manual_lane_gate.py`).
++
++    A pick of `local_model` is exactly what it was before this existed: that
++    lane, gate "manual", memory riding along as on any local turn.
++
++    A pick of any OTHER lane is a pick of a CLOUD lane, and F-01 (2026-10-27)
++    is why it is not simply obeyed. `{"lane": "<cloud lane>", "auto": false}`
++    used to reach a cloud model with private memory text, a tainted
++    conversation, a picture or the owner's screen attached: the manual path
++    built its Decision itself and ran no gate at all. Such a pick is used
++    ONLY when `decide` - the decision this turn got from the ONE
++    jarvis_router.choose() call in do_POST, with the pick standing in for the
++    owner's yes - landed on a cloud lane (gate "escalate"). Everything the
++    router checks still runs first: the everyday model being one of Ollama's
++    cloud models, no lane offered, Lockdown, a tainted conversation, a
++    picture, the owner's screen, the private-topic backstop, a real secret,
++    the complexity threshold and the cloud budget. If any of them refuses, or
++    `lanes` (the lane names this PC actually offers) does not hold the chosen
++    name, or there is no router at all (`decide` is None), the turn stays on
++    the local model and `reason` says so in one plain sentence. Nothing here
++    can send a turn out "just because the owner picked the lane".
++
++    Returns the three values a Decision is built from, so no caller has to
++    re-derive the rule - and the tests can read the rule without a Decision.
++    """
++    local = str(local_model or "local")
++    pick = str(chosen or local)
++    # The client's own words go into a header: one line, short, printable, no
++    # control characters. Nothing else about the name is trusted (the
++    # membership test below is what decides), so a friendly label is all this
++    # is.
++    label = " ".join(
++        "".join(c if c.isprintable() else " " for c in pick).split())[:60]
++    if pick == local:
++        return local, "you chose this lane", "manual"
++    if decide is None:
++        return local, (f"you chose {label}, but this turn stays local: the "
++                       "routing module is not installed on this PC"), "unavailable"
++    if pick not in [str(n) for n in (lanes or [])]:
++        return local, (f"you chose {label}, but this turn stays local: this PC "
++                       "offers no cloud lane by that name"), "unavailable"
++    gate = str(getattr(decide, "gate", "") or "") or "manual"
++    if gate != "escalate" or str(getattr(decide, "lane", "") or "") == local:
++        if gate == "escalate":
++            # A cloud lane and this PC at once cannot happen; if it ever does,
++            # the header must not say "escalate" - the apps read that value as
++            # "the answer came from the cloud" on a backend without `where`.
++            gate = "manual"
++        why = " ".join(str(getattr(decide, "reason", "") or "").split())
++        return local, (f"you chose {label}, but this turn stays local: "
++                       f"{why or 'the router kept it on this machine'}"), gate
++    return pick, "you chose this lane", "manual"
++
++
++def _manual_decision(chosen: str, local_model: str, decide=None, lanes=None):
++    """You picked the lane yourself. Memory still only rides along locally.
++
++    `decide` is the decision this turn got from the ONE
++    jarvis_router.choose() call in do_POST, or None when there is no router
++    (`ROUTING` is False). `_manual_lane()` is the rule - a cloud pick is used
++    only when that decision landed on a cloud lane - and this function only
++    turns its answer into the Decision the rest of the turn reads. With no
++    router a cloud pick therefore stays local too, which is the fail-closed
++    direction: on its own this function cannot put a turn on a cloud lane.
++    """
++    picked, why, gate_name = _manual_lane(decide, chosen, local_model, lanes)
++    is_local = picked == str(local_model or "local")
++    # The turn's real complexity when there is a decision to read it from: a
++    # refused pick may name gate "complexity", and "complexity": 0.0 beside
++    # that sentence would contradict it. Without a router this keeps the 0.0
++    # the manual path has always reported.
++    complexity_of = 0.0
++    if decide is not None:
++        try:
++            complexity_of = float(getattr(decide, "complexity", 0.0) or 0.0)
++        except (TypeError, ValueError):
++            complexity_of = 0.0
+     if ROUTING:
+         return jarvis_router.Decision(
+-            chosen, "you chose this lane", "manual", 0.0, inject_memory=is_local
++            picked, why, gate_name, complexity_of, inject_memory=is_local,
++            tainted=bool(getattr(decide, "tainted", False)),
+         )
+ 
+     class _D:
+-        lane = chosen
+-        reason = "you chose this lane"
+-        gate = "manual"
+-        complexity = 0.0
++        lane = picked
++        reason = why
++        gate = gate_name
++        complexity = complexity_of
+         inject_memory = is_local
+ 
+         def as_dict(self):
+             return {"lane": self.lane, "reason": self.reason, "gate": self.gate,
+-                    "complexity": 0.0, "inject_memory": self.inject_memory}
++                    "complexity": self.complexity,
++                    "inject_memory": self.inject_memory}
+ 
+     return _D()
+ 

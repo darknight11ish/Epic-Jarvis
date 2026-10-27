@@ -304,6 +304,19 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 }
 .chip.hot{border-color:var(--gold); color:var(--gold);}
 .chip.live{border-color:var(--ok); color:var(--ok);}
+/* The model name IS the Current Models door (the owner, 2026-10-27: "the model
+   name ... must become a BUTTON ... DELETE the separate Current Models
+   button"). The door wears no box of its own: it must look exactly like the
+   chip it holds, and only the focus ring may show it is a control. It wraps
+   the chip instead of replacing it because six places write the chip's text
+   (the lane after every turn) and none of them may touch the door. */
+.chip-door{display:inline-flex; align-items:center; gap:4px; background:none;
+  border:0; padding:0; margin:0; font:inherit; color:inherit; cursor:pointer;
+  border-radius:4px;}
+.chip-door:hover .chip{border-color:var(--line-hot); color:var(--text);}
+.chip-door[aria-expanded="true"] .chip{border-color:var(--line-hot); color:var(--ice);}
+.chip-door:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.chip-door-caret{width:9px; height:9px; color:var(--dimmer); flex-shrink:0;}
 
 .view{display:none; flex:1; min-height:0;}
 .view.on{display:flex;}
@@ -881,7 +894,13 @@ html.hud-window-hidden *::after{
  *  2026-10-20 - THE HUD'S THREE LAYOUTS (the owner's request; the work
  *  order's PART III+IV). Everything below is layout and paint ONLY:
  *
- *   * switched by `html[data-hud-shell="three-column" | "studio" | "ambient"]`;
+ *   * switched by `html[data-hud-shell="split-stage" | "three-column" |
+ *     "center-core" | "single-stage-bento" | "two-column-left" |
+ *     "two-column-right"]` - the SIX shell values `contract/hud-presets.json`
+ *     and `hud-layout.js` name. (`studio` and `ambient` are LAYOUT ids, not
+ *     shell values, and styling them here would style nothing; this comment
+ *     used to name those three and omit the other four - F7 of the
+ *     2026-10-27 contract audit);
  *   * the SAME DOM nodes and ids in every mode - nothing is deleted, built
  *     twice or moved between parents, so every control the page's tests
  *     reach for is in the document whichever layout is showing;
@@ -921,16 +940,6 @@ html.hud-window-hidden *::after{
 }
 .ambient-view:hover{color:var(--text); border-color:var(--line-hot);}
 .ambient-view[aria-pressed="true"]{border-color:var(--ice); color:var(--ice);}
-
-.current-models{
-  display:none; max-width:190px; background:var(--plate-2); border:1px solid var(--line);
-  border-radius:3px; padding:5px 8px; color:var(--text); cursor:pointer;
-  font-family:var(--f-mono); font-size:11px; letter-spacing:.02em;
-  transition:border-color .15s, color .15s;
-}
-.current-models:hover{border-color:var(--line-hot);}
-.current-models[aria-expanded="true"]{border-color:var(--line-hot); color:var(--ice);}
-.current-models:focus{outline:none; border-color:var(--line-hot);}
 
 #stage-tabs{display:none;}
 .stage-tab{
@@ -1205,7 +1214,6 @@ html[data-hud-shell="split-stage"] #reactor{width:48px; height:48px;}
 html[data-hud-shell="split-stage"] .reactor-state{
   position:static; transform:none; font-size:9px;
 }
-html[data-hud-shell="split-stage"] .current-models{display:block;}
 html[data-hud-shell="split-stage"] .rail-toggle{display:none;}
 html[data-hud-shell="split-stage"] .appr-badge:not([hidden]){display:inline-flex;}
 html[data-hud-shell="split-stage"] #rail-right{
@@ -1381,9 +1389,9 @@ html[data-hud-shell="center-core"] .stage-bar{
   box-shadow:0 12px 32px rgb(var(--shade-rgb) / .38);
 }
 html[data-hud-shell="center-core"] .stage-bar h2,
+html[data-hud-shell="center-core"] #chip-model-door,
 html[data-hud-shell="center-core"] #chip-model,
-html[data-hud-shell="center-core"] #chip-state,
-html[data-hud-shell="center-core"] .current-models{display:none;}
+html[data-hud-shell="center-core"] #chip-state{display:none;}
 html[data-hud-shell="center-core"] .ambient-view{display:inline-flex;}
 html[data-hud-shell="center-core"] .appr-badge:not([hidden]){display:inline-flex;}
 html[data-hud-shell="center-core"] #ambient-status{
@@ -1406,6 +1414,14 @@ html[data-hud-shell="center-core"] #ambient-status{
   box-shadow:0 0 9px var(--ok); flex-shrink:0;
 }
 .as-sep{color:var(--text-faint);}
+/* Ambient's own door to the Current Models panel: the model name in the pill,
+   as a real button (2026-10-27). No box - it reads as the pill's own text
+   until it is hovered or focused, exactly as the chip door does in the bar. */
+.as-model-door{background:none; border:0; padding:0; margin:0; font:inherit;
+  color:inherit; cursor:pointer; border-radius:4px;}
+.as-model-door:hover{color:var(--text); text-decoration:underline dotted;}
+.as-model-door[aria-expanded="true"]{color:var(--ice);}
+.as-model-door:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
 html[data-hud-shell="center-core"] #stage{align-items:center;}
 html[data-hud-shell="center-core"] #approvals{
   width:min(720px, 94%); margin:76px auto 0;
@@ -1771,6 +1787,21 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
   .hud-presets-danger{color:var(--warn); border-color:rgb(var(--warn-rgb, 255 140 90) / .4);}
   .hud-presets-empty{margin:3px 0; font-size:10.5px; color:var(--dim); line-height:1.5;}
   .hud-presets-line{margin:6px 0 0; min-height:1.2em; font-size:10px; color:var(--dim);}
+  /* The Cloud section's provider submenu (2026-10-27): one inset block under
+     the Cloud row, so it reads as part of that row and not as a second menu. */
+  .hud-presets-submenu{margin:2px 0 4px; padding:6px 8px; border:1px solid var(--line);
+    border-left:2px solid var(--ice); border-radius:3px;
+    background:rgb(var(--accent-rgb) / .05);}
+  .hud-presets-submenu[hidden]{display:none !important;}
+  .hud-presets-cloud-row{margin:4px 0;}
+  .hud-presets-cloud-row .hud-presets-item{font-size:11px;}
+  .hud-presets-key{margin:2px 0 4px; padding:3px 6px; border-radius:3px;
+    background:var(--plate-2); border:1px solid var(--line); color:var(--ice);
+    font-family:inherit; font-size:10.5px; white-space:pre-wrap; user-select:all;}
+  .hud-presets-check{display:flex; align-items:flex-start; gap:7px; margin:8px 0 2px;
+    font-size:10.5px; color:var(--text); line-height:1.5; cursor:pointer;}
+  .hud-presets-check input{margin:2px 0 0; accent-color:var(--ice);}
+  .hud-presets-check input:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
   .hud-presets-close{
     align-self:flex-end; margin-top:8px; padding:3px 10px;
     border:1px solid var(--line); border-radius:3px; background:var(--plate-2);
@@ -2152,10 +2183,13 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         <span class="pc-glyph" aria-hidden="true">&#9729;</span><span class="pc-name">Cloud</span>
       </button>
       <p class="preset-words" id="preset-words" role="status" aria-live="polite"></p>
-      <!-- The lane list stays exactly where it was: it is still the page's
-           ONE lane mechanism (the Studio dock's dropdown and the page's
-           own lane tests drive these buttons), so it is hidden rather
-           than removed when the presets took the visible rail. -->
+      <!-- The lane route buttons stay in the document but out of sight: they
+           are the page's ONE lane mechanism (the Current Models panel routes
+           by clicking these, and the chat body reads S.lane), so they are
+           hidden rather than removed. Since 2026-10-27 they draw only `auto`
+           and the local model: escalate / critic / bulk are no longer modes,
+           and the cloud is reached through the Cloud button above and the
+           Presets menu's own Cloud section. -->
       <div class="lanes" id="lanes" hidden></div>
     </div>
 
@@ -2234,13 +2268,21 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
     <!-- Ambient layout: the top-left floating glass pill. Same facts the rail
          already shows (the brand line, the model chip, the last latency), just
          mirrored here by the layout script so the corners can carry them when
-         the rails are gone. Hidden in the other two layouts by CSS. -->
-    <div id="ambient-status" aria-hidden="true">
-      <div class="as-brand">J.A.R.V.I.S.</div>
+         the rails are gone. Hidden in the other two layouts by CSS.
+         NOT aria-hidden (2026-10-27): the model name in it is the Ambient
+         shell's own door to the Current Models panel (P1-2 of the HUD audit -
+         the stage bar's chip is display:none in this shell, so without this a
+         keyboard or mouse user in Ambient could not open the panel at all).
+         The brand and the separators stay decorative and aria-hidden. -->
+    <div id="ambient-status">
+      <div class="as-brand" aria-hidden="true">J.A.R.V.I.S.</div>
       <div class="as-line">
-        <span class="as-dot"></span>
-        <span id="as-model">local</span>
-        <span class="as-sep">·</span>
+        <span class="as-dot" aria-hidden="true"></span>
+        <button class="as-model-door" id="chip-model-door-ambient" type="button"
+                aria-haspopup="dialog" aria-expanded="false"
+                aria-label="Current Models: what Jarvis is using and has loaded"
+                title="Current Models: what Jarvis is using and has loaded"><span id="as-model">local</span></button>
+        <span class="as-sep" aria-hidden="true">&middot;</span>
         <span id="as-latency">&mdash;</span>
       </div>
     </div>
@@ -2256,21 +2298,23 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
            they already are; this is a badge, kept in step by the layout
            script from the cards' own count. -->
       <span class="chip appr-badge" id="appr-badge" hidden>0 waiting</span>
-      <span class="chip" id="chip-model">local</span>
-      <span class="chip" id="chip-state">standing by</span>
-      <!-- Studio layout: the "Current Models" button (the owner's ask of
-           2026-10-26). It replaces the compact lane dropdown that used to sit
-           here. The button is a DOOR, not a control: it opens a read-only
-           panel (hud-presets.js `mountCurrentModels`) with the model answering,
-           what the PC has loaded, the chosen focus preset and the same lane
-           routes the dropdown offered. Those routes are built from the SAME
-           #lanes buttons renderLanes() draws (built from that one list, never a
-           copy), and nothing is switched, installed, approved or routed from
-           here itself. -->
-      <button class="current-models" id="current-models" type="button"
+      <!-- The top-right model name IS the Current Models door (the owner,
+           2026-10-27: "the model name ... must become a BUTTON that opens the
+           current-models menu ... DELETE the separate Current Models button").
+           The chip stays a SPAN inside the door: ten assignments in five
+           functions write its text, its class and its title (the lane after
+           every turn, a preset apply, the Cloud button), and none of them may
+           be able to erase the door - the door keeps its own id, class and
+           tooltip. Ambient hides this door by CSS (its own pill carries one),
+           so the panel is reachable in every shell. -->
+      <button class="chip-door" id="chip-model-door" type="button"
               aria-haspopup="dialog" aria-expanded="false"
               aria-label="Current Models: what Jarvis is using and has loaded"
-              title="Current Models: what Jarvis is using and has loaded">Current Models</button>
+              title="Current Models: what Jarvis is using and has loaded"><span class="chip" id="chip-model">local</span><svg class="chip-door-caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M2 4l3 3 3-3"/></svg></button>
+      <span class="chip" id="chip-state">standing by</span>
+      <!-- The separate [Current Models] button that used to sit here was
+           DELETED on 2026-10-27: the model name above is the one door now, in
+           every shell (hud-presets.js `mountCurrentModels`). -->
       <!-- The legacy three-pill HUD-layout control was REMOVED on
            2026-10-22 (F1 of the coherence slice). The layout is the saved
            H1/H2 document in the desktop settings store, and the window shows a
@@ -2736,6 +2780,13 @@ const S = {
   presetModel: "",
   presetWords: "",
   presetBusy: false,
+  // /api/presets's own `cloud.escalate.on` (2026-10-27): may this page tell the
+  // PC "yes" for a cloud turn without asking again? TRUE ONLY WHEN THE PC SAYS
+  // SO - never from a click here. The PC still decides: the flag is one gate's
+  // yes, never a lane, and the privacy gates (private words, taint, a picture,
+  // the screen) still answer locally. Re-read with the presets, and updated by
+  // the Presets menu's own read through `jarvis:cloud-escalate`.
+  cloudEscalate: false,
   // /api/status's own `proxy`: is the PC's cloud proxy answering? null
   // before the PC has said. The Cloud button never pretends it is up.
   proxy: null,
@@ -4521,6 +4572,12 @@ async function send(){
     // Modelfile's num_predict). This page used to ask for 2,048 while the
     // quickbar and the phone got 1,024.
   };
+  // The owner's yes for ONE turn, and ONLY when the PC's own setting says so
+  // (2026-10-27; the plan's step 4.3). Not sent at all when it is off, so an
+  // older PC that never heard of the key gets exactly the bytes it always
+  // did. The PC is still the decider: this is a yes, never a lane, and every
+  // privacy gate still runs first.
+  if(S.cloudEscalate) body.cloud_yes = true;
 
   let node = null, full = "";
   try{
@@ -4579,7 +4636,15 @@ async function send(){
         $("r-model").textContent = route.lane
           ? route.lane + (secondCard ? " on the second graphics card" : "")
           : "—";
-        $("chip-model").title = secondCard ? "Answered on the second graphics card" : "";
+        // The tooltip lives on the DOOR, never on the chip inside it: the chip
+        // is wiped to "" on every ordinary turn, and a control's own words
+        // must survive a turn (2026-10-27, HUD audit P1-1). The second-card
+        // note is the one true thing a turn knows about the model, so it
+        // replaces the door's own sentence until the next turn.
+        const modelDoor = $("chip-model-door");
+        if(modelDoor) modelDoor.title = secondCard
+          ? "Answered on the second graphics card"
+          : "Current Models: what Jarvis is using and has loaded";
         $("r-gate").textContent = route.gate || "—";
         $("r-why").textContent = route.reason || "—";
         $("r-complexity").textContent = (route.complexity ?? 0).toFixed(2);
@@ -4593,7 +4658,9 @@ async function send(){
         // picks a cloud lane. This used to test gate === "privacy", a gate
         // the router never returns, so EVERY answer was painted as cloud.
         const cloud = route.where ? route.where === "cloud" : route.gate === "escalate";
-        $("chip-model").className = "chip" + (cloud ? " hot" : "");
+        // classList, never className: the chip is a span inside the door and
+        // must never be handed a class list that replaces the page's own.
+        $("chip-model").classList.toggle("hot", cloud);
       }
     }catch(e){}
 
@@ -4751,13 +4818,27 @@ $("input").addEventListener("paste", () => { S.inputTag = "pasted"; });
 $("input").addEventListener("drop", () => { S.inputTag = "pasted"; });
 
 $("mic").addEventListener("click", () => voice.listening ? voice.stop() : voice.start(true));
+/* Push-to-talk is the page's Space shortcut, but ONLY while the page itself
+ * has focus. Space is also how a keyboard user presses a button, a menu item
+ * or the chip door, and this handler used to preventDefault() it everywhere
+ * outside #input - so Space on a Presets row started the microphone instead of
+ * picking the preset (P2-4 of the 2026-10-27 HUD audit). A real control keeps
+ * its own key. */
+let spaceTalks = false;
+/* Space is the page's own push-to-talk key only while the PAGE has focus. A
+ * focused control (a menu item, the chip door, the mic, a lane button) owns
+ * its Space key: the browser uses it to activate that control. */
+function spaceIsThePages(){
+  const active = document.activeElement;
+  return !active || active === document.body || active === document.documentElement;
+}
 document.addEventListener("keydown", e => {
-  if(e.code === "Space" && document.activeElement !== $("input") && !e.repeat){
-    e.preventDefault(); voice.start(false);
+  if(e.code === "Space" && !e.repeat && spaceIsThePages()){
+    e.preventDefault(); spaceTalks = true; voice.start(false);
   }
 });
 document.addEventListener("keyup", e => {
-  if(e.code === "Space" && document.activeElement !== $("input")) voice.stop();
+  if(e.code === "Space" && spaceTalks){ spaceTalks = false; voice.stop(); }
 });
 
 $("gsearch").addEventListener("input", e => galaxy.search(e.target.value));
@@ -4844,11 +4925,12 @@ $("insp-ask").addEventListener("click", () => {
  * down and marks nothing.
  */
 
-/** The cloud lane to route to: the documented general one when this PC has
- *  it, else the first cloud lane /api/status listed. Empty: no cloud here. */
+/** The cloud lane to route to: the one documented lane name, and ONLY when
+ *  this PC's /api/status lists it. There is no "first lane" fallback any more
+ *  (2026-10-27): a stray lane name must never become "the cloud". Empty means
+ *  this PC has no cloud lane to offer, and the button says so. */
 function cloudLane(){
-  if(S.lanes.includes("jarvis-escalate")) return "jarvis-escalate";
-  return S.lanes.length ? S.lanes[0] : "";
+  return S.lanes.includes("jarvis-escalate") ? "jarvis-escalate" : "";
 }
 
 /** Is the cloud lane really available to route to right now? */
@@ -4893,8 +4975,33 @@ function paintCloud(){
     : (S.proxy !== true ? "The cloud lane is down right now" : "Send the next message to the cloud");
 }
 
+/** Read the PC's own escalate switch out of one /api/presets answer
+ *  (`cloud.escalate.on`, 2026-10-27). Absent, malformed or a failed read is
+ *  OFF: the page may only say "yes" for a cloud turn when the PC said so. */
+function setCloudEscalateFromPc(j){
+  const cloud = j && typeof j === "object" ? j.cloud : null;
+  const escalate = cloud && typeof cloud === "object" ? cloud.escalate : null;
+  S.cloudEscalate = Boolean(escalate && escalate.on === true);
+}
+
+/** The Presets menu reads /api/presets too (its Cloud section); it says what
+ *  the PC answered on this event, so the chat body follows the same truth
+ *  without a second read here. */
+window.addEventListener("jarvis:cloud-escalate", e => {
+  S.cloudEscalate = Boolean(e && e.detail && e.detail.on === true);
+});
+
 /** Draw the five preset buttons from the PC's own list (no innerHTML: every
- *  word is server text, so it is set with textContent). */
+ *  word is server text, so it is set with textContent).
+ *
+ *  A HEAVY PRESET IS DRAWN, BUT IT CANNOT BE CLICKED (2026-10-27, the same
+ *  contract audit's F1 that the Presets menu fixes): the PC always refuses it -
+ *  both cards as one pooled lane is not built - so the button says why in the
+ *  same sentence the phone uses (`FocusPresets.kt` HEAVY) instead of offering
+ *  a dead action. The five rows stay: the order and the count are the PC's. */
+const HEAVY_PRESET_WORDS = "This preset needs both cards at once as one "
+  + "pooled lane. Your PC refuses heavy mode until that lane support lands, so "
+  + "it cannot be used from here yet.";
 function renderPresets(){
   const box = $("presets");
   if(!box) return;
@@ -4911,10 +5018,18 @@ function renderPresets(){
     name.textContent = String(p.title || p.id || "preset");
     const model = document.createElement("span");
     model.className = "preset-model";
-    model.textContent = String(p.model || "");
+    model.textContent = p.heavy_mode === true ? "needs both cards" : String(p.model || "");
     b.appendChild(name);
     b.appendChild(model);
     const what = [p.what, p.focus, p.model].filter(x => typeof x === "string" && x).join(" - ");
+    if(p.heavy_mode === true){
+      b.disabled = true;
+      b.classList.add("blocked");
+      b.title = HEAVY_PRESET_WORDS;
+      b.setAttribute("aria-label", String(p.title || p.id || "preset") + " - " + HEAVY_PRESET_WORDS);
+      box.appendChild(b);
+      return;
+    }
     b.title = what + (p.pending ? " (being prepared)" : "");
     b.addEventListener("click", () => applyPreset(String(p.id || "")));
     box.appendChild(b);
@@ -4934,6 +5049,10 @@ async function loadPresets(){
     S.presets = j.presets;
     S.presetChosen = j.chosen_preset || j.chosen || null;
     S.presetModel = typeof j.chosen_model === "string" ? j.chosen_model : "";
+    // The PC's own escalate switch (2026-10-27), read from the same answer and
+    // never from a click here: it decides whether this page may say "yes" to a
+    // cloud turn. Absent (an older PC) reads as off.
+    setCloudEscalateFromPc(j);
     S.presetWords = "";
     renderPresets();
     paintCloud();
@@ -4941,6 +5060,8 @@ async function loadPresets(){
     S.presets = [];
     S.presetChosen = null;
     S.presetModel = "";
+    // A read that did not land is not a "yes": fail closed.
+    S.cloudEscalate = false;
     renderPresets();
     presetWords("This PC's Jarvis did not list its focus presets ("
       + ((e && e.message) || "no answer") + "). Update the backend by running "
@@ -4971,7 +5092,7 @@ async function applyAnswer(j, status){
     renderLanes();
     const model = (j.preset && j.preset.model) || j.model || "";
     $("chip-model").textContent = model || S.defaultModel || "local model";
-    $("chip-model").className = "chip";
+    $("chip-model").classList.remove("hot");
     await loadPresets();
     const row = S.presets.find(p => p.id === (j.preset && j.preset.id));
     presetWords("Now using " + ((row && row.title) || (j.preset && j.preset.title) || "this preset")
@@ -5046,15 +5167,22 @@ function chooseCloud(){
   renderLanes();
   paintCloud();
   $("chip-model").textContent = "cloud \u00b7 " + lane.replace("jarvis-", "");
-  $("chip-model").className = "chip hot";
+  $("chip-model").classList.add("hot");
   presetWords("Cloud: the next message goes to the cloud ("
     + lane.replace("jarvis-", "") + ").");
 }
 
 function renderLanes(){
+  // ONLY the two lanes the owner can still see (2026-10-27): auto and the
+  // local model. The escalate / critic / bulk names are no longer modes and
+  // are never drawn as one - the cloud is reached through the Cloud button and
+  // the Presets menu's own Cloud section. The list itself (`S.lanes`, read
+  // from /api/status) still names the PC's cloud lane, and #lanes stays in the
+  // document: renderLanes() is called by a preset apply, by Cloud, by a lane
+  // click and at boot, and deleting the element made a SUCCESSFUL preset apply
+  // throw before it refetched (P1-3 of the HUD audit).
   const all = [{id:"auto", label:"auto", tag:"routed"},
-               {id:"local", label:S.defaultModel || "local model", tag:"ollama"}]
-    .concat(S.lanes.map(l => ({id:l, label:l.replace("jarvis-",""), tag:"cloud"})));
+               {id:"local", label:S.defaultModel || "local model", tag:"ollama"}];
   // `l.id` is the server's own lane name (`S.lanes`, read from /api/status and
   // the lanes table) or the two literals above. It sits inside a quoted
   // attribute, so it is escaped like the visible label: a lane name carrying a
@@ -5070,7 +5198,7 @@ function renderLanes(){
       S.lane = b.dataset.lane;
       renderLanes();
       $("chip-model").textContent = b.querySelector("span").textContent;
-      $("chip-model").className = "chip" + (S.lane === "local" ? "" : " hot");
+      $("chip-model").classList.toggle("hot", S.lane !== "local");
       // A lane choice is a route, not a preset: the Cloud button follows
       // it so it is only ever marked while the cloud lane is the one in use.
       presetWords("");
@@ -5148,7 +5276,11 @@ async function boot(){
   } else {
     led("led-ollama", false, "—");
     led("led-proxy",  false, "—");
-    S.lanes = ["jarvis-escalate","jarvis-critic","jarvis-bulk"];
+    // No invented lane names (2026-10-27): with the PC unreachable this page
+    // does not know whether a cloud lane exists, so it says it has none rather
+    // than naming the three old ones. The three were never this page's to
+    // guess, and two of them (critic, bulk) no longer exist at all.
+    S.lanes = [];
     S.proxy = false;
     S.defaultModel = "qwen3:8b";
     // The page's own fallback, and the shell's own marker: `recheckBrand`

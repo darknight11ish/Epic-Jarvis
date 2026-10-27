@@ -522,16 +522,19 @@ await check("copy/paste JSON is the only move path (no file, blob, object URL)",
   assert.match(presetsSrc, /navigator\.clipboard/);
   assert.match(presetsSrc, /Press Ctrl\+C/);
   // The H3 move path adds no network of its own. The ONLY requests in this
-  // module are the Presets menu's four PC calls (2026-10-27): two reads and two
-  // writes on the two routes the page already uses, each on the shell bridge or
-  // the browser road - never a bare fetch, never a third URL.
+  // module are the Presets menu's PC calls (2026-10-27): two reads and three
+  // writes on the routes the page already uses (the Cloud section's provider
+  // apply reuses /api/work/apply and its escalate switch is the ONE new route),
+  // each on the shell bridge or the browser road - never a bare fetch, never a
+  // third URL.
   const fetches = [...presetsSrc.matchAll(/(\w+)\.fetch\(/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(fetches)], ["win"],
     `a request in hud-presets.js is not on the page's own window: ${JSON.stringify(fetches)}`);
   assert.equal(/(?<![.\w])fetch\s*\(/.test(codeOnly(presetsSrc)), false,
     "hud-presets.js calls a bare fetch outside the two windows' roads");
   const routes = new Set([...presetsSrc.matchAll(/apiUrlFor\(win, "([^"]+)"\)/g)].map((m) => m[1]));
-  assert.deepEqual([...routes].sort(), ["/api/manner", "/api/presets", "/api/work/apply"],
+  assert.deepEqual([...routes].sort(),
+    ["/api/manner", "/api/presets", "/api/work/apply", "/api/work/cloud-escalate"],
     `the Presets menu reaches an unexpected route: ${JSON.stringify([...routes])}`);
 });
 
@@ -539,15 +542,19 @@ await check("H3 added no WRITE capability of its own - and the HUD's writes stay
   const capability = JSON.parse(read("src-tauri/capabilities/hud.json"));
   assert.ok(capability.permissions.includes("hud-layout-write"));
   assert.ok(capability.permissions.includes("hud-layout-read"));
-  // 2026-10-27: the Presets menu's personality switch is a write, so the HUD
-  // window now holds TWO write-capable sets and exactly these two: the layout
-  // store (H2/H3) and the personalities set (wording only, no card, held on a
-  // stale link). Nothing else may be added without this list changing.
+  // 2026-10-27: the Presets menu's personality switch is a write, and so is
+  // the Cloud section's escalate switch, so the HUD window holds THREE
+  // write-capable sets and exactly these three: the layout store (H2/H3), the
+  // personalities set (wording only, no card, held on a stale link) and the
+  // escalate switch (one boolean; ON raises the PC's card, OFF is instant).
+  // Nothing else may be added without this list changing.
   const writes = capability.permissions.filter((name) => /write/.test(name));
   assert.deepEqual(writes, ["hud-layout-write"],
     `the HUD window holds unexpected write grants: ${JSON.stringify(writes)}`);
   assert.equal(capability.permissions.filter((name) => name === "hud-personalities").length, 1,
     "the HUD's personality commands are granted by no set, or by more than one");
+  assert.equal(capability.permissions.filter((name) => name === "hud-cloud-escalate").length, 1,
+    "the HUD's cloud escalate command is granted by no set, or by more than one");
   // Same commands as H2: H3 added none.
   const lib = read("src-tauri/src/lib.rs");
   assert.match(lib, /hud_layout::get_hud_layout/);
@@ -567,13 +574,17 @@ await check("modelPresetRows reads the PC's chosen_preset - and nothing else mar
   const payload = {
     presets: [
       { id: "general", title: "General", focus: "everyday chat" },
-      { id: "coding", title: "Coding", focus: "big code" },
+      // The PC's own two facts about applicability (contract audit F1): heavy
+      // mode is always refused by this PC, pending is "being prepared".
+      { id: "coding", title: "Coding", focus: "big code", heavy_mode: true },
+      { id: "fast", title: "Fast", focus: "short answers", pending: true },
     ],
     chosen_preset: "coding",
   };
   assert.deepEqual(P.modelPresetRows(payload), [
-    { id: "general", title: "General", focus: "everyday chat", chosen: false },
-    { id: "coding", title: "Coding", focus: "big code", chosen: true },
+    { id: "general", title: "General", focus: "everyday chat", chosen: false, heavy: false, pending: false },
+    { id: "coding", title: "Coding", focus: "big code", chosen: true, heavy: true, pending: false },
+    { id: "fast", title: "Fast", focus: "short answers", chosen: false, heavy: false, pending: true },
   ]);
   assert.equal(P.modelPresetRows({ available: false, why: "old backend" }).length, 0,
     "a backend without the route invents presets");
@@ -615,7 +626,7 @@ await check("the two click bodies carry ONE field each", () => {
   assert.deepEqual(P.personalitySwitchBody(""), { personality: "" });
 });
 
-await check("the shell road calls the four commands, and the browser road sends the right request", async () => {
+await check("the shell road calls the five commands, and the browser road sends the right request", async () => {
   const calls = [];
   const win = { __TAURI__: { core: { invoke: (...args) => {
     calls.push(args); return Promise.resolve({ ok: true });
@@ -623,12 +634,16 @@ await check("the shell road calls the four commands, and the browser road sends 
   await P.readFocusPresetsOnPc(win);
   await P.readPersonalitiesOnPc(win);
   await P.applyFocusPresetOnPc(win, "coding");
+  await P.applyFocusPresetOnPc(win, "cloud", "deepseek_api");
   await P.switchPersonalityOnPc(win, "classic_butler");
+  await P.setCloudEscalateOnPc(win, true);
   assert.deepEqual(calls, [
     ["get_focus_presets"],
     ["hud_personalities"],
     ["apply_focus_preset", { preset: "coding" }],
+    ["apply_focus_preset", { preset: "cloud", provider: "deepseek_api" }],
     ["hud_switch_personality", { personality: "classic_butler" }],
+    ["hud_cloud_escalate", { on: true }],
   ]);
   const seen = [];
   const browser = {
@@ -645,15 +660,21 @@ await check("the shell road calls the four commands, and the browser road sends 
   await P.readFocusPresetsOnPc(browser);
   await P.readPersonalitiesOnPc(browser);
   await P.applyFocusPresetOnPc(browser, "coding");
+  await P.applyFocusPresetOnPc(browser, "cloud", "deepseek_api");
   await P.switchPersonalityOnPc(browser, "classic_butler");
+  await P.setCloudEscalateOnPc(browser, false);
   assert.deepEqual(seen.map((s) => [s.url, s.init.method || "GET", s.init.headers["X-Jarvis-Client"]]), [
     ["http://127.0.0.1:4719/api/presets", "GET", "hud"],
     ["http://127.0.0.1:4719/api/manner", "GET", "hud"],
     ["http://127.0.0.1:4719/api/work/apply", "POST", "hud"],
+    ["http://127.0.0.1:4719/api/work/apply", "POST", "hud"],
     ["http://127.0.0.1:4719/api/manner", "POST", "hud"],
+    ["http://127.0.0.1:4719/api/work/cloud-escalate", "POST", "hud"],
   ]);
   assert.deepEqual(JSON.parse(seen[2].init.body), { preset: "coding" });
-  assert.deepEqual(JSON.parse(seen[3].init.body), { personality: "classic_butler" });
+  assert.deepEqual(JSON.parse(seen[3].init.body), { preset: "cloud", provider: "deepseek_api" });
+  assert.deepEqual(JSON.parse(seen[4].init.body), { personality: "classic_butler" });
+  assert.deepEqual(JSON.parse(seen[5].init.body), { on: false });
   // A refusal on the browser road is thrown in the PC's own words.
   await assert.rejects(
     P.switchPersonalityOnPc({ fetch: () => Promise.resolve({ ok: false, status: 409,

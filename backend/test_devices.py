@@ -869,7 +869,26 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # write sites (the finally's chat-log condition, the feedback/speed/
                                 # audit/sources guards), none of which is a devices line; the
                                 # later_rewriting() half below proves the other half.
-                                "private-chat.patch"}
+                                "private-chat.patch",
+                                # cloud-escalate.patch (2026-10-27) is appended after it and
+                                # before plugin-loader.patch: three hunks, all in
+                                # jarvis_hud.py (the HUD page's `cloud_yes` counts only while
+                                # this PC's own escalation file says on, the cloud reply's
+                                # reader is told when a turn was escalated with no click, and
+                                # `_lane_names()` asks jarvis_presets.cloud_lanes() instead of
+                                # reading litellm-proxy.yaml). It touches jarvis_gate.py not at
+                                # all - no gate list entry, no tier row, no _RISK row, no
+                                # _TOOL_ACTIONS line, and no line devices.patch wrote.
+                                "cloud-escalate.patch",
+                                # f01-manual-lane-gate.patch (2026-10-27, F-01) is the last code
+                                # patch, immediately before plugin-loader.patch: five hunks,
+                                # all in jarvis_hud.py - the chat turn's lane-picking block and
+                                # `_manual_decision`, so a lane the owner picks by hand runs
+                                # the router's gates. It touches jarvis_gate.py not at all -
+                                # no gate list entry, no tier row, no _RISK row, no
+                                # _TOOL_ACTIONS line, and no line devices.patch wrote. The
+                                # later_rewriting() half below proves the other half.
+                                "f01-manual-lane-gate.patch"}
           and not _stack.later_rewriting("devices.patch", DEVICES_TIER_LINE)
           and not _stack.later_rewriting("devices.patch", DEVICES_RISK_LINE), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

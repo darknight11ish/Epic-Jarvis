@@ -267,7 +267,21 @@ def t_the_patch_is_registered_last():
              # tool-list switch, the header, the deny-all gate and the write
              # guards). No gate list entry, no tier row, no _RISK row, and
              # no line this patch writes - ordering safe.
-             "private-chat.patch"}
+             "private-chat.patch",
+             # cloud-escalate.patch (2026-10-27) is appended after it and before
+             # plugin-loader.patch: three hunks, all in jarvis_hud.py (the HUD page's
+             # `cloud_yes` counts only while this PC's own escalation file says on,
+             # the cloud reply's reader, and `_lane_names()` asking
+             # jarvis_presets.cloud_lanes()). It has no hunk in jarvis_gate.py, so it
+             # rewrites none of the stale rows this patch removes.
+             "cloud-escalate.patch",
+             # f01-manual-lane-gate.patch (2026-10-27, F-01) is the last code patch,
+             # immediately before plugin-loader.patch: five hunks, all in
+             # jarvis_hud.py - the chat turn's lane-picking block and `_manual_decision`,
+             # so a lane the owner picks by hand runs the router's gates. It has no
+             # hunk in jarvis_gate.py, so it rewrites none of the stale rows this
+             # patch removes.
+             "f01-manual-lane-gate.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

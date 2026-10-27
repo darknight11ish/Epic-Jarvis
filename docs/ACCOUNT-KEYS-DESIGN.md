@@ -252,10 +252,13 @@ The owner chose the first option, and the service behind the lane is
 | The desktop's health light | `jarvis-desktop/src-tauri/src/lib.rs` (`CLOUD_LANE_STATUS_PATH`) and `commands.rs` (`check_server_health`): the old `LITELLM_URL` (`127.0.0.1:4000`) is gone |
 | The honest test | `backend/test_ollama_direct.py` — it used to assert the placeholder; it now asserts the real lane, and `backend/test_chatbot_api.py` covers the resolver and the prices |
 
-The three lane names in `jarvis-framework.toml`'s `degrade_chain` map like
-this: `jarvis-escalate` and `jarvis-bulk` to `deepseek-flash` (the cheap,
-current model), `jarvis-critic` to `deepseek-v4-pro` (the stronger one, for
-the lane whose job is to check an answer). Any other non-local lane name also
+There is ONE lane name in `jarvis-framework.toml`'s `degrade_chain` since
+2026-10-27 (`docs/DECISIONS.md` that date): `jarvis-escalate` maps to
+`deepseek-flash` (the cheap, current model). Until then two more names - both
+mapped to this same service, so their difference was a label and a model name
+rather than a route - were listed: `jarvis-bulk` to `deepseek-flash` too, and
+`jarvis-critic` to `deepseek-v4-pro` (the stronger one, for the lane whose job
+was to check an answer). Any other non-local lane name also
 resolves, to `deepseek-flash`. A `[chatbot] deepseek_api_model` line in
 `jarvis-framework.toml`, if you set one, wins over all of them.
 

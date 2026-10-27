@@ -1485,24 +1485,33 @@ def t_money_words_shared_with_both_apps():
 # ==========================================================================
 
 def t_the_cloud_lane_resolves_to_a_real_service():
-    """`jarvis-escalate` and friends were labels read out of a LiteLLM config
-    for a proxy that is not installed. They now name a service and a model
-    this module actually has - DeepSeek, the service the owner chose."""
+    """`jarvis-escalate` was a label read out of a LiteLLM config for a proxy
+    that is not installed. It now names a service and a model this module
+    actually has - DeepSeek, the service the owner chose.
+
+    ONE LANE since 2026-10-27 (the owner's decision): `jarvis-bulk` and
+    `jarvis-critic` went with it, because all three mapped to this one service
+    and the difference was a label and a model name, never a route. The
+    second check below is the bite that keeps them gone: a table that grew a
+    second entry back would fail it.
+    """
     clean()
     point_all(limit=5.0)
-    check("the three lanes the shipped degrade_chain names all resolve",
-          set(API.CLOUD_LANES) == {"jarvis-escalate", "jarvis-bulk", "jarvis-critic"},
+    check("the ONE lane the shipped degrade_chain names resolves, and it is alone",
+          set(API.CLOUD_LANES) == {"jarvis-escalate"},
           sorted(API.CLOUD_LANES))
     check("every lane names a real preset and a model that preset could send",
           all(pid in API.PRESETS and model for pid, model in API.CLOUD_LANES.values()),
           API.CLOUD_LANES)
-    check("jarvis-escalate and jarvis-bulk are DeepSeek's cheap current model",
-          API.lane_service("jarvis-escalate") == ("deepseek_api", "deepseek-flash")
-          and API.lane_service("jarvis-bulk") == ("deepseek_api", "deepseek-flash"),
-          (API.lane_service("jarvis-escalate"), API.lane_service("jarvis-bulk")))
-    check("jarvis-critic, whose job is to check an answer, is the stronger model",
-          API.lane_service("jarvis-critic") == ("deepseek_api", "deepseek-v4-pro"),
-          API.lane_service("jarvis-critic"))
+    check("jarvis-escalate is DeepSeek's cheap current model",
+          API.lane_service("jarvis-escalate") == ("deepseek_api", "deepseek-flash"),
+          API.lane_service("jarvis-escalate"))
+    check("the two lanes that went (critic, bulk) resolve only as the default - "
+          "no table entry of their own",
+          "jarvis-critic" not in API.CLOUD_LANES and "jarvis-bulk" not in API.CLOUD_LANES
+          and API.lane_service("jarvis-critic") == API.lane_service("jarvis-vision")
+          == ("deepseek_api", "deepseek-flash"),
+          (API.lane_service("jarvis-critic"), API.lane_service("jarvis-bulk")))
     check("a lane name nobody here knows still means something real, not nothing",
           API.lane_service("jarvis-vision")[0] == API.DEFAULT_LANE[0]
           and ORIGINAL[API.DEFAULT_LANE[0]].base_url == DEEPSEEK_URL
@@ -1601,8 +1610,7 @@ def t_the_cloud_lane_status_never_carries_a_key():
           sorted(st["ready"]) == sorted(API.CLOUD_LANES)
           and all(r["model"] for r in st["lanes"])
           and {r["lane"]: r["model"] for r in st["lanes"]}
-          == {"jarvis-escalate": "deepseek-flash", "jarvis-bulk": "deepseek-flash",
-              "jarvis-critic": "deepseek-v4-pro"}, st)
+          == {"jarvis-escalate": "deepseek-flash"}, st)
     check("... and the host it names is the preset's own (DeepSeek's, unpointed)",
           all(r["host"] == "127.0.0.1" for r in st["lanes"])
           and ORIGINAL["deepseek_api"].host == "api.deepseek.com", st)
