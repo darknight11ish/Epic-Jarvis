@@ -2,7 +2,7 @@
  * Focus presets - the reading and the words the desktop draws.
  *
  * The PC owns this feature. `backend/jarvis_presets.py` and the generated
- * `backend/fixtures/work_presets.json` are the contract: five presets (an id,
+ * `backend/fixtures/work_presets.json` are the contract: nine presets (an id,
  * title, focus, what, cost, worse, model, lane, context, pending, heavy-mode and
  * the one apply block), the hardware block and the recommendations. This file
  * only reads that answer and turns it into the small view objects the quickbar
@@ -18,7 +18,7 @@
  * line instead of promising an action this app cannot send.
  *
  * It is a plain ES module with no DOM and no Tauri import so `node
- * tests/focus-presets.mjs` can exercise every rule without a browser. The DOM
+ * tests/focus-presets.mjs` can exercise every rule without a webview. The DOM
  * wiring lives in focus-presets-bar.js (the command bar) and
  * focus-presets-settings.js (Settings -> Focus presets).
  *

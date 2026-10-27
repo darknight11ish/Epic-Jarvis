@@ -7,9 +7,10 @@ is what the Cloud row in the Presets menu shows. It still switches nothing and
 starts nothing: every apply raises the one ask card itself, and the cloud
 provider's apply changes NO model and starts NO lane.
 
-The four local presets replace the five "work setups" in jarvis_work.py (owner
-decision 2026-10-18): General (absorbs Admin + Long), Coding, Agentic+Vision,
-Fast.
+The nine local presets: the original five (General, General Uncensored, Coding,
+Agentic+Vision, Fast) and four capability rows added 2026-10-27 at the owner's
+request - Reflective Coach, Pictures & Screens, Long Documents, Browser & Forms.
+They replace the five "work setups" in jarvis_work.py (decision 2026-10-18).
 
 Every measured number below is from
 .dsh-scratch/android-verify/MODEL-BENCH-2026-10-10.md (and STRATEGY beside it);
@@ -18,8 +19,9 @@ Every measured number below is from
 Lanes (this PC, 2026-10-10 measurements):
   main    RTX 2060 12 GB, port 11436 - the long-context card
   coding  RTX 2080 SUPER 8 GB, port 11435 - the fast card
-The owner's choices: Fast runs qwen3:8b on the coding lane at 16k while the
-2060 keeps the general model warm; Coding starts the coding lane on demand.
+The owner's choices: Fast runs qwen3.5:4b on the coding lane at the window that
+lane serves (16,384) while the 2060 keeps the general model warm; Coding starts
+the coding lane on demand.
 """
 from __future__ import annotations
 
@@ -207,19 +209,107 @@ PRESETS = (
     ),
     Preset(
         id="fast", title="Fast", focus="the quickest short answers",
-        what="The quickest preset: qwen3:8b on the fast card at 16k, while the 2060 "
-             "keeps the general model warm for when you switch back.",
-        cost="16,384 tokens is its ceiling and it is the weakest measured explainer; "
-             "the 2060's model stays loaded beside it, for the same measured -1.9% "
-             "off the main model's speed.",
-        worse="Weakest answer quality of the measured models and the shortest "
-              "conversation; chosen for waiting less, not for care.",
-        model="qwen3:8b", lane="coding", context=16384,
+        what="The quickest preset: qwen3.5:4b on the 2080 SUPER at the 16,384-token "
+             "window its lane serves, while the 2060 keeps the general model warm for "
+             "when you switch back.",
+        cost="Measured 2026-10-10 on this same card: 77.1 tokens a second and 4.15 GB "
+             "of video memory at a 65,536-token window (the file is 3.16 GB on disk). "
+             "The Fast lane starts at 16,384 tokens today, so this row keeps that "
+             "window; the bigger measurement is why the card has room to spare.",
+        worse="The small model: fastest measured writer here, and the bench's three "
+              "short prompts were only called broadly correct rather than scored. "
+              "Chosen for waiting less, not for care; its first request after a cold "
+              "load is slow on this card.",
+        model="qwen3.5:4b", lane="coding", context=16384,
         prompt="fast", diet="fast",
-        measured={"tok_s": 64.0, "size_gib": 4.87, "vram_gib": 5.84, "spill_gib": 0.0},
+        measured={"tok_s": 77.1, "size_gib": 3.16, "vram_gib": 4.15, "spill_gib": 0.0,
+                  "context": 65536,
+                  "source": "measured 2026-10-10 at 65,536 tokens on the RTX 2080 "
+                            "SUPER (repo restatement: docs/WORK-SETUPS.md:29, "
+                            "jarvis_work.py:262); the Fast lane serves 16,384"},
         words=("fast", "quick", "quickly", "short answer", "one-off", "hurry",
                "speed", "asap"),
         strong=("quick answer", "as fast as possible", "fast"),
+    ),
+    Preset(
+        id="reflect", title="Reflective Coach",
+        focus="talking a difficult thought through",
+        what="For talking something through: a calm listener that reflects what you "
+             "said first and asks one gentle question at a time. It is the same "
+             "measured model as General, on the 12 GB card with the same full window, "
+             "so a conversation is not cut off.",
+        cost="Same measured setup as General: qwen3.5:9b on the 2060 at 196,608 tokens, "
+             "44.9 tokens a second, 9.17 of the 12 GB, no spill. No model on this PC "
+             "has been measured for empathy or reflective quality, and nothing here "
+             "claims it; pair it with a matching manner in How Jarvis talks once that "
+             "wording is approved.",
+        worse="A model choice only - it changes no wording by itself. It is not a "
+              "therapist: it gives no diagnosis, keeps no therapy record and the "
+              "crisis help stays exactly where it already is.",
+        model="qwen3.5:9b", lane="main", context=196608,
+        prompt="balanced", diet="balanced",
+        measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
+        words=("reflect", "talk it through", "thinking out loud", "coach",
+               "difficult thought"),
+        strong=("talk something through", "reflective coach"),
+    ),
+    Preset(
+        id="pictures", title="Pictures & Screens",
+        focus="reading a screenshot or a picture",
+        what="For looking at a picture or a screenshot and talking about it: qwen3.5:9b, "
+             "whose vision capability is documented on this PC, on the 12 GB card. "
+             "Agentic + Vision is the version that also drives tools.",
+        cost="Same model and card as General at a 32,768-token window. Vision is "
+             "documented (the model reports completion/vision/tools/thinking and its "
+             "CLIP encoder runs on the 12 GB card); this row's window and speed are not "
+             "separately measured. The 2026-10-18 picture test belongs to "
+             "Agentic + Vision, not this row.",
+        worse="Picture quality through this row is not measured. Live phone-camera "
+              "frames are explicitly unmeasured, and the old qwen3-vl fallback (which "
+              "gave no answer on the desktop UI) is not used here.",
+        model="qwen3.5:9b", lane="main", context=32768,
+        prompt="balanced", diet="balanced",
+        tools=("pictures",),
+        words=("picture", "screenshot", "screen", "image", "photo", "look at"),
+        strong=("read this screenshot", "look at this picture"),
+    ),
+    Preset(
+        id="documents", title="Documents & Notes",
+        focus="long reading, notes and study",
+        what="For long documents, notes and study material: the same measured setup as "
+             "General - qwen3.5:9b on the 2060 with the full 196,608-token window - "
+             "named so long reading, note synthesis and study guides are one click "
+             "instead of remembering which preset has the big window.",
+        cost="Same measured setup as General: 44.9 tokens a second, 9.17 of the 12 GB, "
+             "no spill. The window is the point - it is what stops a long document "
+             "being cut before the model sees it.",
+        worse="Not the quickest; fine for reading, not for waiting. Same model as "
+              "General, so this row adds a named choice and the full window, not a "
+              "different model.",
+        model="qwen3.5:9b", lane="main", context=196608,
+        prompt="balanced", diet="balanced",
+        measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
+        words=("document", "documents", "long read", "summarise", "summarize", "pdf",
+               "long text", "notes", "wiki", "study"),
+        strong=("read this long document", "summarise this"),
+    ),
+    Preset(
+        id="browser", title="Browser & Forms",
+        focus="long pages and multi-step web work",
+        what="For long web pages and multi-step form work: the long-context model on "
+             "the 12 GB card with the full 196,608-token window, so a whole page plus "
+             "its steps fit. Agentic + Vision stays the short tool-loop setup.",
+        cost="Same measured setup as General: qwen3.5:9b on the 2060 at 196,608 tokens, "
+             "44.9 tokens a second, 9.17 of the 12 GB, no spill.",
+        worse="Browser and form work has not been measured through this row, and no "
+              "tool-success rate is claimed; the model is the same one Agentic + "
+              "Vision already uses.",
+        model="qwen3.5:9b", lane="main", context=196608,
+        prompt="agentic", diet="agentic",
+        measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
+        tools=("browser", "forms"),
+        words=("browser", "web page", "form", "fill in", "website"),
+        strong=("use the browser", "fill in this form"),
     ),
 )
 
@@ -335,7 +425,7 @@ CLOUD_ESCALATE_PATH = "/api/work/cloud-escalate"
 CLOUD_LANE = "jarvis-escalate"
 #: The card action every loosening in this program uses.
 CLOUD_ACTION = "change_own_config"
-#: The Cloud row's own id - NOT one of PRESET_IDS, so both apps' five-preset
+#: The Cloud row's own id - NOT one of PRESET_IDS, so both apps' nine-preset
 #: list is unchanged and the phone keeps ignoring a key it does not know.
 CLOUD_PRESET_ID = "cloud"
 
@@ -500,7 +590,7 @@ def cloud_view() -> dict:
 
     `provider` is the service in use ("" when none is), `providers` every
     connected service (see cloud_providers), `escalate` the PC's own standing
-    switch. Additive: the five presets are untouched, `version` stays 1, and
+    switch. Additive: the nine presets are untouched, `version` stays 1, and
     every reader that does not know this key ignores it.
     """
     return {"provider": cloud_chosen(),
@@ -512,7 +602,7 @@ def cloud_preset_view() -> dict:
     """The Cloud row itself, in the SAME shape as a `Preset.view()`.
 
     Its id is "cloud", it is deliberately absent from `PRESETS`/`PRESET_IDS`
-    (both apps' five-row list stays five rows), and its `apply` block says the
+    (both apps' nine-row list stays nine rows), and its `apply` block says the
     two things that make it different: it is a cloud row, and it needs a
     provider before it can be applied.
     """
@@ -774,7 +864,7 @@ def _active_lane_key() -> Optional[str]:
 
 
 def live_status() -> dict:
-    """GET /api/work's and GET /api/presets' answer: the five local presets,
+    """GET /api/work's and GET /api/presets' answer: the nine local presets,
     the Cloud row, the cloud provider list and the PC's own escalation switch,
     the detected cards, the questionnaire, the 1/2/3-GPU recommendations, the
     chosen preset and the active lane.
@@ -803,7 +893,7 @@ def live_status() -> dict:
         "found": f"{len(PRESETS)} focus presets",
         "presets": [p.view() for p in PRESETS],
         # The Cloud row: a SIXTH row in the same shape, deliberately not in
-        # `presets` - both apps' five-row list stays five rows (the owner's
+        # `presets` - both apps' nine-row list stays nine rows (the owner's
         # decision of 2026-10-27: additive keys only, so the phone needs no
         # change at all to keep working).
         "cloud_preset": cloud_preset_view(),
@@ -1251,14 +1341,19 @@ def recommendations() -> dict:
                 # CONFIRMED PLAN (owner, 2026-10-18): three RTX cards, no GTX 1080
                 # for compute; lane-per-GPU, never one model split across three.
                 idx = {"general": 0, "general_uncensored": 0, "coding": 0,
-                       "fast": 1, "agentic_vision": 2}[p.id]
+                       "fast": 1, "agentic_vision": 2, "reflect": 0,
+                       "pictures": 0, "documents": 0, "browser": 0}[p.id]
                 note = {
                     "general": "2060 12 GB: main chat/everyday, 196k",
                     "general_uncensored": "2060 12 GB: main chat/everyday, 196k",
                     "coding": "main model on the 2060; the Coding lane (qwen3.5:4b helper) "
                               "starts on demand on 2080 SUPER #2 (card 2, PCIe 3.0 x4 M.2 adapter)",
-                    "fast": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3:8b",
+                    "fast": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3.5:4b",
                     "agentic_vision": "2080 SUPER #2 (card 2): Agentic+Vision, qwen3.5:9b with images",
+                    "reflect": "2060 12 GB (card 0): Reflective Coach, qwen3.5:9b, 196,608 window",
+                    "pictures": "2060 12 GB (card 0): Pictures & Screens, qwen3.5:9b with images, 32,768 window",
+                    "documents": "2060 12 GB (card 0): Documents & Notes, qwen3.5:9b, 196,608 window",
+                    "browser": "2060 12 GB (card 0): Browser & Forms, qwen3.5:9b, 196,608 window",
                 }[p.id]
                 rows[p.id] = _row(p, idx, cards, False, True, note)
         by[str(n)] = rows

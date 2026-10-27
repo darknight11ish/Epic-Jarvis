@@ -5,10 +5,10 @@ its apply raises (the owner's decision, 2026-10-27).
 
 WHAT THIS PROVES, and why each check is here
 
-  * the Cloud row is a SIXTH row in the same shape as the five presets and is
+  * the Cloud row is a SIXTH row in the same shape as the nine presets and is
     NOT one of them: `PRESET_IDS` stays five, so both apps' five-row list is
     unchanged and the phone needs no code change at all;
-  * `/api/presets` gains `cloud_preset` and `cloud` and nothing else - the five
+  * `/api/presets` gains `cloud_preset` and `cloud` and nothing else - the nine
     presets are byte-for-byte what they were (additive keys only);
   * `cloud.providers` has one row per connected service and NEVER carries a
     key, a fragment of one, or a message;
@@ -153,15 +153,15 @@ API.ready_for = _fake_ready_for
 #  1. the row itself
 # ==========================================================================
 
-def t_the_cloud_row_is_a_sixth_row_and_not_one_of_the_five():
+def t_the_cloud_row_is_a_sixth_row_and_not_one_of_the_nine():
     clean()
     row = P.cloud_preset_view()
     check("the Cloud row has the SAME keys a Preset.view() has",
           set(row) == set(P.PRESETS[0].view()), (sorted(set(row)), sorted(set(P.PRESETS[0].view()))))
-    check("... and its id is 'cloud', which is NOT one of the five",
+    check("... and its id is 'cloud', which is NOT one of the nine",
           row["id"] == "cloud" and "cloud" not in P.PRESET_IDS, P.PRESET_IDS)
-    check("... so both apps' five-row list is still exactly five rows",
-          len(P.PRESET_IDS) == 5 and [p["id"] for p in P.view()["presets"]] == list(P.PRESET_IDS),
+    check("... so both apps' nine-row list is still exactly nine rows",
+          len(P.PRESET_IDS) == len(P.PRESETS) and "cloud" not in P.PRESET_IDS and [p["id"] for p in P.view()["presets"]] == list(P.PRESET_IDS),
           P.PRESET_IDS)
     check("its apply block says it is a cloud row that needs a provider, and "
           "starts no lane and switches no model",
@@ -178,7 +178,7 @@ def t_live_status_gains_two_keys_and_moves_nothing_else():
     st = P.live_status()
     for key in ("cloud_preset", "cloud"):
         check(f"/api/presets carries `{key}`", key in st, sorted(st))
-    check("the five presets are untouched by it, in the same order",
+    check("the nine presets are untouched by it, in the same order",
           [p["id"] for p in st["presets"]] == list(P.PRESET_IDS), st["presets"][:1])
     check("... and the rest of the answer still has every key it had",
           {"found", "presets", "old_ids_replaced", "hardware", "recommendations",
@@ -393,7 +393,7 @@ def t_the_lane_list_is_one_or_none():
 # ==========================================================================
 
 TESTS = [
-    t_the_cloud_row_is_a_sixth_row_and_not_one_of_the_five,
+    t_the_cloud_row_is_a_sixth_row_and_not_one_of_the_nine,
     t_live_status_gains_two_keys_and_moves_nothing_else,
     t_the_providers_are_one_row_per_service_and_never_a_key,
     t_one_source_of_truth_for_whether_a_service_can_be_used,

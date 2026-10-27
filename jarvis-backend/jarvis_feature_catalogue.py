@@ -3,7 +3,7 @@
 The owner's feature list, as data: 141 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 9b33d814ca66d54ea8800dd441763fdc70d7a88a955c8ae958c57eaa1cf98a77); the apps' Features pages read their own
+`features/features.json` (sha256 9fbfdab4669961d0ad19aac1cf95def9e971a7098bbfd6007e95904e17cfca84); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "9b33d814ca66d54ea8800dd441763fdc70d7a88a955c8ae958c57eaa1cf98a77"
+SOURCE_SHA256 = "9fbfdab4669961d0ad19aac1cf95def9e971a7098bbfd6007e95904e17cfca84"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1262,7 +1262,7 @@ FEATURES = (
         "id": "focus-presets",
         "group": "The PC itself",
         "title": "Focus presets",
-        "what": "Five presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose.",
+        "what": "Nine presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
         "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
         "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands.",
