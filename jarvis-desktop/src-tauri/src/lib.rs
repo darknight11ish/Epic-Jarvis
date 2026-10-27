@@ -1177,6 +1177,11 @@ pub fn run() {
             hardware::get_pc_help,
             focus_presets::get_focus_presets,
             focus_presets::apply_focus_preset,
+            // The HUD Presets menu's escalate switch (2026-10-27): ONE
+            // boolean, `POST /api/work/cloud-escalate`. The page holds no
+            // token, so it calls this instead of posting; the PC raises its ONE
+            // card for ON and decides, and OFF is instant.
+            focus_presets::hud_cloud_escalate,
             selection::read_selection,
             tutorials::get_tutorials,
             tutorials::mark_tutorial,

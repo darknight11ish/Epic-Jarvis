@@ -57,6 +57,13 @@ fn main() {
             // manner mode, no dials, no custom personality).
             "hud_personalities",
             "hud_switch_personality",
+            // The HUD Presets menu's Cloud section (2026-10-27, the owner: a
+            // "Cloud" preset beside coder/general/fast, with a real checkbox:
+            // "Escalate to the cloud when the work is too complex"): ONE
+            // boolean, `POST /api/work/cloud-escalate`. The page holds no
+            // token; the PC raises its ONE card for ON, OFF is instant, and the
+            // checkbox is drawn from a refetch of the PC's own answer.
+            "hud_cloud_escalate",
             // App lock and the widget: is the lock on, and "Approve in the
             // Jarvis bar" (apps security audit M3).
             "get_app_lock",
