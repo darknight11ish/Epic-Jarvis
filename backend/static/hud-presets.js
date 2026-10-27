@@ -342,6 +342,11 @@ export function mountHudPresets(options = {}) {
     : globalThis.__jarvisHudLayout ? normalizeLayout(globalThis.__jarvisHudLayout) : presetLayout(DEFAULT_PRESET_ID);
   let badge = null;
   let menu = null;
+  // The owner's left-rail Presets button (2026-10-26): the menu's second door,
+  // wired in start(). `focusDoor` is whichever door opened the one menu, so
+  // Escape and a second click put focus back where it came from.
+  let railDoor = null;
+  let focusDoor = null;
   let returnFocus = null;
   let statusLine = null;
 
@@ -393,13 +398,27 @@ export function mountHudPresets(options = {}) {
 
   /* ── the menu itself ─────────────────────────────────────────────────── */
 
-  function closeMenu(focusBadge) {
+  /** Both doors say whether the ONE menu is open: the "Layout:" badge (H2's)
+   *  and the owner's left-rail Presets button (2026-10-26). One menu, two
+   *  controls that must never disagree about it. */
+  function sayDoors(open) {
+    for (const node of [badge, railDoor]) {
+      if (node) node.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+  }
+
+  function closeMenu(returnToDoor) {
     if (!badge) badge = doc.getElementById("hud-layout-badge");
     if (!menu) return;
     menu.hidden = true;
     menu.setAttribute("aria-hidden", "true");
-    if (badge) badge.setAttribute("aria-expanded", "false");
-    if (focusBadge && badge) badge.focus();
+    sayDoors(false);
+    // Focus goes back to the control that opened the menu - the rail button
+    // when the rail button opened it, never a jump across the window to the
+    // badge at the other end of the stage bar.
+    const back = focusDoor || badge;
+    if (returnToDoor && back) back.focus();
+    focusDoor = null;
     returnFocus = null;
   }
 
@@ -519,7 +538,14 @@ export function mountHudPresets(options = {}) {
     doc.addEventListener("pointerdown", (event) => {
       if (!menu || menu.hidden) return;
       const target = event.target;
-      if (menu.contains(target) || (badge && badge.contains(target))) return;
+      // Both DOORS are outside the menu but must not dismiss it: the click is
+      // the toggle, and dismissing on pointerdown first would turn a second
+      // click on either door into close-then-reopen. The rail button is a door
+      // too (2026-10-26), so it is exempt exactly as the badge is.
+      if (!railDoor) railDoor = doc.getElementById("rail-presets");
+      if (menu.contains(target)
+        || (badge && badge.contains(target))
+        || (railDoor && railDoor.contains(target))) return;
       closeMenu(false);
     }, true);
     return menu;
@@ -542,18 +568,29 @@ export function mountHudPresets(options = {}) {
     }
   }
 
-  function openMenu() {
+  function openMenu(anchor) {
     // A click can arrive before the 100 ms badge poll has run; resolve the
     // badge on demand so `aria-expanded` and the menu position are never lost.
     if (!badge) badge = doc.getElementById("hud-layout-badge");
+    if (!railDoor) railDoor = doc.getElementById("rail-presets");
     ensureMenu();
     renderMenu();
-    const rect = badge ? badge.getBoundingClientRect() : { left: 16, bottom: 40 };
-    menu.style.left = `${Math.max(8, Math.min(win.innerWidth - 360, rect.left))}px`;
+    // Which control opened it decides where the ONE menu appears: under the
+    // badge at the top right (no anchor, exactly as before), or beside the
+    // rail button when the rail button asked (2026-10-26) - so a click in the
+    // left column is answered in the left column, not at the far corner.
+    focusDoor = (anchor && anchor.getBoundingClientRect) ? anchor : badge;
+    const rect = focusDoor
+      ? focusDoor.getBoundingClientRect()
+      : { left: 16, right: 16, bottom: 40 };
+    const left = focusDoor === badge
+      ? Math.max(8, Math.min(win.innerWidth - 360, rect.left))
+      : Math.max(8, Math.min(win.innerWidth - 360, rect.right + 8));
+    menu.style.left = `${left}px`;
     menu.style.top = `${Math.round(rect.bottom + 6)}px`;
     menu.hidden = false;
     menu.setAttribute("aria-hidden", "false");
-    if (badge) badge.setAttribute("aria-expanded", "true");
+    sayDoors(true);
     const first = menu.querySelector('[role="menuitem"]');
     if (first) first.focus();
   }
@@ -767,10 +804,26 @@ export function mountHudPresets(options = {}) {
     });
     // H2's editor owns the badge element; it asks the module that owns the
     // menu to open it (one badge, one menu, no duplicate click handlers).
-    win.addEventListener("jarvis:hud-presets-open", () => {
+    // The owner's left-rail Presets button (2026-10-26) dispatches the SAME
+    // event, carrying itself as the anchor, so both doors go through this one
+    // listener and there is still exactly one Layouts menu.
+    win.addEventListener("jarvis:hud-presets-open", (event) => {
       if (menu && !menu.hidden) closeMenu(true);
-      else openMenu();
+      else openMenu(event && event.detail ? event.detail.anchor : null);
     });
+    // The door itself: a click on the rail button opens (or closes) the same
+    // menu the badge opens, beside the button that was clicked. The dataset
+    // mark stops a second mount wiring a second handler - two handlers would
+    // toggle twice, which reads as "the button does nothing".
+    railDoor = doc.getElementById("rail-presets");
+    if (railDoor && railDoor.dataset.hudPresets !== "1") {
+      railDoor.dataset.hudPresets = "1";
+      railDoor.addEventListener("click", () => {
+        win.dispatchEvent(new CustomEvent("jarvis:hud-presets-open", {
+          detail: { anchor: railDoor },
+        }));
+      });
+    }
     const controller = {
       get layout() { return layout; },
       open: openMenu,
