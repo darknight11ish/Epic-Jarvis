@@ -3758,8 +3758,12 @@ def _settings_control(s: str) -> Optional[Intent]:
     if kind == "ask":
         return Intent("control_ask", {"control": got["control"]})
     if kind == "bad":
+        # The words the owner said come along too: a control with one field
+        # answers a bad value by naming the wrong value and the real ones (see
+        # _run_control_bad). Without it the answer read "face's face".
         return Intent("control_bad", {"control": got["control"],
-                                      "field": got["field"], "value": ""})
+                                      "field": got["field"],
+                                      "value": got.get("value") or ""})
     return Intent("control_bad", {"control": got["control"], "field": "",
                                   "value": got.get("value") or ""})
 
@@ -5779,10 +5783,29 @@ def _run_control_bad(f: dict) -> Result:
     import jarvis_settings_registry as R
     control = str(f.get("control") or "")
     field = str(f.get("field") or "")
+    said = str(f.get("value") or "").strip()
+    if field and said:
+        # A control with ONE field and a value it does not have: name the value
+        # that was wrong and list the real ones. `control_bad_words` names the
+        # field instead, which for the face read "That is not one of the values
+        # for face's face" (2026-10-26, measured through "change your face to
+        # zorb"); the owner needs to hear the word he said and the choices.
+        try:
+            rows = R.fields_for_control(control)
+        except Exception:                   # noqa: BLE001 - fall back below
+            rows = []
+        if len(rows) == 1:
+            try:
+                options = sorted(rows[0].setting.options().keys())
+            except Exception:               # noqa: BLE001 - fall back below
+                options = []
+            if options:
+                return Result(
+                    f'"{said}" is not one of the choices for {control}. '
+                    f'Say one of: {", ".join(options)}.', "control_bad")
     if field:
         return Result(R.control_bad_words(control, field), "control_bad")
-    return Result(R.control_invalid_words(control, str(f.get("value") or "")),
-                  "control_bad")
+    return Result(R.control_invalid_words(control, said), "control_bad")
 
 
 def _run_settings_not_by_asking(f: dict) -> Result:

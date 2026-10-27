@@ -2963,7 +2963,8 @@ def resolve_control_sentence(control_words: str, value_words: str = None) -> dic
         # about what to say; `control_bad_words` lists the real values instead.
         rows = fields_for_control(control)
         if len(rows) == 1:
-            return {"kind": "bad", "control": control, "field": rows[0].field}
+            return {"kind": "bad", "control": control, "field": rows[0].field,
+                    "value": value_words}
         return {"kind": "invalid", "control": control, "value": value_words}
     return {"kind": "ask", "control": control}
 
