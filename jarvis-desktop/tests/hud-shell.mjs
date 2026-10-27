@@ -521,17 +521,33 @@ await check("copy/paste JSON is the only move path (no file, blob, object URL)",
   }
   assert.match(presetsSrc, /navigator\.clipboard/);
   assert.match(presetsSrc, /Press Ctrl\+C/);
-  // Nothing in H3 adds a network call: the only invoke roads are the store's.
-  assert.equal(/fetch\s*\(/.test(presetsSrc), false, "the Layouts menu calls fetch");
+  // The H3 move path adds no network of its own. The ONLY requests in this
+  // module are the Presets menu's four PC calls (2026-10-27): two reads and two
+  // writes on the two routes the page already uses, each on the shell bridge or
+  // the browser road - never a bare fetch, never a third URL.
+  const fetches = [...presetsSrc.matchAll(/(\w+)\.fetch\(/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(fetches)], ["win"],
+    `a request in hud-presets.js is not on the page's own window: ${JSON.stringify(fetches)}`);
+  assert.equal(/(?<![.\w])fetch\s*\(/.test(codeOnly(presetsSrc)), false,
+    "hud-presets.js calls a bare fetch outside the two windows' roads");
+  const routes = new Set([...presetsSrc.matchAll(/apiUrlFor\(win, "([^"]+)"\)/g)].map((m) => m[1]));
+  assert.deepEqual([...routes].sort(), ["/api/manner", "/api/presets", "/api/work/apply"],
+    `the Presets menu reaches an unexpected route: ${JSON.stringify([...routes])}`);
 });
 
-await check("H3 added no WRITE capability and no command: still exactly one HUD write", () => {
+await check("H3 added no WRITE capability of its own - and the HUD's writes stay named", () => {
   const capability = JSON.parse(read("src-tauri/capabilities/hud.json"));
   assert.ok(capability.permissions.includes("hud-layout-write"));
   assert.ok(capability.permissions.includes("hud-layout-read"));
+  // 2026-10-27: the Presets menu's personality switch is a write, so the HUD
+  // window now holds TWO write-capable sets and exactly these two: the layout
+  // store (H2/H3) and the personalities set (wording only, no card, held on a
+  // stale link). Nothing else may be added without this list changing.
   const writes = capability.permissions.filter((name) => /write/.test(name));
   assert.deepEqual(writes, ["hud-layout-write"],
     `the HUD window holds unexpected write grants: ${JSON.stringify(writes)}`);
+  assert.equal(capability.permissions.filter((name) => name === "hud-personalities").length, 1,
+    "the HUD's personality commands are granted by no set, or by more than one");
   // Same commands as H2: H3 added none.
   const lib = read("src-tauri/src/lib.rs");
   assert.match(lib, /hud_layout::get_hud_layout/);
@@ -543,6 +559,106 @@ await check("H3 added no WRITE capability and no command: still exactly one HUD 
   assert.match(settings, /id="hud-reset-layout"/);
   assert.match(settingsModule, /userLayouts/);
   assert.match(settingsModule, /resetToCockpit/);
+});
+
+/* ── 6. The Presets menu's PC lists (2026-10-27) ─────────────────────────── */
+
+await check("modelPresetRows reads the PC's chosen_preset - and nothing else marks a row", () => {
+  const payload = {
+    presets: [
+      { id: "general", title: "General", focus: "everyday chat" },
+      { id: "coding", title: "Coding", focus: "big code" },
+    ],
+    chosen_preset: "coding",
+  };
+  assert.deepEqual(P.modelPresetRows(payload), [
+    { id: "general", title: "General", focus: "everyday chat", chosen: false },
+    { id: "coding", title: "Coding", focus: "big code", chosen: true },
+  ]);
+  assert.equal(P.modelPresetRows({ available: false, why: "old backend" }).length, 0,
+    "a backend without the route invents presets");
+  assert.equal(P.modelPresetRows({ presets: [{ title: "no id" }] }).length, 0,
+    "a preset with no id is drawn as an unclickable row");
+  // A row is never chosen just because it exists - only chosen_preset says so.
+  assert.equal(P.modelPresetRows({ presets: [{ id: "fast", title: "Fast" }] })[0].chosen, false);
+});
+
+await check("personalityRows reads the nine and the owner's own, and marks the PC's current", () => {
+  const payload = {
+    personality: "classic_butler",
+    personalities: [
+      { id: "warm_peer", title: "Warm Collaborator", description: "warm" },
+      { id: "classic_butler", title: "Classic British Butler", description: "formal" },
+    ],
+    user_personalities: [
+      { id: "mine-1", name: "Calm Helper", line: "calm" },
+      { id: "bad-row" },
+    ],
+  };
+  const { rows, current } = P.personalityRows(payload);
+  assert.equal(current, "classic_butler");
+  assert.deepEqual(rows.map((row) => [row.id, row.title, row.custom, row.current]), [
+    ["warm_peer", "Warm Collaborator", false, false],
+    ["classic_butler", "Classic British Butler", false, true],
+    ["mine-1", "Calm Helper", true, false],
+  ]);
+  // The old spelling is read too, so an older backend still lists them.
+  const older = P.personalityRows({ personalities: [], custom_personalities: [
+    { id: "mine-2", name: "Old Name" }] });
+  assert.equal(older.rows.length, 1, "a backend using custom_personalities lost the owner's own");
+  assert.equal(older.rows[0].custom, true);
+});
+
+await check("the two click bodies carry ONE field each", () => {
+  assert.deepEqual(P.personalitySwitchBody("classic_butler"), { personality: "classic_butler" });
+  assert.deepEqual(P.modelApplyBody("coding"), { preset: "coding" });
+  assert.deepEqual(P.personalitySwitchBody(""), { personality: "" });
+});
+
+await check("the shell road calls the four commands, and the browser road sends the right request", async () => {
+  const calls = [];
+  const win = { __TAURI__: { core: { invoke: (...args) => {
+    calls.push(args); return Promise.resolve({ ok: true });
+  } } } };
+  await P.readFocusPresetsOnPc(win);
+  await P.readPersonalitiesOnPc(win);
+  await P.applyFocusPresetOnPc(win, "coding");
+  await P.switchPersonalityOnPc(win, "classic_butler");
+  assert.deepEqual(calls, [
+    ["get_focus_presets"],
+    ["hud_personalities"],
+    ["apply_focus_preset", { preset: "coding" }],
+    ["hud_switch_personality", { personality: "classic_butler" }],
+  ]);
+  const seen = [];
+  const browser = {
+    JARVIS: {
+      headers: (extra) => ({ "X-Jarvis-Token": "a-token", "X-Jarvis-Client": "hud", ...extra }),
+      url: (path) => `http://127.0.0.1:4719${path}`,
+    },
+    fetch: (url, init) => {
+      seen.push({ url, init });
+      return Promise.resolve({ ok: true, status: 200,
+        json: () => Promise.resolve({ ok: true, said: "hello" }) });
+    },
+  };
+  await P.readFocusPresetsOnPc(browser);
+  await P.readPersonalitiesOnPc(browser);
+  await P.applyFocusPresetOnPc(browser, "coding");
+  await P.switchPersonalityOnPc(browser, "classic_butler");
+  assert.deepEqual(seen.map((s) => [s.url, s.init.method || "GET", s.init.headers["X-Jarvis-Client"]]), [
+    ["http://127.0.0.1:4719/api/presets", "GET", "hud"],
+    ["http://127.0.0.1:4719/api/manner", "GET", "hud"],
+    ["http://127.0.0.1:4719/api/work/apply", "POST", "hud"],
+    ["http://127.0.0.1:4719/api/manner", "POST", "hud"],
+  ]);
+  assert.deepEqual(JSON.parse(seen[2].init.body), { preset: "coding" });
+  assert.deepEqual(JSON.parse(seen[3].init.body), { personality: "classic_butler" });
+  // A refusal on the browser road is thrown in the PC's own words.
+  await assert.rejects(
+    P.switchPersonalityOnPc({ fetch: () => Promise.resolve({ ok: false, status: 409,
+      json: () => Promise.resolve({ error: "I do not know that personality." }) }) }, "nope"),
+    /I do not know that personality\./);
 });
 
 if (fails) {

@@ -592,4 +592,40 @@ matches it, and all four generated settings copies agree (27 toggle rows). The
 one test pin this rebase did move is `tests/hud.mjs`'s exact permission list for
 the HUD window, which now names `open-fix-place` — the gear the owner asked for.
 
+---
+
+## 12. 2026-10-27: the menu becomes **Presets**, and lists the PC's own
+
+The owner, after §10.5 shipped: *"you didnt put presets, you put hud layouts"*,
+*"the spacing of the two new buttons is uneven"*, *"i want the settings to be in
+a similar style of icon to the others"*, and *"i also want the presets to include
+all the ideal local ai presets that are made (like coder, or general, etc) along
+with the different personalities of jarvis that i can select"*. What changed:
+
+* **The menu is called Presets** - the visible title and its `aria-label`, and
+  the "Layout: <name>" badge's tooltip now says "Open the Presets menu". Its
+  saved-layout sections and every action in them are untouched: this renames the
+  ONE menu and adds sections above them.
+* **The gear now matches the rail.** `hud_bootstrap.js` gives it the page's own
+  `rail-toolbar-btn` class, so its padding, border and height are the Presets
+  button's own rules and the Studio rail draws both as the same 42x38 box; and
+  it draws a line gear (`viewBox="0 0 24 24"`, fill none, currentColor,
+  stroke-width 1.8) instead of the bar's filled 16-unit one. §10.5's "the id, the
+  glyph, the 'Jarvis settings' name ... are unchanged" is superseded on the
+  GLYPH only: id, name, command and shell-only rule are unchanged, and the bar's
+  and the widget's gears are untouched.
+* **The menu lists the PC's five model presets and the nine personalities**
+  (plus "My personalities" when the PC has any). A model preset click raises the
+  PC's ONE `switch_model` card and is never marked chosen until a refetch of
+  `GET /api/presets`' own `chosen_preset` names it; a personality click is
+  immediate, shows the PC's own `switch_ack` and asks for no card. The HUD page
+  still holds no token: the shell road adds it in Rust, the two personality
+  calls are the new narrow `hud_personalities` / `hud_switch_personality`
+  commands in the `hud-personalities` set (not a grant of the Settings window's
+  wider manner commands), and a plain browser uses the routes directly with
+  `X-Jarvis-Client: hud`.
+* **Not verified here:** no live HUD window was driven (no desktop rebuild from
+  this branch), so the owner's own look at the real window is still the field
+  test.
+
 

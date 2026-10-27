@@ -49,6 +49,14 @@ fn main() {
             // its own POSTs stay refused; hud_proxy.rs owns the read.
             "hud_secret_handoff_fill",
             "hud_secret_handoff_cancel",
+            // The HUD's Presets menu (2026-10-27, the owner: the menu should
+            // list "the different personalities of jarvis that i can select"):
+            // read the personalities, and switch ONE of them. Wording only,
+            // no card, held on a stale link. HUD window only, and deliberately
+            // narrower than the Settings window's get_manner/set_manner (no
+            // manner mode, no dials, no custom personality).
+            "hud_personalities",
+            "hud_switch_personality",
             // App lock and the widget: is the lock on, and "Approve in the
             // Jarvis bar" (apps security audit M3).
             "get_app_lock",

@@ -1962,6 +1962,12 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // ONE job - held on a stale link, no card, never a list form and never
       // a delete-all (Ruling 15: clear-list stays the Brain's).
       "hud-schedule",
+      // The Presets menu's personalities (2026-10-27, the owner asked the menu
+      // to list "the different personalities of jarvis that i can select"):
+      // read the nine and the owner's own, and switch ONE - wording only, no
+      // card, held on a stale link. Narrower than the Settings window's
+      // get_manner/set_manner on purpose (no manner mode, no dials, no custom).
+      "hud-personalities",
       // H2 (2026-10-22, owner-approved 2026-10-21): EXACTLY ONE new grant -
       // this window's own layout write, saved by its own Edit mode. No other
       // write command is added, and the read grant above is not removed.
@@ -1972,10 +1978,12 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
     "the H2 change must not take the H1 read grant away");
   const writeish = cap.permissions.filter((name) => [
     "hud-layout-write", "hud-approvals", "focus-presets", "hud-voice", "hud-schedule",
+    "hud-personalities",
   ].includes(name));
   assert.deepEqual(writeish.sort(),
-    ["focus-presets", "hud-approvals", "hud-layout-write", "hud-schedule", "hud-voice"],
-    "the HUD window gained a write command beyond its own layout and Reminders");
+    ["focus-presets", "hud-approvals", "hud-layout-write", "hud-personalities",
+      "hud-schedule", "hud-voice"],
+    "the HUD window gained a write command beyond its own layout, Reminders and the wording-only personality switch");
   assert.match(cap.description, /hud-layout-write/);
   assert.match(cap.description, /owner-approved/);
   assert.match(cap.description, /holds NO pairing token/);
@@ -2372,8 +2380,9 @@ await check("every view shape keeps every id, and the Layout badge is reachable 
  * move the settings from the top right to the left column".
  *
  * This is the behaviour, on the real page with the shell's real bootstrap
- * injected: ONE Presets button in the left rail that opens the ONE Layouts
- * menu (beside the button, not at the far corner), and ONE settings gear in
+ * injected: ONE Presets button in the left rail that opens the ONE Presets
+ * menu (beside the button, not at the far corner; Layouts, the PC's model presets
+ * and the personalities since 2026-10-27), and ONE settings gear in
  * that same rail - never on the stage bar any more, never two of them. In
  * Ambient the left rail is a fixed drawer; the check opens it with the page's
  * own [Controls] button, because "in the drawer" is where a control has to be
@@ -2382,7 +2391,7 @@ await check("every view shape keeps every id, and the Layout badge is reachable 
  * tests/hud-rail-tools.mjs is the browser-free half (markup, all six shells'
  * CSS, the wiring and the one-gear guard), so a machine without Playwright
  * still catches a structural regression here. */
-await check("the owner's two rail controls: Presets opens the one Layouts menu, and there is exactly one gear", async () => {
+await check("the owner's two rail controls: Presets opens the one Presets menu, and there is exactly one gear", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   await page.waitForSelector("#hud-settings", { timeout: 10000 });
   const report = [];
@@ -2473,8 +2482,8 @@ await check("the owner's two rail controls: Presets opens the one Layouts menu, 
       `${r.look}: the settings gear is not on screen (${JSON.stringify(r.gearBox)})`);
     assert.equal(r.presetsBox.hit, true, `${r.look}: something is drawn over the Presets button`);
     assert.equal(r.gearBox.hit, true, `${r.look}: something is drawn over the settings gear`);
-    assert.equal(r.opened.menus, 1, `${r.look}: the page holds ${r.opened.menus} Layouts menus, not one`);
-    assert.equal(r.opened.shown, true, `${r.look}: the rail Presets button did not open the Layouts menu`);
+    assert.equal(r.opened.menus, 1, `${r.look}: the page holds ${r.opened.menus} Presets menus, not one`);
+    assert.equal(r.opened.shown, true, `${r.look}: the rail Presets button did not open the Presets menu`);
     assert.equal(r.opened.badgeExpanded, "true",
       `${r.look}: the Layout badge does not agree that the one menu is open`);
     assert.equal(r.opened.railExpanded, "true", `${r.look}: the rail button does not say the menu is open`);
