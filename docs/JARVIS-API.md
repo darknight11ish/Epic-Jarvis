@@ -23606,6 +23606,16 @@ mechanism, raises no card, and when `/api/status` says `proxy: false` it says
 plainly that the cloud lane is down and marks nothing. Tests:
 `jarvis-desktop/tests/hud-presets.mjs`.
 
+**The Studio dock's "Current Models" panel** (2026-10-26) is a second reader of
+this contract, plus the PC's model facts: it shows `GET /api/models`'s
+`current`, `previous` and `offload.models`, `GET /api/status`'s `default_model`
+when it differs, and `chosen_preset`/`chosen_model` from here. Its lane routes
+are the same HUD lane mechanism the Cloud button uses (the page's own `#lanes`
+buttons), so it starts nothing, applies nothing, resets nothing and raises no
+card. `/api/models` is on the same fixed read list (`HUD_GET_PATHS`), read
+through `hud_get`; every model write (`/api/models/switch`, `/install`,
+`/rollback`) and the `?recommend=1` catalogue query stay off it.
+
 Tests: `backend/test_presets.py`, `test_presets_lanes.py`,
 `test_presets_apply.py` (route shape, origin/token, old shape not served,
 pending/heavy refusals, rollback), and `tools/gen_work_presets.py --check`.

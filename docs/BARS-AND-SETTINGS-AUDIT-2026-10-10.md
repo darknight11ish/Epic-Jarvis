@@ -629,3 +629,48 @@ with the different personalities of jarvis that i can select"*. What changed:
   test.
 
 
+
+---
+
+## 13. 2026-10-27: the Studio dock's lane dropdown becomes **Current Models**
+
+The owner, the same night as §12: *"under the button on the jarvis hud that says
+auto, theres several options including bulk, critic, escalate, can you just get
+rid of this button and replace it with a button that says "Current Models" and
+clicking it will show what models are being used and or loaded on jarvis?"*
+What changed:
+
+* **The button.** The `<select id="lane-compact">` in the Studio (split-stage)
+  stage bar is gone. In the same slot, with the same plate / border / radius /
+  mono type and the same Studio-only visibility, there is a `#current-models`
+  button labelled **Current Models**, with the tooltip and accessible name
+  "Current Models: what Jarvis is using and has loaded". Its class is
+  `current-models` now, so no stale `lane-compact` CSS or test id is left behind.
+* **The panel is a read, in the page's existing panel style.** It wears the
+  Presets menu's own popover classes (`hud-presets-menu`, `-title`, `-group`,
+  `-head`, `-empty`, `-close`), so there is one panel look, not a second visual
+  language. Three sections: **Answering now** (`/api/models` `current`,
+  `previous` as "before that", and `/api/status` `default_model` only when it
+  differs); **Loaded right now** (`/api/models` `offload.models`, each with
+  `size_mb`, `vram_mb`, `on_gpu_percent`, or the owner's exact sentence "The PC
+  did not say any model is in memory right now."); **Chosen focus preset**
+  (`/api/presets` `chosen_preset` / `chosen_model`, the title from `presets[]`).
+  A failed read says the PC did not answer and changes nothing. Refresh re-reads
+  all three; opening the panel always reads fresh.
+* **The lanes are still routable, from the one list.** The fourth section,
+  **Route the next message**, builds its buttons from the page's own
+  `#lanes .lane` buttons and clicks them, so the Auto / model / cloud lanes the
+  old dropdown offered are all still there and there is still ONE list of lanes.
+  The current lane is marked from the page's own `aria-pressed`, never from the
+  click. It is a route only: no card, no model switch, no install, no new route
+  and no new command.
+* **The read list, widened by exactly one read.** `hud_proxy.rs`'s
+  `allowed_get` gains `/api/models` (a plain GET) and its tests gain the
+  positive pin plus negative pins for `/api/models/switch`, `/install`,
+  `/rollback`, `?recommend=1`, `/api/models/` and `/api/models#a`. Every other
+  read the page already made is unchanged; a plain browser reads the same three
+  routes with `X-Jarvis-Client: hud`.
+* **Not verified here:** the real desktop window and WebView2 painting (no
+  rebuild from this branch), so the owner's own look is still the field test.
+  The two Playwright suites that drive the panel are written but were not run on
+  this machine (Playwright is deliberately not installed).

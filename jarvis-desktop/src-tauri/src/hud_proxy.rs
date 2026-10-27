@@ -42,7 +42,15 @@ use crate::ChatState;
 /// `/api/schedule/act` are NOT here and stay refused; a change goes through
 /// `hud_schedule_add` / `hud_schedule_act`, which hold the same stale-link
 /// rule as the Brain.
-pub const HUD_GET_PATHS: [&str; 8] = [
+///
+/// `/api/models` (2026-10-26, the owner's "Current Models" panel): the model
+/// answering, the previous one and what Ollama really has in memory right now.
+/// These are read-only model/loaded facts the owner asked the HUD to show, and
+/// this is the LIST read only: `/api/models/switch`, `/api/models/install` and
+/// `/api/models/rollback` are NOT here and stay refused (a switch is a change
+/// with its card, never a read), and `?recommend=1` is not a path the page
+/// asks for, so the catalogue fetch stays off this window too.
+pub const HUD_GET_PATHS: [&str; 9] = [
     "/api/status",
     "/api/graph",
     "/api/pending",
@@ -54,6 +62,9 @@ pub const HUD_GET_PATHS: [&str; 8] = [
     // the cards the host measured; filling/cancelling are the two shell
     // commands in hud_secret_handoff.rs, never the page's own POSTs.
     "/api/secret-handoff/pending",
+    // The Current Models panel's model/loaded facts (2026-10-26): a plain
+    // GET, read-only, no card and no switch - see the doc comment above.
+    "/api/models",
 ];
 
 /// The retrieval trace: `/api/retrieve?q=<the question>`, and nothing else.
@@ -346,6 +357,9 @@ mod tests {
         // The rail's five presets, added 2026-10-21 - and only as a plain
         // GET: the apply is `apply_focus_preset`, never a read.
         assert_eq!(allowed_get("/api/presets").as_deref(), Some("/api/presets"));
+        // The Current Models panel's list read, added 2026-10-26: a plain GET
+        // on the exact path, and nothing around it.
+        assert_eq!(allowed_get("/api/models").as_deref(), Some("/api/models"));
         assert_eq!(allowed_get("/api/work/apply"), None);
         assert_eq!(
             allowed_get("/api/retrieve?q=what%20is%20on%20today").as_deref(),
@@ -372,6 +386,14 @@ mod tests {
             "/api/schedule?id=s0123456789",
             "/api/schedule?x=1",
             "/api/schedule/",
+            // The Current Models panel may READ the list and nothing else:
+            // every model write stays refused, and the catalogue query too.
+            "/api/models/switch",
+            "/api/models/install",
+            "/api/models/rollback",
+            "/api/models?recommend=1",
+            "/api/models/",
+            "/api/models#a",
             "http://127.0.0.1:4719/api/status",
             "/api/retrieve",
             "/api/retrieve?q=",
