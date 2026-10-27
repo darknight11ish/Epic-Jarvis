@@ -746,9 +746,6 @@ def t_the_backend_behind_check():
           R.behind({"keys": full["keys"]}, full)["behind"] is False, full)
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
 
 # ================================== 7. the universal-control pass (2026-10-22)
 #
@@ -805,13 +802,29 @@ def t_every_choice_setting_resolves_its_options_and_reaches_its_own_setter():
         check(f"{c.key} has at least two named choices", len(options) >= 2, options)
         check(f"{c.key}'s setter is this registry's own (no copied path)",
               getattr(c.set, "__module__", "") == "jarvis_settings_registry", c.set)
+        # THESE CHECKS HAD NEVER RUN until 2026-10-26: they sat after the file's
+        # `if __name__ == "__main__"` block, so a script run - the way
+        # run_suites.py runs a suite - never defined them. Moving that block to
+        # the end of the file is what surfaced the three stale expectations
+        # below; each is repaired to the grammar as it really is, never weakened.
         for value_word, value in list(options.items())[:3]:
             phrase = f"set {c.names[0]} to {value_word}"
             got = Q.match(phrase)
+            # THREE real grammars can own this sentence since 2026-10-22, and
+            # every one of them changes the SAME setting: `settings_choice` (the
+            # named-choice table), `control_set` (the generic control/field
+            # grammar, which names the voice, the captcha hand-off and the focus
+            # preset) and `personality_set` (the older personality grammar,
+            # which owns "set the personality to X"). Accept whichever wins, and
+            # insist it carries THIS setting and THIS value - never another one.
+            if got is not None and got.name == "personality_set":
+                check(f"{phrase!r} resolves to personality={value!r}",
+                      c.key == "personality" and got.f.get("personality") == value, got)
+                continue
             check(f"{phrase!r} resolves to {c.key}",
-                  got is not None and got.name == "settings_choice"
-                  and got.f.get("key") == c.key, got)
-            if got is None or got.name != "settings_choice":
+                  got is not None and got.name in ("settings_choice", "control_set")
+                  and got.f.get("key") == c.key and got.f.get("value") == value, got)
+            if got is None or got.name not in ("settings_choice", "control_set"):
                 continue
             calls = []
 
@@ -823,8 +836,12 @@ def t_every_choice_setting_resolves_its_options_and_reaches_its_own_setter():
             saved = R.CHOICE_SETTINGS
             R.CHOICE_SETTINGS = tuple(swapped if x.key == c.key else x for x in saved)
             try:
-                out = Q._run_settings_choice(
-                    {"key": c.key, "value": got.f["value"]}, "peer-b", False)
+                if got.name == "control_set":
+                    out = Q._run_control_set({"key": c.key, "value": got.f["value"]},
+                                             "peer-b", False)
+                else:
+                    out = Q._run_settings_choice({"key": c.key, "value": got.f["value"]},
+                                                 "peer-b", False)
             finally:
                 R.CHOICE_SETTINGS = saved
             check(f"...and dispatch calls {c.key}'s own setter with the value",
@@ -834,13 +851,30 @@ def t_every_choice_setting_resolves_its_options_and_reaches_its_own_setter():
                   out is not None and out.reply == "spy", out)
         bad = Q.match(f"set {c.names[0]} to zzzz-not-a-real-choice")
         check(f"{c.key}: an unknown value is a refusal, not a guess",
-              bad is not None and bad.name == "settings_choice_bad", bad)
+              bad is not None and bad.name in ("settings_choice_bad", "control_bad"), bad)
+        refused = None
         if bad is not None and bad.name == "settings_choice_bad":
             refused = Q._run_settings_choice_bad(bad.f)
-            first = sorted(options)[0]
-            check(f"{c.key}: the refusal names the real options",
-                  refused is not None and first in refused.reply.lower()
-                  and "not one of the choices" in refused.reply, refused.reply if refused else None)
+        elif bad is not None and bad.name == "control_bad":
+            refused = Q._run_control_bad(bad.f)
+        if bad is not None and bad.name == "control_bad" and not bad.f.get("field"):
+            # A control with MORE THAN ONE field (the captcha hand-off) cannot
+            # answer with values: the value may belong to either field, so the
+            # honest answer names the fields. The values belong to a field, and
+            # `control_bad` answers with them once one is named.
+            fields = [row.field for row in R.fields_for_control(bad.f.get("control"))]
+            check(f"{c.key}: an unrecognised value names the fields to choose from",
+                  refused is not None and all(f in refused.reply for f in fields),
+                  (fields, refused.reply if refused else None))
+            ask = Q.match(f"what are the choices for {c.names[0]}")
+            check(f"{c.key}: 'what are the choices' answers without changing anything",
+                  ask is not None and ask.name == "settings_choice_help", ask)
+            continue
+        first = sorted(options)[0]
+        check(f"{c.key}: the refusal names the real options",
+              refused is not None and first in refused.reply.lower()
+              and "not one of the" in refused.reply.lower(),
+              refused.reply if refused else None)
         ask = Q.match(f"what are the choices for {c.names[0]}")
         check(f"{c.key}: 'what are the choices' answers without changing anything",
               ask is not None and ask.name == "settings_choice_help", ask)
@@ -864,14 +898,43 @@ def t_the_deliberate_open_only_switches_stay_unreachable():
 def t_the_new_controls_do_not_branch_on_which_client_asked():
     """The backend never reads a client kind: the same phrase, the same setter,
     the same gate on both apps (the app is told apart only by peer/local, which
-    the setters already receive)."""
+    the setters already receive).
+
+    READ AS CODE, NOT AS TEXT (2026-10-26). This used to scan the source for the
+    two names, so a DOCSTRING that explains why per-app wording is not done
+    ("would need the backend to read `X-Jarvis-Client`") failed the check while
+    no code read anything. It now walks the syntax tree and ignores docstrings,
+    which is the claim the test is actually making."""
+    import ast
     import inspect
     import jarvis_settings_registry as R
     repo = Path(__file__).resolve().parents[1]
+
+    def _code_mentions(tree, needle: str) -> bool:
+        docstrings = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                                 ast.ClassDef)):
+                body = getattr(node, "body", [])
+                if (body and isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, ast.Constant)
+                        and isinstance(body[0].value.value, str)):
+                    docstrings.add(id(body[0].value))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and id(node) not in docstrings and needle in node.value):
+                return True
+            if isinstance(node, ast.Name) and node.id == needle:
+                return True
+            if isinstance(node, ast.Attribute) and node.attr == needle:
+                return True
+        return False
+
     for name in ("jarvis_settings_registry.py", "jarvis_quick.py"):
-        text = (repo / "backend" / name).read_text(encoding="utf-8")
-        check(f"{name} does not branch on the client kind",
-              "X-Jarvis-Client" not in text and "client_kind" not in text, name)
+        tree = ast.parse((repo / "backend" / name).read_text(encoding="utf-8"))
+        for needle in ("X-Jarvis-Client", "client_kind"):
+            check(f"{name} does not branch on the client kind ({needle})",
+                  not _code_mentions(tree, needle), needle)
     for key in ("chat_history", "write_like_me", "big_model", "second_card_combined"):
         setting = next(b for b in R.BOOL_SETTINGS if b.key == key)
         params = inspect.signature(setting.set).parameters
@@ -1020,3 +1083,259 @@ def t_the_two_settings_only_exceptions_are_refused_in_plain_words():
           "chat_keep_days" not in {c.key for c in R.CHOICE_SETTINGS}
           and "chat history" not in R.CONTROL_FIELDS,
           [c.key for c in R.CHOICE_SETTINGS])
+
+
+# ================================== 9. the two settings outside the tables
+#
+# 2026-10-26. The PC's own "hey Jarvis" switch and which browser Jarvis uses
+# are real routes, but they are not BOOL_SETTINGS/CHOICE_SETTINGS rows (the
+# contract pins those keys, and the desktop draws the wake word as a button,
+# not a toggle). They are reachable by asking all the same, and that is what
+# this section proves - phrases, values, refusals and the honest count.
+
+def t_the_wake_word_changes_by_asking_and_says_whether_it_asked():
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    for phrase, want_on in (
+            ("turn on the wake word", True),
+            ("turn the wake word on", True),
+            ("enable the wake word", True),
+            ("turn off the wake word", False),
+            ("turn the wake word off", False),
+            ("disable the wake word", False)):
+        got = Q.match(phrase)
+        check(f"{phrase!r} changes the wake word",
+              got is not None and got.name == "settings_wake_word"
+              and got.f.get("on") is want_on, got)
+
+    calls = []
+
+    def spy(on, *, peer=None, local=None):
+        calls.append((bool(on), peer, local))
+        return R.Outcome(True, "Approve the card on your PC or phone to turn it "
+                               "on. Nothing changes until you do.", waiting=bool(on))
+
+    real = R.set_wake_word
+    R.set_wake_word = spy
+    try:
+        off = Q._run_settings_wake_word({"on": False}, "peer-w", True)
+        on = Q._run_settings_wake_word({"on": True}, "peer-w", True)
+    finally:
+        R.set_wake_word = real
+    check("the runner calls the setting's own setter, with the request's peer/local",
+          calls == [(False, "peer-w", True), (True, "peer-w", True)], calls)
+    check("turning it ON repeats the module's own 'waiting for the card' words",
+          on is not None and "Nothing changes until you do" in on.reply, on)
+    check("turning it OFF repeats the module's own words too",
+          off is not None and "Approve the card" in off.reply, off)
+
+
+def t_the_wake_words_own_title_points_at_the_working_phrase():
+    """The feature's own TITLE used to get the false "Command-Only" sentence
+    (review of 2026-10-26).
+
+    `jarvis_feature_guide.switch_target` cannot see a switch for the wake-word
+    row - its switch is not a BoolSetting - so "turn on Say "Hey Jarvis"" fell
+    to the old refusal, which said the ability is Command-Only and "there is no
+    fixed sentence for it" while "turn on the wake word" does work. The row now
+    names that phrase instead, and changes nothing."""
+    import jarvis_quick as Q
+    for verb in ("turn on", "turn off"):
+        phrase = f'{verb} Say "Hey Jarvis"'
+        got = Q.match(phrase)
+        words = str(((got.f or {}) if got is not None else {}).get("words") or "")
+        check(f"{phrase!r} names the real phrase, not the Command-Only sentence",
+              got is not None and got.name == "feature_switch_refused"
+              and "turn on the wake word" in words and "Command-Only" not in words,
+              got)
+    # The phrase the refusal points at is the real control, so the pointer is
+    # true rather than another sentence with nothing behind it.
+    got = Q.match("turn on the wake word")
+    check("...and the phrase it names really changes the wake word",
+          got is not None and got.name == "settings_wake_word"
+          and got.f.get("on") is True, got)
+
+
+def t_which_browser_jarvis_uses_changes_by_asking():
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    for phrase, want in (
+            ("set the browser to headless", "headless"),
+            ("set the browser mode to automatic", "auto"),
+            ("change the browser engine to visible", "visible"),
+            ("use the windowless browser", "headless"),
+            ("only use the visible browser", "visible")):
+        got = Q.match(phrase)
+        check(f"{phrase!r} picks {want}",
+              got is not None and got.name == "settings_browser_mode"
+              and got.f.get("mode") == want, got)
+    bad = Q.match("set the browser to the kitchen sink")
+    check("a browser Jarvis does not have is a refusal, not a guess",
+          bad is not None and bad.name == "settings_browser_mode_bad", bad)
+    refused = Q._run_settings_browser_mode_bad(bad.f if bad else {})
+    check("the refusal names the three real ones",
+          refused is not None and "headless" in refused.reply
+          and "visible" in refused.reply and "automatic" in refused.reply,
+          refused.reply if refused else None)
+    check("...and says nothing was changed",
+          refused is not None and "not one of the browsers" in refused.reply,
+          refused.reply if refused else None)
+
+    calls = []
+
+    def spy(mode, *, peer=None, local=None):
+        calls.append((mode, peer, local))
+        return R.Outcome(True, "Done - which browser Jarvis uses is now the "
+                               "windowless browser when it can run. That is a PC "
+                               "setting, so both apps follow it, and it needed no card.")
+
+    real = R.set_browser_mode
+    R.set_browser_mode = spy
+    try:
+        out = Q._run_settings_browser_mode({"mode": "headless"}, "peer-b", False)
+    finally:
+        R.set_browser_mode = real
+    check("the runner calls the setting's own setter",
+          calls == [("headless", "peer-b", False)], calls)
+    check("a success says what changed, that both apps follow it, and that no card was needed",
+          out is not None and "which browser Jarvis uses" in out.reply
+          and "both apps" in out.reply and "no card" in out.reply,
+          out.reply if out else None)
+
+
+def t_the_honest_count_includes_them():
+    import jarvis_settings_registry as R
+    data = R.changeable_settings()
+    words = data["words"].lower()
+    check("the answer to 'what can I change?' names the wake word",
+          "wake word" in words, data["words"][:400])
+    check("...and which browser Jarvis uses",
+          "which browser jarvis uses" in words, data["words"][:400])
+    check("the count is at least the switches + the two families",
+          data["count"] >= len(R.BOOL_SETTINGS) + 2, data["count"])
+    check("the number in the sentence is the measured number",
+          f"You can change {data['count']} settings" in data["words"],
+          data["words"][:120])
+
+
+def t_every_registry_row_resolves_from_a_natural_phrase():
+    """A setting added to any table WITHOUT a phrase that reaches it fails here.
+
+    THE COMPLETENESS CHECK the machinery never had: the tables are what
+    "what can I change?" reads, and a row nothing can reach is a promise the
+    owner will try and be refused. One natural phrase per row (its own first
+    name), through the real matcher, and the intent must carry that row's own
+    key and value - a phrase reaching a DIFFERENT setting is worse than none."""
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    for b in R.BOOL_SETTINGS:
+        for want_on, verb in ((True, "turn on"), (False, "turn off")):
+            phrase = f"{verb} {b.names[0]}"
+            got = Q.match(phrase)
+            check(f"{phrase!r} reaches the {b.key} switch",
+                  got is not None and got.name in ("settings_bool", "feature_switch")
+                  and got.f.get("key") == b.key and got.f.get("on") is want_on, got)
+    for c in R.CHOICE_SETTINGS:
+        options = c.options()
+        check(f"{c.key} declares at least one value to try", bool(options), c.key)
+        value_word = sorted(options)[0] if options else ""
+        phrase = f"set {c.names[0]} to {value_word}"
+        got = Q.match(phrase)
+        ok = got is not None and (
+            (got.name in ("settings_choice", "control_set")
+             and got.f.get("key") == c.key)
+            or (got.name == "personality_set" and c.key == "personality"
+                and got.f.get("personality") == options[value_word]))
+        check(f"{phrase!r} reaches {c.key}", ok, got)
+    for action, names in R.asks_first_targets().items():
+        phrase = f"stop asking before {names[0]}"
+        got = Q.match(phrase)
+        check(f"{phrase!r} reaches asks-first {action}",
+              got is not None and got.name == "settings_asks_first"
+              and got.f.get("action") == action and got.f.get("ask") is False, got)
+    for tool, names in R.tool_targets().items():
+        phrase = f"let the ai model read {names[0]}"
+        got = Q.match(phrase)
+        check(f"{phrase!r} reaches the {tool} tool switch",
+              got is not None and got.name == "settings_tool"
+              and got.f.get("tool") == tool and got.f.get("on") is True, got)
+    # The two that are not table rows (this section's own subject).
+    for phrase, want_on in (("turn on the wake word", True),
+                            ("turn off the wake word", False)):
+        got = Q.match(phrase)
+        check(f"{phrase!r} reaches the wake-word switch",
+              got is not None and got.name == "settings_wake_word"
+              and got.f.get("on") is want_on, got)
+    for phrase, want in (("set the browser to headless", "headless"),
+                         ("set the browser to visible", "visible"),
+                         ("set the browser to automatic", "auto")):
+        got = Q.match(phrase)
+        check(f"{phrase!r} reaches which-browser mode {want}",
+              got is not None and got.name == "settings_browser_mode"
+              and got.f.get("mode") == want, got)
+
+
+def t_a_page_only_switch_is_not_stolen_by_the_tolerant_matcher():
+    """THE REGRESSION THIS FOUND (2026-10-26, in a suite that had never run).
+
+    "turn on windows hello for memory lists and chat history" is an exact
+    NOT_BY_ASKING name - a real switch this backend has no route for - and the
+    word-tolerant switch matcher read "chat history" inside it and would have
+    switched the setting on. The page-only answer is decided first now, and
+    nothing is changed.
+
+    AND THE FILLER FORMS, from the review of the same day: the first fix used
+    the EXACT page-only lookup, so one natural filler word defeated it again -
+    "turn off the windows hello for memory lists and chat history setting" fell
+    to the tolerant switch matcher and turned `chat_history` off AT ONCE, with
+    no card. The page-only lookup now strips the same filler the switch matcher
+    strips, and it is checked BEFORE any switch - so every tail below is the
+    named refusal, and none of them carries a switch key."""
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    for name in ("windows hello for memory lists and chat history",
+                 "windows hello for memory lists"):
+        for verb in ("turn on", "turn off"):
+            # "setting" and "please" are the matcher's own filler words;
+            # "now" is NOT filler, so it exercises the containment rule (the
+            # request contains the whole page-only name).
+            for tail in ("", " setting", " please", " now"):
+                phrase = f"{verb} {name}{tail}"
+                got = Q.match(phrase)
+                check(f"{phrase!r} is answered as a page-only setting",
+                      got is not None and got.name == "settings_not_by_asking", got)
+                check(f"...and it is not read as the switch whose words it contains",
+                      got is None or got.f.get("key") != "chat_history", got)
+    check("the tolerant page-only lookup strips the switch matcher's own filler",
+          R.find_not_by_asking_words(
+              "the windows hello for memory lists and chat history setting")
+          == "sec-private",
+          R.find_not_by_asking_words(
+              "the windows hello for memory lists and chat history setting"))
+    check("...and a different page-only row with filler is still that row",
+          R.find_not_by_asking_words("the app lock please") == "sec-app-lock",
+          R.find_not_by_asking_words("the app lock please"))
+    got = Q.match("turn off the app lock please")
+    check("a page-only name plus filler answers as the page, not a switch",
+          got is not None and got.name == "settings_not_by_asking"
+          and got.f.get("dom_id") == "sec-app-lock", got)
+    said = R.cannot_change_setting_words(
+        "windows hello for memory lists and chat history setting")
+    check("the tool's refusal names the page and the row, never the whole list",
+          "Settings" in said
+          and "Windows Hello for memory lists and chat history" in said
+          and "You can change" not in said, said)
+    # The tolerant matcher still works for the owner's own words (D5), so the
+    # fix did not take a working phrase away.
+    got = Q.match("turn on learning in the background")
+    check("the owner's own words still reach background learning",
+          got is not None and got.name == "settings_bool"
+          and got.f.get("key") == "background_learning" and got.f.get("on") is True,
+          got)
+    check("that phrase really was the tolerant matcher's",
+          R.find_bool_setting("learning in the background") is None
+          and R.find_bool_setting_words("learning in the background") is not None)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

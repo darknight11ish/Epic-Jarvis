@@ -489,6 +489,17 @@ _VOICE_SPEED = re.compile(
     r"(?P<way>faster|more\s+quickly|slower|more\s+slowly|normally|normal)")
 _VOICE_SPEED_AT_NORMAL = re.compile(
     r"(?:speak|talk)\s+at\s+(?:the\s+)?normal\s+speed")
+#: "make the voice faster", "make Jarvis speak faster" (2026-10-26). The same
+#: setting the reflex above changes - a wording, not a second path - added
+#: because the owner's most natural sentence ("make the voice faster") missed
+#: the "speak faster" form and went to the model, which has no voice control.
+_VOICE_SPEED_MAKE = re.compile(
+    r"(?:make|get)\s+(?:the\s+|your\s+)?(?:voice|speaking|speech)\s+"
+    r"(?:a\s+(?:bit|little)\s+)?"
+    r"(?P<way>faster|more\s+quickly|slower|more\s+slowly)"
+    r"|(?:make|get)\s+(?:jarvis|it)\s+(?:to\s+)?(?:speak|talk)\s+"
+    r"(?:a\s+(?:bit|little)\s+)?"
+    r"(?P<way2>faster|more\s+quickly|slower|more\s+slowly)")
 _SPEED_WAY = {"faster": "faster", "more quickly": "faster",
               "slower": "slower", "more slowly": "slower",
               "normally": "normal", "normal": "normal"}
@@ -500,6 +511,11 @@ def _voice_speed(s: str) -> Optional[Intent]:
         return Intent("voice_speed", {"speed": _SPEED_WAY[m.group("way")]})
     if _VOICE_SPEED_AT_NORMAL.fullmatch(s):
         return Intent("voice_speed", {"speed": "normal"})
+    m = _VOICE_SPEED_MAKE.fullmatch(s)
+    if m:
+        way = m.group("way") or m.group("way2") or ""
+        if way in _SPEED_WAY:
+            return Intent("voice_speed", {"speed": _SPEED_WAY[way]})
     return None
 
 
@@ -3542,6 +3558,31 @@ _SET_CHOICE_HELP = re.compile(
     r"(?:what\s+are\s+)?(?:the\s+)?(?:choices|options)\s+for\s+(?:the\s+|my\s+|a\s+)?(.+)"
     r"|what\s+can\s+i\s+set\s+(?:the\s+|my\s+|a\s+)?(.+?)\s+to")
 
+#: The PC's own "hey Jarvis" switch (jarvis_speech.set_wake_enabled, POST
+#: /api/voice/wake). OFF at once; ON is ONE approval card that either app's
+#: approval list can answer. It is NOT a BOOL_SETTINGS row - the desktop draws
+#: it as a status line and a button in the Voice card, not a toggle - so it has
+#: its own intent, the same shape settings_budget and settings_card_mode use.
+_WAKE_WORD = re.compile(
+    r"(?:turn|switch)\s+(?P<on>on|off)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?:wake\s+word|hey\s+jarvis(?:\s+wake\s+word)?)"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+|your\s+)?(?:wake\s+word|hey\s+jarvis)"
+    r"\s+(?P<on2>on|off)"
+    r"|(?P<enable>enable|disable)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?:wake\s+word|hey\s+jarvis(?:\s+wake\s+word)?)")
+
+#: Which browser Jarvis uses (jarvis_browser_engine.MODES): automatic, the
+#: visible browser, or the windowless one. A local behaviour choice with its
+#: own route (POST /api/browser/engine {"mode": ...}) and NO card: it changes
+#: which engine does the work, never what Jarvis may reach or approve.
+_BROWSER_MODE_TO = re.compile(
+    r"(?:set|change|switch|put|make)\s+(?:the\s+|my\s+)?"
+    r"(?:default\s+)?browser(?:\s+engine)?(?:\s+mode)?\s+to\s+(.+)")
+_BROWSER_MODE_USE = re.compile(
+    r"(?:always\s+|only\s+|just\s+|please\s+)?use\s+(?:the\s+)?"
+    r"(?P<mode>visible|headless|windowless|automatic)\s+browser"
+    r"(?:\s+(?:by\s+default|from\s+now\s+on))?")
+
 #: "What asks first" (jarvis_asks_first.LOOSE): stricter (ask again) or
 #: looser (stop asking - the PC only, one card plus Windows Hello). An
 #: optional "jarvis reads/accesses/checks/writes" is taken off first, so
@@ -3639,6 +3680,30 @@ def _settings_only(s: str) -> Optional[Intent]:
     if _SETTINGS_ONLY_ACCOUNTS.fullmatch(s):
         return Intent("settings_only", {"which": "accounts"})
     return None
+
+
+def _browser_mode_intent(s: str) -> Optional[Intent]:
+    """Which browser Jarvis uses, from a whole sentence (2026-10-26).
+
+    Deterministic like every other setting here: a value the browser does not
+    have is answered with the real three, never guessed at and never handed to
+    the model, which has no control for it."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    m = _BROWSER_MODE_TO.fullmatch(s)
+    if m:
+        value = m.group(1)
+    else:
+        m = _BROWSER_MODE_USE.fullmatch(s)
+        if not m:
+            return None
+        value = m.group("mode")
+    mode = R.browser_mode_from_words(value)
+    if mode is None:
+        return Intent("settings_browser_mode_bad", {"words": value})
+    return Intent("settings_browser_mode", {"mode": mode})
 
 
 def _settings_control(s: str) -> Optional[Intent]:
@@ -3764,6 +3829,20 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     cards = _card_mode_intent(s)
     if cards is not None:
         return cards
+    # The PC's own "hey Jarvis" switch and which browser Jarvis uses
+    # (2026-10-26). Neither is a BOOL_SETTINGS/CHOICE_SETTINGS row - see
+    # jarvis_settings_registry's own block for why - so neither is reachable
+    # through the blocks below; both are real routes with their own setters,
+    # and both answer here rather than falling to the model, which has no
+    # control for either.
+    m = _WAKE_WORD.fullmatch(s)
+    if m:
+        on = ((m.group("on") or m.group("on2") or "") == "on"
+              or (m.group("enable") or "") == "enable")
+        return Intent("settings_wake_word", {"on": bool(on)})
+    got = _browser_mode_intent(s)
+    if got is not None:
+        return got
     m = _TOOL_ON.fullmatch(s) or _TOOL_OFF.fullmatch(s)
     if m:
         tool = R.find_tool_target(m.group(1))
@@ -3784,6 +3863,20 @@ def _settings_adjust(s: str) -> Optional[Intent]:
             on, name = True, g[3]
         else:                           # "disable <name>"
             on, name = False, g[5]
+        # THE PAGE-ONLY ANSWER IS DECIDED FIRST, ON THE SAME FILLER-TOLERANT
+        # WORDS THE SWITCH MATCHER USES (2026-10-26). This guard used to be the
+        # exact `find_not_by_asking`, so one natural filler word defeated it:
+        # "turn off the windows hello for memory lists and chat history
+        # setting" missed the page-only row, fell to `find_bool_setting_words`,
+        # and that matcher read `chat_history` inside the SAME words - turning
+        # chat-history retention off at once, with no card, for a switch this
+        # backend has no route for. `find_not_by_asking_words` strips the same
+        # filler the switch matcher strips, so the named refusal is what filler
+        # phrasings get, and it runs BEFORE any switch is resolved. No second
+        # exact check is needed below: the tolerant lookup is a superset.
+        dom_id = R.find_not_by_asking_words(name)
+        if dom_id is not None:
+            return Intent("settings_not_by_asking", {"dom_id": dom_id})
         setting = R.find_bool_setting(name)
         if setting is None:
             # THE OWNER'S OWN WORDS FOR A REAL SWITCH (D5, the live campaign of
@@ -3804,13 +3897,6 @@ def _settings_adjust(s: str) -> Optional[Intent]:
             setting = R.find_bool_setting_words(name)
         if setting is not None:
             return Intent("settings_bool", {"key": setting.key, "on": on})
-        # The name is a real switch on the Settings page that this backend has
-        # no route to change (2026-10-13). Answer in words rather than letting
-        # it fall to the model, which has no settings tool and would sound as
-        # if it had done something. Nothing is changed and no card is raised.
-        dom_id = R.find_not_by_asking(name)
-        if dom_id is not None:
-            return Intent("settings_not_by_asking", {"dom_id": dom_id})
     # The owner's two Settings-only exceptions are refused before anything
     # else can read them as a setting (ruling Q3.3, 2026-10-22).
     got = _settings_only(s)
@@ -4140,6 +4226,46 @@ def _feature_howto_intent(raw, target: str, on: bool, explicit: bool = False):
     return None
 
 
+def _feature_own_controls(row: dict) -> tuple:
+    """`(switches, choices)` - the real settings the feature's own control table
+    names, in the order that table lists them.
+
+    WHY THIS EXISTS (2026-10-26). `jarvis_feature_guide.switch_target` links a
+    feature to its switches through the feature list's own `covers`
+    ("settings.<section id>"), and 124 of the 140 rows name no section that
+    owns a switch (measured with FG.switches_for on every row). So "turn off
+    Write like me" - a switch that exists, with its own route - was answered
+    "that is a Command-Only ability ... there is no fixed sentence for it".
+    The guide's OWN_CONTROLS/EXTRA_CONTROLS tables already carry the link the
+    covers miss (the same tables the feature-controls matrix is built from),
+    so this reads them rather than inventing a second list."""
+    try:
+        import jarvis_feature_guide as FG
+        import jarvis_settings_registry as R
+    except Exception:
+        return (), ()
+    fid = str((row or {}).get("id") or "")
+    keys = list((getattr(FG, "EXTRA_CONTROLS", {}) or {}).get(fid, ()))
+    if not keys:
+        own = (getattr(FG, "OWN_CONTROLS", {}) or {}).get(fid) or ()
+        keys = list(own[0]) if own else []
+    # PLUS whatever the guide's own `covers` link already finds, so the two
+    # links ADD UP instead of one overruling the other. Custom voices is the
+    # case that showed it: its own-control table names the voice CHOICE, while
+    # its covers name the two switches beside it - and the owner means all
+    # three when they say "custom voices" (2026-10-26).
+    try:
+        for found in FG.switches_for(row):
+            if found.key not in keys:
+                keys.append(found.key)
+    except Exception:
+        pass
+    bools = {b.key: b for b in R.BOOL_SETTINGS}
+    choices = {c.key: c for c in R.CHOICE_SETTINGS}
+    return (tuple(bools[k] for k in keys if k in bools),
+            tuple(choices[k] for k in keys if k in choices))
+
+
 def _feature_switch_intent(raw, target: str, on: bool, explicit: bool = False):
     # The EXACT name first, before any context word is taken off: four features
     # have "Jarvis" in their own name ("How Jarvis talks", "Floating Jarvis",
@@ -4159,9 +4285,47 @@ def _feature_switch_intent(raw, target: str, on: bool, explicit: bool = False):
         setting, why = FG.switch_target(clean)
     except Exception:
         return None
-    if setting is None:
-        return Intent("feature_switch_refused", {"words": why})
-    return Intent("feature_switch", {"key": setting.key, "on": bool(on)})
+    if setting is not None:
+        return Intent("feature_switch", {"key": setting.key, "on": bool(on)})
+    # THE LINK `switch_target` COULD NOT SEE (2026-10-26). Its own table is the
+    # truth about which settings a feature owns; one switch means switchable by
+    # the feature's own name, several means say which, and a choice means say
+    # how a choice is asked for. Never a guess, and never the "Command-Only"
+    # sentence for a feature that really does have a control.
+    switches, choices = _feature_own_controls(row)
+    title = str(row.get("title") or "That feature")
+    if len(switches) == 1:
+        return Intent("feature_switch", {"key": switches[0].key, "on": bool(on)})
+    if len(switches) > 1:
+        # The same shape jarvis_feature_guide.switch_target writes when its own
+        # link CAN see them: name every one, so the next sentence can name one.
+        names = "; ".join((s.names[0] if s.names else s.key) for s in switches)
+        return Intent("feature_switch_refused", {"words": (
+            f"{title}: more than one switch - {names}. Say \"turn on <one of "
+            f"those>\" for the one you mean.")})
+    if choices:
+        named = choices[0].names[0] if choices[0].names else choices[0].key
+        return Intent("feature_switch_refused", {"words": (
+            f"{title} is not simply on or off - it is a choice. Say \"set "
+            f"{named} to <one of its values>\", or ask \"what are the choices "
+            f"for {named}?\" and I will read them out.")})
+    # THE WAKE WORD'S OWN TITLE (2026-10-26). Its switch is NOT a BoolSetting -
+    # it is the PC's "hey Jarvis" switch, `jarvis_speech.set_wake_enabled` - so
+    # the guide's control tables name no key for this row, and the fall-through
+    # below answered the false "Command-Only ... there is no fixed sentence for
+    # it" sentence for a feature that HAS a working phrase. Name that phrase
+    # instead. (Mapping the title straight to `settings_wake_word` was the
+    # other option; not taken here because the feature directory and
+    # contract/feature-controls.json record this row as planned, and changing
+    # them is a separate, contract-owned edit - naming the real phrase is
+    # enough to stop the false sentence, and it never changes anything.)
+    if str(row.get("id") or "") == "wake-word":
+        return Intent("feature_switch_refused", {"words": (
+            f"{title} is the PC's \"hey Jarvis\" switch. Say \"turn on the wake "
+            f"word\" or \"turn off the wake word\" and it goes through that "
+            f"switch's own rule: turning it on asks on one card, and turning "
+            f"it off is instant.")})
+    return Intent("feature_switch_refused", {"words": why})
 
 
 #: "from your feature guide", "in the guide", "according to the feature
@@ -5518,6 +5682,36 @@ def _run_settings_only(f: dict) -> Result:
     return Result(R.settings_only_words(f.get("which") or "accounts"), "settings_only")
 
 
+def _run_settings_wake_word(f: dict, peer, local) -> Result:
+    """"Turn on/off the wake word" (2026-10-26).
+
+    The setter is `jarvis_speech.set_wake_enabled`, the exact function
+    POST /api/voice/wake calls, so the approval card is the module's own one
+    and nothing changes until a person answers it. `peer`/`local` are passed on
+    the same way every other setting's are, so a PC-only rule (if the module
+    ever grows one) is the module's own decision, never a second one here."""
+    import jarvis_settings_registry as R
+    out = R.set_wake_word(bool(f.get("on")), peer=peer, local=local)
+    return Result(out.said, "settings_wake_word")
+
+
+def _run_settings_browser_mode(f: dict, peer, local) -> Result:
+    """"Set the browser to headless" (2026-10-26).
+
+    The setter is `jarvis_browser_engine.handle_post({"mode": ...})`, the exact
+    function POST /api/browser/engine calls. It needs no card either way."""
+    import jarvis_settings_registry as R
+    out = R.set_browser_mode(str(f.get("mode") or ""), peer=peer, local=local)
+    return Result(out.said, "settings_browser_mode")
+
+
+def _run_settings_browser_mode_bad(f: dict) -> Result:
+    """A browser that is not one of the three: say the real ones, change nothing."""
+    import jarvis_settings_registry as R
+    return Result(R.browser_mode_bad_words(str(f.get("words") or "")),
+                  "settings_browser_mode_bad")
+
+
 def _run_control_set(f: dict, peer, local) -> Result:
     """The one generic multi-field setter: the SAME ChoiceSetting.set the
     Settings control calls - no second mutation path."""
@@ -5801,6 +5995,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_choice_help(f)
     if n == "settings_only":
         return _run_settings_only(f)
+    if n == "settings_wake_word":
+        return _run_settings_wake_word(f, peer, local)
+    if n == "settings_browser_mode":
+        return _run_settings_browser_mode(f, peer, local)
+    if n == "settings_browser_mode_bad":
+        return _run_settings_browser_mode_bad(f)
     if n == "control_set":
         return _run_control_set(f, peer, local)
     if n == "control_ask":
@@ -6289,6 +6489,7 @@ READ_ONLY_INTENTS = frozenset({
     "personality_status", "project_log",
     "reach_list", "sayable_help", "screen_status", "search_explain", "settings_choice_bad",
     "settings_choice_help", "settings_help", "settings_not_by_asking", "settings_only",
+    "settings_browser_mode_bad",
     "settings_open", "settings_unknown", "tellme_help", "thinking_status", "thinking_when",
     "time_now", "timer_status", "today_list", "todo_list", "weather_now", "wellbeing_me",
     "wellbeing_now", "where_put"})

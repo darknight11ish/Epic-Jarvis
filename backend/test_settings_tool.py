@@ -190,12 +190,22 @@ def t_the_tool_exists_and_is_offered_only_when_enabled():
     check("it is NOT offered when nothing names it",
           AG.SETTINGS_TOOL not in AG.offered_tools({"calculator"}))
     fn = AG.TOOLS[AG.SETTINGS_TOOL].schema()["function"]
-    check("it takes a setting and an on/off value",
+    check("it takes a setting and a value",
           fn["parameters"].get("required") == ["setting", "value"],
           repr(fn["parameters"].get("required")))
-    check("the value can only be on or off",
-          fn["parameters"]["properties"]["value"].get("enum") == ["on", "off"],
+    # 2026-10-26: the value is a FREE string now. It used to be enum ["on",
+    # "off"], which made the tool incapable of a setting whose value is a NAME
+    # (the voice speed, the personality, which browser Jarvis uses) even though
+    # the phrase grammar changes all of them. The per-setting check moved into
+    # _settings_call, which is where the setting's own list is known - and a
+    # switch with anything but on/off is still refused there.
+    check("the value is a free string, so a named choice can be expressed",
+          fn["parameters"]["properties"]["value"].get("type") == "string"
+          and "enum" not in fn["parameters"]["properties"]["value"],
           repr(fn["parameters"]["properties"]["value"]))
+    check("its description says on/off for a switch and a name for a choice",
+          "on or off" in fn["parameters"]["properties"]["value"].get("description", ""),
+          repr(fn["parameters"]["properties"]["value"].get("description")))
     check("it has exactly one home (the core, or exactly one group)",
           (1 if AG.SETTINGS_TOOL in AG.CORE_TOOLS else 0)
           + sum(1 for _g, _w, m in AG.TOOL_GROUPS if AG.SETTINGS_TOOL in m) == 1)
@@ -381,6 +391,59 @@ def t_a_setting_that_lives_on_the_page_names_the_page():
     check("it names the Settings screen and the row to use instead",
           "Settings" in err and "App lock" in err, err)
     check("it does not pretend it was done", got.get("changed") is False, repr(got))
+
+
+def t_a_page_only_setting_is_not_reached_by_a_filler_form():
+    """REVIEW FINDING 1 (2026-10-26): one filler word defeated the page-only
+    guard on the TOOL path, and the tool changed a real privacy setting.
+
+    `find_bool_setting_words` strips filler ("setting", "please"), so
+    "the windows hello for memory lists and chat history setting" - a switch
+    this backend has no route for, already named in `NOT_BY_ASKING` - resolved
+    to `chat_history` and the tool called `chat_history.set(False)` AT ONCE,
+    with no card. The page-only lookup now uses the same filler rules and is
+    checked BEFORE any switch is resolved: nothing changes, no card is raised,
+    and the refusal names the Settings page and the row. The exact name is
+    unchanged (it was already refused)."""
+    import dataclasses
+    calls = []
+
+    def spy(on, *, peer=None, local=None):
+        calls.append(bool(on))
+        return R.Outcome(True, "Done.")
+
+    real = R.BOOL_SETTINGS
+    table = tuple(dataclasses.replace(b, set=spy) if b.key == "chat_history" else b
+                  for b in real)
+    try:
+        for phrase in ("windows hello for memory lists and chat history",
+                       "the windows hello for memory lists and chat history setting",
+                       "the windows hello for memory lists and chat history please",
+                       "windows hello for memory lists and chat history now"):
+            got, steps, _events, w = run_tool(phrase, "off", table=table)
+            err = str(got.get("error", ""))
+            check(f"{phrase!r}: no setter is reached", calls == [], repr(calls))
+            check(f"{phrase!r}: nothing is reported as changed",
+                  got.get("changed") is False, repr(got))
+            check(f"{phrase!r}: no card is raised", w.cards == 0, repr(w.cards))
+            check(f"{phrase!r}: it names the Settings page and the row",
+                  "Settings" in err
+                  and "Windows Hello for memory lists and chat history" in err,
+                  err)
+            check(f"{phrase!r}: it is refused, not run",
+                  steps and steps[0].get("ran") is False
+                  and steps[0].get("outcome") == "refused", repr(steps))
+        # The recorder was really installed where the tolerant matcher reads,
+        # so "no setter was reached" is not an empty table talking.
+        check("the recording setter is the table's chat_history row",
+              calls == [] and any(b.key == "chat_history" and b.set is spy
+                                  for b in table))
+    finally:
+        R.BOOL_SETTINGS = real
+    check("the same sentence names the row in the registry's own refusal",
+          "Windows Hello for memory lists and chat history"
+          in R.cannot_change_setting_words(
+              "windows hello for memory lists and chat history setting"))
 
 
 def t_a_bad_value_changes_nothing():
@@ -875,6 +938,92 @@ def t_the_tier_rule_is_untouched_by_the_wording():
           AG.SETTINGS_GATE_ACTION != AG.SETTINGS_TOOL)
 
 
+def t_a_setting_with_named_choices_can_be_changed_too():
+    """2026-10-26: the tool used to resolve switches only.
+
+    A real setting whose value is a NAME - how fast Jarvis speaks, the
+    personality, which browser it uses - was refused here even though the
+    phrase grammar changes all of them. The tool now resolves the setting
+    first and checks the value against that setting's OWN list, so a name it
+    does not have is answered with the real ones and changes nothing."""
+    import dataclasses
+    calls = []
+
+    def spy(chosen, *, peer=None, local=None):
+        calls.append(chosen)
+        return R.Outcome(True, "spy said it changed")
+
+    real = R.CHOICE_SETTINGS
+    base = next(c for c in real if c.key == "voice_speed")
+    R.CHOICE_SETTINGS = tuple(dataclasses.replace(c, set=spy)
+                              if c.key == "voice_speed" else c for c in real)
+    try:
+        got, _steps, _events, _w = run_tool("how fast Jarvis speaks", "faster")
+        check("a named choice resolves from the model's own wording",
+              calls == ["faster"], repr(calls))
+        check("it reports the change, with the setter's own sentence",
+              got.get("changed") is True and got.get("said") == "spy said it changed",
+              repr(got))
+        got, steps, _events, _w = run_tool("how fast Jarvis speaks", "zzz")
+        check("a value the setting does not have changes nothing",
+              calls == ["faster"], repr(calls))
+        check("...and the refusal lists the setting's real choices",
+              "not one of the choices" in str(got.get("error", "")), repr(got))
+        check("...and it is recorded as a refusal, not a run",
+              steps and steps[0].get("ran") is False, repr(steps))
+        got, _steps, _events, _w = run_tool("how fast Jarvis speaks", "on")
+        check("'on' is not a value of a named choice, and is refused the same way",
+              calls == ["faster"] and "not one of the choices" in str(got.get("error", "")),
+              repr(got))
+    finally:
+        R.CHOICE_SETTINGS = real
+
+
+def t_the_wake_word_and_the_browser_mode_are_reachable_by_the_tool():
+    """The two settings that are NOT table rows (2026-10-26).
+
+    They are real switches with an existing route, kept out of
+    BOOL_SETTINGS/CHOICE_SETTINGS because the contract pins those keys. The
+    tool reaches them all the same - otherwise a model restatement of one
+    would be told "I cannot change that by asking" while the phrase grammar
+    changes it, which is the looks-like-failure this tool exists to end."""
+    real_w, real_b = R.set_wake_word, R.set_browser_mode
+    wcalls, bcalls = [], []
+
+    def wake(on, *, peer=None, local=None):
+        wcalls.append(bool(on))
+        return R.Outcome(True, "the wake word is " + ("on" if on else "off"))
+
+    def browser(mode, *, peer=None, local=None):
+        bcalls.append(mode)
+        return R.Outcome(True, "the browser is " + str(mode))
+
+    R.set_wake_word, R.set_browser_mode = wake, browser
+    try:
+        got, _s, _e, _w = run_tool("the wake word", "off")
+        check("the wake word is reachable, and OFF is applied",
+              wcalls == [False] and got.get("changed") is True, repr((wcalls, got)))
+        got, _s, _e, _w = run_tool("hey Jarvis", "on")
+        check("the model's own words reach it too",
+              wcalls == [False, True] and got.get("changed") is True, repr((wcalls, got)))
+        got, _s, _e, _w = run_tool("the wake word", "maybe")
+        check("a value that is not on/off is refused and nothing runs",
+              wcalls == [False, True] and "on" in str(got.get("error", "")),
+              repr((wcalls, got)))
+        got, _s, _e, _w = run_tool("which browser Jarvis uses", "headless")
+        check("which browser Jarvis uses is reachable, by name",
+              bcalls == ["headless"] and got.get("changed") is True, repr((bcalls, got)))
+        got, _s, _e, _w = run_tool("the browser mode", "the windowless one")
+        check("and by the apps' own word for the mode",
+              bcalls == ["headless", "headless"], repr(bcalls))
+        got, _s, _e, _w = run_tool("the browser mode", "zzz")
+        check("an unknown browser is refused with the real ones, changing nothing",
+              bcalls == ["headless", "headless"]
+              and "not one of the browsers" in str(got.get("error", "")), repr(got))
+    finally:
+        R.set_wake_word, R.set_browser_mode = real_w, real_b
+
+
 if __name__ == "__main__":
     for fn in (t_the_tool_exists_and_is_offered_only_when_enabled,
                t_asking_and_speaking_run_the_same_function,
@@ -885,7 +1034,10 @@ if __name__ == "__main__":
                t_a_setter_that_raises_is_contained,
                t_an_unknown_name_changes_nothing_and_raises_no_card,
                t_a_setting_that_lives_on_the_page_names_the_page,
+               t_a_page_only_setting_is_not_reached_by_a_filler_form,
                t_a_bad_value_changes_nothing,
+               t_a_setting_with_named_choices_can_be_changed_too,
+               t_the_wake_word_and_the_browser_mode_are_reachable_by_the_tool,
                t_an_answer_that_has_asked_too_often_changes_nothing,
                t_outside_text_stops_a_setting_change,
                t_conversation_taint_alone_does_not_stop_it,

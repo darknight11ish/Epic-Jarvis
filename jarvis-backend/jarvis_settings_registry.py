@@ -2138,7 +2138,11 @@ def cannot_change_setting_words(words: str = "") -> str:
     asked = " ".join(str(words or "").split())[:80]
     lead = (f'I cannot change "{asked}" by asking.' if asked
             else "I cannot change that by asking.")
-    dom_id = find_not_by_asking(words or "")
+    # THE TOLERANT FORM (2026-10-26), not the exact one. The model restates a
+    # name in its own words ("the windows hello for memory lists and chat
+    # history setting"), and the exact lookup missed it - so the refusal listed
+    # every changeable setting instead of naming the one page the owner meant.
+    dom_id = find_not_by_asking_words(words or "")
     if dom_id is not None:
         return f"{lead} {not_by_asking_sentence(dom_id)}"
     return f"{lead} {changeable_words()}"
@@ -2192,12 +2196,68 @@ NOT_BY_ASKING: dict = {
 
 def find_not_by_asking(words: str) -> Optional[str]:
     """The `SETTINGS_ROWS` id `words` names exactly and cannot be changed by
-    asking, or None. Exact names only, like everything else here."""
+    asking, or None. Exact names only - this is the SPOKEN grammar's lookup,
+    and a half-heard sentence must fall through rather than be answered as a
+    switch nobody named. The model's own wording uses the tolerant form below."""
     bare = _bare(words)
     for dom_id, names in NOT_BY_ASKING.items():
         if any(bare == _bare(n) for n in names):
             return dom_id
     return None
+
+
+def _one_dom(ids) -> Optional[str]:
+    """The single `SETTINGS_ROWS` id `ids` names, or None when that is not
+    exactly one. An ambiguous sentence is REFUSED, never guessed at - the same
+    rule `_one_setting` keeps for the switches."""
+    if len(ids) != 1:
+        return None
+    return next(iter(ids))
+
+
+def find_not_by_asking_words(words: str) -> Optional[str]:
+    """The `SETTINGS_ROWS` id `words` names in the MODEL's own wording, or None.
+
+    THE SAME FILLER RULES `find_bool_setting_words` USES (2026-10-26), and for
+    the same reason. `find_not_by_asking` above is exact, so one natural filler
+    word defeated it - "turn off the windows hello for memory lists and chat
+    history setting" missed the page-only row, fell to the tolerant SWITCH
+    matcher, and that matcher read `chat_history` inside the same words and
+    turned chat-history retention off AT ONCE, with no card. The owner had named
+    a switch this backend has no route for, and a privacy setting changed
+    instead. So the page-only lookup gets the model's own rules too:
+
+      1. the stripped words ARE a stripped name, exactly; else
+      2. the request CONTAINS every word of one name - one direction only, the
+         request being more specific than the name, exactly as the switch
+         matcher's own safety comment explains.
+
+    Ambiguity between two page-only rows is refused (`_one_dom`), never guessed
+    at. `None` means "no single page-only row is named" - the caller may then
+    look for a switch, which is the safe order because no switch's own name
+    contains a page-only name (checked when this was written: `chat_history` is
+    the only alias on either side of that relation, and it is inside the
+    page-only row, not the other way round)."""
+    text = _setting_words(words)
+    if not text:
+        return None
+    exact: dict = {}
+    for dom_id, names in NOT_BY_ASKING.items():
+        for name in names:
+            exact.setdefault(_setting_words(name), set()).add(dom_id)
+    if text in exact:
+        return _one_dom(exact[text])
+    if len(text.split()) < 2:
+        return None
+    theirs = set(text.split())
+    found: set = set()
+    for dom_id, names in NOT_BY_ASKING.items():
+        for name in names:
+            mine = set(_setting_words(name).split())
+            if mine and mine <= theirs:
+                found.add(dom_id)
+                break
+    return _one_dom(found)
 
 
 def not_by_asking_sentence(dom_id: str) -> str:
@@ -2489,6 +2549,47 @@ def find_choice_setting(words: str):
     return None
 
 
+def find_choice_setting_words(words: str):
+    """The ONE named-choice setting `words` names in the MODEL's own wording.
+
+    The same two rules `find_bool_setting_words` uses, and for the same reason
+    (2026-10-13): filler and case are ignored, because a model restates a
+    setting in its own words; then the request must CONTAIN a whole name, in
+    one direction only, so the request is more specific than the name rather
+    than the other way round. An ambiguous answer is refused, never guessed:
+    changing a setting the owner did not name is the one failure this must not
+    have. `None` means "no single choice setting is named"."""
+    text = _setting_words(words)
+    if not text:
+        return None
+    exact: dict = {}
+    for setting in CHOICE_SETTINGS:
+        for name in setting.names:
+            exact.setdefault(_setting_words(name), set()).add(setting.key)
+    if text in exact:
+        return _one_choice(exact[text])
+    if len(text.split()) < 2:
+        return None
+    theirs = set(text.split())
+    found: set = set()
+    for setting in CHOICE_SETTINGS:
+        for name in setting.names:
+            mine = set(_setting_words(name).split())
+            if mine and mine <= theirs:
+                found.add(setting.key)
+                break
+    return _one_choice(found)
+
+
+def _one_choice(keys) -> Optional["ChoiceSetting"]:
+    """The single ChoiceSetting `keys` names, or None when that is not exactly
+    one - the same refusal `_one_setting` makes for the switches."""
+    if len(keys) != 1:
+        return None
+    key = next(iter(keys))
+    return next((c for c in CHOICE_SETTINGS if c.key == key), None)
+
+
 def choice_from_words(setting: ChoiceSetting, words: str):
     """The value `words` names in this setting's own list, or None."""
     return setting.options().get(_choice_key(words))
@@ -2613,10 +2714,22 @@ def resolve_control_sentence(control_words: str, value_words: str = None) -> dic
     Returns one of:
       {"kind": "set",  "control", "field", "key", "value", "setting"}
       {"kind": "ask",  "control"}            - field/value missing or ambiguous
-      {"kind": "bad",  "control", "field"}    - a named field's value is invalid
-      {"kind": "invalid", "control", "value"} - value matches no field
+      {"kind": "bad",  "control", "field"}    - the value is wrong FOR THAT
+                                                FIELD: a named field's value
+                                                that is not in its list, or -
+                                                when the control has exactly
+                                                one field (2026-10-26) - a
+                                                value that one field does not
+                                                have. Answered with the field's
+                                                real values, never its name.
+      {"kind": "invalid", "control", "value"} - the control has SEVERAL fields
+                                                and the value matches none of
+                                                them
       {"kind": "none"}                       - no control in the closed table
-    Never guesses: two matching fields is "ask", zero is "invalid"."""
+    Never guesses: two matching fields is "ask"; no field matches and the
+    control has more than one field is "invalid"; one field whose value the
+    sentence does not name is "bad", so the answer can list the values to say
+    instead of the field names (which told the owner nothing)."""
     found = find_control(control_words)
     if found is None:
         return {"kind": "none"}
@@ -2649,6 +2762,13 @@ def resolve_control_sentence(control_words: str, value_words: str = None) -> dic
                 "key": candidate.setting.key, "value": value,
                 "setting": candidate.setting}
     if not hits:
+        # A control with EXACTLY ONE field and a value that is not in that
+        # field's list is a bad VALUE, not a missing field (2026-10-26). It used
+        # to answer "its fields are: preset", which tells the owner nothing
+        # about what to say; `control_bad_words` lists the real values instead.
+        rows = fields_for_control(control)
+        if len(rows) == 1:
+            return {"kind": "bad", "control": control, "field": rows[0].field}
         return {"kind": "invalid", "control": control, "value": value_words}
     return {"kind": "ask", "control": control}
 
@@ -2803,6 +2923,168 @@ SECTION_PLAIN = {
     "prompt-coach": "the prompt coach",
 }
 
+# --------------------------------------------------------------------------
+#   Two switches the tables above cannot hold (2026-10-26)
+# --------------------------------------------------------------------------
+#
+# THE WAKE WORD ("hey Jarvis") and WHICH BROWSER JARVIS USES are both real
+# switches with an existing route, and until now neither could be changed by
+# asking. They are deliberately NOT BOOL_SETTINGS/CHOICE_SETTINGS rows:
+#
+#   * `SETTINGS_ROWS` records the desktop Settings page's `<label
+#     class="toggle">` rows, and the wake word is not one of them: the Voice
+#     card draws it as a status line plus a "Turn the wake word off" button
+#     (`settings.html` #voice-wake / #voice-wake-off, settings.js's platform
+#     row), so a BoolSetting for it would name a page row that does not exist.
+#   * `contract/feature-controls.json` pins the KEYS of BOOL_SETTINGS and
+#     CHOICE_SETTINGS - `tools/check_feature_controls.py` fails on a key the
+#     contract does not know - and that contract is owned by another session.
+#     A new row here would turn that check red on every branch until the
+#     contract caught up.
+#
+# So they use the shape `_ASKS_FIRST_TARGETS` and `_TOOL_TARGETS` already use:
+# a small table in this file, a finder, a setter that calls the EXACT function
+# the route calls, and a `_OTHER_REACHABLE` row so "what can I change?" counts
+# them honestly. Nothing here invents a tier or a card: each module's own
+# function decides, and its own words are what come back.
+
+#: The words a person uses for the PC's own "hey Jarvis" switch.
+_WAKE_WORD_NAMES = (
+    "the wake word", "wake word", "the wake word switch", "the hey jarvis switch",
+    "hey jarvis", "listening for hey jarvis", "waking jarvis by voice",
+    "waking jarvis with my voice",
+)
+
+
+def _bare_lower(words: str) -> str:
+    """`_bare` on a lower-cased copy: the spoken grammar lower-cases a
+    sentence before it arrives, and a model may not, so both are one form."""
+    return _bare(" ".join(str(words or "").lower().split()))
+
+
+def wake_word_from_words(words: str) -> bool:
+    """The model's own wording: True when it names the wake-word switch."""
+    text = _setting_words(words)
+    if not text:
+        return False
+    return text in {_setting_words(name) for name in _WAKE_WORD_NAMES}
+
+
+def set_wake_word(on: bool, *, peer=None, local=None) -> Outcome:
+    """The PC's "hey Jarvis" switch: exactly `jarvis_speech.set_wake_enabled`,
+    the function POST /api/voice/wake calls. OFF happens at once; ON raises the
+    module's OWN approval card and changes nothing until a person answers it -
+    its words are handed back as they are, so no answer can say it is on."""
+    try:
+        import jarvis_speech as SP
+    except Exception:
+        return _missing('the wake word ("hey Jarvis")')
+    try:
+        got = SP.set_wake_enabled(bool(on))
+    except Exception:
+        return Outcome(False, "Jarvis could not change the wake word just now.")
+    if not isinstance(got, dict):
+        return Outcome(False, "Jarvis could not change the wake word just now.")
+    said = str(got.get("message") or got.get("error") or "").strip()
+    pending = bool(got.get("pending"))
+    if got.get("ok") and pending:
+        return Outcome(True, said or "Approve the card to turn the wake word on.",
+                       waiting=True)
+    if got.get("ok"):
+        return Outcome(True, said or ("The wake word is on." if on
+                                      else "The wake word is off."))
+    return Outcome(False, said or "The wake word could not be changed just now.")
+
+
+#: Which browser Jarvis uses - `jarvis_browser_engine.MODES`, three choices.
+_BROWSER_MODE_NAMES = (
+    "the browser mode", "browser mode", "the browser engine mode",
+    "which browser jarvis uses", "the browser jarvis uses", "the default browser",
+)
+
+#: The three in plain words, for a refusal that lists them. The ids come from
+#: the module; these are the words both apps already use for them.
+_BROWSER_MODE_PLAIN = ("automatic", "visible", "headless", "windowless")
+
+
+def browser_mode_named(words: str) -> bool:
+    bare = _bare_lower(words)
+    return any(bare == _bare_lower(name) for name in _BROWSER_MODE_NAMES)
+
+
+def browser_mode_from_words(words: str) -> Optional[str]:
+    """The mode `words` names in `jarvis_browser_engine`'s own list, or None."""
+    return _browser_mode_choices().get(_choice_key(words))
+
+
+def _browser_mode_choices() -> dict:
+    """Spoken value -> mode, from the module's own MODES and picker titles.
+
+    A module that is not on this PC gives the three ids plus the words the
+    picker uses, so a name still resolves and the setter answers "not there
+    yet" rather than inventing a mode."""
+    fallback = {"auto": "auto", "automatic": "auto", "visible": "visible",
+                "headless": "headless", "windowless": "headless",
+                "windowless one": "headless", "no window": "headless",
+                "visible one": "visible"}
+    try:
+        import jarvis_browser_engine as BE
+    except Exception:
+        return dict(fallback)
+    out = dict(fallback)
+    titles = (getattr(BE, "WORDS", {}) or {}).get("modes") or {}
+    for mode in getattr(BE, "MODES", ("auto", "visible", "headless")):
+        out[str(mode)] = mode
+        if isinstance(titles, dict):
+            title = str(titles.get(mode) or "").strip()
+            if title:
+                out[_choice_key(title)] = mode
+    return out
+
+
+def set_browser_mode(value: str, *, peer=None, local=None) -> Outcome:
+    """Which browser Jarvis uses: `jarvis_browser_engine.handle_post({"mode":...})`,
+    the exact function POST /api/browser/engine calls. At once, no card either
+    way - it picks which engine does the work and never widens what Jarvis may
+    reach (both engines go through the same gate and the same card)."""
+    try:
+        import jarvis_browser_engine as BE
+    except Exception:
+        return _missing("the windowless browser")
+    try:
+        code, out = BE.handle_post({"mode": str(value)})
+    except Exception:
+        return Outcome(False, "Jarvis could not change which browser it uses just now.")
+    out = out if isinstance(out, dict) else {}
+    if code >= 400 or out.get("ok") is False:
+        return Outcome(False, str(out.get("error") or "That did not work."))
+    # THE MODULE'S OWN WORDS for the mode: WORDS["modes"] is what both apps
+    # draw on the picker, so the answer cannot describe a mode differently from
+    # the screen that shows it.
+    titles = (getattr(BE, "WORDS", {}) or {}).get("modes") or {}
+    title = str(titles.get(str(value)) or "").strip() if isinstance(titles, dict) else ""
+    if title:
+        # Lower-case only the first letter ("The windowless browser when it can
+        # run" -> "the windowless browser when it can run"), so the sentence
+        # reads as one sentence and the module's own words are unchanged.
+        said_title = title[:1].lower() + title[1:]
+        return Outcome(True, f"Done - which browser Jarvis uses is now {said_title}. "
+                             "That is a PC setting, so both apps follow it, and "
+                             "it needed no card.")
+    return _say(code, out)
+
+
+def browser_mode_bad_words(words: str = "") -> str:
+    """The honest answer when the mode named is not one of the three."""
+    asked = " ".join(str(words or "").split())[:60]
+    lead = (f'"{asked}" is not one of the browsers Jarvis can use.' if asked
+            else "That is not one of the browsers Jarvis can use.")
+    return (f"{lead} Which browser Jarvis uses can be {_BROWSER_MODE_PLAIN[0]}, "
+            f"the {_BROWSER_MODE_PLAIN[1]} browser, or the "
+            f"{_BROWSER_MODE_PLAIN[3]} one - say for example \"set the browser "
+            f"to headless\".")
+
+
 #: Settings a chat turn genuinely reaches whose own table lives OUTSIDE this
 #: registry - so "derive it from the tables" alone cannot see them, and the
 #: answer used to leave every one of them out.
@@ -2863,6 +3145,15 @@ _OTHER_REACHABLE: tuple = (
     ("which service web search uses", "the web search", 1, "jarvis_search"),
     # jarvis_asks_first.py, reached from jarvis_quick.py
     ("Lockdown", "what asks first", 1, "jarvis_asks_first"),
+    # The PC's own "hey Jarvis" switch (jarvis_speech.set_wake_enabled, POST
+    # /api/voice/wake). Not a BOOL_SETTINGS row - see the block above for why -
+    # so it is counted here: ON is one approval card, OFF is at once.
+    ("the wake word (\"hey Jarvis\")", "the voice", 1, "jarvis_speech"),
+    # Which browser Jarvis uses: automatic, the visible browser, or the
+    # windowless one (jarvis_browser_engine.MODES, POST /api/browser/engine
+    # with {"mode": ...}). A local behaviour choice, at once, no card.
+    ("which browser Jarvis uses: automatic, visible or windowless", "the browser",
+     1, "jarvis_browser_engine"),
 )
 
 def _family_count(module_name: str, fallback: int) -> int:

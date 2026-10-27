@@ -1916,6 +1916,12 @@ def _settings_tool_text() -> str:
                                13 of 21, the model's own 1.0
                                 calculator control called 3/3 and 3/3
 
+    The wording above was measured as it stood (295 tokens). Two clauses were
+    added on 2026-10-26 - a named value such as "faster" for a setting with
+    named choices - taking it to 299, still inside the 300-token budget
+    `backend/test_settings_tool.py` pins. The measurement itself has not been
+    re-run against the longer text, and nothing here claims it has.
+
     So the plumbing was never the problem and the text was: the same requests,
     in the same harness, went from no calls at all to most of them, while the
     control called its own tool in every run. Answers in those runs claimed
@@ -1937,12 +1943,12 @@ def _settings_tool_text() -> str:
     head = ("Call this tool when the owner asks you to change one of Jarvis's own "
             "settings, in any words - do not ask first, just call it. Examples: "
             "\"turn on humour\", \"switch the prompt coach off\", \"enable web "
-            "search\", \"turn on quiet hours\". \"setting\" is the setting in "
-            "their words, e.g. \"humour\"; \"value\" is on or off. ")
-    tail = ("Its own result says what happened: a change that loosens a rule or "
-            "reads more waits for one approval card, a cosmetic one changes at "
-            "once. Repeat that result - never say a setting changed when it did "
-            "not.")
+            "search\", \"turn on quiet hours\". \"setting\" is their words for "
+            "it, e.g. \"humour\"; \"value\" is on or off, or a named choice such "
+            "as \"faster\". ")
+    tail = ("Its own result says what happened: a loosening waits for one "
+            "approval card, cosmetic ones at once; never say a setting "
+            "changed when it did not.")
     return head + tail
 
 
@@ -2605,8 +2611,10 @@ TOOLS: dict = {
         {"type": "object", "properties": {
             "setting": {"type": "string",
                         "description": "the setting, in the owner's own words"},
-            "value": {"type": "string", "enum": ["on", "off"],
-                      "description": "on to switch it on, off to switch it off"}},
+            "value": {"type": "string",
+                      "description": "on or off for a switch; for a setting "
+                                     "with named choices, the choice itself "
+                                     "(e.g. faster, normal, headless)"}},
          "required": ["setting", "value"]},
         _prepare_change_setting,
         lambda args, state, **_: _execute_change_setting(args, state)),
@@ -10309,7 +10317,9 @@ def _setting_denial_line(text: str, owner_words: str) -> str:
     one the tool would accept, and the correction's promise ("say turn it on and
     I will") is one this code can keep. Anything that resolves to nothing ("banana
     mode") or to more than one setting is left alone: that refusal was right. A
-    missing registry adds nothing.
+    page-only setting is left alone TOO (2026-10-26): it is on the Settings page
+    and has no route by asking, so calling it unavailable was correct and must
+    not be turned into a promise. A missing registry adds nothing.
     """
     if not _SETTING_DENIAL.search(text or ""):
         return ""
@@ -10321,6 +10331,12 @@ def _setting_denial_line(text: str, owner_words: str) -> str:
     except Exception:
         return ""
     try:
+        # THE PAGE-ONLY CHECK COMES FIRST, ON THE TOLERANT LOOKUP (2026-10-26).
+        # The exact form missed filler ("... setting"), and the tolerant switch
+        # matcher then read `chat_history` inside the same words - so the false
+        # denial would have been "corrected" with the wrong setting's name.
+        if R.find_not_by_asking_words(asked) is not None:
+            return ""
         setting = R.find_bool_setting_words(asked)
     except Exception:
         return ""
@@ -10374,11 +10390,13 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
     WHAT HAPPENS, IN ORDER, AND WHY EACH STEP IS HERE:
       1. a turn shaped by outside text changes nothing (SETTINGS_AFTER_OUTSIDE) -
          STRICTER than the spoken path, never looser;
-      2. the name is resolved against the registry's own table. Unresolved or
-         ambiguous: answered in words, nothing changed and NO card (there is
-         nothing to approve, and offering a card for a setting that cannot be
-         changed would be a lie in card form);
-      3. the value must be exactly on or off;
+      2. the name is resolved against the registry's own tables - a switch, a
+         setting with named values, the wake word or which browser Jarvis uses
+         (2026-10-26). Unresolved or ambiguous: answered in words, nothing
+         changed and NO card (there is nothing to approve, and offering a card
+         for a setting that cannot be changed would be a lie in card form);
+      3. the VALUE is checked against that setting's own list: "on"/"off" for a
+         switch, one of the setting's own values for a named choice;
       4. THE SETTING'S OWN `set()` RUNS, and it is the gate: a cosmetic change
          is applied at once, and anything that loosens a rule, turns on
          something that reads or reaches more, or touches privacy or how Jarvis
@@ -10420,21 +10438,64 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
         # gets, which tells the owner to ask again in a new message.
         return stop(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
     value = str(args.get("value") or "").strip().lower()
-    if value not in ("on", "off"):
-        return stop(SETTINGS_VALUE_WORDS)
     asked = str(args.get("setting") or "").strip()
     try:
         import jarvis_settings_registry as R
     except Exception as exc:
         return stop(f"the settings list is not available here ({type(exc).__name__}), so "
                     f"nothing was changed.", "unknown")
+    # WHICH KIND OF SETTING THE MODEL NAMED (2026-10-26). The tool used to
+    # resolve switches only, and to demand "on"/"off" BEFORE it knew what kind
+    # of setting it had - so a real setting whose value is a NAME (the voice
+    # speed, the personality, which browser Jarvis uses) was refused here even
+    # though the phrase grammar changes it. The order is now: resolve the name
+    # first, then check the value against that setting's own list, and never
+    # guess either.
+    # A PAGE-ONLY SETTING IS REFUSED BEFORE ANY SWITCH IS RESOLVED (2026-10-26).
+    # Its exact name was already answered by the fall-through below, but one
+    # filler word ("... setting") defeated that exact check and the tolerant
+    # matcher read `chat_history` inside the SAME words - a real, card-free
+    # privacy change for a switch the owner did not name. The tolerant page-only
+    # lookup uses the same filler rules the switch matcher uses, so the named
+    # refusal is what filler phrasings get and nothing is changed.
+    if R.find_not_by_asking_words(asked) is not None:
+        return stop(R.cannot_change_setting_words(asked))
     setting = R.find_bool_setting_words(asked)
-    if setting is None:
+    choice = None if setting is not None else R.find_choice_setting_words(asked)
+    wake_word = bool(setting is None and choice is None and R.wake_word_from_words(asked))
+    browser = bool(setting is None and choice is None and not wake_word
+                   and R.browser_mode_named(asked))
+    apply = None
+    if setting is not None:
+        if value not in ("on", "off"):
+            return stop(SETTINGS_VALUE_WORDS)
+        key = setting.key
+        apply = lambda: setting.set(value == "on")
+    elif choice is not None:
+        # THE SETTING'S OWN VALUE LIST decides. A value it does not have is
+        # answered with the real ones and changes nothing - the same sentence
+        # the phrase grammar gives ("settings_choice_bad").
+        chosen = R.choice_from_words(choice, value)
+        if chosen is None:
+            return stop(R.choice_bad_words(choice))
+        key = choice.key
+        apply = lambda: choice.set(chosen)
+    elif wake_word:
+        if value not in ("on", "off"):
+            return stop(SETTINGS_VALUE_WORDS)
+        key = "wake_word"
+        apply = lambda: R.set_wake_word(value == "on")
+    elif browser:
+        mode = R.browser_mode_from_words(value)
+        if mode is None:
+            return stop(R.browser_mode_bad_words(value))
+        key = "browser_mode"
+        apply = lambda: R.set_browser_mode(mode)
+    else:
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         return reply({"ok": False, "changed": False,
                       "error": R.cannot_change_setting_words(asked)})
-    on = value == "on"
     # `peer`/`local` are deliberately NOT passed here, and that is a CHECKED
     # claim rather than an oversight (2026-10-13, raised by a second reader).
     # The spoken path passes them (jarvis_quick._run_settings_bool ->
@@ -10453,9 +10514,9 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
     # treated as though it came from the PC. Whoever adds such a rule must thread
     # them; this comment is here so that is found, not rediscovered.
     try:
-        got = setting.set(on)
+        got = apply()
     except Exception as exc:
-        return stop(f"{name} could not change {setting.key} ({type(exc).__name__}), so "
+        return stop(f"{name} could not change {key} ({type(exc).__name__}), so "
                     f"nothing was changed.", "unknown")
     ok = bool(getattr(got, "ok", False))
     waiting = bool(getattr(got, "waiting", False))
@@ -10498,7 +10559,7 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
     reply({"ok": ok, "changed": bool(ok and not waiting), "waiting": waiting,
-           "setting": setting.key, "value": value, "said": said,
+           "setting": key, "value": value, "said": said,
            "error": "" if ok else (said or "that setting could not be changed.")})
 
 

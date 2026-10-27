@@ -1514,6 +1514,14 @@ def t_a_denied_setting_that_does_not_exist_is_left_alone():
     check("an unknown name gets no correction",
           AG._setting_denial_line(said, "turn on banana mode") == "",
           AG._setting_denial_line(said, "turn on banana mode"))
+    check("a page-only setting gets no correction either: calling it unavailable "
+          "was right, and there is no phrase to promise",
+          AG._setting_denial_line(
+              said,
+              "turn off the windows hello for memory lists and chat history setting") == "",
+          AG._setting_denial_line(
+              said,
+              "turn off the windows hello for memory lists and chat history setting"))
     check("a real name does, with the owner's own words as the name",
           "background learning" in AG._setting_denial_line(
               said, "turn on learning in the background"))
