@@ -745,6 +745,12 @@ data class HomeActions(
      * first section with nothing scrolled to and nothing opened, while the
      * Models plate is at the bottom of the "Jarvis on your PC" heading, behind
      * its own menu. This one opens the Brain AT that plate.
+     *
+     * Since 2026-10-27 it is also the lane pill's own action on Home
+     * ([LaneChip]): the owner asked for the model name to be the button that
+     * opens the current-models menu, and the pill under the face is the one
+     * place the phone shows that name. Navigation only - the plate's existing
+     * switch/install actions keep their own approval cards.
      */
     val onOpenModelChoices: () -> Unit,
     /**
@@ -2399,7 +2405,15 @@ private fun FaceBlock(
                 // The lane, which the phone parsed and threw away. "This left your
                 // machine" is the single most consequential fact the UI carries and
                 // it had no representation here at all.
-                LaneChip(state.status)
+                //
+                // Since 2026-10-27 the pill is also the owner's one door to the
+                // model list (ask of 2026-10-27: the model name should be the
+                // button that opens the current-models menu). It reuses the
+                // Brain's existing "models" place through [HomeActions.onOpenModelChoices],
+                // which the plain-word model errors already use - no new route,
+                // no second action, and the plate's switch/install cards are
+                // untouched.
+                LaneChip(state.status, onOpenModels = actions.onOpenModelChoices)
                 // "Open the Brain →" used to sit here. The owner asked on
                 // 2026-10-25 for it to go: the navigation row's Brain button
                 // and the face tap (when the owner allows it) are the same
@@ -2419,11 +2433,11 @@ private fun FaceBlock(
                 // is you.") - this button adds no way around it.
                 if (showCaption) {
                     Gap(2)
-                    // Two doors to two Brain plates, side by side and both one
-                    // tap from Home: the Galaxy ("people-and-things") and the
-                    // focus presets ("hardware"). Same shape, same tokens, one
-                    // Row - so the new one is a first-class neighbour rather
-                    // than a second row nobody notices.
+                    // Three doors to three Brain plates, side by side and both
+                    // one tap from Home: the Galaxy ("people-and-things"), the
+                    // focus presets ("hardware") and the model list ("models").
+                    // Same shape, same tokens, one Row - so each is a
+                    // first-class neighbour rather than a row nobody notices.
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -2456,6 +2470,26 @@ private fun FaceBlock(
                                 .pressable(onClick = actions.onOpenPresets)
                                 // Read aloud as what it opens, not as an arrow.
                                 .semantics { contentDescription = "Jarvis presets" }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                        // The model list, one tap from Home - the owner's ask of
+                        // 2026-10-27: the model name should be the button that
+                        // opens the current-models menu. The lane pill is the
+                        // first door (when the PC's status names a lane/model),
+                        // but this phone's PC sends neither, so the pill is not
+                        // drawn - this is the door that always exists. It calls
+                        // the same action the plain-word model errors use and
+                        // only navigates: switching or installing still raises
+                        // the plate's existing approval card.
+                        Text(
+                            "Model →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = wellChrome.textLo,
+                            modifier = Modifier
+                                .clip(LocalRadii.current.insetShape)
+                                .pressable(onClick = actions.onOpenModelChoices)
+                                // Read aloud as what it opens, not as an arrow.
+                                .semantics { contentDescription = "Jarvis model" }
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                         )
                     }
@@ -2516,18 +2550,44 @@ private fun TickRing(minor: Color, major: Color, modifier: Modifier = Modifier) 
     )
 }
 
+/**
+ * The lane the answer came from, under the face: "Local · <model>", "Cloud ·
+ * <model>", "Offline", or the bare model name. Since 2026-10-27 the pill is
+ * also the owner's one door to the model list - tapping it opens the Brain's
+ * Model plate through [HomeActions.onOpenModelChoices] (the action the
+ * plain-word model errors already use). Navigation only: no route, no write,
+ * no card; the plate's own switch/install actions keep their cards.
+ */
 @Composable
-private fun LaneChip(status: StatusInfo?) {
+private fun LaneChip(status: StatusInfo?, onOpenModels: () -> Unit) {
     val chrome = LocalChrome.current
     val lane = status?.lane?.lowercase()
     val model = status?.model
-    when (lane) {
+    val words = when (lane) {
         // violet-4 is the desktop's `--cloud`, and it means the same thing on
         // both: this is leaving the local lane.
-        "cloud" -> Pill("Cloud" + (model?.let { " · $it" } ?: ""), color = chrome.cloudInk)
-        "offline" -> Pill("Offline", color = chrome.badInk)
-        "local" -> Pill("Local" + (model?.let { " · $it" } ?: ""), color = chrome.okInk)
-        else -> if (model != null) Pill(model, color = chrome.textMid)
+        "cloud" -> "Cloud" + (model?.let { " · $it" } ?: "")
+        "offline" -> "Offline"
+        "local" -> "Local" + (model?.let { " · $it" } ?: "")
+        // No lane and no model: nothing worth opening, so nothing is drawn.
+        else -> model ?: return
+    }
+    val ink = when (lane) {
+        "cloud" -> chrome.cloudInk
+        "offline" -> chrome.badInk
+        "local" -> chrome.okInk
+        else -> chrome.textMid
+    }
+    // The pressable's 48dp minimum is invisible growth around the CHILD (see
+    // `pressable`'s own doc), so the pill sits in a Box: pressing it paints the
+    // normal pill, not a 48dp-tall one with the label at the top.
+    Box(
+        modifier = Modifier
+            .pressable(onClick = onOpenModels)
+            .semantics(mergeDescendants = true) { contentDescription = "Model: $words" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Pill(words, color = ink)
     }
 }
 
