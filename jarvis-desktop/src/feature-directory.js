@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "8900365ab44050a3a271ce19c81478898024875039f88a3e02ac49aeb81ea01f",
+  "source_sha256": "4ea36907558eddfa5afaa919fb311d956bc1af49871334f5f83cfae42394d6a0",
   "feature_count": 140,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -731,7 +731,7 @@ export const FEATURE_DIRECTORY = {
       "id": "galaxy",
       "title": "Galaxy",
       "group": "Memory",
-      "surface": "desktop",
+      "surface": "both",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "status": "not-a-setting",
       "label_note": "",

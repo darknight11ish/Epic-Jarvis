@@ -486,6 +486,7 @@ See the table at the end: every entry there says whether the **preflight** cover
 | 127 | Settings itself (`settings-entry`) | Safety | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:4 |
 | 128 | Ask for a picture, and keep it (`pictures`) | Screen and pictures | both | **SCREEN** <br>was `PARTIAL` | phone, 2026-10-12 - the record names no build | /docs/FIELD-TEST-2026-10-12-TOPUP.md:52 |
 | 129 | Change a setting by asking, in any words (`settings-by-asking`) | The PC itself | both | **DRIVEN** | live backend, 2026-10-12 | this document, third pass PASS T2 (typed "keep the animal still" and `still` went `false -> true` in the live store) - added 2026-10-15: the 129th entry had no row at all |
+| 130 | The phone's read-only Galaxy picture (`galaxy`, 2026-10-26) | Memory | phone | **NOT-TESTABLE** | built at PR #869; CI compiled it and ran the phone JVM unit tests on 2026-10-26 (`build` passed in 7m41s, `phone-unit-tests` in 4m13s) | no human has run it on a phone or an emulator: the look and a real tap are unverified. Its layout is pinned to the desktop JavaScript at 1e-6 by `GalaxyPictureTest.kt`, which is a test, not a field test. |
 
 ## Method, and its limits, said plainly
 
