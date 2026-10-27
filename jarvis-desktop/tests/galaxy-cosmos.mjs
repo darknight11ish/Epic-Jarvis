@@ -19,9 +19,10 @@
  *     switcher and the Brain window cannot list one thing while the 3D engine
  *     draws another. Each carries Gemini's own palette, camera and look-at,
  *     compared number by number against the reference page.
- *  2. THE CAMERA IS GEMINI'S UNTIL THE PICTURE DOES NOT FIT. A 32-name picture
- *     gets the page's exact position; a 240-name one backs away along the same
- *     direction, and only the distance changes.
+ *  2. THE CAMERA IS GEMINI'S UNTIL A NAME WOULD LEAVE THE FRAME. A picture that
+ *     already fits gets the page's exact position; a 120- or 240-name one backs
+ *     away along the same direction, and only the distance changes. The frame
+ *     itself is proved in 8.
  *  3. THE THREE FIELDS THE BACKEND DOES NOT SEND ARE DERIVED, NOT INVENTED.
  *     `ringOf` (the radar look's three rings), `wellOf` (the nebula's four
  *     wells) and `timeFractions` (the helix's order) are pure functions over
@@ -39,6 +40,14 @@
  *     seeded generator, so the same build draws the same sky twice.
  *  7. BUDGETS: at most 240 names and 360 links, in the order given, and the
  *     input is never mutated.
+ *  8. EVERY REAL NAME IS INSIDE A COMFORTABLE FRAME, which is the one thing the
+ *     reference page gets wrong and this port must not copy. At 1440x900 - and
+ *     on the HUD's real stage shapes - with 32, 120 and 240 names, in all eight
+ *     looks, at rest and around the orrery's orbit: every name's centre is
+ *     within `FRAME_FILL` (82%) of the half-frame, there is room for its label
+ *     above it on the canvas, and the picture still fills the frame. The fog is
+ *     proved in the same place: it thins with the camera, so a 240-name picture
+ *     is not fogged to black.
  *
  * The render layer (three.js, the GPU, the canvas) is proved by the HUD suites
  * and by CI's browser run, not here.
@@ -51,6 +60,7 @@ import {
   COSMOS_PRESET_ORDER,
   COSMOS_PRESETS,
   FOG_DENSITY,
+  FRAME_FILL,
   HELIX_PER_COLUMN,
   MAX_COSMOS_LINKS,
   MAX_COSMOS_NODES,
@@ -71,6 +81,7 @@ import {
   cameraFor,
   cameraFrame,
   fitDistance,
+  fogDensityAt,
   hexToInt,
   hexToRgb,
   isCosmosLook,
@@ -81,6 +92,7 @@ import {
   presetLinks,
   presetMeta,
   presetPositions,
+  projectPoint,
   ringCapacity,
   ringOf,
   ringPlan,
@@ -149,6 +161,36 @@ function geminiShaped() {
   });
 }
 
+/** A graph at one of the HUD's own budgets, shaped like `/api/graph` really is:
+ *  one core, the brains and ability groups that exist, and the rest saved
+ *  things. `size` names are returned exactly, so 120 and 240 are the page's
+ *  two caps rather than approximations of them. */
+function budgetGraph(size) {
+  const spec = [
+    ["core", 1], ["model", 4], ["cluster", 6], ["tool", 40], ["fact", 25],
+    ["document", 10], ["entity", 8], ["project", 6], ["persona", 4],
+    ["source", 12], ["skill", 4],
+  ];
+  const total = spec.reduce((sum, [, count]) => sum + count, 0);
+  const nodes = [];
+  for (const [group, count] of spec) {
+    const want = Math.max(1, Math.round((count * size) / total));
+    for (let i = 0; i < want && nodes.length < size; i++) {
+      nodes.push({
+        id: group === "core" ? "core" : `${group}:${i + 1}`,
+        label: `${group} ${i + 1}`,
+        group,
+        weight: 1 + (i % 3),
+      });
+    }
+  }
+  while (nodes.length < size) {
+    nodes.push({ id: `fact:extra${nodes.length}`, label: `note ${nodes.length}`,
+      group: "fact", weight: 1 });
+  }
+  return nodes;
+}
+
 function nearest(positions) {
   let worst = Infinity;
   for (let i = 0; i < positions.length; i++) {
@@ -214,40 +256,114 @@ check("the page's fog, exposure and field of view are the rendered ones", () => 
   assert.equal(NEBULA_POINTS, 3200);
 });
 
-check("the camera stays Gemini's until the picture stops fitting, then only pulls back",
-  () => {
-    // Gemini's own picture fits: the position is untouched.
-    const small = cameraFrame("planetary-orbit", { radius: 100, aspect: 1.6 });
-    assert.deepEqual(small.position, [0, 150, 230]);
-    assert.deepEqual(small.lookAt, [0, 0, 0]);
-    assert.equal(small.distance, Math.hypot(0, 150, 230));
+check("the camera is Gemini's until a name would leave the comfortable frame", () => {
+  // A two-name picture is far inside Gemini's own frame: his position, exactly,
+  // for the six looks whose own cameras already frame it. (The other two pull
+  // back a little: their base camera puts a name at the very edge.)
+  const tiny = [{ id: "core", group: "core" }, { id: "fact:1", group: "fact" }];
+  let kept = 0;
+  for (const id of COSMOS_PRESET_ORDER) {
+    const at = presetPositions(id, tiny);
+    const framed = cameraFrame(id, { positions: at, aspect: 1.6 });
+    const base = cameraFor(id);
+    assert.deepEqual(framed.lookAt, base.lookAt, `${id}: the look-at moved`);
+    assert.equal(framed.fill, FRAME_FILL);
+    if (!framed.fitted) {
+      kept += 1;
+      assert.deepEqual(framed.position, base.position, `${id}: a kept camera changed`);
+    } else {
+      // Only the distance changes: the offset stays parallel to Gemini's own.
+      const was = [base.position[0] - base.lookAt[0], base.position[1] - base.lookAt[1],
+        base.position[2] - base.lookAt[2]];
+      const now = [framed.position[0] - base.lookAt[0], framed.position[1] - base.lookAt[1],
+        framed.position[2] - base.lookAt[2]];
+      const cross = [
+        was[1] * now[2] - was[2] * now[1],
+        was[2] * now[0] - was[0] * now[2],
+        was[0] * now[1] - was[1] * now[0],
+      ];
+      assert.ok(Math.hypot(...cross) < 1e-6, `${id}: the angle changed, not just the distance`);
+      assert.ok(framed.distance > Math.hypot(...was), `${id}: a pull-back came closer`);
+    }
+  }
+  assert.ok(kept >= 6, `only ${kept} of 8 looks keep Gemini's own camera on a two-name picture`);
 
-    // A 240-name star map is 278 units out: the camera backs away along the
-    // SAME direction from the same look-at, so the angle never changes.
-    const wide = cameraFrame("star-map", { radius: 280, aspect: 1.6 });
-    assert.ok(wide.distance > Math.hypot(0, 255, 4), "the camera did not pull back");
-    const pressed = [wide.position[0] - wide.lookAt[0], wide.position[1] - wide.lookAt[1],
-      wide.position[2] - wide.lookAt[2]];
-    const base = [0, 255, 4];
-    const cross = [
-      pressed[1] * base[2] - pressed[2] * base[1],
-      pressed[2] * base[0] - pressed[0] * base[2],
-      pressed[0] * base[1] - pressed[1] * base[0],
-    ];
-    assert.ok(Math.hypot(...cross) < 1e-6, "the camera direction changed, not just the distance");
-    assert.ok(fitDistance(280, 1.6) < wide.distance);
+  // The radius-only path is the conservative whole-sphere rule (a caller with no
+  // positions): it can only be further out than the flat-fit distance.
+  const sphere = cameraFrame("star-map", { radius: 280, aspect: 1.6 });
+  assert.equal(sphere.fitted, true);
+  assert.ok(sphere.distance > fitDistance(280, 1.6));
+  const near = cameraFrame("planetary-orbit", { radius: 40, aspect: 1.6 });
+  assert.equal(near.fitted, false);
+  assert.deepEqual(near.position, cameraFor("planetary-orbit").position);
+});
 
-    // A WIDE window is Gemini's picture and keeps his camera exactly; a narrow
-    // column gets the same angle from further back rather than a cropped edge.
-    const wideWindow = cameraFrame("planetary-orbit", { radius: 128, aspect: 1.78 });
-    assert.equal(wideWindow.fitted, false);
-    assert.deepEqual(wideWindow.position, [0, 150, 230]);
-    const column = cameraFrame("planetary-orbit", { radius: 128, aspect: 1.03 });
-    assert.equal(column.fitted, true);
-    assert.ok(column.distance > wideWindow.distance);
-    // ... and its look-at never moves.
-    assert.deepEqual(column.lookAt, [0, 0, 0]);
-  });
+check("every name sits inside a comfortable frame at 1440x900, at 120 and at 240 names", () => {
+  const frames = [
+    { name: "the 1440x900 window", width: 1440, height: 900 },
+    { name: "the HUD stage at 1440x900", width: 970, height: 806 },
+    { name: "a narrow stage", width: 800, height: 773 },
+  ];
+  for (const frame of frames) {
+    const aspect = frame.width / frame.height;
+    for (const size of [32, 120, MAX_COSMOS_NODES]) {
+      const nodes = budgetGraph(size);
+      for (const id of COSMOS_PRESET_ORDER) {
+        // The orrery moves while it spins: frame it at rest and check the whole
+        // orbit too, so a moving name cannot leave the frame either.
+        const rest = presetPositions(id, nodes, { orbitTime: 0 });
+        const framed = cameraFrame(id, { positions: rest, radius: boundsOf(rest).radius, aspect });
+        let widest = 0;
+        for (const t of [0, 0.6, 1.4, 2.2, 3.7]) {
+          const at = presetPositions(id, nodes, { orbitTime: t });
+          for (const point of at) {
+            const seen = projectPoint(point,
+              { position: framed.position, lookAt: framed.lookAt },
+              { aspect, width: frame.width, height: frame.height });
+            const where = `${id} at ${size} names (${frame.name}, t=${t})`;
+            assert.ok(seen.inFront, `${where}: a name is behind the camera`);
+            assert.ok(Math.abs(seen.ndcX) <= FRAME_FILL + 1e-9,
+              `${where}: ${point.id} is ${seen.ndcX.toFixed(2)} across (fill ${FRAME_FILL})`);
+            assert.ok(Math.abs(seen.ndcY) <= FRAME_FILL + 1e-9,
+              `${where}: ${point.id} is ${seen.ndcY.toFixed(2)} up (fill ${FRAME_FILL})`);
+            // The label is drawn ABOVE the body (10-14 px text, a 7 px gap), and
+            // a body is at most 9 scene units across: both must fit on canvas.
+            assert.ok(seen.y - 9 * seen.k - 21 >= 0,
+              `${where}: ${point.id} has no room for its label above it`);
+            widest = Math.max(widest, Math.abs(seen.ndcX), Math.abs(seen.ndcY));
+          }
+        }
+        // ... and it is not a dot in the middle of an empty frame: the picture
+        // really was fitted, not merely shrunk.
+        assert.ok(widest > 0.4,
+          `${id} at ${size}: the picture only fills ${(widest * 100).toFixed(0)}% of the frame`);
+      }
+    }
+  }
+});
+
+check("the fog fades with the camera, so 240 names are not fogged out", () => {
+  assert.equal(FOG_DENSITY, 0.0016);
+  assert.equal(fogDensityAt(200), FOG_DENSITY);           // Gemini's own frame: untouched
+  assert.ok(fogDensityAt(900) < FOG_DENSITY);
+  assert.ok(fogDensityAt(2700) < fogDensityAt(900));      // further out, thinner still
+  for (const size of [32, 120, MAX_COSMOS_NODES]) {
+    const nodes = budgetGraph(size);
+    for (const id of COSMOS_PRESET_ORDER) {
+      const at = presetPositions(id, nodes, { orbitTime: 0 });
+      const framed = cameraFrame(id, { positions: at, aspect: 1440 / 900 });
+      const density = fogDensityAt(framed.distance);
+      const visible = Math.exp(-((density * framed.distance) ** 2));
+      assert.ok(visible > 0.8,
+        `${id} at ${size}: only ${(visible * 100).toFixed(0)}% of the far edge survives the fog`);
+      if (framed.distance <= 250) assert.equal(density, FOG_DENSITY);
+    }
+  }
+  // Why the scaling exists: Gemini's fixed density at a 240-name tree's distance
+  // leaves almost nothing of the picture.
+  const worst = Math.exp(-((FOG_DENSITY * 2000) ** 2));
+  assert.ok(worst < 0.02, `the fixed density keeps ${(worst * 100).toFixed(1)}% at 2,000 units`);
+});
 
 /* -------------------------------------------------------------------------
  * 2. Roles: the HUD's eleven groups on Gemini's five categories

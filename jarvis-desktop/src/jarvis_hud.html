@@ -30,6 +30,14 @@
      "Open the Jarvis bar" control. Nothing here holds the pairing key on
      disk: the PC's HttpOnly cookie is the session. -->
 <script src="hud-web-bridge.js"></script>
+<!-- three.js r128 (2026-10-27): the drawing library the Galaxy's eight 3D
+     looks are built with. It ships inside this app and is served from this
+     same address - never from the internet - so the app still works with no
+     connection. `defer` keeps it off the page's critical path, and the page's
+     inline-script count is unchanged because this is a separate file.
+     galaxy-cosmos.js waits for it and falls back to the flat picture when it
+     is missing, so no machine loses the Galaxy. -->
+<script src="/three.min.js" defer></script>
 <!--
   Theme before first paint, the same synchronous read from localStorage every
   other window does (settings.html, onboarding.html): this page also opens as

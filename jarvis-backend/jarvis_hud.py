@@ -2238,10 +2238,16 @@ STATIC_ASSETS = {
     # The Galaxy's 3D cosmos (2026-10-27): the page's SECOND dynamic import, the
     # engine that draws the eight looks with three.js. Same rule as the module
     # above - a module beside the page, fetched only when a look needs it, so a
-    # browser HUD that cannot fetch it keeps the flat picture. three.js itself is
-    # served at /three.min.js by its own vendoring change; this module loads it
-    # and stays on the flat picture when it is not there.
+    # browser HUD that cannot fetch it keeps the flat picture. It draws with
+    # three.js itself, which is the next entry.
     "/galaxy-cosmos.js": ("galaxy-cosmos.js", "text/javascript; charset=utf-8"),
+    # three.js r128 (2026-10-27): the one drawing library the 3D cosmos uses,
+    # copied into this repository (its own change) and served from this same
+    # origin, never from the internet. The PAGE loads it with its own
+    # <script src="/three.min.js" defer>, which is why it is a key here:
+    # backend/test_hud_static.py requires the whitelist to be exactly what the
+    # page loads, in both directions.
+    "/three.min.js": ("three.min.js", "text/javascript; charset=utf-8"),
     "/private-speech.js": ("private-speech.js", "text/javascript; charset=utf-8"),
     "/face-voice.js": ("face-voice.js", "text/javascript; charset=utf-8"),
     "/face-moments.js": ("face-moments.js", "text/javascript; charset=utf-8"),
