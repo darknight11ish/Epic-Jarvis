@@ -1141,6 +1141,23 @@ class MainActivity : FragmentActivity() {
             }
             onDispose { stop() }
         }
+        // A read-aloud stops the moment this screen leaves the owner's sight. The
+        // read is Jarvis's own voice saying an answer; it must not keep talking
+        // behind a lock screen, from a pocket, or under another app (the Lead's
+        // ruling of 2026-10-27: stop immediately, privacy first). ON_STOP covers
+        // all three - pressing power stops the activity before the keyguard is
+        // drawn - and it costs nothing when nothing is being read, because
+        // stopReadingAloud() on an idle runtime is two state writes.
+        DisposableEffect(Unit) {
+            val activity = this@MainActivity
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                    JarvisRuntime.stopReadingAloud()
+                }
+            }
+            activity.lifecycle.addObserver(observer)
+            onDispose { activity.lifecycle.removeObserver(observer) }
+        }
         // Everything FaceView draws with comes through here: the one live
         // budget, FaceQuality, re-resolved whenever a setting or the phone's
         // state changes. Nothing here reaches the desktop. A SideEffect, not a

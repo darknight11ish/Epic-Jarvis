@@ -3557,8 +3557,12 @@ second one - and read the scope honestly: the rule above was written for a
 **voice** answer, and a typed question is otherwise allowed to be read aloud
 (`jarvis_voice.may_speak(private, origin="typed")`). **That exception is
 removed in that one window, on his instruction** - *"Gate it - keep
-sensitive answers on screen in the HUD too"* - and nowhere else: the bar,
-the widget and the phone are unchanged. `tests/hud.mjs` drives the real HUD
+sensitive answers on screen in the HUD too"* - and nowhere else: the bar
+and the widget are unchanged, and the phone did not read typed answers then.
+The phone gained its own tap-only typed read-aloud on 2026-10-27 under a
+stricter gate than this one (it refuses when the route header is missing and
+checks the real tool and screen facts) - a new, narrower decision, not this
+one reaching the phone. `tests/hud.mjs` drives the real HUD
 window once per route and holds the gate against `usedSensitiveFact` here,
 so the two cannot drift; the local-voices-only rule that was already in that
 wrapper (an "Online (Natural)" voice would send the text to Microsoft) still

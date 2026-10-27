@@ -42,8 +42,14 @@ class ReadAloudWiringTest {
         assertTrue("the wrapper does not pass onRoute", runtime.contains("onRoute = { route -> header = route }"))
         assertTrue("the offer state is not exposed", runtime.contains("val readAloud: StateFlow<com.jarvis.client.voice.ReadAloud.Offer?>"))
         assertTrue("the reading state is not exposed", runtime.contains("val readingAloud: StateFlow<Boolean>"))
-        // The facts come from the SAME watch the voice path uses.
-        assertTrue("the route is not read the voice path's way", runtime.contains("PrivateAloud.route(header)"))
+        // The facts come from the SAME watch the voice path uses - but the route
+        // is read the FAIL-CLOSED way: a missing header is unknown, and unknown
+        // must never be spoken (2026-10-27 ruling; see
+        // [ReadAloudRouteFailClosedTest]).
+        assertTrue(
+            "the route is not read fail-closed",
+            runtime.contains("PrivateAloud.routeOrNull(header)"),
+        )
         assertTrue("tool runs are not measured", runtime.contains("PrivateAloud.toolRan(start, now)"))
         assertTrue("unknown tool state is not measured", runtime.contains("PrivateAloud.toolsKnown(start, now)"))
         assertTrue("screen reads are not measured", runtime.contains("PrivateAloud.screenRead(start, now)"))
@@ -121,5 +127,38 @@ class ReadAloudWiringTest {
                 privateAloud.contains("const val ON_SCREEN = \"It's on your screen.\""),
         )
         assertFalse("the pure gate invented a route", readAloudCode.contains("/api/"))
+    }
+
+    @Test
+    fun `a locked or backgrounded phone stops the read`() {
+        // The `locked` fact is a snapshot of when the answer came in, so the read
+        // asks the live question again before every sentence; leaving the screen
+        // stops it outright (the Lead's ruling of 2026-10-27: privacy first).
+        assertTrue("the read never re-checks the lock", runtime.contains("readAloudLockedNow()"))
+        assertTrue("a lock found mid-read does not stop it", runtime.contains("if (readAloudLockedNow())"))
+        assertTrue("a lock found mid-read does not call the stop path", runtime.contains("stopReadingAloud()"))
+        val activity = source("MainActivity.kt")
+        assertTrue(
+            "leaving the screen does not stop the read",
+            activity.contains("JarvisRuntime.stopReadingAloud()"),
+        )
+        assertTrue(
+            "the screen leaving is not observed",
+            activity.contains("Lifecycle.Event.ON_STOP"),
+        )
+    }
+
+    @Test
+    fun `a withheld read shows the one sentence instead of a dead control`() {
+        val home = source("ui/screens/HomeScreen.kt")
+        assertTrue("the withheld sentence is not drawn", home.contains("offer.withheld"))
+        assertTrue(
+            "the Read aloud control is not drawn once its facts allow it",
+            home.contains("if (offer.mayRead)"),
+        )
+        assertTrue(
+            "the refused answer's one sentence is not in the read path",
+            runtime.contains("ReadAloud.ON_SCREEN"),
+        )
     }
 }

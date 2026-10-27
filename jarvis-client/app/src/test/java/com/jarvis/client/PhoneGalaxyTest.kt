@@ -428,13 +428,25 @@ class PhoneGalaxyTest {
         // ALWAYS drawn, not only while the face-tap opens the Brain: the owner
         // can turn that setting off without meaning to shut this door, and a
         // button that disappears is the confusing part. The Brain link is the
-        // one that leans on `opensMind`.
+        // one that leans on `opensMind`. Since 2026-10-27 "always" also means
+        // with Face size Hidden and while the keyboard is up - the row is the
+        // shared [ModelDoorsRow], drawn from FaceBlock and from the face-hidden
+        // branch - so the door may not sit behind the face-tap setting OR a
+        // caption condition.
         val galaxyAt = home.indexOf("\"The Galaxy →\"")
         assertTrue("the Galaxy button is gone", galaxyAt > 0)
         val above = home.substring(maxOf(0, galaxyAt - 1400), galaxyAt)
-        assertTrue(
+        assertFalse(
             "the Galaxy button is drawn behind the face-tap setting",
-            above.contains("if (showCaption) {"),
+            above.contains("opensMind"),
+        )
+        assertTrue(
+            "the Galaxy button is no longer drawn from the shared door row",
+            home.contains("private fun ModelDoorsRow("),
+        )
+        assertFalse(
+            "a caption condition gates the shared door row again",
+            home.contains("showCaption"),
         )
 
         // It opens the SAME plate - no second Galaxy, no new reader.
