@@ -119,11 +119,19 @@ present, must pass the origin check. There is no directory serving: an
 unlisted path, `..`, an encoded traversal, a trailing slash, a case variant or
 an absolute URL is a 404, never a file lookup. The served set today is
 `/theme.css`, `/fonts/fonts.css`, the seven self-hosted `.woff2` faces and the
-page's twelve `.js` modules. `/hud-web-bridge.js`, `/manifest.webmanifest`,
+page's thirteen `.js` modules. `/hud-web-bridge.js`, `/manifest.webmanifest`,
 `/sw.js` and `/icons/jarvis-180|192|512.png` are listed ahead of the slices
 that write them, so each answers 404 until its file exists beside the server.
 `backend/test_hud_static.py` keeps the page and the whitelist in step in both
 directions.
+
+The page's thirteenth module is `/galaxy-cosmos.js` (2026-10-27), the Galaxy's
+3D engine. It is fetched the same way as `/galaxy-presets.js` - a dynamic
+`import()` from the page's own script, so a browser HUD that cannot fetch it
+keeps the flat picture - and it loads three.js from `/three.min.js` on this same
+origin, never from a CDN. That file, its whitelist key and its notices entry are
+the separate vendoring change's business; until it is served, this module stays
+on the flat picture and asks for nothing else.
 
 ---
 

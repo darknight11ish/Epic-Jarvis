@@ -57,6 +57,7 @@ plus these six files:
         lane-warning.js, hud-actions.js, hud-safety.js,   from backend/static/
         hud-edit.js, hud-presets.js,
         galaxy-presets.js (the Galaxy's looks, 2026-10-27),
+        galaxy-cosmos.js (the Galaxy's 3D engine, 2026-10-27),
         private-speech.js,
         face-voice.js, face-moments.js, face-tuning.js,
         animal-shared.js, hud-layout.js, hud-layout-store.js,
