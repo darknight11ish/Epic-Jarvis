@@ -932,14 +932,17 @@ html.hud-window-hidden *::after{
 
 /* ---- the rail's own toolbar (the owner's request, 2026-10-26) --------- *
  *  "where are the presets ... add a button in the left column. and move the
- *  settings from the top right to the left column." The Layouts door and the
+ *  settings from the top right to the left column." The Presets door and the
  *  settings gear live in THIS group and in no other, because the Studio shell
  *  (split-stage) hides .rail-nav, .rail-lanes and .rail-systems below - the
  *  sections the presets and the settings would otherwise have to live in.
  *  Nothing here is a second menu or a second command: #rail-presets opens the
- *  one Layouts menu hud-presets.js owns (the same menu the "Layout:" badge
- *  opens), and #hud-settings is still the shell's own gear, injected into this
- *  group by hud_bootstrap.js and never written into this vendored page.
+ *  one Presets menu hud-presets.js owns (the same menu the "Layout:" badge
+ *  opens, renamed from "HUD layouts" on 2026-10-27 and now also listing the
+ *  five local-AI presets and the personalities), and #hud-settings is still
+ *  the shell's own gear, injected into this group by hud_bootstrap.js and
+ *  never written into this vendored page. Since 2026-10-27 the injected gear
+ *  wears this group's own class and a stroke gear, so the pair matches.
  *  NAMED rail-toolbar* AND NOT rail-tools*: `#rail-tools` is the RIGHT rail's
  *  "Abilities used" card (`hud-edit.js`'s CARD_REGISTRY names the same
  *  selector), so a second element with that id would quietly steal it.
@@ -1993,20 +1996,30 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
          toolbar because this is the one rail block no shell hides: the Studio
          shell (split-stage) hides .rail-nav, .rail-lanes and .rail-systems
          below, which is where the presets and the settings could not be found.
-         #rail-presets opens the ONE Layouts menu hud-presets.js owns - the
-         same `jarvis:hud-presets-open` door the "Layout: <name>" badge uses -
-         and opens it beside this button, never as a second menu. The settings
-         gear is NOT written here: the page is vendored byte-identical from
-         the backend folder, so the shell injects its gear into #rail-toolbar
-         (hud_bootstrap.js), exactly as it always injected it into the stage
-         bar. A page served on its own in a plain browser therefore still has
-         no gear, and this button needs no shell to work.
+         #rail-presets opens the ONE Presets menu hud-presets.js owns (renamed
+         from "HUD layouts" on 2026-10-27, the owner: "you didnt put presets,
+         you put hud layouts") - the same `jarvis:hud-presets-open` door the
+         "Layout: <name>" badge uses - and opens it beside this button, never
+         as a second menu. Since 2026-10-27 that ONE menu also lists the five
+         local-AI focus presets (GET /api/presets) and Jarvis's personalities
+         (GET /api/manner): a model preset raises the PC's ONE approval card
+         and is never marked chosen until the PC says so, while a personality
+         is immediate and asks for no card.
+         The settings gear is NOT written here: the page is vendored
+         byte-identical from the backend folder, so the shell injects its gear
+         into #rail-toolbar (hud_bootstrap.js), exactly as it always injected
+         it into the stage bar. Since 2026-10-27 that injected gear wears this
+         button's own class and a line-drawn gear on the same 24-unit grid, so
+         the two read as one pair (the owner: "i want the settings to be in a
+         similar style of icon to the others"). A page served on its own in a
+         plain browser therefore still has no gear, and this button needs no
+         shell to work.
          NOTE THE NAME: `#rail-tools` is already the RIGHT rail's "Abilities
          used" card (hud-edit.js maps that id), so nothing here may reuse it. -->
     <div class="rail-toolbar" id="rail-toolbar">
       <button type="button" class="rail-toolbar-btn" id="rail-presets"
-              title="Presets: the HUD's layouts"
-              aria-label="Presets: the HUD's layouts"
+              title="Presets: model presets, personalities and HUD layouts"
+              aria-label="Presets: model presets, personalities and HUD layouts"
               aria-haspopup="menu" aria-expanded="false">
         <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.8" aria-hidden="true" focusable="false">

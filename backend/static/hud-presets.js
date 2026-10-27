@@ -1,7 +1,8 @@
 /**
- * hud-presets.js - "My layouts": the owner's saved HUD layouts, and the
- * Layouts menu / Export / Import controls (H3 of the editable-HUD design,
- * 2026-10-22; Gemini ruling Q5, Rulings 9/27/28).
+ * hud-presets.js - the "Presets" menu: the PC's local-AI focus presets and
+ * personalities (2026-10-27, the owner's ask), the owner's saved HUD layouts,
+ * and the Export / Import controls (H3 of the editable-HUD design, 2026-10-22;
+ * Gemini ruling Q5, Rulings 9/27/28).
  *
  * ONE DOCUMENT, ONE WRITE. The layout library lives inside the SAME saved
  * layout document the H2 editor writes, and it is saved through the SAME
@@ -15,6 +16,41 @@
  * same closed-world normalizer and saves the repaired document. There is no
  * file input, no `blob:`, no `URL.createObjectURL` and no Tauri dialog
  * capability: the HUD's CSP stays `default-src 'self'` (Ruling 9).
+ *
+ * THE MENU IS CALLED "PRESETS" NOW, AND IT LISTS MORE THAN LAYOUTS (the
+ * owner, 2026-10-26: "you didnt put presets, you put hud layouts" and "i also
+ * want the presets to include all the ideal local ai presets that are made
+ * (like coder, or general, etc) along with the different personalities of
+ * jarvis that i can select"). Above the saved layouts, in the SAME one menu:
+ *
+ *   * the five local-AI focus presets (`GET /api/presets`, JARVIS-API section
+ *     145), with the PC's own `chosen_preset` marking the chosen one;
+ *   * Jarvis's nine personalities plus the owner's own "My personalities"
+ *     (`GET /api/manner`), with the PC's own `personality` marking the current
+ *     one.
+ *
+ * TWO KINDS, TWO RULES, and the second one is why this file now fetches:
+ *
+ *   * A MODEL PRESET IS A LOOSENING. Applying one starts its lane and raises
+ *     the PC's ONE `change_own_config` (switch_model) approval card; nothing is
+ *     chosen until the owner answers it, so NOTHING IS MARKED CHOSEN HERE. The
+ *     mark comes from a REFETCH of the PC's own `chosen_preset`, never from the
+ *     click that asked for it - a denied card changes nothing and must not look
+ *     like a success.
+ *   * A PERSONALITY IS WORDING ONLY. The PC says it plainly ("Nothing here
+ *     raises a card", `jarvis_manner.py`), so the click is immediate: the menu
+ *     shows the PC's own `said` (its switch_ack), then refetches and marks the
+ *     personality the PC now names.
+ *
+ * TWO ROADS, ONE ANSWER. In the desktop shell this page holds NO token (apps
+ * security audit M2) and the bootstrap's fetch shim refuses every write except
+ * `/api/chat`, so each call has a Rust bridge: `apply_focus_preset` (the same
+ * command the page's own focus-preset rail calls), and the HUD's two
+ * personality commands (`hud_personalities`, `hud_switch_personality`, granted
+ * by the `hud-personalities` set). A plain browser (no shell) uses the same
+ * two routes directly with `X-Jarvis-Client: hud`, exactly as the page's own
+ * rail does. Both roads answer the same JSON, so the rendering below is one
+ * code path.
  *
  * WHAT THIS FILE OWNS: the pure library helpers (duplicate / rename / delete /
  * apply / export / import), so node tests can prove them without a browser; and
@@ -310,7 +346,184 @@ export function adoptImportedLayout(doc, currentDoc = null) {
 
 export { USER_ID_RE, MAX_USER_PRESETS };
 
-/* ── 2. The Layouts menu (browser only; imported by the page) ─────────────── */
+/* ── 2. The PC's own presets (node-tested) ───────────────────────────────── */
+
+/**
+ * The five local-AI focus presets, in the order the PC lists them
+ * (`GET /api/presets`). Pure, so node tests can prove the reading without a
+ * browser. The PC's own `chosen_preset` is the ONLY thing that marks a row
+ * chosen - never the click that asked for it.
+ */
+export function modelPresetRows(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  if (body.available === false) return [];
+  const rows = Array.isArray(body.presets) ? body.presets : [];
+  const chosen = typeof body.chosen_preset === "string" ? body.chosen_preset : "";
+  return rows
+    .filter((row) => row && typeof row === "object"
+      && typeof row.id === "string" && row.id)
+    .map((row) => ({
+      id: row.id,
+      title: typeof row.title === "string" && row.title ? row.title : row.id,
+      focus: typeof row.focus === "string" ? row.focus : "",
+      chosen: row.id === chosen,
+    }));
+}
+
+/**
+ * The personalities the PC offers (`GET /api/manner`): its nine built-ins in
+ * its own order, then the owner's saved "My personalities" when there are
+ * any. `current` is the PC's own answer, never the last click. Pure for the
+ * same reason as above; a row that carries no id or no name is dropped rather
+ * than drawn as an unclickable blank.
+ */
+export function personalityRows(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const current = typeof body.personality === "string" ? body.personality : "";
+  const builtIn = Array.isArray(body.personalities) ? body.personalities : [];
+  const own = Array.isArray(body.user_personalities) ? body.user_personalities
+    : (Array.isArray(body.custom_personalities) ? body.custom_personalities : []);
+  const rows = [];
+  for (const raw of builtIn) {
+    const row = raw && typeof raw === "object" ? raw : {};
+    const id = typeof row.id === "string" ? row.id : "";
+    if (!id) continue;
+    rows.push({
+      id,
+      title: typeof row.title === "string" && row.title ? row.title : id,
+      hint: typeof row.description === "string" ? row.description : "",
+      custom: false,
+      current: id === current,
+    });
+  }
+  for (const raw of own) {
+    const row = raw && typeof raw === "object" ? raw : {};
+    const id = typeof row.id === "string" ? row.id : "";
+    const name = typeof row.name === "string" && row.name ? row.name : "";
+    if (!id || !name) continue;
+    rows.push({
+      id,
+      title: name,
+      hint: typeof row.line === "string" ? row.line : "",
+      custom: true,
+      current: id === current,
+    });
+  }
+  return { rows, current };
+}
+
+/** The body one personality click sends: ONE field, never a dial or a mode. */
+export function personalitySwitchBody(id) {
+  return { personality: String(id || "") };
+}
+
+/** The body one model-preset click sends: ONE field, the preset's own id. */
+export function modelApplyBody(id) {
+  return { preset: String(id || "") };
+}
+
+/* ── 3. The roads to the PC (node-tested with a fake window) ─────────────── */
+
+/** The shell's IPC bridge, or null in a plain browser. The HUD page holds no
+ *  token (apps security audit M2): with a shell every request goes through
+ *  Rust, which adds it. */
+export function shellCoreOf(win) {
+  try {
+    const core = win && win.__TAURI__ && win.__TAURI__.core;
+    return core && typeof core.invoke === "function" ? core : null;
+  } catch { /* a page with no shell */ }
+  return null;
+}
+
+/** The header the standing rule asks for on EVERY request: the page's own
+ *  `JARVIS.headers()` adds the token when the page has one (a browser), and
+ *  `X-Jarvis-Client: hud` is sent either way. Rust's `jarvis_headers()` sends
+ *  the same client name on the shell road. */
+export function apiHeadersFor(win, extra) {
+  const base = extra ? { ...extra } : {};
+  const jarvis = win && win.JARVIS;
+  if (jarvis && typeof jarvis.headers === "function") return jarvis.headers(base);
+  return { "X-Jarvis-Client": "hud", ...base };
+}
+
+export function apiUrlFor(win, path) {
+  const jarvis = win && win.JARVIS;
+  return jarvis && typeof jarvis.url === "function" ? jarvis.url(path) : path;
+}
+
+/** A thrown string (Rust) or an Error, said in one plain line. */
+export function errorTextOf(error) {
+  if (typeof error === "string" && error) return error;
+  return (error && error.message) || String(error || "no answer");
+}
+
+/** The one reading of a write's answer, on the browser road. */
+async function readWriteAnswer(response) {
+  let answer = null;
+  try { answer = await response.json(); } catch { /* a refusal may be empty */ }
+  if (!response.ok) {
+    throw new Error((answer && (answer.error || answer.reason))
+      || `the PC answered ${response.status}`);
+  }
+  if (!answer || typeof answer !== "object") {
+    throw new Error("the PC answered, but not in a way this menu can read");
+  }
+  return answer;
+}
+
+/** `GET /api/presets`, on whichever road this page has. The shell command is
+ *  the page's own `get_focus_presets` (the same answer the page's focus-preset
+ *  rail reads); a plain browser reads the route itself. */
+export async function readFocusPresetsOnPc(win) {
+  const core = shellCoreOf(win);
+  if (core) return core.invoke("get_focus_presets");
+  const response = await win.fetch(apiUrlFor(win, "/api/presets"), {
+    cache: "no-store", headers: apiHeadersFor(win),
+  });
+  if (!response.ok) throw new Error(`the PC answered ${response.status}`);
+  return response.json();
+}
+
+/** `GET /api/manner`: the personalities half. It has its own HUD command
+ *  (`hud_personalities`) because this page holds no token (M2) and a read
+ *  outside `hud_get`'s fixed list would be refused by the bootstrap. */
+export async function readPersonalitiesOnPc(win) {
+  const core = shellCoreOf(win);
+  if (core) return core.invoke("hud_personalities");
+  const response = await win.fetch(apiUrlFor(win, "/api/manner"), {
+    cache: "no-store", headers: apiHeadersFor(win),
+  });
+  if (!response.ok) throw new Error(`the PC answered ${response.status}`);
+  return response.json();
+}
+
+/** `POST /api/work/apply {"preset": id}` - ONE card on the PC. In the shell
+ *  this is the page's own `apply_focus_preset` command, which is exactly the
+ *  route the bootstrap's fetch shim refuses to let a page POST itself. */
+export async function applyFocusPresetOnPc(win, id) {
+  const core = shellCoreOf(win);
+  if (core) return core.invoke("apply_focus_preset", { preset: id });
+  const response = await win.fetch(apiUrlFor(win, "/api/work/apply"), {
+    method: "POST",
+    headers: apiHeadersFor(win, { "Content-Type": "application/json" }),
+    body: JSON.stringify(modelApplyBody(id)),
+  });
+  return readWriteAnswer(response);
+}
+
+/** `POST /api/manner {"personality": id}` - ONE field, no card. */
+export async function switchPersonalityOnPc(win, id) {
+  const core = shellCoreOf(win);
+  if (core) return core.invoke("hud_switch_personality", { personality: id });
+  const response = await win.fetch(apiUrlFor(win, "/api/manner"), {
+    method: "POST",
+    headers: apiHeadersFor(win, { "Content-Type": "application/json" }),
+    body: JSON.stringify(personalitySwitchBody(id)),
+  });
+  return readWriteAnswer(response);
+}
+
+/* ── 4. The Presets menu (browser only; imported by the page) ─────────────── */
 
 const MENU_ID = "hud-presets-menu";
 const STATUS_ID = "hud-presets-status";
@@ -323,10 +536,11 @@ function el(doc, tag, className, text) {
 }
 
 /**
- * Mount the Layouts menu and its dialogs. The page calls this once; the module
- * finds the badge H2's editor already created and turns its click into the
- * menu. A page without the editor (an older page) simply has no badge and this
- * mount does nothing.
+ * Mount the "Presets" menu and its dialogs. The page calls this once; the
+ * module finds the badge H2's editor already created (and the rail button the
+ * page draws) and turns their click into the ONE menu. A page without the
+ * editor (an older page) simply has no badge and this mount still wires the
+ * rail button.
  */
 export function mountHudPresets(options = {}) {
   const doc = options.document || globalThis.document;
@@ -349,6 +563,18 @@ export function mountHudPresets(options = {}) {
   let focusDoor = null;
   let returnFocus = null;
   let statusLine = null;
+  // The last line said in the menu, kept so a re-render (which rebuilds the
+  // menu's own line element) does not wipe the answer the owner is reading.
+  let statusNote = "";
+
+  // The PC's own two lists (2026-10-27). `null` = not read yet, and the menu
+  // says that in words rather than drawing an empty section; `pcBusy` holds the
+  // ONE in-flight pick per kind, so a double click cannot send two applies.
+  let pcPresets = null;   // GET /api/presets answer (or {available:false, why})
+  let pcManner = null;    // GET /api/manner answer (or {available:false, why})
+  let pcReading = false;
+  let pcError = "";
+  let pcBusy = { preset: "", personality: "" };
 
   // A page-level live line for the menu/dialog results. It is separate from
   // H2's editing bar (which only exists while editing) so a saved layout is
@@ -365,11 +591,87 @@ export function mountHudPresets(options = {}) {
   }
 
   function announce(text) {
+    statusNote = String(text || "");
     const line = ensureStatus();
-    line.textContent = String(text || "");
+    line.textContent = statusNote;
     if (menu) {
       const inside = menu.querySelector(".hud-presets-line");
-      if (inside) inside.textContent = String(text || "");
+      if (inside) inside.textContent = statusNote;
+    }
+  }
+
+  /* ── the PC's own presets: two roads, one answer ──────────────────────── */
+
+  // The roads themselves live at the top of this file (`readFocusPresetsOnPc`
+  // and friends), so a plain node test can prove what each one sends with a
+  // fake window and a fake fetch - no browser needed. Here the mount only
+  // keeps the two lists, the one in-flight pick per kind, and the rendering.
+
+  /** Read both lists. The menu keeps whatever it already shows and says it is
+   *  reading, so reopening never blanks a list the owner is looking at. */
+  function readPcLists() {
+    if (pcReading) return;
+    pcReading = true;
+    pcError = "";
+    renderMenu();
+    const done = () => {
+      pcReading = false;
+      renderMenu();
+    };
+    readFocusPresetsOnPc(win)
+      .then((answer) => { pcPresets = answer; })
+      .catch((error) => { pcPresets = null; pcError = errorTextOf(error); })
+      .then(() => readPersonalitiesOnPc(win))
+      .then((answer) => { pcManner = answer; })
+      .catch((error) => { pcManner = null; if (!pcError) pcError = errorTextOf(error); })
+      .then(done);
+  }
+
+  /** ONE model-preset click. The PC's `switch_model` card is raised by the
+   *  apply itself, and the apply only answers 2xx once the owner approved it -
+   *  so this waits, says what it is waiting for, and then lets a REFETCH of the
+   *  PC's own contract decide the mark. A denied card returns a refusal and
+   *  marks nothing. */
+  async function pickModelPreset(id, title) {
+    if (!id || pcBusy.preset) return;
+    pcBusy.preset = id;
+    renderMenu();
+    announce(`Asked the PC to apply ${title || id}. Nothing changes until you answer its approval card.`);
+    try {
+      await applyFocusPresetOnPc(win, id);
+      pcPresets = await readFocusPresetsOnPc(win).catch(() => pcPresets);
+      const row = modelPresetRows(pcPresets).find((item) => item.id === id);
+      announce(row && row.chosen
+        ? `Now using ${row.title}. The PC switched its model and lane.`
+        : `The PC answered, but its preset list does not name ${title || id} as chosen - nothing is marked here.`);
+    } catch (error) {
+      announce(`That did not work: ${errorTextOf(error)}`);
+      pcPresets = await readFocusPresetsOnPc(win).catch(() => pcPresets);
+    } finally {
+      pcBusy.preset = "";
+      renderMenu();
+    }
+  }
+
+  /** ONE personality click: immediate, NO card (wording only - the PC's own
+   *  words). The PC's `said` is its switch_ack; the mark comes from the
+   *  refetched `personality`, never from this click. */
+  async function pickPersonality(id, title) {
+    if (!id || pcBusy.personality) return;
+    pcBusy.personality = id;
+    renderMenu();
+    announce(`Switching to ${title || id}...`);
+    try {
+      const answer = await switchPersonalityOnPc(win, id);
+      pcManner = await readPersonalitiesOnPc(win).catch(() => pcManner);
+      const said = answer && typeof answer.said === "string" && answer.said
+        ? answer.said : `Now speaking as ${title || id}.`;
+      announce(said);
+    } catch (error) {
+      announce(`That did not work: ${errorTextOf(error)}`);
+    } finally {
+      pcBusy.personality = "";
+      renderMenu();
     }
   }
 
@@ -448,11 +750,124 @@ export function mountHudPresets(options = {}) {
     return box;
   }
 
+  /** One grey plain-words line inside a section (never a control). */
+  function note(text, className) {
+    return el(doc, "p", className || "hud-presets-empty", text);
+  }
+
+  /** A one-line placeholder for a section whose read has not landed yet. */
+  function loadingNote(what) {
+    return note(pcError
+      ? `The PC did not list ${what} (${pcError}).`
+      : (pcReading ? `Reading ${what} from the PC...` : `Open the menu again to read ${what}.`));
+  }
+
+  /** The five local-AI focus presets (GET /api/presets). A row is marked
+   *  chosen ONLY from the PC's own `chosen_preset`, and the section says the
+   *  card rule in words before any click. */
+  function renderModelPresets() {
+    const group = section("Model presets");
+    if (pcPresets === null) {
+      group.appendChild(loadingNote("its presets"));
+      return group;
+    }
+    if (pcPresets.available === false) {
+      group.appendChild(note(pcPresets.why || "This PC's Jarvis cannot list presets yet."));
+      return group;
+    }
+    const rows = modelPresetRows(pcPresets);
+    if (!rows.length) {
+      group.appendChild(note("The PC listed no presets."));
+      return group;
+    }
+    group.appendChild(note("Applying one asks the PC for ONE approval card - nothing is chosen until you answer it."));
+    for (const row of rows) {
+      const asking = pcBusy.preset === row.id;
+      const button = menuItem(
+        `${row.title}${row.chosen ? " (chosen)" : ""}${asking ? " - asking..." : ""}`,
+        row.focus,
+        () => { pickModelPreset(row.id, row.title); },
+      );
+      if (row.chosen) button.setAttribute("aria-current", "true");
+      // The id in the DOM, so a person tabbing through and the tests both see
+      // which row a button is - never read back as the chosen state, which is
+      // the PC's answer alone.
+      button.dataset.preset = row.id;
+      if (pcBusy.preset && !asking) button.disabled = true;
+      group.appendChild(button);
+    }
+    return group;
+  }
+
+  /** Jarvis's nine personalities (GET /api/manner), then the owner's own
+   *  "My personalities" as their own section when there are any. A click is
+   *  immediate - no card - and the mark comes from the PC's own `personality`. */
+  function renderPersonalities() {
+    const group = section("Personality");
+    if (pcManner === null) {
+      group.appendChild(loadingNote("its personalities"));
+      return group;
+    }
+    if (pcManner.available === false) {
+      group.appendChild(note(pcManner.why || "This PC's Jarvis cannot list its personalities yet."));
+      return group;
+    }
+    const { rows } = personalityRows(pcManner);
+    const builtIns = rows.filter((row) => !row.custom);
+    if (!builtIns.length) {
+      group.appendChild(note("The PC listed no personalities."));
+      return group;
+    }
+    group.appendChild(note("Switching is immediate: it changes how Jarvis talks and asks for no card."));
+    for (const row of builtIns) {
+      const asking = pcBusy.personality === row.id;
+      const button = menuItem(
+        `${row.title}${row.current ? " (current)" : ""}${asking ? " - switching..." : ""}`,
+        row.hint,
+        () => { pickPersonality(row.id, row.title); },
+      );
+      if (row.current) button.setAttribute("aria-current", "true");
+      button.dataset.personality = row.id;
+      if (pcBusy.personality && !asking) button.disabled = true;
+      group.appendChild(button);
+    }
+    return group;
+  }
+
+  /** The owner's saved personalities, only when the PC says there are any. */
+  function renderMyPersonalities() {
+    if (pcManner === null || pcManner.available === false) return null;
+    const { rows } = personalityRows(pcManner);
+    const own = rows.filter((row) => row.custom);
+    if (!own.length) return null;
+    const group = section("My personalities");
+    for (const row of own) {
+      const asking = pcBusy.personality === row.id;
+      const button = menuItem(
+        `${row.title}${row.current ? " (current)" : ""}${asking ? " - switching..." : ""}`,
+        row.hint,
+        () => { pickPersonality(row.id, row.title); },
+      );
+      if (row.current) button.setAttribute("aria-current", "true");
+      button.dataset.personality = row.id;
+      if (pcBusy.personality && !asking) button.disabled = true;
+      group.appendChild(button);
+    }
+    return group;
+  }
+
   function renderMenu() {
     if (!menu) return;
     const scroll = menu.querySelector(".hud-presets-scroll");
     if (!scroll) return;
     scroll.textContent = "";
+    // The owner's presets first (2026-10-27): the five local-AI focus presets
+    // and the personalities, then the saved HUD layouts the menu always had.
+    // Every action below is unchanged - this only adds sections above them.
+    scroll.appendChild(renderModelPresets());
+    scroll.appendChild(renderPersonalities());
+    const ownPersonalities = renderMyPersonalities();
+    if (ownPersonalities) scroll.appendChild(ownPersonalities);
     const builtIns = section("Built-in layouts");
     for (const preset of PRESETS) {
       const info = presetInfo(preset.id);
@@ -512,7 +927,7 @@ export function mountHudPresets(options = {}) {
       () => { closeMenu(false); openTransfer("export"); }));
     scroll.appendChild(actions);
 
-    const line = el(doc, "p", "hud-presets-line");
+    const line = el(doc, "p", "hud-presets-line", statusNote);
     line.setAttribute("role", "status");
     line.setAttribute("aria-live", "polite");
     scroll.appendChild(line);
@@ -525,12 +940,12 @@ export function mountHudPresets(options = {}) {
     menu.className = "hud-presets-menu";
     menu.hidden = true;
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "HUD layouts");
-    const head = el(doc, "p", "hud-presets-title", "HUD layouts");
+    menu.setAttribute("aria-label", "Presets");
+    const head = el(doc, "p", "hud-presets-title", "Presets");
     const scroll = el(doc, "div", "hud-presets-scroll");
     const close = el(doc, "button", "hud-presets-close", "Close");
     close.type = "button";
-    close.setAttribute("aria-label", "Close the layouts menu");
+    close.setAttribute("aria-label", "Close the presets menu");
     close.addEventListener("click", () => closeMenu(true));
     menu.append(head, scroll, close);
     doc.body.appendChild(menu);
@@ -575,6 +990,11 @@ export function mountHudPresets(options = {}) {
     if (!railDoor) railDoor = doc.getElementById("rail-presets");
     ensureMenu();
     renderMenu();
+    // Read the PC's two lists each time the menu opens: the chosen preset and
+    // the current personality can be changed from the Settings window or the
+    // bar, and this menu must never show yesterday's answer as today's. The
+    // cached copy stays on screen while the read is in flight.
+    readPcLists();
     // Which control opened it decides where the ONE menu appears: under the
     // badge at the top right (no anchor, exactly as before), or beside the
     // rail button when the rail button asked (2026-10-26) - so a click in the

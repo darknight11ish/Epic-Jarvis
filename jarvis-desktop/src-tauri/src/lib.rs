@@ -1266,6 +1266,12 @@ pub fn run() {
             plain_errors::get_manner,
             plain_errors::set_manner,
             plain_errors::set_humor,
+            // The HUD's Presets menu (2026-10-27): read the personalities, and
+            // switch ONE of them. Wording only, no card; the write is held on a
+            // stale link. Deliberately narrower than get_manner/set_manner -
+            // the HUD window gets no manner mode, dials or custom presets.
+            plain_errors::hud_personalities,
+            plain_errors::hud_switch_personality,
             plain_errors::get_thinking,
             plain_errors::set_thinking,
             plain_errors::open_fix_place,

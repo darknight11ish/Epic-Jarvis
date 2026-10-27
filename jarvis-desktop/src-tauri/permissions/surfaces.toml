@@ -2001,3 +2001,22 @@ permissions = [
   "allow-hud-schedule-add",
   "allow-hud-schedule-act",
 ]
+
+# The HUD Presets menu's personalities (2026-10-27). The owner asked that menu
+# to list "the different personalities of jarvis that i can select", and the
+# page's own POST to /api/manner is refused by the bootstrap's fetch shim: the
+# page holds no token (apps security audit M2), so every write it makes has a
+# Rust command that adds it. These are deliberately their OWN two commands -
+# narrower than the Settings window's get_manner/set_manner, which also carry
+# the manner mode, the four dials and the custom personalities; the HUD window
+# has no business with those. Nothing here raises a card: a personality
+# changes only how answers are worded, never what Jarvis does, asks, remembers
+# or sends (jarvis_manner.py says so). The switch is held on a stale link like
+# every other write; the read decides nothing.
+[[set]]
+identifier = "hud-personalities"
+description = "Read the nine personalities and the owner's own, and switch ONE of them. Wording only, no card, held on a stale link; nothing else about how Jarvis talks is reachable here."
+permissions = [
+  "allow-hud-personalities",
+  "allow-hud-switch-personality",
+]

@@ -1799,9 +1799,14 @@
    * what the Jarvis bar's gear and the widget's gear call - plain_errors.rs's
    * `open_fix_place {place: "settings"}`, navigation only, through the app
    * lock like every other way in - so there is NO new Tauri command and no
-   * new Rust code. It carries the same gear glyph and the same "Jarvis
-   * settings" name for a screen reader, so all three gears look and read
-   * alike.
+   * new Rust code. It keeps the same "Jarvis settings" name for a screen
+   * reader as the bar's and the widget's gears, and since 2026-10-27 it draws
+   * the PAGE's own stroke gear (24-unit grid, fill none, currentColor,
+   * stroke-width 1.8) instead of the bar's filled 16-unit one: the owner
+   * asked for it to match the icons of the rail buttons it sits beside ("i
+   * want the settings to be in a similar style of icon to the others"). All
+   * three still read alike to a screen reader; the HUD's gear now looks like
+   * its own rail.
    *
    * WHY IT IS ADDED HERE rather than in the page: jarvis_hud.html is
    * vendored byte-identical from the backend folder, and section 2b below
@@ -1845,37 +1850,46 @@
    * page's Presets button (2026-10-26). Silent if the page has no such group
    * (an older or newer copy of the vendored page): the gear is chrome the
    * shell adds to a page it does not fork, never a control the page is made
-   * to carry. */
+   * to carry.
+   *
+   * THE SAME BOX AS THE PRESETS BUTTON (2026-10-27). The owner said "the
+   * spacing of the two new buttons is uneven" and "i want the settings to be
+   * in a similar style of icon to the others". The gear used to be a `.ghost`
+   * sized with 26px inline styles while the Presets button was a plain
+   * `.rail-toolbar-btn`, so the two were different heights - and in the Studio
+   * rail (split-stage) the page's CSS draws every `.rail-toolbar-btn` as the
+   * same 42x38 box, which the ghost was not. It now takes that page class, so
+   * padding, border, height and the 14px glyph (16px in the Studio rail) all
+   * come from the same rules the Presets button uses; only the flex is
+   * overridden, so an icon-only button does not stretch to the labelled
+   * button's width. */
   function addSettingsGear() {
     var railToolbar = document.querySelector(".rail-toolbar");
     if (!railToolbar || document.getElementById("hud-settings")) return;
     var gear = document.createElement("button");
     gear.type = "button";
     gear.id = "hud-settings";
-    gear.className = "ghost hud-settings";
+    gear.className = "rail-toolbar-btn hud-settings";
     gear.title = GEAR_SAID;
-    // The page's `.ghost` pads for a word; this one is a square icon button,
-    // so it is sized here. 26px is the size the page's own small controls use
-    // (the Telemetry toggle this gear used to sit beside), not the 44px
-    // composer buttons.
-    gear.style.width = "26px";
-    gear.style.height = "26px";
-    gear.style.padding = "0";
-    gear.style.display = "flex";
-    gear.style.alignItems = "center";
-    gear.style.justifyContent = "center";
-    // The pill above it is as tall as a row; a 26px square centred beside it
-    // keeps the group one line in the wide rails and one column in the
-    // Studio rail, without the gear changing size or shape.
+    // `.rail-toolbar-btn` is `flex:1 1 auto` so the labelled Presets button
+    // fills the row; this box carries no label, so it keeps its own width and
+    // centres its glyph. Everything else - the padding, the border, the height
+    // - still comes from the shared class, which is what makes the pair line
+    // up (and in the Studio rail's column, where the page sets both to
+    // 42x38, the two are the same box exactly).
     gear.style.flex = "0 0 auto";
+    gear.style.justifyContent = "center";
     gear.setAttribute("aria-label", GEAR_SAID);
-    // The SAME gear glyph the Jarvis bar's gear and the widget's gear draw
-    // (index.html #open-settings, widget.html #btn-settings), so the three
-    // are recognisably one control. inline SVG, so neither CSP objects.
+    // The rail's own icon language, copied from the page's #rail-presets
+    // glyph: a line drawing on the 24-unit grid, no fill, currentColor,
+    // stroke-width 1.8. The Jarvis bar's gear and the widget's gear keep
+    // their filled 16-unit one - they are different windows, and the owner
+    // asked for THIS one to match the buttons beside it. The name for a
+    // screen reader is unchanged, so all three still read alike.
     gear.innerHTML =
-      '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
-      '<path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm0 1.5a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />' +
-      '<path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />' +
+      '<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false">' +
+      '<circle cx="12" cy="12" r="3" />' +
+      '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />' +
       "</svg>";
     gear.addEventListener("click", settingsFromHud);
     // After the page's own Presets button, so the group reads "Presets, then

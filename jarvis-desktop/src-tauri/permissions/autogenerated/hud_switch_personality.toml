@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-switch-personality"
+description = "Enables the hud_switch_personality command without any pre-configured scope."
+commands.allow = ["hud_switch_personality"]
+
+[[permission]]
+identifier = "deny-hud-switch-personality"
+description = "Denies the hud_switch_personality command without any pre-configured scope."
+commands.deny = ["hud_switch_personality"]

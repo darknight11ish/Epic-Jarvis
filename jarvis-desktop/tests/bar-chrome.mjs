@@ -197,10 +197,25 @@ check("the HUD's gear is NOT put back on the stage bar", () => {
     "the gear is being inserted beside Telemetry again, which is the stage bar it left");
 });
 
-check("the HUD's gear draws the bar's and widget's own glyph", () => {
+check("the HUD's gear draws the rail's own stroke glyph, not the bar's filled one", () => {
+  // MOVED 2026-10-27, the owner's request: "i want the settings to be in a
+  // similar style of icon to the others" - the rail's buttons are line icons
+  // on a 24-unit grid (jarvis_hud.html #rail-presets is the model), so the
+  // injected gear now draws the same language. The bar's gear and the
+  // widget's gear keep their filled 16-unit glyph; only the HUD's changed,
+  // and tests/hud-rail-tools.mjs holds the class/size half of that.
   const glyph = hudBootstrap.slice(hudBootstrap.indexOf("gear.innerHTML"));
-  assert.match(glyph.slice(0, 900), /M8 5\.6a2\.4 2\.4 0 1 0 0 4\.8/,
-    "all three gears must look alike - same gear path as index.html/widget.html");
+  assert.match(glyph.slice(0, 1200), /viewBox="0 0 24 24"/,
+    "the HUD's gear is not on the rail's 24-unit grid");
+  assert.match(glyph.slice(0, 1200), /fill="none"/, "the HUD's gear is still a filled icon");
+  assert.match(glyph.slice(0, 1200), /stroke="currentColor"/,
+    "the HUD's gear is not drawn with the rail's currentColor stroke");
+  assert.match(glyph.slice(0, 1200), /stroke-width="1\.8"/,
+    "the HUD's gear does not use the rail's stroke width");
+  assert.match(glyph.slice(0, 1200), /class="glyph"/,
+    "the HUD's gear is not sized by the page's .rail-toolbar-btn .glyph rule");
+  assert.doesNotMatch(glyph.slice(0, 1200), /M8 5\.6a2\.4/,
+    "the HUD's gear still draws the bar's filled glyph");
 });
 
 check("the HUD's window is granted the command its gear calls", () => {

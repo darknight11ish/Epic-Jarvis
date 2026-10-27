@@ -45,6 +45,8 @@ const SRC = join(HERE, "..", "src");
 const FIXTURE = JSON.parse(
   readFileSync(join(HERE, "..", "..", "backend", "fixtures", "work_presets.json"), "utf8"));
 const CLOUD_LANES = ["jarvis-escalate", "jarvis-critic", "jarvis-bulk"];
+const PERSONALITIES = JSON.parse(
+  readFileSync(join(HERE, "..", "..", "contract", "personalities.json"), "utf8"));
 
 let PASSED = 0, FAILED = 0;
 async function check(name, fn) {
@@ -84,6 +86,24 @@ function fixturePayload(chosen = null) {
 }
 
 /**
+ * The PC's own manner answer (GET /api/manner), in the shape the HUD reads:
+ * the nine personalities from the contract, the current one, and the owner's
+ * own list. No card is involved anywhere in this stub - that is the point of
+ * the personality half.
+ */
+function mannerPayload(current = PERSONALITIES.default, mine = []) {
+  return {
+    available: true,
+    personality: current,
+    personalities: PERSONALITIES.personalities.map((p) => ({
+      id: p.id, title: p.title, description: p.description,
+    })),
+    user_personalities: mine,
+    custom_personalities: mine,
+  };
+}
+
+/**
  * The page, served as Tauri serves it (same-origin static files), with the PC
  * stubbed. Everything the page asks for is answered on this origin, so the
  * page's own JARVIS.url() base is "" - the same same-origin shape the plain
@@ -94,6 +114,11 @@ async function openHud(browser, options = {}) {
     proxy: options.proxy !== false,
     payload: fixturePayload(options.chosen || null),
     presetsAvailable: options.presetsAvailable !== false,
+    manner: mannerPayload(options.personality || PERSONALITIES.default,
+      options.userPersonalities || []),
+    mannerAvailable: options.mannerAvailable !== false,
+    mannerBody: null,
+    mannerPosts: [],
     applyMode: options.applyMode || "ok",       // ok | hold | refuse
     applyBody: null,
     applyWait: null,                            // resolves when hold is released
@@ -140,6 +165,21 @@ async function openHud(browser, options = {}) {
       if (url.pathname === "/api/presets" || url.pathname === "/api/work") {
         if (!state.presetsAvailable) return json(route, 404, { error: "not found" });
         return json(route, 200, state.payload);
+      }
+      if (url.pathname === "/api/manner") {
+        if (!state.mannerAvailable) return json(route, 404, { error: "not found" });
+        if (req.method() === "POST") {
+          state.mannerBody = JSON.parse(req.postData() || "{}");
+          state.mannerPosts.push(state.mannerBody);
+          const all = state.manner.personalities.concat(state.manner.user_personalities);
+          const row = all.find((p) => p.id === state.mannerBody.personality);
+          if (!row) return json(route, 409, { ok: false, error: "I do not know that personality." });
+          state.manner.personality = row.id;
+          // The PC's own switch_ack, as jarvis_manner.py returns it in `said`.
+          return json(route, 200, { ok: true, said: `Switched to ${row.title}.`,
+            ...state.manner });
+        }
+        return json(route, 200, state.manner);
       }
       if (url.pathname === "/api/work/apply" && req.method() === "POST") {
         state.applyBody = JSON.parse(req.postData() || "{}");
@@ -403,6 +443,146 @@ await check("at 960x640 the cockpit rail does not overflow, and all three layout
       `${name} overflows horizontally at 960 px (${out[name].scroll} > ${out[name].inner})`);
   }
   assert.equal(out.cockpit.presetShown, true, "the cockpit rail does not show the presets");
+  assert.deepEqual(problems, []);
+});
+
+/* ── The PC's own presets in the menu (owner, 2026-10-27: "i also want the
+ *    presets to include all the ideal local ai presets that are made (like
+ *    coder, or general, etc) along with the different personalities of jarvis
+ *    that i can select") ─────────────────────────────────────────────────── */
+
+async function openPresetMenu(page) {
+  await page.click("#rail-presets");
+  await page.waitForSelector("#hud-presets-menu:not([hidden])", { timeout: 5000 });
+  await page.waitForTimeout(700);          // both reads land, then the menu re-renders
+}
+
+async function menuReport(page) {
+  return page.evaluate(() => {
+    const menu = document.getElementById("hud-presets-menu");
+    if (!menu) return null;
+    const groups = [...menu.querySelectorAll(".hud-presets-group")].map((group) => ({
+      heading: (group.querySelector(".hud-presets-head") || {}).textContent || "",
+      items: [...group.querySelectorAll('[role="menuitem"]')].map((b) => ({
+        text: b.textContent.trim(),
+        chosen: b.getAttribute("aria-current") === "true",
+        preset: b.dataset.preset || "",
+        personality: b.dataset.personality || "",
+      })),
+      notes: [...group.querySelectorAll(".hud-presets-empty")].map((p) => p.textContent),
+    }));
+    const rows = (heading) => (groups.find((g) => g.heading === heading) || { items: [] }).items;
+    const line = menu.querySelector(".hud-presets-line");
+    return {
+      title: (menu.querySelector(".hud-presets-title") || {}).textContent || "",
+      aria: menu.getAttribute("aria-label"),
+      headings: groups.map((g) => g.heading),
+      groups,
+      model: rows("Model presets"),
+      people: rows("Personality"),
+      mine: rows("My personalities"),
+      layouts: rows("Built-in layouts").length,
+      line: line ? line.textContent : "",
+    };
+  });
+}
+
+await check("the menu is called Presets and lists the PC's five model presets and nine personalities", async () => {
+  const { page, problems } = await openHud(browser, { chosen: "coding" });
+  await openPresetMenu(page);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.equal(menu.title, "Presets", "the menu did not take the owner's name for it");
+  assert.equal(menu.aria, "Presets", "the menu's name for a screen reader is not Presets");
+  assert.deepEqual(menu.headings.slice(0, 3), ["Model presets", "Personality", "Built-in layouts"],
+    `the PC's own lists do not come before the layouts: ${JSON.stringify(menu.headings)}`);
+  assert.deepEqual(menu.model.map((r) => r.preset), FIXTURE.presets.map((p) => p.id),
+    "the menu does not list the PC's five model presets in its order");
+  assert.deepEqual(menu.model.map((r) => r.text.replace(/ \(chosen\)$/, "")),
+    FIXTURE.presets.map((p) => p.title), "the model presets' titles are not the PC's own");
+  assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["coding"],
+    "the chosen mark is not the PC's chosen_preset");
+  assert.deepEqual(menu.people.map((r) => r.personality),
+    PERSONALITIES.personalities.map((p) => p.id),
+    "the menu does not list the PC's nine personalities in its order");
+  assert.deepEqual(menu.people.map((r) => r.text.replace(/ \(current\)$/, "")),
+    PERSONALITIES.personalities.map((p) => p.title),
+    "the personalities' titles are not the PC's own");
+  assert.equal(menu.mine.length, 0, "a My personalities section appeared with no saved ones");
+  assert.match(menu.line, /approval card/i, `the menu does not say the model cards' rule: ${menu.line}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("a model preset click asks the PC, and the chosen mark follows the REFETCHED contract", async () => {
+  const { page, state, problems } = await openHud(browser);
+  await openPresetMenu(page);
+  await page.click('#hud-presets-menu [data-preset="coding"]');
+  await page.waitForTimeout(900);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.equal(state.applyBody && state.applyBody.preset, "coding",
+    "the model-preset click did not ask the PC to apply it");
+  assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["coding"],
+    "the menu did not mark the preset the PC's refetched contract now names chosen");
+  assert.match(menu.line, /Now using Coding/, `the menu does not say what the PC did: ${menu.line}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("a refused model preset leaves nothing marked, and says why", async () => {
+  const { page, state, problems } = await openHud(browser, { applyMode: "refuse" });
+  await openPresetMenu(page);
+  await page.click('#hud-presets-menu [data-preset="coding"]');
+  await page.waitForTimeout(900);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.equal(state.applyBody && state.applyBody.preset, "coding", "the click never reached the PC");
+  assert.equal(menu.model.filter((r) => r.chosen).length, 0,
+    "a preset was marked chosen although the PC refused it");
+  assert.match(menu.line, /did not work|prepared|nothing was changed/i,
+    `the refusal is not said in plain words: ${menu.line}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("a personality click is immediate, asks for no card, and marks the PC's new current", async () => {
+  const { page, state, problems } = await openHud(browser);
+  await openPresetMenu(page);
+  await page.click('#hud-presets-menu [data-personality="classic_butler"]');
+  await page.waitForTimeout(700);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.deepEqual(state.mannerPosts, [{ personality: "classic_butler" }],
+    "the personality click did not post ONE personality field");
+  assert.deepEqual(state.decisions, [], "a personality switch asked for an approval decision");
+  assert.equal(state.pending.length, 0, "a personality switch raised an approval card");
+  assert.deepEqual(menu.people.filter((r) => r.chosen).map((r) => r.personality),
+    ["classic_butler"], "the menu did not mark the personality the PC now names current");
+  assert.match(menu.line, /Switched to Classic British Butler/,
+    `the PC's own words are not shown: ${menu.line}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("My personalities appears only when the PC lists one", async () => {
+  const { page, problems } = await openHud(browser, { userPersonalities: [
+    { id: "mine-1", name: "Calm Helper", line: "calm and short" }] });
+  await openPresetMenu(page);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.deepEqual(menu.headings.slice(0, 4),
+    ["Model presets", "Personality", "My personalities", "Built-in layouts"],
+    `My personalities is missing or out of order: ${JSON.stringify(menu.headings)}`);
+  assert.deepEqual(menu.mine.map((r) => r.text), ["Calm Helper"]);
+  assert.deepEqual(problems, []);
+});
+
+await check("a PC without the presets route gets honest words, and no invented presets", async () => {
+  const { page, problems } = await openHud(browser, { presetsAvailable: false });
+  await openPresetMenu(page);
+  const menu = await menuReport(page);
+  await page.close();
+  assert.equal(menu.model.length, 0, "model presets appeared without the PC's contract");
+  const group = menu.groups.find((g) => g.heading === "Model presets") || { notes: [] };
+  assert.match(group.notes.join(" "), /did not list/i,
+    `no honest words for a backend without the route: ${JSON.stringify(group.notes)}`);
   assert.deepEqual(problems, []);
 });
 

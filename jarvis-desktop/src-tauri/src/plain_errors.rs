@@ -23,6 +23,22 @@
 //!   the SAME route, so setting one never resets the other. At once, no
 //!   card, held on a stale link like [`set_manner`].
 //!
+//! And two for the HUD's Presets menu (2026-10-27, the owner asked that menu
+//! to list "the different personalities of jarvis that i can select"):
+//!
+//! * [`hud_personalities`] - the SAME `GET /api/manner` answer, read for the
+//!   HUD window so its Presets menu can draw the nine personalities and the
+//!   owner's own, and mark the one the PC names.
+//! * [`hud_switch_personality`] - `POST /api/manner {"personality": <id>}`:
+//!   ONE field, at once, NO card (wording only - the PC says this itself in
+//!   `jarvis_manner.py`), held on a stale link like [`set_manner`].
+//!
+//! They are deliberately their OWN two commands rather than a grant of the
+//! Settings window's [`get_manner`] / [`set_manner`]: the HUD page may switch
+//! which personality Jarvis speaks in and nothing else - not the manner mode,
+//! not the dials, not a custom personality. The ACL set that grants them
+//! (`hud-personalities`, permissions/surfaces.toml) says the same.
+//!
 //! And one for the quickbar: [`open_fix_place`] opens Settings or the Brain
 //! when the owner presses an error's fix button ("Check the connection
 //! settings", "Choose a model"). It opens a window and nothing else; the
@@ -355,6 +371,67 @@ pub async fn set_humor(app: AppHandle, on: bool) -> Result<serde_json::Value, St
         .post(format!("{base}{MANNER_PATH}"))
         .headers(jarvis_headers(&app)?)
         .json(&serde_json::json!({ "humor": on }))
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if missing(status, &text) {
+        return Err(MANNER_MISSING.to_string());
+    }
+    Err(backend_refusal(status, &text))
+}
+
+/// The HUD's read of `GET /api/manner` (2026-10-27): the Presets menu draws
+/// the nine personalities and the owner's own from this answer, and marks the
+/// one the PC names. Read only - it changes nothing and raises no card.
+///
+/// Its own command rather than a grant of [`get_manner`]: the Settings answer
+/// carries the manner mode and the four dials too, and this window has no
+/// business reading them (the `hud-personalities` set says so).
+#[tauri::command]
+pub async fn hud_personalities(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(READ_TIMEOUT))?
+        .get(format!("{base}{MANNER_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    manner_answer(status, &body)
+}
+
+/// ONE personality switch from the HUD's Presets menu (2026-10-27):
+/// `POST /api/manner {"personality": <id>}`. At once, NO card - it changes only
+/// how answers are worded (the PC's own `jarvis_manner.py` says so), never what
+/// Jarvis does, asks, remembers or sends. Held on a stale link like every other
+/// write (rule 4).
+///
+/// ONE field and nothing else: no manner mode, no dial, no custom personality.
+/// [`manner_change_body`] checks the id's shape (lowercase, digits, `_`, `-`);
+/// what the id MEANS is the PC's business.
+#[tauri::command]
+pub async fn hud_switch_personality(
+    app: AppHandle,
+    personality: String,
+) -> Result<serde_json::Value, String> {
+    let body = manner_change_body(None, Some(&personality), None, None, None)?;
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(STALE.to_string());
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(WRITE_TIMEOUT))?
+        .post(format!("{base}{MANNER_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&body)
         .send()
         .await
         .map_err(|e| backend_unreachable(&e, &base))?;

@@ -120,7 +120,7 @@ function buildLayoutRows() {
 
 /**
  * One row per owner-saved layout (H3). Built from the SAME saved document the
- * window's Layouts menu shows; choosing one writes through the one existing
+ * window's Presets menu shows; choosing one writes through the one existing
  * command, exactly like a built-in preset.
  */
 function buildUserRows(list) {
@@ -146,7 +146,7 @@ function buildUserRows(list) {
     name.textContent = entry.name;
     const blurb = document.createElement("span");
     blurb.className = "theme-blurb";
-    blurb.textContent = "Your saved layout. Edit it in the window's Layouts menu.";
+    blurb.textContent = "Your saved layout. Edit it in the window's Presets menu.";
     text.append(name, blurb);
     label.append(radio, glyph, text);
     list.append(label);

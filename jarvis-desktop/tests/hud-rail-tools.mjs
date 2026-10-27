@@ -82,9 +82,13 @@ check("the Presets button is in the left rail, in its own toolbar", () => {
 
 check("the button says what it does, in the page's own monochrome glyphs", () => {
   const button = between(HUD, 'id="rail-presets"', "</button>", 900);
-  assert.match(button, /title="Presets: the HUD's layouts"/,
-    "the button needs a plain-words title");
-  assert.match(button, /aria-label="Presets: the HUD's layouts"/,
+  // Renamed 2026-10-27: the menu is the Presets menu now and lists the PC's
+  // model presets and personalities as well as the HUD layouts, so the title
+  // names all three (the owner's own words: "you didnt put presets, you put
+  // hud layouts").
+  assert.match(button, /title="Presets: model presets, personalities and HUD layouts"/,
+    "the button needs a plain-words title that names what the menu now lists");
+  assert.match(button, /aria-label="Presets: model presets, personalities and HUD layouts"/,
     "the button needs the same plain words for a screen reader");
   assert.match(button, /<span class="rt-label">Presets<\/span>/,
     "the visible word should be 'Presets' in the wide rails");
@@ -220,13 +224,36 @@ check("the gear is added to the rail toolbar, and the stage-bar road is gone", (
     "no part of the bootstrap should reach for the stage bar for the gear any more");
 });
 
-check("the gear keeps its name, its glyph, its command and its shell-only rule", () => {
+check("the gear keeps its name, its command, its rail box and its shell-only rule", () => {
   assert.match(BOOT, /var GEAR_SAID = "Jarvis settings";/,
     "the HUD's gear must keep the bar's and the widget's name");
   assert.match(BOOT, /gear\.setAttribute\("aria-label", GEAR_SAID\)/,
     "the gear needs a name for a screen reader");
-  assert.match(BOOT, /M8 5\.6a2\.4 2\.4 0 1 0 0 4\.8/,
-    "the gear must keep the same glyph the bar and the widget draw");
+  // 2026-10-27, the owner: "the spacing of the two new buttons is uneven" and
+  // "i want the settings to be in a similar style of icon to the others". The
+  // gear now wears the page's own rail-button class - so its padding, border
+  // and height ARE the Presets button's rules, and the Studio rail draws both
+  // as the same 42x38 box - and it draws the rail's stroke glyph instead of
+  // the bar's filled one. The bar's and the widget's gears are untouched, and
+  // the name for a screen reader is unchanged.
+  assert.match(BOOT, /gear\.className = "rail-toolbar-btn hud-settings";/,
+    "the gear must take the page's own rail-button class, or the pair is uneven again");
+  assert.doesNotMatch(BOOT, /gear\.className = "ghost hud-settings"/,
+    "the gear is back on the .ghost class the Presets button does not use");
+  const gearBlock = between(BOOT, "function addSettingsGear", "appendChild(gear)", 3600);
+  assert.doesNotMatch(gearBlock, /gear\.style\.width|gear\.style\.height|26px/,
+    "the gear is being sized by hand again - the page's rail class owns its box");
+  assert.match(gearBlock, /viewBox="0 0 24 24"/,
+    "the gear is not on the rail's 24-unit grid");
+  assert.match(gearBlock, /fill="none"/, "the gear is a filled icon again");
+  assert.match(gearBlock, /stroke="currentColor"/,
+    "the gear is not drawn with the rail's currentColor stroke");
+  assert.match(gearBlock, /stroke-width="1\.8"/,
+    "the gear does not use the rail's stroke width");
+  assert.match(gearBlock, /class="glyph"/,
+    "the gear is not sized by the page's .rail-toolbar-btn .glyph rule");
+  assert.doesNotMatch(gearBlock, /M8 5\.6a2\.4/,
+    "the gear draws the bar's filled glyph again");
   assert.match(BOOT, /invoke\("open_fix_place",\s*\{\s*place:\s*"settings"\s*\}\)/,
     "the gear must keep calling open_fix_place with place: settings");
   // Shell-only: the gate returns before addSettingsGear with no __TAURI__.
@@ -235,6 +262,92 @@ check("the gear keeps its name, its glyph, its command and its shell-only rule",
     "the gear's gate must be the shell's own __TAURI__ presence");
   assert.match(gate, /if \(!\(tauri && tauri\.core && typeof tauri\.core\.invoke === "function"\)\) return;/,
     "a page in a plain browser must be given no gear at all");
+});
+
+/* ── 5. The menu lists the PC's own presets (2026-10-27) ─────────────────── */
+
+check("the menu is called Presets, and the PC's own lists come first", () => {
+  assert.match(PRESETS, /menu\.setAttribute\("aria-label", "Presets"\)/,
+    "the menu's own name is not Presets any more");
+  assert.match(PRESETS, /el\(doc, "p", "hud-presets-title", "Presets"\)/,
+    "the menu title is not the word Presets");
+  assert.doesNotMatch(PRESETS, /"HUD layouts"\)/,
+    "the menu still titles itself HUD layouts");
+  // The owner's two new kinds sit above the layouts they used to be the only
+  // content of; "My personalities" is conditional, so its section function
+  // exists but is only appended when the PC lists one.
+  const order = ["Model presets", "Personality", "My personalities", "Built-in layouts"];
+  let at = -1;
+  for (const heading of order) {
+    const next = PRESETS.indexOf(`section("${heading}")`);
+    assert.ok(next > at, `the menu's "${heading}" section is missing or out of order`);
+    at = next;
+  }
+  assert.match(PRESETS, /const ownPersonalities = renderMyPersonalities\(\);/,
+    "the My personalities section is not conditional on the PC listing any");
+});
+
+check("a model preset raises the PC's ONE card, and nothing is marked before the PC says so", () => {
+  assert.match(PRESETS,
+    /Applying one asks the PC for ONE approval card - nothing is chosen until you answer it\./,
+    "the section does not say the card rule in words");
+  assert.match(PRESETS, /await applyFocusPresetOnPc\(win, id\);/,
+    "a model-preset click does not go through the apply road");
+  // The mark comes from the REFETCHED contract's chosen_preset - never from
+  // the click. Both halves are read from the code so a future edit that marks
+  // optimistically fails here instead of looking finished.
+  const afterApply = between(PRESETS, "await applyFocusPresetOnPc(win, id);",
+    "} catch (error) {", 900);
+  assert.match(afterApply, /await readFocusPresetsOnPc\(win\)/,
+    "a preset is marked without refetching the PC's contract");
+  assert.match(afterApply, /row && row\.chosen/,
+    "the mark does not come from the PC's chosen_preset");
+  assert.doesNotMatch(PRESETS, /chosen: true|\.chosen = true/,
+    "the menu marks a preset chosen on its own");
+});
+
+check("a personality switch is immediate, shows the PC's own words, and asks for no card", () => {
+  assert.match(PRESETS,
+    /Switching is immediate: it changes how Jarvis talks and asks for no card\./,
+    "the section does not say the no-card rule in words");
+  assert.match(PRESETS, /await switchPersonalityOnPc\(win, id\);/,
+    "a personality click does not go through the switch road");
+  assert.match(PRESETS, /typeof answer\.said === "string"/,
+    "the PC's own switch_ack (its `said`) is not shown");
+  assert.match(PRESETS, /pcManner = await readPersonalitiesOnPc\(win\)/,
+    "the new current personality is not read back from the PC");
+});
+
+check("the rail box rules the pair shares are the page's own", () => {
+  // The page draws BOTH controls with one class; the gear adds no width/height
+  // of its own, so the Studio rail's 42x38 rule (and the 14/16px glyph rule)
+  // applies to it exactly as it does to the Presets button.
+  assert.match(HUD, /\.rail-toolbar-btn \.glyph\{width:14px; height:14px;/,
+    "the rail's own glyph size rule is gone");
+  assert.match(HUD, /html\[data-hud-shell="split-stage"\] \.rail-toolbar-btn\{[^}]*width:42px; height:38px;/,
+    "the Studio rail's square-button rule is gone");
+  assert.match(HUD, /html\[data-hud-shell="split-stage"\] \.rail-toolbar-btn \.glyph\{width:16px; height:16px;\}/,
+    "the Studio rail no longer sizes the pair's glyphs to one size");
+});
+
+check("the HUD window is granted the two commands the menu calls, and Settings is not broadened", () => {
+  const capability = JSON.parse(read(join(TAURI, "capabilities", "hud.json")));
+  assert.equal(capability.permissions.filter((name) => name === "hud-personalities").length, 1,
+    "capabilities/hud.json does not grant exactly one hud-personalities set");
+  const surfaces = read(join(TAURI, "permissions", "surfaces.toml"));
+  const start = surfaces.indexOf('identifier = "hud-personalities"');
+  assert.notEqual(start, -1, "surfaces.toml has no hud-personalities set");
+  const set = surfaces.slice(start, start + 500);
+  assert.match(set, /"allow-hud-personalities"/, "the set misses allow-hud-personalities");
+  assert.match(set, /"allow-hud-switch-personality"/, "the set misses allow-hud-switch-personality");
+  assert.doesNotMatch(set, /allow-set-manner|allow-get-manner/,
+    "the HUD set was widened to the Settings window's whole manner commands");
+  const build = read(join(TAURI, "build.rs"));
+  const lib = read(join(TAURI, "src", "lib.rs"));
+  for (const command of ["hud_personalities", "hud_switch_personality"]) {
+    assert.ok(build.includes(`"${command}"`), `build.rs does not export ${command} to the ACL`);
+    assert.ok(lib.includes(`plain_errors::${command}`), `lib.rs does not register ${command}`);
+  }
 });
 
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nall checks passed");

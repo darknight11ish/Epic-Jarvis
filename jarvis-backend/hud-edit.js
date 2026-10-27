@@ -851,8 +851,10 @@ export function mountHudEditor(options = {}) {
     if (!badgeEl || !layout) return;
     const name = currentLayoutName();
     badgeEl.textContent = `Layout: ${name}`;
-    badgeEl.title = `HUD layout: ${name}. Open the Layouts menu.`;
-    badgeEl.setAttribute("aria-label", `HUD layout: ${name}. Open the Layouts menu.`);
+    // The menu is called Presets since 2026-10-27 (it lists the PC's model
+    // presets and personalities too), so the tooltip says that name.
+    badgeEl.title = `HUD layout: ${name}. Open the Presets menu.`;
+    badgeEl.setAttribute("aria-label", `HUD layout: ${name}. Open the Presets menu.`);
   }
 
   function ensureToggle() {

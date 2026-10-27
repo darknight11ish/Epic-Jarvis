@@ -2589,7 +2589,35 @@ does, so there is still ONE menu and one listing - it just opens beside the
 control that asked for it. The same toolbar is where the shell's settings gear
 now sits, moved out of the stage bar on the same day ("move the settings from
 the top right to the left column"); the gear is still injected by
-`hud_bootstrap.js` and still calls `open_fix_place { place: "settings" }`.
+`hud_bootstrap.js` and still calls `open_fix_place { place: "settings" }`, and
+since 2026-10-27 it wears the page's own `.rail-toolbar-btn` class and a
+line-drawn gear on the same 24-unit grid as `#rail-presets`, so the two controls
+are one pair - the owner's asks were "the spacing of the two new buttons is
+uneven" and "i want the settings to be in a similar style of icon to the
+others".
+
+**The menu is called "Presets" now, and it lists the PC's own presets
+(2026-10-27).** The owner's words: *"you didnt put presets, you put hud
+layouts"*, and *"i also want the presets to include all the ideal local ai
+presets that are made (like coder, or general, etc) along with the different
+personalities of jarvis that i can select"*. Above the saved layouts, the SAME
+one menu now draws the five local-AI focus presets from `GET /api/presets` and
+the nine personalities plus the owner's own from `GET /api/manner`, each marked
+current only from the PC's own `chosen_preset` / `personality`. The two kinds
+keep their existing permission rules: **a model preset is a loosening** -
+applying one starts its lane and raises the PC's ONE existing
+`change_own_config` (`switch_model`) card via the page's `apply_focus_preset`
+command, and the menu never marks it chosen until a REFETCH of the contract
+names it; **a personality is wording only** - `jarvis_manner.py` says it raises
+no card, so the click is immediate and shows the PC's own `said` (its
+switch_ack) before refetching. The reads are the existing `get_focus_presets`
+plus the HUD's own `hud_personalities`, and the one write is
+`hud_switch_personality` - a narrow pair in the `hud-personalities` set
+(`capabilities/hud.json`), deliberately NOT a grant of the Settings window's
+wider `get_manner`/`set_manner` (which carry the manner mode, the four dials and
+the custom personalities). A plain browser (no shell) sends `GET /api/presets`,
+`GET /api/manner` and `POST /api/manner` / `/api/work/apply` directly with
+`X-Jarvis-Client: hud`, exactly as the page's focus-preset rail already does.
 Settings lists the same library and adds a one-click
 "Reset HUD to Cockpit" row. **Honest limits, in the PR:** the library is
 per-computer (export/import is the manual move path; no sync), touch/pen and the
@@ -2597,7 +2625,9 @@ real monitor look are NOT-TESTABLE in CI, and H4's non-hideable safety rail
 (outside-text/rush-latch, stale-link/catching-up with Deny kept live, App lock)
 is still H4 - H3 does not draw it and makes no new guarantee about it.
 Desktop-only, like H1/H2: the phone has its own home screen and no editable-HUD
-layouts (A1-A4 planned, not built).
+layouts (A1-A4 planned, not built); the model presets and personalities the menu
+adds are PC settings the phone already reaches its own way (its Settings, "How
+Jarvis talks"), so no phone half was added for the menu.
 
 **The HUD Reminders tab is the desktop HUD's, on purpose** (2026-10-21; the
 owner's dedicated Reminders menu). The HUD page (`jarvis_hud.html`, vendored
