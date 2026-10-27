@@ -2432,6 +2432,32 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+**A reminder's own action: the desktop CREATES it and the PC OPENS it, and that
+is one-sided on purpose** (2026-10-27, the owner's request: *"id likee to set
+custom reminders that open something ... like makinf a reminder that opens a
+specific image or webpage"*; JARVIS-API §21's "a reminder's own action"). A
+reminder may carry ONE action - show a note, open a web page, open a file on
+this PC, or ask to put the morning briefing together - and the block is
+additive, so a client that does not know it drops it and draws what it drew.
+**Creating one is the desktop HUD's alone, for now**, and the reason is not
+policy: the target of `open-file` has to be a path inside a folder the PC lists
+(`jarvis_documents.allowed_path`, resolved again at the tap), and the phone
+cannot read the PC's folder tree, so a phone form could only ever offer the two
+task names - a smaller design that is a later slice, not an invented phone
+caller. **Opening the target is the PC's alone**: the file is on the PC and the
+page opens in the PC's browser, a phone opening either would be a different
+device showing a different thing, and a notification action that acts is a grant
+the phone deliberately does not add. Nothing on the phone writes an action, no
+route was added (`tools/check_parity.py` has nothing new to classify: the phone's
+use of `/api/schedule` and `/api/approve` is unchanged), and the phone still
+does the two things it already did: it shows the reminder's words - a fired
+`show-note` is words, so the note is shown - and it approves the ONE
+`schedule_action` card through the EXISTING `/api/approve`, because that card is
+local and reversible and is not in `PC_ONLY_ACTIONS`. Until the phone half lands
+it says the same one sentence `jarvis_open.py` already uses: opening happens on
+your PC, not on this phone. Nothing here claims the phone can open, create or
+edit one.
+
 **The microphone recovery is the desktop's, on purpose** (2026-10-21;
 JARVIS-API §5.2, Slice D of the Live & Voice program). Only the desktop opens
 THIS PC's input device (`jarvis-desktop/src-tauri/src/voice.rs`), so only it

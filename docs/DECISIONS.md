@@ -3697,3 +3697,65 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     layout itself is pinned to the real desktop JavaScript at 1e-6 by the
     generated fixture and `GalaxyPictureTest.kt`; that is a test, not a run on
     a phone.
+
+## 2026-10-27 — a reminder may carry one action, and opening is never a card
+
+The owner asked for this in their own words: *"id likee to set custom reminders
+that open something or do an action if i ask jarvos to make a specific remonder
+... like makinf a reminder that opens a specific image or webpage ... or action
+cards (woth actions that jarvis will perform after i approve a card made by the
+reminder when the time hits)"*. The design is
+`.dsh-scratch/REMINDER-ACTIONS-2026-10-27/DESIGN.md`; this is what was built,
+and the four decisions it rests on.
+
+**One reminder, one action, and it is additive.** The action is ONE JSON block
+in a new nullable column (`jobs.action`), added the way every other column was
+added (`_ADDED_COLUMNS`). A reminder written before this has NULL, hands out no
+`action` key at all, and behaves exactly as it did; an older client drops the
+field and draws what it drew; an older BACKEND would drop it silently, which is
+why `status()` gained the `actions: true` capability marker beside `phase2` and
+the HUD hides the whole "Then" block when it is absent. Rollback is safe: old
+code ignores the column.
+
+**Opening is a notice with an Open button, never an approval card.** A page or
+a file is shown in full on the reminder's row and on the notice, and nothing
+opens until that button is pressed - and the press IS the approval. Two
+reasons, both facts about this codebase: opening writes nothing (the same
+reasoning `jarvis_open.py` already gives for opening a program with no card),
+and a card lives 900 s, so "open this when you get to it" would be a 409 before
+the owner got to it. A button that opened something the owner could not see
+first would be the one thing this must never offer, so while App lock or "Hide
+memory lists" is on the target is blanked in Rust and no button is drawn.
+
+**A task always raises exactly one card at fire time, and nothing runs without
+it.** `run-task` is acting, so it goes through the existing gate as ONE
+`schedule_action` card, tier `ask`, every time the reminder goes off - never
+once and then silent. Denied, expired, refused, a tier that is not "ask" and a
+reminder edited while the card waited all run nothing. The card's `detail`
+carries the job id, `due`, the closed-list task name and one boolean, and never
+the reminder's words, the address, the path or the note: `_redact` returns
+`detail` verbatim when redaction is off, and `detail` reaches both apps.
+`run-task`'s list is two names and nothing else - `briefing` and `backup` - so
+there is no shell, no command, no script, no webhook and no free text anywhere
+in this feature.
+
+**The backup target was refused, and that is a correction to the design.** A
+backup made by a reminder would be encrypted with a fresh random recovery code
+(`jarvis_backup.generate_code`: "never logged, never written to a file, never
+kept by this module past the response that shows it once"), and a reminder that
+fired at 07:00 has nobody to show it to - so it would write an archive nobody
+could ever open. Putting the code in the card would write a credential to
+`approvals.db` in plain text. A backup nobody can open is worse than no backup,
+so `backup` is refused when the reminder is SAVED, in one plain sentence that
+says why and points at "Back up now" in the Brain. `briefing` has no such
+secret and runs. `open-app` stays out of the slice for the reason the design
+gave (the only resolver is the desktop's Start-menu index).
+
+**Creating one is the desktop's, and the phone creates nothing.** The HUD's
+Reminders form gained a "Then" choice - Nothing / Show a note / Open a web page /
+Open a file on this PC / Do a task - with the target field, a live sentence
+saying what will happen, and error sentences rather than codes. The phone shows
+a fired reminder's note and a read-only "opens on your PC" line, and approves
+the card through the EXISTING `/api/approve`; it has no way to create or edit an
+action, because a phone cannot read the PC's folders and a client must not edit
+deep configuration. That one-sided reason is in `docs/ARCHITECTURE.md` §8.

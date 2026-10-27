@@ -5248,7 +5248,7 @@ repeating job then moves to its next time - never once per missed time.
 |---|---|---|---|
 | `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "went_off": [job], "lists": [{"name", "title", "open"}], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items of every list, oldest first (each with its `list`). Since 2026-09-25 (21.9): `went_off` - timers, alarms and reminders that went off in the last hour and are not snoozed, newest first, at most five; `lists` - the named lists with open items. An older PC sends neither. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
-| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
+| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` · `{"kind": "reminder", ..., "action": {...}}` (a reminder that opens something or asks to run one task: 21.11) | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
 | `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off, and since 2026-10-14 every verb but `snooze` and `delete` on a job that has already gone off - "It has already gone off."); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. Since 2026-10-14 (DEF-008, the owner's decision) **`delete` also acts on a job that has gone off**: it is one the apps SHOW under "Just went off", and it is kept for `FIRED_KEEP` (a day), so the route reaches back the same day `snooze` does. `snooze` and `delete` are the two verbs routed before the scheduler's state gate; nothing else changed. |
 
 A `job`:
@@ -5273,6 +5273,13 @@ A `job`:
  "notify": false,                 only for a kind that tells nobody (the standby schedule)
  "note": "Went on standby at 01:00.",   a kind's line about how it last went (21.8)
  "urgent", "watches", "alert", "alert_at",   a "tell me when" only (section 30)
+ "action": {...},                 a reminder's ONE action (21.11). ABSENT when there is
+                                  none, which is every job written before 2026-10-27.
+ "action_problem": "That file is not there any more.",   a row that has gone off, when the
+                                  PC's own second check says the target cannot work; the
+                                  Open control is then not drawn
+ "action_unreadable": true,       the stored block could not be read at all, so the
+                                  reminder fires as an ordinary one and opens nothing
  "created", "source": "quick"|"tool"|"app"}
 ```
 
@@ -5919,6 +5926,146 @@ named list's title. **Not included in v1:** undo/edit history (the existing
 "cancel that" only deletes jobs; the owner can re-edit), and the UI controls
 themselves are a separate follow-up slice. **No UI work, no capability/ACL
 change and no patch-carried file change is in this backend slice.**
+
+### 21.11 A reminder's own action - it opens something, or raises ONE card (added 2026-10-27)
+
+The owner's request: *"id likee to set custom reminders that open something or do
+an action if i ask jarvos to make a specific remonder ... like makinf a reminder
+that opens a specific image or webpage ... or action cards (woth actions that
+jarvis will perform after i approve a card made by the reminder when the time
+hits)"*. A reminder may carry **ONE** action, added the way every other column
+was (`_ADDED_COLUMNS`): a new nullable `jobs.action`, JSON, NULL for every row
+written before it.
+
+**The field.** Exactly one kind and its one payload key:
+
+```
+{"kind": "show-note",    "note": "Take the blue folder and the form"}
+{"kind": "open-webpage", "url":  "https://example.com/invoice-42"}
+{"kind": "open-file",    "path": "C:\\Users\\you\\Pictures\\taxes.png"}
+{"kind": "run-task",     "task": "briefing"}
+```
+
+No other kind exists in this slice. `open-app` was evaluated and is deliberately
+NOT shipped: the only resolver for a program is the desktop's own Start-menu
+index (`open_app.rs`, which says in its header why it is not a command), so
+shipping it would mean duplicating that index in Python or adding a general exec
+path. There is no shell, command, script, webhook or "run this program" kind, and
+there never will be: a stored command is a script with no author present at run
+time (`DESIGN.md` §2.3).
+
+**Only a reminder may carry one**, and it is checked twice:
+
+* **When the reminder is saved** (`add_at` / `add_repeat` -> `_clean_action`), so
+  a bad target is refused before a row exists: `https://` only, at most 1024
+  characters, no whitespace or control characters, a real host, no `@` before the
+  host and no backslash; a file must be inside one of the folders on
+  `GET /api/folders` (`jarvis_documents.allowed_path`, which resolves links and
+  junctions and refuses a hidden folder, a reserved name and a protected place)
+  AND its extension must be on a small allow-list - `.png .jpg .jpeg .gif .webp
+  .bmp .pdf .txt .md .docx .doc .xlsx .pptx .csv`. `.lnk`, `.exe`, `.bat`, `.cmd`,
+  `.ps1`, `.msi`, `.scr`, `.html` and `.svg` are never openable this way, because
+  "open a file" means "run whatever is registered for it". A note is up to 500
+  characters and 10 lines.
+* **At the moment the target is used.** The row is plain SQLite on the owner's own
+  disk, so the PC checks it again when the job is read after it has gone off
+  (`action_problem` in its view) and the desktop checks it again at the tap. A
+  file that has moved, or a folder removed from Settings, is reported in one
+  sentence and the Open control is not drawn.
+
+Every failure is ONE plain sentence shown as it is ("A web address starts with
+https:// - copy it from your browser's address bar.", "That file is not in a
+folder Jarvis may look in. Add its folder in Settings, Folders.").
+
+**What happens when it goes off.** Two different things, by whether the kind acts:
+
+* `show-note`, `open-webpage`, `open-file` **open nothing and raise no card.** The
+  reminder goes off exactly as it does today, both apps name the whole target on
+  the row and on the notice, and the PC's notice carries an **Open** button.
+  Nothing opens until that is pressed, and the press IS the approval. The
+  reasoning is the codebase's own: opening writes nothing (no memory, no file, no
+  setting, no account - the same sentence `jarvis_open.py` gives for opening a
+  program with no card), a card lives 900 s so "look at this when you get to it"
+  would be a 409 before the owner got to it, and the tap is the same one that
+  already opens a link in one of Jarvis's answers. While App lock or "Hide memory
+  lists" is on, the action's target words are blanked in Rust (`redact_list`) and
+  **no Open control is drawn**: a control that opens something the owner cannot
+  see must not exist.
+* `run-task` **acts**, so it raises exactly ONE card at fire time, every time it
+  goes off, and runs nothing without a yes. The card is the existing gate action
+  `schedule_action`, tier `ask` (`[autonomy.tiers]`); it is answerable from either
+  app through the existing `POST /api/approve`, and it is not in
+  `PC_ONLY_ACTIONS` because it is local and reversible. A denial, an expiry, a
+  refusal, a tier that is not "ask", a gate that raised, and a reminder edited
+  while the card waited all run nothing, and the audit says which. Its `detail`
+  carries the job id, `due`, `what`, the closed-list task name and
+  `leaves_this_pc: false` - **never** the reminder's words, the address, the path
+  or the note, because `_redact` returns `detail` verbatim when redaction is off
+  and `detail` is handed to both apps on `/api/pending`. The target the owner
+  needs is in the card's own text.
+
+**The task list is two names and nothing else:** `briefing` and `backup`.
+`briefing` calls `jarvis_briefing.make` and rings the existing `schedule` ->
+`"ready"` event, so a briefing made by a reminder appears exactly like one made by
+a briefing job. **`backup` is refused when the reminder is saved, with its
+reason**: a backup is encrypted with a fresh random recovery code that
+`jarvis_backup.generate_code` never writes anywhere ("never kept by this module
+past the response that shows it once"), and a reminder that fired at 07:00 has
+nobody to show it to - so it would write an archive nobody could ever open. The
+sentence says that and points at "Back up now" in the Brain. `switch_model` is
+deliberately not on the list either: a reminder must not be able to pre-approve a
+loosening that has its own card.
+
+**The desktop command: `open_reminder_target(id)`.** ONE new Tauri command, and it
+takes the reminder's **id and nothing else** - never a URL, never a path, so no
+page can choose what Windows opens (the same rule the toast buttons follow).
+It: (1) is held on a stale link (`require_link_live`); (2) reads the job back from
+this PC (`GET /api/schedule?id=<id>`); (3) refuses a job that has not gone off,
+one with no action, a `show-note`, a `run-task`, and any job whose answer carries
+`action_problem`; (4) re-checks the target itself - `https` and a real host for a
+page (through the same `validate_external_url` an answer's links use), the
+extension allow-list and "the file is still there" for a file; (5) opens a page
+through `open_external_url` and a file through `ShellExecuteExW` (never
+`cmd /C start`, and never a page-supplied program); (6) refuses in one plain
+sentence, because a silent failure looks like a broken feature. It cannot re-run
+`jarvis_documents.allowed_path` - that is Python, in the backend - so the folder
+check is the PC's own `action_problem`, and this side adds the extension and
+scheme checks on top. It is granted to the HUD window alone (`reminder-open` in
+`permissions/surfaces.toml`), and the same command is what the toast's **Open**
+button reaches through `jarvis-openjob:<id>`.
+
+**The capability marker, and why it exists.** `status()` gains `"actions": true`
+beside `"phase2": true`. `handle_add` pulls only the keys it knows, so an OLDER
+backend would drop an `action` **silently** and the owner would get a reminder
+that opens nothing - the one dangerous direction. The HUD therefore hides the
+whole "Then" block unless the PC says `actions: true`, and says why if asked
+("Your PC's Jarvis cannot give a reminder an action yet - run apply-patches.ps1 on
+the PC."). Every old client ignores the key.
+
+**Back-compat and rollback.** A job with no action carries no new key at all, in
+the payload or in the event. Old clients drop the field. An older build ignores
+the column, so a code rollback leaves every job readable and loses nothing - the
+same contract `rank` was added under. A corrupt or unknown block fails safe: the
+reminder still fires as an ordinary reminder, opens nothing, raises no card, says
+`action_unreadable` in its view and writes `schedule.action_unreadable` with the
+id only.
+
+**Privacy.** The audit gets ids, kinds and outcomes only:
+`schedule.action_asked {"id","kind","what"}`, `schedule.action_refused
+{"id","outcome"}`, `schedule.action_ran {"id","what"}`, `schedule.action_failed
+{"id","what","error": <ExceptionName>}`, `schedule.action_unreadable {"id"}`.
+Never the words, the address, the path or the note.
+
+**Phone.** It creates and edits nothing in this slice (a phone cannot read the
+PC's folders, and a client must not edit deep configuration). It shows a fired
+`show-note`'s note and the one card, and approves that card through the existing
+`POST /api/approve`. **No route was added**, so `tools/check_parity.py` has
+nothing new to classify; the one-sided reason is in `docs/ARCHITECTURE.md` §8.
+
+**Not in this slice, said plainly:** editing an action on an existing reminder
+(the form adds one; the editor does not change it yet), `open-app`, a phone
+form, and the Brain window's own Coming up row has no Open control - the HUD's
+"Just went off" row and the PC's notice do.
 
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 
