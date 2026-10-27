@@ -379,7 +379,7 @@ index 2afade5..58caf1f 100644
      if hit:
          _audit("gate.refused_protected", {"action": action, "file": hit})
          return Verdict(False, "never", action,
-@@ -1426,22 +1764,60 @@ def check(action: str,
+@@ -1426,22 +1764,66 @@ def check(action: str,
                         outcome="notify")
  
      # ---- "ask", and anything unrecognised, waits for a human ----
@@ -413,13 +413,19 @@ index 2afade5..58caf1f 100644
 +                    # The digest covers the WHOLE request, including detail
 +                    # past the 4000 characters the row keeps (F-680-2).
 +                    target_digest = _pending_target(action, detail, prompt)
++                    # `raised` is stored WHOLE, with no length cap, unlike the
++                    # two fields above: it is JSON, and JSON cut mid-string is
++                    # not JSON - pending() then serves raised=None and every
++                    # client reads that as "not raised", leaving the swipe on
++                    # the one card the latch exists to slow down. chip_from()
++                    # already bounds every value, and the column is TEXT.
 +                    c.execute(
 +                        "INSERT INTO approvals (id,action,tier,detail,prompt,state,"
 +                        "created,raised,target_digest)"
 +                        " VALUES (?,?,?,?,?,'pending',?,?,?)",
 +                        (rid, action, tier, json.dumps(detail)[:4000],
 +                         (prompt or "")[:2000], now,
-+                         json.dumps(raised)[:1000] if raised else None,
++                         json.dumps(raised) if raised else None,
 +                         target_digest))
 +                c.execute("COMMIT")
 +            except Exception:
@@ -446,7 +452,7 @@ index 2afade5..58caf1f 100644
      _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
      # An unclassified action is safe (it became "ask") but opaque: you cannot
      # improve the pattern table without knowing what phrasing missed. Recording
-@@ -1599,9 +1975,16 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
+@@ -1599,9 +1981,16 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
      that mattered. Called from inside execute(), it sees every call.
      """
      action, _ = action_for_tool(name, params)
@@ -466,7 +472,7 @@ index 2afade5..58caf1f 100644
      if v.allowed:
          return None
      if v.timed_out:
-@@ -1633,29 +2016,74 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
+@@ -1633,29 +2022,74 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
  # some public questions answered by the local model; the alternative cost is
  # personal material reaching a cloud lane.
  
@@ -546,7 +552,7 @@ index 2afade5..58caf1f 100644
      try:
          _init()
          with closing(_connect()) as c:
-@@ -1666,6 +2094,9 @@ def taint_active() -> bool:
+@@ -1666,6 +2100,9 @@ def taint_active() -> bool:
  
  
  def clear_taint() -> bool:
@@ -556,7 +562,7 @@ index 2afade5..58caf1f 100644
      try:
          _init()
          with closing(_connect()) as c:
-@@ -1764,6 +2195,18 @@ def pending() -> list[dict]:
+@@ -1764,6 +2201,18 @@ def pending() -> list[dict]:
          # desktop cannot word the same warning two different ways - and so
          # there is one place to audit what a notification may contain.
          d["notice"] = notice_for(d)

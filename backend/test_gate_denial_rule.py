@@ -50,7 +50,10 @@ LISTED = ("second_card_enable", "second_card_browser_enable", "second_card_combi
           # email-send.patch: each email is its own card, sent only on "ask".
           "send_email",
           # draft-email.patch: each draft is its own card, saved only on "ask".
-          "draft_email")
+          "draft_email",
+          # update-in-chat.patch: the desktop update is ONE card, and
+          # jarvis_quick.py acts on tier "ask" only, so a "no" is not a wish.
+          "desktop_update")
 
 
 def check(name, cond, detail=""):

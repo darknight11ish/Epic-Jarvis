@@ -10,8 +10,8 @@ folder (or run `scripts\add-plugin.ps1 -Name receipts`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_receipts.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: 146, after every folder the old patch stack had
-  (the highest is `model-lanes` at 143), so its two paths are checked in the order
+- Position in the loader's order: 147, after every folder the old patch stack had
+  (the highest is `model-lanes` at 144), so its two paths are checked in the order
   they were added rather than in the middle of somebody else's
 
 The module itself is one of the ones this repository already ships

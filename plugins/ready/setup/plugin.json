@@ -4,5 +4,5 @@
   "module": "jarvis_setup",
   "install": "handler",
   "replaces_patch": "setup.patch",
-  "stack_order": 150
+  "stack_order": 151
 }

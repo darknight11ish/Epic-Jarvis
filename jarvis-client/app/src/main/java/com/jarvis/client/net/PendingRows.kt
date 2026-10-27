@@ -62,6 +62,85 @@ private val DETAIL_TEXT_KEYS = listOf("diff", "command", "cmd", "preview", "cont
  */
 private val REPLACES_TEXT_KEYS = listOf("replaces_kind", "replaces_heading", "replaces_note")
 
+/** The notice's sentences, all non-nullable [Notice] strings. */
+private val NOTICE_TEXT_KEYS = listOf("title", "body", "summary", "full")
+
+/** The raise's declared [Raised] strings - never its "count_today". */
+private val RAISED_TEXT_KEYS = listOf("code", "text", "quote", "context", "source", "from_tier", "to_tier")
+
+/** A [ProposalOption]'s declared strings. */
+private val OPTION_TEXT_KEYS = listOf("id", "label", "summary", "weight")
+
+/**
+ * A boolean read the safe way: a real boolean primitive, else null. JSON `null`
+ * and strings/numbers are all "not a boolean", never a coercion.
+ */
+private fun boolOf(el: JsonElement?): Boolean? {
+    val p = el as? JsonPrimitive ?: return null
+    return if (p is JsonNull) null else p.booleanOrNull
+}
+
+/**
+ * A `risk` object with every declared non-nullable field made decodable, each
+ * default chosen toward caution: unknown reversibility is treated as "no" and
+ * unknown reach as "outbound" (both make the card look worse, never better),
+ * and an unreadable swipe is refused. Unknown extra keys are kept for the
+ * model's own `ignoreUnknownKeys`.
+ */
+private fun riskSanitised(r: JsonObject): JsonObject {
+    val out = r.toMutableMap()
+    if ("reversible" in out && textOf(out["reversible"]) == null) out["reversible"] = JsonPrimitive("no")
+    if ("reach" in out && textOf(out["reach"]) == null) out["reach"] = JsonPrimitive("outbound")
+    if ("swipe_ok" in out && boolOf(out["swipe_ok"]) == null) out["swipe_ok"] = JsonPrimitive(false)
+    if ("why" in out && textOf(out["why"]) == null) out["why"] = JsonPrimitive("")
+    if ("classified" in out && boolOf(out["classified"]) == null) out["classified"] = JsonPrimitive(false)
+    return JsonObject(out)
+}
+
+/**
+ * A `notice` object with its non-nullable fields made decodable. An unreadable
+ * weight becomes "heavy" - the cautious one: Approve waits and the card may
+ * interrupt. An unreadable deny keeps Deny allowed, and an unreadable approve
+ * never turns Approve on. Absent keys stay absent, so an older desktop's card
+ * keeps exactly the behaviour its model documents.
+ */
+private fun noticeSanitised(n: JsonObject): JsonObject {
+    val out = n.toMutableMap()
+    for (key in NOTICE_TEXT_KEYS) {
+        if (key in out && textOf(out[key]) == null) out[key] = JsonPrimitive("")
+    }
+    if (out["weight"] is JsonNull) out["weight"] = JsonPrimitive("heavy")
+    if ("deny_ok" in out && boolOf(out["deny_ok"]) == null) out["deny_ok"] = JsonPrimitive(true)
+    if ("approve_ok" in out && boolOf(out["approve_ok"]) == null) out["approve_ok"] = JsonPrimitive(false)
+    return JsonObject(out)
+}
+
+/**
+ * A `raised` object with its declared strings and count made decodable. The
+ * raise itself is already present here (that is what refuses the swipes); a
+ * null inside it must not take that away.
+ */
+private fun raisedSanitised(r: JsonObject): JsonObject {
+    val out = r.toMutableMap()
+    for (key in RAISED_TEXT_KEYS) {
+        if (key in out && textOf(out[key]) == null) out[key] = JsonPrimitive("")
+    }
+    if ("count_today" in out) {
+        val n = (out["count_today"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
+        if (n == null) out["count_today"] = JsonPrimitive(0)
+    }
+    return JsonObject(out)
+}
+
+/** One [ProposalOption] with its declared strings made decodable. */
+private fun optionSanitised(o: JsonObject): JsonObject {
+    val out = o.toMutableMap()
+    for (key in OPTION_TEXT_KEYS) {
+        if (key in out && textOf(out[key]) == null) out[key] = JsonPrimitive("")
+    }
+    return JsonObject(out)
+}
+
 /**
  * One wire row, rewritten into the shape [PendingItem] decodes. Null when the
  * row has no usable id - an item that cannot be named cannot be decided.
@@ -115,6 +194,11 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
     for (key in REPLACES_TEXT_KEYS) {
         if (textOf(out[key]) == null) out[key] = JsonPrimitive("")
     }
+    // `replaces` itself: absent means an older desktop that has no guard (an
+    // ordinary card, exactly as its model documents); an explicit null or a
+    // value that is not a boolean means the guard was sent and could not be
+    // read - keep the two-press ask rather than silently dropping it.
+    if ("replaces" in out && boolOf(out["replaces"]) == null) out["replaces"] = JsonPrimitive(true)
 
     // --- detail and summary
     val rawDetail = obj["detail"]
@@ -156,12 +240,21 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
         out.remove("detail")
     }
 
-    // --- the shapes that must be objects or arrays, or not be there at all
-    if (obj["risk"] !is JsonObject) out.remove("risk")
-    val notice = obj["notice"] as? JsonObject
-    if (notice == null) out.remove("notice")
+    // --- the shapes that must be objects or arrays, or not be there at all.
+    // Each object is also made decodable: a null inside a declared non-nullable
+    // field of Risk/Notice/Raised/ProposalOption would fail the WHOLE row the
+    // same way replaces_kind did (measured 2026-10-27), so the declared fields
+    // are settled here with cautious values.
+    val risk = obj["risk"] as? JsonObject
+    if (risk == null) out.remove("risk") else out["risk"] = riskSanitised(risk)
+    val notice = (obj["notice"] as? JsonObject)?.let { noticeSanitised(it) }
+    if (notice == null) out.remove("notice") else out["notice"] = notice
     val options = obj["options"] as? JsonArray
-    if (options == null) out.remove("options") else out["options"] = JsonArray(options.filterIsInstance<JsonObject>())
+    if (options == null) {
+        out.remove("options")
+    } else {
+        out["options"] = JsonArray(options.filterIsInstance<JsonObject>().map { optionSanitised(it) })
+    }
 
     // --- title: never from row prose
     val title = notice?.let { textOf(it["title"]) } ?: titleForAction(action)
@@ -171,7 +264,7 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
     if (task != null) out["task"] = JsonPrimitive(task) else out.remove("task")
 
     // --- raised: fail toward caution
-    val raised = raisedOf(obj["raised"])
+    val raised = raisedOf(obj["raised"])?.let { raisedSanitised(it) }
     if (raised == null) out.remove("raised") else out["raised"] = raised
 
     // --- expiry

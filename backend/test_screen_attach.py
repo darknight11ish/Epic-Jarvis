@@ -495,6 +495,12 @@ def t_hygiene():
              # jarvis_hud.py, on setup.patch own last printed lines, and no line
              # this patch POST /api/screen wrapper wrote.
              "secret-handoff.patch",
+             # update-in-chat.patch (2026-10-26): ONE hunk in jarvis_gate.py
+             # that appends `desktop_update` to the END of _NO_RULE_FROM_DENIAL,
+             # after uncensored-optins.patch's own last entry, and no
+             # jarvis_hud.py hunk at all - so it cannot rewrite the POST
+             # /api/screen wrapper this patch installs.
+             "update-in-chat.patch",
              "gate-raise-rows.patch",
              "plugin-loader.patch",
              # app-control.patch (2026-10-19, the owner's phone
