@@ -588,15 +588,23 @@ from a commit message:
   were moved out to `docs/DECISIONS.md` on 2026-10-12, and this one moved with them
   without the pointer being corrected; fixed 2026-10-13.
 
-**`audit` and `python-advisories` are informational. Six required checks are what
+**`audit` and `python-advisories` are informational. SEVEN required checks are what
 gate a merge** - `rust`, `frontend`, `backend`, `backend-windows`,
-`credential-manager` and `powershell-5` - and the ruleset says so itself: a direct
-push to `main` was refused with ***"6 of 6 required status checks are expected."***
-The owner's evidence for the other half is five merged PRs (#312, #314, #315, #317,
-#318) that each had those six green **while `audit` was red**. So **a red `audit` is
-a signal to fix `main`'s own state - never a reason to hold a PR.** The cost of not
-knowing this was hours of holding mergeable work, which is why it is written here
-rather than left to be inferred.
+`credential-manager`, `powershell-5` and `phone-unit-tests` - measured 2026-10-27
+from the ruleset itself (id `24677804`, name "protect", enforcement `active`, no
+bypass actors; `gh api repos/darknight11ish/Epic-Jarvis/rulesets/24677804`).
+**The count was six until 2026-10-25 22:43:29 -0700**: the ruleset's own history
+shows `phone-unit-tests` added then (`.../rulesets/24677804/history/54742523`), and
+six before it back to at least 2026-10-07. The job landed earlier, at `eaa099d23`
+(2026-10-11 22:26:36 -0700) and was simply not required yet. **Keep the dated
+evidence dated, not current:** a direct push to `main` was refused with ***"6 of 6
+required status checks are expected."***, and five merged PRs (#312, #314, #315,
+#317, #318) each had the then-six green **while `audit` was red**. At seven, #899
+proved the same half again: merged 2026-10-27 17:07:20Z as `aaad48540` with all
+seven required checks green and `audit` red. So **a red `audit` is a signal to fix
+`main`'s own state - never a reason to hold a PR.** The cost of not knowing this was
+hours of holding mergeable work, which is why it is written here rather than left to
+be inferred.
 
 ## Appending to a shared file: put it at the end, and keep both when two PRs cross
 

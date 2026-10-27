@@ -557,11 +557,12 @@ estimates, and they change — re-run the command rather than trusting the numbe
 **What runs when a change is pushed.** Ten CI jobs are declared in
 `.github/workflows/ci.yml` — `rust`, `frontend`, `backend`, `backend-windows`,
 `credential-manager`, `powershell-5`, `phone-unit-tests`, `audit`,
-`python-advisories` (and the `push` trigger). **Six of them gate a merge** —
+`python-advisories` (and the `push` trigger). **Seven of them gate a merge** —
 `rust`, `frontend`, `backend`, `backend-windows`, `credential-manager`,
-`powershell-5` — while `audit` and `python-advisories` are informational
-(`CLAUDE.md`, final section, which records a direct push refused with *"6 of 6
-required status checks are expected."*).
+`powershell-5`, `phone-unit-tests` — while `audit` and `python-advisories` are
+informational (`CLAUDE.md`, final section; the set became seven at 2026-10-25
+22:43:29 -0700, and the refusal of a direct push with *"6 of 6 required status
+checks are expected."* is dated evidence from while it was still six).
 
 **The checkers, run for this page.** All five exit 0 on `main` at `8104e6d01`, with
 `JARVIS_BACKEND` cleared:
