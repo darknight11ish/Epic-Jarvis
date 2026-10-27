@@ -174,13 +174,13 @@
             aria-pressed="false"
             title="Hold to talk to Jarvis"
           >
+            <!-- The HUD's own composer microphone, drawn as a line glyph on
+                 the bar's 16-unit grid (every HUD rail glyph is 24-unit,
+                 stroked 1.8, shown at 14px; style.css scales this one's
+                 stroke so it renders at the same 1.05px). -->
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path
-                d="M8 1.5a2.25 2.25 0 0 0-2.25 2.25v4a2.25 2.25 0 0 0 4.5 0v-4A2.25 2.25 0 0 0 8 1.5Z"
-              />
-              <path
-                d="M4 7.25a.75.75 0 0 0-1.5 0 5.5 5.5 0 0 0 4.75 5.451V14.5H6a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5H8.75v-1.799A5.5 5.5 0 0 0 13.5 7.25a.75.75 0 0 0-1.5 0 4 4 0 0 1-8 0Z"
-              />
+              <rect x="6" y="2" width="4" height="7.3" rx="2" />
+              <path d="M3.3 7.3a4.7 4.7 0 0 0 9.4 0M8 12v2M5.7 14h4.6" />
             </svg>
             <span class="chip-label" aria-hidden="true">Voice</span>
             <!-- The button's name. main.js setAutoListening rewrites it, so a
@@ -203,11 +203,11 @@
             title='Listen for "hey Jarvis" instead of holding the mic button'
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path
-                d="M2 8a6 6 0 1 1 12 0A6 6 0 0 1 2 8Zm6-4.25A4.25 4.25 0 1 0 8 12.25 4.25 4.25 0 0 0 8 3.75ZM8 6.5A1.5 1.5 0 1 1 8 9.5 1.5 1.5 0 0 1 8 6.5Z"
-              />
+              <circle cx="8" cy="8" r="6" />
+              <circle cx="8" cy="8" r="3.75" />
+              <circle cx="8" cy="8" r="1.5" />
             </svg>
-            <span class="chip-label" aria-hidden="true">Auto</span>
+            <span class="chip-label" aria-hidden="true">Hey Jarvis</span>
             <span class="sr-only">Toggle listening for "hey Jarvis"</span>
           </button>
 
@@ -250,42 +250,27 @@
             <span class="live-toggle-label chip-label" aria-hidden="true">Watch</span>
           </button>
 
-          <!-- Temporary chat (the owner's decision, 2026-09-25): while it is
-               pressed, Jarvis uses and learns nothing from memory and the PC
-               keeps nothing of the chat. Turning it on or off starts a new
-               conversation. answer-memory.js. -->
-          <button
-            id="temporary"
-            class="icon-button mode-chip"
-            type="button"
-            aria-pressed="false"
-            title="Start an incognito chat: Jarvis won't use or learn from your memory, and it isn't kept"
-          >
-            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path d="M8 1.75c-2.9 0-5 2.2-5 5.1v6.9l1.7-1.2 1.6 1.2L8 12.5l1.7 1.25 1.6-1.2 1.7 1.2V6.85c0-2.9-2.1-5.1-5-5.1Z" />
-              <circle cx="6.1" cy="6.8" r="0.9" />
-              <circle cx="9.9" cy="6.8" r="0.9" />
-            </svg>
-            <span class="chip-label" aria-hidden="true">Temp</span>
-            <span class="sr-only">Incognito</span>
-          </button>
-
-          <!-- Private chat (owner-approved 2026-10-26): a temporary chat
-               plus a strict zero-write promise - no memory, nothing learned or
-               kept, no tool and no card. Only offered when the PC advertises
-               capabilities.private_chat; private-chat.js. -->
+          <!-- Incognito (the owner's decision, 2026-10-27): ONE chip. Private
+               chat and the old Temporary chat collapsed into this one, and it
+               keeps the STRICTER half - the private turn's strict zero-write
+               promise: no memory, nothing learned or kept, no tool and no card
+               (private-chat.js). The old #temporary button left the DOM; a
+               conversation the PC itself makes temporary (a game) still gets
+               its own marker (#temporary-strip) and is not called Incognito.
+               Always on the bar; the PC is asked on press and the strip says
+               why if it can't. -->
           <button
             id="private"
             class="icon-button mode-chip"
             type="button"
             aria-pressed="false"
-            title="Start a private chat: Jarvis won't use memory, keep anything, or run tools"
+            title="Start an incognito chat: Jarvis won't use memory, keep anything, or run tools"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M8 1.75a3.25 3.25 0 0 0-3.25 3.25v2.25H4.2a.9.9 0 0 0-.9.9v5.1c0 .5.4.9.9.9h7.6c.5 0 .9-.4.9-.9v-5.1a.9.9 0 0 0-.9-.9h-.55V5A3.25 3.25 0 0 0 8 1.75Zm-1.75 5.5V5a1.75 1.75 0 1 1 3.5 0v2.25h-3.5Z" />
             </svg>
-            <span class="chip-label" aria-hidden="true">Private</span>
-            <span class="sr-only">Private chat</span>
+            <span class="chip-label" aria-hidden="true">Incognito</span>
+            <span class="sr-only">Incognito</span>
           </button>
           </div>
 
@@ -295,38 +280,15 @@
                name it already had; the one keyboard shortcut the bar already
                documents (Esc hides the bar, the same command #hide-bar calls)
                is shown as a badge beside the close. -->
+          <!-- ── Zone 3: the window utilities ───────────────────────────
+               Secondary window controls, grouped and separated from the
+               modes by a hairline. The owner's decision of 2026-10-27 leaves
+               two here: the settings gear and the close. The "?" primer door,
+               the pin button and the Esc badge all left the bar - Esc still
+               hides it, and the close's own tooltip is the one place that
+               names the key now. Each survivor keeps the id, title and
+               screen-reader name it already had. -->
           <div class="utility-cluster" role="group" aria-label="Window controls">
-
-          <!-- The bar opens compact (owner, 2026-10-19). "Things you can say"
-               is a help panel, not the empty bar's permanent furniture; this
-               button is its door, and pressing it again closes the panel and
-               lets the bar shrink back to the input row. -->
-          <button
-            id="sayable-toggle"
-            class="icon-button"
-            type="button"
-            aria-expanded="false"
-            aria-controls="primer"
-            aria-label="What can I say?"
-            title="What can I say?"
-          >
-            <span class="sayable-mark" aria-hidden="true">?</span>
-            <span class="sr-only">What can I say?</span>
-          </button>
-
-          <button
-            id="pin"
-            class="icon-button"
-            type="button"
-            aria-pressed="false"
-            aria-label="Pin window"
-            title="Keep Jarvis open when it loses focus"
-          >
-            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path d="M6 1.5h4l-.6 3.2 2.1 2.1v1.4H8.7V14L8 15l-.7-1V8.2H4.5V6.8l2.1-2.1L6 1.5Z" />
-            </svg>
-            <span class="sr-only">Pin window</span>
-          </button>
 
           <!-- Settings, on the bar itself (the owner's request, 2026-10-10:
                "i should be able to access settings on the desktop program
@@ -335,9 +297,9 @@
                already uses - plain_errors.rs's `open_fix_place` - so it needs
                no new Tauri command and no new permission (the quickbar
                already holds `allow-open-fix-place`), and it goes through the
-               app lock like every other way in. Placed beside the pin rather
-               than in the palette: the palette is a finder for things you
-               name, and the owner asked for a symbol he can SEE. -->
+               app lock like every other way in. Placed beside the close
+               rather than in the palette: the palette is a finder for things
+               you name, and the owner asked for a symbol he can SEE. -->
           <button
             id="open-settings"
             class="icon-button"
@@ -372,8 +334,6 @@
             </svg>
             <span class="sr-only">Hide the Jarvis bar</span>
           </button>
-          <!-- The bar's one documented shortcut, shown where it acts. -->
-          <kbd class="key-badge" aria-hidden="true">Esc</kbd>
           </div>
         </div>
       </div>
@@ -573,17 +533,20 @@
             <button id="watch-stop" class="text-button" type="button" hidden>Stop watching</button>
           </div>
         </section>
-        <!-- The marker for a whole temporary chat, and its one line while
-             the chat is still empty (answer-memory.js). -->
+        <!-- The marker for a chat the PC itself made temporary (a game or
+             role-play). The bar no longer offers temporary chat as a mode
+             (owner, 2026-10-27), so this strip is only ever the PC's own
+             decision; it keeps the word Incognito it shares with the phone
+             because the two apps must name one server feature the same way. -->
         <div class="temporary-strip" id="temporary-strip" role="status" hidden>
           <strong class="temporary-label" id="temporary-label">Incognito</strong>
           <span class="temporary-line" id="temporary-line"></span>
           <span class="temporary-refused" id="temporary-refused" hidden></span>
         </div>
-        <!-- The same marker, for a private chat (private-chat.js): the two
-             modes cannot both be on. -->
+        <!-- The marker for a whole Incognito chat (private-chat.js): the strict
+             zero-write mode the one chip turns on. -->
         <div class="temporary-strip" id="private-strip" role="status" hidden>
-          <strong class="temporary-label" id="private-label">Private</strong>
+          <strong class="temporary-label" id="private-label">Incognito</strong>
           <span class="temporary-line" id="private-line"></span>
           <span class="temporary-refused" id="private-refused" hidden></span>
         </div>
@@ -717,84 +680,19 @@
           </footer>
         </section>
 
-        <!-- What Jarvis can do, on the surface a first run actually shows.
-             Every one of these hints already existed — in the card footer,
-             which is `hidden` until an answer has streamed. So the only way to
-             learn the hotkeys was to already know one. This block is the
-             inverse: present when nothing else is, gone the moment the card,
-             a gate or the brief takes the space. -->
-        <!-- "Things you can say" (jarvis_sayable.py; the ease-of-use audit's
-             do-first table, row 4): replaces the old 10-row list of kbd
-             combinations here (Alt+Space and the rest still work - they are
-             just no longer taught here, since Settings -> Shortcuts already
-             teaches them, live, and does so more accurately than a primer
-             that had to be told about every rebind). The note-app prefixes
-             (#log, #joplin, #obs) stay: they are not keyboard shortcuts, and
-             this is still their only in-app explanation. sayable.js fills
-             #sayable-list from its own fixed words (see that module's own
-             comment for why this list is hardcoded, not fetched). Tapping a
-             line calls fillFromSayable (main.js), which only fills #prompt -
-             it never sends. -->
-        <!-- The bar opens compact (owner, 2026-10-19: "the jarvis bar is huge
-             now, i want it back to its compact size"). The "Things you can
-             say" primer is a help panel, not the empty bar's permanent
-             furniture: it stays hidden until #sayable-toggle is pressed, and
-             pressing it again collapses the bar back to the input row. -->
-        <section class="primer" id="primer" aria-label="What you can do here" hidden>
-          <h2 class="sr-only">What you can do here</h2>
-          <div id="sayable-list"></div>
-          <!-- The command palette's way in (palette-ui.js, built from the menu
-               catalogue). A button, so Tab reaches it; typing "/" in an empty
-               box does the same thing. Hidden while a gate is waiting - the
-               card is the top surface then - which palette-ui.js refuses to
-               open over rather than hiding. -->
-          <p class="palette-hint-row" id="palette-hint"></p>
-          <!-- "Earlier chats" (the chat audit, 2026-09-28): the Brain's
-               History, where "Continue this chat" carries one on here; and,
-               after Esc ended a chat, where it went (main.js closeCard). -->
-          <p class="primer-chats">
-            <button class="text-button" type="button" id="earlier-chats-primer">Earlier chats</button>
-            <span class="chat-ended-note" id="chat-ended-note" hidden></span>
-          </p>
-          <ul class="primer-list">
-            <!-- Only the note apps the PC says are set up are shown (main.js
-                 syncNotePrimer). Until it answers, none are - and the last
-                 row says why. -->
-            <li data-note-target="logseq" hidden>
-              <span class="primer-keys"><code>#log</code></span>
-              <span>File what you type in today's Logseq journal</span>
-            </li>
-            <li data-note-target="joplin" hidden>
-              <span class="primer-keys"><code>#joplin</code></span>
-              <span>File what you type as a new Joplin note</span>
-            </li>
-            <li data-note-target="obsidian" hidden>
-              <span class="primer-keys"><code>#obs</code></span>
-              <span>File what you type in today's Obsidian daily note</span>
-            </li>
-            <li id="note-targets-line">
-              <span class="primer-keys"><code>#</code></span>
-              <span>Checking which note apps are set up on your PC…</span>
-            </li>
-          </ul>
-          <!-- This used to end "and nothing leaves this machine." It is the
-               first sentence a new owner reads, on the surface with nothing
-               else on it, and three parts of this same binary disprove it: the
-               route badge turns Cloud when a turn escalates, the updater checks
-               GitHub on startup by default, and the Brain labels a job
-               "tainted - stays local", which only means something if untainted
-               ones do not. A promise the product cannot keep is worse than no
-               promise, because the owner stops checking the badge.
+        <!-- The "Things you can say" primer used to hang here, behind a "?"
+             button in the utility cluster. The owner's decision of 2026-10-27
+             removed both: the bar keeps only the ask box, the model/route row,
+             the mode chips, the gear and the close. Nothing else could reach
+             the panel (the command palette never opened it and there was no
+             key for it), so it left the DOM with its door. The same words are
+             still in Settings' Brain tab, "Tutorials and the FAQ"
+             (desktop-help.js reuses sayable.js's HELP_TITLE/HELP_BODY), and
+             the palette is still opened by typing "/" in an empty box.
+             The note-app prefixes (#log, #joplin, #obs) and the quiet
+             "where the chat went" line lived only in that panel; the line is
+             still announced to a screen reader (main.js closeCard). -->
 
-               "Anything private" is the claim the design actually enforces:
-               memory injection pins a turn local and latches it, and a cloud
-               turn drops every role but the user's own words. -->
-          <p class="primer-foot">
-            Anything risky waits here for your yes first. Anything private
-            stays on the local model — the small Local or Cloud label says
-            where each answer came from.
-          </p>
-        </section>
 
         <!-- "Offline" used to be a dead end: the route badge said it, the Core
              dot went out, and neither offered anything to do about it. This is
@@ -1210,10 +1108,12 @@
               <span class="service" data-service="ollama"><i></i>Ollama</span>
               <span class="service" data-service="cloud_lane"><i></i>Cloud model</span>
             </span>
-            <!-- The four-hotkey strip that used to sit here moved into
-                 `#primer`, which is visible BEFORE the first answer rather
-                 than only after it. `Esc` stays: it is the one key whose
-                 meaning changes with the card open (stop, then dismiss). -->
+            <!-- The four-hotkey strip that used to sit here is gone, with the
+                 primer that carried it (owner, 2026-10-27). Settings ->
+                 Shortcuts is the one place that teaches them, live, so it can
+                 never go stale from a rebind. `Esc` stays here: it is the one
+                 key whose meaning changes with the card open (stop, then
+                 dismiss). -->
             <!-- Esc ends the chat (it is kept in History when history is on);
                  said so since the chat audit, 2026-09-28 - it used to say
                  "dismiss" and the chat went without a word. -->

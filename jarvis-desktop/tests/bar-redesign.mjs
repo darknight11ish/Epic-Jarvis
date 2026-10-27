@@ -1,18 +1,21 @@
 /**
- * The bar's redesign (2026-10-20): the real rendering of it, not the work
- * order's screenshot claims.
+ * The bar's chrome, as it really renders (2026-10-20, re-pinned 2026-10-27).
  *
  *   node tests/bar-redesign.mjs
  *
- * WHY THIS EXISTS. The work order says the bar's far-left mark is an
- * "orb canvas" with a solid #000000 background. It is not: there is no
- * `.orb` / `#bar-orb` / avatar element anywhere on the page - the slot is
+ * WHY THIS EXISTS. The 2026-10-20 work order said the bar's far-left mark is
+ * an "orb canvas" with a solid #000000 background. It is not: the slot is
  * `#reactor` holding the project's own `faces.html?mode=display` frame (the
  * same one the widget, the floating face and the HUD embed), and the dark
  * square the owner saw is that frame's own opaque canvas, clipped square
  * inside the rounded pill. The fix is a circular clip on the container, and
- * this suite pins it so a later "restyle" cannot quietly un-clip it. It also
- * pins the rest of the redesign where it is a real, checkable property:
+ * this suite pins it so a later "restyle" cannot quietly un-clip it.
+ *
+ * The owner's decision of 2026-10-27 changed the rest of the second row to
+ * match the HUD, so the pins below are the NEW truth: flat 3 px plates, mono
+ * uppercase labels, line glyphs at the HUD's rendered weight, the ice/ice
+ * pressed state instead of red or a glow, and the utility cluster cut down to
+ * the settings gear and the close. What still holds from 2026-10-20:
  *
  *   - the face slot is circular and clips; the frame stays the same square;
  *   - the mini-core's glow is driven by the bar's ONE state source
@@ -21,7 +24,7 @@
  *     their ids/aria meanings are unchanged;
  *   - the preset chip and the lane badge are one compound control made of
  *     BOTH original nodes, joined only while the preset half is really there;
- *   - the window utilities are one group, close last, with the Esc badge;
+ *   - the window utilities are one group, close last, with Esc still hiding;
  *   - the submit keycap sits on the input row and Enter still submits.
  *
  * NOT here, because it needs a real desktop window: how it looks over the
@@ -117,15 +120,32 @@ await check("each primary mode is one icon plus one visible word", async () => {
   const rows = await page.evaluate(() => {
     const strip = document.querySelector(".mode-strip");
     if (!strip) return null;
+    const px = (v) => Math.round(parseFloat(v) * 100) / 100;
     return [...strip.querySelectorAll(":scope > button")].map((b) => {
       const label = b.querySelector(".chip-label");
       const svg = b.querySelector("svg");
+      const ls = label ? getComputedStyle(label) : null;
+      const ss = svg ? getComputedStyle(svg) : null;
+      const box = b.getBoundingClientRect();
+      const glyphBox = svg ? svg.getBoundingClientRect() : null;
+      // The rendered line weight: CSS stroke-width x display px / viewBox px.
+      const vb = svg ? Number(svg.getAttribute("viewBox").split(" ")[3]) : 0;
+      const strokePx = ss && glyphBox ? px(ss.strokeWidth) * (glyphBox.width / vb) : 0;
       return {
         id: b.id,
         word: label ? label.textContent.trim() : "",
         labelledForTheEyeOnly: label ? label.getAttribute("aria-hidden") : null,
-        icon: svg ? Math.round(svg.getBoundingClientRect().width) : 0,
+        icon: glyphBox ? Math.round(glyphBox.width) : 0,
         aria: b.getAttribute("aria-label") || "",
+        labelFont: ls ? ls.fontFamily : "",
+        labelSize: ls ? ls.fontSize : "",
+        labelCase: ls ? ls.textTransform : "",
+        labelTracking: ls ? ls.letterSpacing : "",
+        radius: getComputedStyle(b).borderTopLeftRadius,
+        fill: ss ? ss.fill : "",
+        stroke: ss ? ss.stroke : "",
+        strokePx,
+        plate: Math.round(box.height),
       };
     });
   });
@@ -133,10 +153,10 @@ await check("each primary mode is one icon plus one visible word", async () => {
   assert.ok(rows, "there is no .mode-strip holding the modes");
   const want = [
     ["mic", "Voice"],
-    ["voice-auto", "Auto"],
+    ["voice-auto", "Hey Jarvis"],
     ["jarvis-live-toggle", "Live"],
     ["watch-toggle", "Watch"],
-    ["temporary", "Temp"],
+    ["private", "Incognito"],
   ];
   for (const [id, word] of want) {
     const row = rows.find((r) => r.id === id);
@@ -150,24 +170,157 @@ await check("each primary mode is one icon plus one visible word", async () => {
     "a Screen control appeared in the bar: \"Look at this\" is a KEY on purpose - a button here would cover the screen it is about to look at");
 });
 
+/* The owner's decision of 2026-10-27: the row is the HUD's plate family. */
+await check("the mode row is flat 3px plates with mono, uppercase, tracked labels", async () => {
+  const page = await open();
+  const got = await page.evaluate(() => {
+    const strip = document.querySelector(".mode-strip");
+    const rows = [...strip.querySelectorAll(":scope > button")].map((b) => {
+      const label = b.querySelector(".chip-label");
+      const ls = getComputedStyle(label);
+      const bs = getComputedStyle(b);
+      return { id: b.id, radius: bs.borderTopLeftRadius, border: bs.borderTopWidth,
+               font: ls.fontFamily, size: ls.fontSize, casing: ls.textTransform,
+               tracking: ls.letterSpacing };
+    });
+    const route = getComputedStyle(document.getElementById("route"));
+    const preset = getComputedStyle(document.getElementById("preset-chip"));
+    return { rows, routeRadius: route.borderTopLeftRadius, routeFont: route.fontFamily,
+             routeSize: route.fontSize, routeCase: route.textTransform,
+             presetRadius: preset.borderTopLeftRadius, presetFont: preset.fontFamily,
+             presetSize: preset.fontSize };
+  });
+  await page.close();
+  for (const r of got.rows) {
+    assert.equal(r.radius, "3px", `#${r.id} is ${r.radius}, not a 3px plate`);
+    assert.equal(r.border, "1px", `#${r.id} lost its 1px plate border`);
+    assert.match(r.font, /Cascadia|IBM Plex Mono|JetBrains Mono|Consolas|monospace/i,
+      `#${r.id}'s label is not mono: ${r.font}`);
+    assert.equal(r.size, "10px", `#${r.id}'s label is ${r.size}, not the HUD's 10px`);
+    assert.equal(r.casing, "uppercase", `#${r.id}'s label is ${r.casing}, not uppercase`);
+    assert.equal(r.tracking, "1.4px",
+      `#${r.id}'s tracking is ${r.tracking}, not the 0.14em this bar settled on`);
+  }
+  assert.equal(got.routeRadius, "3px", `the lane badge is ${got.routeRadius}, not a 3px plate`);
+  assert.equal(got.routeFont.includes("mono") || /Cascadia|Consolas/.test(got.routeFont), true,
+    `the lane badge's tier is not mono: ${got.routeFont}`);
+  assert.equal(got.routeSize, "10px", `the lane badge's tier is ${got.routeSize}, not 10px`);
+  assert.equal(got.routeCase, "uppercase", "the lane tier is not uppercase");
+  assert.equal(got.presetRadius, "3px", `the preset chip is ${got.presetRadius}, not a 3px plate`);
+  assert.match(got.presetFont, /Cascadia|IBM Plex Mono|JetBrains Mono|Consolas|monospace/i,
+    `the preset chip's name is not mono: ${got.presetFont}`);
+  assert.equal(got.presetSize, "10px", `the preset chip's name is ${got.presetSize}, not 10px`);
+});
+
+/* Every chip glyph is a line drawing, never a filled silhouette. */
+await check("every chip glyph is a stroke, at the HUD's rendered line weight", async () => {
+  const page = await open();
+  const got = await page.evaluate(() => {
+    const out = [];
+    for (const id of ["mic", "voice-auto", "jarvis-live-toggle", "watch-toggle", "private",
+                      "open-settings", "hide-bar"]) {
+      const svg = document.querySelector(`#${id} svg`);
+      if (!svg) { out.push({ id, missing: true }); continue; }
+      const cs = getComputedStyle(svg);
+      const box = svg.getBoundingClientRect();
+      const vb = Number(svg.getAttribute("viewBox").split(" ")[3]);
+      out.push({ id, fill: cs.fill, stroke: cs.stroke,
+                 strokeWidth: parseFloat(cs.strokeWidth),
+                 rendered: Math.round(parseFloat(cs.strokeWidth) * (box.width / vb) * 100) / 100,
+                 viewBox: svg.getAttribute("viewBox") });
+    }
+    return out;
+  });
+  await page.close();
+  for (const g of got) {
+    assert.ok(!g.missing, `#${g.id} has no glyph`);
+    assert.equal(g.fill, "none", `#${g.id}'s glyph is still filled (${g.fill}), not a line drawing`);
+    assert.notEqual(g.stroke, "none", `#${g.id}'s glyph has no stroke at all`);
+    // The HUD draws 24-unit at stroke 1.8 and shows it at 14px: 1.05px.
+    assert.ok(Math.abs(g.rendered - 1.05) <= 0.02,
+      `#${g.id}'s line renders ${g.rendered}px (stroke ${g.strokeWidth} on ${g.viewBox} shown at ` +
+      `${g.rendered ? "its own size" : "?"}), not the HUD's 1.05px`);
+  }
+});
+
 await check("the mode ids and their names are the ones the suites know", async () => {
   const page = await open();
   const got = await page.evaluate(() => ({
     liveAria: document.querySelector("#jarvis-live-toggle").getAttribute("aria-label"),
     watchAria: document.querySelector("#watch-toggle").getAttribute("aria-label"),
     micName: document.querySelector("#mic-label")?.textContent || "",
-    tempName: document.querySelector("#temporary .sr-only")?.textContent || "",
+    incognitoName: document.querySelector("#private .sr-only")?.textContent || "",
+    incognitoTitle: document.querySelector("#private").getAttribute("title") || "",
+    voiceTitle: document.querySelector("#voice-auto").getAttribute("title") || "",
     voicePressed: document.querySelector("#voice-auto").getAttribute("aria-pressed"),
+    // The owner's one-chip decision: the old temporary button is not in the
+    // document at all, not hidden.
+    temporary: document.querySelector("#temporary"),
+    sayable: document.querySelector("#sayable-toggle"),
+    pin: document.querySelector("#pin"),
   }));
   await page.close();
   assert.equal(got.liveAria, "Jarvis Live");
   assert.equal(got.watchAria, "Watch with me");
   assert.match(got.micName, /Hold to talk to Jarvis/);
-  assert.equal(got.tempName, "Incognito");
+  assert.equal(got.incognitoName, "Incognito");
+  assert.match(got.incognitoTitle, /incognito chat/i,
+    "the one chip's tooltip must say what its name says");
+  assert.doesNotMatch(got.incognitoTitle, /private/i,
+    "the one chip's tooltip still says \"private chat\" beside the word Incognito");
+  assert.match(got.voiceTitle, /hey Jarvis/i, "the wake-word chip must say what it listens for");
   assert.equal(got.voicePressed, "false");
+  assert.equal(got.temporary, null, "the #temporary button is still in the DOM (owner, 2026-10-27)");
+  assert.equal(got.sayable, null, "the \"?\" primer door is still in the DOM");
+  assert.equal(got.pin, null, "the #pin button is still in the DOM");
 });
 
-/* ── The compound model + lane pill ─────────────────────────────────────── */
+/* Pressed is the HUD's "on": ice text + ice-edged border, never red or a glow. */
+await check("a pressed mode is ice-coloured with an ice border, never red and never a glow", async () => {
+  const page = await open();
+  // The colour/border transition is 140ms: set the state and let it land, or
+  // the read below catches the old colour mid-ease.
+  await page.evaluate(() => {
+    for (const id of ["jarvis-live-toggle", "watch-toggle", "mic", "private"]) {
+      document.getElementById(id).setAttribute("aria-pressed", "true");
+    }
+  });
+  await page.waitForTimeout(300);
+  const got = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    document.body.appendChild(probe);
+    probe.style.color = "var(--accent)";
+    const accent = getComputedStyle(probe).color;
+    probe.style.borderColor = "var(--border-accent)";
+    const accentBorder = getComputedStyle(probe).borderTopColor;
+    probe.remove();
+    const read = (id) => {
+      const el = document.getElementById(id);
+      const cs = getComputedStyle(el);
+      return { color: cs.color, border: cs.borderTopColor, shadow: cs.boxShadow,
+               fill: getComputedStyle(el.querySelector("svg")).fill };
+    };
+    return { accent, accentBorder,
+             live: read("jarvis-live-toggle"), watch: read("watch-toggle"),
+             mic: read("mic"), incognito: read("private") };
+  });
+  await page.close();
+  for (const [id, pressed] of Object.entries(got)) {
+    if (id === "accent" || id === "accentBorder") continue;
+    assert.equal(pressed.color, got.accent,
+      `#${id} pressed paints ${pressed.color}, not the ice --accent (${got.accent})`);
+    assert.equal(pressed.border, got.accentBorder,
+      `#${id} pressed paints its border ${pressed.border}, not --border-accent (${got.accentBorder})`);
+    assert.equal(pressed.shadow, "none",
+      `#${id} pressed still has a glow: ${pressed.shadow}`);
+  }
+  // Red is the HUD's stop/recording colour: no pressed mode may wear it.
+  assert.notEqual(got.live.color, "rgb(255, 0, 0)");
+  assert.doesNotMatch(got.live.color, /^rgba?\(2[0-5]\d,\s*\d{1,2},/,
+    `Live's pressed colour is red (${got.live.color}) - red is reserved for stop/recording`);
+});
+
+/* ── The compound model + lane plate ────────────────────────────────────── */
 
 await check("the compound pill is both original nodes, joined only when a preset exists", async () => {
   const page = await open();
@@ -196,8 +349,8 @@ await check("the compound pill is both original nodes, joined only when a preset
   assert.equal(hidden.inside, true, "the preset chip and lane badge are no longer one compound control");
   assert.equal(hidden.chipHidden, true, "the bar is asserting a preset with no reading");
   assert.equal(hidden.sepDisplay, "none", "the hairline is drawn between one half and nothing");
-  assert.deepEqual(hidden.routeInner, ["999px", "999px"],
-    "with no preset half, the lane badge is not a whole rounded pill");
+  assert.deepEqual(hidden.routeInner, ["3px", "3px"],
+    "with no preset half, the lane badge is not a whole 3px plate");
 
   /* The state the PC really sends when it HAS named one: focus-presets-bar.js
      unhides the chip and writes its label. Both halves must then read as one
@@ -214,15 +367,15 @@ await check("the compound pill is both original nodes, joined only when a preset
   assert.equal(shown.oneRow, true, "the two halves are not on one row");
   assert.deepEqual(shown.chipInner, ["0px", "0px"],
     `the preset half's inner corners are ${shown.chipInner} - not joined`);
-  assert.deepEqual(shown.chipOuter, ["999px", "999px"], "the preset half's outer edge is not rounded");
+  assert.deepEqual(shown.chipOuter, ["3px", "3px"], "the preset half's outer edge is not a 3px plate");
   assert.deepEqual(shown.routeInner, ["0px", "0px"],
     `the lane half's inner corners are ${shown.routeInner} - not joined`);
-  assert.deepEqual(shown.routeOuter, ["999px", "999px"], "the lane half's outer edge is not rounded");
+  assert.deepEqual(shown.routeOuter, ["3px", "3px"], "the lane half's outer edge is not a 3px plate");
 });
 
 /* ── The utility cluster ────────────────────────────────────────────────── */
 
-await check("the window utilities are one group, close last, with the Esc badge", async () => {
+await check("the window utilities are one group, close last, with no badge and Esc still hiding", async () => {
   const page = await open();
   const got = await page.evaluate(() => {
     const group = document.querySelector(".utility-cluster");
@@ -234,17 +387,31 @@ await check("the window utilities are one group, close last, with the Esc badge"
       label: group.getAttribute("aria-label"),
       ids,
       last: ids[ids.length - 1],
-      badge: badge ? { text: badge.textContent.trim(), hidden: badge.getAttribute("aria-hidden") } : null,
+      badge: badge ? badge.textContent.trim() : null,
+      pin: document.querySelector("#pin"),
+      sayable: document.querySelector("#sayable-toggle"),
+      pinText: document.body.textContent.includes("Pin window"),
     };
   });
-  await page.close();
   assert.ok(got, "the bar has no utility cluster");
   assert.equal(got.role, "group");
   assert.ok(got.label, "the cluster has no name for a screen reader");
-  assert.deepEqual(got.ids, ["sayable-toggle", "pin", "open-settings", "hide-bar"]);
+  // The owner's decision of 2026-10-27: the "?" primer door and the pin left
+  // the bar; the gear and the close are what remain.
+  assert.deepEqual(got.ids, ["open-settings", "hide-bar"]);
   assert.equal(got.last, "hide-bar", "the close is no longer the last control (it already was at the right end, not mid-bar)");
-  assert.deepEqual(got.badge, { text: "Esc", hidden: "true" },
-    "the bar's one documented shortcut (Esc hides it) is not shown beside the close");
+  assert.equal(got.badge, null, "the Esc key badge is still in the bar");
+  assert.equal(got.pin, null, "the #pin button is still in the bar");
+  assert.equal(got.sayable, null, "the \"?\" primer door is still in the bar");
+
+  // Esc-to-hide is the bar's own keydown handler, not the removed badge.
+  const before = await page.evaluate(() => window.__calls.length);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
+  const after = await page.evaluate(() => window.__calls.map((c) => c[0]));
+  const hides = after.slice(before).filter((c) => c === "hide_quickbar");
+  await page.close();
+  assert.equal(hides.length, 1, "Esc no longer hides the bar - the badge was the only thing that named it, not the only thing that did it");
 });
 
 /* ── The submit keycap ──────────────────────────────────────────────────── */
