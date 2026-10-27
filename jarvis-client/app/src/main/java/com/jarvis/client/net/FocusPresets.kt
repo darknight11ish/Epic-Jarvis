@@ -77,6 +77,19 @@ object FocusPresets {
         "Asked. Your PC raises one approval card; nothing changes until you approve it."
     const val NOTHING_CHANGED = "Nothing was changed."
 
+    /**
+     * The phone's ONE read-only sentence about the PC's cloud setting (2026-10-27).
+     * The phone never offers the switch: turning escalation ON is a loosening
+     * that needs the approval card only the PC's own command path holds, so the
+     * phone only says what the PC has already decided.
+     */
+    fun cloudLine(cloud: Cloud): String = when {
+        cloud.escalateOn && cloud.provider.isNotBlank() ->
+            "The cloud may answer hard questions through ${cloud.provider} - set on your PC."
+        cloud.escalateOn -> "The cloud may answer hard questions - set on your PC."
+        else -> "Cloud escalation is off - set on your PC."
+    }
+
     data class Lane(val key: String, val card: String, val port: Int?, val words: String)
 
     data class Helper(val model: String, val lane: Lane, val context: Int?)
@@ -134,10 +147,24 @@ object FocusPresets {
         /** The lane the PC's chat points at right now, and the two contract paths. */
         val activeLane: JsonObject? = null,
         val applyPath: String? = null,
+        /**
+         * The PC's cloud block on the same answer (additive, 2026-10-27; older
+         * PCs send none and this stays null). READ ONLY - the phone draws one
+         * sentence from it and offers no control.
+         */
+        val cloud: Cloud? = null,
     ) {
         fun preset(id: String): Preset? = presets.firstOrNull { it.id == id }
         val current: Preset? get() = chosen?.let(::preset)
     }
+
+    /**
+     * `cloud: {provider, providers, escalate: {on, why}}` - the additive block
+     * the PC sends beside the presets. [provider] is the one provider the PC
+     * would use; [escalateOn] is the PC's own "escalate to the cloud when the
+     * work is too complex" file, [why] its own sentence when it has one.
+     */
+    data class Cloud(val provider: String, val escalateOn: Boolean, val why: String)
 
     sealed interface Read {
         data object NotAsked : Read
@@ -206,6 +233,14 @@ object FocusPresets {
             recommendations = root.obj("recommendations"),
             activeLane = root.obj("active_lane"),
             applyPath = root.str("apply_path"),
+            cloud = root.obj("cloud")?.let { c ->
+                val escalate = c.obj("escalate")
+                Cloud(
+                    provider = c.str("provider").orEmpty(),
+                    escalateOn = escalate?.bool("on") ?: false,
+                    why = escalate?.str("why").orEmpty(),
+                )
+            },
         )
     }
 

@@ -1942,7 +1942,7 @@ class MainActivity : FragmentActivity() {
             shortcutQuestion.value = null
             nav.resetTo(Screen.HOME)
             if (paired && !repairing) {
-                scope.launch { chat.send(question, provenance = Provenance.TYPED) }
+                scope.launch { JarvisRuntime.sendTypedChat(question, provenance = Provenance.TYPED) }
             }
         }
 
@@ -3515,7 +3515,7 @@ class MainActivity : FragmentActivity() {
                                         draft = ""
                                         draftPasted = false
                                         sharedHeld = null
-                                        scope.launch { chat.send(text, provenance = tag, shared = shared) }
+                                        scope.launch { JarvisRuntime.sendTypedChat(text, provenance = tag, shared = shared) }
                                     } else {
                                         // With a picture, the PC is asked first
                                         // whether Pictures still works; if not,
@@ -3531,7 +3531,7 @@ class MainActivity : FragmentActivity() {
                                                 draftPasted = false
                                                 if (sharedHeld == shared) sharedHeld = null
                                                 picture.value = null
-                                                chat.send(text, picture = pic.dataUri, provenance = tag, shared = shared)
+                                                JarvisRuntime.sendTypedChat(text, picture = pic.dataUri, provenance = tag, shared = shared)
                                             }
                                         }
                                     }

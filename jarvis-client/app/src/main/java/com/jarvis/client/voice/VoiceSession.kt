@@ -890,6 +890,15 @@ class VoiceSession(
     private fun voiceBusy(): Boolean =
         _phase.value != Phase.OFF || job?.isCompleted == false || liveOn()
 
+    /**
+     * The same "nothing may play over this" answer, for the one caller outside
+     * this class: reading a typed chat answer aloud (the owner's ask,
+     * 2026-10-27). True while the microphone belongs to a voice turn, an
+     * answer is being spoken, or Jarvis Live is on - the phone never plays
+     * the read-aloud clip over any of those (one speaker, one track).
+     */
+    fun speakerBusy(): Boolean = voiceBusy() || tryPlaying
+
     /** Bumped by every turn that starts; see [playTry]. */
     private val turnsStarted = java.util.concurrent.atomic.AtomicLong(0)
 
