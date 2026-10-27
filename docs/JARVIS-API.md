@@ -23879,7 +23879,17 @@ active lane (what the bar and the phone send). The single **Cloud** button is
 NOT this contract: it sets the next message's lane to the general cloud lane
 (`jarvis-escalate` when the PC lists it) through the HUD's existing lane
 mechanism, raises no card, and when `/api/status` says `proxy: false` it says
-plainly that the cloud lane is down and marks nothing. Tests:
+plainly that the cloud lane is down and marks nothing. **Since 2026-10-27 the
+Studio stage's own words row carries a third door to the same one menu:**
+`#stage-presets`, after Telemetry and beside the new "Galaxy options" word,
+dispatches the same `jarvis:hud-presets-open` event with itself as the anchor -
+so the menu is reachable from the words beside Galaxy, Approvals, Reminders and
+the rest, and no second menu or route is added. The same row's **Galaxy
+options** word opens the page's own `#galaxy-options` panel, which holds the
+lenses, the Look switch, the search box, Reset view, Pause spin and Hide the
+galaxy; that panel is the HUD's existing `galaxy` view and its existing
+device-local preferences only - it reads `/api/graph` exactly as before and
+adds no route, command or permission. Tests:
 `jarvis-desktop/tests/hud-presets.mjs`.
 
 **The Studio dock's "Current Models" panel** (2026-10-26) is a second reader of

@@ -724,6 +724,10 @@ export function mountHudPresets(options = {}) {
   // wired in start(). `focusDoor` is whichever door opened the one menu, so
   // Escape and a second click put focus back where it came from.
   let railDoor = null;
+  // The stage words row's own Presets word (2026-10-27): the owner's "also add
+  // presets as a word in the right order next to the galaxy, approvals,
+  // reminders and other menu options". A THIRD door to the same one menu.
+  let stageDoor = null;
   let focusDoor = null;
   let returnFocus = null;
   let statusLine = null;
@@ -944,9 +948,10 @@ export function mountHudPresets(options = {}) {
 
   /** Both doors say whether the ONE menu is open: the "Layout:" badge (H2's)
    *  and the owner's left-rail Presets button (2026-10-26). One menu, two
-   *  controls that must never disagree about it. */
+   *  controls that must never disagree about it. (Three since 2026-10-27: the
+   *  stage's own "Presets" word joins them, same one menu.) */
   function sayDoors(open) {
-    for (const node of [badge, railDoor]) {
+    for (const node of [badge, railDoor, stageDoor]) {
       if (node) node.setAttribute("aria-expanded", open ? "true" : "false");
     }
   }
@@ -1414,9 +1419,11 @@ export function mountHudPresets(options = {}) {
       // click on either door into close-then-reopen. The rail button is a door
       // too (2026-10-26), so it is exempt exactly as the badge is.
       if (!railDoor) railDoor = doc.getElementById("rail-presets");
+      if (!stageDoor) stageDoor = doc.getElementById("stage-presets");
       if (menu.contains(target)
         || (badge && badge.contains(target))
-        || (railDoor && railDoor.contains(target))) return;
+        || (railDoor && railDoor.contains(target))
+        || (stageDoor && stageDoor.contains(target))) return;
       closeMenu(false);
     }, true);
     return menu;
@@ -1482,6 +1489,7 @@ export function mountHudPresets(options = {}) {
     // badge on demand so `aria-expanded` and the menu position are never lost.
     if (!badge) badge = doc.getElementById("hud-layout-badge");
     if (!railDoor) railDoor = doc.getElementById("rail-presets");
+    if (!stageDoor) stageDoor = doc.getElementById("stage-presets");
     ensureMenu();
     // A reopen is a new intent: whatever was in flight last time does not get
     // to leave the rows disabled (P2-3).
@@ -1743,6 +1751,20 @@ export function mountHudPresets(options = {}) {
       railDoor.addEventListener("click", () => {
         win.dispatchEvent(new CustomEvent("jarvis:hud-presets-open", {
           detail: { anchor: railDoor },
+        }));
+      });
+    }
+    // The stage's own "Presets" word (2026-10-27): the owner's "also add
+    // presets as a word in the right order next to the galaxy, approvals,
+    // reminders and other menu options". The same door, the same ONE menu and
+    // the same event - only a third control can ask for it, so a click there
+    // opens/closes the one menu and never a second copy of it.
+    stageDoor = doc.getElementById("stage-presets");
+    if (stageDoor && stageDoor.dataset.hudPresets !== "1") {
+      stageDoor.dataset.hudPresets = "1";
+      stageDoor.addEventListener("click", () => {
+        win.dispatchEvent(new CustomEvent("jarvis:hud-presets-open", {
+          detail: { anchor: stageDoor },
         }));
       });
     }

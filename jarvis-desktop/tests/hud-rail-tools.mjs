@@ -67,7 +67,11 @@ function between(source, start, end, span = 4000) {
 /* ── 1. The button is in the rail, in the group no shell hides ───────────── */
 
 check("the Presets button is in the left rail, in its own toolbar", () => {
-  const rail = between(HUD, 'id="rail-left"', "</aside>", 6000);
+  // The span covers the whole aside: since 2026-10-27 the rail carries one
+  // more control (the Galaxy options icon) and the dock another, with comments
+  // explaining them, which pushed the toolbar past the old 6000-character
+  // window and read as a missing group.
+  const rail = between(HUD, 'id="rail-left"', "</aside>", 16000);
   assert.match(rail, /id="rail-toolbar"/, "the rail has no #rail-toolbar group");
   assert.match(rail, /id="rail-presets"/, "the rail has no #rail-presets button");
   // The group sits with the controls, not among the sections a shell hides:
