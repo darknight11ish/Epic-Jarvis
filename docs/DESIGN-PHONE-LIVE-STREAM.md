@@ -327,7 +327,7 @@ this design does not invent one.
 
 ---
 
-## 10. Build plan (each its own PR, six required checks, no live writes)
+## 10. Build plan (each its own PR, seven required checks, no live writes)
 
 1. **G1 (this PR)** - this design + the `[live] stream = false` switch + the
    frozen 501 stub route + tests. No audio path.

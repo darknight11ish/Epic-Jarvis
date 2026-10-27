@@ -594,8 +594,12 @@ gate a merge** - `rust`, `frontend`, `backend`, `backend-windows`,
 from the ruleset itself (id `24677804`, name "protect", enforcement `active`, no
 bypass actors; `gh api repos/darknight11ish/Epic-Jarvis/rulesets/24677804`).
 **The count was six until 2026-10-25 22:43:29 -0700**: the ruleset's own history
-shows `phone-unit-tests` added then (`.../rulesets/24677804/history/54742523`), and
-six before it back to at least 2026-10-07. The job landed earlier, at `eaa099d23`
+shows `phone-unit-tests` added then (`.../rulesets/24677804/history/54742523`). One
+exception belongs on the record rather than hidden: for about two minutes on
+2026-10-11 the ruleset also required a `build` job (history versions `52797553` then
+`52797672`), which is the job `ci.yml` already describes beside `phone-unit-tests`.
+Apart from that window, six was the count back to at least 2026-10-07. The job landed
+earlier, at `eaa099d23`
 (2026-10-11 22:26:36 -0700) and was simply not required yet. **Keep the dated
 evidence dated, not current:** a direct push to `main` was refused with ***"6 of 6
 required status checks are expected."***, and five merged PRs (#312, #314, #315,
