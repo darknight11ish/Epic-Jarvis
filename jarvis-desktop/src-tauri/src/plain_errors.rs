@@ -26,18 +26,19 @@
 //! And two for the HUD's Presets menu (2026-10-27, the owner asked that menu
 //! to list "the different personalities of jarvis that i can select"):
 //!
-//! * [`hud_personalities`] - the SAME `GET /api/manner` answer, read for the
-//!   HUD window so its Presets menu can draw the nine personalities and the
-//!   owner's own, and mark the one the PC names.
+//! * [`hud_personalities`] - the personality half of the `GET /api/manner`
+//!   answer, narrowed in Rust by [`personalities_answer`] to the fields the
+//!   menu draws, so its Presets menu can list the nine built-ins and the
+//!   owner's own and mark the one the PC names.
 //! * [`hud_switch_personality`] - `POST /api/manner {"personality": <id>}`:
 //!   ONE field, at once, NO card (wording only - the PC says this itself in
 //!   `jarvis_manner.py`), held on a stale link like [`set_manner`].
 //!
 //! They are deliberately their OWN two commands rather than a grant of the
-//! Settings window's [`get_manner`] / [`set_manner`]: the HUD page may switch
-//! which personality Jarvis speaks in and nothing else - not the manner mode,
-//! not the dials, not a custom personality. The ACL set that grants them
-//! (`hud-personalities`, permissions/surfaces.toml) says the same.
+//! Settings window's [`get_manner`] / [`set_manner`], and BOTH halves are
+//! narrow: the read carries no manner mode, no dial and no custom definition,
+//! and the write carries the personality id alone. The ACL set that grants
+//! them (`hud-personalities`, permissions/surfaces.toml) says the same.
 //!
 //! And one for the quickbar: [`open_fix_place`] opens Settings or the Brain
 //! when the owner presses an error's fix button ("Check the connection
@@ -170,6 +171,85 @@ pub(crate) fn manner_answer(status: u16, body: &str) -> Result<serde_json::Value
     Err(backend_refusal(status, body))
 }
 
+/// [`hud_personalities`]'s reading of the answer: [`manner_answer`], cut down
+/// to the personality half the HUD menu draws. The manner mode, the four
+/// dials and the custom definitions stay on the PC - the `hud-personalities`
+/// set grants the personality, so the read must not carry more than that
+/// (2026-10-27, the independent review of the capability).
+///
+/// A row with no string `id` is dropped: the menu cannot draw it, and an id
+/// is the ONE thing a click sends back.
+pub(crate) fn personalities_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    let whole = manner_answer(status, body)?;
+    if whole.get("available").and_then(|v| v.as_bool()) == Some(false) {
+        // "Your PC's Jarvis does not have this setting yet" - no lists to cut.
+        return Ok(whole);
+    }
+    let kept = |entry: &serde_json::Value, fields: &[&str]| {
+        let mut row = serde_json::Map::new();
+        for key in fields {
+            if let Some(value) = entry.get(*key) {
+                row.insert((*key).into(), value.clone());
+            }
+        }
+        serde_json::Value::Object(row)
+    };
+    let mut out = serde_json::Map::new();
+    if let Some(current) = whole.get("personality") {
+        out.insert("personality".into(), current.clone());
+    }
+    if let Some(list) = whole.get("personalities").and_then(|v| v.as_array()) {
+        let mut rows = Vec::with_capacity(list.len());
+        for entry in list {
+            let row = kept(entry, &["id", "title", "description", "builtin"]);
+            if row.get("id").is_some_and(|id| id.is_string()) {
+                rows.push(row);
+            }
+        }
+        out.insert("personalities".into(), serde_json::Value::Array(rows));
+    }
+    for key in ["user_personalities", "custom_personalities"] {
+        let Some(list) = whole.get(key).and_then(|v| v.as_array()) else {
+            continue;
+        };
+        let rows: Vec<serde_json::Value> = list
+            .iter()
+            .map(|entry| kept(entry, &["id", "name", "line"]))
+            .filter(|row| row.get("id").is_some_and(|id| id.is_string()))
+            .collect();
+        out.insert(key.into(), serde_json::Value::Array(rows));
+    }
+    Ok(serde_json::Value::Object(out))
+}
+
+/// [`hud_switch_personality`]'s reading of the PC's answer: the PC's own words
+/// (`ok`, `said`) and the personality it now names. The POST answer carries
+/// the WHOLE manner view (`jarvis_manner.py` returns `**view()`), and this
+/// window has no business with the rest of it either - the menu re-reads its
+/// lists through [`personalities_answer`] straight after a switch.
+pub(crate) fn personality_switch_answer(
+    status: u16,
+    body: &str,
+) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        let whole = serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| UNREADABLE.to_string())?;
+        let mut out = serde_json::Map::new();
+        for key in ["ok", "said", "personality"] {
+            if let Some(value) = whole.get(key) {
+                out.insert(key.into(), value.clone());
+            }
+        }
+        return Ok(serde_json::Value::Object(out));
+    }
+    if missing(status, body) {
+        return Err(MANNER_MISSING.to_string());
+    }
+    Err(backend_refusal(status, body))
+}
+
 /// The body of one manner change. The older call (`{"manner": "warm"}`) is
 /// unchanged; a Personality Presets change adds ONE of the other fields, so a
 /// switch never resets a different choice (the same rule the humour switch
@@ -194,8 +274,15 @@ pub(crate) fn manner_change_body(
     }
     if let Some(personality) = personality {
         let id = personality.trim();
-        let shape = (1..=40).contains(&id.len())
-            && id.starts_with(|c: char| c.is_ascii_lowercase())
+        // The PC's own contract, not a guess. A built-in id is the contract's
+        // (letters, digits, `_`, `-`); a saved one is minted as `custom-` +
+        // up to 40 characters, or typed as `[a-z0-9][a-z0-9-]{2,63}`
+        // (`jarvis_manner.py` `_custom_slug` / `save_user_personality`). So a
+        // first digit and up to 64 characters are both this PC's own; any
+        // narrower rule makes a listed personality unswitchable. What an id
+        // MEANS is still the PC's business.
+        let shape = (1..=64).contains(&id.len())
+            && id.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
             && id
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
@@ -392,9 +479,11 @@ pub async fn set_humor(app: AppHandle, on: bool) -> Result<serde_json::Value, St
 /// the nine personalities and the owner's own from this answer, and marks the
 /// one the PC names. Read only - it changes nothing and raises no card.
 ///
-/// Its own command rather than a grant of [`get_manner`]: the Settings answer
-/// carries the manner mode and the four dials too, and this window has no
-/// business reading them (the `hud-personalities` set says so).
+/// Its own command rather than a grant of [`get_manner`], and NARROWER than
+/// that command's answer: [`personalities_answer`] keeps only the personality
+/// half, because the Settings answer also carries the manner mode, the four
+/// dials and the custom definitions and this window has no business reading
+/// them (the `hud-personalities` set says so).
 #[tauri::command]
 pub async fn hud_personalities(app: AppHandle) -> Result<serde_json::Value, String> {
     let base = jarvis_base(&app);
@@ -406,7 +495,7 @@ pub async fn hud_personalities(app: AppHandle) -> Result<serde_json::Value, Stri
         .map_err(|e| backend_unreachable(&e, &base))?;
     let status = response.status().as_u16();
     let body = response.text().await.unwrap_or_default();
-    manner_answer(status, &body)
+    personalities_answer(status, &body)
 }
 
 /// ONE personality switch from the HUD's Presets menu (2026-10-27):
@@ -416,8 +505,13 @@ pub async fn hud_personalities(app: AppHandle) -> Result<serde_json::Value, Stri
 /// write (rule 4).
 ///
 /// ONE field and nothing else: no manner mode, no dial, no custom personality.
-/// [`manner_change_body`] checks the id's shape (lowercase, digits, `_`, `-`);
-/// what the id MEANS is the PC's business.
+/// [`manner_change_body`] checks the id's shape (1-64 characters, lowercase
+/// letters, digits, `_`, `-` - the PC's own contract); what the id MEANS is
+/// the PC's business.
+///
+/// The ANSWER is narrowed too ([`personality_switch_answer`]): the PC replies
+/// with its whole manner view, and this window has no business with the rest
+/// of it either.
 #[tauri::command]
 pub async fn hud_switch_personality(
     app: AppHandle,
@@ -437,16 +531,7 @@ pub async fn hud_switch_personality(
         .map_err(|e| backend_unreachable(&e, &base))?;
     let status = response.status().as_u16();
     let text = response.text().await.unwrap_or_default();
-    if (200..300).contains(&status) {
-        return serde_json::from_str::<serde_json::Value>(&text)
-            .ok()
-            .filter(|v| v.is_object())
-            .ok_or_else(|| UNREADABLE.to_string());
-    }
-    if missing(status, &text) {
-        return Err(MANNER_MISSING.to_string());
-    }
-    Err(backend_refusal(status, &text))
+    personality_switch_answer(status, &text)
 }
 
 const THINKING_PATH: &str = "/api/thinking";
@@ -634,6 +719,14 @@ mod tests {
             serde_json::json!({ "personality": "classic_butler" })
         );
         assert!(manner_change_body(None, Some("Classic Butler!"), None, None, None).is_err());
+        // A saved personality's own id can be 47 characters (`custom-` + up to
+        // 40) and the PC accepts a typed id starting with a digit; a narrower
+        // rule here would list a personality the menu cannot switch.
+        let saved_id = format!("custom-{}", "a".repeat(40));
+        let saved_body = manner_change_body(None, Some(&saved_id), None, None, None).unwrap();
+        assert_eq!(saved_body["personality"], saved_id.as_str());
+        assert!(manner_change_body(None, Some("3d-artist"), None, None, None).is_ok());
+        assert!(manner_change_body(None, Some(&"a".repeat(65)), None, None, None).is_err());
         let dials = serde_json::json!({ "humor": 2, "brevity": "concise",
                                         "formality": "formal_butler", "address": "sir" });
         let got = manner_change_body(None, None, Some(&dials), None, None).unwrap();
@@ -661,5 +754,97 @@ mod tests {
         let gone = manner_change_body(None, None, None, None, Some(&confirmed)).unwrap();
         assert_eq!(gone["custom"]["confirm"], true);
         assert!(manner_change_body(None, None, None, None, None).is_err());
+    }
+
+    /// The HUD's read is the personality half ONLY (2026-10-27, the
+    /// capability review): the menu has no business seeing the manner mode,
+    /// the dials or the custom definitions the Settings window's answer holds.
+    #[test]
+    fn personalities_read_is_narrowed() {
+        let whole = serde_json::json!({
+            "available": true,
+            "choices": [ { "id": "warm", "label": "Warm", "why": "" } ],
+            "personality": "classic_butler",
+            "personalities": [
+                { "id": "warm_peer", "title": "Warm Collaborator",
+                  "description": "warm", "builtin": true,
+                  "dials": { "humor": 1 }, "voice": { "speed": 1.0 } },
+                { "id": "custom-calm", "title": "Calm", "description": "calm",
+                  "builtin": false, "prompt": "a private prompt" }
+            ],
+            "manner": "warm",
+            "dials": { "humor": 2 },
+            "voice_sync": true,
+            "dial_choices": { "humor": [ "dry" ] },
+            "sync_voice_with_personality": true,
+            "max_user_personalities": 12,
+            "reflex_kinds": [ "greeting" ],
+            "user_personalities": [
+                { "id": "custom-calm", "name": "Calm", "line": "calm and short",
+                  "dials": { "humor": 1 } }
+            ],
+            "custom_personalities": [
+                { "id": "custom-calm", "name": "Calm", "line": "calm and short",
+                  "dials": { "humor": 1 } }
+            ],
+        });
+        let got = personalities_answer(200, &whole.to_string()).unwrap();
+        assert_eq!(got["personality"], "classic_butler");
+        assert_eq!(got["personalities"].as_array().unwrap().len(), 2);
+        assert_eq!(got["personalities"][0]["id"], "warm_peer");
+        assert_eq!(got["personalities"][0]["builtin"], true);
+        assert_eq!(got["personalities"][1]["builtin"], false);
+        assert!(got["personalities"][0].get("dials").is_none());
+        assert!(got["personalities"][0].get("voice").is_none());
+        assert!(got["personalities"][1].get("prompt").is_none());
+        assert_eq!(got["custom_personalities"][0]["line"], "calm and short");
+        assert!(got["custom_personalities"][0].get("dials").is_none());
+        for gone in [
+            "manner",
+            "dials",
+            "voice_sync",
+            "dial_choices",
+            "sync_voice_with_personality",
+            "max_user_personalities",
+            "reflex_kinds",
+        ] {
+            assert!(
+                got.get(gone).is_none(),
+                "{gone} leaked through the narrow read"
+            );
+        }
+        assert_eq!(personalities_answer(404, "").unwrap()["available"], false);
+        assert!(personalities_answer(200, "{}").is_err());
+    }
+
+    /// The switch's answer is narrowed too: the PC's POST reply carries its
+    /// whole manner view, and the HUD menu only needs the PC's own words and
+    /// the personality it now names (2026-10-27 review).
+    #[test]
+    fn personality_switch_answer_is_narrowed() {
+        let whole = serde_json::json!({
+            "ok": true,
+            "said": "Now speaking as Classic British Butler.",
+            "personality": "classic_butler",
+            "manner": "warm",
+            "dials": { "humor": 2 },
+            "voice_sync": true,
+            "personalities": [ { "id": "classic_butler" } ],
+        });
+        let got = personality_switch_answer(200, &whole.to_string()).unwrap();
+        assert_eq!(got["ok"], true);
+        assert_eq!(got["said"], "Now speaking as Classic British Butler.");
+        assert_eq!(got["personality"], "classic_butler");
+        for gone in ["manner", "dials", "voice_sync", "personalities"] {
+            assert!(
+                got.get(gone).is_none(),
+                "{gone} leaked through the switch answer"
+            );
+        }
+        assert_eq!(
+            personality_switch_answer(404, "").unwrap_err(),
+            MANNER_MISSING.to_string()
+        );
+        assert!(personality_switch_answer(500, "{\"error\":\"nope\"}").is_err());
     }
 }

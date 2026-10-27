@@ -59,9 +59,11 @@ permissions = ["allow-set-theme", "allow-set-theme-follow-system"]
 # rulings 23-28). Read-only for the HUD window, whose injected bootstrap reads
 # the saved document so the page can wear it; the Settings window's picker
 # holds the preset picker. Since H2 of the editable-HUD design (2026-10-22,
-# owner-approved) the HUD page itself ALSO holds exactly one write: its own
-# layout, saved from its own Edit mode - no other settings command and still
-# no pairing token. A layout is the appearance class the theme is: card
+# owner-approved) the HUD page itself ALSO holds a write: its own layout,
+# saved from its own Edit mode - still no settings command beyond the
+# appearance class and, since 2026-10-27, ONE personality switch
+# (`hud-personalities` below) and still no pairing token. A layout is the
+# appearance class the theme is: card
 # positions, visibility and names, nothing private, so it raises no card.
 [[set]]
 identifier = "hud-edit-open"
@@ -2007,15 +2009,18 @@ permissions = [
 # page's own POST to /api/manner is refused by the bootstrap's fetch shim: the
 # page holds no token (apps security audit M2), so every write it makes has a
 # Rust command that adds it. These are deliberately their OWN two commands -
-# narrower than the Settings window's get_manner/set_manner, which also carry
-# the manner mode, the four dials and the custom personalities; the HUD window
-# has no business with those. Nothing here raises a card: a personality
+# narrower than the Settings window's get_manner/set_manner, and BOTH halves
+# are narrow: the write carries ONE field (`{"personality": <id>}`) and no
+# manner mode, dial or custom definition, and the read is the same PC answer
+# narrowed in Rust to the fields the menu draws (`personalities_answer`), so
+# the manner mode, the four dials and the owner's custom definitions are not
+# reachable from this window either. Nothing here raises a card: a personality
 # changes only how answers are worded, never what Jarvis does, asks, remembers
 # or sends (jarvis_manner.py says so). The switch is held on a stale link like
 # every other write; the read decides nothing.
 [[set]]
 identifier = "hud-personalities"
-description = "Read the nine personalities and the owner's own, and switch ONE of them. Wording only, no card, held on a stale link; nothing else about how Jarvis talks is reachable here."
+description = "Read the nine personalities and the owner's own - the PC's answer narrowed to the personality half - and switch ONE of them. Wording only, no card, held on a stale link; nothing else about how Jarvis talks is reachable here."
 permissions = [
   "allow-hud-personalities",
   "allow-hud-switch-personality",

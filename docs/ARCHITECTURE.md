@@ -2625,9 +2625,12 @@ real monitor look are NOT-TESTABLE in CI, and H4's non-hideable safety rail
 (outside-text/rush-latch, stale-link/catching-up with Deny kept live, App lock)
 is still H4 - H3 does not draw it and makes no new guarantee about it.
 Desktop-only, like H1/H2: the phone has its own home screen and no editable-HUD
-layouts (A1-A4 planned, not built); the model presets and personalities the menu
-adds are PC settings the phone already reaches its own way (its Settings, "How
-Jarvis talks"), so no phone half was added for the menu.
+layouts (A1-A4 planned, not built), and it has no personality picker at all -
+`jarvis-client` has no personality code (only its own focus presets,
+`FocusPresets.kt`), so that half is one-sided on purpose rather than a parity
+gap; the five model presets the menu adds are PC settings, and the phone
+reaches its own focus presets through the Brain screen's own row. No phone half
+was added for the menu.
 
 **The HUD Reminders tab is the desktop HUD's, on purpose** (2026-10-21; the
 owner's dedicated Reminders menu). The HUD page (`jarvis_hud.html`, vendored

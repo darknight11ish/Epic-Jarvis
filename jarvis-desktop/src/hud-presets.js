@@ -373,14 +373,18 @@ export function modelPresetRows(payload) {
 /**
  * The personalities the PC offers (`GET /api/manner`): its nine built-ins in
  * its own order, then the owner's saved "My personalities" when there are
- * any. `current` is the PC's own answer, never the last click. Pure for the
- * same reason as above; a row that carries no id or no name is dropped rather
- * than drawn as an unclickable blank.
+ * any. The PC's `personalities` list already carries the saved ones too -
+ * each marked `builtin: false` (`jarvis_manner.py` `all_personalities`) - so
+ * the split is that flag, and a saved personality is never drawn twice.
+ * `current` is the PC's own answer, never the last click. Pure for the same
+ * reason as above; a row that carries no id or no name is dropped rather than
+ * drawn as an unclickable blank.
  */
 export function personalityRows(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
   const current = typeof body.personality === "string" ? body.personality : "";
-  const builtIn = Array.isArray(body.personalities) ? body.personalities : [];
+  const listed = Array.isArray(body.personalities) ? body.personalities : [];
+  const builtIn = listed.filter((row) => !(row && typeof row === "object" && row.builtin === false));
   const own = Array.isArray(body.user_personalities) ? body.user_personalities
     : (Array.isArray(body.custom_personalities) ? body.custom_personalities : []);
   const rows = [];

@@ -95,9 +95,17 @@ function mannerPayload(current = PERSONALITIES.default, mine = []) {
   return {
     available: true,
     personality: current,
-    personalities: PERSONALITIES.personalities.map((p) => ({
-      id: p.id, title: p.title, description: p.description,
-    })),
+    personalities: [
+      ...PERSONALITIES.personalities.map((p) => ({
+        id: p.id, title: p.title, description: p.description, builtin: true,
+      })),
+      // The PC's own list already carries the saved ones too, marked
+      // `builtin: false` (`jarvis_manner.py` `all_personalities`) - the menu
+      // must split them out on that flag, not draw them twice.
+      ...mine.map((row) => ({
+        id: row.id, title: row.name, description: row.line || "", builtin: false,
+      })),
+    ],
     user_personalities: mine,
     custom_personalities: mine,
   };
@@ -509,7 +517,10 @@ await check("the menu is called Presets and lists the PC's five model presets an
     PERSONALITIES.personalities.map((p) => p.title),
     "the personalities' titles are not the PC's own");
   assert.equal(menu.mine.length, 0, "a My personalities section appeared with no saved ones");
-  assert.match(menu.line, /approval card/i, `the menu does not say the model cards' rule: ${menu.line}`);
+  const modelRule = (menu.groups.find((g) => g.heading === "Model presets") || { notes: [] }).notes.join(" ");
+  assert.match(modelRule, /ONE approval card/i,
+    `the menu does not say the model cards' rule: ${modelRule}`);
+  assert.equal(menu.line, "", "the menu said something before any action ran");
   assert.deepEqual(problems, []);
 });
 
@@ -571,6 +582,11 @@ await check("My personalities appears only when the PC lists one", async () => {
     ["Model presets", "Personality", "My personalities", "Built-in layouts"],
     `My personalities is missing or out of order: ${JSON.stringify(menu.headings)}`);
   assert.deepEqual(menu.mine.map((r) => r.text), ["Calm Helper"]);
+  // The PC's own list already carries the saved one (builtin: false); it must
+  // be drawn under My personalities only, never also under Personality.
+  assert.deepEqual(menu.people.map((r) => r.personality),
+    PERSONALITIES.personalities.map((p) => p.id),
+    `a saved personality was drawn under Personality as well: ${JSON.stringify(menu.people.map((r) => r.personality))}`);
   assert.deepEqual(problems, []);
 });
 
