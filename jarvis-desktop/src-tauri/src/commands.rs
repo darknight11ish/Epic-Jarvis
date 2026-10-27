@@ -2189,6 +2189,11 @@ pub async fn stream_chat(
     if let Some(body) = payload.as_object_mut() {
         body.extend(chat_extras(conversation_id.as_deref(), device.as_deref()));
         add_chat_mode_flags(body, temporary, private, cloud_yes);
+        // This build's own facts, for "is there an update?" and "update
+        // Jarvis" answered in chat (2026-10-26). The value comes from Rust,
+        // never from the page: `chat_extras` above keeps only checked page
+        // fields, and this is added after it.
+        body.insert("desktop".into(), crate::update::desktop_chat_facts(&app));
     }
 
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
@@ -2960,6 +2965,14 @@ async fn answer_approval(
         );
     }
 
+    // The update card (2026-10-26). "Update Jarvis" answered in chat raises ONE
+    // approval card (backend/jarvis_quick.py, action `desktop_update`); the
+    // owner's Approve here is what makes this shell run its own updater. Read
+    // BEFORE the decision is sent, from the queue this process already holds -
+    // and `waiting_cut_off` above has already refused an id it has not read, so
+    // this is the card on screen, never the page's claim about it.
+    let start_update = approved && waiting_update(&app, id);
+
     // The widget approves nothing while App lock is on (apps security audit
     // M3, the owner's decision 2026-09-25): it sits on the desktop outside
     // the lock, so its Approve opens the Jarvis bar - which asks Windows
@@ -3082,6 +3095,18 @@ async fn answer_approval(
         crate::events::APPROVAL_RESOLVED,
         serde_json::json!({ "id": id, "approved": approved }),
     );
+
+    if start_update {
+        // The card WAS the gate. What runs now is the same `update_both` the
+        // Settings button runs, through the same signed updater - backend
+        // first, then the executable, then a restart. Spawned so the page's
+        // Approve returns at once, and its steps reach the HUD's chat
+        // (`update.rs` `announce_step`).
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::update::run_approved_update(handle).await;
+        });
+    }
 
     Ok(serde_json::from_str(&body)
         .unwrap_or_else(|_| serde_json::json!({ "ok": true, "endpoint": endpoint, "raw": body })))
@@ -3951,6 +3976,18 @@ fn waiting_email(app: &AppHandle, id: &str) -> bool {
         Some(item) => crate::email_sending::is_email(item),
         None => true,
     }
+}
+
+/// Whether the pending card `id` is the update card ("update Jarvis").
+///
+/// Fails CLOSED, like the two around it: an id this process has not read yet,
+/// or a row with no action, is NOT the update card, so nothing is started.
+fn waiting_update(app: &AppHandle, id: &str) -> bool {
+    let pending = app.state::<crate::stream::StreamState>().pending();
+    pending
+        .iter()
+        .find(|item| crate::stream::approval_id(item).as_deref() == Some(id))
+        .is_some_and(crate::update::is_update_card)
 }
 
 /// Whether the request behind `id` was cut off before it reached the card, so
