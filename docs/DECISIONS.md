@@ -3784,7 +3784,6 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     installed by the card - the updater's own installer path was not run in
     this container, and that is the owner's field test, never a pass.
 
-
 ## 2026-10-27 — The "no standing grant" rule is changed by the owner: cloud escalation becomes a switch
 
 The rule that this replaces, in `jarvis_router.choose()`'s own words, was the
@@ -3920,6 +3919,91 @@ private-topic backstop and the secret scan are all as they were, and
     answering a crafted `{"lane": ..., "auto": false}` request - this suite
     drives the functions out of the patched file, not the server, and that
     end-to-end run is a field test, never a pass.
+
+
+## 2026-10-27 — CI parses every Python file, and a suite that runs no check is not a pass
+
+  * **The problem, measured.** The 2026-10-27 test audit
+    (`.dsh-scratch/AUDIT-TESTS-2026-10-27/FINDINGS.md`, F-01/F-02/F-07/F-09)
+    found four holes in the checks that gate a merge. Two files that say in
+    their own headers that they are not tests - `poll-hygiene-measure.mjs`
+    (prints one JSON object) and `make-before-overlay.mjs` (copies `src/` to
+    `src-old/`) - were counted as passing `frontend` suites. Fourteen backend
+    suites carrying 364 `check()` calls were run by no CI job, and no CI job
+    even parsed them, so a syntax error in one was invisible to a pull request
+    and surfaced during the owner's update. A suite that skipped every check it
+    had was still printed as `ok` by `backend/run_suites.py`, because its exit
+    code depended only on failures. And the frontend shard count was typed in
+    three places, so a `SHARDS` larger than the matrix silently dropped every
+    fifth suite.
+  * **What now holds.** (1) The required `backend` job's first working step
+    compiles every `.py` file under `backend/`, `jarvis-backend/` and `tools/`
+    in memory and fails in seconds on the first syntax error. It is not
+    `compileall`/`py_compile`: both were measured writing `__pycache__` even
+    under `-B` and `PYTHONDONTWRITEBYTECODE=1` (1,090 `.pyc` files in a copy of
+    the three folders), and a job that dirties its checkout is a trap for the
+    next step that reads the tree. (2) The frontend loop no longer runs those
+    two non-tests; the frontend job's selected suites are 225 of the 229
+    top-level `.mjs` files (the other four are `uikit.mjs` and `shots.mjs`, the
+    harness and the screenshot writer, plus the two non-tests). (3) The shard
+    count has ONE definition - the `matrix.shard` list - and both the job name
+    and the shell's `SHARDS` read `strategy.job-total`, so a matrix and a
+    `SHARDS` cannot disagree. (4) A suite that exits 0 having run no
+    non-skipped check is `NO-CHECKS`, neither a pass nor a skip; it fails the
+    sweep unless it is on the named `ZERO_CHECK_ALLOWED` list, which holds the
+    three suites whose optional package (playwright, cryptography, Pillow) is
+    not installed on a bare machine, each with its one-line reason. In the
+    required backend job all three packages are installed, so there they still
+    run for real.
+  * **The 14 audit suites, and which can run without the owner's PC.** Each was
+    run DIRECTLY against a staged backend holding every shipped module and none
+    of the owner's files (measured 2026-10-27). Four passed and are now in the
+    required backend job, naming as a skip whatever still needs the owner's
+    whole file: `test_bitemporal.py` (28 passed, 1 skipped),
+    `test_extraction_wiring.py` (13 passed, 10 skipped), `test_gate_push.py`
+    (7 passed, 6 skipped) and `test_import_history.py` (13 passed, 6 skipped) -
+    61 checks CI did not run before. The other ten stay skipped by name, with
+    the files each is waiting for, in `run_suites.py`'s `NEEDS_OWNER`:
+    `test_approval_notice.py`, `test_decide_once.py`,
+    `test_degrade_filter.py`, `test_events_pump.py`, `test_gate_egress.py`,
+    `test_gate_outcome.py`, `test_gpu_offload.py`, `test_memory_noise.py`,
+    `test_memory_prefix.py` and `test_memory_safety.py`. Four of those exit 1
+    at import with no output at all (they import the owner's module at module
+    level), three fail checks that read the owner's real file, and three print
+    one whole-suite skip and exit 0 - so all ten need `jarvis_hud.py`,
+    `jarvis_gate.py`, `jarvis_extract.py` or `jarvis_models.py`, which only the
+    owner's PC has.
+  * **What is pinned, and what is not yet run.** `backend/test_suite_report.py`
+    gained 31 checks (74 in the file now): a zero-check suite is FAILED with
+    "no check ran" and the sweep exits non-zero (proved end to end with the
+    real `test_apps.py`, whose git guard skips everything when `git` is not on
+    PATH); an allowlisted one is `NO-CHECKS`, neither passed nor failed nor
+    skipped (proved end to end with `test_browser_control_live.py` and a
+    shadowed `playwright`); and a real suite that passed one check and skipped
+    one is still `ok`. `backend/test_suite_state.py` still passes unchanged.
+    The workflow itself has been parsed with PyYAML, and `strategy.job-total`
+    is documented by GitHub as the matrix length in both `jobs.<job_id>.name`
+    and `steps.env`.
+  * **The rule's own first CI run found two suites that had been proving
+    nothing (run 40468616102, 2026-10-27).** The branch's first run went red on
+    the new rule, not on a product change, and both failures were real:
+    `test_decks.py` printed one skip and ran NO check because `py-fsrs` was
+    never installed by either backend job - 349 checks sat unrun on every push
+    while the job read green; `fsrs==6.3.2`, the version `requirements.lock`
+    pins for Python 3.12, is now installed by BOTH the Ubuntu and the Windows
+    backend jobs, so its 351 checks run on Ubuntu and 349 passed with 2
+    legitimately skipped on Windows. `test_tool_calling_wiring.py` lifts
+    `do_POST`'s text out of `jarvis_hud.py` in all six checks, and that file is
+    the owner's patched entry point which no checkout holds - so no CI runner
+    can run it at all: it moved into `NEEDS_OWNER` (skipped by name, saying
+    which file it waits for) and out of the Windows job's suite list, where six
+    skips and exit 0 would have read as a pass. The owner's PC is still the
+    only machine it runs on, for real. **What is not fixed:** the Windows job
+    still trusts exit codes alone, so a future suite that skips every check
+    there would still read as a pass - the Ubuntu sweep is the one with the
+    rule, and widening it to that job is named as remaining work rather than
+    claimed here. What has NOT happened is a green run of the amended branch:
+    the next CI run is what shows the fix.
 
 
 ## 2026-10-27 - the phone reads a typed answer aloud, behind the same gate as the HUD
