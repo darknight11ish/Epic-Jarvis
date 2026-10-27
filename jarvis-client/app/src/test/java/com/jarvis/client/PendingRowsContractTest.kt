@@ -200,4 +200,81 @@ class PendingRowsContractTest {
         assertEquals("data", got.items.first { it.id == "restore-1" }.replacesKind)
         assertTrue(got.items.first { it.id == "restore-1" }.replaces)
     }
+
+    /**
+     * Every declared non-nullable field of the card's nested objects arriving as
+     * an explicit null. This is not a shape the PC sends today - it is the
+     * latent cliff that `replaces_kind` fell off: any one of these would throw
+     * the whole row out of the queue the same way. The row MUST still be read,
+     * with each unreadable value settled toward caution.
+     */
+    @Test
+    fun `a row whose every nested field is null is still read, with the cautious values`() {
+        val nullBomb = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive("null-bomb-1"),
+                "action" to JsonPrimitive("run_shell_on_host"),
+                "tier" to JsonNull,
+                "detail" to JsonNull,
+                "replaces" to JsonNull,
+                "replaces_kind" to JsonNull,
+                "replaces_heading" to JsonNull,
+                "replaces_note" to JsonNull,
+                "expires_in" to JsonNull,
+                "risk" to JsonObject(
+                    mapOf(
+                        "reversible" to JsonNull,
+                        "reach" to JsonNull,
+                        "swipe_ok" to JsonNull,
+                        "why" to JsonNull,
+                        "classified" to JsonNull,
+                    ),
+                ),
+                "notice" to JsonObject(
+                    mapOf(
+                        "title" to JsonNull,
+                        "body" to JsonNull,
+                        "summary" to JsonNull,
+                        "full" to JsonNull,
+                        "weight" to JsonNull,
+                        "deny_ok" to JsonNull,
+                        "approve_ok" to JsonNull,
+                    ),
+                ),
+                "raised" to JsonObject(
+                    mapOf(
+                        "code" to JsonNull,
+                        "text" to JsonNull,
+                        "quote" to JsonNull,
+                        "context" to JsonNull,
+                        "source" to JsonNull,
+                        "from_tier" to JsonNull,
+                        "to_tier" to JsonNull,
+                        "count_today" to JsonNull,
+                    ),
+                ),
+            ),
+        )
+        val got = decodePendingRows(listOf(nullBomb), nowMs = 0L)
+        assertEquals(1, got.items.size)
+        assertEquals(0, got.skipped)
+        val item = got.items.single()
+        // The guard fields: an unreadable "replaces" keeps the two-press ask.
+        assertTrue(item.replaces)
+        assertEquals("", item.replacesKind)
+        // Risk: unknown reversibility and reach are the worse reading; swipe refused.
+        assertEquals("no", item.risk.reversible)
+        assertEquals("outbound", item.risk.reach)
+        assertFalse(item.risk.swipeOk)
+        assertFalse(item.risk.classified)
+        // Notice: an unreadable weight is the cautious one; Deny stays, Approve does not.
+        assertEquals("heavy", item.notice!!.weight)
+        assertTrue(item.notice!!.denyOk)
+        assertFalse(item.notice!!.approveOk)
+        // A raise that was sent and could not be read still refuses every swipe.
+        assertNotNull(item.raised)
+        assertFalse(item.swipeable)
+        // The title falls back to the PC's own action words, never blank.
+        assertTrue(item.title.isNotBlank())
+    }
 }
