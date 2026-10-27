@@ -12778,7 +12778,8 @@ each uses the ones above.
   press = stop Jarvis talking (not under "Don't interrupt"), hold = Mic off /
   Mic on. It never approves, denies or starts anything. Android gives the
   button to the app that played sound last, and some phones open their
-  assistant on a hold; the Live screen says so.
+  assistant on a hold; the screen no longer explains this (removed
+  2026-10-26 at the owner's request).
 - **"Live ended - Resume"** (phone): after Live ended here and the PC says
   `resumable`, a notification kept on the phone offers Resume Live for the
   rest of `limits.resume_s`; Resume opens the app and starts Live in the

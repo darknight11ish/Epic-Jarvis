@@ -152,8 +152,9 @@ object LiveExtras {
         else -> "$MIC_HEADSET (${headset.name.take(40)})"
     }
 
-    /** Said under the headset line on the Live screen: what the button does, and its limit. */
-    const val HEADSET_HINT = "Headset button: press to stop Jarvis talking, hold to turn the " +
-        "microphone off or on. It never approves anything. On some phones holding it opens " +
-        "the phone's assistant instead - Mic off is here and in the notification too."
+    // The long "Headset button" explanation that used to sit under the
+    // microphone line was removed from the Live screen on the owner's request
+    // of 2026-10-26 ("get rid of the long explanation on jarvis live"). What
+    // the button does is unchanged and is tested above ([HeadsetKeys]); only
+    // its on-screen paragraph is gone.
 }
