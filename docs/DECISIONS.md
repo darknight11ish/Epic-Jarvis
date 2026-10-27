@@ -3697,3 +3697,40 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     layout itself is pinned to the real desktop JavaScript at 1e-6 by the
     generated fixture and `GalaxyPictureTest.kt`; that is a test, not a run on
     a phone.
+
+## 2026-10-27 — The Galaxy's eight looks are all built, on both desktop surfaces
+
+The owner asked for "an easy way to change the appearance of the jarvis galaxy
+to the other models [modes]", and when the surfaces were offered, chose **both**:
+the HUD's Galaxy gets the switcher, and the five looks that Phase G0 listed as
+"not built yet" are built. So the Galaxy now offers **eight looks** -
+**Planetary orbit**, **Neural arbor**, **Nebula**, **DNA helix**, **Radar dome**,
+**Star map**, **Clean tree** and **Zen ring** - with the constellation still the
+default, hotkeys `1`-`8` in the Brain window, the same chips in its Galaxy bar,
+and a row of nine pills in the HUD's own Galaxy view.
+
+What this is, and what it is not. A look only **moves the dots the picture
+already draws**: no node, no link, no label rule, no cap, no route, no
+permission, no approval card, no new dependency and no PC write. The choice is
+stored on this device in each window's own `localStorage`
+(`jarvis.galaxy.preset`, `jarvis.galaxy.hud.look`), and a corrupt or stale value
+reads as the constellation. The five rich views are the **flat, 2D halves** of
+what the rework blueprint lists: deterministic positions and guide lines in each
+shape, **not** the WebGL engines and **not** their per-preset controls (warp
+orbit, isolate cortical layer, sweep laser, lockdown dome). Nothing on either
+screen claims more than that.
+
+Same day, same piece of work: the Studio dock's icons now follow the stage's
+words (**Galaxy, Approvals, Reminders, Memory, Telemetry**) instead of an order
+nothing else used - the owner: "the icons on the left column don't match the
+order of the horizontal words in the jarvis hud (reminder is out of place for
+example)".
+
+The HUD keeps its own canvas renderer and carries an inline mirror of the layout
+maths (the page is one vendored file with no imports); `tests/hud.mjs` compares
+the mirror and `galaxy-presets.js` position for position. The phone is unchanged
+and stays excluded: it draws its read-only zen-ring picture and has no look
+switcher, and no route was added, so `tools/check_parity.py` has nothing to
+classify. Proved by `jarvis-desktop/tests/galaxy-presets.mjs` and
+`tests/hud.mjs`; the look on the real WebView2 window is NOT-TESTABLE here
+(headless Chromium only).
