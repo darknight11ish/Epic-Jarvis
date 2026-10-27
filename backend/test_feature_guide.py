@@ -1451,24 +1451,53 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
                      (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
     check("...the five phone controls are the PC-Only-labelled ones",
           len(settings_rows) == 5, [r["id"] for r in settings_rows])
-    # Each names its OWN path and says plainly that the PC has no control, in
-    # both the change sentence and the whole answer.
+    # Each names its OWN path and says what is true of the PC, in both the change
+    # sentence and the whole answer. The PC's side is read from the row's own
+    # `surface_reason`: three of the five really have no PC control, and the other
+    # two (`phone-floating`, `phone-screen-rate`) name the desktop's own, different
+    # control - so denying a PC control would contradict the surface line printed
+    # in the same answer (2026-10-26, part B).
     missing = []
     for row in settings_rows:
         where = str(row["where"])
         head, sep, rest = where.partition(",")
         tail = rest.strip() if head.strip().lower() == "settings" and sep else where
+        pc_has_its_own = row["id"] in FG.PHONE_PC_COUNTERPART
         for label, words in (("change_words", FG.change_words(row)),
                              ("explain", str(FG.explain(row["id"]).get("words") or ""))):
-            if ("phone's own Settings" not in words
-                    or "The PC does not have that control" not in words):
-                missing.append((row["id"], label, words[:120]))
+            if "phone's own Settings" not in words:
+                missing.append((row["id"], label, "no phone Settings path", words[:120]))
             if tail.rstrip(".") not in words:
                 missing.append((row["id"], label, "does not name its own path", tail))
             if "on this PC" in words:
                 missing.append((row["id"], label, "still says on this PC"))
+            if pc_has_its_own:
+                if "The PC does not have that control" in words:
+                    missing.append((row["id"], label,
+                                    "denies the PC's own control", words[:120]))
+                if "different control" not in words:
+                    missing.append((row["id"], label,
+                                    "does not name the PC's different control", words[:120]))
+            elif "The PC does not have that control" not in words:
+                missing.append((row["id"], label,
+                                "does not say the PC has no control", words[:120]))
     check("...and each says the phone's own Settings, names its own path, and "
-          "says the PC has no control", not missing, missing[:8])
+          "says the truth about the PC's own control", not missing, missing[:8])
+    # The two rows whose PC has its own, different control are pinned exactly, and
+    # the row's own surface_reason must be what says so - the map in the module
+    # cannot drift away from the data it was written from.
+    for fid, want in FLAT_ROW_SENTENCES.items():
+        row = next(r for r in SOURCE if r["id"] == fid)
+        check(f"{fid} names the phone's path and the PC's DIFFERENT control",
+              FG.change_words(row) == want, FG.change_words(row))
+        check(f"...and its own surface reason is what says the PC has one",
+              "the desktop's" in FG.surface_words(row), FG.surface_words(row)[:160])
+    for row in settings_rows:
+        if row["id"] in FG.PHONE_PC_COUNTERPART:
+            continue
+        check(f"{row['id']}'s surface reason really says the PC has none",
+              "the desktop's" not in FG.surface_words(row),
+              FG.surface_words(row)[:160])
     # The other three phone rows are abilities, not settings: their sentence must
     # stay the Command-Only one instead of pretending the PC has a control.
     for fid in ("memory-people", "live-camera", "phone-limits"):
@@ -1476,6 +1505,258 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
         check(f"{fid} keeps its Command-Only sentence",
               "no switch of its own" in FG.change_words(row),
               FG.change_words(row))
+
+
+#: The four rows BOTH apps have whose SETTING CONTROL is the PC's, and the exact
+#: sentence each now answers "how do I change it?" with (2026-10-26, part B).
+#: Pinned word for word so a reword cannot drift what a reviewer checked; the
+#: comma-fragment garble they replace read "It is changed at Settings, a new
+#: conversation starts after on this PC; the phone says so rather than pretending
+#: it changed".
+BOTH_PC_ONLY_SENTENCES = {
+    "chat-thread": ("Its setting is in Settings, a new conversation starts after. "
+                    "It is changed on the PC; the phone has the feature but cannot "
+                    "change the PC's setting."),
+    "connection": ("Its setting is in Settings, connection. It is changed on the PC; "
+                   "the phone has the feature but cannot change the PC's setting."),
+    "appearance": ("Its setting is in Settings, appearance. It is changed on the PC; "
+                   "the phone has the feature but cannot change the PC's setting."),
+    "faces": ("Its setting is in Settings, Appearance. It is changed on the PC; "
+              "the phone has the feature but cannot change the PC's setting."),
+}
+#: The garble shape itself: a Settings path swallowed by " on this PC" in the same
+#: clause. It is what `settings_path_words()` produced when a prose `where` was
+#: split at its first comma and glued together.
+_GARBLED_PATH = re.compile(r"Settings,[^.;]*\s+on this PC")
+
+#: The two phone-only rows whose PC has its own, DIFFERENT control (2026-10-26,
+#: part B). Pinned word for word: the row's own surface_reason says the PC has one,
+#: so "The PC does not have that control" contradicted the same answer.
+FLAT_ROW_SENTENCES = {
+    "phone-floating": ("It is changed in the phone's own Settings, Floating Jarvis. "
+                       "The PC's floating face is a different control."),
+    "phone-screen-rate": ('It is changed in the phone\'s own Settings, Screen refresh '
+                          'rate. "Check again" re-reads what the screen settled on. '
+                          "The PC's frame-rate setting is the animal's, a different "
+                          "control."),
+}
+
+
+def t_the_galaxy_is_both_apps_and_its_answer_says_so():
+    """Part B (2026-10-26): the Galaxy row the phone now draws, and its old lie.
+
+    The phone draws a read-only Galaxy picture since PR #869, so the row is
+    `surface: "both"` and carries no desktop-only reason. The branch that met
+    here had added one - "the memory graph stays off the phone, so the phone has
+    no Galaxy view" - which the merged row finally made owner-facing. The answer
+    must never carry it again.
+    """
+    row = FG.row_by_id("galaxy")
+    check("the Galaxy row is both apps'", row["surface"] == "both", row["surface"])
+    check("...and carries no one-sided reason to contradict it",
+          not row.get("surface_reason"), row.get("surface_reason"))
+    words = FG.explain_words(row)
+    check("...so its answer says both apps and never 'the phone has no Galaxy view'",
+          "It is in both apps" in words
+          and "the phone has no Galaxy view" not in words, words[:200])
+    check("...and describes the phone's picture as read-only",
+          "read-only picture" in words and "at most 48 names" in words, words[:200])
+    # The row the phone's list draws from is the same row in all three copies of
+    # the list; tools/check_feature_list.py is the gate, and this pins the one
+    # fact this suite can read: the catalogue the answers use.
+    check("...and the catalogue the answers read is the generator's",
+          CAT.SOURCE_SHA256 == GEN.load_rows()[1], CAT.SOURCE_SHA256)
+
+
+def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
+    """Part B (2026-10-26): four rows BOTH apps have read as PC-only settings.
+
+    `_label_from` maps the row's `reason` (app-local / credentials) to PC-Only
+    without looking at `surface`, and `change_words` believed the label's own
+    words - so chat-thread, connection, appearance and faces said "It is changed
+    at Settings, <a comma-split fragment> on this PC; the phone says so rather
+    than pretending it changed" for features both apps have. The sentence is now
+    built from `surface`: the PC's Settings is named as a place, and the phone is
+    not said to lack the feature. The four are pinned exactly.
+    """
+    both_pc = [row for row in SOURCE if row["surface"] == "both"
+               and FG.label_for(row) == FG.LABEL_PC_ONLY]
+    check("exactly the four pinned rows are both-apps PC-Only settings",
+          [r["id"] for r in both_pc] == list(BOTH_PC_ONLY_SENTENCES),
+          [r["id"] for r in both_pc])
+    for fid, want in BOTH_PC_ONLY_SENTENCES.items():
+        row = FG.row_by_id(fid)
+        check(f"{fid} says where its setting is, and does not take the phone's copy away",
+              FG.change_words(row) == want, FG.change_words(row))
+        ability = FG.ability_explanation(row)
+        check(f"{fid} says the same when asked how to turn it on",
+              want in ability and "on this PC" not in ability, ability)
+        words = FG.explain_words(row)
+        check(f"{fid}'s whole answer carries that sentence and both apps",
+              want in words and "It is in both apps" in words, words[:200])
+    # No BOTH-APPS row may carry the garble shape, in either the change sentence
+    # or the whole explain answer. (A desktop-only row may still say "on this PC" -
+    # that is true for it - but its place is never swallowed by that phrase.)
+    bad = []
+    for row in SOURCE:
+        if row["surface"] != "both":
+            continue
+        for label, words in (("change_words", FG.change_words(row)),
+                             ("explain", FG.explain_words(row))):
+            if _GARBLED_PATH.search(words):
+                bad.append((row["id"], label, words[:160]))
+    check("no both-apps answer glues a Settings place to ' on this PC' any more",
+          not bad, bad[:8])
+    # A both-apps row must never claim the phone has no control at all.
+    denied = [(row["id"], FG.change_words(row)) for row in SOURCE
+              if row["surface"] == "both"
+              and re.search(r"phone (does not|has no|cannot)\b", FG.change_words(row))
+              and "phone has the feature" not in FG.change_words(row)]
+    check("...and no both-apps row tells the owner the phone lacks the feature",
+          not denied, denied[:8])
+
+
+def t_a_phone_only_status_line_agrees_with_its_surface():
+    """Part B (2026-10-26): the Status line of a phone-only row said "PC-Only".
+
+    The five phone controls carry the PC-Only label because the phone is the only
+    app with the control; `label_for()` reads that from the row's reason and
+    never looks at `surface`, so the Status line contradicted the "It is on the
+    phone only" line in the same answer. `status_label()` derives the Status line
+    from `surface` for DISPLAY only. `label_for()`, the contracts' counts and
+    both apps' directories are untouched - the phone-side UI label is a separate
+    change, recorded in the PR body.
+    """
+    phone = [row for row in SOURCE if row["surface"] == "phone"]
+    check("there are phone-only rows to check", len(phone) >= 5, len(phone))
+    bad = []
+    for row in SOURCE:
+        status = FG.status_label(row)
+        words = FG.explain_words(row)
+        if f"Status: {status}." not in words:
+            bad.append((row["id"], "the Status line is not the derived label", status))
+        if row["surface"] == "phone":
+            if FG.LABEL_PC_ONLY in words or FG.LABEL_SETTINGS_ONLY in words:
+                bad.append((row["id"], "a PC label inside a phone-only answer", words[:160]))
+            if status == FG.PHONE_ONLY_DISPLAY_LABEL:
+                if "phone's own Settings" not in words or "It is on the phone only" not in words:
+                    bad.append((row["id"], "the Status disagrees with the change sentence",
+                                words[:160]))
+            elif status != FG.label_for(row):
+                bad.append((row["id"], "a phone row's label was reworded for no reason",
+                            status))
+        elif status != FG.label_for(row):
+            bad.append((row["id"], "a non-phone row was reworded", status))
+    check("every row's Status line agrees with its surface", not bad, bad[:8])
+    five = [row for row in phone
+            if FG.label_for(row) in (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
+    check("...the five phone controls are the ones this rewording covers",
+          len(five) == 5, [r["id"] for r in five])
+    check("...and each says Phone-Only, with the phone's Settings named",
+          all(FG.status_label(r) == FG.PHONE_ONLY_DISPLAY_LABEL for r in five),
+          [FG.status_label(r) for r in five])
+    # The reword is display-only: the contract label, the directory data both
+    # apps render and the counts tools/check_feature_controls.py pins are all
+    # exactly as approved.
+    directory = {r["id"]: r for r in FG.abilities_directory()}
+    check("...and the directory's own label and counts are untouched",
+          all(directory[r["id"]]["label"] == FG.LABEL_PC_ONLY for r in five)
+          and all(FG.label_for(r) == FG.LABEL_PC_ONLY for r in five),
+          [(r["id"], directory[r["id"]]["label"]) for r in five])
+    # "can I change it?" says the same thing as "tell me about it".
+    out = FG.change("phone notifications")
+    check("...and 'can I change it?' carries the same Status line",
+          out.get("ok") and f"Status: {FG.PHONE_ONLY_DISPLAY_LABEL}." in str(out.get("words")),
+          str(out.get("words"))[:160])
+
+
+def t_a_settings_path_is_a_place_not_a_sentence():
+    """Part B (2026-10-26): `where` is written for a person, not to be split.
+
+    `settings_path_words()` answered "Settings, <fragment>" for rows whose
+    `where` is prose: the place was taken from a comma-split of the sentence and
+    then glued into "on this PC". A place is now READ, never split blindly: the
+    opening "Settings, <Place>" is taken only up to its own stop, and only when
+    it is path-shaped; anything else falls back to the directory, which every
+    feature really is listed at.
+    """
+    check("a plain place is a path", FG._path_shaped("Connection"),
+          FG._path_shaped("Connection"))
+    check("a place that opens like a clause is not",
+          not FG._path_shaped("the first card on the page"),
+          FG._path_shaped("the first card on the page"))
+    check("...and neither is a clause with a comma in it",
+          not FG._path_shaped("Appearance, then Open Faces on the PC"),
+          FG._path_shaped("Appearance, then Open Faces on the PC"))
+    check("the row's own prose gives up its first place only",
+          FG._where_place({"where": 'Settings, Appearance, then Open Faces on the PC. '
+                                    'On the phone, Appearance.'}) == "Appearance",
+          FG._where_place({"where": 'Settings, Appearance, then Open Faces on the PC. '
+                                    'On the phone, Appearance.'}))
+    check("...and a row that opens with prose yields nothing",
+          FG._where_place({"where": "Scroll the Jarvis bar. Settings has it."}) == "",
+          FG._where_place({"where": "Scroll the Jarvis bar. Settings has it."}))
+    for fid, want in (("chat-thread", "Settings, a new conversation starts after"),
+                      ("connection", "Settings, connection"),
+                      ("appearance", "Settings, appearance"),
+                      ("faces", "Settings, Appearance")):
+        got = FG.settings_path_words(FG.row_by_id(fid))
+        check(f"{fid}'s Settings place is a real path", got == want, got)
+    bad = []
+    for row in SOURCE:
+        path = FG.settings_path_words(row)
+        if not path.startswith("Settings, "):
+            bad.append((row["id"], path, "not a Settings path"))
+        if path.rstrip().endswith(".") or any(ch in path for ch in ";:!?"):
+            bad.append((row["id"], path, "prose punctuation in a path"))
+        if " on this PC" in path:
+            bad.append((row["id"], path, "the old garble is back"))
+    check("every row's Settings place is a path, not a sentence", not bad, bad[:8])
+
+
+def t_how_do_i_change_asks_the_same_question_as_where_do_i_change():
+    """Part B (2026-10-26): "how do i change <x>" is an alternative, gated the same.
+
+    The owner's live question was "where do i change the presets?"; the same
+    question the other way round must reach the same ROW, through the row's own
+    aliases ("presets" is focus-presets' alias, "personality presets" is
+    manner's), and get the full answer - which ends with the way to change it.
+    The gate is unchanged, so a general "how do i change my password" still falls
+    through to the model instead of being hijacked.
+    """
+    pairs = (("how do i change the presets", "where do i change presets",
+              "focus-presets"),
+             ("how do i change the jarvis presets",
+              "where do i change the jarvis presets", "focus-presets"),
+             ("how do i change the personality presets",
+              "where do i change the personality presets", "manner"),
+             ("how do i change my personalities",
+              "where do i change my personalities", "manner"))
+    for how, where, fid in pairs:
+        got_how, got_where = match(how), match(where)
+        check(f'"{how}" reaches {fid}, exactly as "{where}" does',
+              got_how is not None and got_where is not None
+              and got_how.f.get("id") == got_where.f.get("id") == fid,
+              (got_how, got_where))
+    out = say(match("how do i change the presets"))
+    check("...and the answer still says how to change it",
+          out is not None and any(marker in out.reply for marker in HOW_WORDS),
+          out.reply[:200] if out else None)
+    for phrase in ("how do i change my password",
+                   "how do i change my wifi password",
+                   "Jarvis, how do i change my password",
+                   "how do i change my password in chrome",
+                   "how do i change the layout presets",
+                   "how do i change the voice speed"):
+        got = match(phrase)
+        check(f'"{phrase}" is not hijacked by the feature list', got is None, got)
+    for phrase, fid in (("can i change the presets", "focus-presets"),
+                        ("how can i adjust the presets", "focus-presets"),
+                        ("is the prompt coach adjustable", "prompt-coach")):
+        got = match(phrase)
+        check(f'"{phrase}" still reaches the change lane',
+              got is not None and got.name == "feature_change"
+              and got.f.get("id") == fid, got)
 
 
 def t_the_matrix_keeps_every_typed_phrase():
@@ -1559,6 +1840,11 @@ if __name__ == "__main__":
                t_what_can_you_do_still_answers,
                t_the_presets_question_reaches_the_guide,
                t_a_phone_only_row_is_never_changed_on_this_pc,
+               t_the_galaxy_is_both_apps_and_its_answer_says_so,
+               t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone,
+               t_a_phone_only_status_line_agrees_with_its_surface,
+               t_a_settings_path_is_a_place_not_a_sentence,
+               t_how_do_i_change_asks_the_same_question_as_where_do_i_change,
                t_the_matrix_keeps_every_typed_phrase):
         print(f"\n--- {fn.__name__} ---")
         try:

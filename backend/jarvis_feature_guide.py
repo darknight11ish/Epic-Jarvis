@@ -41,8 +41,8 @@ down, never a guess:
     five owner-facing labels and the same switch table `turn on` writes
     through, and changes nothing.
   * THE ANSWER NAMES BOTH APPS. `surface` says which apps have it; when one
-    does not, the answer gives the row's own `surface_reason` (written for all
-    27 one-sided rows on 2026-10-26), so "the phone does not have it" is never a
+    does not, the answer gives the row's own `surface_reason` (written for every
+    one-sided row on 2026-10-26), so "the phone does not have it" is never a
     bare claim. A both-apps answer points at the phone's copy of the feature
     list by name, because the row's `where` is written from the PC's side.
   * ALIASES ARE THE OWNER'S OTHER NAMES. A row may carry `aliases` ("customer
@@ -636,8 +636,8 @@ def surface_words(row: dict) -> str:
     """Which app(s) have it, and - when one does not - the row's own reason.
 
     The reason is the feature list's `surface_reason`, written for every
-    one-sided row (19 desktop-only rows gained one on 2026-10-26). When a row
-    has no reason the answer says that plainly rather than inventing one.
+    one-sided row on 2026-10-26 (the desktop-only rows gained theirs then). When
+    a row has no reason the answer says that plainly rather than inventing one.
     """
     surface = str(row.get("surface") or "")
     if surface == "both":
@@ -705,6 +705,25 @@ def _phone_settings_words(row: dict) -> str:
     return f"the phone's own Settings, {where}"
 
 
+#: The phone-only rows whose feature the PC ALSO has, as a DIFFERENT control.
+#: Each row's own `surface_reason` says so - "the desktop's floating face draws the
+#: real animal" (phone-floating) and "the desktop's frame-rate setting is the
+#: animal's, a different thing" (phone-screen-rate) - so "The PC does not have that
+#: control" contradicted the surface line printed in the same answer (2026-10-26,
+#: part B). The PC's control is not this setting, and the row's `where` names only
+#: the phone's.
+PHONE_PC_COUNTERPART = {
+    "phone-floating": "The PC's floating face is a different control.",
+    "phone-screen-rate": "The PC's frame-rate setting is the animal's, a different control.",
+}
+
+
+def _phone_pc_claim(row: dict) -> str:
+    """What this phone row says about the PC's own side, from the row's data."""
+    return PHONE_PC_COUNTERPART.get(
+        str(row.get("id") or ""), "The PC does not have that control.")
+
+
 def phone_change_words(row: dict) -> str:
     """How a PHONE-ONLY row is changed: on the phone, never "on this PC".
 
@@ -714,9 +733,32 @@ def phone_change_words(row: dict) -> str:
     without looking at `surface`. The label's own words therefore said "on this
     PC" for rows the PC does not have at all (2026-10-26 review, F3). The row's
     `surface` wins, and the row's own `where` names the place.
+
+    The closing claim about the PC is per row (`_phone_pc_claim`): three of the
+    five really have no PC control, and saying so for the other two would
+    contradict the surface line in the same answer.
     """
     return (f"It is changed in {_phone_settings_words(row)} "
-            f"The PC does not have that control.")
+            f"{_phone_pc_claim(row)}")
+
+
+def both_pc_change_words(row: dict) -> str:
+    """How a row BOTH apps have, whose CONTROL lives in the PC's Settings, changes.
+
+    Four rows (chat-thread, connection, appearance, faces) are `surface: "both"`
+    and carry the PC-Only label because the SETTING CONTROL is the PC's, not the
+    feature. Read out of the label alone, the sentence said "It is changed at
+    Settings, a new conversation starts after on this PC; the phone says so
+    rather than pretending it changed" (2026-10-26, part B): the place was glued
+    to "on this PC" with no sentence of its own, and the label's own words told
+    the owner the phone lacked a feature both apps have. The row's `surface`
+    decides now: the setting is the PC's, and the phone does not change it. It
+    does not claim the phone has no control it might have - only that THIS
+    setting is the PC's (the contract's own reason for these rows is "no backend
+    route to change it").
+    """
+    return (f"Its setting is in {settings_path_words(row)}. It is changed on the "
+            f"PC; the phone has the feature but cannot change the PC's setting.")
 
 
 def change_words(row: dict) -> str:
@@ -725,7 +767,9 @@ def change_words(row: dict) -> str:
     A PHONE-ONLY row is answered from its `surface` BEFORE the label: the label
     says PC-Only for the five phone controls (the phone is the only app with a
     control), and reading that label's words out loud told the owner to change a
-    phone setting "on this PC" (2026-10-26 review, F3). No label count changes.
+    phone setting "on this PC" (2026-10-26 review, F3). A row BOTH apps have is
+    answered from its `surface` too, for the same reason: its control is the
+    PC's, and the phone is not said to lack the feature. No label count changes.
 
     The five owner-facing labels decide the rest of the shape, so this can never
     call a Command-Only ability a switch or a safety rule a setting:
@@ -740,12 +784,15 @@ def change_words(row: dict) -> str:
         list pins one, plus the Settings place it is listed at.
     """
     label = label_for(row)
-    # The surface wins over the label's own words: see this docstring and
-    # phone_change_words(). Both Settings-shaped labels are covered because
-    # either one would otherwise say "on this PC" / "Open ... on the PC".
-    if (str(row.get("surface") or "") == "phone"
-            and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY)):
+    surface = str(row.get("surface") or "")
+    # The surface wins over the label's own words: see this docstring,
+    # phone_change_words() and both_pc_change_words(). Both Settings-shaped
+    # labels are covered because either one would otherwise say "on this PC" /
+    # "Open ... on the PC".
+    if surface == "phone" and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY):
         return phone_change_words(row)
+    if surface == "both" and label == LABEL_PC_ONLY:
+        return both_pc_change_words(row)
     settings = feature_switches(row)
     if label == LABEL_SWITCH_ADJUST and settings:
         labels = [setting["label"] for setting in settings]
@@ -778,10 +825,37 @@ def change_words(row: dict) -> str:
             + f" It is listed at {settings_path_words(row)}.")
 
 
+#: The Status line a PHONE-ONLY row shows. DISPLAY ONLY: `label_for()` keeps the
+#: owner-approved five-label mix, pinned to `contract/feature-controls.json` and
+#: to the same counts the two apps' feature lists render. But a phone-only row's
+#: Status line read "PC-Only Setting (Honest Refusal on Phone)" while the very
+#: same answer said "It is on the phone only" (2026-10-26, part B): the label was
+#: picked from the row's reason without looking at `surface`, and the two halves
+#: of one answer contradicted each other. The Status line is therefore derived
+#: from `surface` here, and from nothing else.
+PHONE_ONLY_DISPLAY_LABEL = "Phone-Only Setting (Changed in the phone's Settings)"
+
+
+def status_label(row: dict) -> str:
+    """The five-label kind as the Status line says it - `surface` first.
+
+    Only a phone-only row whose label is one of the two Settings-shaped labels
+    is reworded; every other row returns its contract label untouched, so the
+    counts and both apps' directories are exactly as approved. The phone lists'
+    own rendering of that label (a data-level change in both apps) is recorded
+    as a separate PR, not done here.
+    """
+    label = label_for(row)
+    if (str(row.get("surface") or "") == "phone"
+            and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY)):
+        return PHONE_ONLY_DISPLAY_LABEL
+    return label
+
+
 def explain_words(row: dict) -> str:
     """The exact facts, in plain words, made only from the row and the switches."""
     parts = [f"{row['title']}.", str(row.get("what") or "").strip(),
-             f"Status: {label_for(row)}.",
+             f"Status: {status_label(row)}.",
              f"Settings: {settings_path_words(row)}.", "",
              f"Where: {str(row.get('where') or '').strip()}",
              f"Does it ask first? {str(row.get('asks') or '').strip()}",
@@ -909,14 +983,14 @@ def change(words) -> dict:
     if got["kind"] == "feature":
         row = got["row"]
         rows = _switch_state_rows(row)
-        words_out = (f"{row['title']}. Status: {label_for(row)}. "
+        words_out = (f"{row['title']}. Status: {status_label(row)}. "
                      f"{change_words(row)}")
         clause = _state_clause(rows)
         if clause:
             words_out += " " + clause
         known = [r["state"] for r in rows if isinstance(r["state"], bool)]
         return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-                "label": label_for(row), "switches": rows,
+                "label": status_label(row), "switches": rows,
                 "state": known[0] if len(set(known)) == 1 else None,
                 "words": words_out}
     if got["kind"] == "ambiguous":
@@ -1867,11 +1941,77 @@ def _section_words(row: dict) -> str:
     return ", ".join(names)
 
 
+#: A Settings place is a SHORT NAME ("Connection", "A new conversation starts
+#: after"), never a sentence. These are the limits a path is held to when it is
+#: read out of a row's own `where` prose: the owner's list writes the setting
+#: place as `Settings, <Place>` and then carries on with a full stop, a dash or
+#: a second clause, and reading the whole of that as a place is what glued a
+#: fragment to "on this PC" (2026-10-26, part B: "It is changed at Settings, a
+#: new conversation starts after on this PC").
+_MAX_PLACE_WORDS = 6
+#: A place never opens like a clause of prose. Deliberately checked on the
+#: FIRST word only, and only for a place read out of `where` - the registry's
+#: own names ("the big model") are trusted as written.
+_PROSE_OPENERS = ("the", "a", "an", "it", "this", "that", "then", "and", "or",
+                  "when", "where", "what", "how", "if", "so")
+
+
+def _path_shaped(place: str) -> bool:
+    """Is this a Settings place, or a piece of prose that happens to follow a comma?
+
+    The guard exists because `where` is written for a person to read, not to be
+    split: "Settings, Appearance, then Open Faces on the PC." must yield
+    "Appearance", and "Settings, the first card on the page." must yield nothing
+    (it names a position, not a place) so the answer falls back to the directory
+    instead of inventing a path.
+    """
+    place = " ".join(str(place or "").split())
+    if not place:
+        return False
+    words = place.split()
+    if len(words) > _MAX_PLACE_WORDS:
+        return False
+    if any(ch in place for ch in '.;:!?,"()'):
+        return False
+    if words[0].lower().strip("'") in _PROSE_OPENERS:
+        return False
+    return True
+
+
+def _where_place(row: dict) -> str:
+    """The `<Place>` of the row's own opening "Settings, <Place>", or "".
+
+    Only the OPENING path is read, and only up to its own full stop, dash or
+    second comma - never the rest of the sentence. `_path_shaped` then decides
+    whether that really was a place.
+    """
+    where = " ".join(str(row.get("where") or "").split())
+    if not where.lower().startswith("settings,"):
+        return ""
+    rest = where[len("settings,"):].strip()
+    head = rest.split(".", 1)[0]
+    head = head.split(" - ", 1)[0]
+    head = head.split(",", 1)[0].strip()
+    return head if _path_shaped(head) else ""
+
+
 def settings_path_words(row: dict) -> str:
-    """The EXACT place the owner finds this feature, in Settings words."""
+    """The EXACT place the owner finds this feature, in Settings words.
+
+    The registry's section names come FIRST and are used as written: they are
+    the Settings cards this repository already knows how to open. When a row
+    covers no such card, its own `where` may still open with a path -
+    "Settings, Appearance, then Open Faces on the PC." - and that place is used
+    only if it passes `_path_shaped`. What is never used is the prose after the
+    first comma unexamined; when no path survives, the answer gives the
+    directory, which every feature really is listed at.
+    """
     sections = _section_words(row)
     if sections:
         return f"Settings, {sections}"
+    place = _where_place(row)
+    if place:
+        return f"Settings, {place}"
     return SETTINGS_DIRECTORY
 
 
@@ -1930,11 +2070,15 @@ def ability_explanation(row: dict) -> str:
     title = str(row.get("title") or row.get("id") or "That")
     path = settings_path_words(row)
     # Same rule as change_words(): a phone-only row is changed on the phone, and
-    # the PC-Only label must never put its control "on this PC" (F3, 2026-10-26).
+    # the PC-Only label must never put its control "on this PC" (F3, 2026-10-26);
+    # a row BOTH apps have says the setting is the PC's, never that the phone
+    # lacks the feature (part B, 2026-10-26).
     if (str(row.get("surface") or "") == "phone"
             and label in (LABEL_PC_ONLY, LABEL_SETTINGS_ONLY)):
         return (f"{title} is on the phone only: it is changed in "
-                f"{_phone_settings_words(row)} The PC does not have that control.")
+                f"{_phone_settings_words(row)} {_phone_pc_claim(row)}")
+    if str(row.get("surface") or "") == "both" and label == LABEL_PC_ONLY:
+        return f"{title} is a PC-Only Setting. {both_pc_change_words(row)}"
     if label == LABEL_ALWAYS_ON:
         why = str(row.get("what") or row.get("asks") or "").strip()
         extra = ALWAYS_ON_EXCEPTION.get(str(row.get("id") or ""))
