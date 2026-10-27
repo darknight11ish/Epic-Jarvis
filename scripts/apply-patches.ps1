@@ -1704,6 +1704,52 @@ $PATCHES = @(
     # re-anchored onto this block's last two printed lines (tools/check_plugins.py
     # checks that). The browser path is deliberately NOT wired (ARCHITECTURE 8).
     'secret-handoff.patch'
+    # cloud-escalate.patch (2026-10-27, the owner's decision): ONE cloud lane,
+    # and a standing "escalate when the work is too complex" switch that no
+    # client can fake. Three hunks, NO install block and no route of its own -
+    # `POST /api/work/cloud-escalate` is presets.patch's own
+    # jarvis_presets.install() chain and the one card it raises is
+    # jarvis_gate's change_own_config, so the plugin loader's anchor above is
+    # untouched.
+    #
+    #   1. the HUD page's `cloud_yes` counts only while THIS PC's own
+    #      escalation file says on - a stale page cannot turn a switch that has
+    #      been turned off into a yes for one question. Another client's
+    #      `cloud_yes` (the phone's "Try the cloud model", the desktop
+    #      window's strip) is the per-question tap it always was. Its context
+    #      is cloud-say-yes.patch's own comment block and screen.patch's
+    #      `has_screen` line, so it goes after both - and after presets.patch,
+    #      whose `active_ollama_url()` the second hunk uses.
+    #   2. the cloud reply's reader is told when a turn was escalated with no
+    #      click, so a reply with nothing usable in it (the measured
+    #      `finish_reason: "length"` with empty `content`) is answered HERE,
+    #      under one honest line, instead of showing the model's private
+    #      working-out to somebody who did not ask for it. Its context is the
+    #      reasoning fallback that arrived by a re-take (PR #424), which is in
+    #      the published base and on the owner's PC.
+    #   3. `_lane_names()` stops reading `litellm-proxy.yaml` - the config of a
+    #      proxy that is not installed and never was - and asks
+    #      `jarvis_presets.cloud_lanes()` instead: the one lane when the owner
+    #      has chosen a cloud provider, none when he has not (gate
+    #      "unavailable", not three names that do not exist). This is the one
+    #      hunk whose context is text only the owner's PC holds, and
+    #      backend/_stack.py's RATCHET records it (58 -> 60, with hunk 2).
+    'cloud-escalate.patch'
+
+    # f01-manual-lane-gate.patch (2026-10-27, F-01): a lane the owner picks by
+    # hand (`{"lane": "<cloud lane>", "auto": false}`) used to reach a cloud
+    # model with private memory text, a tainted conversation, a picture or the
+    # owner's screen attached, because the manual path built its decision
+    # itself and ran NO privacy gate. Both paths now come through the ONE
+    # jarvis_router.choose() call, the pick stands in for the owner's yes, and
+    # a pick the router would not have escalated stays on the local model with
+    # a plain reason (`_manual_lane()`, in the same `X-Jarvis-Route` field a
+    # refused automatic decision already uses). It touches the chat turn's
+    # lane-picking block and `_manual_decision` only - no install block, no
+    # gate row, no tier line - so it sits last of the code patches, immediately
+    # before plugin-loader.patch, whose anchor ("Before the main socket") is
+    # untouched by it.
+    'f01-manual-lane-gate.patch'
     'plugin-loader.patch'
 )
 
@@ -2104,7 +2150,7 @@ $SHIPPED = @(
     # --- Action receipts and one-click undo (2026-10-14) ---
     'jarvis_receipts.py'         # a receipt for every action that CHANGES something: what changed, the before and after snapshots, and the code that can put it back, in its own receipts.db (WAL, one connection per call). record() must never raise into the action it records from and never writes an unscrubbed word; undo() is idempotent - a second call refuses with "this was already undone" - and falls back to the before snapshot when the in-memory callable is gone, saying plainly which path it took. GET /api/receipts and POST /api/receipts/<id>/undo come from its install(), called by the plugins\ready\receipts folder: NO patch, which is what the loader is for. Undo raises ONE card (undo_action, tier ask) and a denied card changes nothing. jarvis_goals.py records a receipt for every step tick
     # --- Cost advice, and the four gates that bound it (2026-10-14) ---
-    'jarvis_auto_router.py'      # estimates what a turn will COST on this PC - the measured token rate jarvis_speed.py keeps, the size of the conversation, and the work jarvis_work.match() reads - and ADVISES jarvis-escalate (or jarvis-critic for a review task) when the wait looks long. It DECIDES NOTHING: jarvis_router.choose() is the one authority on which lane answers a turn, and this module asks it directly, so the advice can never name a lane choose() would refuse. Four gates bound it - the mode switch (off by default in general chat), the ONE taint latch (jarvis_gate.taint_active(), reason taint_latched_local_only) plus a project not marked shareable, the on-disk budget and jarvis_chatbot_api.money_check() (an exhausted OR unconfigured cap is a no), and jarvis_scrub.scrub_text() (absent means refuse, and a recommendation always carries the scrubbed text). Sends nothing, writes nothing, approves nothing, logs nothing, reaches no network and serves no route - plugins\ready\auto-router has install "none" - no patch
+    'jarvis_auto_router.py'      # estimates what a turn will COST on this PC - the measured token rate jarvis_speed.py keeps, the size of the conversation, and the work jarvis_work.match() reads - and ADVISES jarvis-escalate when the wait looks long (it was two lanes until 2026-10-27, when jarvis-critic went with the owner's decision to keep one). It DECIDES NOTHING: jarvis_router.choose() is the one authority on which lane answers a turn, and this module asks it directly, so the advice can never name a lane choose() would refuse. Four gates bound it - the mode switch (off by default in general chat), the ONE taint latch (jarvis_gate.taint_active(), reason taint_latched_local_only) plus a project not marked shareable, the on-disk budget and jarvis_chatbot_api.money_check() (an exhausted OR unconfigured cap is a no), and jarvis_scrub.scrub_text() (absent means refuse, and a recommendation always carries the scrubbed text). Sends nothing, writes nothing, approves nothing, logs nothing, reaches no network and serves no route - plugins\ready\auto-router has install "none" - no patch
     # --- The skill library's other doors (2026-10-15) ---
     'jarvis_skill_hub.py'        # A reference manual read only when it is asked for (parse_skill collected references/<file>.md into the file list and nothing ever read one), leading /skill and /bundle tokens that stop dead at the first name they do not know - so /path/to/file survives whole - a trusted project's own skills at <folder>/.jarvis/skills with anything that fails the scan QUARANTINED rather than loaded, and /learn: a four-section distillation (When to Use / Procedure / Pitfalls / Verification) scrubbed through jarvis_scrub, writing NOTHING AT ALL when the scrubber is absent. It re-implements none of jarvis_skills.py - the index, the full body, the list, the removal and write_skill() are all CALLED - and every save goes through write_skill(), whose scanner runs first and whose modify_own_code card is raised BEFORE the write, so no client can reach a write around either. learn() re-checks the TIER itself, the way jarvis_skill_discovery.offer() does, so a config that listed modify_own_code as notify cannot turn the card into a rubber stamp. Its FOUR routes (GET /api/skills/hub/references, GET /api/skills/hub/projects, POST /api/skills/chain, POST /api/skills/learn) come from its own install(), called by the plugins\ready\skill-hub folder: NO patch. It adds no route that already existed - GET /api/skills and POST /api/skills/decide, with the "are you sure?" before them, stay where they are, on both apps
     # --- The blind credential vault (2026-10-14) ---

@@ -2026,6 +2026,28 @@ permissions = [
   "allow-hud-switch-personality",
 ]
 
+# The HUD Presets menu's Cloud escalation switch (2026-10-27). The owner asked
+# for a "Cloud" preset beside coder/general/fast and a real checkbox: "Escalate
+# to the cloud when the work is too complex". The page holds no token (apps
+# security audit M2), so the write is ONE narrow Rust command that adds it, and
+# the page's own POST to /api/work/cloud-escalate stays refused by the
+# bootstrap's fetch shim. ONE boolean and nothing else: no lane, no provider, no
+# one-turn "yes" can be smuggled into a stored setting through it.
+#
+# It is a LOOSENING when it goes on - a hard question may then reach an API
+# service without asking first - so the PC raises its ONE change_own_config ask
+# card and nothing is written until the owner answers it. OFF is instant. The
+# command is held on a stale link like every other write, the checkbox is drawn
+# from a REFETCH of the PC's own /api/presets answer (never from the click), and
+# the read side of that answer is hud_get's /api/presets - already on the fixed
+# list - so this set grants no read of its own.
+[[set]]
+identifier = "hud-cloud-escalate"
+description = "Turn the PC's cloud-escalation setting on or off: ONE boolean, `POST /api/work/cloud-escalate`. ON is a loosening and the PC raises its ONE approval card; OFF is instant; held on a stale link. The page stores nothing and reads the setting back from /api/presets."
+permissions = [
+  "allow-hud-cloud-escalate",
+]
+
 # The HUD's own Live button (2026-10-27). The owner asked for "a live mode
 # button in the left column of the Jarvis HUD", and it has to be the BAR'S
 # control rather than a second idea of Live - so it sends the bar's own two

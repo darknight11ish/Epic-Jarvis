@@ -453,6 +453,14 @@ class Decision:
     #: Empty whenever a privacy gate kept the turn local: those are never
     #: offered to the cloud at all.
     offer: str = ""
+    #: True when the turn went to the cloud WITHOUT a per-question click -
+    #: because the PC's own standing switch is on (`escalate-cloud.json`) or
+    #: because the owner asked for the cloud in the message itself ("send this
+    #: to the cloud"). The apps say so on the turn, and a cloud answer with no
+    #: usable text is handled differently for these: nothing the owner did not
+    #: ask for is ever presented as an answer. See jarvis_chatbot_api's
+    #: CloudAnswer. False on every local turn and on the per-turn "yes".
+    auto: bool = False
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -499,6 +507,96 @@ CLOUD_MODEL_AS_LOCAL = (
     "on ollama.com, not on this PC, so nothing is sent to it. Switch the everyday "
     "model to one that runs on this PC; a cloud model belongs in a cloud lane, "
     "where Jarvis asks you before each question")
+
+
+# ==========================================================================
+#   ONE cloud lane, and who may say yes to it (2026-10-27)
+# ==========================================================================
+#
+# THE THREE NAMES BECOME ONE. Until 2026-10-27 the caller's lane list came from
+# `litellm-proxy.yaml` - the config of a LiteLLM proxy that is not installed and
+# never was - and it named `jarvis-escalate`, `jarvis-critic` and `jarvis-bulk`.
+# `jarvis_chatbot_api.CLOUD_LANES` mapped all three at one service, so the
+# difference between them was a label and a model name, never a route. The
+# owner's decision of 2026-10-27 keeps ONE (`jarvis-escalate`) and drops the
+# other two, and this is where that becomes true for every caller: whatever
+# list arrives, only the one name is a cloud lane, and a list holding none of it
+# is an EMPTY list - gate "unavailable" - never a substituted name.
+#
+# It has to be here rather than in each caller's own file, because the deletion
+# of the two names must not leave a hole: an empty lane list is exactly the
+# "no cloud lane was offered" answer, and a stray name from an older config must
+# not quietly become "the cloud".
+CLOUD_LANE = "jarvis-escalate"
+
+
+def cloud_lanes(lanes) -> list:
+    """The cloud lanes in `lanes`: at most ONE, the name above.
+
+    Everything else in the list is dropped. An empty answer is the honest
+    answer for a PC where nothing named a cloud lane, and `choose()` turns it
+    into gate "unavailable" - which is what stops the removal of the two old
+    names from silently killing escalation everywhere.
+    """
+    return [CLOUD_LANE] if CLOUD_LANE in [str(n or "") for n in (lanes or [])] else []
+
+
+def standing_escalation() -> bool:
+    """Is the PC's own standing cloud switch ON? (`escalate-cloud.json`)
+
+    THE ONLY SOURCE OF A STANDING YES, and that is the point of it being here:
+    no request body, no header and no client flag can reach this. The owner
+    turns it on in the Presets menu, which raises ONE `change_own_config` card
+    (jarvis_presets.cloud_escalate); turning it off is immediate. Absent,
+    unreadable, corrupt, or a `jarvis_presets.py` that is not there all read as
+    OFF - a privacy switch fails closed.
+
+    docs/DECISIONS.md's 2026-10-27 entry records that this reverses the
+    "no standing grant" rule of 2026-09-24; `choose()`'s own docstring still
+    describes the rule the gates follow, which has not changed.
+    """
+    try:
+        import jarvis_presets
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_presets.escalate_on())
+    except Exception:
+        return False
+
+
+#: The phrases that count as the owner asking for the cloud IN THE MESSAGE.
+#: Deliberately narrow and fixed: a false positive here would send words the
+#: owner did not choose, so each one has to name the cloud or the escalation
+#: outright. Matched against the NEWEST message only, lower-cased, and only
+#: ever read at gate 6 - after every privacy gate has had its chance to answer
+#: local, so this can never lift a gate that already refused.
+ESCALATE_PHRASES = (
+    "escalate this",
+    "escalate it",
+    "use the cloud for this",
+    "use the cloud",
+    "send this to the cloud",
+    "send it to the cloud",
+    "ask the cloud",
+    "the bigger model for this",
+    "use the bigger model",
+)
+
+
+def explicit_escalation(query) -> bool:
+    """Did the owner ask for the cloud in the message itself?
+
+    FOR ONE TURN ONLY: nothing is stored, nothing is remembered, and the next
+    message has to ask again. `choose()` reads it at gate 6 and nowhere else,
+    so a Lockdown, a tainted conversation, a picture, the screen's words, a
+    private question or a pasted secret all still answer local - the phrase can
+    only turn "offer" into "escalate", never a refusal into an answer.
+    """
+    text = str(query or "").lower()
+    if not text:
+        return False
+    return any(phrase in text for phrase in ESCALATE_PHRASES)
 
 
 def complexity(query: str) -> float:
@@ -618,11 +716,23 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
     and asks. No standing grant." This function used to decide on its own:
     any long, non-private question went to the first cloud lane, and the
     owner saw a Cloud badge afterwards. Now a turn reaches a cloud lane only
-    when the caller passes `owner_said_yes=True` - the owner's own yes for
-    this one question - and even then gates 0-5 still apply, so a yes can
-    never carry a private or tainted turn out. Without it, the turn is
-    answered here and `offer` names the lane that could have answered, so an
-    app can ask. Nothing learned, remembered or configured sets the yes.
+    when one of three things says so, and even then gates 0-5 still apply, so
+    a yes can never carry a private or tainted turn out:
+      * `owner_said_yes=True` - the owner's own yes for this one question;
+      * the PC's own standing switch (`standing_escalation()`, the checkbox in
+        the Presets menu). The owner CHANGED the "no standing grant" rule on
+        2026-10-27 - docs/DECISIONS.md records it - and the switch is a file on
+        this PC raised by one `change_own_config` card. No request body, no
+        header and no client flag is consulted for it, so a stale page or a
+        phone cannot make a standing decision this PC has not made;
+      * the owner asking for the cloud in the message itself
+        (`explicit_escalation`), for THAT TURN only - nothing is stored.
+    Without any of them the turn is answered here and `offer` names the lane
+    that could have answered, so an app can ask. Nothing learned, remembered
+    or configured sets the per-question yes.
+    The last two are "automatic" - no click - and the decision says so
+    (`Decision.auto`), so a cloud answer with no usable text in it is never
+    dressed up as an answer. See jarvis_chatbot_api.CloudAnswer.
 
     Gate 2 (`is_private`) catches the WORD for a secret ("what's my api
     key"); gate 3 (`looks_like_a_secret`) catches the secret ITSELF pasted
@@ -656,7 +766,7 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
                              {"names": sorted(_extra.keys())})
         except Exception:
             pass
-    lanes = list(lanes or [])
+    lanes = cloud_lanes(lanes)
     c = complexity(query)
     local = local_model or "local"
     # Whether the "local" lane IS local, rather than assuming it. `local_model`
@@ -743,15 +853,40 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         return local_decision("budget", f"the {which} cloud budget is spent")
 
     lane = lanes[0]
-    if owner_said_yes is not True:
+    # WHO SAID YES, and it can only ever be one of three (2026-10-27):
+    #   * `owner_said_yes` - the per-question click both apps already had
+    #     ("Try the cloud model"), unchanged;
+    #   * the PC's own standing switch (`standing_escalation()`, read from the
+    #     file on THIS machine and from nowhere else); or
+    #   * the owner asking for the cloud in the message itself
+    #     (`explicit_escalation`), for that one turn.
+    # All three are consulted HERE, after every gate above has had its chance
+    # to return local, so none of them can lift a refusal: the order is still
+    # the policy. The last two are auto-escalation - the owner did not click -
+    # so the decision says so (`auto`), and a cloud answer with nothing usable
+    # in it is never dressed up as one (jarvis_chatbot_api.CloudAnswer).
+    asked = explicit_escalation(query)
+    clicked = owner_said_yes is True
+    # A click for THIS question is already the owner's yes, and calling a turn
+    # he chose "automatic" would change how a blank cloud answer is shown for
+    # it. So the standing switch is consulted only when he did not click.
+    standing = False if clicked else standing_escalation()
+    if not (clicked or standing or asked):
         d = local_decision(
             "offer", f"complexity {c}: {lane} could answer this, but the cloud is used "
                      f"only when you say yes for this question")
         d.offer = lane
         return d
-    return Decision(lane, f"complexity {c}, budget available, and you said yes for this "
-                          f"question", "escalate", c,
-                    inject_memory=False, tainted=conversation_tainted)
+    auto = bool(asked or standing)
+    if asked:
+        why = f"complexity {c}, budget available, and you asked for the cloud in this message"
+    elif clicked:
+        why = f"complexity {c}, budget available, and you said yes for this question"
+    else:
+        why = (f"complexity {c}, budget available, and cloud escalation is on for this PC "
+               f"in the Presets menu")
+    return Decision(lane, why, "escalate", c,
+                    inject_memory=False, tainted=conversation_tainted, auto=auto)
 
 
 def degrade(lane: str, lanes: Optional[list] = None,

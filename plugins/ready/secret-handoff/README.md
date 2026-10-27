@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_secret_handoff_wiring.install()` (takes the core's Handler)
 - The patch this replaces: `backend/secret-handoff.patch`
-- Position in the old patch stack: 153 of 155
+- Position in the old patch stack: 153 of 157
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_secret_handoff_wiring.py`), copied into the backend by

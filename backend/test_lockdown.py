@@ -239,16 +239,23 @@ def t_while_on_nothing_loosens():
 # ======================================================== 5. the rest
 
 def t_the_ways_out_the_table_cannot_reach():
+    # The lane has to be the one the router really recognises. Until 2026-10-27
+    # this said "cloud-big", a name no product code has ever carried: the
+    # router's `cloud_lanes()` now drops a name it does not know, so the OFF
+    # check below would have passed for the wrong reason ("unavailable") and
+    # the ON one failed outright. `jarvis_router.CLOUD_LANE` is the name the
+    # ONE cloud lane is made of (three names became one on 2026-10-27), so this
+    # measures Lockdown against the lane the owner can actually pick.
     off()
     d = R.choose("please write a long detailed essay comparing three economic theories in "
                  "depth with many examples and citations", local_model="jarvis-primary",
-                 lanes=["cloud-big"], owner_said_yes=True)
+                 lanes=[R.CLOUD_LANE], owner_said_yes=True)
     check("off: Lockdown is not the reason (the other gates decide, as before)",
           d.gate != "lockdown", d.gate)
     on()
     d = R.choose("please write a long detailed essay comparing three economic theories in "
                  "depth with many examples and citations", local_model="jarvis-primary",
-                 lanes=["cloud-big"], owner_said_yes=True)
+                 lanes=[R.CLOUD_LANE], owner_said_yes=True)
     check("on: no cloud AI model, and none offered", d.gate == "lockdown"
           and d.lane == "jarvis-primary" and not getattr(d, "offer", None), d.gate)
 

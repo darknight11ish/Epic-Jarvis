@@ -61,16 +61,36 @@
  * ask, 2026-10-26: "under the button on the jarvis hud that says auto, theres
  * several options including bulk, critic, escalate, can you just get rid of this
  * button and replace it with a button that says \"Current Models\" and clicking
- * it will show what models are being used and or loaded on jarvis?"). It
- * replaced the compact lane dropdown in the Studio header with a button that
- * opens a READ-ONLY panel: `GET /api/models`'s `current`/`previous` and its
- * `offload.models` (what is really in memory), `/api/status`'s `default_model`
- * when it differs, and `/api/presets`'s chosen preset. Its route buttons are
- * built from the page's own `#lanes .lane` buttons - the same one source of
- * truth the dropdown used - so the lanes are still routable and no list of lane
- * names is copied here. `/api/models` joined `hud_proxy.rs`'s fixed read list
- * for this panel; there is NO write, NO approval card, NO model switch and NO
- * new route (the model presets' apply stays the Presets menu's own).
+ * it will show what models are being used and or loaded on jarvis?"). Since
+ * 2026-10-27 it is opened by the TOP-RIGHT MODEL NAME itself (the owner: "the
+ * model name ... must become a BUTTON that opens the current-models menu ...
+ * DELETE the separate Current Models button"), and Ambient's top-left pill
+ * carries a second door to the same panel, because the stage bar's chip is
+ * hidden in that shell. The panel is a READ-ONLY view: `GET /api/models`'s
+ * `current`/`previous` and its `offload.models` (what is really in memory),
+ * `/api/status`'s `default_model` when it differs, and `/api/presets`'s chosen
+ * preset. Its route buttons are built from the page's own `#lanes .lane`
+ * buttons - the one source of truth - so no lane name is copied here.
+ *
+ * THE CLOUD SECTION (2026-10-27, the owner's ask: a "Cloud" preset beside
+ * coder/general/fast, listing "the API providers the PC has connected"). It is
+ * drawn ONLY from the PC's own `GET /api/presets` answer's `cloud` object
+ * (`provider`, `providers[]`, `escalate{on,why}`); a PC that does not send one
+ * gets no row and no invented provider. Picking a provider is an APPLY, the
+ * same road and the same ONE approval card as every other preset - it changes
+ * where the owner's words go, so it is a loosening - and nothing is marked
+ * chosen until a REFETCH of the PC's answer names it. A service with no key
+ * saved is NOT a button: it shows the PC's own `key_line` and says to add the
+ * key on the PC, because a key is never typed, pasted or sent from an app
+ * (rule 3).
+ *
+ * THE ESCALATE CHECKBOX is the owner's switch: "Escalate to the cloud when the
+ * work is too complex". Its tick comes from `cloud.escalate.on` and NEVER from
+ * the click; a click posts ONCE (`POST /api/work/cloud-escalate {"on":…}`,
+ * through the HUD's own `hud_cloud_escalate` command in the shell) and the
+ * refetched answer decides. ON is a loosening and the PC raises its ONE card;
+ * OFF is instant. A refused card, an expired one or a failed read always clears
+ * this menu's busy state, so the owner is never left with dead rows.
  *
  * @module hud-presets
  */
@@ -368,6 +388,13 @@ export { USER_ID_RE, MAX_USER_PRESETS };
  * (`GET /api/presets`). Pure, so node tests can prove the reading without a
  * browser. The PC's own `chosen_preset` is the ONLY thing that marks a row
  * chosen - never the click that asked for it.
+ *
+ * TWO FACTS DECIDE WHETHER A ROW CAN BE APPLIED, and both are the PC's:
+ * `heavy_mode` (its model needs both cards as one pooled lane, which this PC
+ * refuses until that lane support lands - the same refusal the phone and the
+ * older focus-preset module honour) and `pending` (the PC is still preparing
+ * it). Carrying them here is the fix for the 2026-10-27 contract audit's F1:
+ * the menu offered Coding, the PC always answered 409, and nothing said why.
  */
 export function modelPresetRows(payload) {
   const body = payload && typeof payload === "object" ? payload : {};
@@ -382,6 +409,8 @@ export function modelPresetRows(payload) {
       title: typeof row.title === "string" && row.title ? row.title : row.id,
       focus: typeof row.focus === "string" ? row.focus : "",
       chosen: row.id === chosen,
+      heavy: row.heavy_mode === true,
+      pending: row.pending === true,
     }));
 }
 
@@ -436,9 +465,106 @@ export function personalitySwitchBody(id) {
   return { personality: String(id || "") };
 }
 
-/** The body one model-preset click sends: ONE field, the preset's own id. */
-export function modelApplyBody(id) {
-  return { preset: String(id || "") };
+/** The body one model-preset click sends: the preset's own id, plus the ONE
+ *  provider id when the Cloud preset asks for one (2026-10-27). With no
+ *  provider the body is byte-for-byte what every preset click sent before, so
+ *  an older PC and the five local presets are untouched. */
+export function modelApplyBody(id, provider) {
+  const body = { preset: String(id || "") };
+  const pid = typeof provider === "string" ? provider.trim() : "";
+  if (pid) body.provider = pid;
+  return body;
+}
+
+/** The one plain-words line the PC's own contract says a heavy preset cannot
+ *  be applied. VERBATIM the phone's (`FocusPresets.kt:66-68`), because it is
+ *  the same refusal and the two apps must not describe it differently. */
+export const HEAVY_PRESET_WORDS = "This preset needs both cards at once as one "
+  + "pooled lane. Your PC refuses heavy mode until that lane support lands, so "
+  + "it cannot be used from here yet.";
+
+const cloudText = (value) => (typeof value === "string" ? value.trim() : "");
+
+/**
+ * The API services the PC says it is connected to, from `GET /api/presets`'s
+ * `cloud` object. PURE, and it invents nothing: a PC that sends no `cloud`
+ * object gets an empty list and the menu draws no providers at all.
+ *
+ * The chosen one is `cloud.provider` - the PC's own word for which service the
+ * cloud lane uses. A per-row `chosen` flag is accepted too (the shape the
+ * plan wrote first), but the container key wins when both are present, and a
+ * click here never marks anything.
+ */
+export function providerRows(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const cloud = body.cloud && typeof body.cloud === "object" ? body.cloud : null;
+  if (!cloud) return [];
+  const listed = Array.isArray(cloud.providers) ? cloud.providers : [];
+  const named = cloudText(cloud.provider);
+  const rows = listed
+    .filter((row) => row && typeof row === "object" && typeof row.id === "string" && row.id)
+    .map((row) => {
+      const money = row.money && typeof row.money === "object" ? row.money : null;
+      return {
+        id: row.id,
+        name: cloudText(row.name) || cloudText(row.company) || row.id,
+        company: cloudText(row.company),
+        host: cloudText(row.host),
+        model: cloudText(row.model),
+        keySaved: row.key_saved === true,
+        ready: row.ready === true,
+        why: cloudText(row.why),
+        chosen: false,
+        money: money ? {
+          limit: cloudText(money.limit),
+          left: cloudText(money.left),
+          reached: money.reached === true,
+        } : null,
+        keyLine: cloudText(row.key_line),
+        keyWhere: cloudText(row.key_where),
+      };
+    });
+  const winner = named || cloudText((listed.find((row) => row && row.chosen === true) || {}).id);
+  for (const row of rows) row.chosen = Boolean(winner) && row.id === winner;
+  return rows;
+}
+
+/** The PC's own escalate switch: `{on, why}` from the same answer. ON only
+ *  when the PC sent a literal `true`; anything unreadable is OFF. */
+export function cloudEscalate(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const cloud = body.cloud && typeof body.cloud === "object" ? body.cloud : null;
+  const escalate = cloud && cloud.escalate && typeof cloud.escalate === "object"
+    ? cloud.escalate : null;
+  return {
+    on: Boolean(escalate && escalate.on === true),
+    why: cloudText(escalate && escalate.why),
+  };
+}
+
+/**
+ * The "Cloud" row itself, or null when the PC does not offer one. It sits
+ * beside the five local presets, with the chosen service's own name when the
+ * PC names one; `chosen` comes from `cloud.provider` alone.
+ */
+export function cloudPresetRow(payload) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  if (!body.cloud || typeof body.cloud !== "object") return null;
+  const providers = providerRows(payload);
+  const chosenRow = providers.find((row) => row.chosen) || null;
+  return {
+    id: "cloud",
+    title: "Cloud",
+    chosen: Boolean(chosenRow),
+    provider: chosenRow ? chosenRow.name : "",
+    providers,
+    escalate: cloudEscalate(payload),
+  };
+}
+
+/** The body one escalate click sends: ONE boolean, nothing else. */
+export function cloudEscalateBody(on) {
+  return { on: on === true };
 }
 
 /* ── 3. The roads to the PC (node-tested with a fake window) ─────────────── */
@@ -518,14 +644,33 @@ export async function readPersonalitiesOnPc(win) {
 
 /** `POST /api/work/apply {"preset": id}` - ONE card on the PC. In the shell
  *  this is the page's own `apply_focus_preset` command, which is exactly the
- *  route the bootstrap's fetch shim refuses to let a page POST itself. */
-export async function applyFocusPresetOnPc(win, id) {
+ *  route the bootstrap's fetch shim refuses to let a page POST itself. A
+ *  provider id rides along for the Cloud preset only, and the command sends
+ *  the `provider` key only when one was given. */
+export async function applyFocusPresetOnPc(win, id, provider) {
+  const body = modelApplyBody(id, provider);
   const core = shellCoreOf(win);
-  if (core) return core.invoke("apply_focus_preset", { preset: id });
+  if (core) return core.invoke("apply_focus_preset", body);
   const response = await win.fetch(apiUrlFor(win, "/api/work/apply"), {
     method: "POST",
     headers: apiHeadersFor(win, { "Content-Type": "application/json" }),
-    body: JSON.stringify(modelApplyBody(id)),
+    body: JSON.stringify(body),
+  });
+  return readWriteAnswer(response);
+}
+
+/** `POST /api/work/cloud-escalate {"on": true|false}` - the owner's escalate
+ *  switch (2026-10-27). ON is a loosening and the PC raises its ONE card; OFF
+ *  is instant. In the shell this is the HUD's own narrow `hud_cloud_escalate`
+ *  command; a plain browser posts the same one-field body itself. */
+export async function setCloudEscalateOnPc(win, on) {
+  const body = cloudEscalateBody(on);
+  const core = shellCoreOf(win);
+  if (core) return core.invoke("hud_cloud_escalate", { on: body.on });
+  const response = await win.fetch(apiUrlFor(win, "/api/work/cloud-escalate"), {
+    method: "POST",
+    headers: apiHeadersFor(win, { "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
   });
   return readWriteAnswer(response);
 }
@@ -593,7 +738,21 @@ export function mountHudPresets(options = {}) {
   let pcManner = null;    // GET /api/manner answer (or {available:false, why})
   let pcReading = false;
   let pcError = "";
-  let pcBusy = { preset: "", personality: "" };
+  let pcBusy = { preset: "", personality: "", escalate: false, provider: "" };
+  // Is the Cloud section's provider submenu open? ONE at a time, and Escape
+  // closes it before the menu (2026-10-27).
+  let cloudOpen = false;
+
+  /** Tell the page what the PC says about its escalate switch. The chat body's
+   *  `cloud_yes` is decided from this, so the page writes it only when the PC's
+   *  own answer said on - never from a click in this menu. */
+  function sayCloudState() {
+    const state = cloudEscalate(pcPresets);
+    try {
+      win.dispatchEvent(new CustomEvent("jarvis:cloud-escalate", { detail: state }));
+    } catch { /* a window without CustomEvent (a fake one in a node test) */ }
+    return state;
+  }
 
   // A page-level live line for the menu/dialog results. It is separate from
   // H2's editing bar (which only exists while editing) so a saved layout is
@@ -638,8 +797,12 @@ export function mountHudPresets(options = {}) {
       renderMenu();
     };
     readFocusPresetsOnPc(win)
-      .then((answer) => { pcPresets = answer; })
-      .catch((error) => { pcPresets = null; pcError = errorTextOf(error); })
+      .then((answer) => { pcPresets = answer; sayCloudState(); })
+      .catch((error) => {
+        pcPresets = null;
+        pcError = errorTextOf(error);
+        sayCloudState();          // a failed read is not a "yes"
+      })
       .then(() => readPersonalitiesOnPc(win))
       .then((answer) => { pcManner = answer; })
       .catch((error) => { pcManner = null; if (!pcError) pcError = errorTextOf(error); })
@@ -650,24 +813,84 @@ export function mountHudPresets(options = {}) {
    *  apply itself, and the apply only answers 2xx once the owner approved it -
    *  so this waits, says what it is waiting for, and then lets a REFETCH of the
    *  PC's own contract decide the mark. A denied card returns a refusal and
-   *  marks nothing. */
-  async function pickModelPreset(id, title) {
+   *  marks nothing.
+   *
+   *  `provider` is only ever given by the Cloud section: picking a service is
+   *  the SAME apply with one more field (2026-10-27). */
+  async function pickModelPreset(id, title, provider) {
     if (!id || pcBusy.preset) return;
     pcBusy.preset = id;
+    pcBusy.provider = provider || "";
     renderMenu();
-    announce(`Asked the PC to apply ${title || id}. Nothing changes until you answer its approval card.`);
+    announce(provider
+      ? `Asked the PC to use ${title || id} for the cloud. Nothing changes until you answer its approval card.`
+      : `Asked the PC to apply ${title || id}. Nothing changes until you answer its approval card.`);
     try {
-      await applyFocusPresetOnPc(win, id);
+      await applyFocusPresetOnPc(win, id, provider);
       pcPresets = await readFocusPresetsOnPc(win).catch(() => pcPresets);
+      sayCloudState();
       const row = modelPresetRows(pcPresets).find((item) => item.id === id);
-      announce(row && row.chosen
-        ? `Now using ${row.title}. The PC switched its model and lane.`
-        : `The PC answered, but its preset list does not name ${title || id} as chosen - nothing is marked here.`);
+      const chosen = provider
+        ? providerRows(pcPresets).some((item) => item.chosen && item.id === provider)
+        : Boolean(row && row.chosen);
+      announce(chosen
+        ? (provider
+          ? `Now using ${title || id} for the cloud when it answers there.`
+          : `Now using ${row.title}. The PC switched its model and lane.`)
+        : `The PC answered, but its own list does not name ${title || id} as chosen - nothing is marked here.`);
     } catch (error) {
       announce(`That did not work: ${errorTextOf(error)}`);
       pcPresets = await readFocusPresetsOnPc(win).catch(() => pcPresets);
+      sayCloudState();
     } finally {
+      // Cleared on EVERY end: a refused card, an expired one and a failed read
+      // all leave the menu usable (2026-10-27 HUD audit P2-3). Only the row
+      // that is actually waiting is disabled, and only while it waits.
       pcBusy.preset = "";
+      pcBusy.provider = "";
+      renderMenu();
+    }
+  }
+
+  /** ONE provider click: apply the Cloud preset with this service. It is the
+   *  same ONE card every preset raises, and it changes where the owner's words
+   *  go, so it is never instant and never marked from here. */
+  async function pickCloudProvider(row) {
+    if (!row || !row.id || !row.keySaved || !row.ready) return;
+    await pickModelPreset("cloud", row.name, row.id);
+  }
+
+  /** ONE escalate click: post ONCE, then let the PC's own answer draw the box.
+   *  ON raises the PC's ONE card; OFF is instant. The tick is NEVER set from
+   *  this click - it is re-read from the refetched `cloud.escalate.on`, so a
+   *  refused or expired card leaves it off and the owner can try again. */
+  async function setCloudEscalate(next) {
+    if (pcBusy.escalate) return;
+    pcBusy.escalate = true;
+    renderMenu();
+    announce(next
+      ? "Asked the PC to escalate hard questions to the cloud. Nothing changes until you answer its approval card."
+      : "Asked the PC to stop escalating to the cloud.");
+    try {
+      const answer = await setCloudEscalateOnPc(win, next === true);
+      pcPresets = await readFocusPresetsOnPc(win).catch(() => pcPresets);
+      const state = sayCloudState();
+      const said = answer && typeof answer.said === "string" ? answer.said : "";
+      if (state.on === (next === true)) {
+        announce(said || (state.on
+          ? "Escalating is on: a hard question may go to the cloud. Your monthly limit still applies."
+          : "Escalating is off. Every question stays on this PC."));
+      } else if (answer && answer.waiting === true) {
+        announce(said || "The PC is waiting for you to answer its card - nothing has changed yet.");
+      } else {
+        announce(said || `The PC did not switch it ${next ? "on" : "off"} - nothing is marked here.`);
+      }
+    } catch (error) {
+      announce(`That did not work: ${errorTextOf(error)}`);
+      pcPresets = await readFocusPresetsOnPc(win).catch(() => pcPresets);
+      sayCloudState();
+    } finally {
+      pcBusy.escalate = false;
       renderMenu();
     }
   }
@@ -730,9 +953,10 @@ export function mountHudPresets(options = {}) {
 
   function closeMenu(returnToDoor) {
     if (!badge) badge = doc.getElementById("hud-layout-badge");
-    if (!menu) return;
+    if (!menu) return null;
     menu.hidden = true;
     menu.setAttribute("aria-hidden", "true");
+    cloudOpen = false;
     sayDoors(false);
     // Focus goes back to the control that opened the menu - the rail button
     // when the rail button opened it, never a jump across the window to the
@@ -741,6 +965,10 @@ export function mountHudPresets(options = {}) {
     if (returnToDoor && back) back.focus();
     focusDoor = null;
     returnFocus = null;
+    // The caller may need the door for a dialog's own focus return (P2-6):
+    // `closeMenu(false)` used to throw that identity away, so Rename/Delete/
+    // Export always sent focus to the badge at the other end of the window.
+    return back;
   }
 
   function menuItem(text, hint, onPick, extraClass) {
@@ -781,27 +1009,45 @@ export function mountHudPresets(options = {}) {
       : (pcReading ? `Reading ${what} from the PC...` : `Open the menu again to read ${what}.`));
   }
 
-  /** The five local-AI focus presets (GET /api/presets). A row is marked
-   *  chosen ONLY from the PC's own `chosen_preset`, and the section says the
-   *  card rule in words before any click. */
+  /** The five local-AI focus presets (GET /api/presets), plus the Cloud preset
+   *  beside them when the PC offers one. A row is marked chosen ONLY from the
+   *  PC's own `chosen_preset` / `cloud.provider`, and the section says the card
+   *  rule in words before any click.
+   *
+   *  A HEAVY PRESET IS NOT A BUTTON (2026-10-27, contract audit F1): the PC
+   *  always answers 409 for it, so the row says so in the PC's own sentence
+   *  instead of offering a dead action. The same rule the phone follows. */
   function renderModelPresets() {
-    const group = section("Model presets");
+    // "Focus presets" is the ONE name this feature has everywhere else - the
+    // phone's title, Settings, the bar and JARVIS-API (2026-10-27 audit F5).
+    const group = section("Focus presets");
     if (pcPresets === null) {
-      group.appendChild(loadingNote("its presets"));
+      group.appendChild(loadingNote("its focus presets"));
       return group;
     }
+    // The PC's own reason key is `error` (a 503 body); `why` is read too, for
+    // the older shape (2026-10-27 audit F8).
     if (pcPresets.available === false) {
-      group.appendChild(note(pcPresets.why || "This PC's Jarvis cannot list presets yet."));
+      group.appendChild(note(pcPresets.error || pcPresets.why
+        || "This PC's Jarvis cannot list presets yet."));
       return group;
     }
     const rows = modelPresetRows(pcPresets);
-    if (!rows.length) {
+    const cloud = cloudPresetRow(pcPresets);
+    if (!rows.length && !cloud) {
       group.appendChild(note("The PC listed no presets."));
       return group;
     }
     group.appendChild(note("Applying one asks the PC for ONE approval card - nothing is chosen until you answer it."));
     for (const row of rows) {
       const asking = pcBusy.preset === row.id;
+      if (row.heavy) {
+        // Unavailable, in the PC's own words - never a button that always fails.
+        const dead = el(doc, "p", "hud-presets-empty", `${row.title} - ${HEAVY_PRESET_WORDS}`);
+        dead.dataset.preset = row.id;
+        group.appendChild(dead);
+        continue;
+      }
       const button = menuItem(
         `${row.title}${row.chosen ? " (chosen)" : ""}${asking ? " - asking..." : ""}`,
         row.focus,
@@ -812,10 +1058,146 @@ export function mountHudPresets(options = {}) {
       // which row a button is - never read back as the chosen state, which is
       // the PC's answer alone.
       button.dataset.preset = row.id;
-      if (pcBusy.preset && !asking) button.disabled = true;
+      // A waiting row is NOT disabled: the click handler's own guard already
+      // refuses a second send, and a `disabled` button cannot keep the
+      // keyboard focus across the re-render that follows - which is exactly
+      // how the owner's Space press ended up on <body> (P2-2). Only the
+      // label says it is waiting.
       group.appendChild(button);
     }
+    if (cloud) group.appendChild(renderCloudRow(cloud));
     return group;
+  }
+
+  /** The one "Cloud" row, after the five. It does NOT apply anything: it opens
+   *  the provider submenu. The mark is the PC's `cloud.provider`. */
+  function renderCloudRow(cloud) {
+    const asking = pcBusy.preset === "cloud";
+    const button = menuItem(
+      `Cloud${cloud.provider ? ` - ${cloud.provider}` : ""}${cloud.chosen ? " (chosen)" : ""}`
+        + `${asking ? " - asking..." : ""}${cloudOpen ? " - open" : ""}`,
+      cloud.providers.length
+        ? "Choose the API service the cloud turns use"
+        : "No API service is connected on this PC yet",
+      () => { toggleCloud(!cloudOpen); },
+    );
+    button.setAttribute("aria-haspopup", "true");
+    button.setAttribute("aria-expanded", cloudOpen ? "true" : "false");
+    button.setAttribute("aria-controls", "hud-presets-cloud-menu");
+    button.dataset.cloudAction = "open";
+    if (cloud.chosen) button.setAttribute("aria-current", "true");
+    return button;
+  }
+
+  function providerState(row) {
+    if (row.chosen) return "chosen";
+    // The PC's own sentence whenever it sent one, never this page's guess.
+    if (!row.keySaved) return row.why || "no key saved on this PC";
+    if (row.ready) {
+      return row.money && row.money.limit ? `ready - ${row.money.limit} a month` : "ready";
+    }
+    return row.why || "this PC cannot use it yet";
+  }
+
+  /** The Cloud section's provider submenu. Rendered beside the menu (not inside
+   *  another group) so `menu.json`-style readers see one flat list, and hidden
+   *  until the Cloud row is pressed. Nothing here sends anything: a row that is
+   *  not usable is not a button at all. */
+  function renderCloudSubmenu(cloud) {
+    let box = menu.querySelector("#hud-presets-cloud-menu");
+    if (!box) {
+      box = el(doc, "div", "hud-presets-submenu");
+      box.id = "hud-presets-cloud-menu";
+      box.setAttribute("role", "group");
+      box.setAttribute("aria-label", "Cloud providers");
+    }
+    box.textContent = "";
+    box.hidden = !cloudOpen;
+    if (!cloudOpen) return box;
+
+    box.appendChild(note("One service at a time. Applying one asks the PC for ONE approval card - nothing changes until you answer it."));
+    if (!cloud.providers.length) {
+      box.appendChild(note("The PC has not listed any API service it is connected to yet. Add the key on your PC, then open this menu again."));
+    }
+    for (const row of cloud.providers) {
+      const state = providerState(row);
+      const line = el(doc, "div", "hud-presets-cloud-row");
+      if (!row.keySaved) {
+        // A key is added on the PC only (rule 3). The PC's own command is
+        // offered as selectable text, and this row is NOT an apply.
+        const dead = el(doc, "p", "hud-presets-empty", `${row.name} - ${state}.`);
+        dead.dataset.provider = row.id;
+        line.appendChild(dead);
+        if (row.keyLine) {
+          const cmd = el(doc, "p", "hud-presets-key", row.keyLine);
+          line.appendChild(cmd);
+        }
+        line.appendChild(note("Add the key on your PC, then open this menu again."));
+        box.appendChild(line);
+        continue;
+      }
+      const asking = pcBusy.preset === "cloud" && pcBusy.provider === row.id;
+      const button = menuItem(
+        `${row.name}${row.chosen ? " (chosen)" : ""}${asking ? " - asking..." : ""}`,
+        [row.host, row.model, state].filter((bit) => bit).join(" - "),
+        () => { pickCloudProvider(row); },
+      );
+      button.dataset.provider = row.id;
+      if (row.chosen) button.setAttribute("aria-current", "true");
+      // A service the PC says is not ready is not clickable - the same rule as
+      // a heavy preset, and the reason is on the line below it. Waiting is NOT
+      // a disabled state: the row keeps the keyboard focus and its own guard.
+      if (!row.ready) button.disabled = true;
+      line.appendChild(button);
+      const words = el(doc, "p", "hud-presets-empty",
+        [row.host, state].filter((bit) => bit).join(" - "));
+      line.appendChild(words);
+      box.appendChild(line);
+    }
+
+    // The owner's own switch: "Escalate to the cloud when the work is too
+    // complex". DRAWN FROM THE PC (`cloud.escalate.on`), never from the click.
+    const escalate = cloud.escalate;
+    const label = el(doc, "label", "hud-presets-check");
+    const boxInput = doc.createElement("input");
+    boxInput.type = "checkbox";
+    boxInput.id = "hud-escalate-cloud";
+    boxInput.checked = escalate.on;
+    // Never disabled: `setCloudEscalate` has its own in-flight guard, and a
+    // disabled checkbox would lose the keyboard focus on the re-render that
+    // follows the click (P2-2/P2-3 in one place).
+    boxInput.setAttribute("aria-describedby", "hud-escalate-cloud-why");
+    boxInput.addEventListener("change", () => { setCloudEscalate(boxInput.checked); });
+    label.htmlFor = boxInput.id;
+    label.appendChild(boxInput);
+    label.appendChild(el(doc, "span", "", "Escalate to the cloud when the work is too complex"));
+    box.appendChild(label);
+    const why = el(doc, "p", "hud-presets-empty",
+      escalate.why || (escalate.on
+        ? "On: a hard question may go to the cloud without asking you first. Private words, a picture or your screen still never leave this PC, and your monthly limit still applies."
+        : "When off, every question is answered on this PC first. Turning it on asks the PC for ONE approval card."));
+    why.id = "hud-escalate-cloud-why";
+    box.appendChild(why);
+
+    const back = menuItem("Back", "Close the cloud providers",
+      () => { toggleCloud(false); });
+    back.dataset.cloudAction = "back";
+    back.id = "hud-presets-cloud-back";
+    box.appendChild(back);
+    return box;
+  }
+
+  /** Open or close the ONE provider submenu, and put focus where the state
+   *  says it goes: into the submenu when it opens, back on the Cloud row when
+   *  it closes (so a keyboard user is never dropped on <body>). */
+  function toggleCloud(open) {
+    cloudOpen = Boolean(open);
+    renderMenu();
+    if (!menu) return;
+    const target = cloudOpen
+      ? menu.querySelector("#hud-presets-cloud-menu .hud-presets-item:not([disabled]), #hud-escalate-cloud, #hud-presets-cloud-back")
+      : menu.querySelector('[data-cloud-action="open"]');
+    if (target && typeof target.focus === "function") target.focus();
   }
 
   /** Jarvis's nine personalities (GET /api/manner), then the owner's own
@@ -847,7 +1229,6 @@ export function mountHudPresets(options = {}) {
       );
       if (row.current) button.setAttribute("aria-current", "true");
       button.dataset.personality = row.id;
-      if (pcBusy.personality && !asking) button.disabled = true;
       group.appendChild(button);
     }
     return group;
@@ -869,21 +1250,45 @@ export function mountHudPresets(options = {}) {
       );
       if (row.current) button.setAttribute("aria-current", "true");
       button.dataset.personality = row.id;
-      if (pcBusy.personality && !asking) button.disabled = true;
       group.appendChild(button);
     }
     return group;
+  }
+
+  /** A stable identity for one menu control, so a rebuild can put the keyboard
+   *  focus back on the SAME row instead of dropping it on <body> (2026-10-27
+   *  HUD audit P2-2). Built from the row's own DATA, never from its position
+   *  and never from its visible text: a row that becomes "General (chosen)"
+   *  after the PC answers is still the same row, and using its text as the key
+   *  lost the focus on exactly the action the owner had just taken. */
+  function focusKey(node) {
+    if (!node || !node.dataset) return "";
+    const data = node.dataset;
+    const stable = [
+      data.preset ? `preset:${data.preset}` : "",
+      data.personality ? `personality:${data.personality}` : "",
+      data.provider ? `provider:${data.provider}` : "",
+      data.cloudAction ? `cloud:${data.cloudAction}` : "",
+      node.id ? `id:${node.id}` : "",
+    ].filter(Boolean);
+    if (stable.length) return stable.join("\u0001");
+    return `text:${(node.textContent || "").trim()}`;
   }
 
   function renderMenu() {
     if (!menu) return;
     const scroll = menu.querySelector(".hud-presets-scroll");
     if (!scroll) return;
+    const active = doc.activeElement;
+    const hadFocus = Boolean(active && scroll.contains(active));
+    const key = hadFocus ? focusKey(active) : "";
     scroll.textContent = "";
     // The owner's presets first (2026-10-27): the five local-AI focus presets
+    // (then the Cloud preset and its provider submenu when the PC offers one)
     // and the personalities, then the saved HUD layouts the menu always had.
-    // Every action below is unchanged - this only adds sections above them.
     scroll.appendChild(renderModelPresets());
+    const cloud = cloudPresetRow(pcPresets);
+    if (cloud) scroll.appendChild(renderCloudSubmenu(cloud));
     scroll.appendChild(renderPersonalities());
     const ownPersonalities = renderMyPersonalities();
     if (ownPersonalities) scroll.appendChild(ownPersonalities);
@@ -894,10 +1299,10 @@ export function mountHudPresets(options = {}) {
       builtIns.appendChild(menuItem(
         `${info ? info.label : preset.id}${current ? " (current)" : ""}`,
         info ? info.blurb : "",
-        () => closeMenu(false) || commit(normalizeLayout({
+        () => { closeMenu(false); commit(normalizeLayout({
           ...presetLayout(preset.id),
           user_presets: userLayouts(layout),
-        }), `Layout: ${info ? info.label : preset.id}.`),
+        }), `Layout: ${info ? info.label : preset.id}.`); },
       ));
     }
     scroll.appendChild(builtIns);
@@ -913,23 +1318,23 @@ export function mountHudPresets(options = {}) {
       const choose = menuItem(
         `${entry.name}${layout.id === entry.id ? " (current)" : ""}`,
         `Use the layout "${entry.name}"`,
-        () => closeMenu(false) || commit(applyUserLayout(layout, entry.id), `Layout: ${entry.name}.`),
+        () => { closeMenu(false); commit(applyUserLayout(layout, entry.id), `Layout: ${entry.name}.`); },
       );
       const rename = el(doc, "button", "hud-presets-small", "Rename");
       rename.type = "button";
       rename.setAttribute("role", "menuitem");
       rename.setAttribute("aria-label", `Rename ${entry.name}`);
       rename.addEventListener("click", () => {
-        closeMenu(false);
-        openRename(entry.id);
+        const back = closeMenu(false);
+        openRename(entry.id, back);
       });
       const remove = el(doc, "button", "hud-presets-small hud-presets-danger", "Delete");
       remove.type = "button";
       remove.setAttribute("role", "menuitem");
       remove.setAttribute("aria-label", `Delete ${entry.name}`);
       remove.addEventListener("click", () => {
-        closeMenu(false);
-        openDelete(entry.id);
+        const back = closeMenu(false);
+        openDelete(entry.id, back);
       });
       row.append(choose, rename, remove);
       mine.appendChild(row);
@@ -943,13 +1348,25 @@ export function mountHudPresets(options = {}) {
       "Put back the shipped layout, keeping your saved layouts",
       () => { closeMenu(false); resetActive(); }));
     actions.appendChild(menuItem("Export / Import JSON…", "Move a layout by copy and paste",
-      () => { closeMenu(false); openTransfer("export"); }));
+      () => { const back = closeMenu(false); openTransfer("export", back); }));
     scroll.appendChild(actions);
 
     const line = el(doc, "p", "hud-presets-line", statusNote);
     line.setAttribute("role", "status");
     line.setAttribute("aria-live", "polite");
     scroll.appendChild(line);
+
+    // Put the keyboard back where it was when the rebuild replaced the row it
+    // was on. `preventScroll` because the list has not been measured yet and
+    // the menu is already placed. Never while the menu is closed: focus must
+    // not be moved into a hidden control.
+    if (key && !menu.hidden) {
+      const again = [...scroll.querySelectorAll('[role="menuitem"], input, button')]
+        .find((node) => focusKey(node) === key);
+      if (again && !again.disabled && typeof again.focus === "function") {
+        try { again.focus({ preventScroll: true }); } catch { again.focus(); }
+      }
+    }
   }
 
   function ensureMenu() {
@@ -980,6 +1397,13 @@ export function mountHudPresets(options = {}) {
       if (event.key !== "Escape" || !menu || menu.hidden) return;
       if (doc.querySelector("dialog.hud-presets-dialog[open]")) return;
       event.preventDefault();
+      // ONE Escape, ONE owner (P3-1 of the same audit): without this the same
+      // key also closed the open left/right drawer and left HUD edit mode, and
+      // the focus return then targeted a control sliding off-screen.
+      event.stopPropagation();
+      // The provider submenu is the inner thing: it closes first, the menu
+      // second (2026-10-27).
+      if (cloudOpen) { toggleCloud(false); return; }
       closeMenu(true);
     }, true);
     doc.addEventListener("pointerdown", (event) => {
@@ -1003,6 +1427,8 @@ export function mountHudPresets(options = {}) {
     const items = [...menu.querySelectorAll('[role="menuitem"]')].filter((node) => !node.disabled);
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
+      if (cloudOpen) { toggleCloud(false); return; }
       closeMenu(true);
       return;
     }
@@ -1015,12 +1441,52 @@ export function mountHudPresets(options = {}) {
     }
   }
 
+  /** The menu's own width, and the smallest gap kept from the window's edges.
+   *  ONE number for the CSS (`min(352px, calc(100vw - 16px))`) and for this
+   *  placement - they used to disagree by 8px (P3-6 of the HUD audit). */
+  const MENU_WIDTH = 352;
+  const MENU_GAP = 8;
+
+  /** Place the open menu beside/under its door, INSIDE the window.
+   *
+   *  The vertical clamp is the fix for P2-1: the menu used to open at
+   *  `rect.bottom + 6` with a `72vh` max-height, so from the rail in the Studio
+   *  shell its bottom (and its Close button) landed ~96px BELOW an 820px
+   *  window. There is no bottom clamp in CSS for a fixed box, so it is done
+   *  here, from the real measured height, and again on resize and on a shell
+   *  change (P3-4). */
+  function placeMenu() {
+    if (!menu || menu.hidden) return;
+    const rect = focusDoor && typeof focusDoor.getBoundingClientRect === "function"
+      ? focusDoor.getBoundingClientRect()
+      : { left: 16, right: 16, bottom: 40 };
+    const viewportWidth = Number(win.innerWidth) || MENU_WIDTH + (MENU_GAP * 2);
+    const viewportHeight = Number(win.innerHeight) || 0;
+    const width = Math.min(MENU_WIDTH, Math.max(240, viewportWidth - 16));
+    // Under the door it belongs to: the rail button answers in the left
+    // column, the badge and the chip door under their own left edge.
+    const left = focusDoor === railDoor
+      ? Math.max(MENU_GAP, Math.min(viewportWidth - width - MENU_GAP, rect.right + MENU_GAP))
+      : Math.max(MENU_GAP, Math.min(viewportWidth - width - MENU_GAP, rect.left));
+    const height = menu.offsetHeight || 0;
+    const below = Math.round(rect.bottom + 6);
+    const top = viewportHeight
+      ? Math.max(MENU_GAP, Math.min(below, viewportHeight - height - MENU_GAP))
+      : Math.max(MENU_GAP, below);
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+  }
+
   function openMenu(anchor) {
     // A click can arrive before the 100 ms badge poll has run; resolve the
     // badge on demand so `aria-expanded` and the menu position are never lost.
     if (!badge) badge = doc.getElementById("hud-layout-badge");
     if (!railDoor) railDoor = doc.getElementById("rail-presets");
     ensureMenu();
+    // A reopen is a new intent: whatever was in flight last time does not get
+    // to leave the rows disabled (P2-3).
+    pcBusy = { preset: "", personality: "", escalate: false, provider: "" };
+    cloudOpen = false;
     renderMenu();
     // Read the PC's two lists each time the menu opens: the chosen preset and
     // the current personality can be changed from the Settings window or the
@@ -1032,16 +1498,11 @@ export function mountHudPresets(options = {}) {
     // rail button when the rail button asked (2026-10-26) - so a click in the
     // left column is answered in the left column, not at the far corner.
     focusDoor = (anchor && anchor.getBoundingClientRect) ? anchor : badge;
-    const rect = focusDoor
-      ? focusDoor.getBoundingClientRect()
-      : { left: 16, right: 16, bottom: 40 };
-    const left = focusDoor === badge
-      ? Math.max(8, Math.min(win.innerWidth - 360, rect.left))
-      : Math.max(8, Math.min(win.innerWidth - 360, rect.right + 8));
-    menu.style.left = `${left}px`;
-    menu.style.top = `${Math.round(rect.bottom + 6)}px`;
+    // Visible FIRST, then measured and placed: an offsetHeight of 0 would put
+    // the Close button back off-screen.
     menu.hidden = false;
     menu.setAttribute("aria-hidden", "false");
+    placeMenu();
     sayDoors(true);
     const first = menu.querySelector('[role="menuitem"]');
     if (first) first.focus();
@@ -1093,10 +1554,12 @@ export function mountHudPresets(options = {}) {
     wrapper.setAttribute("open", "");
   }
 
-  function openRename(id) {
+  function openRename(id, back) {
     const entry = userLayouts(layout).find((item) => item.id === id);
     if (!entry) return;
-    returnFocus = badge;
+    // Back to the control that opened the menu, which for the rail door is
+    // the rail button - never a jump across the window to the badge (P2-6).
+    returnFocus = back || badge;
     ensureMenu();
     const { wrapper, form, line, buttons } = dialogShell("Rename layout");
     const label = el(doc, "label", "hud-presets-label", "Name");
@@ -1128,10 +1591,10 @@ export function mountHudPresets(options = {}) {
     input.select();
   }
 
-  function openDelete(id) {
+  function openDelete(id, back) {
     const entry = userLayouts(layout).find((item) => item.id === id);
     if (!entry) return;
-    returnFocus = badge;
+    returnFocus = back || badge;
     ensureMenu();
     const { wrapper, line, buttons } = dialogShell(`Delete "${entry.name}"?`);
     line.textContent = "This cannot be undone. The layout is removed from this PC.";
@@ -1152,8 +1615,8 @@ export function mountHudPresets(options = {}) {
     cancel.focus();
   }
 
-  function openTransfer(mode) {
-    returnFocus = badge;
+  function openTransfer(mode, back) {
+    returnFocus = back || badge;
     ensureMenu();
     const { wrapper, form, line, buttons } = dialogShell("Move a layout by copy and paste");
     line.textContent = "The HUD keeps its locked-down page: there is no file picker and no network. Copy this text to save a layout, or paste one to bring it in.";
@@ -1263,6 +1726,13 @@ export function mountHudPresets(options = {}) {
       if (menu && !menu.hidden) closeMenu(true);
       else openMenu(event && event.detail ? event.detail.anchor : null);
     });
+    // Keep the open menu inside the window when the window or the shell
+    // changes (P3-4): it is position:fixed with coordinates computed at open
+    // time, so a resize or a shell switch used to leave it hanging at the old
+    // spot - and the rail door sliding off-canvas with aria-expanded still
+    // true. Re-place while it is open; nothing is closed for the owner.
+    win.addEventListener("resize", () => { if (menu && !menu.hidden) placeMenu(); });
+    win.addEventListener("jarvis:hud-shell", () => { if (menu && !menu.hidden) placeMenu(); });
     // The door itself: a click on the rail button opens (or closes) the same
     // menu the badge opens, beside the button that was clicked. The dataset
     // mark stops a second mount wiring a second handler - two handlers would
@@ -1417,7 +1887,10 @@ function focusWords(presets) {
   }
   const body = objectOf(presets.value);
   if (body.available === false) {
-    return [{ text: stringOf(body.why) || "This PC's Jarvis cannot list focus presets.", dim: true }];
+    // The PC's own reason key is `error` (a 503 body); `why` is the older
+    // shape and is still read (2026-10-27 audit F8).
+    return [{ text: stringOf(body.error) || stringOf(body.why)
+      || "This PC's Jarvis cannot list focus presets.", dim: true }];
   }
   const chosen = stringOf(body.chosen_preset);
   if (!chosen) return [{ text: NO_PRESET_CHOSEN, dim: false }];
@@ -1441,8 +1914,14 @@ function nodeOf(doc, tag, className, text) {
 }
 
 /**
- * Mount the Studio dock's "Current Models" button and its read-only panel.
+ * Mount the Current Models panel and the two doors that open it (2026-10-27).
  * The page calls this once.
+ *
+ * THE DOORS ARE THE MODEL NAME ITSELF: the stage bar's chip (`#chip-model-door`,
+ * visible in five of six shells) and Ambient's top-left pill
+ * (`#chip-model-door-ambient`, because the bar's chip is display:none in that
+ * shell - P1-2 of the HUD audit). Both are plain buttons that only open the one
+ * panel; `#current-models` and its separate button are gone.
  *
  * WHAT IT IS: one READ of the PC's own model facts, plus the SAME lane route
  * the compact lane dropdown in that slot always offered. Clicking a route
@@ -1458,14 +1937,19 @@ export function mountCurrentModels(options = {}) {
   const doc = options.document || globalThis.document;
   const win = options.window || globalThis.window || globalThis;
   if (!doc || !doc.body) return null;
-  const door = doc.getElementById("current-models");
-  if (!door) return null;
-  if (door.dataset.currentModels === "1") return globalThis.__jarvisCurrentModels || null;
+  const DOOR_IDS = ["chip-model-door", "chip-model-door-ambient"];
+  const doors = DOOR_IDS.map((id) => doc.getElementById(id)).filter(Boolean);
+  if (!doors.length) return null;
+  if (doors.some((door) => door.dataset.currentModels === "1")) {
+    return globalThis.__jarvisCurrentModels || null;
+  }
 
   let panel = null;
   let reading = false;
   let readings = null;
-
+  // Which door opened it, so Escape and Close put focus back where it came
+  // from - the Ambient pill's door when Ambient opened it (P2-6).
+  let openedFrom = null;
   const lanesBox = () => doc.getElementById("lanes");
 
   /** The page's own lane buttons, as the panel's routes: one source of truth,
@@ -1500,6 +1984,10 @@ export function mountCurrentModels(options = {}) {
   function renderRoutes(group) {
     line(group, "The next message only: it raises no card and switches no model.", true);
     line(group, "To change the model itself instead, open the Presets menu - that asks ONE card.", true);
+    // The cloud is no longer a mode in this list (2026-10-27): it is the rail's
+    // Cloud button and the Presets menu's Cloud section, and saying so here is
+    // the one place the owner would look for it.
+    line(group, "For the cloud, use the rail's Cloud button or the Presets menu's Cloud section.", true);
     const rows = routeRows();
     if (!rows.length) {
       line(group, "This page has no lanes to route, so there is nothing to choose here.", true);
@@ -1535,6 +2023,14 @@ export function mountCurrentModels(options = {}) {
     const scroll = panel.querySelector(".hud-presets-scroll");
     if (!scroll) return;
     const words = readings ? currentModelsWords(readings) : null;
+    // The panel RE-RENDERS right after it opens (refresh() renders before its
+    // read lands and again after), so the route the keyboard was on would be
+    // thrown away - the same bug the Presets menu fixed, and the reason the
+    // panel's own Escape never fired (P2-5 of the HUD audit). Remember it and
+    // put it back.
+    const active = doc.activeElement;
+    const keepLane = active && scroll.contains(active) && active.dataset
+      ? active.dataset.lane || "" : "";
     scroll.textContent = "";
 
     const heading = section("Answering now");
@@ -1560,6 +2056,11 @@ export function mountCurrentModels(options = {}) {
     if (refreshButton) {
       refreshButton.disabled = reading;
       refreshButton.textContent = reading ? "Refreshing..." : "Refresh";
+    }
+    if (keepLane) {
+      const again = [...panel.querySelectorAll(".hud-models-route")]
+        .find((item) => item.dataset.lane === keepLane);
+      if (again && typeof again.focus === "function") again.focus({ preventScroll: true });
     }
   }
 
@@ -1600,28 +2101,49 @@ export function mountCurrentModels(options = {}) {
     actions.append(presetsButton, refreshButton, closeButton);
     panel.appendChild(actions);
     doc.body.appendChild(panel);
-    panel.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close(true);
-      }
-    });
+    // Escape is heard from the DOCUMENT, not from the panel: the panel's own
+    // keydown only fires while something inside it holds focus, and the
+    // render that follows opening had already dropped focus to <body> - the
+    // exact failure the Presets menu fixed, which this branch did not copy
+    // (P2-5). `stopPropagation` so ONE Escape closes ONE thing (P3-1).
+    doc.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !panel || panel.hidden) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    }, true);
     doc.addEventListener("pointerdown", (event) => {
       if (!panel || panel.hidden) return;
-      if (panel.contains(event.target) || door.contains(event.target)) return;
+      if (panel.contains(event.target)) return;
+      // BOTH doors are exempt: a second click on a door is the toggle, and
+      // dismissing on pointerdown first would turn it into close-then-reopen.
+      if (doors.some((door) => door.contains(event.target))) return;
       close(false);
     }, true);
     return panel;
   }
 
-  /** Under the button, kept inside the window - the same placement rule the
-   *  Presets menu uses for its own doors. */
-  function place() {
-    const rect = door.getBoundingClientRect();
-    const width = Math.min(352, Math.max(240, win.innerWidth - 16));
-    const left = Math.max(8, Math.min(win.innerWidth - width - 8, rect.left));
+  /** Under the door that opened it, kept inside the window - the same
+   *  placement rule the Presets menu uses, including the vertical clamp: this
+   *  panel declares `max-height:72vh` too, so from the Ambient pill at the top
+   *  of a 640px window an unclamped `rect.bottom + 6` would put its Close
+   *  button off-screen (P2-1). */
+  function place(door) {
+    const host = door || openedFrom || doors[0];
+    const rect = host && typeof host.getBoundingClientRect === "function"
+      ? host.getBoundingClientRect()
+      : { left: 16, bottom: 40 };
+    const viewportWidth = Number(win.innerWidth) || 360;
+    const viewportHeight = Number(win.innerHeight) || 0;
+    const width = Math.min(352, Math.max(240, viewportWidth - 16));
+    const left = Math.max(8, Math.min(viewportWidth - width - 8, rect.left));
+    const height = panel.offsetHeight || 0;
+    const below = Math.round(rect.bottom + 6);
+    const top = viewportHeight
+      ? Math.max(8, Math.min(below, viewportHeight - height - 8))
+      : Math.max(8, below);
     panel.style.left = `${Math.round(left)}px`;
-    panel.style.top = `${Math.round(rect.bottom + 6)}px`;
+    panel.style.top = `${Math.round(top)}px`;
   }
 
   async function refresh() {
@@ -1633,16 +2155,23 @@ export function mountCurrentModels(options = {}) {
     } finally {
       reading = false;
       render();
+      // The read is what moves the panel's height; re-clamp after it lands.
+      if (panel && !panel.hidden) place(openedFrom);
     }
   }
 
-  function open() {
+  function sayDoors(open) {
+    for (const door of doors) door.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function open(from) {
     ensurePanel();
+    openedFrom = from || openedFrom || doors[0];
     render();
     panel.hidden = false;
     panel.setAttribute("aria-hidden", "false");
-    door.setAttribute("aria-expanded", "true");
-    place();
+    sayDoors(true);
+    place(openedFrom);
     const first = panel.querySelector(".hud-models-route") || panel.querySelector("button");
     if (first) first.focus();
     // Always a fresh read: the PC's loaded model can change between openings.
@@ -1653,8 +2182,9 @@ export function mountCurrentModels(options = {}) {
     if (!panel || panel.hidden) return;
     panel.hidden = true;
     panel.setAttribute("aria-hidden", "true");
-    door.setAttribute("aria-expanded", "false");
-    if (returnFocus) door.focus();
+    sayDoors(false);
+    const back = openedFrom || doors[0];
+    if (returnFocus && back) back.focus();
   }
 
   // The page's own lane changes (a click in the rail, the Cloud button, a
@@ -1667,11 +2197,15 @@ export function mountCurrentModels(options = {}) {
     observer.observe(lanes, { childList: true, subtree: true, attributes: true });
   }
 
-  door.dataset.currentModels = "1";
-  door.addEventListener("click", () => {
-    if (panel && !panel.hidden) close(true);
-    else open();
-  });
+  // Both doors: a click opens the one panel under the door that was clicked,
+  // and a second click closes it back to that same door.
+  for (const door of doors) {
+    door.dataset.currentModels = "1";
+    door.addEventListener("click", () => {
+      if (panel && !panel.hidden) close(true);
+      else open(door);
+    });
+  }
 
   const controller = {
     open,

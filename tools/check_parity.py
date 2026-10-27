@@ -118,6 +118,17 @@ CLASSIFICATION = {
     "/api/secret-handoff/cancel": ("deliberate", "Cancelling the owner-secret hand-off card is PC-only, like the card itself: the card exists only in the desktop HUD (ARCHITECTURE section 8)."),
 
     "/api/appearance": ("ported", ""),
+    # `/api/work/cloud-escalate` (the standing cloud-escalation switch, 2026-10-27):
+    # PC-only. The desktop half is the `hud_cloud_escalate` command, which raises
+    # the one change_own_config card; the phone reads `cloud.escalate` from
+    # /api/presets and never writes it.
+    "/api/work/cloud-escalate": ("deliberate", "The standing cloud-escalation switch is PC-only: turning it ON is a loosening that needs the one change_own_config card, answered on the PC it belongs to. The phone reads `cloud.escalate` from /api/presets and never writes it (ARCHITECTURE section 8, JARVIS-API section 145)."),
+    # Backend: jarvis_presets.cloud_escalate() (presets.patch) plus
+    # cloud-escalate.patch for the chat half. The provider choice rides on
+    # /api/work/apply, below, and is PC-only for the same reason plus rule 3 (a
+    # key is added on the PC only, so a service chosen from the phone would be
+    # one it cannot see).
+    "/api/work/apply": ("deliberate", "Applying a preset is PC-only: every apply is ONE switch_model or change_own_config card answered on this PC, and the cloud preset additionally chooses which service the owner's key belongs to - a key is added on the PC only (rule 3). The phone shows the five presets and the cloud provider read-only, from /api/presets (ARCHITECTURE section 8, JARVIS-API section 145)."),
     # Write Like Me V2 UI slice (2026-10-20, PR #665): both apps call the same
     # three routes. Desktop: Settings -> "How Jarvis talks" -> "Write like me"
     # (src/voiceprint-settings.js, mounted by manner-settings.js; the four Tauri

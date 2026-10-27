@@ -289,7 +289,24 @@ RATCHET = {
     #: is the check this walk cannot make. Measured, not argued: the walk now
     #: reads 58 and test_installed_stand_in asserts EQUAL. A ratchet: it may
     #: still only go down.
-    "jarvis_hud.py": 58,
+    #: RAISED 2026-10-27: 58 -> 60 for `cloud-escalate.patch` (its two
+    #: hand-picked cloud lane skipped every privacy gate). THREE of its four
+    #: hunks read the owner's own HUD text, and the defect itself is why: the
+    #: manual lane-picking path exists only in that file. No patch in this walk
+    #: writes the `if ROUTING and body.get("auto", True):` line, the
+    #: `if manual_pick:` insertion point under the router rewrite, or
+    #: `_manual_decision()` - the function whose missing gates WERE the bug - so
+    #: none of the three can anchor on patch-written text. The fourth hunk
+    #: (`owner_said_yes=`) reads a line `cloud-say-yes.patch` writes and costs
+    #: nothing. Honest rather than drift, and checked the other way with
+    #: `git apply` against `jarvis-backend/jarvis_hud.py` (apply, reverse, byte
+    #: for byte - `backend/test_hud_manual_lane_gate.py` re-runs it), which is
+    #: the check this walk cannot make. Measured, not argued: the walk reads 61
+    #: and test_installed_stand_in asserts EQUAL - and the two hunks
+    #: `cloud-escalate.patch` materialises (its `_lane_names()` body and the
+    #: cloud reply's reader, which reached the PC by a re-take) are counted in
+    #: the same 63. A ratchet: it may still only go down.
+    "jarvis_hud.py": 63,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

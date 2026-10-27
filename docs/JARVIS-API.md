@@ -652,6 +652,30 @@ Pressing it resends the exact same question with `cloud_yes: true`; nothing
 else from the conversation goes with it. Apps that do not know `offer`
 read the turn as local, which it is.
 
+**A lane you pick by hand runs the same gates** (`f01-manual-lane-gate.patch`,
+2026-10-27; F-01). `POST /api/chat` with `"auto": false` and a `"lane"` is a
+MANUAL pick, and until this patch it skipped every routing gate: any client
+could send `{"lane": "<cloud lane>", "auto": false}` and have the turn answered
+on a cloud model with private memory text, a tainted conversation, a picture or
+the owner's screen attached. Both paths now go through the ONE
+`jarvis_router.choose()` call. A pick of the local model is unchanged. A pick of
+any other lane is a CLOUD pick and is used only when the decision the automatic
+path would have made for this same turn landed on a cloud lane - the pick stands
+in for the owner's yes for that one question (`owner_said_yes`), and every
+privacy, availability and budget gate still runs first, in the same order
+(including the complexity threshold and the cloud budget: what may leave this
+PC is the router's answer, never the pick). A pick the router would not have
+escalated is answered on the LOCAL model, and the header carries the router's
+own `gate` (`"taint"`, `"image"`, `"screen"`, `"private"`, `"secret"`,
+`"budget"`, `"complexity"`, `"lockdown"`, `"unavailable"`, `"cloud_model"`) with
+`reason` in one plain sentence: `you chose <lane>, but this turn stays local:
+<why>`. No field was added - a refused pick looks exactly like a refused
+automatic turn, `where` is `"local"`, and both apps already draw every `gate`
+except `"escalate"` as local. A lane this PC does not offer (the names
+`_lane_names()` reads) and a PC with no `jarvis_router.py` both stay local too,
+and a pick of the local model is answered with memory exactly as before.
+`backend/test_hud_manual_lane_gate.py` is the proof.
+
 **`second_card` in `X-Jarvis-Route`** (`second-card.patch`, 2026-09-24): on a
 turn the second graphics card answered, `where` is still `"local"` (it is
 this PC), `lane` is the model really answering (e.g. `"qwen3:8b"`), and
@@ -22589,7 +22613,7 @@ may act on:
 
 | key | what it holds |
 |---|---|
-| `lane` | `"local"`, `"jarvis-escalate"` or `"jarvis-critic"` |
+| `lane` | `"local"` or `"jarvis-escalate"` (a second name, `jarvis-critic`, went on 2026-10-27 - section 145.1) |
 | `recommended` | `True` only when `lane` is a cloud lane |
 | `advisory` | always `True` - this is advice, never a permission |
 | `gate` / `reason` | which rule decided; `"cost"` when advice was given |
@@ -22660,7 +22684,7 @@ Everything `backend/jarvis_auto_router.py` holds, read out of the module:
 | `_router_allows(text, lane, budget=None, tainted=False)` | the delegation to `choose()`, which is what makes the advice never broader than the permission |
 | `_from_stats()`, `_best_from_summary()`, `measured_rate()` | the measurement: the caller's numbers, else this PC's own speed log, else a cautious default |
 | `category_of()` | which work setup the owner's words ask for, through `jarvis_work.match()` |
-| `_answer_tokens()`, `is_review()` | how long the ANSWER is expected to be, and whether this is `jarvis-critic`'s kind of task |
+| `_answer_tokens()`, `is_review()` | how long the ANSWER is expected to be, and whether this is a review-shaped task (it sizes the answer; it no longer picks a lane - section 145.1) |
 | `est_local_seconds()`, `complexity_score()`, `_prior_bad_turn()` | the estimate, the score, and the one signal no reading of the question alone can produce |
 | `_local()`, `evaluate_route()` | every refusal leaves through `_local()`, so no return path can keep a cloud lane set; `evaluate_route()` is the advice itself |
 | `install()` | the loader's entry point: takes no arguments, installs nothing, returns the one banner line |
@@ -23702,6 +23726,150 @@ through `hud_get`; every model write (`/api/models/switch`, `/install`,
 Tests: `backend/test_presets.py`, `test_presets_lanes.py`,
 `test_presets_apply.py` (route shape, origin/token, old shape not served,
 pending/heavy refusals, rollback), and `tools/gen_work_presets.py --check`.
+
+### 145.1 The Cloud row, the provider list, and the standing escalation switch (added 2026-10-27)
+
+Owner decision, 2026-10-27: the Cloud row belongs in the Presets menu beside
+General/Coding/Agentic+Vision/Fast, picking one of the connected API services
+is an APPLY, and underneath it there is ONE checkbox - "escalate to the cloud
+when the work is too complex". **The answer stays `version` 1 and gains keys
+only**: no existing key moved, changed meaning or disappeared, so a reader that
+does not know them is unaffected (the phone's `FocusPresets.parse` reads named
+keys and ignores the rest, which is why the phone needs no change to keep
+working).
+
+Two new top-level keys on `GET /api/work` / `GET /api/presets`:
+
+    "cloud_preset": {"id": "cloud", "title": "Cloud", "focus", "what", "cost",
+                     "worse", "model": "", "lane": {"key": "cloud", "card": "",
+                     "port": 0, "words": "the cloud"}, "context": 0,
+                     "helper": null, "policy": {...}, "measured": null,
+                     "pending": false, "heavy_mode": false,
+                     "apply": {"action", "switch_route", "apply_route",
+                               "lane_start": false, "auto": false,
+                               "cloud": true, "needs_provider": true}}
+
+    "cloud": {"provider": "<service id or \\"\\">",
+              "providers": [{"id", "short", "name", "company", "host", "model",
+                             "key_saved": true|false|null, "ready", "why",
+                             "chosen", "money": {...}|null, "key_line",
+                             "key_where"}],
+              "escalate": {"on": false, "why": "not turned on for this PC"}}
+
+* `cloud_preset` is a SIXTH row in the same shape as a preset, and it is
+  deliberately **not** in `presets[]` - both apps' five-row list stays five
+  rows. Its `apply` block says the two things that make it different: it is a
+  cloud row (`cloud: true`) and it needs a provider (`needs_provider: true`);
+  it starts no lane and switches no model (`lane_start: false`).
+* `cloud.providers` has one row per service in `jarvis_chatbot_api.PRESETS`
+  (openai, deepseek, mistral, xai, openrouter, groq), in that dict's order.
+  `key_saved` is `true`/`false`, or **`null` when Windows Credential Manager
+  cannot be asked** - an honest "this PC cannot say", never guessed. `why` is
+  the PC's own sentence for why a service cannot be used yet. `key_line` is the
+  one honest connect action from an app: the command line to run ON THE PC
+  (`py -3 jarvis_chatbot_api.py key <service>`), because keys are added on the
+  PC only and **no route accepts one** (rule 3). No key, no fragment of one and
+  no message is ever in this answer.
+* `cloud.escalate` is the PC's own standing switch. `on` is true only when
+  `escalate-cloud.json` says `{"on": true}` literally; absent, unreadable,
+  corrupt or any other value reads as OFF. `why` is `""` when it is on, else
+  the plain reason it is not.
+
+**`POST /api/work/apply` gains ONE optional field.** `{"preset": "cloud",
+"provider": "deepseek_api"}` uses that service. `provider` is read only for the
+cloud preset and ignored for the local five, so **a body with no `provider` is
+the same request it always was, byte for byte**. The cloud apply:
+
+1. refuses `400` for no provider or an id this PC does not know, naming the six;
+2. refuses `409` with the PC's own sentence, BEFORE any card, when the service
+   has no key saved, no price, or no monthly limit (`jarvis_chatbot_api
+   .ready_for`) - no approval is asked for something that cannot work;
+3. raises exactly ONE `change_own_config` approval card that names the company,
+   its host, its model and the money line;
+4. **only after that yes** writes `cloud-choice.json` and
+   `presets-choice.json {"preset": "cloud"}`;
+5. **starts no lane and switches no model.** That is the one apply branch that
+   must not run `start_lane`/`switch_model`/`set_active_url`: a cloud preset
+   changes nothing local, and starting a GPU lane for it would unload the model
+   the owner is using. `backend/test_presets_cloud.py` asserts all three spies
+   were never called.
+
+A refused card changes nothing and marks nothing. One provider is in use at a
+time; `cloud.provider` is the truth and a click is never what marks a row.
+
+**`POST /api/work/cloud-escalate` - NEW, the standing switch.**
+
+    {"on": true}  -> ONE change_own_config card, then escalate-cloud.json
+    {"on": false} -> immediate, no card, nothing asked
+
+ON is a **loosening** - Jarvis may then send a hard question to that service
+with no per-question yes - so it follows every loosening in this program: ONE
+card, and nothing written before the answer. Its text says what changes in the
+owner's words ("Jarvis may send a hard question to <Company> without asking you
+first"), and what still does NOT go (anything private, a tainted conversation,
+a picture, your screen) and that the monthly money limit still applies. OFF is
+a tightening and is instant. ON with no provider chosen refuses `409` **before**
+a card, because a standing yes to a service nobody picked cannot do anything.
+The body is checked exactly: a missing or non-boolean `on` is a `400` - there
+is no truthiness shortcut on a privacy switch. The answer is
+`{ok, on, changed, card, escalate{on, why}, message|error}`; `card: true` means
+one was raised and the app should say it is waiting.
+
+**Where the standing yes is read, and what cannot forge it.** The switch is a
+FILE on the PC, read by `jarvis_router.standing_escalation()` at gate 6 of
+`choose()` and from **nowhere else** - no request body, no header and no client
+flag is consulted for it, so a stale page or a phone cannot make a standing
+decision the PC has not made. The HUD page keeps sending `cloud_yes` while its
+box is on, and `cloud-escalate.patch` makes that flag count **only while the
+PC's own file still says on**, so turning the box off cannot be defeated by a
+page that has not refreshed. Another client's `cloud_yes` - the phone's "Try
+the cloud model", the desktop window's strip - is the per-question tap it
+always was, and is unchanged.
+
+**Asking in the message.** On the newest message only, a fixed phrase list
+(`jarvis_router.ESCALATE_PHRASES`: "escalate this", "escalate it", "use the
+cloud", "use the cloud for this", "send this to the cloud", "send it to the
+cloud", "ask the cloud", "use the bigger model", "the bigger model for this")
+counts as the owner's yes **for that turn only**. Nothing is stored and the
+next message has to ask again. It is evaluated at gate 6, after every privacy
+gate, so a Lockdown, a tainted conversation, a picture, the words off the
+screen, a private question or a pasted secret all still answer local and name
+the gate that refused - the phrase can only turn `offer` into `escalate`.
+
+**`X-Jarvis-Route` gains one key: `auto`.** `false` on every local turn and on
+a turn the owner clicked for; `true` when the turn was escalated **with no
+click** (the standing switch, or the phrase). It is additive and every reader
+this project has reads named keys.
+
+**A cloud answer nobody asked for is not dressed up as one.** The measured
+failure on exactly the questions that escalate is `finish_reason: "length"`
+with empty `content` and the whole cap spent on DeepSeek's hidden reasoning
+(four of four, `docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md`). On an
+`auto: true` turn, `jarvis_chatbot_api.CloudAnswer` withholds the
+`reasoning_content` events and, if there is no usable answer, shows ONE honest
+line - "The cloud did not answer this one, so this PC answered it instead:" -
+followed by the local model's own answer (`jarvis_agent.answer_here`), or, if
+the local turn produced nothing either, one line saying so and **no
+working-out**. The 2026-10-14 rule is untouched for a turn the owner clicked
+for: that turn still shows the working-out, marked, byte for byte.
+
+**The one lane.** `jarvis_router.cloud_lanes()` keeps only `jarvis-escalate`
+and drops every other name, so an older `litellm-proxy.yaml` listing
+`jarvis-critic` and `jarvis-bulk` cannot bring a second lane back; a list with
+only dead names is an EMPTY list, which is gate `"unavailable"` - never a
+substituted name. `degrade_chain` in `jarvis-framework.toml` is
+`["jarvis-escalate"]`. Those two names are gone from `CLOUD_LANES`,
+`jarvis_auto_router` and `jarvis_projects`.
+
+**PC-only.** Turning the switch on and choosing a provider are the PC's, by
+`tools/check_parity.py`'s `deliberate` row. The phone reads `cloud.escalate`
+and `cloud.provider` and never writes either: there is no phone route, and
+`docs/ARCHITECTURE.md` §8 records why.
+
+Tests: `backend/test_presets_cloud.py`,
+`backend/test_cloud_escalate_setting.py` (the switch, the card, the phrase, the
+gates, the patch round trip on the published base, and the automatic-turn
+fallback).
 
 ## 146. App control on the phone: one allow-list, ONE card, ONE atomic step (backend half, added 2026-10-19)
 

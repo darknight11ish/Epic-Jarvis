@@ -82,18 +82,29 @@ one of them is `cloud-say-yes.patch`:
     position 145  hud-exclusive-bind.patch  (SECPRIV audit 2026-10-18 N4: owner-only main() setup tail)
     position 146  presets.patch             (2026-10-18 preset model selector: the owner's original HUD text)
     position 151  private-chat.patch        (2026-10-25 H10: the route-audit line under the owner's budget.spend())
+    position 153  cloud-escalate.patch      (2026-10-27: `_lane_names()`'s own body, and the cloud
+                                             reply's reader, which arrived by a re-take not a patch)
+
+    position 154  f01-manual-lane-gate.patch (2026-10-27 F-01: the manual lane path and _manual_decision(), which
+                                             exist only in the owner's file - and whose missing gates WERE the bug)
 
 A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 `main` with eight findings - the false positives the audit's own next sentence
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all fourteen - those thirteen, plus `private-chat.patch` at position 151,
-added 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks
-anchor on text an earlier patch writes, and the other two - the body-parse
-block that reads the private flag, and the route-audit line - read the
-owner's own line) - with their positions, instead of pretending they are not
-there. The position-29 rule is kept as a REPORTED fact, not a gate.
+all SIXTEEN - those thirteen, plus `private-chat.patch` at position 152, added
+2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
+text an earlier patch writes, and the other two - the body-parse block that
+reads the private flag, and the route-audit line - read the owner's own line),
+plus TWO patches added together on 2026-10-27: `cloud-escalate.patch` at
+position 154 (two of its three hunks: `_lane_names()`'s body, which no patch
+had ever touched, and the cloud reply's reader, which reached the owner's PC
+by a re-take rather than a patch) and `f01-manual-lane-gate.patch` at position
+155 (the manual lane-picking path and `_manual_decision()`, which no patch in
+this walk writes - and whose missing gates WERE the F-01 defect) - with their
+positions, instead of pretending they are not there. The position-29 rule is
+kept as a REPORTED fact, not a gate.
 
 THE PIN
 
@@ -221,6 +232,39 @@ PIN = {
     # backend/test_private_chat.py applies the patch to the published base
     # forwards and reverses it byte for byte.
     "private-chat.patch":                      (2, 13),     # position 151
+    # 2026-10-27, cloud-escalate.patch (the owner's decision: ONE cloud lane,
+    # and a standing escalation switch no client can fake). TWO of its three
+    # hunks read text only the owner's PC holds, and both are honest rather
+    # than drift - no patch in this walk writes either:
+    #   * `_lane_names()`'s own body, which no patch had ever touched. The new
+    #     body asks `jarvis_presets.cloud_lanes()` instead of reading the
+    #     `litellm-proxy.yaml` of a proxy that was never installed.
+    #   * the cloud reply's reader - `_api.CloudAnswer(...)`. That block
+    #     arrived on the owner's PC by a RE-TAKE, not by a patch
+    #     (`tools/hud-deltas/reasoning-new.txt`, applied by
+    #     `tools/reconcile_live_backend.py`; PR #424), so it is in the
+    #     published base and on his PC and in no patch at all.
+    # The THIRD hunk anchors on cloud-say-yes.patch's own comment block and
+    # costs nothing. The check that these two are honest rather than broken is
+    # `backend/test_cloud_escalate_setting.py`, which applies the patch to
+    # `jarvis-backend/jarvis_hud.py` with `git apply` (no fuzz), compiles the
+    # result and reverses it byte for byte.
+    "cloud-escalate.patch":                    (2, 22),     # position 153
+
+    # 2026-10-27, f01-manual-lane-gate.patch (F-01: a hand-picked cloud lane
+    # skipped every privacy gate). THREE of its four hunks read the owner's
+    # original HUD text, and the defect is why: the manual lane-picking path
+    # (`{"lane": "<cloud lane>", "auto": false}`) exists only in that file. No
+    # patch in this walk writes the `if ROUTING and body.get("auto", True):`
+    # line, the `if manual_pick:` insertion point under the router's own
+    # rewrite, or `_manual_decision()` - the function whose missing gates WERE
+    # the bug - so those three cannot anchor on patch-written text. The fourth
+    # hunk (`owner_said_yes=`) reads a line cloud-say-yes.patch writes and
+    # invents nothing. Honest rather than drift, and checked the other way:
+    # backend/test_hud_manual_lane_gate.py applies the patch to
+    # `jarvis-backend/jarvis_hud.py` with `git apply` and reverses it out byte
+    # for byte, which is the check this walk cannot make.
+    "f01-manual-lane-gate.patch":              (3, 37),    # position 154
 }
 
 #: The audit's position, kept because the rule it states is the shape of this
