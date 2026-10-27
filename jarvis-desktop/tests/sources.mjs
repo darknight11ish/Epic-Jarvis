@@ -180,17 +180,25 @@ await check("nothing read, or no turn_id at all: no line, and no fetch is even t
   assert.deepEqual(reads, [], "no fetch was even attempted");
 });
 
-await check("a temporary answer never fetches, even with a real turn_id", async () => {
-  const page = await quickbar({ chatReplies: [[route({ ...LOCAL, turn_id: TID, temporary: true,
-    injected_facts: 0 }), "Sure."]] }, { __temporaryOk: true, __chatSources: { [TID]: SOME_SOURCES } });
-  await page.locator("#temporary").click();
+await check("an incognito answer never fetches, even with a real turn_id", async () => {
+  // This drove the old #temporary chip. The owner's decision of 2026-10-27
+  // collapsed temporary and private into the one stricter Incognito chip, so
+  // the strict mode is what must never fetch sources now.
+  const page = await quickbar({ chatReplies: [[route({ ...LOCAL, turn_id: TID, private: true,
+    temporary: true, injected_facts: 0 }), "Sure."]] },
+  { __privateOk: true, __chatSources: { [TID]: SOME_SOURCES } });
+  await page.locator("#private").click();
   await page.waitForTimeout(200);
   await submit(page, "what should I cook?");
   const shown = await page.locator("#answer-sources").isVisible();
   const reads = await page.evaluate(() => window.__sourcesReads || []);
+  const sent = await page.evaluate(() => window.__calls
+    .filter((c) => c[0] === "stream_chat").map((c) => ({ private: c[1].private, temporary: c[1].temporary })));
   await page.close();
   assert.equal(shown, false);
   assert.deepEqual(reads, []);
+  assert.deepEqual(sent, [{ private: true, temporary: false }],
+    "the incognito turn did not carry only the private flag");
 });
 
 await check("hidden under Windows Hello: how many, never a reference", async () => {

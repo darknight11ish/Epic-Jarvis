@@ -4,9 +4,12 @@
  * and the reading of the PC's answers are memory-used.js; this draws them.
  *
  * main.js owns the conversation and the stream. It calls:
- *   - `temporary.toggle()` from the button; `temporary.on` is read by send()
- *     for the request's `temporary` flag; `temporary.paint(empty)` whenever
- *     the conversation empties or fills.
+ *   - `temporary.setGame()` when the PC itself makes a chat temporary (a
+ *     game), and `temporary.on` for the request's `temporary` flag - the
+ *     bar's temporary BUTTON is gone (owner, 2026-10-27; the one Incognito
+ *     chip is private-chat.js's strict mode), so `temporary.toggle()` has no
+ *     caller from the bar; `temporary.paint(empty)` whenever the conversation
+ *     empties or fills.
  *   - `answer.begin(sentTemporary)` when a question is sent,
  *     `answer.route(route)` with the route line, `answer.finish(done)` when
  *     the stream ends, `answer.clear()` with the card, and
@@ -94,7 +97,16 @@ export const STALE_TITLE = "The event stream is stale, so this cannot be confirm
 const TURN_ID_RX = /^[0-9a-f]{32}$/;
 
 /**
- * The temporary-chat toggle and the marker strip.
+ * The temporary-chat state and the marker strip.
+ *
+ * THE CHIP IS GONE (owner, 2026-10-27): the bar has one Incognito chip and it
+ * is `private-chat.js`'s strict private toggle. This tracker stays for two
+ * things that are not that chip - the request's `temporary` flag (always
+ * false from the bar now) and the marker for a chat the PC ITSELF made
+ * temporary, a game (`setGame`, from the route header). `button` is null and
+ * every paint/toggle access to it is guarded, so nothing throws when there is
+ * no element to paint; it is not a stub element, so no dead control exists in
+ * the DOM.
  *
  * `check()` resolves true only when the PC says it can hold a temporary
  * chat (commands.rs temporary_chat_available); `restart()` starts a new
@@ -132,7 +144,7 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
         return;
       }
       t.checking = true;
-      button.disabled = true;
+      if (button) button.disabled = true;
       let ok = false;
       let why = TEMPORARY_UNAVAILABLE;
       try {
@@ -141,7 +153,7 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
         why = errorText(error);
       }
       t.checking = false;
-      button.disabled = false;
+      if (button) button.disabled = false;
       if (!ok) {
         // Never pretend: the mode stays off and says why.
         refused.textContent = why;
@@ -163,8 +175,10 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
     paint(empty) {
       // A refusal is said until the next question is asked.
       if (!empty) refused.hidden = true;
-      button.setAttribute("aria-pressed", String(t.on));
-      button.title = t.on ? TEMPORARY_OFF_TITLE : TEMPORARY_ON_TITLE;
+      if (button) {
+        button.setAttribute("aria-pressed", String(t.on));
+        button.title = t.on ? TEMPORARY_OFF_TITLE : TEMPORARY_ON_TITLE;
+      }
       root.dataset.temporary = String(t.on);
       if (t.on) {
         strip.dataset.state = "on";

@@ -4703,9 +4703,11 @@ pub async fn temporary_chat_available(app: AppHandle) -> Result<bool, String> {
     temporary_chat_supported(&app).await
 }
 
-/// What the quickbar says when the owner turns on a private chat and the PC's
+/// What the quickbar says when the owner turns on Incognito and the PC's
 /// backend has no such thing (JARVIS-API.md section 156). Nothing is sent.
-pub(crate) const PRIVATE_UNAVAILABLE: &str = "Private chat isn't available on this PC's \
+/// The mode's name in the bar is "Incognito" (owner, 2026-10-27); the
+/// command and the capability it checks are unchanged.
+pub(crate) const PRIVATE_UNAVAILABLE: &str = "Incognito isn't available on this PC's \
      version of Jarvis, so nothing was sent. Run apply-patches.ps1 on the PC to update it.";
 
 /// Whether `GET /api/version`'s answer says the running server has a private

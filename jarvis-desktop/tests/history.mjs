@@ -1243,20 +1243,24 @@ await check("the bar: Earlier chats opens History; Esc says where the chat went"
   await page.fill("#prompt", "when is the dentist?");
   await page.keyboard.press("Enter");
   await page.waitForTimeout(500);
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(150);
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(150);
-  const ended = await page.locator("#chat-ended-note").innerText();
-  // The Earlier chats link lives in the primer, behind the bar's "?" button.
-  await page.locator("#sayable-toggle").click();
-  await page.waitForTimeout(250);
-  await page.locator("#earlier-chats-primer").click();
+  // "Earlier chats" is the CARD's own button (the primer's copy left with the
+  // primer, owner 2026-10-27). It is on screen while the card is, so ask it
+  // first, then end the chat.
+  await page.locator("#earlier-chats").click();
   await page.waitForTimeout(100);
   const opened = await calls(page, "open_fix_place");
   const footer = await page.locator("footer .keys").innerText();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  // The visible "where the chat went" span lived in the primer; the WORDS are
+  // still spoken through the bar's one announcer.
+  const ended = await page.evaluate(() =>
+    [...document.querySelectorAll('[aria-live="polite"]')].map((n) => n.textContent).join(" ").trim());
+  const gone = await page.evaluate(() => document.querySelector("#chat-ended-note"));
   await page.close();
-  assert.equal(ended, CASES.words.ended_saved);
+  assert.equal(gone, null, "the primer's #chat-ended-note is back in the bar");
+  assert.match(ended, new RegExp(CASES.words.ended_saved.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `the bar ended a kept chat without saying where it went: "${ended}"`);
   assert.deepEqual(opened, [{ place: "history" }]);
   assert.match(footer, /Esc\s*end chat/);
 });

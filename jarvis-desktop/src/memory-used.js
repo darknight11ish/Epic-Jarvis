@@ -31,7 +31,15 @@
  * @module memory-used
  */
 
-/** The mode's name, and the one line on the empty chat - both apps. */
+/** The temporary mode's name, and the one line on the empty chat - the SAME
+ *  words on the phone (net/MemoryUsed.kt), held together by tests.
+ *
+ *  This is not the bar's Incognito chip (owner, 2026-10-27): that chip is the
+ *  STRICTER private chat (private-chat.js), which has its own words. This
+ *  name belongs to a conversation the PC itself made temporary - a game -
+ *  and to the feature the phone still offers as a toggle. It stays in sync
+ *  with the phone because the two apps must not name one server feature two
+ *  different ways. */
 export const TEMPORARY_LABEL = "Incognito";
 export const TEMPORARY_LINE =
   "Incognito: Jarvis won't use or learn from your memory, and this chat isn't kept.";

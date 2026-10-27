@@ -3697,3 +3697,43 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     layout itself is pinned to the real desktop JavaScript at 1e-6 by the
     generated fixture and `GalaxyPictureTest.kt`; that is a test, not a run on
     a phone.
+
+## 2026-10-27 — The bar matches the HUD; Private and Temp become one Incognito chip
+
+  * **The decision, in the owner's words.** The bar's second row must read like
+    the HUD: "flat 3px plates instead of full-round pills, mono labels instead
+    of sentence-case sans, and HUD-style line glyphs"; the pressed state is the
+    HUD's "on" language - ice text and an ice-edged border - "NOT the current
+    glow and NOT red", because red is the HUD's stop/recording colour. The
+    chips are renamed to what they do: "Auto" becomes "Hey Jarvis" (it is the
+    wake-word listener; `#voice-auto` keeps its id) and "Private" becomes
+    "Incognito"; "Temp" is removed and the two chat modes collapse into ONE
+    Incognito chip that keeps the STRICTER behaviour - today's `#private`
+    strict zero-write turn (no memory, nothing learned or kept, no tool and no
+    card). The bar keeps only the ask box, the model/route row, the mode chips,
+    the settings gear and the hide button, so the "?" help button and its
+    primer panel, the pin button and the Esc key badge leave the DOM.
+  * **What changed, and what did not.** Look, wording and removal only: every
+    surviving id, `aria-pressed` semantic, handler and Tauri command is the one
+    that was there, the server capability and the `private_chat` behaviour are
+    untouched, no permission was added and no backend file changed. The
+    temporary chat still exists on the PC (a game or role-play the PC puts in
+    one keeps its marker), but the bar no longer sends `temporary: true` and
+    has no control that could. The single Incognito chip still asks
+    `private_chat_available` on press and never pretends; the window still pins
+    itself while an answer card is on screen - it is just not something the
+    owner toggles from the bar any more, because that button is gone.
+  * **What replaced what.** The removed primer's words are still in Settings'
+    Brain tab, "Tutorials and the FAQ" (`desktop-help.js` reuses `sayable.js`'s
+    `HELP_TITLE`/`HELP_BODY`), and the command palette still opens with "/" in
+    an empty box. The "where the chat went" line that lived in the primer is
+    still announced to a screen reader; its visible span is gone with the
+    panel. The note-app prefixes the panel explained still file, and the note
+    chip is still the live "where this goes" display.
+  * **Not verified, and not overstated.** Nothing was built, installed, pushed
+    or opened as a pull request: this is a local commit only, and the app was
+    not restarted. The new shapes are pinned by `tests/bar-redesign.mjs`, the
+    removal by `tests/bar-primer.mjs`, and the one-chip Incognito by
+    `tests/private-chat.mjs`; no real desktop window rendered them, so how the
+    plates look over the owner's wallpaper is still unmeasured.
+

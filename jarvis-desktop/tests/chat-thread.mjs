@@ -212,15 +212,25 @@ await check("the bar: no thread under Hide memory lists, until Show; the answer 
   assert.equal(visible, true, "shown lists: the thread comes back");
 });
 
-await check("the bar: New conversation says where the chat went, and a game says nothing was kept", async () => {
+await check("the bar: ending a chat still says where it went, and a game says nothing was kept", async () => {
+  // The visible "where the chat went" span lived in the primer, which the
+  // owner removed on 2026-10-27 (and it was only on screen if that panel had
+  // been opened). The WORDS are still spoken through the bar's one announcer,
+  // on the paths that end a chat - Esc and New conversation - so that is what
+  // this pins now.
+  const spoken = (page) => page.evaluate(() =>
+    [...document.querySelectorAll('[aria-live="polite"]')].map((n) => n.textContent).join(" ").trim());
   const page = await bar({ chatReplies: ["Tuesday at 3."] });
   await ask(page, "when is the dentist?", "Tuesday at 3.");
   await page.locator("#new-conversation").click();
-  await page.waitForTimeout(200);
-  const note = await page.locator("#chat-ended-note").innerText();
+  await page.waitForTimeout(300);
+  const gone = await page.evaluate(() => document.querySelector("#chat-ended-note"));
   const youGone = await page.locator("#you-line").isHidden();
+  const said = await spoken(page);
   await page.close();
-  assert.equal(note, CH.ENDED_SAVED, "New conversation ended a kept chat without a word");
+  assert.equal(gone, null, "the primer's #chat-ended-note is back - it left with the primer");
+  assert.ok(/New conversation|next question starts fresh/i.test(said),
+    `New conversation ended a kept chat without a word: "${said}"`);
   assert.equal(youGone, true);
 
   const game = await bar({ chatReplies: [[route({ temporary: true, lane: "qwen3:8b", where: "local" }),
@@ -229,14 +239,15 @@ await check("the bar: New conversation says where the chat went, and a game says
   const strip = await game.locator("#temporary-strip").innerText();
   const state = await game.locator("#temporary-strip").getAttribute("data-state");
   await game.keyboard.press("Escape");
-  await game.waitForTimeout(200);
-  const ended = await game.locator("#chat-ended-note").innerText();
+  await game.waitForTimeout(300);
+  const ended = await spoken(game);
   const stripGone = await game.locator("#temporary-strip").isHidden();
   await game.close();
   assert.match(strip, /^Incognito/);
   assert.match(strip, /looks like a game/);
   assert.equal(state, "game");
-  assert.equal(ended, CH.ENDED_TEMPORARY, "a game ending said Kept chats are in History");
+  assert.match(ended, new RegExp(CH.ENDED_TEMPORARY.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `a game ending said the wrong thing, or nothing: "${ended}"`);
   assert.equal(stripGone, true);
 });
 

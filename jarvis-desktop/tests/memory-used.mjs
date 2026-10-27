@@ -4,14 +4,13 @@
  * src/memory-used.js, src/answer-memory.js, commands.rs stream_chat /
  * temporary_chat_available / route_line_from_header, brain/used.rs).
  *
- * What must hold:
- * - one tap starts a temporary chat - but only on a PC that says it has
- *   one; an older PC says so plainly and the mode stays off;
- * - a marker for the whole chat, and the one line on the empty chat;
- * - every question of it goes with `temporary: true`, and turning it on or
- *   off starts a new conversation (nothing re-sent across);
- * - an answer whose route does not confirm it is temporary says so;
- *   a "Remember:" says Remember is off;
+ * The owner's decision of 2026-10-27 removed the bar's temporary toggle: the
+ * one Incognito chip is the strict private chat (tests/private-chat.mjs). The
+ * temporary mode still exists on the PC and on the phone, and the PC can put
+ * a chat in it by itself (a game) - so what must hold here is:
+ * - no request from the bar is ever sent as temporary;
+ * - a marker for a chat the PC itself made temporary, with its one line;
+ * - a "Remember:" in one says Remember is off, and no memories line appears;
  * - under an answer that used memories, "Used 2 memories" opens those facts
  *   (words read by id), a pinned one marked, each with Forget and Erase,
  *   asked about first, one fact per call, held on a stale link, hidden
@@ -128,85 +127,44 @@ const chats = (page) => page.evaluate(() =>
     .map((c) => ({ temporary: c[1].temporary, conversationId: c[1].conversationId,
                    messages: c[1].messages.map((m) => m.content) })));
 
-await check("an older PC: the mode stays off, says why, and nothing is sent as temporary", async () => {
-  const page = await quickbar({ chatReplies: ["Hi."] }, { __temporaryOk: false });
-  await page.locator("#temporary").click();
-  await page.waitForTimeout(200);
-  const pressed = await page.locator("#temporary").getAttribute("aria-pressed");
-  const strip = await page.locator("#temporary-strip").innerText();
+await check("the bar has no temporary toggle, and a normal turn is never sent as temporary", async () => {
+  const page = await quickbar({ chatReplies: ["Hi."] });
+  const toggle = await page.evaluate(() => document.querySelector("#temporary"));
   await submit(page, "hello");
   const sent = await chats(page);
   await page.close();
-  assert.equal(pressed, "false");
-  assert.equal(strip.trim(), TEMPORARY_UNAVAILABLE);
-  assert.equal(sent[0].temporary, false);
+  // The owner's decision of 2026-10-27: the milder temporary mode has no
+  // control at all - the one Incognito chip is the strict private chat.
+  assert.equal(toggle, null, "the #temporary button is back in the bar");
+  assert.equal(sent[0].temporary, false, "an ordinary turn was sent as temporary");
 });
 
-await check("on: a marker for the whole chat, the one line while it is empty, and every question temporary", async () => {
-  const page = await quickbar({ chatReplies: ["Hello.", "Still here."] }, { __temporaryOk: true });
-  await page.locator("#temporary").click();
-  await page.waitForTimeout(200);
-  const pressed = await page.locator("#temporary").getAttribute("aria-pressed");
-  const empty = await page.locator("#temporary-strip").innerText();
-  const marked = await page.locator("#shell").getAttribute("data-temporary");
-  await submit(page, "hi");
-  await submit(page, "and again");
+await check("a chat the PC itself made temporary still gets its marker - and the request stays ordinary", async () => {
+  const page = await quickbar({ chatReplies: [[route({ ...LOCAL, temporary: true, injected_facts: 0 }),
+    "The dragon roars."]] });
+  await submit(page, "let's play a text adventure");
+  await page.waitForTimeout(150);
   const strip = await page.locator("#temporary-strip").innerText();
+  const state = await page.locator("#temporary-strip").getAttribute("data-state");
   const sent = await chats(page);
   await page.close();
-  assert.equal(pressed, "true");
-  assert.equal(marked, "true");
-  assert.match(empty, new RegExp(`^${TEMPORARY_LABEL}`));
-  // The label beside the line already says "Incognito", so the strip
-  // does not say it twice (the second chat audit, desktop C8).
-  assert.ok(empty.includes(TEMPORARY_LINE.replace(/^Incognito:\s*/, "")), empty);
-  assert.ok(!empty.includes("Incognito: "), empty);
-  assert.equal(strip.trim(), TEMPORARY_LABEL, "the marker went, or the empty-chat line stayed");
-  assert.deepEqual(sent.map((s) => s.temporary), [true, true]);
-  assert.equal(sent[1].conversationId, sent[0].conversationId);
-  assert.deepEqual(sent[1].messages, ["hi", "Hello.", "and again"]);
+  assert.match(strip, new RegExp(`^${TEMPORARY_LABEL}`),
+    "the PC made the chat temporary and the bar said nothing");
+  assert.match(strip, /looks like a game/);
+  assert.equal(state, "game");
+  assert.equal(sent[0].temporary, false,
+    "the bar asked for a temporary chat nobody pressed");
 });
 
-await check("turning it on or off starts a new conversation: nothing is re-sent across", async () => {
-  const page = await quickbar({ chatReplies: ["A.", "B.", "C."] }, { __temporaryOk: true });
-  await submit(page, "normal question");
-  await page.locator("#temporary").click();
-  await page.waitForTimeout(200);
-  await submit(page, "private question");
-  await page.locator("#temporary").click();
-  await page.waitForTimeout(200);
-  await submit(page, "normal again");
-  const sent = await chats(page);
-  await page.close();
-  assert.deepEqual(sent.map((s) => s.messages), [["normal question"], ["private question"],
-    ["normal again"]]);
-  assert.deepEqual(sent.map((s) => s.temporary), [false, true, false]);
-  assert.equal(new Set(sent.map((s) => s.conversationId)).size, 3, "a conversation id was reused");
-});
-
-await check("confirmed: no memories line; a Remember: says Remember is off", async () => {
+await check("a game the PC made temporary: Remember: says Remember is off, and no memories line", async () => {
   const page = await quickbar({ chatReplies: [[route({ ...LOCAL, temporary: true,
-    remember_off: true, injected_facts: 0 }), "I can't keep that here."]] },
-  { __temporaryOk: true });
-  await page.locator("#temporary").click();
-  await page.waitForTimeout(200);
+    remember_off: true, injected_facts: 0 }), "I can't keep that here."]] });
   await submit(page, "Remember: my locker is 12");
   const note = await page.locator("#answer-memory-note").innerText();
   const used = await page.locator("#answer-used").isVisible();
   await page.close();
-  assert.equal(note.trim(), REMEMBER_OFF);
+  assert.match(note, new RegExp(REMEMBER_OFF.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), note);
   assert.equal(used, false);
-});
-
-await check("a PC that does not confirm a temporary chat is never pretended to have", async () => {
-  const page = await quickbar({ chatReplies: [[route({ ...LOCAL, injected_facts: 1,
-    memory_ids: [3] }), "You like tea."]] }, { __temporaryOk: true });
-  await page.locator("#temporary").click();
-  await page.waitForTimeout(200);
-  await submit(page, "what do I drink?");
-  const note = await page.locator("#answer-memory-note").innerText();
-  await page.close();
-  assert.equal(note.trim(), TEMPORARY_NOT_CONFIRMED);
 });
 
 const USED = {
