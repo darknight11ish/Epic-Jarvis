@@ -52,7 +52,6 @@ extraction-wiring.patch	extraction-wiring/35a1001.patch	35a1001e2028fb245b79606e
 extraction-wiring.patch	extraction-wiring/80309e5.patch	80309e584047abb27a30f3163c29a841000ea7f7	2026-09-15T01:42:10Z	The route is /api/pending, and I told the other client the wrong one
 extraction-wiring.patch	extraction-wiring/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34Z	Master audit: the worst finding was a cloud lane nobody re-filtered
 extraction-wiring.patch	extraction-wiring/a50cbf1.patch	a50cbf1ee96d71ac66e3d7a9bab702dc5b7b8b49	2026-09-15T00:50:38Z	backend: give the learning loop a trigger and the review queue a doorbell
-f01-manual-lane-gate.patch	f01-manual-lane-gate/3a4ad5d.patch	3a4ad5ddb791309210e1bc9a8124e2bfccf35c29	2026-10-27T00:57:46-07:00	fix(hud): a lane you pick by hand runs the privacy gates (F-01)
 feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45Z	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
 feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29Z	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
 focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09-25T23:45:52Z	Focus sessions, backend: jarvis_focus.py, focus.patch, the fast-path commands
