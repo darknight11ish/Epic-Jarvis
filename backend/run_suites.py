@@ -3,14 +3,16 @@ name, with the reason - the ones that cannot. This is what CI runs.
 
     python3 backend/run_suites.py
 
-WHY A RUNNER AND NOT JUST A LOOP. About twenty suites test a patch against the
+WHY A RUNNER AND NOT JUST A LOOP. Twelve suites test a patch against the
 file it patches - jarvis_hud.py, jarvis_gate.py, jarvis_extract.py,
 jarvis_models.py - and those files live only on the owner's PC, never in this
 repository (backend/.gitignore refuses them). Run anywhere else, those suites
 fail with an ImportError that looks exactly like a broken patch. A CI job
 that is always red teaches everyone to ignore it, so those suites are
 SKIPPED here, each one named with the files it is waiting for - and only
-while those files are absent. FOUR MORE SUITES ARE A SECOND, SEPARATE SKIP
+while those files are absent. (It was about twenty until 2026-10-27, when the
+four that can run their own checks without those files were taken off the
+list; see NEEDS_OWNER below.) FOUR MORE SUITES ARE A SECOND, SEPARATE SKIP
 CLASS (2026-10-26, below): they are skipped by name even when their files are
 present, unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set, because each
 starts a real, visible Chromium window. Every other suite must pass.
@@ -91,6 +93,15 @@ its own config folder, audit log and scratch folder inside the same run root,
 because the suites write real state and two of them writing into one folder
 is not a check either of them asked for.
 
+A SUITE THAT SKIPS EVERY CHECK IS NOT A PASS (2026-10-27). A suite that exits
+0 having skipped every check it owns is reported as `NO-CHECKS`, not `ok`, and
+it makes the run exit non-zero - because a skip is never a pass, and a guard
+phrase that stopped matching must not turn a whole suite green. Three suites
+are exempt by name, with the reason, in ZERO_CHECK_ALLOWED: the ones that need
+an OPTIONAL package (playwright, cryptography, Pillow) and so legitimately
+prove nothing on a machine without it - while the required backend job
+installs all three and runs them for real.
+
 THE UPDATE LOCK. A backend update holds `update-in-progress.lock` in the
 folder Jarvis keeps its own data in (`OPENJARVIS_CONFIG_DIR`, then
 `JARVIS_CONFIG_DIR`, then `~/.openjarvis`). While that lock is VALID (live pid,
@@ -159,18 +170,44 @@ import _where  # noqa: E402
 # Naming the skips, rather than leaving the whole suite listed, is the point:
 # the runner prints "N passed, M skipped" beside each of them, so a reader sees
 # how much of the suite actually ran.
+#
+# FOUR WERE TAKEN OFF ON 2026-10-27, after the test audit named 14 suites that
+# no CI job ran (`.dsh-scratch/AUDIT-TESTS-2026-10-27/FINDINGS.md`, F-02). Each
+# was run DIRECTLY against a staged backend with NO owner files - which is what
+# the required backend job runs - and each PASSED, naming as a skip whatever
+# still needs the owner's whole file:
+#
+#   * test_bitemporal.py        28 passed,  1 skipped   (needs no owner file now)
+#   * test_extraction_wiring.py 13 passed, 10 skipped   (10 lift jarvis_hud.py)
+#   * test_gate_push.py          7 passed,  6 skipped   (6 lift jarvis_gate.py)
+#   * test_import_history.py    13 passed,  6 skipped   (6 lift jarvis_extract.py)
+#
+# That is 61 checks the required backend job gains. The other 10 stay below,
+# with the files each is waiting for: they fail or prove nothing without those
+# files, and a skip with a reason is honest where a red would only teach people
+# to ignore the job. Measured the same way, 2026-10-27:
+#
+#   test_approval_notice.py, test_gate_outcome.py, test_gpu_offload.py and
+#   test_memory_safety.py exit 1 at import with no output at all (they import
+#   the owner's module at module level); test_events_pump.py (1 failure) and
+#   test_gate_egress.py (5 failures) fail checks that read the owner's real
+#   file; test_decide_once.py, test_degrade_filter.py, test_memory_noise.py and
+#   test_memory_prefix.py print one whole-suite skip and exit 0 (0 checks).
+#
+# ONE MORE WAS ADDED THE SAME DAY, by the zero-check rule below: every one of
+# test_tool_calling_wiring.py's six checks lifts `do_POST`'s text out of
+# jarvis_hud.py, so with no jarvis_hud.py it printed six skips, ran nothing and
+# exited 0 - which used to read as a pass and is now NO-CHECKS. Naming it here
+# is the honest form: the runner says which file it is waiting for. The owner's
+# PC is the only machine it can run on.
 NEEDS_OWNER = {
     "test_approval_notice.py": ("jarvis_gate.py", "jarvis_events.py"),
-    "test_bitemporal.py": ("jarvis_hud.py", "jarvis_memory.py"),
     "test_decide_once.py": ("jarvis_extract.py", "jarvis_hud.py", "jarvis_memory.py"),
     "test_degrade_filter.py": ("jarvis_hud.py",),
     "test_events_pump.py": ("jarvis_hud.py", "jarvis_events.py"),
-    "test_extraction_wiring.py": ("jarvis_hud.py", "jarvis_events.py"),
     "test_gate_egress.py": ("jarvis_gate.py", "jarvis_hud.py", "jarvis_events.py"),
     "test_gate_outcome.py": ("jarvis_gate.py",),
-    "test_gate_push.py": ("jarvis_gate.py",),
     "test_gpu_offload.py": ("jarvis_hud.py", "jarvis_models.py"),
-    "test_import_history.py": ("jarvis_extract.py", "jarvis_memory.py"),
     "test_memory_noise.py": ("jarvis_extract.py", "jarvis_hud.py", "jarvis_memory.py"),
     "test_memory_prefix.py": ("jarvis_hud.py",),
     "test_memory_safety.py": ("jarvis_extract.py", "jarvis_memory.py"),
@@ -181,6 +218,7 @@ NEEDS_OWNER = {
     # fails and every cloud check would read as "no lane".
     "test_ollama_direct.py": ("jarvis_hud.py",),
     "test_token_file.py": ("jarvis_hud.py",),
+    "test_tool_calling_wiring.py": ("jarvis_hud.py",),
 }
 
 # The files only the owner's PC has. Checked below: every NEEDS_OWNER entry
@@ -223,6 +261,34 @@ VISIBLE_BROWSER_SUITES = {
     "test_chatbot_sites.py": "it opens a real, VISIBLE browser window per chatbot site",
     "test_handoff.py": "it opens a real, VISIBLE browser window (the hand-off page)",
     "test_support_widget.py": "it opens a real, VISIBLE browser window (a support chat)",
+}
+
+#: SUITES THAT MAY LEGITIMATELY RUN NO CHECK (2026-10-27). A suite that exits
+#: 0 having skipped every check it owns proves nothing, so it is reported as
+#: `NO-CHECKS` - neither a pass nor a skip - and it is a FAILURE by default: a
+#: skip guard that stopped matching, or a loop over an empty list, would
+#: otherwise turn a whole suite into a green line forever. These three are the
+#: exception, because what they need is OPTIONAL on a developer machine (the
+#: required backend job installs all three packages, so there they really run):
+#:
+#:   * test_browser_control_live.py - needs playwright. The Ubuntu backend job
+#:     installs no Playwright (the browser page tests live in the frontend
+#:     job), so there it prints one SKIP line and exits 0 today.
+#:   * test_mesh_tls_cert.py - needs cryptography, optional at run time; with
+#:     no cryptography it skips all 16 checks and says so.
+#:   * test_pillow_pictures.py - needs Pillow, optional at run time (four
+#:     shipped modules load it by name and the backend starts without it);
+#:     with no Pillow it names the whole-suite skip and exits 0.
+#:
+#: A suite whose checks are skipped for ANY OTHER reason is NOT exempt. Add an
+#: entry here only with a one-line reason, never to silence a red.
+ZERO_CHECK_ALLOWED = {
+    "test_browser_control_live.py":
+        "needs playwright, which is optional and which the backend job leaves out",
+    "test_mesh_tls_cert.py":
+        "needs cryptography, optional at run time (the backend job installs it)",
+    "test_pillow_pictures.py":
+        "needs Pillow, optional at run time (the backend job installs it)",
 }
 
 
@@ -849,6 +915,28 @@ def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
     silent = code == 0 and not any(n.values())
     if silent:
         code = "printed no checks"
+    # A suite that exits 0 having run NO non-skipped check proves nothing: it is
+    # the whole-suite version of `check("SKIP ...", True)`, the shape this
+    # runner exists to distrust. It is reported as NO-CHECKS - neither "ok" nor
+    # "skip" - and, unless it is named on the allowlist above, it FAILS.
+    zero = code == 0 and n["passed"] == 0 and n["failed"] == 0 and n["skipped"] > 0
+    if zero and name in ZERO_CHECK_ALLOWED:
+        return ("zero", n,
+                f"NO-CHECKS  {name:<34} {took}  {said}  (every check was skipped: "
+                f"{ZERO_CHECK_ALLOWED[name]})", [])
+    if zero:
+        line = (f"FAIL  {name:<34} {took}  (exit 0)  {said}  "
+                f"(every check was skipped - no check ran)")
+        skips = [l for l in out.splitlines() if _LINE["skipped"].match(l)]
+        echo = ["      it ran NO checks: every check it has was skipped, and a "
+                "skip is never a pass."]
+        echo += ["      " + l for l in skips[:6]]
+        if len(skips) > 6:
+            echo.append(f"      ... and {len(skips) - 6} more skip line(s)")
+        echo.append("      If this machine genuinely cannot run it, add it to "
+                    "ZERO_CHECK_ALLOWED with the reason; otherwise one of its skip "
+                    "guards has just hidden every check it owns.")
+        return "FAIL", n, line[:200], echo
     if code == 0:
         # The numbers are shown whenever they are not already on the suite's
         # own last line: a suite that skipped something (its own line would
@@ -1179,8 +1267,13 @@ def _suite_job(s: Path, backend: Path, env: dict) -> dict:
 
 
 def _print_job(got: dict, ran: dict, passed: list, failed: list,
-               skipped: list) -> None:
-    """Print one finished suite exactly as the one-at-a-time run always has."""
+               skipped: list, zero: list) -> None:
+    """Print one finished suite exactly as the one-at-a-time run always has.
+
+    `zero` collects the allowlisted suites that ran NO check (status "zero").
+    They are printed as NO-CHECKS and counted in neither `passed` nor `failed`
+    nor the by-name `skipped` list - a skip is never a pass, and a suite that
+    proves nothing must not read like one."""
     if got["status"] == "skip":
         skipped.append(got["name"])
         print(got["line"])
@@ -1191,6 +1284,10 @@ def _print_job(got: dict, ran: dict, passed: list, failed: list,
         passed.append(got["name"])
         print(got["line"])
         return
+    if got["status"] == "zero":
+        zero.append(got["name"])
+        print(got["line"])
+        return
     failed.append(got["name"])
     print(got["line"])
     for line in got["echo"]:
@@ -1199,7 +1296,7 @@ def _print_job(got: dict, ran: dict, passed: list, failed: list,
 
 
 def _sweep_parallel(suites: list, backend: Path, worker_envs: list, ran: dict,
-                    passed: list, failed: list, skipped: list) -> None:
+                    passed: list, failed: list, skipped: list, zero: list) -> None:
     """The same suites, `len(worker_envs)` at a time.
 
     The only thing the extra workers change is the ORDER the finished lines are
@@ -1239,7 +1336,7 @@ def _sweep_parallel(suites: list, backend: Path, worker_envs: list, ran: dict,
                                f"raised {type(exc).__name__}: {exc}",
                        "echo": [], "tail": []}
             with print_lock:
-                _print_job(got, ran, passed, failed, skipped)
+                _print_job(got, ran, passed, failed, skipped, zero)
 
 
 def _sweep(root: Path, only=(), jobs: int = 1,
@@ -1282,10 +1379,15 @@ def _sweep(root: Path, only=(), jobs: int = 1,
     # The visible-browser list is permanent, not "whatever was selected": a
     # renamed or deleted suite must be caught even by `run_suites.py test_x.py`.
     stale_visible = sorted(set(VISIBLE_BROWSER_SUITES) - {s.name for s in known})
-    passed, failed, skipped = [], [], []
+    # The zero-check allowlist is a promise about three files that exist; a
+    # renamed suite must not leave a dead exemption behind (as NEEDS_OWNER and
+    # the visible-browser list are checked above).
+    stale_zero = sorted(set(ZERO_CHECK_ALLOWED) - {s.name for s in known})
+    passed, failed, skipped, zero = [], [], [], []
     # The checks inside the suites that ran, summed from what each suite
-    # reported. A suite that exits 0 having skipped every check it has is still
-    # "ok" here - the numbers beside it are what say so.
+    # reported. A suite that exits 0 having skipped every check it has is NOT
+    # "ok" (2026-10-27): it is NO-CHECKS, kept in `zero`, and it fails the
+    # sweep unless it is named on ZERO_CHECK_ALLOWED.
     ran = {"passed": 0, "skipped": 0, "failed": 0}
     if unknown:
         print(f"FAIL  no suite here is named: {', '.join(unknown)}  "
@@ -1298,6 +1400,10 @@ def _sweep(root: Path, only=(), jobs: int = 1,
         print(f"FAIL  run_suites.py's visible-browser skip list names suites that do not "
               f"exist: {stale_visible}")
         failed += stale_visible
+    if stale_zero:
+        print(f"FAIL  run_suites.py's zero-check allowlist names suites that do not exist: "
+              f"{stale_zero}")
+        failed += stale_zero
     no_owner = sorted(k for k, v in NEEDS_OWNER.items() if not set(v) & OWNER_FILES)
     if no_owner:
         print(f"FAIL  run_suites.py skips suites that need nothing from the owner's PC: {no_owner}")
@@ -1315,7 +1421,7 @@ def _sweep(root: Path, only=(), jobs: int = 1,
         print(home_words(worker_envs[0]))
         for suite in suites:
             _print_job(_suite_job(suite, backend, worker_envs[0]),
-                       ran, passed, failed, skipped)
+                       ran, passed, failed, skipped, zero)
     else:
         worker_envs = []
         for index in range(jobs):
@@ -1326,12 +1432,17 @@ def _sweep(root: Path, only=(), jobs: int = 1,
               f"config folder and audit log for this run, not yours)")
         print(home_words(worker_envs[0]) + f"  (one home per worker: "
               f"state-1 .. state-{jobs})")
-        _sweep_parallel(suites, backend, worker_envs, ran, passed, failed, skipped)
+        _sweep_parallel(suites, backend, worker_envs, ran, passed, failed, skipped, zero)
     # No rmtree here any more: `root` - which holds the staged backend (unless
     # an EXPLICIT --use-env-backend / --backend-path named a real one), the
     # state folder and the suites' own scratch - is removed by main()'s
     # `finally`, on every path out of here.
     print(f"\n{ran['passed']} passed, {ran['skipped']} skipped, {ran['failed']} failed")
+    if zero:
+        shown = sorted(zero) if jobs > 1 else zero
+        print(f"      ({len(zero)} suite(s) ran NO checks - every check was skipped: "
+              f"{', '.join(shown)}. Each is allowed by ZERO_CHECK_ALLOWED and none is a "
+              f"pass; a skip is never a pass)")
     if ran["skipped"] or skipped:
         print(f"      (a skip is a check that could not run here: {ran['skipped']} inside the "
               f"suites above, {len(skipped)} whole suite(s) skipped by name - each line above "
