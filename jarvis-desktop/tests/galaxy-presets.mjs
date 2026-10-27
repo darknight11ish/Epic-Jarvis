@@ -4,12 +4,15 @@
  *
  *     node tests/galaxy-presets.mjs
  *
- * Phase G0 (the owner's answer A/A of 2026-10-23; the Galaxy blueprint, Part B,
- * presets 6-8) adds three flat layouts beside the constellation the desktop
- * already draws: `star-map`, `clean-tree` and `zen-ring`, chosen from a menu chip
- * or hotkeys 6/7/8 in the Galaxy view. The default view is untouched, the five
- * rich presets are shown disabled as "not built yet", and the choice is
- * remembered on this device only.
+ * Phase G0 (the owner's answer A/A of 2026-10-23; the Galaxy blueprint, Part B)
+ * adds eight flat layouts beside the constellation the desktop already draws:
+ * `star-map`, `clean-tree` and `zen-ring` (hotkeys 6/7/8), and - built on
+ * 2026-10-27, when the owner asked for "an easy way to change the appearance of
+ * the jarvis galaxy to the other models" - `planetary-orbit`, `neural-arbor`,
+ * `nebula`, `dna-helix` and `radar-dome` (hotkeys 1-5). Every one is chosen from
+ * a menu chip or its hotkey in the Galaxy view. The default view is untouched,
+ * nothing is "not built yet" any more, and the choice is remembered on this
+ * device only.
  *
  * WHAT THIS SUITE HOLDS
  *
@@ -52,10 +55,21 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as K from "./uikit.mjs";
 import {
+  ARBOR_ROWS,
+  ARBOR_ROW_PITCH,
   BUILT_PRESETS,
   DEFAULT_PRESET,
+  DOME_BASE,
+  DOME_GROUND_DROP,
+  DOME_PITCH,
+  HELIX_AMPLITUDE,
+  HELIX_STEPS_PER_TURN,
   MAX_LAYOUT_NODES,
   MIN_GAP,
+  NEBULA_SPACING,
+  PLANET_ASPECT,
+  PLANET_B0,
+  PLANET_PITCH,
   PLANNED_PRESETS,
   PRESET_MENU,
   PRESET_STORAGE_KEY,
@@ -65,11 +79,17 @@ import {
   ZEN_HALO_GAP,
   ZEN_MAX_CHORDS,
   ZEN_RADIUS,
+  arborRowCounts,
   cleanTreeRowFor,
   gapForPreset,
   layoutCleanTree,
+  layoutDnaHelix,
   layoutFor,
   layoutIsUsable,
+  layoutNebula,
+  layoutNeuralArbor,
+  layoutPlanetaryOrbit,
+  layoutRadarDome,
   layoutStarMap,
   layoutZenRing,
   plannedForKey,
@@ -84,6 +104,14 @@ import { MAX_RENDERED_NODES } from "../src/galaxy-view.js";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EVIDENCE = join(HERE, "..", "..", ".dsh-scratch", "GALAXY-G0-EVIDENCE");
 const WANT_SHOTS = process.env.JARVIS_GALAXY_SHOTS === "1";
+
+/** Every look the module builds, in hotkey order. Read from the module, so a
+ *  look added there is covered here without editing this list. */
+const LOOK_IDS = BUILT_PRESETS.map((p) => p.id);
+
+/** The same eight as `[id, hotkey, plain label]`, in the order a person meets
+ *  them: the five rich looks first (keys 1-5), then the three flat ones. */
+const FLAT_LOOKS = BUILT_PRESETS.map((p) => [p.id, p.key, p.label]);
 
 const fails = [];
 const check = async (name, fn) => {
@@ -135,29 +163,39 @@ function expectedRingCapacity(radius, gap = MIN_GAP) {
 
 /* ── 1. the presets themselves ────────────────────────────────────────── */
 
-await check("the three flat layouts are built; 6/7/8 are their keys; the five rich presets are not", async () => {
+await check("all eight looks are built; keys 1-8 are theirs; nothing is planned any more", async () => {
   assert.equal(DEFAULT_PRESET, "constellation");
-  assert.deepEqual(BUILT_PRESETS.map((p) => p.id), ["star-map", "clean-tree", "zen-ring"]);
-  assert.deepEqual(BUILT_PRESETS.map((p) => p.key), ["6", "7", "8"]);
-  assert.deepEqual(PLANNED_PRESETS.map((p) => p.key), ["1", "2", "3", "4", "5"]);
+  assert.deepEqual(LOOK_IDS, ["planetary-orbit", "neural-arbor", "nebula", "dna-helix",
+    "radar-dome", "star-map", "clean-tree", "zen-ring"]);
+  assert.deepEqual(BUILT_PRESETS.map((p) => p.key), ["1", "2", "3", "4", "5", "6", "7", "8"]);
+  assert.deepEqual(PLANNED_PRESETS, [], "a look is still listed as planned and not built");
   assert.equal(presetMeta(DEFAULT_PRESET).built, true);
-  for (const p of PLANNED_PRESETS) assert.equal(presetMeta(p.id).built, false, p.id);
-  assert.equal(PRESET_MENU.length, 1 + PLANNED_PRESETS.length + BUILT_PRESETS.length);
+  for (const look of BUILT_PRESETS) {
+    assert.equal(presetMeta(look.id).built, true, `${look.id} is not marked built`);
+    assert.equal(plannedForKey(look.key), null,
+      `${look.id}'s hotkey is still answered by the not-built list`);
+  }
+  assert.equal(PRESET_MENU.length, 1 + BUILT_PRESETS.length);
   assert.equal(new Set(PRESET_MENU.map((p) => p.id)).size, PRESET_MENU.length, "duplicate preset id");
-  assert.equal(presetForKey("6").id, "star-map");
+  assert.equal(PRESET_MENU.filter((p) => !p.built).length, 0, "a menu entry still says not built");
+  assert.equal(presetForKey("1").id, "planetary-orbit");
+  assert.equal(presetForKey("5").id, "radar-dome");
+  assert.equal(presetForKey("8").id, "zen-ring");
   assert.equal(presetForKey("9"), null);
-  assert.equal(plannedForKey("3").label, "Nebula");
+  assert.equal(plannedForKey("3"), null, "the nebula is built now");
   assert.equal(plannedForKey("6"), null);
 });
 
-await check("the menu shows the not-built presets disabled rather than hiding them", async () => {
-  const planned = PRESET_MENU.filter((p) => !p.built);
-  assert.equal(planned.length, 5);
-  for (const p of planned) {
-    assert.equal(p.hint, "not built yet", p.id);
-    assert.match(presetStatus(p.id), /is not built yet\. Press 6, 7 or 8/);
+await check("the menu names every built look and says nothing is 'not built yet'", async () => {
+  for (const meta of PRESET_MENU) {
+    assert.equal(meta.built, true, `${meta.id} is in the menu as not built`);
+    assert.ok(meta.label && meta.label.trim().length > 1, `${meta.id} has no plain name`);
+    assert.doesNotMatch(presetStatus(meta.id), /not built/i,
+      `the status line still says ${meta.id} is not built`);
   }
   assert.match(presetStatus("star-map"), /^Layout: Star map\./);
+  assert.match(presetStatus("planetary-orbit"), /^Layout: Planetary orbit\. Press its key again/);
+  assert.match(presetStatus("nebula"), /^Layout: Nebula\./);
   assert.match(presetStatus(DEFAULT_PRESET), /constellation/);
   assert.equal(presetStatus("nope"), "");
 });
@@ -165,7 +203,7 @@ await check("the menu shows the not-built presets disabled rather than hiding th
 /* ── 2. pure + deterministic ──────────────────────────────────────────── */
 
 await check("the same list lays out the same way twice, every time - and is not mutated", async () => {
-  for (const id of ["star-map", "clean-tree", "zen-ring"]) {
+  for (const id of LOOK_IDS) {
     const nodes = nodesFor(40);
     const before = JSON.parse(JSON.stringify(nodes));
     const first = layoutFor(id, nodes);
@@ -181,7 +219,6 @@ await check("the same list lays out the same way twice, every time - and is not 
       `${id} changed the node order`);
   }
   assert.equal(layoutFor(DEFAULT_PRESET, nodesFor(3)), null, "the constellation is not a flat layout");
-  assert.equal(layoutFor("nebula", nodesFor(3)), null, "a planned preset must not pretend to lay out");
   assert.equal(layoutFor("no-such-preset", nodesFor(3)), null);
 });
 
@@ -278,13 +315,201 @@ await check("a list too big for the halo grows OUTWARD, so 108 stays the calm ce
   assert.ok(nearestPair(layout) >= ZEN_HALO_GAP - 1e-9, "zen ring overlaps at 240 names");
 });
 
+/* ── 5b. the five rich looks built on 2026-10-27 ──────────────────────── */
+
+await check("planetary orbit is one sun and homothetic ellipses around it", async () => {
+  const layout = layoutPlanetaryOrbit(nodesFor(40));
+  assert.deepEqual([layout.nodes[0].x, layout.nodes[0].y], [0, 0], "the first name is the sun");
+  assert.ok(layout.rings.length >= 2, "40 names should need at least two orbits");
+  assert.deepEqual(layout.rings.slice(0, 2), [PLANET_B0, PLANET_B0 + PLANET_PITCH],
+    "orbits are a pitch apart, starting at the module's own first axis");
+  // Every other name lies ON one of those ellipses:
+  // (x/a)^2 + (y/b)^2 = 1 with a = b * PLANET_ASPECT.
+  for (const point of layout.nodes.slice(1)) {
+    const onOrbit = layout.rings.some((b) => {
+      const a = b * PLANET_ASPECT;
+      return Math.abs((point.x / a) ** 2 + (point.y / b) ** 2 - 1) < 0.02;
+    });
+    assert.ok(onOrbit, `a name at (${point.x.toFixed(1)}, ${point.y.toFixed(1)}) is on no orbit`);
+  }
+  assert.equal(layout.guides.circles.length, 0, "orbits are ellipses, not circles");
+  assert.equal(layout.guides.paths.length, layout.rings.length, "one faint ellipse per orbit");
+  for (const orbit of layout.guides.paths) {
+    assert.equal(orbit.kind, "orbit");
+    assert.match(orbit.d, /^M .* Z$/, "an orbit is a closed path");
+    // The same ellipse as numbers, for a renderer that does not parse `d`.
+    assert.ok(orbit.a > orbit.b, "an orbit's long axis is its semi-major axis");
+    assert.ok(Math.abs(orbit.a / orbit.b - PLANET_ASPECT) < 1e-6, "an orbit has the family's shape");
+  }
+});
+
+await check("neural arbor is a crown of rows widening upward, with dendrites down", async () => {
+  const layout = layoutNeuralArbor(nodesFor(40));
+  const counts = arborRowCounts(40);
+  assert.deepEqual(counts, [1, 2, 3, 5, 8, 21], "the crown's rows are the module's own");
+  assert.equal(counts.reduce((total, n) => total + n, 0), 40, "the rows hold exactly the list");
+  for (let i = 1; i < counts.length; i++) {
+    assert.ok(counts[i] >= counts[i - 1], `row ${i + 1} is narrower than row ${i}`);
+  }
+  assert.equal(layout.rows.length, counts.length, "one guide line per row");
+  for (let i = 1; i < layout.rows.length; i++) {
+    // Canvas y grows DOWNWARD, so the crown's next row up is a pitch SMALLER.
+    assert.equal(layout.rows[i - 1] - layout.rows[i], ARBOR_ROW_PITCH,
+      "rows keep the module's pitch");
+  }
+  // Every name's y IS its row's line, the rows are centred, and the root is alone.
+  let at = 0;
+  counts.forEach((count, row) => {
+    const onRow = layout.nodes.slice(at, at + count);
+    for (const point of onRow) {
+      assert.equal(point.y, layout.rows[row], `${point.id} is not on its row's line`);
+    }
+    if (count > 1) {
+      const xs = onRow.map((p) => p.x);
+      assert.equal(new Set(xs.map((x) => x.toFixed(4))).size, count,
+        `row ${row + 1} has two names at one x`);
+      for (let i = 1; i < xs.length; i++) {
+        assert.ok(Math.abs(xs[i] - xs[i - 1]) >= MIN_GAP - 1e-9,
+          `row ${row + 1} has neighbours closer than a gap`);
+      }
+      assert.ok(Math.abs(xs[0] + xs[xs.length - 1]) < 1e-9, `row ${row + 1} is not centred`);
+    }
+    at += count;
+  });
+  assert.equal(layout.nodes[0].x, 0, "the root is not centred over its crown");
+  assert.ok(layout.guides.lines.length > 0, "the arbor has no dendrites");
+  assert.ok(layout.guides.lines.length <= 120, "the arbor drew too many dendrites");
+  for (const line of layout.guides.lines) {
+    assert.equal(line.kind, "dendrite");
+    const ends = [line, line].map((shape, which) => {
+      const x = which ? shape.x2 : shape.x1;
+      const y = which ? shape.y2 : shape.y1;
+      return layout.nodes.some((p) => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6);
+    });
+    assert.deepEqual(ends, [true, true], "a dendrite does not start and end on two names");
+  }
+});
+
+await check("nebula is one soft cloud: no rings, no rows, no guides", async () => {
+  const layout = layoutNebula(nodesFor(60));
+  assert.deepEqual(layout.rings, [], "a cloud has no rings");
+  assert.deepEqual(layout.rows, [], "a cloud has no rows");
+  assert.deepEqual(layout.guides.circles, [], "a cloud has no guide circles");
+  assert.deepEqual(layout.guides.lines, [], "a cloud has no guide lines");
+  assert.deepEqual(layout.guides.paths, [], "a cloud has no guide paths");
+  // Nothing lines up: no two names share a row or a column, which is what stops
+  // it reading as a grid.
+  const ys = layout.nodes.map((p) => p.y.toFixed(3));
+  const xs = layout.nodes.map((p) => p.x.toFixed(3));
+  assert.equal(new Set(ys).size, ys.length, "two names share a row");
+  assert.equal(new Set(xs).size, xs.length, "two names share a column");
+  const first = Math.hypot(layout.nodes[0].x, layout.nodes[0].y);
+  const last = Math.hypot(layout.nodes[59].x, layout.nodes[59].y);
+  assert.ok(last > first * 4, "the cloud did not grow outward");
+  assert.equal(layout.minGap, MIN_GAP);
+  assert.ok(NEBULA_SPACING > 1, "the cloud's spacing is looser than one gap");
+});
+
+await check("DNA helix is two strands twisting up each column, with a rung per row", async () => {
+  const layout = layoutDnaHelix(nodesFor(40));
+  assert.deepEqual(layout.rings, []);
+  // Consecutive names are one row apart down a column, so their y difference is
+  // at least a gap - the module's own no-overlap argument for this look.
+  for (let i = 1; i < layout.nodes.length; i++) {
+    assert.ok(Math.abs(layout.nodes[i].y - layout.nodes[i - 1].y) >= MIN_GAP - 1e-9,
+      `names ${i - 1} and ${i} are less than a gap apart down the helix`);
+  }
+  // The two strands: consecutive names sit on opposite sides of their column's
+  // axis, and the sideways offset is a cosine of the row (one turn every
+  // HELIX_STEPS_PER_TURN rows), which is what makes the pair a twist.
+  const columns = Math.max(1, Math.min(8, Math.round(Math.sqrt(40 / 6)) || 1));
+  const perColumn = Math.ceil(40 / columns);
+  const columnPitch = HELIX_AMPLITUDE * 2 + 30;
+  for (let column = 0; column < columns; column++) {
+    const first = column * perColumn;
+    const rows = Math.min(perColumn, 40 - first);
+    const centreX = (column - (columns - 1) / 2) * columnPitch;
+    for (let k = 0; k < rows; k++) {
+      const want = (k % 2 === 0 ? 1 : -1) * HELIX_AMPLITUDE
+        * Math.cos(k * ((Math.PI * 2) / HELIX_STEPS_PER_TURN));
+      assert.ok(Math.abs((layout.nodes[first + k].x - centreX) - want) < 1e-6,
+        `row ${k} of column ${column + 1} is not on its strand`);
+    }
+  }
+  // One rung between each pair of neighbouring rows, capped.
+  assert.ok(layout.guides.paths.length > 0, "the helix has no rungs");
+  assert.ok(layout.guides.paths.length <= 120, "the helix drew too many rungs");
+  for (const rung of layout.guides.paths) {
+    assert.equal(rung.kind, "rung");
+    assert.ok(Number.isFinite(rung.x1) && Number.isFinite(rung.y2), "a rung has no numeric ends");
+    assert.match(rung.d, /^M .* L .*$/, "a rung is a straight line between the two strands");
+  }
+});
+
+await check("radar dome puts every name above a horizon, on arcs over a ground row", async () => {
+  const layout = layoutRadarDome(nodesFor(40));
+  const ground = layout.nodes.filter((p) => p.y > 0);
+  assert.ok(ground.length >= 2, "the dome has no ground row");
+  for (const point of ground) {
+    assert.equal(point.y, DOME_GROUND_DROP, "a ground-row name is off the horizon line");
+  }
+  for (const point of layout.nodes.filter((p) => p.y <= 0)) {
+    assert.ok(point.y < 0, "a dome name sits on the horizon instead of above it");
+  }
+  assert.ok(layout.rings.length >= 1, "the dome has no arcs");
+  assert.equal(layout.rings[0], DOME_BASE, "the dome starts at the module's own first arc");
+  for (let i = 1; i < layout.rings.length; i++) {
+    assert.equal(layout.rings[i] - layout.rings[i - 1], DOME_PITCH, "the arcs keep one pitch");
+  }
+  assert.equal(layout.guides.circles.length, layout.rings.length, "one faint circle per arc");
+  for (const circle of layout.guides.circles) {
+    assert.equal(circle.kind, "dome");
+    assert.ok(layout.rings.includes(circle.r), "a guide circle is not one of the arcs");
+  }
+  for (const point of layout.nodes.filter((p) => p.y < 0)) {
+    const radius = Math.hypot(point.x, point.y);
+    assert.ok(layout.rings.some((r) => Math.abs(radius - r) < 1e-6),
+      `a dome name at radius ${radius.toFixed(1)} is on no arc`);
+  }
+  assert.equal(layout.guides.lines.length, 6, "the dome's six bearing spokes");
+  assert.deepEqual(layout.rows, [DOME_GROUND_DROP]);
+});
+
+await check("the eight looks are eight different arrangements, not recolours", async () => {
+  const nodes = nodesFor(40);
+  const signatures = new Map();
+  for (const id of LOOK_IDS) {
+    const layout = layoutFor(id, nodes);
+    const key = JSON.stringify(layout.nodes.map((p) => [Math.round(p.x * 100), Math.round(p.y * 100)]));
+    assert.ok(!signatures.has(key), `${id} draws exactly the same picture as ${signatures.get(key)}`);
+    signatures.set(key, id);
+  }
+  assert.equal(signatures.size, LOOK_IDS.length);
+  // Each also has its own proportions: the ratio of a look's widest span to its
+  // tallest is not another look's, which is what stops five of them reading as
+  // one shape in five colours.
+  const shapes = LOOK_IDS.map((id) => {
+    const layout = layoutFor(id, nodes);
+    const xs = layout.nodes.map((p) => p.x);
+    const ys = layout.nodes.map((p) => p.y);
+    const wide = Math.max(...xs) - Math.min(...xs);
+    const tall = Math.max(...ys) - Math.min(...ys);
+    return { id, ratio: +(wide / Math.max(1, tall)).toFixed(2) };
+  });
+  const distinct = new Set(shapes.map((s) => s.ratio));
+  assert.ok(distinct.size >= 6,
+    `only ${distinct.size} of ${shapes.length} looks have their own proportions: `
+    + shapes.map((s) => `${s.id} ${s.ratio}`).join(", "));
+  console.log(`      shapes: ${shapes.map((s) => `${s.id} ${s.ratio}`).join(", ")}`);
+});
+
 /* ── 6. the bound, no overlap, and the safe fallback guard ────────────── */
 
 await check("every layout respects the picture's own 240-node bound", async () => {
   assert.equal(MAX_LAYOUT_NODES, MAX_RENDERED_NODES,
     "galaxy-presets.js and galaxy-view.js disagree about the cap");
   const many = nodesFor(500);
-  for (const id of ["star-map", "clean-tree", "zen-ring"]) {
+  for (const id of LOOK_IDS) {
     const layout = layoutFor(id, many);
     assert.equal(layout.nodes.length, MAX_LAYOUT_NODES, `${id} ignored the cap`);
     assert.deepEqual(layout.nodes.map((p) => p.id), many.slice(0, MAX_LAYOUT_NODES).map((n) => n.id),
@@ -295,7 +520,7 @@ await check("every layout respects the picture's own 240-node bound", async () =
 
 await check("no two names are closer than the layout's gap, at 240 and at every smaller size tried", async () => {
   for (const size of [1, 2, 5, 6, 7, 20, 100, 239, 240]) {
-    for (const id of ["star-map", "clean-tree", "zen-ring"]) {
+    for (const id of LOOK_IDS) {
       const layout = layoutFor(id, nodesFor(size));
       assert.equal(layout.nodes.length, size);
       const pair = nearestPair(layout);
@@ -324,12 +549,12 @@ await check("the safe-fallback guard rejects a bad layout instead of drawing it"
 
 await check("only the three built layouts can be restored; anything else is the constellation", async () => {
   assert.equal(typeof PRESET_STORAGE_KEY, "string");
-  for (const id of ["star-map", "clean-tree", "zen-ring"]) {
+  for (const id of LOOK_IDS) {
     assert.equal(storedPreset(id), id);
     assert.equal(storedPreset(` ${id} `), id, "surrounding whitespace is tolerated");
   }
   assert.equal(storedPreset(DEFAULT_PRESET), DEFAULT_PRESET);
-  for (const raw of ["nebula", "planetary-orbit", "no-such-layout", "", "  ", null,
+  for (const raw of ["no-such-layout", "constellation ", "", "  ", null,
                      undefined, 42, { id: "star-map" }]) {
     assert.equal(storedPreset(raw), DEFAULT_PRESET, `stored value ${JSON.stringify(raw)}`);
   }
@@ -337,39 +562,46 @@ await check("only the three built layouts can be restored; anything else is the 
 
 /* ── 8. the keyboard decision, without a page ─────────────────────────── */
 
-await check("hotkeys 6/7/8 apply a layout, a second press returns to the constellation", async () => {
+await check("hotkeys 1-8 apply a layout, a second press returns to the constellation", async () => {
+  assert.deepEqual(switchRequest("1", DEFAULT_PRESET),
+    { action: "apply", key: "1", id: "planetary-orbit" });
+  assert.deepEqual(switchRequest("3", "star-map"), { action: "apply", key: "3", id: "nebula" });
   assert.deepEqual(switchRequest("6", DEFAULT_PRESET), { action: "apply", key: "6", id: "star-map" });
   assert.deepEqual(switchRequest("7", "star-map"), { action: "apply", key: "7", id: "clean-tree" });
   assert.deepEqual(switchRequest("8", "clean-tree"), { action: "apply", key: "8", id: "zen-ring" });
   assert.deepEqual(switchRequest("8", "zen-ring"),
     { action: "apply", key: "8", id: DEFAULT_PRESET },
   "pressing the active preset's key goes back to the constellation");
+  assert.deepEqual(switchRequest("5", "radar-dome"),
+    { action: "apply", key: "5", id: DEFAULT_PRESET });
   // The stage's own keys are not presets: pan/zoom/fit keep working.
   for (const key of ["0", "ArrowLeft", "+", "-", "Escape", "a", "9"]) {
     assert.equal(switchRequest(key, DEFAULT_PRESET), null, `key ${key} was stolen from the stage`);
   }
 });
 
-await check("hotkeys 1-5 say the rich presets are not built yet, and change nothing", async () => {
-  assert.deepEqual(switchRequest("1", "star-map"),
-    { action: "planned", key: "1", id: "planetary-orbit" });
-  assert.deepEqual(switchRequest("5", "zen-ring"),
-    { action: "planned", key: "5", id: "radar-dome" });
-  assert.match(presetStatus("planetary-orbit"), /not built yet/);
+await check("every hotkey asks for a look that really lays out", async () => {
+  for (const look of BUILT_PRESETS) {
+    const request = switchRequest(look.key, DEFAULT_PRESET);
+    assert.equal(request.action, "apply", `${look.key} did not ask to apply a look`);
+    const layout = layoutFor(request.id, nodesFor(20));
+    assert.ok(layout, `${look.key} names ${request.id}, which has no layout`);
+    assert.equal(layout.id, request.id, `${look.key} drew ${layout.id}`);
+  }
 });
 
 /* ── 9. performance: a switch must not be a noticeable pause ──────────── */
 
-await check("laying out 240 names is fast enough to feel instant (all three under 250 ms)", async () => {
+await check("laying out 240 names is fast enough to feel instant (all eight under 250 ms)", async () => {
   const many = nodesFor(240);
   const started = performance.now();
-  for (const id of ["star-map", "clean-tree", "zen-ring"]) {
+  for (const id of LOOK_IDS) {
     const layout = layoutFor(id, many);
     assert.equal(layout.nodes.length, 240);
   }
   const elapsed = performance.now() - started;
-  assert.ok(elapsed < 250, `three 240-name layouts took ${elapsed.toFixed(1)} ms`);
-  console.log(`      (three 240-name layouts: ${elapsed.toFixed(1)} ms)`);
+  assert.ok(elapsed < 250, `eight 240-name layouts took ${elapsed.toFixed(1)} ms`);
+  console.log(`      (eight 240-name layouts: ${elapsed.toFixed(1)} ms)`);
 });
 
 /* ── 10. the real Brain window ────────────────────────────────────────── */
@@ -401,6 +633,15 @@ async function gotoGalaxy(page) {
 const guides = (page, selector) => page.locator(`#graph-svg [data-layer="guides"] ${selector}`);
 const chip = (page, id) => page.locator(`#graph-presets button[data-preset="${id}"]`);
 const status = (page) => page.locator("#graph-preset-status").innerText();
+
+/** Wait until the status line says this look is the one on screen - the one
+ *  signal every flat look gives, including the nebula (which has no guides). */
+async function waitForLook(page, label) {
+  await page.waitForFunction(
+    ({ want }) => document.getElementById("graph-preset-status").textContent
+      .startsWith(`Layout: ${want}.`),
+    { want: label });
+}
 /** How many fact-sharing links are actually PAINTED (not just in the DOM). A
  *  flat layout hides them with CSS: they are the physics picture's edges and
  *  turn a stationary diagram into a web. */
@@ -418,26 +659,24 @@ async function saveShot(page, name) {
   await page.screenshot({ path: join(EVIDENCE, name) });
 }
 
-await check("the real window has the nine chips; the five not-built ones are disabled", async () => {
+await check("the real window has the nine chips and every one of them works", async () => {
   const page = await openBrain();
   await gotoGalaxy(page);
-  assert.equal(await page.locator("#graph-presets button").count(), 9);
-  assert.equal(await page.locator("#graph-presets button:disabled").count(), 5);
-  for (const p of PLANNED_PRESETS) {
-    const label = (await chip(page, p.id).innerText()).replace(/\s+/g, " ");
-    assert.match(label, new RegExp(`^${p.key} ${p.label} not built yet$`), label);
-    assert.equal(await chip(page, p.id).isDisabled(), true, `${p.id} is not disabled`);
-  }
-  for (const p of BUILT_PRESETS) {
-    assert.equal(await chip(page, p.id).isDisabled(), false, `${p.id} should be usable`);
+  assert.equal(await page.locator("#graph-presets button").count(), 1 + BUILT_PRESETS.length);
+  assert.equal(await page.locator("#graph-presets button:disabled").count(), 0,
+    "a chip is still disabled - nothing is 'not built yet' since 2026-10-27");
+  for (const look of BUILT_PRESETS) {
+    const label = (await chip(page, look.id).innerText()).replace(/\s+/g, " ");
+    assert.equal(label, `${look.key} ${look.label}`, `${look.id}'s chip does not name its key`);
+    assert.equal(await chip(page, look.id).isDisabled(), false, `${look.id} is not usable`);
   }
   assert.equal(await chip(page, DEFAULT_PRESET).getAttribute("aria-pressed"), "true");
-  // A keyboard/screen-reader user cannot focus the disabled planned chips, so
-  // the group and the stage must SAY the five planned presets exist (audit F2).
-  assert.match(await page.locator("#graph-presets").getAttribute("aria-label"),
-    /five planned presets that are not built yet/);
+  // Nothing in the window may still tell the owner a look does not exist.
+  assert.doesNotMatch(await page.locator("#graph-presets").innerText(), /not built/i);
+  assert.doesNotMatch(await page.locator("#graph-presets").getAttribute("aria-label"),
+    /not built|planned/i);
   assert.match(await page.locator(".galaxy-stage").getAttribute("aria-label"),
-    /Presets 1 to 5 are planned and not built yet/);
+    /Press 1 to 8 for a layout/);
   // The chip row must not make the window scroll sideways (the first version
   // did: the zen-ring evidence screenshot was cut off on the left).
   const overflow = await page.evaluate(() =>
@@ -501,17 +740,28 @@ await check("hotkey 7 draws the four-row clean tree, and a chip click switches t
   await page.close();
 });
 
-await check("hotkeys 1-5 announce 'not built yet' and leave the layout alone", async () => {
+await check("hotkey 1 draws the planetary orbits, and 3 the cloud with no guides at all", async () => {
   const page = await openBrain();
   await gotoGalaxy(page);
-  await pressKey(page, "8");
-  await page.waitForFunction(() =>
-    document.querySelectorAll('#graph-svg [data-layer="guides"] circle.galaxy-guide-ring').length === 1);
+  await pressKey(page, "1");
+  await waitForLook(page, "Planetary orbit");
+  assert.equal(await chip(page, "planetary-orbit").getAttribute("aria-pressed"), "true");
+  assert.ok(await guides(page, "path.galaxy-guide-chord").count() >= 2,
+    "the planetary orbit drew no orbits");
+  assert.equal(await guides(page, "line.galaxy-guide-line").count(), 0,
+    "the planetary orbit is not a star map: it has no spokes");
+  assert.equal(await visibleLinks(page), 0,
+    "a flat look must not draw the constellation's fact-sharing web");
+  await saveShot(page, "g0-planetary-orbit-32.png");
+  // The nebula is the one look with NO guides: it is a cloud, and the page must
+  // draw nothing under it rather than leaving the last look's rings behind.
   await pressKey(page, "3");
-  assert.match(await status(page), /^Nebula is not built yet\./);
-  assert.equal(await chip(page, "zen-ring").getAttribute("aria-pressed"), "true",
-    "a planned preset changed the layout");
-  assert.equal(await guides(page, "circle.galaxy-guide-ring").count(), 1);
+  await waitForLook(page, "Nebula");
+  assert.equal(await guides(page, "path.galaxy-guide-chord").count(), 0,
+    "the nebula kept the planetary orbits' guide paths");
+  assert.equal(await guides(page, "circle.galaxy-guide-ring").count(), 0);
+  assert.equal(await visibleLinks(page), 0);
+  await saveShot(page, "g0-nebula-32.png");
   assert.deepEqual(page.__errors, [], `the page logged errors: ${page.__errors.join("; ")}`);
   await page.close();
 });
@@ -554,16 +804,9 @@ await check("with the real 32-node graph every layout keeps the dots apart and t
   const page = await openBrain();
   await gotoGalaxy(page);
   const counts = { buttons: 0, labels: 0 };
-  for (const [id, key, waitSelector] of [
-    ["star-map", "6", 'circle.galaxy-guide-ring'],
-    ["clean-tree", "7", 'line.galaxy-guide-line'],
-    ["zen-ring", "8", 'circle.galaxy-guide-ring'],
-  ]) {
+  for (const [id, key, label] of FLAT_LOOKS) {
     await pressKey(page, key);
-    await page.waitForFunction(
-      ({ selector }) => document.querySelectorAll(
-        `#graph-svg [data-layer="guides"] ${selector}`).length > 0,
-      { selector: waitSelector });
+    await waitForLook(page, label);
     assert.equal(await visibleLinks(page), 0, `${id}: the fact-sharing web is still drawn`);
     const metrics = await page.evaluate(() => {
       const cs = [...document.querySelectorAll("#graph-overlay .galaxy-node-button")]
@@ -624,16 +867,9 @@ await check("with the real 32-node graph every layout keeps the dots apart and t
 await check("Fit and the 0 key keep every label inside the picture under each flat layout", async () => {
   const page = await openBrain();
   await gotoGalaxy(page);
-  for (const [id, key, waitSelector] of [
-    ["star-map", "6", 'circle.galaxy-guide-ring'],
-    ["clean-tree", "7", 'line.galaxy-guide-line'],
-    ["zen-ring", "8", 'circle.galaxy-guide-ring'],
-  ]) {
+  for (const [id, key, label] of FLAT_LOOKS) {
     await pressKey(page, key);
-    await page.waitForFunction(
-      ({ selector }) => document.querySelectorAll(
-        `#graph-svg [data-layer="guides"] ${selector}`).length > 0,
-      { selector: waitSelector });
+    await waitForLook(page, label);
     // The two general fit actions must use the wider margin a flat layout needs
     // (audit finding F1): neither may clip the outer labels.
     for (const action of ["0", "Fit"]) {
