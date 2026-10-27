@@ -3169,21 +3169,29 @@ drift. The verbs are ready for it, and JARVIS-API section 21 documents the
 shapes it will use.
 
 **The Galaxy layout presets are the desktop's, on purpose** (2026-10-23; the
-Galaxy rework's Phase G0: `jarvis-desktop/src/galaxy-presets.js`, `brain.js`).
-The three flat views - **Star map**, **Clean tree** and **Zen ring** - and the
-switcher that chooses them (chips in the Galaxy bar, hotkeys `6`/`7`/`8`, a
-remembered choice) are the **desktop Brain window's alone** for now: the phone
-deliberately has no editable memory graph - since 2026-10-26 it draws a
-read-only picture of the Galaxy with the one zen-ring layout, and the preset
-switcher stays the desktop's (the standing rule recorded elsewhere in this
-section) - and the editable HUD stage keeps its own canvas renderer until Phase
-G1 shares the same layout math with it. Nothing here reads or writes the PC: the
-layouts are pure position maths, the choice is stored on this device only, in
-the Brain window's own `localStorage` (`jarvis.galaxy.preset`); unlike the
-theme, nothing about it is persisted on the PC and no route is involved. No
-backend route or phone source names any of it - so `tools/check_parity.py` has
-nothing to classify. The five rich 3D presets the blueprint also lists are shown
-as disabled "not built yet" chips, never faked.
+Galaxy rework's Phase G0: `jarvis-desktop/src/galaxy-presets.js`, `brain.js`;
+all eight looks built 2026-10-27). The **eight looks** - **Star map**,
+**Clean tree**, **Zen ring**, **Planetary orbit**, **Neural arbor**, **Nebula**,
+**DNA helix** and **Radar dome**, with the constellation as the default - and the
+switcher that chooses them (chips in the Galaxy bar, hotkeys `1`-`8`, a
+remembered choice; and, since 2026-10-27, a row of the same nine choices in the
+HUD's own Galaxy view) are the **desktop's alone**: the phone deliberately has no
+editable memory graph - since 2026-10-26 it draws a read-only picture of the
+Galaxy with the one zen-ring layout, and the look switcher stays the desktop's
+(the standing rule recorded elsewhere in this section). The HUD keeps its **own
+canvas renderer**; it carries an inline mirror of the same layout maths (the page
+is one vendored file with no imports) and `jarvis-desktop/tests/hud.mjs` compares
+the two position for position, so the two windows cannot drift. Nothing here
+reads or writes the PC: the layouts are pure position maths, the choice is stored
+on this device only, in each window's own `localStorage`
+(`jarvis.galaxy.preset` in the Brain window, `jarvis.galaxy.hud.look` in the HUD);
+unlike the theme, nothing about it is persisted on the PC and no route is
+involved. No backend route or phone source names any of it - so
+`tools/check_parity.py` has nothing to classify. The five rich views are the
+**flat, 2D halves** of what the blueprint lists: deterministic positions and
+guide lines in the same shape, with no 3D engine, no per-preset control and no
+new dependency - the blueprint's WebGL engines and their controls (warp orbit,
+sweep laser, lockdown dome) are not built, and no screen claims them.
 
 **The medical record and the local medical model are PC-only, and that is
 one-sided on purpose** (2026-10-24; `backend/jarvis_medical_advocate.py`,

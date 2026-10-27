@@ -187,7 +187,10 @@ is a canvas; the band itself keeps its words): counts and connections come from 
 already makes. It is hidden while the list shows a past date. The owner's other two options (a
 still picture, and the animated 8-preset canvas) were **not** taken at the time: the signed 2026-10-21
 ruling kept the phone read-only, and the owner reversed its zero-canvas part for the picture alone
-on 2026-10-26; the desktop's five rich animated presets do not exist to adapt yet. Proven by
+on 2026-10-26; the animated 8-preset canvas is still not something the phone can adapt, because the
+desktop's eight looks are **flat 2D layouts**, not the blueprint's animated 3D engines (they were
+built as flat looks on 2026-10-27, with no 3D, no per-preset control and no new dependency - see
+`ARCHITECTURE.md` section 8). Proven by
 `GalaxyBandTest.kt` (pure data), the source pins in
 `PhoneGalaxyTest.kt`, and the picture's own `GalaxyPictureTest.kt` with its generated fixture;
 the runtime look, the TalkBack order and a real tap are field-test rows, not passes.
