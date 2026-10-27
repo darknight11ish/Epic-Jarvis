@@ -1016,6 +1016,16 @@ def t_a_hud_reminder_really_lands():
             api_jobs = w.s.status().get("jobs") or []
             check(f"... and GET /api/schedule's body lists it: {words!r}",
                   any(want in (j.get("text") or "") for j in api_jobs), api_jobs)
+            row = next((j for j in api_jobs if want in (j.get("text") or "")), None)
+            # The HUD's own reader keeps a row only when it looks like this
+            # (jarvis_hud.html `readSchedule`'s `ok()`: an `s` + 10 hex id and a
+            # known kind/text/state). This is the contract its Reminders list
+            # draws; the Playwright suite hud.mjs drives that list's DOM over
+            # GET /api/schedule in CI (REMINDERS_SCHEDULE fixture).
+            check(f"... and the row passes the HUD reader's own filter: {words!r}",
+                  row is not None and re.fullmatch(r"s[0-9a-f]{10}", row.get("id") or "")
+                  and row.get("kind") == "reminder" and row.get("text") == want
+                  and row.get("state") == "active", row)
     finally:
         S._SCHED = None
     # The HUD half of the chain: the page draws GET /api/schedule through the
@@ -1028,6 +1038,17 @@ def t_a_hud_reminder_really_lands():
     check("the HUD page's Reminders tab reads GET /api/schedule",
           'fetch("/api/schedule",' in page or "fetch('/api/schedule'" in page,
           "no read of /api/schedule in the HUD page")
+    # ...and the LIST that draws those jobs is driven in CI by the Playwright
+    # suite hud.mjs (a browser suite: NOT run here), over a GET /api/schedule
+    # fixture, asserting #reminders-body rows and titles. So: this test proves
+    # the chat request really writes the row into the body the page reads, and
+    # hud.mjs proves the page renders that body's jobs as rows.
+    hud_suite = (REPO / "jarvis-desktop" / "tests" / "hud.mjs").read_text(encoding="utf-8")
+    check("the HUD Reminders list's rendering is pinned in CI against /api/schedule (hud.mjs)",
+          "REMINDERS_SCHEDULE" in hud_suite
+          and "#reminders-body .rem-row" in hud_suite
+          and 'url.pathname === "/api/schedule"' in hud_suite,
+          "hud.mjs no longer drives the Reminders list from a /api/schedule fixture")
     # And the half that must never pass silently: a model that only SAYS it
     # added a reminder gets the plain correction line (2026-10-27).
     import jarvis_claims as CL
