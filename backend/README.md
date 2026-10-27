@@ -6,16 +6,18 @@
 > is the detail.
 
 
-One hundred and forty-six patches against the Jarvis backend, each meant to
+One hundred and fifty-eight patches against the Jarvis backend, each meant to
 have an executable test beside it. One does not: `vram-estimate.patch` adds
 `_cache_bits_from_env` and `batch_surcharge_mb` to `jarvis_models.py`, and no
 suite names either function (checked 2026-10-14 with `git grep` over
 `backend/test_*.py`). Both figures come from the `$PATCHES` list in
 `scripts/apply-patches.ps1`, which is the list the installer actually walks -
-all 146 `.patch` files in this folder are in it, one each, and the script
+all 158 `.patch` files in this folder are in it, one each, and the script
 refuses to run if a `.patch` file here is missing from it. That is the number
 to trust, because the list grows. The paragraphs below were written as the list
 grew, so the counts in them are the count at the time.
+*(Both counts were re-measured on 2026-10-27, when `f01-manual-lane-gate.patch`
+made it 158: they read 146 before, so they had drifted 11 behind the list.)*
 The last four of the older ones - `ui-control-wiring.patch`, `ollama-direct.patch`,
 `tool-calling-wiring.patch` and `loopback-too.patch` - sit outside the ordered
 stack below: each only touches its own few lines, shared with no other patch
@@ -212,6 +214,7 @@ on a throwaway copy instead.
 | `setup.patch` | `jarvis_hud.py` | **The owner's setup questionnaire - the backend half only, no app UI yet** (owner, 2026-10-20: a first-run / re-runnable series of multiple-choice questions that set the defaults, with a summary accepted before anything changes; design `.dsh-scratch/DESIGN-SETUP-QUESTIONNAIRE-2026-10-20.md`, `docs/JARVIS-API.md` section 147). ONE install block - `jarvis_setup.install(Handler, ...)` - answering `GET /api/setup` (the ordered questions, current values, last answers), `POST /api/setup/plan` (`{"answers": {...}}` -> a read-only summary: what changes at once and what raises a card) and `POST /api/setup/apply` (`{"answers": ..., "confirm": true}` -> per-setting outcomes). The rules are entirely in the shipped `jarvis_setup.py`, which is a GUIDE through the EXISTING setters: every option calls the same `jarvis_settings_registry` setter the matching Settings control calls, so every loosening change still raises its OWN existing card, one at a time (apply waits for that card before raising the next - never a combined/bulk card, never auto-approval, no new gate tier or action, no latch, no model switch). The preset answer is a RECOMMENDATION only; applying one stays the preset selector's own `POST /api/work/apply` card. Plan writes nothing; apply saves only the owner's choices and a completed timestamp in `setup.json` in the settings folder (no chat, facts, voice or files). Its install block is the chain's last, and `plugin-loader.patch` is re-anchored onto its last two printed lines and MUST stay last of all. Needs `jarvis_setup.py` (shipped whole); without it the routes are absent and the banner says so. The desktop and phone screens are the NEXT slices - no app calls these routes yet. |
 | `app-control.patch` | `jarvis_hud.py` | **App control on the phone - the backend half only, and OFF by default** (the owner's decisions of 2026-10-19: "fuller automation inside other apps", then "enable accessibility service with control by jarvis **as an option** in the android app", with an EMPTY allow-list and no read-only phase). The PC is the brain and the gate, the phone is the hands: TWO new route blocks, `POST /api/app-control/run` (validates the owner's allow-list and one atomic step, raises exactly ONE `change_own_config` card and returns a run id - **nothing runs before approval**) and `POST /api/app-control/step` (the phone asks for the ONE approved step, re-checked against its fresh screen snapshot: a changed screen STOPS the run rather than guess; Stop is immediate and needs no card; a done/failed result ends it). The rules are entirely in the shipped `jarvis_app_control.py`: an empty allow-list refuses everything, an unlisted app refuses, and password/credential/2FA fields, money/banking apps, send/post/share steps, delete/move steps, gate-protected files and any action but tap/swipe/type/back/home are refused BEFORE any card. The audit line is app + verb only - never the typed text or the screen's words; the card (a local approvals row) is the only place the exact step is written. **The feature is OFF**: `[app_control] enabled = false` in the framework template, a settings file with no `[app_control]` table reads as OFF, and this slice adds no way to switch it on - both routes answer "App control is switched off on this PC" until the next slice. It adds NO install block, touches no gate file and no tier row, and its context is `big-coder.patch`'s own last lines plus the `/api/memory/decide` block, so it applies to real text; it sits after `presets.patch` and before `setup.patch`, and `plugin-loader.patch` must stay LAST of all, and `_stack.py`'s jarvis_hud.py RATCHET does not move. Needs `jarvis_app_control.py` (shipped whole); without it the routes answer 503. The Android AccessibilityService, the allow-list Settings screen and the running banner/Stop are the NEXT slice - no app calls these routes yet. `docs/JARVIS-API.md` section 146 is the contract. |
 | `update-in-chat.patch` | `jarvis_gate.py` | **Updates in chat: "is there an update?", "what changed?", "update Jarvis"** (the owner's request, 2026-10-26; `docs/JARVIS-API.md` section 158). The two questions are answered from the same release manifest the app's own updater reads, and starting an update is ONE approval card (`desktop_update`, tier `ask`, PC only with Windows Hello in `jarvis_owner_check.PC_ONLY_ACTIONS`) that the desktop shell's own `update.rs` runs - nothing is downloaded before the yes. ONE hunk: the action joins the "a no is not a standing rule" set, at the END of the list, right after `uncensored-optins.patch`'s own last entry, so a "no" on that one card proposes no standing rule. It sits after `uncensored-optins.patch` and before `gate-touches.patch` (which `backend/test_gate_touches.py` requires to be the last patch writing `jarvis_gate.py`). It touches no other file, adds no route and no new module: `jarvis_quick.py` and the action's `[autonomy.tiers]` line are shipped whole in this repository, so this patch only puts the action's name in the gate's own table. |
+| `f01-manual-lane-gate.patch` | `jarvis_hud.py` | **F-01: a lane you pick by hand runs the privacy gates** (2026-10-27). `{"lane": "<cloud lane>", "auto": false}` reached a cloud model with private memory text, a tainted conversation, a picture or the owner's screen attached, because the manual path built its decision itself and ran NO gate. Both paths now come through the ONE `jarvis_router.choose()` call, the pick stands in for the owner's yes for that one question, and a pick the router would not have escalated stays on the local model with a plain reason in `X-Jarvis-Route`. No new wire field, no new gate tier, no app change. `backend/test_hud_manual_lane_gate.py` is the proof. See its own section at the end of this file. 
 
 ## The gate reads what an action touches, not the words on its card
 
@@ -19688,3 +19691,90 @@ immediately BEFORE `plugin-loader.patch`, which must stay last of all, and the
 suite also checks it applies to the owner's live `jarvis_hud.py` copy when one
 is present.
 
+## `f01-manual-lane-gate.patch` (2026-10-27): a lane you pick by hand runs the gates
+
+**F-01, a privacy bypass in the HUD server.** Found by two independent reviews
+on 2026-10-27 and re-verified against the published base before anything was
+changed.
+
+**What was wrong.** `POST /api/chat` picks a lane in `jarvis_hud.py`'s
+`do_POST`, and it had two paths.
+
+* The AUTOMATIC path (the normal one, `auto` absent or true) called
+  `jarvis_router.choose()`, which runs every gate in a fixed order: the
+  everyday model being one of Ollama's own cloud models, no lane offered,
+  Lockdown, a tainted conversation, a picture, the owner's screen's words, the
+  private-topic backstop, a real secret, the complexity threshold, the cloud
+  budget, and finally the owner's yes for this one question.
+* The MANUAL path (`"auto": false` with a `"lane"`) called
+  `_manual_decision(chosen, local_model)`, which built a `Decision` with
+  `gate: "manual"` and **ran no gate at all**.
+
+So any client that could reach the port with the pairing token could send
+`{"messages": [...], "lane": "<a cloud lane>", "auto": false}` and have that
+turn answered on a cloud model with private memory text, a tainted
+conversation, a picture, or the owner's screen attached - the five rules'
+per-use privacy gates, skipped by one request field. Neither shipping client
+sends `lane` today (checked: no `auto: false` chat body in `jarvis-desktop/src`
+or `jarvis-client`), which is why it was latent rather than seen - but the
+route accepts it, and the HUD's own lane list makes it reachable.
+
+**The rule now, in one sentence.** A manual pick of the local model is exactly
+what it always was. A manual pick of any OTHER lane - a cloud lane - is used
+only when the decision the automatic path would have made for this same turn
+landed on a cloud lane; otherwise the turn stays on the local model and the
+reason says why.
+
+Three pieces, and no new wire field:
+
+1. **One argument block, not two.** `if ROUTING:` now guards the single
+   `jarvis_router.choose(...)` call, and `manual_pick = not body.get("auto",
+   True)` is read inside it, so both paths reach that one call. A gate added to
+   it can no longer reach one path only.
+2. **The pick is the owner's yes for THAT question.** `owner_said_yes` becomes
+   `bool(body.get("cloud_yes")) or manual_pick`. The pick therefore answers
+   gate 6 and nothing else: every privacy, availability and budget gate still
+   runs first, in the same order. (Gate 4, the complexity threshold, and gate 5,
+   the cloud budget, do refuse a manual pick too - the router's own answer
+   decides what may leave this PC, not the pick. That is deliberate: it is the
+   only reading of "the same decision would have permitted a cloud lane" that
+   cannot be argued with. A product decision to let a pick outrank the
+   complexity heuristic is a one-line change in `_manual_lane()`.)
+3. **`_manual_lane(decide, chosen, local_model, lanes)`** - a pure function,
+   so its rule is proved by calling it - returns `(lane, reason, gate)`:
+   local+`"you chose this lane"`/`"manual"` for a local pick; the chosen lane
+   when `decide.gate == "escalate"` and the name is in `_lane_names()`; and
+   otherwise the local model with `"you chose <lane>, but this turn stays local:
+   <the router's own sentence>"` and the router's own gate name. `_manual_decision()`
+   turns that into the `Decision` the rest of the turn reads, and with no
+   router at all (`ROUTING` false, so `decide is None`) a cloud pick fails
+   closed to the local model.
+
+The reason and the gate ride out in `X-Jarvis-Route` exactly as a refused
+automatic decision's do - `lane` is the local model, `gate` is the router's own
+(`"taint"`, `"screen"`, `"image"`, `"private"`, `"secret"`, `"budget"`,
+`"complexity"`, `"lockdown"`, `"unavailable"`, `"cloud_model"`), and `reason`
+is that one plain sentence. No header field was added; `where` is already
+`"local"` because it is computed from the lane that answered. Both apps read
+`gate` only when `where` is absent, and only `"escalate"` means cloud, so an
+older app draws a refused pick as the local answer it is.
+
+**What it costs.** Three of its four hunks read the owner's own HUD text - the
+manual path exists nowhere else, and `_manual_decision()` itself is the
+function whose gates were missing - so `_stack.py`'s `jarvis_hud.py` RATCHET
+moves 58 -> 61 and `tools/check_patch_original_text.py`'s pin records
+`f01-manual-lane-gate.patch` at 3 hunks / 37 lines, with the reason in both.
+The fourth hunk (`owner_said_yes=`) anchors on the line `cloud-say-yes.patch`
+writes and invents nothing. It touches no install block, no gate row, no tier
+line and no app file.
+
+**The proof** is `backend/test_hud_manual_lane_gate.py`: the patch applies to
+the published base and reverses out of it byte for byte; the patched file
+parses; there is exactly ONE `jarvis_router.choose()` call in it (counted as
+an ast node); `_manual_lane` is driven with REAL `jarvis_router` decisions for
+a tainted conversation, a picture, the owner's screen, a private question, a
+pasted secret, Lockdown, a spent budget, an Ollama cloud model as the everyday
+model, a lane this PC does not offer, and no router at all; the local pick is
+shown unchanged; and the CONTROL lifts the OLD `_manual_decision()` - the
+defect - out of the patch's own removed lines and shows it returning the CLOUD
+lane for the same tainted turn, which is what fails on today's code.
