@@ -2,7 +2,7 @@
 
 > **Written, tested and ready to apply:** `backend/appearance.patch`. This page
 > is the contract; that patch is the implementation of it for `jarvis_hud.py`,
-> with fourteen checks in `backend/test_appearance.py`.
+> with nineteen checks in `backend/test_appearance.py` (the merge is in there).
 
 The desktop's Faces window edits which face Jarvis wears and how each of the
 eight states looks. That choice is **data, not drawing code**, which is the
@@ -66,8 +66,10 @@ rule for a false capability.
 
 ### `POST /api/appearance`
 
-Body is the document. `face` and `bindings` are the only fields a client sends
-that matter; the server owns `updated` and should stamp it.
+Body is the part of the document the caller owns. **A key that is present
+replaces its stored value; a key that is absent keeps it** (the merge rule
+below). `face` and `bindings` are the only fields a client sends that matter;
+the server owns `updated` and stamps it.
 
 ```json
 { "ok": true, "updated": 1758067200.0 }
@@ -75,9 +77,39 @@ that matter; the server owns `updated` and should stamp it.
 
 ## Rules worth keeping
 
-**Last write wins.** There is one owner and two of their devices; a merge
-strategy would be machinery for a conflict that does not happen. The desktop
-stamps `updated` locally too, so a server that ignores the field still behaves.
+**Last write wins, key by key.** There is one owner and two of their devices; a
+merge strategy would be machinery for a conflict that does not happen. The
+desktop stamps `updated` locally too, so a server that ignores the field still
+behaves. Two devices setting the SAME key within the same second still end with
+one of them — that is the rule, not an accident.
+
+**A partial write MERGES; it does not replace.** This is a correctness rule,
+not a convenience, and it was a real defect before 2026-10-26: the write used
+to replace the whole document, and three writers send three different shapes.
+The phone sends `bindings` on every push and a `face` only once its owner has
+picked one (`AppearanceStore.toSyncDocument` leaves a blank face out), so the
+first colour change from a fresh phone wrote `face: null` and erased the face
+the desktop was wearing. The desktop's own document has the same shape when no
+face is chosen. Now an absent key keeps its stored value, and only the request
+is validated, so a document already on disk that a newer spec would refuse
+cannot make a colour change fail.
+
+**Clearing is explicit.** Because an absent key now means "leave it alone",
+forgetting something has to be said: `"face": null` (or `""`) clears the face,
+and `"bindings": {}` clears every state binding so each client falls back to
+the spec's defaults.
+
+**Two narrow ways a save can still lose a half, recorded rather than claimed
+away.** The merge covers the ordinary partial document, not two rarer cases.
+The server is a `ThreadingHTTPServer` and the read-modify-write has no lock, so
+two saves that overlap inside the server can both read the same old document
+and the second write can carry the first one's stale other half. And
+`_appearance_view` cannot tell a corrupt file from one that is unreadable just
+now, so a save made in that moment merges onto an empty document and can lose
+the rest. Both were found by the independent review of 2026-10-26; closing
+them means a `threading.Lock` and a "could not read just now" refusal, and is
+the obvious next change if either is ever seen. The windows are small: one
+owner, two devices.
 
 **Validate against the spec, and reject rather than clamp.** An unknown
 `pattern` or `color` should be a 400 naming the offender. A server that

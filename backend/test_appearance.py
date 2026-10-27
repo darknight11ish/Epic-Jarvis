@@ -5,7 +5,12 @@
 
 `py_compile` said the patch was fine while `time` was unimported and the
 palette walk found zero colours. Neither is a syntax error; both would have
-shipped. So this extracts the four helpers and runs them.
+shipped. So this extracts the appearance helpers and runs them.
+
+Since 2026-10-26 it also proves the MERGE: a save that names one key keeps
+the other half's stored value, which is the defect a fresh phone pushing its
+colours could hit (it sends `bindings` and leaves a blank face out, so the
+old replace-everything write cleared the face the desktop was wearing).
 
 WHERE THE HELPERS COME FROM. `jarvis_hud.py` is the owner's own file and is not
 in this repository, so in CI this suite used to be skipped BY NAME and its 14
@@ -144,10 +149,88 @@ check("a refused save leaves the stored document alone", rejected_writes_nothing
 
 def publishes():
     ns["published"] = []
-    ns["_appearance_save"]({"bindings": {"idle": {"pattern": "solid", "color": "ice-3"}}})
+    ns["_appearance_save"]({"face": "orbit",
+                            "bindings": {"idle": {"pattern": "solid", "color": "ice-3"}}})
+    ns["_appearance_save"]({"face": "spiral"})
     kinds = [k for k, _ in ns.get("published", [])]
-    assert kinds == ["appearance"], kinds
-check("a save publishes an event so the other client repaints", publishes)
+    assert kinds == ["appearance", "appearance"], kinds
+    # The event carries the MERGED document: the desktop and the phone both
+    # repaint from this body, so a face-only save that published a body with
+    # no bindings would blank the colours on every open client.
+    doc = ns["published"][-1][1]
+    assert doc["face"] == "spiral", doc
+    assert doc["bindings"]["idle"]["pattern"] == "solid", doc
+check("a save publishes the merged document so the other client repaints", publishes)
+
+# ---------------------------------------------------------------- the merge ----
+#
+# `_appearance_save` used to REPLACE the whole document, and that was a real
+# defect rather than a style: three writers send three different shapes. The
+# phone sends `bindings` and only sends `face` once its owner has picked one
+# (`AppearanceStore.toSyncDocument`), so the first colour change from a fresh
+# phone wrote `face: null` and erased the face the desktop was wearing. These
+# checks pin the merge: a key that is present replaces, a key that is absent
+# keeps its stored value, and clearing is the one thing that must be said out
+# loud.
+
+def face_only_keeps_the_colours():
+    ns["_appearance_save"]({"face": "orbit",
+                            "bindings": {"idle": {"pattern": "pulse", "color": "violet-4"},
+                                         "thinking": {"pattern": "sweep",
+                                                      "params": {"offset_deg": 246}}}})
+    code, out = ns["_appearance_save"]({"face": "arc"})
+    assert code == 200, (code, out)
+    view = ns["_appearance_view"]()
+    assert view["face"] == "arc", view
+    assert view["bindings"]["idle"] == {"pattern": "pulse", "color": "violet-4"}, view
+    assert view["bindings"]["thinking"]["pattern"] == "sweep", view
+check("a face-only save changes the face and leaves every colour binding", face_only_keeps_the_colours)
+
+def bindings_only_keeps_the_face():
+    ns["_appearance_save"]({"face": "redpanda",
+                            "bindings": {"idle": {"pattern": "solid", "color": "ice-3"}}})
+    code, out = ns["_appearance_save"]({"bindings": {
+        "thinking": {"pattern": "comet", "color": "amber-4"}}})
+    assert code == 200, (code, out)
+    view = ns["_appearance_view"]()
+    # This is the pre-existing defect the merge fixes: the phone's fresh
+    # colour push used to leave this None.
+    assert view["face"] == "redpanda", view
+    assert view["bindings"]["thinking"]["pattern"] == "comet", view
+check("a bindings-only save keeps the face", bindings_only_keeps_the_face)
+
+def null_clears_the_face():
+    ns["_appearance_save"]({"face": "orbit",
+                            "bindings": {"idle": {"pattern": "solid", "color": "ice-3"}}})
+    code, out = ns["_appearance_save"]({"face": None})
+    assert code == 200, (code, out)
+    view = ns["_appearance_view"]()
+    assert view["face"] is None, view
+    assert view["bindings"]["idle"]["pattern"] == "solid", view
+check("an explicit null clears the face and nothing else", null_clears_the_face)
+
+def empty_bindings_clear_them():
+    ns["_appearance_save"]({"face": "orbit",
+                            "bindings": {"idle": {"pattern": "solid", "color": "ice-3"}}})
+    code, out = ns["_appearance_save"]({"bindings": {}})
+    assert code == 200, (code, out)
+    view = ns["_appearance_view"]()
+    assert view["bindings"] == {}, view
+    assert view["face"] == "orbit", view
+check("an explicit empty bindings clears them and keeps the face", empty_bindings_clear_them)
+
+def unknown_fields_are_ignored():
+    ns["_appearance_save"]({"face": "orbit",
+                            "bindings": {"idle": {"pattern": "solid", "color": "ice-3"}}})
+    before = ns["_appearance_view"]()
+    code, out = ns["_appearance_save"]({"theme": "midnight"})
+    assert code == 200, (code, out)
+    after = ns["_appearance_view"]()
+    assert after["face"] == before["face"], (before, after)
+    assert after["bindings"] == before["bindings"], (before, after)
+    assert after["updated"] > before["updated"], (before, after)
+check("an unknown field is ignored and the stored document survives it",
+      unknown_fields_are_ignored)
 
 def no_spec_says_so():
     ns2 = dict(ns); ns2["CONFIG_DIR"] = Path(tempfile.mkdtemp()); ns2["HERE"] = Path("/nonexistent")

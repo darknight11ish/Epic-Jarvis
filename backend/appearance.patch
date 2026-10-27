@@ -8,7 +8,7 @@
  from typing import Optional
  import sqlite3
  import sys
-@@ -239,6 +240,237 @@
+@@ -239,6 +240,316 @@
      return out
  
  
@@ -188,6 +188,33 @@
 +    The server stamps `updated`, not the client - two devices with two clocks
 +    are exactly the case the field exists to arbitrate, so the one machine both
 +    of them talk to owns it.
++
++    A key that is PRESENT replaces its stored value; a key that is ABSENT
++    keeps it. That is a correctness rule rather than a convenience: three
++    writers send three different shapes. The phone sends `bindings` on every
++    push and a `face` only once its owner has picked one
++    (`AppearanceStore.toSyncDocument` leaves a blank face out); the Faces
++    window sends a fresh document; and a change made by asking sends ONE key
++    (`_appearance_set_face` below). Replacing the whole document meant any
++    writer erased whatever it left out - a fresh phone pushing its colours
++    cleared the face the desktop was wearing.
++
++    Clearing is explicit, and it has to be: `"face": null` (or "") clears the
++    face, and `"bindings": {}` clears every state binding so each client goes
++    back to the spec's defaults. There is no other way to say "forget this",
++    because an absent key no longer means it.
++
++    TWO KNOWN LIMITS, written down rather than claimed away (independent
++    review, 2026-10-26). The read-modify-write below has no lock, and this
++    server is a ThreadingHTTPServer: two saves that overlap inside ONE server
++    can still read the same old document and lose one side. And
++    `_appearance_view` cannot tell a corrupt file from one that is unreadable
++    FOR A MOMENT, so a save made in that moment merges onto an empty document
++    and can lose the rest. Both windows are small (one owner, two devices)
++    and neither is the ordinary partial-document shape this merge fixes - the
++    phone's bindings-only push and the desktop's face-only write. A lock, or
++    a "could not read just now" refusal, would close them and is the obvious
++    next change if either is ever seen.
 +    """
 +    problem = _appearance_check(body)
 +    if problem:
@@ -211,8 +238,23 @@
 +        if safe is not params:
 +            bindings[state] = dict(binding, params=safe)
 +            clamped.append(state)
-+    doc = {"face": body.get("face") or None,
-+           "bindings": bindings,
++    # What is already stored, read the same tolerant way `_appearance_view`
++    # reads it, then the request overlaid key by key. Only the REQUEST is
++    # validated above: a document already on disk that a newer spec would
++    # refuse must not make a colour change fail.
++    stored = _appearance_view()
++    face = stored.get("face")
++    if not isinstance(face, str):
++        face = None
++    kept = stored.get("bindings")
++    if not isinstance(kept, dict):
++        kept = {}
++    if "face" in body:
++        face = body.get("face") or None
++    if "bindings" in body:
++        kept = bindings
++    doc = {"face": face,
++           "bindings": dict(kept),
 +           "updated": time.time()}
 +    try:
 +        APPEARANCE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -243,10 +285,47 @@
 +    return 200, out
 +
 +
++def _appearance_faces() -> list:
++    """[{id, name}] from the visual spec, or [] when this machine has none.
++
++    The ONE list the face is checked and spoken against, named from the spec
++    rather than typed here: a face added to `jarvis-visual-spec.json` appears
++    in the chat answer and in the refusal without editing Python.
++    """
++    spec = _visual_spec()
++    rows = spec.get("faces") if isinstance(spec, dict) else None
++    out = []
++    for row in rows if isinstance(rows, list) else []:
++        if not isinstance(row, dict) or not row.get("id"):
++            continue
++        out.append({"id": str(row["id"]),
++                    "name": str(row.get("name") or row["id"])})
++    return out
++
++
++def _appearance_set_face(face_id: str) -> tuple[int, dict]:
++    """ONE face - `face` and nothing else.
++
++    `_appearance_save`'s merge keeps the state colours exactly as they are, so
++    a change made by asking cannot erase what either app owns. Refuses when
++    this machine has no spec: a guessed id would be stored and then drawn as
++    nothing.
++    """
++    faces = _appearance_faces()
++    if not faces:
++        return 503, {"error": "no face list on this machine",
++                     "reason": "jarvis-visual-spec.json was not found, so the "
++                               "face cannot be checked and nothing was changed"}
++    if str(face_id) not in {row["id"] for row in faces}:
++        return 400, {"error": f"no face named {face_id!r}",
++                     "faces": [row["name"] for row in faces]}
++    return _appearance_save({"face": str(face_id)})
++
++
  def _desktop_action(route: str, body: dict):
      """Returns (http_status, payload). Every branch calls the module and
      returns what the module said - including its refusals."""
-@@ -273,6 +505,9 @@
+@@ -273,6 +584,9 @@
          return 202, {"ok": True, "started": ref,
                       "progress": "watch the event stream for kind=model"}
  
@@ -256,7 +335,7 @@
      if route == "/api/config":
          # Not implemented, and saying so is the honest answer. Writing this
          # file means rewriting the tiers that decide what Jarvis may do
-@@ -1379,7 +1614,8 @@
+@@ -1379,7 +1693,8 @@
                  return self._send(200, {"available": False,
                                          "error": f"{type(exc).__name__}: {exc}"})
  
@@ -266,7 +345,7 @@
              # The three desktop-only surfaces. Every one of these existed as a
              # Python module with no way to reach it over HTTP, which meant the
              # desktop brief was promising screens with nothing behind them.
-@@ -1392,6 +1628,43 @@
+@@ -1392,6 +1707,43 @@
                      return self._send(200, _models_view())
                  if path == "/api/config":
                      return self._send(200, _config_view())
@@ -310,7 +389,7 @@
                  return self._send(200, _skills_view())
              except Exception as exc:
                  return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
-@@ -1573,6 +1846,7 @@
+@@ -1573,6 +1925,7 @@
  
          if route in ("/api/models/install", "/api/models/switch",
                       "/api/models/rollback", "/api/config", "/api/skills/decide",

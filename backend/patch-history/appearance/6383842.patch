@@ -1,0 +1,320 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -28,6 +28,7 @@
+ import signal
+ import socket
+ import threading
++import time
+ from typing import Optional
+ import sqlite3
+ import sys
+@@ -239,6 +240,237 @@
+     return out
+ 
+ 
++# ---------------------------------------------------------------------------
++#   How Jarvis looks
++# ---------------------------------------------------------------------------
++#: Where the appearance document lives. Beside config.toml rather than inside
++#: it: that file decides what Jarvis may DO unattended and is deliberately not
++#: writable over HTTP, while this one decides only how it looks.
++APPEARANCE_FILE = CONFIG_DIR / "appearance.json"
++
++#: The eight states a binding may name. Kept here rather than derived from the
++#: spec so a missing spec file cannot make every write fail validation.
++_STATES = ("idle", "listening", "thinking", "speaking",
++           "approval", "standby", "error", "banked")
++
++
++def _visual_spec() -> dict:
++    """`jarvis-visual-spec.json`, if this machine has a copy.
++
++    Both clients bundle it; the server never needed it until now. It is used
++    only to check that a binding names a pattern and a colour that exist, so a
++    machine without it stores the document unvalidated and SAYS so rather than
++    refusing every write - the spec is the desktop's to ship, and a server that
++    could not find it would otherwise brick the feature it is meant to enable.
++    """
++    # The first three were the whole list, and on the owner's machine none of
++    # them hit: HERE is the backend folder, and the spec ships with the DESKTOP
++    # CLIENT, in jarvis-desktop/src/. So validation was off by default, every
++    # write came back with the "stored without checking" note, and a binding
++    # naming a pattern no renderer knows was accepted and then rendered as
++    # nothing. The note was honest; the search path was just wrong.
++    here_up = HERE.parent
++    for candidate in (
++            # Explicit wins. A path is the only thing that survives someone
++            # moving either tree, and this feature should not be the reason
++            # they cannot.
++            Path(os.environ["JARVIS_VISUAL_SPEC"])
++            if os.environ.get("JARVIS_VISUAL_SPEC") else None,
++            CONFIG_DIR / "jarvis-visual-spec.json",
++            HERE / "jarvis-visual-spec.json",
++            HERE / "src" / "jarvis-visual-spec.json",
++            # The desktop client's copy, as checked out beside the backend or
++            # one level up from it. This is where the file actually is.
++            HERE / "jarvis-desktop" / "src" / "jarvis-visual-spec.json",
++            here_up / "jarvis-desktop" / "src" / "jarvis-visual-spec.json",
++            here_up / "jarvis-visual-spec.json",
++    ):
++        if candidate is None:
++            continue
++        try:
++            if candidate.is_file():
++                return json.loads(candidate.read_text(encoding="utf-8"))
++        except Exception:
++            continue
++    return {}
++
++
++def _appearance_view() -> dict:
++    """The stored appearance, or an empty document.
++
++    An absent file is not an error and not a client with no face: a state that
++    is not bound keeps the spec's own default, so `{}` is the correct answer
++    for a machine nobody has edited yet.
++    """
++    doc = {"face": None, "bindings": {}, "updated": 0.0}
++    try:
++        if APPEARANCE_FILE.is_file():
++            stored = json.loads(APPEARANCE_FILE.read_text(encoding="utf-8"))
++            if isinstance(stored, dict):
++                doc.update({k: stored[k] for k in ("face", "bindings", "updated")
++                            if k in stored})
++    except Exception as exc:
++        # A corrupt file must not take the whole surface down with it. Report
++        # it and hand back the empty document, which is recoverable by saving.
++        return dict(doc, available=True,
++                    error=f"{type(exc).__name__}: {exc}",
++                    path=str(APPEARANCE_FILE))
++    return dict(doc, available=True, path=str(APPEARANCE_FILE))
++
++
++def _appearance_check(body: dict) -> str:
++    """Returns the first problem with a document, or "" if there is none.
++
++    Rejects rather than clamps. A server that silently dropped a bad binding
++    would leave the picker showing a choice that is in effect nowhere, which is
++    the worst of the three outcomes - worse than refusing, and worse than
++    storing something odd.
++    """
++    face = body.get("face")
++    if face is not None and not isinstance(face, str):
++        return "face must be a string or null"
++    bindings = body.get("bindings", {})
++    if not isinstance(bindings, dict):
++        return "bindings must be an object"
++
++    spec = _visual_spec()
++    faces = {f.get("id") for f in spec.get("faces", []) if isinstance(f, dict)}
++    patterns = {p.get("id") for p in spec.get("patterns", []) if isinstance(p, dict)}
++    # `palette.colors` is the flat list of all fifty, each `{id: "ice-3", …}`.
++    # `palette.families` carries only {id, name} — walking that for shades
++    # finds nothing and quietly turns colour checking off, which is worse than
++    # not checking at all because it looks like it is working.
++    colours = {c.get("id") for c in spec.get("palette", {}).get("colors", [])
++               if isinstance(c, dict)}
++
++    if faces and face and face not in faces:
++        return f"no face named {face!r} in the spec"
++
++    for state, binding in bindings.items():
++        if state not in _STATES:
++            # Not fatal in the other direction - a client reading this document
++            # ignores what it does not know - but writing one is a typo, and a
++            # typo that is silently kept looks like a feature that does not work.
++            return f"no state named {state!r}"
++        if not isinstance(binding, dict):
++            return f"{state}: binding must be an object"
++        pattern = binding.get("pattern")
++        if not isinstance(pattern, str) or not pattern:
++            return f"{state}: needs a pattern"
++        if patterns and pattern not in patterns:
++            return f"{state}: no pattern named {pattern!r} in the spec"
++        colour = binding.get("color")
++        if colour is not None:
++            if not isinstance(colour, str):
++                return f"{state}: color must be a string"
++            if colours and colour not in colours:
++                return f"{state}: no colour named {colour!r} in the spec"
++        params = binding.get("params", {})
++        if not isinstance(params, dict):
++            return f"{state}: params must be an object"
++    return ""
++
++
++def _clamp_flash(pattern: str, params: dict, spec: dict) -> dict:
++    """Clamp the one animation number the safety envelope actually names.
++
++    `limits.flash.flicker_rate_hz_max` (1.3) is a photosensitive-seizure
++    bound, not a style preference - the spec's own note says the face fills
++    over a quarter of the visual field at reading distance, so the
++    small-area exemption in the guidance does not apply. Only `flicker`'s
++    `rate_hz` reads from this envelope; every other pattern's numbers are
++    cosmetic (a period, a hue span, a gain) and clamping them would be
++    opinionated rather than safe.
++
++    A CLAMP, not a rejection - the line this module already draws for
++    structural problems: reject a bad id, clamp a dangerous number. A bound
++    colour or pattern that does not exist is a choice that is in effect
++    nowhere and _appearance_check refuses it outright; an animation speed
++    one device wrote is a value the OTHER device is about to render nearly
++    full-screen, and dropping the whole binding over one unsafe number in it
++    would be worse than gently taming that number.
++
++    Falls back to the spec's own documented ceiling (1.3) when no spec file
++    is on this machine, so a write is never LESS safe just because
++    `_visual_spec()` came back empty - unlike `_appearance_check`'s
++    structural checks, which have nothing to check against and say so.
++    """
++    if pattern != "flicker":
++        return params
++    limits = spec.get("limits", {}).get("flash", {}) if isinstance(spec, dict) else {}
++    try:
++        ceiling = float(limits.get("flicker_rate_hz_max", 1.3))
++    except (TypeError, ValueError):
++        ceiling = 1.3
++    rate = params.get("rate_hz")
++    if (isinstance(rate, (int, float)) and not isinstance(rate, bool)
++            and rate > ceiling):
++        params = dict(params)
++        params["rate_hz"] = ceiling
++    return params
++
++
++def _appearance_save(body: dict) -> tuple[int, dict]:
++    """Writes the appearance document. Cosmetic: this approves nothing.
++
++    The server stamps `updated`, not the client - two devices with two clocks
++    are exactly the case the field exists to arbitrate, so the one machine both
++    of them talk to owns it.
++    """
++    problem = _appearance_check(body)
++    if problem:
++        return 400, {"error": problem,
++                     "reason": ("a binding the renderers cannot resolve would "
++                                "show as a choice that is in effect nowhere")}
++
++    spec = _visual_spec()
++    spec_seen = bool(spec)
++    # Clamped per binding before anything is written. This is the promise
++    # made and not kept the first time this patch shipped: "our patch will
++    # clamp numeric animation params server-side" - it checked shape only,
++    # never the number, and the desktop's own local Randomise button could
++    # already generate an unsafe rate_hz with no second device involved at
++    # all.
++    bindings = dict(body.get("bindings") or {})
++    clamped = []
++    for state, binding in bindings.items():
++        params = binding.get("params") or {}
++        safe = _clamp_flash(binding.get("pattern", ""), params, spec)
++        if safe is not params:
++            bindings[state] = dict(binding, params=safe)
++            clamped.append(state)
++    doc = {"face": body.get("face") or None,
++           "bindings": bindings,
++           "updated": time.time()}
++    try:
++        APPEARANCE_FILE.parent.mkdir(parents=True, exist_ok=True)
++        # Written beside and renamed: a half-written file here would mean the
++        # owner's face silently reverting on the next read.
++        tmp = APPEARANCE_FILE.with_suffix(".json.tmp")
++        tmp.write_text(json.dumps(doc, indent=2), encoding="utf-8")
++        tmp.replace(APPEARANCE_FILE)
++    except Exception as exc:
++        return 500, {"error": f"{type(exc).__name__}: {exc}",
++                     "path": str(APPEARANCE_FILE)}
++
++    # So a client that is already open repaints instead of waiting for someone
++    # to reopen the window. Clients that do not know this kind ignore it.
++    _publish("appearance", doc)
++
++    out = {"ok": True, "updated": doc["updated"]}
++    if clamped:
++        # Told, not hidden: a device that asked for something unsafe gets an
++        # honest answer about what was actually stored, not silence.
++        out["clamped"] = clamped
++        out["note"] = ("one or more bindings asked for an animation speed "
++                       "above the photosensitive-seizure limit and were "
++                       "slowed to it before being stored")
++    elif not spec_seen:
++        out["note"] = ("stored without checking it against the visual spec: no "
++                       "jarvis-visual-spec.json on this machine")
++    return 200, out
++
++
+ def _desktop_action(route: str, body: dict):
+     """Returns (http_status, payload). Every branch calls the module and
+     returns what the module said - including its refusals."""
+@@ -273,6 +505,9 @@
+         return 202, {"ok": True, "started": ref,
+                      "progress": "watch the event stream for kind=model"}
+ 
++    if route == "/api/appearance":
++        return _appearance_save(body)
++
+     if route == "/api/config":
+         # Not implemented, and saying so is the honest answer. Writing this
+         # file means rewriting the tiers that decide what Jarvis may do
+@@ -1379,7 +1614,8 @@
+                 return self._send(200, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
+-        if path in ("/api/models", "/api/config", "/api/skills"):
++        if path in ("/api/models", "/api/config", "/api/skills",
++                    "/api/appearance", "/api/visual-spec"):
+             # The three desktop-only surfaces. Every one of these existed as a
+             # Python module with no way to reach it over HTTP, which meant the
+             # desktop brief was promising screens with nothing behind them.
+@@ -1392,6 +1628,43 @@
+                     return self._send(200, _models_view())
+                 if path == "/api/config":
+                     return self._send(200, _config_view())
++                if path == "/api/appearance":
++                    return self._send(200, _appearance_view())
++                if path == "/api/visual-spec":
++                    # Serving it settles a question the two clients could not
++                    # settle between themselves. Both vendor a copy, both
++                    # declare "version": 1, and the two files differ - so
++                    # neither side can detect drift at runtime, and the
++                    # client's own SpecDriftTest compares Kotlin constants
++                    # against the PHONE's copy, which is structurally
++                    # incapable of seeing the desktop's.
++                    #
++                    # The hash is the point, more than the document. A client
++                    # keeps its vendored copy as a cold-start fallback and
++                    # compares digests; equal means agreement, different means
++                    # something to look at. A version field that both sides
++                    # hardcode can never say that.
++                    spec = _visual_spec()
++                    if not spec:
++                        return self._send(200, {
++                            "available": False,
++                            "reason": "no jarvis-visual-spec.json on this "
++                                      "machine; set JARVIS_VISUAL_SPEC to its "
++                                      "path. Keep using your vendored copy.",
++                        })
++                    import hashlib
++                    canon = json.dumps(spec, sort_keys=True,
++                                       separators=(",", ":")).encode("utf-8")
++                    return self._send(200, {
++                        "available": True,
++                        "version": spec.get("version"),
++                        # Over the CANONICAL form, so two files that differ
++                        # only in whitespace or key order agree - which is
++                        # what "the same spec" means, and what a byte digest
++                        # of the file would get wrong.
++                        "sha256": hashlib.sha256(canon).hexdigest(),
++                        "spec": spec,
++                    })
+                 return self._send(200, _skills_view())
+             except Exception as exc:
+                 return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
+@@ -1573,6 +1846,7 @@
+ 
+         if route in ("/api/models/install", "/api/models/switch",
+                      "/api/models/rollback", "/api/config", "/api/skills/decide",
++                     "/api/appearance",
+                      "/api/undo/revert", "/api/jobs/cancel", "/api/holds/cancel",
+                      "/api/attention/mute", "/api/attention/unmute",
+                      "/api/digest/seen", "/api/watch/add", "/api/watch/remove",
