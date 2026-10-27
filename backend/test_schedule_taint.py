@@ -151,8 +151,14 @@ def t_the_column_is_declared_once():
     names = [name for name, _typ in S._ADDED_COLUMNS]
     check("source_taint is in _ADDED_COLUMNS exactly once",
           names.count("source_taint") == 1, names)
-    check("...and it is the last column, so an older reader is untouched",
-          S._ADDED_COLUMNS[-1][0] == "source_taint", S._ADDED_COLUMNS[-1])
+    # The column was the LAST one added, and it must stay an append: a column
+    # inserted before an older one would change an older reader's column order.
+    # 2026-10-27: `action` (a reminder's own action) is the newest, appended
+    # after this one; source_taint is still where this change left it.
+    order = [name for name, _typ in S._ADDED_COLUMNS]
+    check("...and it is not a re-ordering of the columns before it",
+          order.index("source_taint") == len(order) - 2 and order[-1] == "action",
+          order[-3:])
 
 
 def t_a_legacy_database_reads_trusted():
