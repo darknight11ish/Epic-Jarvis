@@ -118,19 +118,11 @@ CLASSIFICATION = {
     "/api/secret-handoff/cancel": ("deliberate", "Cancelling the owner-secret hand-off card is PC-only, like the card itself: the card exists only in the desktop HUD (ARCHITECTURE section 8)."),
 
     "/api/appearance": ("ported", ""),
-    # `/api/work/cloud-escalate` (the standing cloud-escalation switch, 2026-10-27)
-    # is PC-only, and its row is NOT here yet ON PURPOSE. This checker refuses a
-    # `deliberate` row for a route the desktop does not call, and the desktop's
-    # half of that feature - the `hud_cloud_escalate` command in
-    # jarvis-desktop/src-tauri - is the desktop session's to add. When that lands,
-    # add this row beside the others in this table:
-    #
-    #   "/api/work/cloud-escalate": ("deliberate", "The standing cloud-escalation
-    #   switch is PC-only: turning it ON is a loosening that needs the one
-    #   change_own_config card, answered on the PC it belongs to. The phone reads
-    #   `cloud.escalate` from /api/presets and never writes it (ARCHITECTURE
-    #   section 8, JARVIS-API section 145)."),
-    #
+    # `/api/work/cloud-escalate` (the standing cloud-escalation switch, 2026-10-27):
+    # PC-only. The desktop half is the `hud_cloud_escalate` command, which raises
+    # the one change_own_config card; the phone reads `cloud.escalate` from
+    # /api/presets and never writes it.
+    "/api/work/cloud-escalate": ("deliberate", "The standing cloud-escalation switch is PC-only: turning it ON is a loosening that needs the one change_own_config card, answered on the PC it belongs to. The phone reads `cloud.escalate` from /api/presets and never writes it (ARCHITECTURE section 8, JARVIS-API section 145)."),
     # Backend: jarvis_presets.cloud_escalate() (presets.patch) plus
     # cloud-escalate.patch for the chat half. The provider choice rides on
     # /api/work/apply, below, and is PC-only for the same reason plus rule 3 (a
