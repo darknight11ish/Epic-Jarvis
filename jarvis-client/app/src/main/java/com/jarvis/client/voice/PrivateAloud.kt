@@ -75,21 +75,41 @@ object PrivateAloud {
     val SILENT_ROUTE = Route(privateGate = false, injectedFacts = 0)
 
     /**
-     * Reads the header. `injected_sensitive` (the owner's decision of
-     * 2026-09-24: sensitive saved facts stay on screen) FAILS CLOSED: when it
-     * is missing, or not a real count, while `injected_facts` is above 0,
-     * every one of those facts counts as possibly sensitive - a PC that does
-     * not say is not taken to mean "none".
+     * Reads the header, or null when there is no header and nothing readable to
+     * read.
+     *
+     * This is the FAIL-CLOSED reader, and it exists because "the PC did not
+     * say" and "the PC said this is fine" are different answers: a missing or
+     * unreadable `X-Jarvis-Route` means the gate and the injected-fact counts
+     * are UNKNOWN, and [com.jarvis.client.voice.ReadAloud.Facts.mayRead] must
+     * refuse on unknown (docs/DECISIONS.md, 2026-10-27: "it refuses when the
+     * route header is missing"). [route] answers [SILENT_ROUTE] instead, which
+     * is right for the voice path - it still answers the question, it just must
+     * not read a private answer aloud - and wrong for the typed read-aloud gate,
+     * which used to test `route(header) != null` and so could never fail closed.
+     *
+     * `injected_sensitive` (the owner's decision of 2026-09-24: sensitive saved
+     * facts stay on screen) FAILS CLOSED: when it is missing, or not a real
+     * count, while `injected_facts` is above 0, every one of those facts counts
+     * as possibly sensitive - a PC that does not say is not taken to mean
+     * "none".
      */
-    fun route(header: String?): Route {
-        if (header.isNullOrBlank()) return SILENT_ROUTE
+    fun routeOrNull(header: String?): Route? {
+        if (header.isNullOrBlank()) return null
         val o = runCatching { JarvisJson.parseToJsonElement(header.trim()) as? JsonObject }.getOrNull()
-            ?: return SILENT_ROUTE
+            ?: return null
         val gate = (o["gate"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.lowercase()
         val facts = count(o, "injected_facts") ?: 0
         val sensitive = count(o, "injected_sensitive") ?: facts
         return Route(privateGate = gate == "private", injectedFacts = facts, injectedSensitive = sensitive)
     }
+
+    /**
+     * Reads the header, answering [SILENT_ROUTE] when there is nothing readable
+     * to read. For callers that need a value and treat "unknown" as "not
+     * private"; the typed read-aloud gate needs the null and uses [routeOrNull].
+     */
+    fun route(header: String?): Route = routeOrNull(header) ?: SILENT_ROUTE
 
     /** A real, non-negative JSON number under [key], as a count (anything above 0 is at least 1); null otherwise. */
     private fun count(o: JsonObject, key: String): Int? {

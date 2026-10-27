@@ -112,6 +112,21 @@ object ReadAloud {
                 stale -> OFFLINE
                 else -> ON_SCREEN
             }
+
+        /**
+         * The ONE sentence to SHOW beside the answer when a read is withheld for
+         * privacy; null when it may be read, and null when the reason is not
+         * privacy (locked, offline - those are not what "It's on your screen."
+         * says, and this project shows no invented sentence).
+         *
+         * A control that is not drawn at all is silent about why, and a control
+         * that does nothing when pressed is worse (the Lead's ruling of
+         * 2026-10-27: show the one sentence, and nothing beyond it). The phone
+         * therefore draws this sentence where the Read aloud control would have
+         * been.
+         */
+        val withheld: String?
+            get() = if (!mayRead && refusal == ON_SCREEN) ON_SCREEN else null
     }
 
     /**
@@ -122,6 +137,9 @@ object ReadAloud {
     data class Offer(val text: String, val facts: Facts) {
         val mayRead: Boolean get() = facts.mayRead
         val refusal: String? get() = facts.refusal
+
+        /** See [Facts.withheld]: the one sentence to show when the read is withheld. */
+        val withheld: String? get() = facts.withheld
     }
 
     /**

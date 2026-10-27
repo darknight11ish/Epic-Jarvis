@@ -3461,21 +3461,38 @@ private fun Reply(
                     // speaks, the same control says Stop. A refusal is one
                     // fixed sentence - never the answer, never a fact.
                     readAloudOffer?.takeIf {
-                        !streaming && it.text == text.trim() && it.mayRead
-                    }?.let {
-                        Quiet(
-                            if (readingAloud) com.jarvis.client.voice.ReadAloud.STOP
-                            else com.jarvis.client.voice.ReadAloud.LABEL,
-                            color = chrome.textMid,
-                        ) {
-                            if (readingAloud) {
-                                com.jarvis.client.JarvisRuntime.stopReadingAloud()
-                            } else {
-                                scope.launch {
-                                    val said = com.jarvis.client.JarvisRuntime.readAloudLastAnswer()
-                                    if (said.isNotBlank()) com.jarvis.client.JarvisRuntime.setNotice(said)
+                        !streaming && it.text == text.trim()
+                    }?.let { offer ->
+                        if (offer.mayRead) {
+                            Quiet(
+                                if (readingAloud) com.jarvis.client.voice.ReadAloud.STOP
+                                else com.jarvis.client.voice.ReadAloud.LABEL,
+                                color = chrome.textMid,
+                            ) {
+                                if (readingAloud) {
+                                    com.jarvis.client.JarvisRuntime.stopReadingAloud()
+                                } else {
+                                    scope.launch {
+                                        val said = com.jarvis.client.JarvisRuntime.readAloudLastAnswer()
+                                        if (said.isNotBlank()) com.jarvis.client.JarvisRuntime.setNotice(said)
+                                    }
                                 }
                             }
+                        } else offer.withheld?.let { sentence ->
+                            // A withheld read is not silence: when a privacy rule
+                            // keeps this answer off the speaker, the ONE fixed
+                            // sentence is shown where the control would have been
+                            // - never the answer, never a fact, and nothing
+                            // beyond that sentence (the Lead's ruling of
+                            // 2026-10-27: a control that silently does nothing is
+                            // worse, so there is no dead control here).
+                            // Locked/offline are not what this sentence says and
+                            // draw nothing; see ReadAloud.Facts.withheld.
+                            Text(
+                                sentence,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textMid,
+                            )
                         }
                     }
                 }
