@@ -2003,6 +2003,11 @@ $SHIPPED = @(
     'static/hud-safety.js'
     'static/hud-edit.js'
     'static/hud-presets.js'
+    # The Galaxy's looks (2026-10-27): the HUD's look switcher loads this module
+    # with a dynamic import(), so it has to sit beside the server (served at
+    # /galaxy-presets.js) like the modules above. backend/test_hud_static.py
+    # fails if this copy drifts from jarvis-desktop/src/galaxy-presets.js.
+    'static/galaxy-presets.js'
     'static/private-speech.js'
     'static/face-voice.js'
     'static/face-moments.js'

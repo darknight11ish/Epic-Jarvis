@@ -3697,3 +3697,51 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     layout itself is pinned to the real desktop JavaScript at 1e-6 by the
     generated fixture and `GalaxyPictureTest.kt`; that is a test, not a run on
     a phone.
+
+## 2026-10-27 — The Galaxy's five missing looks are built, the HUD has ONE look switch, and the dock follows the words
+
+  * **What the owner asked, in their own words.** *"id like an easy way to
+    change the appearance of the jarvis galaxy to the other models"*, and when
+    asked which part of Jarvis they meant: *"by galaxy i mean the matrix of
+    ideas and all sorts of things, not the jarvis face model"*. They chose
+    BOTH halves - a switch in the HUD and the extra looks built - and, the
+    same day, *"the icons on the left column dontt match the order of teh
+    horizontal words in the jarvis hud (reminder is out of place for
+    example)"*.
+  * **The five looks are built, not previewed.** `planetary-orbit`,
+    `neural-arbor`, `nebula`, `dna-helix` and `radar-dome` are real
+    deterministic layouts in `jarvis-desktop/src/galaxy-presets.js`, each with
+    its own arrangement - concentric flattened ellipses round a sun; a crown of
+    rows widening upward with dendrites; a golden-angle cloud with no rings,
+    rows or lines; double helices side by side; arcs over a ground row - and
+    each keeps the module's existing rules: pure, deterministic, standard
+    library only, at most 240 names, no two names closer than the layout's own
+    gap. They keep their blueprint hotkeys 1-5, so keys that used to say "not
+    built yet" now draw a picture; `PLANNED_PRESETS` is empty and nothing in
+    either window says a look does not exist.
+  * **The HUD's Galaxy gets one plain Look list, beside the three lenses.** It
+    is filled from the module's own list of looks (never a second list), so it
+    cannot offer a look the module does not build or miss one it does. Choosing
+    one lays the same names out in that look, remembers the choice on this
+    device under `jarvis.galaxy.preset`, and brings it back on the next load; a
+    stored value that is unknown, stale or nonsense is the constellation, never
+    a broken canvas. A flat look is drawn front-on and is not simulated (it is
+    a stationary diagram), and the fact-sharing web is not drawn over it. The
+    page loads the module with a dynamic `import()`, the same way it already
+    loads its speech rule, so the vendored page's inline-script count and CSP
+    are untouched and all three copies stay byte-identical.
+  * **No digit hotkeys in the HUD, deliberately.** The Brain window has 1-8
+    (its stage takes the focus and owns those keys). The HUD has no view-scoped
+    key handler - its global Space starts the microphone and its digit keys are
+    the chat box's - so a 1-5 shortcut there would fire while the owner is
+    typing. The Look list is the HUD's keyboard path instead.
+  * **The dock's icons follow the stage's words.** The Studio dock read Galaxy,
+    Telemetry, Memory, Approvals, Reminders while the inspector's tab bar read
+    Galaxy, Approvals, Reminders, Memory, Telemetry. The dock now reads the
+    same order as the words - Galaxy, Approvals, Reminders, Memory, Telemetry -
+    with every id and `data-hud-tab-choice` unchanged, so existing tests and
+    wiring keep working. `jarvis-desktop/tests/hud-galaxy-looks.mjs` reads BOTH
+    lists out of the page and fails if either is edited alone.
+  * **The phone is untouched.** Its Galaxy stays the read-only zen-ring picture
+    decided on 2026-10-26: no look switch and no new look there, no new route,
+    no write. Nothing in this work changes what the phone shows.
