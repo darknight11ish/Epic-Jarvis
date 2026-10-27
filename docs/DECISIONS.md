@@ -3783,6 +3783,7 @@ Decided 2026-10-26: the owner-secret hand-off ships first, with its 15-minute se
     and the three two-file checks. **Not proven here:** a real signed release
     installed by the card - the updater's own installer path was not run in
     this container, and that is the owner's field test, never a pass.
+>>>>>>> 69371df40 (Updates in chat: talk about one, and start it only through one card)
 
 ## 2026-10-27 — The bar matches the HUD; Private and Temp become one Incognito chip
 
@@ -3851,3 +3852,100 @@ and the cap, the refusal wording) and `ReadAloudWiringTest` (one control
 beside Copy, the wrapper on every typed send, the PC's say route reused,
 arm-before-play, no new route) - both run off-device; the phone drive is a
 field-test row, not a pass.
+
+
+## 2026-10-27 — A setting can be changed by asking for it on or off, and the answer is a read-back
+
+  * **The owner's ask, already on the record.** *"jarvis should be able to
+    change all settings if i ask it to in chat or in the live mode, if its a
+    big settings change that would impact privacy, security, or significantly
+    change functioning it should send me an approval card"*, and *"Let a card
+    alone authorise it, from either app"* (:1945-1947). This is the first
+    vertical slice of it, and the measure of it is what makes it a slice rather
+    than a promise: ONE setting, changed through its own writer, with the value
+    READ BACK before the answer says it moved.
+  * **What was missing was the plainest sentence.** "Turn on/off <name>" has
+    worked since 2026-09-27 (the settings block, `_settings_adjust`), and "can I
+    change <name>" has explained how since #884. But "make the prompt coach
+    off", "set web search to off", "I want the prompt coach off", "the prompt
+    coach should be off" and "make sure <x> is off" matched NOTHING and went to
+    the model, which has no settings tool - measured through `match()` on
+    2026-10-27, every one of them returned None. So the sentence a person says
+    first was the one that did nothing.
+  * **The allow-list, and why each exclusion is there.** 27 of the 31
+    `jarvis_settings_registry.BOOL_SETTINGS` rows may be changed by asking
+    (`jarvis_quick.CHANGE_BY_ASKING`). It is DERIVED by three rules, not chosen
+    by taste: its writer is a table entry, so the change goes through the same
+    `BoolSetting.set` the Settings switch, the HUD route and "turn on/off"
+    already call, and that setter owns the card, the tier, the PC-only refusal
+    and the words; `jarvis_feature_guide.read_state` answers a real bool for it,
+    so the receipt is a read and never a claim; and its card is not one only the
+    PC may approve. Four are out, each for one of those rules:
+    `second_card_combined`, `second_card_suggest_struggle` and
+    `second_card_suggest_correction` because `read_state` returns None for all
+    three today (the second card's features are not measured - CLAUDE.md says
+    they stay off until they are), and `lights_without_card` because its card is
+    `loosen_what_asks_first`, which `jarvis_owner_check.PC_ONLY_ACTIONS` refuses
+    on any other device - starting it from chat would make this lane depend on
+    the phone/PC distinction it deliberately does not make. Every remaining one
+    is a stored on/off value, so the same sentence the other way round is the
+    undo.
+  * **Three intents, one of which can write.** `feature_change` is UNCHANGED and
+    stays in `READ_ONLY_INTENTS`: "can I change <x>" is a question, it must not
+    write, and in a private chat it must still fall to the model rather than be
+    refused. `feature_change_ask` is the ONE question back when no state was
+    said ("change the prompt coach" -> "Do you want prompt coach on or off? Say
+    ... "), and it changes nothing, so it is read-only too.
+    `feature_change_apply` is the only one that can write; it is NOT in
+    `READ_ONLY_INTENTS`, so "cancel that" knows something happened, and a
+    private chat refuses it before any writer can run. The grammar adds no verb
+    that already worked: "turn on/off" and "enable/disable" stay the settings
+    block's, and the allow-list applies only to the new phrasings.
+  * **Card or immediate, and the receipt.** The lane never decides which: it
+    calls the setter and reads `Outcome.waiting`. Immediate settings (prompt
+    coach, humour, voice follows the face, pictures, the five PC notification
+    switches) are written, then re-read, and the answer names the old and the
+    new value ("I checked: web search reads on now - it was off before").
+    Carded settings (web search ON, background learning ON, picture mode ON, the
+    big coder, chat history, the big model, and the rest) answer with the
+    module's OWN waiting sentence and never with "done". Nothing was written
+    while a card is up, so no read-back is claimed either.
+  * **The refusals, and why they are answers rather than errors.** A switch
+    outside the list keeps the guide's own change sentence word for word (that
+    is what #884's tests pin, and this change does not touch it). A page-only
+    setting ("app lock", "autostart") keeps `NOT_BY_ASKING`'s sentence. A
+    password, a key, a token, a credential, deep config or an irreversible ask
+    is refused in ONE plain sentence, and that sentence is checked only for
+    names NOTHING resolves to - so it can never take a real setting's words
+    away. The phone/PC distinction is refused by exclusion rather than by a
+    sentence: the one PC-only-card switch is not on the list, so no chat
+    sentence can start it.
+  * **No patch, and that is not an omission.** `jarvis_quick.py` is in
+    `scripts/apply-patches.ps1`'s `$SHIPPED` list, and step 3 copies every
+    shipped module over the backend AFTER step 2 applies the patches - so a
+    patch against it would be applied and then overwritten by the same run. The
+    change ships as `backend/jarvis_quick.py` plus its `jarvis-backend/` twin,
+    kept byte-identical; `backend/README.md` says so where it describes the
+    patches, so nobody adds the dead patch later.
+  * **Both apps.** It is one `/api/chat` turn, so the desktop and the phone get
+    it with no app change and no new route: the phone already posts
+    `/api/chat`, the card it may see is the module's own, and its fingerprint is
+    the same authority `change_own_config` already accepts. The phone gains NO
+    write route, and `tools/check_parity.py` has nothing new to classify.
+  * **Proven by:** `backend/test_ask_to_change.py` - the allow-list derived
+    against the real table, every phrasing and near-miss, the writer called
+    exactly once with the wanted bool AND the request's peer/local, zero calls
+    when the value is already right, the waiting sentence with no "done", a
+    disagreement said plainly, a value that cannot be read never written, the
+    guide's own words compared word for word for the four excluded switches,
+    source pins that the apply runner contains no direct config write and no
+    gate decision, and a REAL end-to-end run in a throwaway config folder where
+    the real setter moves the value and the real reader sees it, both ways.
+    Also `backend/test_feature_guide.py` (1,820 checks, unregressed),
+    `backend/test_settings_help.py`, `test_settings_registry.py`,
+    `test_settings_switches.py`, `test_private_chat.py` and
+    `test_voice_reflex.py`.
+  * **Not proven here, and not claimed:** a setting changed on the owner's live
+    backend through a real `/api/chat` request (this session works on a copy
+    and starts no server), a card approved or denied on a phone, and any of the
+    four excluded switches - they are deliberately outside this lane.
