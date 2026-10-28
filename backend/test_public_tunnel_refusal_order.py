@@ -30,23 +30,83 @@ The platform is stated rather than assumed: on this PC the bare forms ("0",
 "0x0", "0.0") are not read as every-interface by `getaddrinfo`, which is why
 `test_bind_wildcard.py` SKIPS that half on Windows. Those are reported, not
 asserted.
+
+WHICH jarvis_hud.py IS READ, AND WHY IT IS NEVER "NOTHING"
+
+Three cases, in this order (backend/_base.py holds the rule in one place):
+
+  1. `jarvis_hud.py` is in the folder this run reads - `JARVIS_BACKEND` when it
+     is set (the owner's PC, or the throwaway folder the runner staged), and
+     `backend/` otherwise (a dev container symlinks it there). That file is
+     read, and this repository's copy of an older one is never substituted.
+  2. No copy there, but the **published base** has one, which is CI:,
+     `jarvis-backend/jarvis_hud.py`, is read: real code, derived from the
+     owner's folder by `tools/gen_base_from_backend.py`, at the state the whole
+     patch stack left when it was last re-taken. The suite prints which folder
+     answered, so a green line never hides the difference.
+  3. Neither file exists. Then the checks SKIP, honestly, on their own
+     SKIPPED list - and `run_suites.py`'s rule that a suite passing nothing
+     FAILS means such a run cannot read as a pass.
+
+Until 2026-10-27 this suite had none of that: without the owner's file both
+checks SKIPPED, and `skip()` appended them to PASSED - so it printed
+`2 passed, 0 failed`, exit 0, in the required `backend` job, having read
+nothing. The job's green said "the app never opens a public tunnel" had been
+re-proved when no line of jarvis_hud.py had been looked at. Both halves are
+fixed: `skip()` counts on its own SKIPPED list (never a pass), and the base
+means a clone now runs all 11 checks for real instead of skipping 2. The
+runner's zero-check rule is still the net under a file that is really absent:
+
+    $ python3 backend/test_public_tunnel_refusal_order.py
+    11 passed, 0 skipped, 0 failed        (no owner install: the base was read)
+
+WHAT THE BASE RUN DOES NOT PROVE, plainly: it proves the refusal order in
+`jarvis-backend/jarvis_hud.py` - the file this repository publishes and an
+installer starts from - and NOT in a patch newer than the base's last
+re-take. Run it on the owner's PC with `JARVIS_BACKEND` set for that half.
 """
 from __future__ import annotations
 
 import ast
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from _where import BACKEND, REPO, missing, explain  # noqa: E402
+from _where import BACKEND, REPO, explain  # noqa: E402
+import _base  # noqa: E402
 
+#: WHICH jarvis_hud.py this run reads - see the docstring's three cases. The
+#: published base is read only when there is no owner install and no copy in
+#: `backend/`; `_base.folder` is the one place that rule lives.
+BASE = _base.folder("jarvis_hud.py")
+if BASE is not None:
+    BACKEND = BASE
+    _base.put_on_path(BASE)
+    _base.say(BACKEND, "jarvis_hud.py")
 HUD = BACKEND / "jarvis_hud.py"
 CASES = REPO / "jarvis-desktop" / "tests" / "bind-address-cases.json"
 
-FAILED, PASSED = [], []
+FAILED, PASSED, SKIPPED = [], [], []
+
+
+def missing(*names):
+    """Which of `names` are not in the folder this run really reads.
+
+    `_where.missing` asks about `backend/`; after the fallback above the file
+    may be in `jarvis-backend/` instead, and asking the wrong folder would
+    report a file as absent while it is being read."""
+    return _base.missing(BACKEND, *names)
+
+
+def why_absent(name):
+    """Why neither file exists, for the skip this suite can then honestly make."""
+    return (f"{name} is in neither {HERE} nor {_base.BASE} "
+            f"(JARVIS_BACKEND is {'set' if os.environ.get('JARVIS_BACKEND') else 'unset'}); "
+            f"the published base is the fallback and it is not here either. {explain()}")
 
 
 def check(name, cond, detail=""):
@@ -56,8 +116,10 @@ def check(name, cond, detail=""):
 
 
 def skip(name, why):
-    print(f"SKIP  {name}\n        {why}")
-    PASSED.append(name)
+    """A check this machine cannot make. NOT a pass: counted in its own list and
+    printed on its own line, the shape backend/test_price_sources.py uses."""
+    SKIPPED.append(name)
+    print(f"SKIP  {name}  (not a pass)\n        {why}")
 
 
 def _tree():
@@ -88,7 +150,7 @@ def t_a_wildcard_bind_is_refused():
     tree = _tree()
     if tree is None:
         return skip("a wildcard bind is refused with SystemExit(2)",
-                    "jarvis_hud.py is not in " + str(BACKEND) + ". " + explain())
+                    why_absent("jarvis_hud.py"))
     ns = _lift(tree, {"_binds_every_interface", "_refuse_every_interface"})
     refuse = ns.get("_refuse_every_interface")
     binds = ns.get("_binds_every_interface")
@@ -130,7 +192,7 @@ def t_the_refusal_comes_before_the_socket():
     tree = _tree()
     if tree is None:
         return skip("main() refuses before it opens the socket",
-                    "jarvis_hud.py is not in " + str(BACKEND) + ". " + explain())
+                    why_absent("jarvis_hud.py"))
     mains = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main"]
     if not mains:
         return skip("main() refuses before it opens the socket",
@@ -164,7 +226,9 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
+    if SKIPPED:
+        print("skipped, and NOT passes: " + ", ".join(SKIPPED))
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

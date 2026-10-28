@@ -323,16 +323,29 @@ cargo test --target x86_64-pc-windows-msvc
 ```
 
 That is the third thing CI runs, on the same Windows target as the checks
-above. It is happy with the owner sitting in front of his own PC: **the one
-test that opens a window and reads the screen is `lock.rs`'s capture probe**
-(`lock::capture_probe::the_exclusion_is_real_and_reversible_on_this_pc`, the
-red window the screenshot-exclusion probe is measured against). Nothing else
-in the suite opens a window, drives a webview or looks at the screen — every
-other test in a file that *builds* windows is a pure one: geometry, JSON
-fixtures and source-text pins.
+above. It is happy with the owner sitting in front of his own PC: **the two
+halves of `lock.rs`'s capture probe are the only tests that open a window**,
+and only one of them reads the screen (2026-10-27 — it was one test until
+then, and the half that must run in CI was hidden inside the half that cannot):
+
+- `lock::capture_probe::the_exclusion_is_applied_and_read_back_on_this_pc` —
+  creates a red 240×240 window of its own and asserts that Windows ACCEPTS
+  `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` and reads it back.
+  No composited desktop is needed, so this is the half the required `rust` job
+  really proves.
+- `lock::capture_probe::the_exclusion_removes_pixels_on_this_pc` — the only
+  test that *reads the screen*: it captures the window's pixels, excludes it,
+  and checks they are gone. A CI runner composites no window onto the screen it
+  captures, so there this half says SKIPPED (or fails under
+  `JARVIS_REQUIRE_CAPTURE_PIXELS=1`, which lets CI insist on the pixels).
+
+Nothing else in the suite opens a window, drives a webview or looks at the
+screen — every other test in a file that *builds* windows is a pure one:
+geometry, JSON fixtures and source-text pins.
 
 **The documented opt-out.** When the owner would rather nothing appear on his
-screen at all, set `JARVIS_SKIP_WINDOW_TESTS=1` and the probe does not run:
+screen at all, set `JARVIS_SKIP_WINDOW_TESTS=1` and neither half of the probe
+runs:
 
 ```
 $env:JARVIS_SKIP_WINDOW_TESTS="1"; cargo test --target x86_64-pc-windows-msvc
@@ -343,8 +356,11 @@ the skip says so out loud, on the process's own stderr — which libtest does no
 capture, so the line shows in a plain run with no `--nocapture`. It reads:
 
 ```
-SKIPPED  the_exclusion_is_real_and_reversible_on_this_pc - this test opens a window or reads the screen, and JARVIS_SKIP_WINDOW_TESTS=1 is set. It did NOT run, and it did NOT pass. Unset that variable to run it.
+SKIPPED  the_exclusion_removes_pixels_on_this_pc - this test opens a window or reads the screen, and JARVIS_SKIP_WINDOW_TESTS=1 is set. It did NOT run, and it did NOT pass. Unset that variable to run it.
 ```
+
+The other half prints the same sentence with
+`the_exclusion_is_applied_and_read_back_on_this_pc` in place of that name.
 
 The harness still prints `ok` for it, and it always will: Rust has no skipped
 state, and `assert!`-ing the skip would fail the suite, which is the opposite
@@ -355,7 +371,9 @@ by an environment variable, and it prints `ignored`, which this project does
 not accept in place of "did not run". A second test,
 `lock::capture_probe::the_window_probe_is_the_only_test_the_opt_out_guards`,
 stops the gate from being quietly renamed away: it reads the source and checks
-the variable name and the guard are both still there.
+both variable names (`JARVIS_SKIP_WINDOW_TESTS` for the opt-out,
+`JARVIS_REQUIRE_CAPTURE_PIXELS` for the pixel switch) and both guards are still
+there, and that the required half cannot report SKIPPED at all.
 
 **`CARGO_PROFILE_DEV_DEBUG="0"` on this PC.** Its `cl.exe` intermittently fails
 `D8050` on an unrelated C++ helper crate (`vswhom-sys`). The flag avoids that
