@@ -71,11 +71,11 @@ object HistoryView {
 
     fun showMoreTitle(section: String, n: Int): String = "Show $n more in $section"
 
-    /** "Pinned (3)" and its spoken form: "Pinned, 3 chats, expanded". */
+    /** "Pinned (3)" and its spoken form: "Pinned, 3 chats, expanded" ("1 chat" for one). */
     fun pinnedHeader(count: Int): String = "$PINNED ($count)"
 
     fun pinnedHeaderSpoken(count: Int, expanded: Boolean): String =
-        "$PINNED, $count chats, ${if (expanded) "expanded" else "collapsed"}"
+        "$PINNED, $count ${if (count == 1) "chat" else "chats"}, ${if (expanded) "expanded" else "collapsed"}"
 
     /** The overflow trigger's name: "Chat actions for Dentist on Tuesday". */
     fun actionsFor(title: String): String = "$MENU for $title"
@@ -113,13 +113,29 @@ object HistoryView {
         )
     }
 
+    /**
+     * [rows]' pinned ones in the one order a pin means: `pinned_at DESC,
+     * updated_at DESC` (docs/JARVIS-API.md section 18.3) - the newest pin
+     * first, two pins in the same moment newest chat first. The sort control
+     * never touches this order: a pin is a place, not a preference. A row
+     * with no pin moment (an older PC) sorts as the oldest pin, so it cannot
+     * claim to have been pinned after one that says when it was.
+     */
+    fun pinnedRows(rows: List<ChatLog.Summary>): List<ChatLog.Summary> = rows
+        .filter { it.pinned }
+        .sortedWith(
+            compareByDescending<ChatLog.Summary> { it.pinnedAt ?: 0L }
+                .thenByDescending { it.updated ?: it.started ?: 0L }
+                .thenBy { it.title },
+        )
+
     // --------------------------------------------------------- sections ---
 
     /**
      * One section of the list. [tag] is the tag it stands for, or null for
      * Pinned and for the chats in no project. [count] is what the header says:
      * the PC's own number when nothing narrows the list, never less than the
-     * rows loaded; the rows shown otherwise (the same rule as [ChatTags.group]).
+     * rows loaded; the rows shown otherwise (the rule the tag chips narrow by).
      */
     data class Section(
         /** Stable for LazyColumn keys and the "Show N more" memory: "pinned", "t3", "untagged". */
@@ -143,7 +159,8 @@ object HistoryView {
     /**
      * [rows] in the DeepSeek order: Pinned first, then one section per tag in
      * the owner's order, then Untagged last. A pinned row appears only in
-     * Pinned. [only] narrows to one tag id or [ChatTags.UNTAGGED_KEY], the
+     * Pinned, and Pinned is ordered by the pin itself ([pinnedRows]), never by
+     * [sort]. [only] narrows to one tag id or [ChatTags.UNTAGGED_KEY], the
      * same filter the chips send. With no tags at all there is one "Chats"
      * section (plus Pinned, when anything is pinned).
      *
@@ -168,9 +185,9 @@ object HistoryView {
             ChatTags.UNTAGGED_KEY -> loose(r)
             else -> r.tagId == only
         }
-        val sorted = sortRows(rows.filter(::belongs), sort)
-        val pinned = sorted.filter { it.pinned }
-        val rest = sorted.filterNot { it.pinned }
+        val mine = rows.filter(::belongs)
+        val pinned = pinnedRows(mine)
+        val rest = sortRows(mine.filterNot { it.pinned }, sort)
         val out = ArrayList<Section>()
         if (pinned.isNotEmpty()) {
             out += Section("pinned", PINNED, null, true, pinned, pinned.size)
@@ -243,14 +260,35 @@ object HistoryView {
 
     // -------------------------------------------- pin, in the loaded list ---
 
-    /** [rows] with one row's pin changed - only the PC's answer ever calls this. */
-    fun withPin(rows: List<ChatLog.Summary>, id: String, pinned: Boolean): List<ChatLog.Summary> =
-        rows.map { if (it.id == id) it.copy(pinned = pinned) else it }
+    /**
+     * [rows] with one row's pin changed - only the PC's answer ever calls
+     * this. [at] is the pin moment the PC echoed (its `pinned_at`, unix
+     * seconds), or the phone's own clock when an older PC echoed none; it is
+     * what puts the row where the pin means, and is dropped on an unpin.
+     */
+    fun withPin(
+        rows: List<ChatLog.Summary>,
+        id: String,
+        pinned: Boolean,
+        at: Long? = null,
+    ): List<ChatLog.Summary> =
+        rows.map {
+            if (it.id == id) it.copy(pinned = pinned, pinnedAt = if (pinned) at else null) else it
+        }
 
     /** The same for a word-the-PC search's results, where the row may not be loaded. */
-    fun withPin(found: ChatLog.Search, id: String, pinned: Boolean): ChatLog.Search = found.copy(
+    fun withPin(
+        found: ChatLog.Search,
+        id: String,
+        pinned: Boolean,
+        at: Long? = null,
+    ): ChatLog.Search = found.copy(
         found = found.found.map { hit ->
-            if (hit.row.id == id) hit.copy(row = hit.row.copy(pinned = pinned)) else hit
+            if (hit.row.id == id) {
+                hit.copy(row = hit.row.copy(pinned = pinned, pinnedAt = if (pinned) at else null))
+            } else {
+                hit
+            }
         },
     )
 

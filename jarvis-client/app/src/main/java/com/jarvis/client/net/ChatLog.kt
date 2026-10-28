@@ -182,6 +182,13 @@ object ChatLog {
          * False from an older PC that sends no `pinned` - nothing is guessed.
          */
         val pinned: Boolean = false,
+        /**
+         * When it was pinned, in the list's own unix seconds (`pinned_at`,
+         * docs/JARVIS-API.md section 18.3), or null for a chat that was never
+         * pinned and for an older PC that sends no `pinned_at`. The Pinned
+         * group is ordered by this, newest pin first - [HistoryView]'s job.
+         */
+        val pinnedAt: Long? = null,
     )
 
     /** One page: the settings, its rows, and whether there may be older ones. */
@@ -292,6 +299,7 @@ object ChatLog {
                 kind = kindOf(o.str("kind")),
                 tagId = o.whole("tag_id")?.toInt(),
                 pinned = o.flag("pinned") == true,
+                pinnedAt = o.whole("pinned_at"),
             )
         }
         val raw = (body["conversations"] as? JsonArray)?.size ?: 0
@@ -427,6 +435,7 @@ object ChatLog {
                     kind = kindOf(o.str("kind")),
                     tagId = o.whole("tag_id")?.toInt(),
                     pinned = o.flag("pinned") == true,
+                    pinnedAt = o.whole("pinned_at"),
                 ),
                 hits = o.whole("hits")?.toInt() ?: 0,
                 snippet = Snippet(
@@ -562,7 +571,13 @@ object ChatLog {
     const val PIN_REFUSED = "The pin was not changed. Your PC did not accept it."
 
     /** What a pin request came to: [ok] is the only thing that may move a row. */
-    data class Pin(val ok: Boolean, val pinned: Boolean? = null, val said: String? = null)
+    data class Pin(
+        val ok: Boolean,
+        val pinned: Boolean? = null,
+        /** The PC's own pin moment, unix seconds; null when it did not echo one. */
+        val pinnedAt: Long? = null,
+        val said: String? = null,
+    )
 
     /** The contract's body, exactly `{"id": "...", "pinned": true|false}`. */
     fun pinBody(id: String, pinned: Boolean): String = buildJsonObject {
@@ -580,7 +595,7 @@ object ChatLog {
     fun pinAnswer(code: Int, body: JsonObject?): Pin {
         val message = body?.str("message")
         if (code in 200..299 && body?.flag("ok") != false) {
-            return Pin(true, body?.flag("pinned"))
+            return Pin(true, body?.flag("pinned"), body?.whole("pinned_at"))
         }
         val error = body?.str("error")
         return when {

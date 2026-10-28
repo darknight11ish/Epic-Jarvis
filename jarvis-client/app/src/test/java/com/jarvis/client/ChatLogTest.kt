@@ -62,8 +62,8 @@ class ChatLogTest {
         val body = obj(
             """
             {"conversations": [
-              {"id":"p1","updated":3,"pinned":true},
-              {"id":"p2","updated":2,"pinned":false},
+              {"id":"p1","updated":3,"pinned":true,"pinned_at":1790000300},
+              {"id":"p2","updated":2,"pinned":false,"pinned_at":null},
               {"id":"p3","updated":1},
               {"id":"p4","updated":0,"pinned":"true"}
             ]}
@@ -71,17 +71,24 @@ class ChatLogTest {
         )
         // Only a JSON true is pinned: a string or no field is not guessed at.
         assertEquals(listOf(true, false, false, false), ChatLog.page(body).conversations.map { it.pinned })
+        // The pin's own moment is read beside the flag; absent or null is no moment.
+        assertEquals(
+            listOf(1_790_000_300L, null, null, null),
+            ChatLog.page(body).conversations.map { it.pinnedAt },
+        )
         val search = ChatLog.search(
             obj(
                 """
                 {"query_ok":true,"conversations":[
                   {"id":"s1","title":"Dentist","updated":9,"pinned":true,
+                   "pinned_at":1790000400,
                    "snippet":{"role":"user","parts":[]}}
                 ]}
                 """.trimIndent(),
             ),
         )
         assertTrue(search.found.single().row.pinned)
+        assertEquals(1_790_000_400L, search.found.single().row.pinnedAt)
     }
 
     @Test
@@ -92,6 +99,19 @@ class ChatLogTest {
         assertEquals(
             ChatLog.Pin(ok = true, pinned = true),
             ChatLog.pinAnswer(200, obj("""{"ok":true,"id":"c-2","pinned":true}""")),
+        )
+        // The PC's own pin moment rides the answer (section 18.3), and is read.
+        assertEquals(
+            ChatLog.Pin(ok = true, pinned = true, pinnedAt = 1_790_000_500L),
+            ChatLog.pinAnswer(
+                200,
+                obj("""{"ok":true,"id":"c-2","pinned":true,"pinned_at":1790000500}"""),
+            ),
+        )
+        assertEquals(
+            "an unpin answers a null pinned_at",
+            ChatLog.Pin(ok = true, pinned = false, pinnedAt = null),
+            ChatLog.pinAnswer(200, obj("""{"ok":true,"id":"c-2","pinned":false,"pinned_at":null}""")),
         )
         // A 2xx that does not echo `pinned` is still a yes; the caller's request stands.
         assertEquals(ChatLog.Pin(ok = true, pinned = null), ChatLog.pinAnswer(200, obj("""{"ok":true}""")))

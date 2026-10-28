@@ -164,65 +164,12 @@ class HistoryContractTest {
         }
     }
 
-    @Test
-    fun `a section's count goes through group and countOf`() {
-        // Twelve Work chats loaded, none elsewhere: the header says 12 either way.
-        val work = ChatTags.STARTER[0].copy(count = 12)
-        val learning = ChatTags.STARTER[1].copy(count = 1)
-        fun row(i: Int, tag: Int?) = ChatLog.Summary(
-            id = "c$i", title = "t$i", started = i.toLong(), updated = i.toLong(), turns = 2, device = null,
-            hasVoice = false, tainted = false, tagId = tag,
-        )
-        val rows = (1..12).map { row(it, work.id) } + row(13, learning.id)
-        val sections = ChatTags.group(rows, listOf(work, learning), untagged = 0)
-        assertEquals(listOf("Work", "Learning"), sections.map { it.tag?.name })
-        assertEquals(12, sections[0].count)
-        assertEquals(1, sections[1].count)
-        for (el in doc["tag_section_cases"]!!.jsonArray) {
-            val c = el.jsonObject
-            val name = c["name"]!!.jsonPrimitive.content
-            val count = c["count"]!!.jsonPrimitive.content.toInt()
-            val sec = sections.firstOrNull { it.tag?.name == name } ?: continue
-            assertEquals(count, sec.count)
-            assertEquals(c["header"]!!.jsonPrimitive.content, ChatTags.header(name, sec.count))
-        }
-    }
-
-    @Test
-    fun `the worked grouping cases give the same sections as the desktop`() {
-        val cases = doc["tag_group_cases"]!!.jsonArray
-        assertTrue(cases.size >= 6)
-        for (el in cases) {
-            val c = el.jsonObject
-            val label = c["name"]!!.jsonPrimitive.content
-            val tags = c["tags"]!!.jsonArray.mapIndexed { i, t ->
-                val o = t.jsonObject
-                ChatTags.Tag(
-                    o["id"]!!.jsonPrimitive.content.toInt(), o["name"]!!.jsonPrimitive.content, 0, "folder", i,
-                    o["count"]!!.jsonPrimitive.content.toInt(),
-                )
-            }
-            val rows = c["rows"]!!.jsonArray.map { r ->
-                val o = r.jsonObject
-                val tag = o["tag"]!!.jsonPrimitive
-                ChatLog.Summary(
-                    id = o["id"]!!.jsonPrimitive.content, title = "t", started = 1L,
-                    updated = o["updated"]!!.jsonPrimitive.content.toLong(), turns = 2, device = null,
-                    hasVoice = false, tainted = false, tagId = tag.content.toIntOrNull(),
-                )
-            }
-            val sections = ChatTags.group(
-                rows, tags, c["untagged"]!!.jsonPrimitive.content.toInt(),
-                exact = c["exact"]!!.jsonPrimitive.content.toBoolean(),
-            )
-            val expect = c["expect"]!!.jsonObject
-            assertEquals(label, expect["flat"]!!.jsonPrimitive.content.toBoolean(), tags.isEmpty())
-            val want = expect["sections"]!!.jsonArray.map { it.jsonObject }
-            assertEquals(label, want.map { it["key"]!!.jsonPrimitive.content }, sections.map { it.tag?.id?.toString() ?: "none" })
-            assertEquals(label, want.map { it["count"]!!.jsonPrimitive.content.toInt() }, sections.map { it.count })
-            assertEquals(label, want.map { w -> w["rows"]!!.jsonArray.map { it.jsonPrimitive.content } }, sections.map { s -> s.rows.map { it.id } })
-        }
-    }
+    // The phone's sections are arranged by HistoryView.sections and held by
+    // HistoryViewTest. The desktop's own groupRows still runs the shared
+    // `tag_group_cases` fixture in jarvis-desktop/tests/tags.mjs, so that
+    // contract keeps being checked where the code it describes lives; the
+    // phone's dead second copy of the rule (ChatTags.group) was deleted on
+    // 2026-10-28.
 
     @Test
     fun `refusal sentences follow the fixture's worked cases`() {

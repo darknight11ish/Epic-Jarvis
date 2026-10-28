@@ -5,6 +5,7 @@ import com.jarvis.client.net.ChatTags
 import com.jarvis.client.net.HistoryView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -22,6 +23,7 @@ class HistoryViewTest {
         updated: Long = 1_000L,
         tagId: Int? = null,
         pinned: Boolean = false,
+        pinnedAt: Long? = null,
         kind: String = "chat",
         started: Long? = null,
     ) = ChatLog.Summary(
@@ -36,6 +38,7 @@ class HistoryViewTest {
         kind = kind,
         tagId = tagId,
         pinned = pinned,
+        pinnedAt = pinnedAt,
     )
 
     private val work = ChatTags.Tag(1, "Work", 0, "briefcase", 0, count = 3)
@@ -109,6 +112,34 @@ class HistoryViewTest {
         assertEquals(3, sections[0].count)
         assertEquals(1, sections[1].count)
         assertTrue(sections[1].rows.isEmpty())
+    }
+
+    @Test
+    fun `Pinned is ordered by the pin moment, not by the sort control`() {
+        // The chat pinned LATER was updated EARLIER: the pin's own moment is
+        // the order (docs/JARVIS-API.md section 18.3: `pinned_at DESC,
+        // updated_at DESC`), whatever Newest/Oldest/Title says.
+        val rows = listOf(
+            row("chat-newer", updated = 900, pinned = true, pinnedAt = 100),
+            row("chat-older", updated = 100, pinned = true, pinnedAt = 500),
+            row("loose", updated = 950),
+        )
+        for (sort in HistoryView.Sort.values()) {
+            val pinned = HistoryView.sections(rows, emptyList(), untagged = 0, sort = sort)[0]
+            assertEquals(sort.name, listOf("chat-older", "chat-newer"), pinned.rows.map { it.id })
+        }
+        // Two pins in the same second: the newer chat first, as the contract says.
+        val sameMoment = listOf(
+            row("b", updated = 20, pinned = true, pinnedAt = 500),
+            row("a", updated = 10, pinned = true, pinnedAt = 500),
+        )
+        assertEquals(listOf("b", "a"), HistoryView.pinnedRows(sameMoment).map { it.id })
+        // An older PC sends no moment: that pin cannot claim to be the newest.
+        val olderPc = listOf(
+            row("no-moment", updated = 9_999, pinned = true),
+            row("dated", updated = 1, pinned = true, pinnedAt = 1),
+        )
+        assertEquals(listOf("dated", "no-moment"), HistoryView.pinnedRows(olderPc).map { it.id })
     }
 
     // ------------------------------------------------------------ sort ---
@@ -235,7 +266,7 @@ class HistoryViewTest {
     fun `the Pinned header says its count and its folded state`() {
         assertEquals("Pinned (3)", HistoryView.pinnedHeader(3))
         assertEquals("Pinned, 3 chats, expanded", HistoryView.pinnedHeaderSpoken(3, expanded = true))
-        assertEquals("Pinned, 1 chats, collapsed", HistoryView.pinnedHeaderSpoken(1, expanded = false))
+        assertEquals("Pinned, 1 chat, collapsed", HistoryView.pinnedHeaderSpoken(1, expanded = false))
     }
 
     // ------------------------------------------------------ pin moving ---
@@ -243,10 +274,13 @@ class HistoryViewTest {
     @Test
     fun `only the PC's yes moves a pin in the list or in the search results`() {
         val rows = listOf(row("a"), row("b"))
-        val pinned = HistoryView.withPin(rows, "a", pinned = true)
+        val pinned = HistoryView.withPin(rows, "a", pinned = true, at = 700)
         assertTrue(pinned.first { it.id == "a" }.pinned)
+        assertEquals("the PC's pin moment goes on the row", 700L, pinned.first { it.id == "a" }.pinnedAt)
         assertFalse(pinned.first { it.id == "b" }.pinned)
-        assertFalse("unpinning works too", HistoryView.withPin(pinned, "a", pinned = false).first { it.id == "a" }.pinned)
+        val unpinned = HistoryView.withPin(pinned, "a", pinned = false)
+        assertFalse("unpinning works too", unpinned.first { it.id == "a" }.pinned)
+        assertNull("and drops the pin moment", unpinned.first { it.id == "a" }.pinnedAt)
 
         val hit = ChatLog.Found(
             row("z"),
@@ -257,7 +291,8 @@ class HistoryViewTest {
             queryOk = true, why = null, whyNot = null,
             found = listOf(hit), more = false, partial = false, searched = 1,
         )
-        assertTrue(HistoryView.withPin(search, "z", pinned = true).found.single().row.pinned)
+        assertTrue(HistoryView.withPin(search, "z", pinned = true, at = 900).found.single().row.pinned)
+        assertEquals(900L, HistoryView.withPin(search, "z", pinned = true, at = 900).found.single().row.pinnedAt)
         assertFalse(HistoryView.withPin(search, "other", pinned = true).found.single().row.pinned)
     }
 

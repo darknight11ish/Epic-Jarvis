@@ -448,8 +448,13 @@ fun HistoryScreen(
                 val w = JarvisRuntime.pinChat(row.id, want)
                 if (w.ok) {
                     val nowPinned = w.pinned ?: want
-                    rows = rows?.let { HistoryView.withPin(it, row.id, nowPinned) }
-                    found = found?.let { HistoryView.withPin(it, row.id, nowPinned) }
+                    // The PC's own pin moment is what puts the row in its one
+                    // place (`pinned_at DESC`); an older PC that does not echo
+                    // it gets this phone's clock, so a just-pinned row still
+                    // goes to the top rather than to the bottom of Pinned.
+                    val at = if (nowPinned) w.pinnedAt ?: System.currentTimeMillis() / 1000L else null
+                    rows = rows?.let { HistoryView.withPin(it, row.id, nowPinned, at) }
+                    found = found?.let { HistoryView.withPin(it, row.id, nowPinned, at) }
                     listSaid = HistoryView.pinSaid(nowPinned)
                     if (nowPinned && HistoryView.PINNED_KEY in closed) {
                         // A section folded shut must not swallow the pin that was
