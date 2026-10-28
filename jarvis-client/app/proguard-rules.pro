@@ -77,6 +77,54 @@
     <init>();
 }
 
+# THE SAME REFLECTIVE HOLE, ONE STEP FURTHER ALONG - found on a real phone on
+# 2026-10-27, after the Room rule above had already stopped the crash.
+#
+# WorkManager names its default InputMerger as a STRING and loads it by name:
+#
+#   WorkRequest.Builder -> inputMergerClassName = OverwritingInputMerger.class.getName()
+#   WorkerWrapper       -> Class.forName(that string).newInstance()
+#
+# androidx.work's own consumer rules are why the CLASS survives at all, and
+# also why it still failed. Unzipped from the artifact this app actually
+# bundles (work-runtime-2.7.1.aar, its proguard.txt):
+#
+#   -keep class * extends androidx.work.InputMerger
+#
+# A `-keep class` with no member specification keeps the class and its name,
+# not its constructors. Nothing in any static call graph calls
+# OverwritingInputMerger's no-arg constructor - only `newInstance()` does,
+# invisibly to R8 - so it was stripped. On the phone that is not a crash; it
+# is a silent, permanent failure:
+#
+#   E/WM-InputMerger: Trouble instantiating + androidx.work.OverwritingInputMerger
+#       java.lang.InstantiationException: java.lang.Class<...> has no zero
+#       argument constructor
+#   E/WM-WorkerWrapper: Could not create Input Merger androidx.work.OverwritingInputMerger
+#
+# WorkManager needs that merger to run ANY job, and Glance runs a home-screen
+# widget's entire composition inside one of those jobs
+# (androidx.glance.session.SessionWorker, a CoroutineWorker). So no Glance
+# worker ever started, no widget was ever drawn, and every Jarvis widget sat
+# on the launcher's `initialLayout` - Glance's own bare ProgressBar, the
+# "buffering for ever" the owner reported - while the app itself worked
+# perfectly, because the app never uses WorkManager directly.
+#
+# CHECKED AGAINST THE SHIPPED APK'S OWN DEX, the artifact that actually failed
+# (pulled from the phone, not inferred): `dexdump classes.dex` shows
+# Landroidx/work/OverwritingInputMerger; with no <init> at all, only the
+# obfuscated merge method - and shows SessionWorker's public
+# (Context, WorkerParameters) constructor still present, kept by
+# WorkManager's own ListenableWorker rule. So this is the missing piece, not
+# one of several.
+#
+# This is also the part the note above says could not be verified, because the
+# dev container has no route to dl.google.com. It can now be: the AAR is in
+# this PC's Gradle cache and its proguard.txt is quoted verbatim above.
+-keep class * extends androidx.work.InputMerger {
+    <init>(...);
+}
+
 # ONNX Runtime (the "hey Jarvis" spotter). Its native library looks Java
 # classes, constructors and fields up BY NAME from C++ (OnnxTensor, OrtSession
 # and its Result, OrtException, the OnnxValue types) - calls R8 cannot see, so
