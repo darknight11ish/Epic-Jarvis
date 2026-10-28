@@ -4187,18 +4187,21 @@ const galaxy = (() => {
     if(nodes.length) renderCounts(nodes);
   }
 
-  /** Let go of the 3D engine, and with it the GPU context, while the map is not
-   *  drawn. The engine is built on the first frame the map is on screen and
-   *  dropped again when it leaves - the owner's guardrail for this wave
-   *  (2026-10-28): a picture nobody is looking at must not hold a WebGL context
-   *  or keep ~1,500 objects alive. The look stays chosen; only the engine goes,
-   *  and the flat 2D pass of the same look draws until it is back. */
+  /** Let go of the 3D engine, and with it the GPU context, while the galaxy is
+   *  HIDDEN (the owner's Hide the galaxy, or a backgrounded window) - the
+   *  owner's guardrail for this wave (2026-10-28): a picture nobody can see must
+   *  not keep a WebGL context or its ~1,500 objects alive. The look stays
+   *  chosen; only the engine goes, and the flat 2D pass of the same look draws
+   *  until `resumeCosmos` builds one again. Deliberately NOT called for a mere
+   *  conversation/map view switch: the engine's draws already stop there, and
+   *  rebuilding a GL context on every toggle would cost more than it saves. */
   function releaseCosmos(){
     if(cosmosEngine) dropCosmos();
   }
 
-  /** Build the 3D engine again when the map comes back on screen. A failure is
-   *  remembered in `cosmosFailed`, so this can never become a rebuild loop. */
+  /** Build the 3D engine again when the map is on screen after being hidden.
+   *  A failure is remembered in `cosmosFailed`, so this can never become a
+   *  rebuild loop. */
   function resumeCosmos(){
     if(cosmosEngine || cosmosFailed || !cosmosLook() || S.reduced) return;
     ensureCosmos();
