@@ -1022,6 +1022,16 @@ function focusPlace(target) {
 function applyPlace(place) {
   const target = $(place);
   if (!target) return false;
+  // A search filters the page, and a place names ONE card. Let the filter go
+  // first: otherwise the card is hidden and the scroll and the focus land on
+  // nothing the owner can see (the tray's update row can be clicked while a
+  // search is still in the box). This is the page's own box and the page's own
+  // listener - nothing is clicked and no setting is touched, only cleared.
+  const searchBox = $("settings-search-input");
+  if (searchBox && searchBox.value) {
+    searchBox.value = "";
+    searchBox.dispatchEvent(new Event("input", { bubbles: true }));
+  }
   const card = target.closest("section.card");
   const menuId = card?.dataset?.menuId || (card ? `settings.${card.id}` : null);
   if (menuId && menuManager.isHidden(menuId)) {

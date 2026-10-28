@@ -384,15 +384,24 @@ await check("an OPEN window hears the place instead of being reloaded", async ()
   const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
   await page.waitForTimeout(300);
   await page.evaluate(() => window.scrollTo(0, 0));
+  // A search in the box filters the page and hides this card. A place names one
+  // card, so it has to let the filter go first - otherwise the scroll and the
+  // focus land on something that is not on screen.
+  await page.locator("#settings-search-input").fill("voice");
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator("#updates").isVisible(), false,
+    "the filter did not hide the card this check needs hidden");
   await page.evaluate(() => window.__emit("settings-place", "updates"));
   await page.waitForFunction(() => {
     const card = document.getElementById("updates");
-    return card && Math.abs(card.getBoundingClientRect().top) < 60;
+    return card && !card.hidden && Math.abs(card.getBoundingClientRect().top) < 60;
   }, null, { timeout: 3000 }).catch(() => {});
   const seen = await page.evaluate(() => {
     const card = document.getElementById("updates");
     return {
       top: card.getBoundingClientRect().top,
+      hidden: card.hidden,
+      search: document.getElementById("settings-search-input").value,
       active: document.activeElement && document.activeElement.id,
       inside: card.contains(document.activeElement),
     };
@@ -402,6 +411,8 @@ await check("an OPEN window hears the place instead of being reloaded", async ()
   await page.waitForTimeout(100);
   const errorsAfter = page.__errors.length;
   await page.close();
+  assert.equal(seen.hidden, false, "a search kept hiding the card the place named");
+  assert.equal(seen.search, "", "the search box still filters the page after a place arrived");
   assert.ok(seen.top >= -4 && seen.top < 60,
     `the Updates card is ${Math.round(seen.top)}px from the top of the window`);
   assert.equal(seen.inside, true,
