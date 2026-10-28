@@ -17,7 +17,10 @@ real PC:
   2. the HUD-delta decision: a patch whose distinctive lines are present is
      ALREADY_PRESENT; one that is absent but has an anchor rule is inserted at exactly
      the configured anchor; an absent patch with no rule, or a missing/ambiguous anchor,
-     is refused LOUDLY and nothing is staged;
+     is refused LOUDLY and nothing is staged. "Distinctive" is proved against the
+     patch's OWN PRE-IMAGE: an added line the patch's hunks already show in the old text
+     is a re-written line and may never decide presence (see section 11 - that rule is
+     what silently skipped `cloud-escalate.patch`);
   3. `py_compile` rehearsal stops a broken staged file before any live file is touched;
   4. the shipped sync compares BYTES, writes only changed/missing files, writes the
      repository's bytes exactly (LF preserved), and backs every overwritten file into a
@@ -41,12 +44,29 @@ real PC:
      `--allow-worktree-mismatch` proceeds to the normal dry-run output; an empty
      `--ref` is refused too (it would read the list from the working tree but the
      bytes from the git index); the CLI flag reaches `run_deploy`.
+ 11. the exactness fix of 2026-10-28 (the measured live-drift finding): an added line
+     the patch's own hunks already show in the old text is a RE-WRITTEN line and may not
+     prove a patch is applied (that is exactly how `cloud-escalate.patch` was skipped -
+     `_says = _api.CloudAnswer(` and `def _lane_names() -> list:` are on its added side
+     and in its pre-image, so the loose "any added line is present" rule called a HUD
+     with none of its three hunks ALREADY_PRESENT). A patch with only re-written-line
+     matches, or with no distinctive line at all, is REFUSED by name, never skipped and
+     never applied on a guess; and the four 2026-10-27 patches (cloud-escalate,
+     f01-manual-lane-gate, reminder-actions, update-in-chat) are carried as their own
+     hunks, proved byte-for-byte against `git apply` on the published base. The
+     reference is the pre-image, NOT `jarvis-backend/`: that folder is a snapshot of the
+     owner's live folder with the stack already applied, measured to hold every added
+     line of 132 of the 160 patches (see `R.patch_pre_image`).
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
-only real repository files read are `scripts/apply-patches.ps1`, the two patches the
-deploy uses and the published base HUD `jarvis-backend/jarvis_hud.py` (the literal
-route delta's bytes are compared with it), for the parser/extraction tests (read-only).
-The ref-read proof builds its own two-commit git repository under a temporary folder.
+only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
+uses, and the published base files under `jarvis-backend/` - used as realistic FIXTURES
+(a file that already carries the old text, and the pre-image the hunk rules are checked
+on), never as the reference presence is proved against (section 11 says why). The
+ref-read proof builds its own two-commit git repository under a temporary folder, and the
+`git apply` oracle in section 11 does the same. The one test that can name a real live
+folder (`t_the_real_live_gate_gets_the_guards_read_only`) is read-only, is driven by
+`JARVIS_LIVE_BACKEND`, and SKIPS when that is unset - which is how CI runs it.
 """
 from __future__ import annotations
 
@@ -445,26 +465,45 @@ def t_presence_is_decided_from_distinctive_lines():
     check("all table probes present means ALREADY_PRESENT",
           R.patch_present("app-control.patch", "jarvis_hud.py",
                           ['        if route in ("/api/app-control/run", "/api/app-control/step",'],
-                          probes_ok))
+                          probes_ok) is True)
     half = MINI_HUD + '        if route in ("/api/app-control/run",\n'
     check("half a block is NOT present (the table needs every probe)",
           R.patch_present("app-control.patch", "jarvis_hud.py",
                           ['        if route in ("/api/app-control/run", "/api/app-control/step",'],
                           half) is False)
+    # What may serve as a probe: a line that is absent from the patch's OWN pre-image.
+    # The pre-image text is injected here so the decision is proved without the old
+    # fallback.
     generic = ["        # demo.patch (test)", "        marker_line = 1",
                "        another_line = 2"]
-    check("a generic patch is present when any distinctive line is",
+    check("a patch is present when a pre-image-absent distinctive line is",
           R.patch_present("demo.patch", "jarvis_hud.py", generic,
-                          "# x\nmarker_line = 1\n", table={}))
+                          "# x\nmarker_line = 1\n", table={},
+                          pre_image="# x\n") is True)
     check("... and absent when none is",
           R.patch_present("demo.patch", "jarvis_hud.py", generic,
-                          "# x\nnothing here\n", table={}) is False)
-    check("no distinctive lines falls back to the live state file",
-          R.patch_present("demo-old.patch", "jarvis_hud.py", ["+", ""], "text",
-                          table={}, state_patches=["rebuilt-patches/demo-old.patch"]))
-    check("lines rewritten by later patches fall back to the state file too",
-          R.patch_present("briefing.patch", "jarvis_gate.py", generic, "text",
-                          table={}, state_patches=["briefing.patch"]))
+                          "# x\nnothing here\n", table={},
+                          pre_image="# x\n") is False)
+    # A line the patch itself rewrites is on both sides of a hunk: it is in the live
+    # file with or without the patch, so it proves nothing and the answer is UNPROVEN.
+    context_line = "        marker_line = 1"
+    state, why = R.patch_presence("demo.patch", "jarvis_hud.py", [context_line],
+                                  "        marker_line = 1\n", table={},
+                                  pre_image="        marker_line = 1\n")
+    check("an added line that is in the patch's own pre-image cannot prove presence",
+          state == R.UNPROVEN, (state, why))
+    check("... and the reason says it cannot be proved either way",
+          "cannot be proved either way" in why, why)
+    # The live deploy's own patch list is a record of a past run, never proof of the
+    # bytes now in the file: it must not turn UNPROVEN into "already there".
+    listed, listed_why = R.patch_presence(
+        "briefing.patch", "jarvis_gate.py", [context_line], "        marker_line = 1\n",
+        table={}, state_patches=["briefing.patch"],
+        pre_image="        marker_line = 1\n")
+    check("the live patch list does not turn an unprovable patch into ALREADY_PRESENT",
+          listed == R.UNPROVEN, (listed, listed_why))
+    check("... the message still says the list is not proof",
+          "not of the bytes" in listed_why, listed_why)
 
 
 def t_insertion_uses_its_anchor_and_refuses_a_bad_one():
@@ -2569,6 +2608,495 @@ def t_a_missing_or_duplicated_secret_handoff_anchor_is_refused():
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
+
+# --------------------------------------------------------------------------
+#   11. the exactness fix (2026-10-28): a patch is PROVED applied or absent,
+#       never inferred from a line its own hunks already show in the old text
+#
+#   The measured bug (`.dsh-scratch/AUDITS-NEXT-2026-10-28/LIVE-DRIFT.md`, section
+#   4.3): `cloud-escalate.patch` was SILENTLY SKIPPED. Its added side carries
+#   `_says = _api.CloudAnswer(` and `def _lane_names() -> list:`, and both of those
+#   lines are already in the text its own hunks replace, so the rule "any one
+#   distinctive added line is present" matched a re-written line - while all three of
+#   its hunks (the standing cloud switch, the honest lane list, the auto=/fallback=
+#   CloudAnswer) were absent from the live HUD. `--apply` would have finished
+#   `RESULT: PASS`.
+#
+#   These tests hold the fix from both ends: the trap (a line on both sides of the
+#   patch's own hunk can never be a probe), the refusal (an unprovable patch is named,
+#   never skipped and never applied on a guess), and the rules that carry the four
+#   2026-10-27 patches - proved byte-for-byte against `git apply`, an applier this
+#   tool does not share.
+#
+#   The reference a probe is proved against is the patch's OWN PRE-IMAGE, not the
+#   published base. That is a measured correction to the brief: `jarvis-backend/` is a
+#   snapshot of the owner's LIVE folder and already carries the whole patch stack, so
+#   132 of the 160 patches have every added line in it (e.g. `_PUMP = _ev.Pump(...)`
+#   from events-pump.patch is at `jarvis-backend/jarvis_hud.py:6307`). See
+#   `R.patch_pre_image`'s docstring, which carries the same measurement.
+# --------------------------------------------------------------------------
+
+#: The published base files - used as realistic FIXTURES (a file the old rule called
+#: "already present"), never as the reference for what a probe may be.
+BASE_HUD = REPO / "jarvis-backend" / "jarvis_hud.py"
+BASE_GATE = REPO / "jarvis-backend" / "jarvis_gate.py"
+
+
+def show_patches(*names):
+    """A `show` seam that answers only the named patches, like the fixture's one."""
+    wanted = {str(n) for n in names}
+
+    def _show(repo, ref, repo_path):
+        base = Path(repo_path).name
+        return patch_text(base) if base in wanted else b""
+
+    return _show
+
+
+def git_apply_oracle(text: str, patches, target: str) -> str:
+    """Apply the REAL patches with git's own applier, in a throwaway temp folder.
+
+    Independent of the tool: `plan_deltas` replays a patch's hunks itself, and this
+    proves the result is byte-for-byte what the patch itself does. The temp folder is
+    a `git init` work tree holding exactly one file; no live folder is involved."""
+    root = tmpdir("reconcile-git-apply-")
+    try:
+        (root / target).write_bytes(text.encode("utf-8"))
+        _git(root, "init", "-q")
+        for patch in patches:
+            (root / patch).write_bytes(patch_text(patch))
+            proc = subprocess.run(["git", "apply", "--whitespace=nowarn", patch],
+                                  cwd=str(root), capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace")
+            if proc.returncode != 0:
+                raise AssertionError(f"git apply {patch} failed: "
+                                     f"{(proc.stderr or '').strip()}")
+        return (root / target).read_text(encoding="utf-8")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def make_base_live(root: Path, suffix: str, texts: dict) -> Path:
+    """A temp live folder whose patched files are EXACTLY `texts` (LF bytes).
+
+    Any of the five patched files the caller does not name gets the same stand-in the
+    other fixtures use, so a plan never trips over a missing file."""
+    live = root / f"live-{suffix}"
+    live.mkdir(parents=True, exist_ok=True)
+    for name, text in texts.items():
+        (live / name).write_bytes(text.encode("utf-8"))
+    for other in R.PATCHED_FILES:
+        if other not in texts:
+            write(live / other, "# a live patched base file\n")
+    write(live / "_jarvis-state.json", json.dumps({"patchList": []}))
+    return live
+
+
+def t_the_cloud_escalate_trap_is_unchanged_context():
+    """(b, evidence) The two lines the old rule matched are on BOTH sides of the patch."""
+    base = BASE_HUD.read_text(encoding="utf-8")
+    raw = patch_text("cloud-escalate.patch").decode("utf-8")
+    added = R.parse_patch_files(raw)["jarvis_hud.py"]["added"]
+    pre = R.patch_pre_image(raw, "jarvis_hud.py")
+    for line in ("_says = _api.CloudAnswer(", "def _lane_names() -> list:"):
+        check(f"cloud-escalate lists {line!r} on its ADDED side",
+              any(line in str(a) for a in added), line)
+        check(f"... and its OWN pre-image already holds {line!r}", line in pre, line)
+        check(f"... and so does the published base, {line!r}", line in base, line)
+    unique = R.distinctive_added_lines(added, pre)
+    check("neither of them is allowed to be a probe",
+          not any(line in u for u in unique
+                  for line in ("_says = _api.CloudAnswer(",
+                               "def _lane_names() -> list:")), unique[:4])
+    # The trap, measured: the REMOVED rule reports ALREADY_PRESENT for the published
+    # base - a file with none of this patch's post-image text - because its top
+    # candidate line is a re-written line.
+    check("the removed rule called the published base ALREADY_PRESENT (the bug)",
+          any(c in base for c in R.probe_candidates(added)) is True,
+          R.probe_candidates(added))
+    # ... and the fixed decision says exactly the opposite.
+    state, why = R.patch_presence("cloud-escalate.patch", "jarvis_hud.py", added,
+                                  base, table={}, pre_image=pre)
+    check("the fixed decision calls the same file ABSENT, not present",
+          state == R.ABSENT, (state, why))
+
+
+def t_cloud_escalate_with_its_hunks_absent_is_refused_not_skipped():
+    """(b) The measured case: hunks absent, only signature lines there => REFUSE."""
+    root = tmpdir()
+    try:
+        base = BASE_HUD.read_text(encoding="utf-8")
+        # A HUD with the two signature lines and the OLD bodies, and not one of the
+        # patch's pre-images: the shape the live folder was measured to have.
+        hunks = R.patch_hunks(patch_text("cloud-escalate.patch").decode("utf-8"),
+                              "jarvis_hud.py")
+        shape = base
+        for hunk in hunks:
+            shape = shape.replace("\n".join(hunk["old"]),
+                                  "\n".join(hunk["old"][:1]), 1)
+        check("the fixture really removed the patch's pre-images",
+              all("\n".join(h["old"]) not in shape for h in hunks))
+        live = make_base_live(root, "cloud-no-hunks", {"jarvis_hud.py": shape})
+        before = (live / "jarvis_hud.py").read_bytes()
+        show = show_patches("cloud-escalate.patch")
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["cloud-escalate.patch"], show=show, repo=REPO, table={},
+            state_patches=[])
+        check("a patch with no rule and its hunks absent is REFUSED by name",
+              len(refusals) == 1 and "cloud-escalate.patch" in refusals[0]
+              and "jarvis_hud.py" in refusals[0] and "no insertion rule" in refusals[0],
+              refusals)
+        check("... it is NOT reported ALREADY_PRESENT (the old silent skip)",
+              not any(d.status == "already" for d in deltas), deltas)
+        check("... the refusal says how to apply it by hand instead",
+              "apply-patches.ps1 -BackendPath" in refusals[0], refusals)
+        check("... nothing is staged", staged == {}, staged)
+        check("... and the live file is untouched",
+              (live / "jarvis_hud.py").read_bytes() == before)
+        # Even the live deploy's own patch list must not rescue it: a record of a
+        # past run is not the bytes now in the file.
+        _d2, staged2, refusals2 = R.plan_deltas(
+            live, ["cloud-escalate.patch"], show=show, repo=REPO, table={},
+            state_patches=["cloud-escalate.patch"])
+        check("... not even when the live patch list records it as applied",
+              bool(refusals2) and staged2 == {}, (refusals2, staged2))
+        # And with the real rule, that same file is REFUSED too (a pre-image that is
+        # gone), never half-applied and never skipped.
+        _d3, staged3, refusals3 = R.plan_deltas(
+            live, ["cloud-escalate.patch"], show=show, repo=REPO,
+            state_patches=[])
+        check("with its exact rule, a shifted HUD is still REFUSED, not guessed",
+              bool(refusals3) and "pre-image block" in refusals3[0]
+              and "expected exactly 1" in refusals3[0] and staged3 == {}, refusals3)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_cloud_escalate_and_f01_are_carried_as_their_hunks():
+    """(b) With its hunks present, cloud-escalate is carried exactly - and so is F-01.
+
+    The published base HUD is both patches' pre-image (cloud-escalate's hunks match it
+    exactly once; f01's hunk 2 and 3 pre-images are cloud-escalate's POST-image, which
+    is why `$PATCHES` puts cloud-escalate immediately before it - the tool walks the
+    same order). The staged text is compared with `git apply`, so the rule cannot
+    quietly carry a paraphrase."""
+    root = tmpdir()
+    try:
+        base = BASE_HUD.read_text(encoding="utf-8")
+        live = make_base_live(root, "cloud-hunks", {"jarvis_hud.py": base})
+        before = (live / "jarvis_hud.py").read_bytes()
+        names = ["cloud-escalate.patch", "f01-manual-lane-gate.patch"]
+        show = show_patches(*names)
+        deltas, staged, refusals = R.plan_deltas(
+            live, names, show=show, repo=REPO, state_patches=[],)
+        check("both 2026-10-27 HUD patches plan cleanly",
+              refusals == [] and list(staged) == ["jarvis_hud.py"],
+              (refusals, sorted(staged)))
+        text = staged.get("jarvis_hud.py", "")
+        expected = git_apply_oracle(base, names, "jarvis_hud.py")
+        check("the staged HUD is byte-for-byte what git apply makes of the same patches",
+              text == expected, (len(text), len(expected)))
+        check("... the standing-switch half is there (F-01's final three-paren form)",
+              "or bool(__import__(\"jarvis_presets\").escalate_on())))" in text
+              and "or manual_pick)," in text)
+        check("... the honest lane list is there",
+              "return list(jarvis_presets.cloud_lanes())" in text)
+        lane_fn = text[text.index("def _lane_names"):text.index("def _manual_lane")]
+        check("... the proxy-file regex the old lane list used is gone from it",
+              "re.findall(" not in lane_fn and "PROXY_FILE" not in lane_fn
+              and "jarvis_presets.cloud_lanes()" in lane_fn, lane_fn[:400])
+        check("... the auto=/fallback= CloudAnswer is there",
+              'auto=bool(getattr(decision, "auto", False)),' in text
+              and 'fallback=(lambda: __import__("jarvis_agent").answer_here(' in text)
+        check("... the manual-lane gate is there",
+              "def _manual_lane(decide, chosen, local_model: str, lanes=None):" in text
+              and "or manual_pick)," in text
+              and 'decision = _manual_decision(body.get("lane") or local_model,' in text)
+        check("... the staged HUD compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        check("... the live file was never touched",
+              (live / "jarvis_hud.py").read_bytes() == before)
+        check("... and both patches are reported as inserts, not 'already'",
+              sorted(d.patch for d in deltas) == sorted(names)
+              and all(d.status == "insert" for d in deltas), deltas)
+        # Pretend the deploy wrote it: a second plan must prove both are present.
+        (live / "jarvis_hud.py").write_bytes(text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, names, show=show, repo=REPO, state_patches=[],)
+        check("a second plan sees both as ALREADY_PRESENT and changes nothing",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already", "already"],
+              (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks():
+    """The two `jarvis_gate.py` patches from 2026-10-27 are proved, not guessed."""
+    root = tmpdir()
+    try:
+        base_gate = BASE_GATE.read_text(encoding="utf-8")
+        # reminder-actions: two insertions, and both pre-images are in the base gate.
+        live = make_base_live(root, "reminder-actions", {"jarvis_gate.py": base_gate})
+        before = (live / "jarvis_gate.py").read_bytes()
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["reminder-actions.patch"], show=show_patches("reminder-actions.patch"),
+            repo=REPO, state_patches=[])
+        text = staged.get("jarvis_gate.py", "")
+        check("reminder-actions plans cleanly on the published base gate",
+              refusals == [] and list(staged) == ["jarvis_gate.py"],
+              (refusals, sorted(staged)))
+        check("... the staged gate is what git apply makes of the same patch",
+              text == git_apply_oracle(base_gate, ["reminder-actions.patch"],
+                                       "jarvis_gate.py"))
+        check("... the gate knows schedule_action in BOTH places",
+              '    "schedule_action",        # jarvis_schedule.py acts only on tier "ask"'
+              in text
+              and '"schedule_action": ("yes", "local",' in text)
+        check("... it compiles", R.rehearse(staged) == [], R.rehearse(staged))
+        check("... the live gate was never touched",
+              (live / "jarvis_gate.py").read_bytes() == before)
+        check("... and the action is an insert, not 'already'",
+              [d.status for d in deltas] == ["insert"], deltas)
+        (live / "jarvis_gate.py").write_bytes(text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, ["reminder-actions.patch"], show=show_patches("reminder-actions.patch"),
+            repo=REPO, state_patches=[])
+        check("a second plan sees reminder-actions ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"], (again, refusals2))
+
+        # update-in-chat: ONE pure insertion. Its pre-image is the gate's
+        # `_NO_RULE_FROM_DENIAL` set as `uncensored-optins.patch` left it, which is
+        # newer than the published base, so the fixture is built from the patch's own
+        # pre-image (exactly what a live gate that has that patch holds).
+        hunk = R.patch_hunks(patch_text("update-in-chat.patch").decode("utf-8"),
+                             "jarvis_gate.py")[0]
+        fake_gate = "_NO_RULE_FROM_DENIAL = frozenset({\n" + "\n".join(hunk["old"]) + "\n"
+        live2 = make_base_live(root, "update-in-chat", {"jarvis_gate.py": fake_gate})
+        _d2, staged2, refusals2 = R.plan_deltas(
+            live2, ["update-in-chat.patch"], show=show_patches("update-in-chat.patch"),
+            repo=REPO, state_patches=[])
+        gate_text = staged2.get("jarvis_gate.py", "")
+        check("update-in-chat plans cleanly on its own pre-image",
+              refusals2 == [] and list(staged2) == ["jarvis_gate.py"],
+              (refusals2, sorted(staged2)))
+        check("... the staged gate is what git apply makes of the same patch",
+              gate_text == git_apply_oracle(fake_gate, ["update-in-chat.patch"],
+                                            "jarvis_gate.py"))
+        check("... `desktop_update` joins the set that can never become a standing rule",
+              '"desktop_update",  # jarvis_quick.py acts only on tier "ask"' in gate_text
+              and gate_text.index('"desktop_update"')
+              > gate_text.index('"fiction_roleplay_enable"'))
+        check("... it still compiles", R.rehearse(staged2) == [], R.rehearse(staged2))
+        (live2 / "jarvis_gate.py").write_bytes(gate_text.encode("utf-8"))
+        again2, staged3, refusals3 = R.plan_deltas(
+            live2, ["update-in-chat.patch"], show=show_patches("update-in-chat.patch"),
+            repo=REPO, state_patches=[])
+        check("a second plan sees update-in-chat ALREADY_PRESENT",
+              refusals3 == [] and staged3 == {}
+              and [d.status for d in again2] == ["already"], (again2, refusals3))
+        # A gate whose `_NO_RULE_FROM_DENIAL` block is not the patch's pre-image is
+        # refused rather than guessed (this PC's live gate could be older than it).
+        live3 = make_base_live(root, "update-in-chat-old", {"jarvis_gate.py": base_gate})
+        _d4, staged4, refusals4 = R.plan_deltas(
+            live3, ["update-in-chat.patch"], show=show_patches("update-in-chat.patch"),
+            repo=REPO, state_patches=[])
+        check("a gate that does not hold the pre-image is REFUSED, not inserted twice",
+              bool(refusals4) and "update-in-chat.patch" in refusals4[0]
+              and staged4 == {}, refusals4)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_patch_whose_only_match_is_unchanged_context_is_refused():
+    """(a) A match on a line the patch itself rewrites is not proof of anything.
+
+    The reduced cloud-escalate shape, and the same measurement: a patch that only
+    RE-WRAPS a call it already has lists the old text's lines on its `+` side (as
+    prefixes of the longer old lines), so every one of those "added" lines is in the
+    live file whether or not the patch was applied. The live fixture holds the OLD
+    form; the removed rule calls it present, and the fixed decision refuses."""
+    root = tmpdir()
+    try:
+        old_call = ('            _says = _api.CloudAnswer("event-stream" in str(\n'
+                    '                upstream.headers.get("Content-Type", "")).lower())\n')
+        patch = ("--- a/jarvis_hud.py\n+++ b/jarvis_hud.py\n@@ -10,2 +10,3 @@\n"
+                 "-" + old_call.splitlines()[0] + "\n"
+                 "-" + old_call.splitlines()[1] + "\n"
+                 "+            _says = _api.CloudAnswer(\n"
+                 '+                "event-stream" in str(\n'
+                 '+                    upstream.headers.get("Content-Type", "")).lower())\n')
+        added = R.parse_patch_files(patch)["jarvis_hud.py"]["added"]
+        pre = R.patch_pre_image(patch, "jarvis_hud.py")
+        check("the fixture's every added line really is in its own pre-image",
+              bool(added) and all(a.strip() in pre for a in added if a.strip()),
+              [(a, a.strip() in pre) for a in added])
+        live = make_live(root)
+        (live / "jarvis_hud.py").write_bytes((MINI_HUD + "\n\n" + old_call).encode("utf-8"))
+        before = (live / "jarvis_hud.py").read_bytes()
+        live_text = (live / "jarvis_hud.py").read_text(encoding="utf-8")
+        check("the removed rule calls that live file ALREADY_PRESENT (the bug)",
+              any(a.strip() in live_text for a in added if a.strip()))
+        state, why = R.patch_presence("rewrap.patch", "jarvis_hud.py", added,
+                                      live_text, table={}, pre_image=pre)
+        check("a match on unchanged context is UNPROVEN, not PRESENT",
+              state == R.UNPROVEN and "cannot be proved either way" in why, (state, why))
+        check("... and the reason names the pre-image as the reference",
+              "pre-image" in why, why)
+        show = lambda repo, ref, path: patch.encode()          # noqa: E731
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["rewrap.patch"], show=show, repo=REPO, state_patches=[],)
+        check("... so the deploy REFUSES it, by name",
+              len(refusals) == 1 and "rewrap.patch" in refusals[0]
+              and "jarvis_hud.py" in refusals[0], refusals)
+        check("... it is neither applied nor skipped",
+              staged == {} and not any(d.status == "already" for d in deltas),
+              (staged, deltas))
+        check("... and the live file is untouched",
+              (live / "jarvis_hud.py").read_bytes() == before)
+        # A rule WITHOUT probes must not rescue an unprovable patch either: the
+        # presence decision is still UNPROVEN, so nothing may be inserted. (A rule with
+        # probes is different by design - those probes are a human's explicit evidence,
+        # so their absence proves the patch is absent and the rule may carry it.)
+        table = {"rewrap.patch": {"jarvis_hud.py": {
+            "anchor": "def do_POST(self):"}}}
+        _d2, staged2, refusals2 = R.plan_deltas(
+            live, ["rewrap.patch"], show=show, repo=REPO, table=table,
+            state_patches=[])
+        check("an anchor rule without probes does not turn it into an insert",
+              staged2 == {} and bool(refusals2)
+              and "cannot be proved either way" in refusals2[0], refusals2)
+        check("... the refusal says what to add (probes) and what to do next",
+              "probes" in refusals2[0] and "apply-patches.ps1" in refusals2[0],
+              refusals2)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_patch_with_no_distinctive_line_is_refused_by_name():
+    """(c) Nothing to prove it with at all: refused by name, never skipped."""
+    root = tmpdir()
+    try:
+        live = make_live(root)
+        before = (live / "jarvis_hud.py").read_bytes()
+        patch = ("--- a/jarvis_hud.py\n+++ b/jarvis_hud.py\n@@ -1,1 +1,3 @@\n"
+                 " context\n"
+                 "+        pass\n"
+                 "+        return True\n")
+        show = lambda repo, ref, path: patch.encode()          # noqa: E731
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["quiet.patch"], show=show, repo=REPO, state_patches=[],)
+        check("a patch with no distinctive line is REFUSED by name",
+              len(refusals) == 1 and "quiet.patch" in refusals[0]
+              and "jarvis_hud.py" in refusals[0], refusals)
+        check("... the refusal says it can be proved neither present nor absent",
+              "cannot be proved either way" in refusals[0], refusals)
+        check("... it says what would make it provable (a DELTA_TABLE entry)",
+              "DELTA_TABLE" in refusals[0] and "probes" in refusals[0], refusals)
+        check("... it says how to apply the stack by hand instead",
+              "apply-patches.ps1 -BackendPath" in refusals[0], refusals)
+        check("... nothing is staged, nothing is called 'already', the file is intact",
+              staged == {} and not any(d.status == "already" for d in deltas)
+              and (live / "jarvis_hud.py").read_bytes() == before,
+              (staged, deltas))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_dry_run_prints_every_refusal_and_writes_nothing():
+    """Step 5: the dry run prints add/update/unchanged and EVERY refusal, and writes
+    nothing. The refusal is the whole reason a deploy stops, so it is never truncated
+    to "... and N more"."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        script = FIXTURE_SCRIPT.replace(
+            "    'setup.patch'\n", "    'setup.patch'\n    'quiet.patch'\n")
+        quiet = ("--- a/jarvis_hud.py\n+++ b/jarvis_hud.py\n@@ -1,1 +1,3 @@\n"
+                 " context\n+        pass\n+        return True\n")
+
+        def show(repo_path, ref, name):
+            if name == R.PATCH_SCRIPT:
+                return script.encode("utf-8")
+            if Path(name).name == "quiet.patch":
+                return quiet.encode("utf-8")
+            return fake_show(repo_path, ref, name)
+
+        before = {p.name: p.read_bytes() for p in live.iterdir() if p.is_file()}
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines, show=show)
+        text = "\n".join(lines)
+        check("a dry run with a refusal exits 2", code == 2, (code, lines[-4:]))
+        check("... it prints the refusal in full, with no 'and N more'",
+              "quiet.patch" in text and "and 1 more" not in text, lines[-8:])
+        check("... it says what to do next (the patch script, then re-run)",
+              "apply-patches.ps1 -BackendPath" in text and "0 refusals" in text,
+              text[-700:])
+        check("... and it still printed the shipped plan above the refusal",
+              "SHIPPED (3 files in $SHIPPED" in text and "unchanged:" in text,
+              lines[:8])
+        after = {p.name: p.read_bytes() for p in live.iterdir() if p.is_file()}
+        check("... and a refused dry run wrote nothing and made no backup",
+              after == before
+              and not any(p.name.startswith("_jarvis-deploy-backup-tool-")
+                          for p in live.iterdir()))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_no_test_touches_a_live_folder():
+    """(d) Every live tree this suite plans against is a temporary folder.
+
+    The tool has no default backend path and no built-in live folder: `--backend-path`
+    is required. So the only way a test could reach a real backend is by naming one, and
+    this check proves the fixture path it uses is under the system temp folder - then
+    that a plan of all four 2026-10-27 patches changes no byte in it (the staged text is
+    returned, not written)."""
+    root = tmpdir()
+    try:
+        tmp = Path(tempfile.gettempdir()).resolve()
+        base_hud = BASE_HUD.read_text(encoding="utf-8")
+        # The gate holds the published base's own text PLUS update-in-chat's pre-image
+        # (that block is newer than the base, so it is appended here rather than read).
+        hunk = R.patch_hunks(patch_text("update-in-chat.patch").decode("utf-8"),
+                             "jarvis_gate.py")[0]
+        gate = BASE_GATE.read_text(encoding="utf-8")
+        gate += ("\n\n_NO_RULE_FROM_DENIAL_COPY = frozenset({\n"
+                 + "\n".join(hunk["old"]) + "\n)\n")
+        live = make_base_live(root, "no-touch",
+                              {"jarvis_hud.py": base_hud, "jarvis_gate.py": gate})
+        check("the live fixture is under the system temp folder",
+              tmp == live.resolve() or tmp in live.resolve().parents, live)
+        names = ["cloud-escalate.patch", "f01-manual-lane-gate.patch",
+                 "reminder-actions.patch", "update-in-chat.patch"]
+        before = {p.name: p.read_bytes() for p in live.iterdir() if p.is_file()}
+        _deltas, staged, refusals = R.plan_deltas(
+            live, names, show=show_patches(*names), repo=REPO, state_patches=[],)
+        after = {p.name: p.read_bytes() for p in live.iterdir() if p.is_file()}
+        check("all four 2026-10-27 patches plan with no refusal at all",
+              refusals == [], refusals)
+        check("planning the four patches against a temp live writes no file",
+              after == before, (sorted(before), sorted(after)))
+        check("... the staged text is returned, not written",
+              sorted(staged) == ["jarvis_gate.py", "jarvis_hud.py"], sorted(staged))
+        check("... and no backup folder appears beside it",
+              not any("_jarvis-deploy-backup" in p.name for p in live.iterdir()))
+        # There is no built-in live folder to fall back to: the CLI itself refuses to
+        # start without one (proved by calling it, not by reading its source). argv is
+        # empty and stderr is muted so argparse's usage line does not litter the suite.
+        refused = False
+        with mock.patch("sys.stderr"):
+            try:
+                R.main([])
+            except SystemExit as exc:
+                refused = int(exc.code or 0) == 2
+        check("the CLI refuses to run without --backend-path (no default live folder)",
+              refused, refused)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -2588,6 +3116,14 @@ def main():
                t_the_lists_are_read_from_the_ref_not_the_working_tree,
                t_a_patch_parses_into_per_file_added_lines,
                t_presence_is_decided_from_distinctive_lines,
+               t_the_cloud_escalate_trap_is_unchanged_context,
+               t_cloud_escalate_with_its_hunks_absent_is_refused_not_skipped,
+               t_cloud_escalate_and_f01_are_carried_as_their_hunks,
+               t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks,
+               t_a_patch_whose_only_match_is_unchanged_context_is_refused,
+               t_a_patch_with_no_distinctive_line_is_refused_by_name,
+               t_the_dry_run_prints_every_refusal_and_writes_nothing,
+               t_no_test_touches_a_live_folder,
                t_insertion_uses_its_anchor_and_refuses_a_bad_one,
                t_the_two_2026_10_14_hud_fixes_are_literal_deltas,
                t_the_api_status_route_delta_replaces_the_inline_route,

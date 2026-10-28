@@ -71,7 +71,7 @@ const card = section("first-run");
 
 await check("the settings page has the card, before Connection", () => {
   // "In the order a person would do them" starts with where the card sits:
-  // the first thing under the page's own heading, not buried in Rare.
+  // the first thing on the page, not buried among the read-only cards.
   const connection = section("connection");
   assert.ok(card.at < connection.at, "the Set up Jarvis card is below Connection");
   assert.match(card.all, /<h2>Set up Jarvis<\/h2>/, "the card has no heading");
@@ -80,14 +80,13 @@ await check("the settings page has the card, before Connection", () => {
   assert.doesNotMatch(card.tag, /\bhidden\b/, "the card starts hidden");
 });
 
-await check("the jump list points at it first, under Everyday", () => {
+await check("the jump list points at it first", () => {
   const nav = HTML.slice(HTML.indexOf('class="settings-jump"'), HTML.indexOf("</nav>"));
-  const everyday = nav.slice(nav.indexOf("Everyday"));
-  assert.match(everyday, /<a href="#first-run">Set up Jarvis<\/a>/,
+  assert.match(nav, /<a href="#first-run">Set up Jarvis<\/a>/,
     "the jump list has no Set up Jarvis row");
-  const first = everyday.indexOf("<a href=");
-  assert.equal(everyday.slice(first, first + 40).includes("#first-run"), true,
-    "Set up Jarvis is not the first jump row under Everyday");
+  const first = nav.indexOf("<a href=");
+  assert.equal(nav.slice(first, first + 40).includes("#first-run"), true,
+    "Set up Jarvis is not the first jump row");
 });
 
 await check("the page loads the module as a real ES module", () => {

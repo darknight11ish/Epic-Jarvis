@@ -36,9 +36,11 @@ Runs anywhere; no Home Assistant, no model, no network, no Windows Hello
    boundary - and `is_command()` recognises every new sentence, so
    jarvis_intake.owner_turns never learns one of these as a fact.
 8. The settings.html jump list is still a map of that page, after the
-   owner's 2026-10-06 tidy-up: its bands are the page's own three headings
-   in order, every link is a real card on the page, none is listed twice and
-   none is missing (t_jump_list_matches_the_page).
+   owner's 2026-10-06 tidy-up: all the editable cards first, then the
+   page's one remaining heading ("What Jarvis does") and its cards, every
+   link a real card on the page, none listed twice and none missing
+   (t_jump_list_matches_the_page). The Everyday/Rare bands went on
+   2026-10-27 - see that test's docstring.
 """
 from __future__ import annotations
 
@@ -289,10 +291,20 @@ def t_jump_list_matches_the_page():
 
     The owner, 2026-10-06: "organize the jump to settings in the settings
     menu? This is really disorganized" - about forty links in eleven flat
-    rows. The fix groups them under the page's own three bands (Everyday,
-    Rare, What Jarvis does) and, inside each band, under the short groups
-    `docs/ease-audit-2026-09-27/customize.md` proposed and `critic.md:199`
-    kept as "the target order of the jump list".
+    rows. The fix groups them into short place rows,
+    `docs/ease-audit-2026-09-27/customize.md`'s groups and `critic.md:199`'s
+    "target order of the jump list", still in that order.
+
+    THE EVERYDAY / RARE SPLIT WENT ON 2026-10-27. The owner: "get rid of the
+    general clasification of everyday settings with things like everyday or
+    rare in settings, search bar should search for matching terms." The page
+    used to divide the same cards into three bands (Everyday, Rare, What
+    Jarvis does) and this test held the list to all three. The two frequency
+    bands are gone from the page AND from the list; the one heading left is a
+    fact about those cards (they report, they change nothing), not a guess
+    about how often you need them. The list still has two groups because the
+    page still has that one heading - all the editable cards first, then the
+    read-only ones - and every id, anchor and card is unchanged.
 
     WHY THIS TEST AND NOT A REGISTRY FIELD. Checked before the grouping was
     chosen: `jarvis_settings_registry.py`'s SECTIONS carries an id, its
@@ -303,7 +315,7 @@ def t_jump_list_matches_the_page():
     list's own links, are in no group at all). So there was no grouping to
     use, and adding one would have made the backend a second, quieter owner
     of where a card sits on one desktop page. What is checked instead is the
-    two things that can really drift apart: the page's own band order, and
+    two things that can really drift apart: the page's own group order, and
     the jump list's agreement with it.
 
     Proves, and does NOT prove:
@@ -312,8 +324,8 @@ def t_jump_list_matches_the_page():
       * no link is listed twice, and none is missing - all of them are still
         there, which is what "every existing link must keep working" means
         for a list that only ever adds an anchor;
-      * each band's links ARE that band's cards, in the page's own order -
-        a link that floated to another band, or a card inserted in the wrong
+      * each group's links ARE that group's cards, in the page's own order -
+        a link that floated to another group, or a card inserted in the wrong
         place, fails here;
       * every link is in SECTIONS with app "both"/"desktop", so nothing on
         this list is a place "open <name>" cannot name.
@@ -322,14 +334,15 @@ def t_jump_list_matches_the_page():
     """
     settings_html = (REPO / "jarvis-desktop" / "src" / "settings.html").read_text(encoding="utf-8")
 
-    # The page's three bands, in order, with the exact heading each carries.
+    # The page's one heading, with the exact text it carries.
     headings = [(m.start(), m.group(1)) for m in
                 re.finditer(r'<h2 class="settings-group-heading">([^<]+)</h2>', settings_html)]
-    check("the page still has its three bands, in this order",
-          [h for _, h in headings] == ["Everyday", "Rare", "What Jarvis does"],
+    check("the page has one group heading, the read-only one",
+          [h for _, h in headings] == ["What Jarvis does"],
           [h for _, h in headings])
 
-    # Every card the page has, in page order, split by the band it sits under.
+    # Every card the page has, in page order, split by the heading it sits
+    # under (or under none, which is where every editable card now lives).
     card_ids = [m.group(1) for m in
                 re.finditer(r'<section class="card"[^>]*\bid="([^"]+)"', settings_html)]
     card_ids.append("more-options")          # the one top-level <details>
@@ -350,31 +363,33 @@ def t_jump_list_matches_the_page():
     nav_end = settings_html.index("</nav>", nav_at)
     nav = settings_html[nav_at:nav_end]
 
-    # Read the list back the way a person does: the band labels divide it, and
-    # every link belongs to the band label above it.
-    listed_by_band = {name: [] for _, name in headings}
-    band_now = None
-    for m in re.finditer(r'<span class="settings-jump-label">([^<]+)</span>'
-                         r'|<a href="#([\w-]+)">', nav):
-        if m.group(1) is not None:
-            band_now = m.group(1)
-        else:
-            check(f"jump link #{m.group(2)} sits under a band label",
-                  band_now in listed_by_band, band_now)
-            if band_now in listed_by_band:
-                listed_by_band[band_now].append(m.group(2))
+    # Read the list back the way a person does: each
+    # `<div class="settings-jump-group">` is one group, a group may carry ONE
+    # label, and the links belong to the group that holds them.
+    groups = []
+    for block in re.findall(
+            r'<div class="settings-jump-group">(.*?)\n        </div>', nav, re.S):
+        label = re.search(r'<span class="settings-jump-label">([^<]+)</span>', block)
+        groups.append({
+            "label": label.group(1) if label else None,
+            "links": re.findall(r'<a href="#([\w-]+)">', block),
+        })
+    check("the jump list has two groups: the settings, then the read-only group",
+          [g["label"] for g in groups] == [None, "What Jarvis does"],
+          [g["label"] for g in groups])
 
-    by_band = {name: [] for _, name in headings}
-    for cid in card_ids:
-        if cid in band_of:
-            by_band[band_of[cid]].append(cid)
+    editable = [cid for cid in card_ids
+                if cid not in band_of and cid not in ("start-jarvis", "crash-notes")]
+    read_only = [cid for cid in card_ids if band_of.get(cid) == "What Jarvis does"]
+    for want, got, label in ((editable, groups[0]["links"] if groups else [], "settings"),
+                             (read_only, groups[1]["links"] if len(groups) > 1 else [],
+                              "What Jarvis does")):
+        check(f"the {label} group lists every card that belongs to it, "
+              f"in the page's own order",
+              got == want,
+              f"listed {got}, page has {want}")
 
-    for name in listed_by_band:
-        check(f"the {name} band lists every card in it, in the page's own order",
-              listed_by_band[name] == by_band[name],
-              f"listed {listed_by_band[name]}, page has {by_band[name]}")
-
-    every = [cid for ids in listed_by_band.values() for cid in ids]
+    every = [cid for g in groups for cid in g["links"]]
     check("no jump link is listed twice", len(every) == len(set(every)),
           sorted({c for c in every if every.count(c) > 1}))
     # Every href really is on this page - an anchor to nothing scrolls nowhere.
@@ -388,10 +403,11 @@ def t_jump_list_matches_the_page():
                   or R.section_by_id(c).app not in ("both", "desktop")]
     check("every jump link is a SECTION this app has", not unopenable, unopenable)
 
-    # The grouping is short rows inside a band, never a third level: a band's
-    # own direct children are its `.settings-jump-place` rows and nothing else.
+    # The grouping is short rows inside a group, never a third level: a
+    # group's own direct children are its `.settings-jump-place` rows and
+    # its own label, nothing else.
     for g in re.findall(r'<div class="settings-jump-group">(.*?)\n        </div>', nav, re.S):
-        check("a band holds only jump rows and its own label",
+        check("a group holds only jump rows and its own label",
               not re.search(r'<a\s', re.sub(r'<div class="settings-jump-place">.*?</div>', "", g, flags=re.S)),
               g[:80])
     check("no jump row is empty",
