@@ -196,6 +196,12 @@ pub struct SupervisorState {
 struct Owned {
     child: Child,
     tree: ProcessTree,
+    /// Windows only: the sidecar's own kill-on-close job, held for as long as
+    /// this backend should live. Named with a leading `_` because it is never
+    /// read - it is held for its `Drop`, which is what closes the last handle
+    /// and so ends the backend if this app dies first.
+    #[cfg(windows)]
+    _job: Option<SidecarJob>,
     started: Instant,
     /// The process we launched has exited. The *tree* may still be serving:
     /// `python.exe` on Windows is often an App Execution Alias or a launcher
@@ -541,6 +547,147 @@ fn resolved_program(program: &str) -> Result<std::path::PathBuf, String> {
     })
 }
 
+// ---------------------------------------------------------------------------
+// The latch at the spawn site: a Job Object of our own that dies with this
+// process
+// ---------------------------------------------------------------------------
+//
+// `proctree::spawn` already puts the backend in a KILL_ON_JOB_CLOSE job before
+// it runs one instruction, so a crash of this app takes the backend with it.
+// This is a SECOND latch, created here at the sidecar's own spawn site, for the
+// one thing that job cannot promise: it lives inside the `ProcessTree` value,
+// and a later refactor that hands only the pid around - or parks the child
+// somewhere the tree is dropped early - would quietly remove the guarantee
+// without removing any code that looks like it. Two independent handles are
+// closed by Windows when this process ends; either one is enough.
+//
+// It is also the shape the Python side documents for its own children
+// (`jarvis_sandbox_exec.py`'s ctypes call: CreateJobObjectW, then
+// `JobObjectExtendedLimitInformation` with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`,
+// then assign). Same API, same flag, in Rust.
+//
+// Nothing here may panic or refuse a start: if the job cannot be created or the
+// child cannot be assigned to it, that is logged in plain words and the backend
+// runs under the process tree's job alone. A machine that will not give us a
+// second latch is not a reason to leave the owner with no backend.
+
+#[cfg(windows)]
+mod installer_job {
+    use crate::logfile;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+
+    /// The limit this job is created with, as a value so a test can hold it
+    /// without making a Win32 call.
+    ///
+    /// `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` is the whole point: when the last
+    /// handle to the job closes - which Windows does for this process when it
+    /// ends, crash and Task Manager "End task" included - every process still
+    /// in the job is terminated.
+    pub fn limit_flags() -> u32 {
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    }
+
+    /// A Job Object the backend was put in, held for as long as it should live.
+    ///
+    /// Dropping it closes the last handle, which terminates whatever is in it:
+    /// that is both the crash backstop and harmless cleanup once the backend
+    /// has already been stopped.
+    pub struct SidecarJob {
+        job: HANDLE,
+    }
+
+    // The Windows HANDLE is a raw pointer, which is not `Send`/`Sync` by
+    // default. A job object handle is a kernel object usable from any thread in
+    // the process, and this one is only ever created, assigned to and closed -
+    // never dereferenced. The same reasoning `proctree`'s `ProcessTree` carries.
+    unsafe impl Send for SidecarJob {}
+    unsafe impl Sync for SidecarJob {}
+
+    impl SidecarJob {
+        /// Creates the job and puts `child` in it, or says why not and gives
+        /// `None` - never a panic, because this runs while a backend is starting.
+        pub fn arm(child: &std::process::Child, pid: u32) -> Option<SidecarJob> {
+            use std::os::windows::io::AsRawHandle;
+            // SAFETY: an unnamed job with default security attributes. A null
+            // return is a failure and is checked.
+            let job: HANDLE = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+            if job.is_null() {
+                logfile::log(&format!(
+                    "[jarvis] could not create the backend's own kill-on-close job ({}), so \
+                     this backend is covered only by the process tree - which still takes it \
+                     down if this app dies.",
+                    std::io::Error::last_os_error()
+                ));
+                return None;
+            }
+
+            let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+            limits.BasicLimitInformation.LimitFlags = limit_flags();
+            // SAFETY: `limits` is a fully initialised value of the struct this
+            // information class expects, and the size passed matches it.
+            let set = unsafe {
+                SetInformationJobObject(
+                    job,
+                    JobObjectExtendedLimitInformation,
+                    std::ptr::addr_of!(limits).cast(),
+                    std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                )
+            };
+            if set == 0 {
+                let err = std::io::Error::last_os_error();
+                // SAFETY: created just above, never handed out.
+                unsafe { CloseHandle(job) };
+                logfile::log(&format!(
+                    "[jarvis] could not arm the backend's kill-on-close job ({err}), so this \
+                     backend is covered only by the process tree."
+                ));
+                return None;
+            }
+
+            // SAFETY: the handle comes from a live `Child` this process owns.
+            let assigned =
+                unsafe { AssignProcessToJobObject(job, child.as_raw_handle() as HANDLE) };
+            if assigned == 0 {
+                let err = std::io::Error::last_os_error();
+                // SAFETY: created just above, never handed out.
+                unsafe { CloseHandle(job) };
+                // A process already in a job can be put in another one on
+                // Windows 8 and later; where that is refused, the process
+                // tree's own job remains the backstop, so this is said and the
+                // backend keeps running.
+                logfile::log(&format!(
+                    "[jarvis] could not put the backend (pid {pid}) in its own kill-on-close \
+                     job ({err}); the process tree's job still takes it down if this app dies."
+                ));
+                return None;
+            }
+
+            logfile::log(&format!(
+                "[jarvis] backend (pid {pid}) is in a kill-on-close job: if this app ends \
+                 without stopping it, Windows ends the backend too."
+            ));
+            Some(SidecarJob { job })
+        }
+    }
+
+    impl Drop for SidecarJob {
+        fn drop(&mut self) {
+            // The last handle closing is the backstop, and harmless once the
+            // backend has already stopped.
+            // SAFETY: the handle is owned by this value and closed once.
+            unsafe { CloseHandle(self.job) };
+        }
+    }
+}
+
+#[cfg(windows)]
+use installer_job::SidecarJob;
+
 /// Spawns the child, inside a process tree that can be killed whole.
 fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, String> {
     let program = resolved_program(&config.program)?;
@@ -637,10 +784,19 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
     })?;
     let pid = child.id();
 
+    // The second latch (see `installer_job` above). The child is already in the
+    // process tree's job, so this is not the race guard: it is the handle that
+    // lives beside the child and closes with this process. A failure here is
+    // logged and the backend still starts.
+    #[cfg(windows)]
+    let job = SidecarJob::arm(&child, pid);
+
     let state = app.state::<SupervisorState>();
     *state.lock() = Some(Owned {
         child,
         tree,
+        #[cfg(windows)]
+        _job: job,
         started: Instant::now(),
         child_exited: false,
     });
@@ -806,6 +962,89 @@ pub fn stop_on_exit(app: &AppHandle) {
             async move { stop_owned(&handle, "the app is exiting").await },
         );
     println!("[jarvis] {outcome}");
+}
+
+/// How long the backend is given to stop on the way into a desktop installer.
+///
+/// Three seconds, not the exit path's ~8: this wait happens while a person is
+/// watching an install button, and the process tree is terminated anyway when
+/// the budget runs out - that is what `stop_owned` does at the end of its own
+/// grace period. What the budget buys is the installer never starting while a
+/// backend it is about to overwrite is still serving.
+pub const INSTALLER_STOP_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// What happened when the backend was stopped for the desktop installer.
+///
+/// Four answers rather than a bool: "this app did not start one", "it stopped",
+/// "the budget ran out" and "the stop ended without an answer" are four
+/// different things to write down, and only the first two are a clean hand-off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopForInstaller {
+    /// Nothing to stop: the running backend was started by someone else, and
+    /// this app never adopts one it did not start.
+    NotOwned,
+    /// It stopped (or had already gone) inside the budget.
+    Stopped,
+    /// The budget ran out. The stop continues on its own thread and nothing is
+    /// claimed about the backend's state.
+    TimedOut,
+    /// The stop ended without saying whether it worked. Nothing is claimed.
+    Failed,
+}
+
+/// Stops the backend and waits for it - up to [`INSTALLER_STOP_TIMEOUT`].
+///
+/// Called from the updater's `on_before_exit` hook (which runs inside
+/// `download_and_install`'s `.await` on the async runtime) and from the explicit
+/// stop `update::prepare_desktop_half` performs before that hook. A nested
+/// `block_on` on the calling thread would panic, so the stop moves to a plain
+/// OS thread and this waits on a channel: the hook must not return until the
+/// backend is gone, because the installer starts the moment it does.
+///
+/// Never panics: every ending is a value, and every ending other than `Stopped`
+/// is written to the log in plain words by [`stop_for_installer_words`].
+pub fn stop_for_installer(app: &AppHandle) -> StopForInstaller {
+    if !app.state::<SupervisorState>().owns() {
+        return StopForInstaller::NotOwned;
+    }
+    let handle = app.clone();
+    let (done, waited) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        let said = tauri::async_runtime::block_on(async move {
+            stop_owned(&handle, "installing Jarvis Desktop").await
+        });
+        logfile::log(&format!("[jarvis] {said}"));
+        let _ = done.send(());
+    });
+    match waited.recv_timeout(INSTALLER_STOP_TIMEOUT) {
+        Ok(()) => StopForInstaller::Stopped,
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => StopForInstaller::TimedOut,
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => StopForInstaller::Failed,
+    }
+}
+
+/// The plain sentence for each ending above, for the log.
+pub fn stop_for_installer_words(outcome: StopForInstaller) -> String {
+    match outcome {
+        StopForInstaller::NotOwned => {
+            "no backend was stopped for the installer: this app did not start the one \
+             that is running."
+                .to_string()
+        }
+        StopForInstaller::Stopped => {
+            "the backend stopped before the desktop installer runs.".to_string()
+        }
+        StopForInstaller::TimedOut => format!(
+            "the backend did not confirm it stopped within {} seconds, so the installer \
+             runs anyway and the backend may still be closing.",
+            INSTALLER_STOP_TIMEOUT.as_secs()
+        ),
+        StopForInstaller::Failed => {
+            "the backend stop ended without an answer, so the installer runs anyway and \
+             the backend may still be running."
+                .to_string()
+        }
+    }
 }
 
 /// Waits — in the background — for a freshly started backend to answer, then
@@ -1321,6 +1560,199 @@ mod tests {
         // the first having aged out.
         assert!(!w.try_reserve_restart(t0 + cycle * 3));
         assert!(w.mark_given_up());
+    }
+
+    // -- the last-resort latch, and the bounded stop (corrections, 2026-10-27)
+
+    /// The job is created with one limit, and it is the one that ends the
+    /// backend when this app does: `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. A
+    /// different flag would look just as plausible and do nothing on a crash.
+    #[cfg(windows)]
+    #[test]
+    fn the_sidecar_job_is_created_with_kill_on_close_and_nothing_else() {
+        let flags = super::installer_job::limit_flags();
+        assert_eq!(
+            flags,
+            windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        );
+        assert_eq!(
+            flags.count_ones(),
+            1,
+            "more than the one limit is set: {flags:#x}"
+        );
+    }
+
+    /// The spawn path really arms it, and failing to is logged rather than fatal
+    /// or a panic. Source pins, because this is wiring a later edit could drop
+    /// without any compile error.
+    #[test]
+    fn the_spawn_path_arms_the_kill_on_close_job() {
+        let src = include_str!("sidecar.rs");
+        for needle in [
+            "CreateJobObjectW",
+            "SetInformationJobObject",
+            "AssignProcessToJobObject",
+            "JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE",
+        ] {
+            assert!(
+                src.contains(needle),
+                "the sidecar's Job Object lost `{needle}`"
+            );
+        }
+        let start = &src[src.find("fn start(").expect("sidecar has no start")..];
+        let start = &start[..start.find("fn start_backend(").expect("start has no end")];
+        assert!(
+            start.contains("SidecarJob::arm("),
+            "the backend is spawned without its own kill-on-close job"
+        );
+        // Windows only: the non-Windows build has no such type at all, so a
+        // Linux build cannot silently lose the promise either.
+        assert!(
+            src.contains("#[cfg(windows)]\nmod installer_job {"),
+            "the job is no longer behind #[cfg(windows)]"
+        );
+        // Errors are logged, never a panic: this runs while a backend starts.
+        let job = &src[src.find("mod installer_job {").expect("the job module")..];
+        let job = &job[..job
+            .find("\n#[cfg(windows)]\nuse installer_job::SidecarJob;")
+            .expect("the job module has no end")];
+        for forbidden in ["unwrap(", "expect(", "panic!"] {
+            assert!(
+                !job.contains(forbidden),
+                "the job can {forbidden} while a backend is starting"
+            );
+        }
+        assert!(
+            job.contains("logfile::log"),
+            "a job failure would be silent"
+        );
+    }
+
+    /// The claim, measured rather than believed: a process put in the sidecar's
+    /// job is ended when the job's last handle closes - which is exactly what
+    /// Windows does for this process when it crashes.
+    ///
+    /// A hidden `cmd` that waits, the way the backend waits; nothing opens a
+    /// window, and the child is killed and reaped on every path. A machine that
+    /// will not start a process or give us a job says SKIPPED out loud and does
+    /// NOT pass.
+    #[cfg(windows)]
+    #[test]
+    fn closing_the_job_really_ends_the_process_in_it() {
+        use std::os::windows::process::CommandExt;
+        const WHAT: &str = "closing_the_job_really_ends_the_process_in_it";
+        let mut command = Command::new("cmd.exe");
+        command
+            .args(["/C", "ping", "-n", "61", "127.0.0.1"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(err) => {
+                say_skipped(
+                    WHAT,
+                    &format!("this machine would not start a process ({err})"),
+                );
+                return;
+            }
+        };
+        let Some(job) = SidecarJob::arm(&child, child.id()) else {
+            let _ = child.kill();
+            let _ = child.wait();
+            say_skipped(
+                WHAT,
+                "the job could not be created, or the process could not be put in it",
+            );
+            return;
+        };
+        assert!(
+            matches!(child.try_wait(), Ok(None)),
+            "the process died before the job was closed, so this proves nothing"
+        );
+        // Closing the last handle is what happens to this app's handles when it
+        // crashes.
+        drop(job);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Ok(None) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    panic!("the process was still running five seconds after the job was closed");
+                }
+                Err(err) => {
+                    let _ = child.kill();
+                    panic!("could not ask whether the process was still running: {err}");
+                }
+            }
+        }
+    }
+
+    /// A real "did not run", said out loud on the process's own stderr handle:
+    /// libtest captures `println!`/`eprintln!`, and this project never counts a
+    /// skipped test as a pass. The same shape as `lock`'s own opt-out helper -
+    /// and deliberately a different name, because that test's ratchet says only
+    /// the window probe may use that helper.
+    #[cfg(windows)]
+    fn say_skipped(what: &str, why: &str) {
+        use std::io::Write;
+        let mut err = std::io::stderr();
+        let _ = writeln!(
+            err,
+            "SKIPPED  {what} - {why}. It did NOT run, and it did NOT pass."
+        );
+        let _ = err.flush();
+    }
+
+    /// The four endings are four sentences, and only the clean one claims a
+    /// hand-off: a timed-out or unanswered stop must never read as one.
+    #[test]
+    fn the_installer_stop_says_which_ending_it_reached() {
+        assert_eq!(INSTALLER_STOP_TIMEOUT, Duration::from_secs(3));
+        let stopped = stop_for_installer_words(StopForInstaller::Stopped);
+        assert!(
+            stopped.contains("stopped before the desktop installer"),
+            "{stopped}"
+        );
+        let timed = stop_for_installer_words(StopForInstaller::TimedOut);
+        assert!(timed.contains("3 seconds"), "{timed}");
+        assert!(timed.contains("may still be closing"), "{timed}");
+        assert!(!timed.contains("stopped before"), "{timed}");
+        let failed = stop_for_installer_words(StopForInstaller::Failed);
+        assert!(failed.contains("without an answer"), "{failed}");
+        assert!(failed.contains("may still be running"), "{failed}");
+        assert!(!failed.contains("stopped before"), "{failed}");
+        let not_owned = stop_for_installer_words(StopForInstaller::NotOwned);
+        assert!(not_owned.contains("did not start"), "{not_owned}");
+    }
+
+    /// The wait is a bounded channel rather than a `join()` that can hang the
+    /// updater's hook for ever, and the stop runs off the caller's thread - a
+    /// nested `block_on` on the async runtime would panic.
+    #[test]
+    fn the_installer_stop_waits_on_a_deadline_and_not_on_a_join() {
+        let src = include_str!("sidecar.rs");
+        let body = &src[src
+            .find("pub fn stop_for_installer(")
+            .expect("sidecar has no stop_for_installer")..];
+        let body = &body[..body.find("\n}\n").expect("it has no end")];
+        assert!(
+            body.contains("recv_timeout(INSTALLER_STOP_TIMEOUT)"),
+            "the wait for the backend is not bounded"
+        );
+        assert!(
+            body.contains("std::thread::spawn"),
+            "the stop does not move off the caller's thread"
+        );
+        assert!(
+            !body.contains(".join()"),
+            "a join() can hang the updater's hook for ever"
+        );
     }
 }
 

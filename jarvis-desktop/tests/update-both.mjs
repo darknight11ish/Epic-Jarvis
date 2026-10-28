@@ -688,7 +688,11 @@ await check("CONTROL: the order is one command in Rust, backend before executabl
   assert.ok(fn, "there is no update_both command");
   const backendAt = fn.indexOf("backend_update::run");
   const stopAt = fn.indexOf("// STOP.");
-  const installAt = fn.indexOf("install_now(&app)");
+  // The call carries two more arguments since 2026-10-27 - what the backend
+  // half did and the program folder's commit, so the NEXT launch can report
+  // what the installer did. What this reads is still the one call site and
+  // where it sits, not its argument list.
+  const installAt = fn.indexOf("install_now(&app");
   assert.ok(backendAt >= 0, "update_both never runs the backend half");
   assert.ok(installAt >= 0, "update_both never runs the desktop half");
   assert.ok(backendAt < installAt,
