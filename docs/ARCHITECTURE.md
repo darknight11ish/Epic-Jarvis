@@ -3461,6 +3461,21 @@ carried live by two literal deltas in `tools/reconcile_live_backend.py`'s
 `DELTA_TABLE` (`tools/hud-deltas/hud-static-*.txt`), because the live
 `jarvis_hud.py` is never replaced.
 
+**The shared invoke budget is a served file, because a page module imports it
+(2026-10-28).** `hud-presets.js` (the HUD's Presets menu) now applies a preset
+through `src/invoke-budget.js`'s `call` instead of reaching
+`TAURI.core.invoke` itself, so `apply_focus_preset`'s 1,250 s budget is
+reachable from the one surface that applies presets (silent-failure audit
+2026-10-27, row 4). That module is therefore part of the page's import
+closure: it ships byte-identically in `backend/static/invoke-budget.js`,
+`jarvis-desktop/src/invoke-budget.js` and the published base, it is in both
+`$SHIPPED` lists and the `BESIDE` table, and it is a `STATIC_ASSETS` key
+(`/invoke-budget.js`) in the base `jarvis_hud.py` and in the live delta
+(`tools/hud-deltas/hud-static-assets.txt`). Without the key the browser HUD
+would 404 the import and the whole Presets menu would fail to load; that is
+the closed-world rule above working as intended, and it is why the module is
+list-checked rather than merely imported.
+
 **The HUD's 3D library is vendored before the page that draws with it
 (2026-10-27).** The owner approved the "exact Gemini cosmos" port, and the HUD
 must work with no CDN, so three.js r128 - the official MIT build,

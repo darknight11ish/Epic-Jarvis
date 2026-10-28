@@ -2097,6 +2097,9 @@ $SHIPPED = @(
     # the server too, so a deploy that left it out would load the sidebar's
     # script and then fail to load the module it needs - no panel at all.
     'static/history-actions.js'
+    # The shared invoke budget (2026-10-28): hud-presets.js imports it, so it
+    # has to sit beside the server (served at /invoke-budget.js).
+    'static/invoke-budget.js'
     # The Galaxy's looks (2026-10-27): the HUD's look switcher loads this module
     # with a dynamic import(), so it has to sit beside the server (served at
     # /galaxy-presets.js) like the modules above. backend/test_hud_static.py

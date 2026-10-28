@@ -24,6 +24,7 @@ import { dirname, join } from "node:path";
 import {
   addArgs,
   BAD_TIME,
+  BOARD_UNREADABLE,
   BREAK_LABEL,
   briefingCards,
   cardsOf,
@@ -327,6 +328,37 @@ await check("the Today board: proposals only with the switch on, and no reminder
   assert.ok(buttons.includes(REMIND_LABEL), buttons.join(","));
   assert.ok(!text.toUpperCase().includes(DUE_TITLE.toUpperCase()),
     "nothing due: no Due now section");
+});
+
+await check("the Today board: a read that FAILED is said, never drawn as a clear day", async () => {
+  // Silent-failure audit 2026-10-27, row 5: a board that could not be read used
+  // to draw exactly like a quiet day - no "Due now", no "Next steps", and the
+  // said-I'd-do switch reading off, which the page cannot know.
+  const page = await workTab({
+    schedule: { jobs: [], todo: [], cockpit_error: true },
+    briefing: { briefing: BRIEFING, setups: [], sources: {} },
+  });
+  const text = await page.locator("#today").innerText();
+  const retry = await page.locator("#today button").allInnerTexts();
+  await page.close();
+  assert.ok(text.includes(BOARD_UNREADABLE), `the unread board said nothing: ${text}`);
+  assert.doesNotMatch(text, new RegExp(`^${DUE_TITLE}$`, "im"), "an unread board drew Due now");
+  assert.doesNotMatch(text, new RegExp(NEXT_TITLE, "i"), "an unread board drew Next steps");
+  assert.doesNotMatch(text, new RegExp(PROPOSALS_TITLE, "i"),
+    "an unread board drew the said-I'd-do shelf, whose switch state it does not know");
+  assert.ok(retry.includes("Retry"), `no way to ask again: ${retry.join(",")}`);
+});
+
+await check("CONTROL: a board that WAS read draws, and never says it failed", async () => {
+  const page = await workTab({
+    schedule: { jobs: [], todo: [], cockpit: COCKPIT },
+    briefing: { briefing: BRIEFING, setups: [], sources: {} },
+  });
+  const text = await page.locator("#today").innerText();
+  await page.close();
+  assert.ok(!text.includes(BOARD_UNREADABLE), "a good board claimed a failed read");
+  assert.match(text, new RegExp(`^${DUE_TITLE}$`, "im"));
+  assert.match(text, /Call the vet/);
 });
 
 await check("the Today board's words are hidden with the private lists", async () => {

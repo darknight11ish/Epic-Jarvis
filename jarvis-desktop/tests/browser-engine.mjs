@@ -125,6 +125,29 @@ await check("a failed read never shows the switch as OFF: it is shown as unknown
   assert.match(src, /el\.sw\.indeterminate = false;\n\s+el\.sw\.checked = view\.checked;/);
 });
 
+await check("a mode change is READ BACK before the page says \"Saved.\"", () => {
+  // Silent-failure audit 2026-10-27, row 9: the green "Saved." was said on the
+  // strength of the write returning, with no read-back - so it could stand
+  // beside a page still showing the old mode, and beside a write the PC had
+  // only queued behind an approval card.
+  const src = read("src/browser-engine.js");
+  assert.match(src, /view\.mode === mode \? BROWSER\.modeSaved : BROWSER\.modeAsked/,
+    "the mode is not compared with a fresh read before \"Saved.\" is said");
+  assert.doesNotMatch(src, /say\(BROWSER\.modeSaved/,
+    "\"Saved.\" is said again without a read-back");
+  assert.match(src, /await load\(\);\n\s+if \(!asked \|\| !view\) return;/,
+    "the read-back after the write is gone");
+  // The same words file says what the honest answer is instead.
+  assert.match(R.BROWSER.modeAsked, /^Asked your PC\./);
+  assert.notEqual(R.BROWSER.modeAsked, R.BROWSER.modeSaved);
+  // ... and every command on the card goes through the ONE shared budget
+  // (2026-10-27, row 4's class: an unbudgeted read or write leaves the card
+  // disabled for ever when the command never settles).
+  assert.match(src, /from "\.\/invoke-budget\.js"/);
+  assert.doesNotMatch(src, /core\.invoke\(/, "the card reaches the bridge directly again");
+  assert.match(src, /await call\("browser_engine", \{ action: "mode", mode \}, "action"\)/);
+});
+
 /* ── 2. Wiring, and what must not be there ───────────────────────────── */
 
 await check("the command is wired: registered, permitted, and only Settings holds it", () => {

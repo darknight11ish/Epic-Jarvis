@@ -316,6 +316,38 @@ pub(crate) fn valid_id(id: &str) -> bool {
 /// failed board read never fails the list itself.
 const COCKPIT_PATH: &str = "/api/today/cockpit";
 
+/// The board's own `cockpit_error` marker: the read FAILED, so there is no
+/// board in this answer and no board was ever asked. The page must draw "could
+/// not read" rather than an empty day (silent-failure audit 2026-10-27, row 5).
+pub(crate) const COCKPIT_ERROR_KEY: &str = "cockpit_error";
+
+/// How the board's separate read went. It is deliberately NOT `Option`: a
+/// missing board has two very different meanings, and only one of them is a
+/// failure the owner has to be told about.
+pub(crate) enum Board {
+    /// The PC sent a board (or said `available: false`): merge what it said.
+    Read(serde_json::Value),
+    /// This PC has no board route (`GET /api/today/cockpit` answered 404/501):
+    /// an older backend, not a failure. Nothing is drawn and nothing is said.
+    NotOnThisPc,
+    /// The read failed - a transport error, an error status, or a body that is
+    /// not JSON. NOT an empty board: the page says the board could not be read.
+    Unreadable,
+}
+
+/// Which of [`Board`] one attempt at the board read is. Split out so the rule
+/// is a function of the outcome, not of the code shape around it.
+pub(crate) fn board_outcome(status: Option<u16>, body: &str) -> Board {
+    match status {
+        Some(code) if (200..300).contains(&code) => match parsed(body) {
+            Some(board) => Board::Read(board),
+            None => Board::Unreadable,
+        },
+        Some(404) | Some(501) => Board::NotOnThisPc,
+        _ => Board::Unreadable,
+    }
+}
+
 /// The board sections that are a list; each is copied only when it has
 /// something in it.
 const COCKPIT_KEYS: &[&str] = &["due_reminders", "active_next_steps", "proposals"];
@@ -466,12 +498,23 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
 /// untouched. Only the board's own sections are copied, and only when they
 /// have something in them (`cockpit` is not added for a quiet day, and the
 /// switch's own state and the honest empty `rollover_cards` ride along so the
-/// page can draw its opt-in row). A missing board changes nothing.
-pub(crate) fn merge_cockpit(
-    mut list: serde_json::Value,
-    cockpit: Option<serde_json::Value>,
-) -> serde_json::Value {
-    let Some(serde_json::Value::Object(board)) = cockpit else {
+/// page can draw its opt-in row).
+///
+/// A board that could NOT be read is not a quiet day: the answer carries
+/// [`COCKPIT_ERROR_KEY`] so the page can say so. It used to be `None` either
+/// way, and the page drew an unanswered question as "nothing is due"
+/// (silent-failure audit 2026-10-27, row 5).
+pub(crate) fn merge_cockpit(mut list: serde_json::Value, board: Board) -> serde_json::Value {
+    if let Board::Unreadable = board {
+        if let Some(out) = list.as_object_mut() {
+            out.insert(COCKPIT_ERROR_KEY.to_string(), serde_json::Value::Bool(true));
+        }
+        return list;
+    }
+    let Board::Read(cockpit) = board else {
+        return list;
+    };
+    let serde_json::Value::Object(board) = cockpit else {
         return list;
     };
     let Some(out) = list.as_object_mut() else {
@@ -1451,7 +1494,11 @@ pub async fn brain_schedule(app: AppHandle) -> Result<serde_json::Value, String>
     let answer = list_answer(status, &body)?;
     // The Today board rides on this same read (GTD-2): one more GET to the
     // PC, added under `cockpit`. A board that fails or is missing is not the
-    // list's failure - the list is what Coming up and the phones need.
+    // list's failure - the list is what Coming up and the phones need - but the
+    // three outcomes are kept apart: a board that was READ, a PC that has no
+    // such route, and a read that FAILED. The last one is carried to the page
+    // (`cockpit_error`) instead of becoming "nothing is due"; it used to become
+    // `None` and then nothing at all (silent-failure audit 2026-10-27, row 5).
     let board = match commands::jarvis_client(Some(READ_TIMEOUT)) {
         Ok(client) => match commands::jarvis_headers(&app) {
             Ok(headers) => {
@@ -1461,15 +1508,19 @@ pub async fn brain_schedule(app: AppHandle) -> Result<serde_json::Value, String>
                     .send()
                     .await
                 {
-                    Ok(response) if response.status().is_success() => {
-                        response.text().await.ok().and_then(|b| parsed(&b))
+                    Ok(response) => {
+                        let status = response.status().as_u16();
+                        // A body that cannot be read is "" here, and
+                        // `board_outcome` calls that unreadable - never quiet.
+                        let body = response.text().await.unwrap_or_default();
+                        board_outcome(Some(status), &body)
                     }
-                    _ => None,
+                    Err(_) => board_outcome(None, ""),
                 }
             }
-            Err(_) => None,
+            Err(_) => board_outcome(None, ""),
         },
-        Err(_) => None,
+        Err(_) => board_outcome(None, ""),
     };
     let answer = merge_cockpit(answer, board);
     Ok(
@@ -1803,18 +1854,17 @@ mod tests {
     }
 
     /// GTD-2: the Today board is ADDED under `cockpit`; every field of the
-    /// list's own answer is untouched, a quiet board adds nothing, and a
-    /// missing or failed board changes nothing at all.
+    /// list's own answer is untouched, a quiet board adds nothing, and a board
+    /// this PC does not have changes nothing at all.
     #[test]
     fn the_today_board_is_added_without_changing_the_list() {
         let list =
             serde_json::json!({"available": true, "jobs": [{"id": "s0123456789"}], "todo": []});
         let quiet = merge_cockpit(
             list.clone(),
-            Some(
-                serde_json::json!({"available": true, "unspoken_commitments_enabled": false,
-                                    "rollover_cards": []}),
-            ),
+            Board::Read(serde_json::json!({"available": true,
+                                    "unspoken_commitments_enabled": false,
+                                    "rollover_cards": []})),
         );
         assert_eq!(quiet["jobs"], list["jobs"]);
         assert_eq!(quiet["todo"], list["todo"]);
@@ -1823,17 +1873,69 @@ mod tests {
         assert!(quiet["cockpit"].get("due_reminders").is_none());
         let full = merge_cockpit(
             list.clone(),
-            Some(serde_json::json!({"available": true, "due_reminders": [
+            Board::Read(serde_json::json!({"available": true, "due_reminders": [
                 {"id": "s0123456789", "text": "Call the vet"}], "proposals": []})),
         );
         assert_eq!(full["jobs"], list["jobs"]);
         assert_eq!(full["cockpit"]["due_reminders"][0]["text"], "Call the vet");
         assert!(full["cockpit"].get("proposals").is_none());
-        assert_eq!(merge_cockpit(list.clone(), None), list);
+        // A PC with no board route: no board, and no complaint - there is
+        // nothing to complain ABOUT on a backend that never had the board.
+        assert_eq!(merge_cockpit(list.clone(), Board::NotOnThisPc), list);
         assert_eq!(
-            merge_cockpit(list.clone(), Some(serde_json::json!({"available": false}))),
+            merge_cockpit(
+                list.clone(),
+                Board::Read(serde_json::json!({"available": false}))
+            ),
             list
         );
+    }
+
+    /// Audit 2026-10-27, row 5: a board that could not be read used to reach
+    /// the page as "no board", which draws exactly like a clear day. It now
+    /// says so, and the list's own answer is still untouched.
+    #[test]
+    fn an_unread_board_is_not_an_empty_day() {
+        let list =
+            serde_json::json!({"available": true, "jobs": [{"id": "s0123456789"}], "todo": []});
+        let failed = merge_cockpit(list.clone(), Board::Unreadable);
+        assert_eq!(failed[COCKPIT_ERROR_KEY], serde_json::Value::Bool(true));
+        assert!(
+            failed.get("cockpit").is_none(),
+            "a failed read invented a board"
+        );
+        assert_eq!(failed["jobs"], list["jobs"], "the list itself changed");
+        assert_eq!(failed["todo"], list["todo"]);
+        // A PC without the route is NOT a failure, and must not claim one.
+        let older = merge_cockpit(list.clone(), Board::NotOnThisPc);
+        assert!(older.get(COCKPIT_ERROR_KEY).is_none());
+        // Read successfully: no failure marker either.
+        let fine = merge_cockpit(
+            list.clone(),
+            Board::Read(serde_json::json!({"available": true})),
+        );
+        assert!(fine.get(COCKPIT_ERROR_KEY).is_none());
+
+        // The classification itself: 2xx + JSON is a read; 404/501 is "not on
+        // this PC"; a transport error, an error status and a broken body are
+        // all unreadable.
+        assert!(matches!(
+            board_outcome(Some(200), r#"{"available": true}"#),
+            Board::Read(_)
+        ));
+        assert!(matches!(board_outcome(Some(404), ""), Board::NotOnThisPc));
+        assert!(matches!(board_outcome(Some(501), ""), Board::NotOnThisPc));
+        assert!(matches!(board_outcome(Some(500), ""), Board::Unreadable));
+        assert!(matches!(board_outcome(Some(503), ""), Board::Unreadable));
+        assert!(matches!(board_outcome(None, ""), Board::Unreadable));
+        assert!(matches!(
+            board_outcome(Some(200), "not json"),
+            Board::Unreadable
+        ));
+        assert!(matches!(
+            board_outcome(Some(200), "[1,2]"),
+            Board::Unreadable
+        ));
     }
 
     /// GTD-2: while the private lists are hidden, the board's words go too -

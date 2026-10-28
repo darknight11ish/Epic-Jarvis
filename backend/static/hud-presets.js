@@ -109,6 +109,7 @@ import {
   userLayouts,
 } from "./hud-layout.js";
 import { saveLayout } from "./hud-layout-store.js";
+import { call } from "./invoke-budget.js";
 
 /* ── 1. Pure library helpers (node-tested) ───────────────────────────────── */
 
@@ -621,7 +622,7 @@ async function readWriteAnswer(response) {
  *  rail reads); a plain browser reads the route itself. */
 export async function readFocusPresetsOnPc(win) {
   const core = shellCoreOf(win);
-  if (core) return core.invoke("get_focus_presets");
+  if (core) return call("get_focus_presets", {}, "read", win);
   const response = await win.fetch(apiUrlFor(win, "/api/presets"), {
     cache: "no-store", headers: apiHeadersFor(win),
   });
@@ -634,7 +635,7 @@ export async function readFocusPresetsOnPc(win) {
  *  outside `hud_get`'s fixed list would be refused by the bootstrap. */
 export async function readPersonalitiesOnPc(win) {
   const core = shellCoreOf(win);
-  if (core) return core.invoke("hud_personalities");
+  if (core) return call("hud_personalities", {}, "read", win);
   const response = await win.fetch(apiUrlFor(win, "/api/manner"), {
     cache: "no-store", headers: apiHeadersFor(win),
   });
@@ -646,11 +647,16 @@ export async function readPersonalitiesOnPc(win) {
  *  this is the page's own `apply_focus_preset` command, which is exactly the
  *  route the bootstrap's fetch shim refuses to let a page POST itself. A
  *  provider id rides along for the Cloud preset only, and the command sends
- *  the `provider` key only when one was given. */
+ *  the `provider` key only when one was given.
+ *
+ *  The shell road goes through the shared budget, like every other road in
+ *  this module: `apply_focus_preset` is the command `invoke-budget.js` was
+ *  given a 1,250 s budget FOR, and this menu could not reach it while it
+ *  called `core.invoke` itself (silent-failure audit 2026-10-27, row 4). */
 export async function applyFocusPresetOnPc(win, id, provider) {
   const body = modelApplyBody(id, provider);
   const core = shellCoreOf(win);
-  if (core) return core.invoke("apply_focus_preset", body);
+  if (core) return call("apply_focus_preset", body, "action", win);
   const response = await win.fetch(apiUrlFor(win, "/api/work/apply"), {
     method: "POST",
     headers: apiHeadersFor(win, { "Content-Type": "application/json" }),
@@ -666,7 +672,7 @@ export async function applyFocusPresetOnPc(win, id, provider) {
 export async function setCloudEscalateOnPc(win, on) {
   const body = cloudEscalateBody(on);
   const core = shellCoreOf(win);
-  if (core) return core.invoke("hud_cloud_escalate", { on: body.on });
+  if (core) return call("hud_cloud_escalate", { on: body.on }, "action", win);
   const response = await win.fetch(apiUrlFor(win, "/api/work/cloud-escalate"), {
     method: "POST",
     headers: apiHeadersFor(win, { "Content-Type": "application/json" }),
@@ -678,7 +684,7 @@ export async function setCloudEscalateOnPc(win, on) {
 /** `POST /api/manner {"personality": id}` - ONE field, no card. */
 export async function switchPersonalityOnPc(win, id) {
   const core = shellCoreOf(win);
-  if (core) return core.invoke("hud_switch_personality", { personality: id });
+  if (core) return call("hud_switch_personality", { personality: id }, "action", win);
   const response = await win.fetch(apiUrlFor(win, "/api/manner"), {
     method: "POST",
     headers: apiHeadersFor(win, { "Content-Type": "application/json" }),

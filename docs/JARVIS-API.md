@@ -24064,7 +24064,17 @@ translated to the model starter's own `"everyday"` lane (`"coding"` stays
 switched, chat is pointed at the lane and the chosen id saved; once the model
 has switched, any later failure rolls it back with the auto-tier
 `jarvis_models.rollback()` as well as restoring the chat lane and chosen
-preset. **Said plainly:** a card the owner DENIES leaves the started lane
+preset. **Every one of those three restores is CHECKED, and only what was seen
+is claimed** (silent-failure audit 2026-10-27, row 2): a refused apply answers
+`{"ok": false, "changed": false, "error": "...", "restored": [...],
+"not_restored": [...]}`, where the two lists name which of `"the model"`,
+`"the chat lane"` and `"the chosen preset"` were put back and which could not
+be, and `error` says the same in words - it contains "were rolled back" only
+when every attempted restore succeeded. `changed: false` means the preset is
+not the chosen one; it says nothing about the model, the lane or the choice
+file, and `not_restored` is the fact about those. Both keys are additive, so a
+reader that ignores them behaves exactly as before. **Said plainly:** a card
+the owner DENIES leaves the started lane
 running - it starts no model and switches nothing. A `pending` preset refuses
 before anything happens, heavy-mode Coding refuses with "heavy mode needs the
 both-card lane, arriving later". Both apps call this route now: the desktop's
