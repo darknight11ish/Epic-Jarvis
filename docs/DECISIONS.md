@@ -4457,16 +4457,30 @@ says "the public trending list" and never "newer than yours". No estimate in a
 preset recommendation (only the candidate list's fit is an estimate, and its own
 sentence says so). No phone screen and no phone route.
 
-**Proven by:** `backend/test_model_recommendations.py` (118 checks) - the check
+**Proven by:** `backend/test_model_recommendations.py` (121 checks) - the check
 endpoint never downloads (source-scanned for every download/apply/gate call),
 the benchmark refuses an uninstalled model before measuring and stores nothing
 when it cannot measure, recommendations quote only benchmark-store rates and
 `nvidia-smi` card sizes, a faster model that would shrink the window is refused,
 an opinion changes the suggestion without changing a single measured number,
-the five routes refuse a phone before reading a body, and the existing
-`/api/models/install` and `/api/work/apply` cards are untouched. **Not proven
+a candidate carries the licence only when the catalogue reports one and carries
+no hash at all, the five routes refuse a phone before reading a body, and the
+existing `/api/models/install` and `/api/work/apply` cards are untouched.
+**Not proven
 here:** the live Hugging Face lookup - this checkout has no network, so every
 test injects the catalogue pass; the first real click on the owner's PC is the
 field test (and it is a read-only request either way). Also not proven: any
 model's quality. This feature compares speed, memory and context window, and
 says so.
+
+## 2026-10-28 - Jarvis may recommend models and preset changes, and the owner still approves every change
+
+**The owner's ask, in their words:** "can you give jarvis the ability to recommend a change to presets (for the local ai models being used) with a one click check for new models button and it will look on hugging face for newer potentially better models, give me a card to approve a download and a bench mark testing locally, then it will recommend changing the presets based on the local gpus and what model goes where and i can approve or give my opinion and jarvis can change the preset recommendations then i approve?"
+
+**Decided:** (1) the Brain's Model card gets ONE "Check for new models" button, which asks the PC to look on Hugging Face - it downloads nothing and raises no card. (2) A candidate's Download is the EXISTING carded install (`/api/models/install`, `brain_model`): the owner sees one card and nothing downloads until it is approved. (3) A model already installed can be measured with "Benchmark on this PC" (`/api/models/benchmark`), and the numbers are labelled "measured on this PC" - a newer model is never called better without one. (4) The preset advice (`POST /api/presets/recommend`) shows its proposed rows, their Why and its evidence; Approve changes is the EXISTING carded preset apply (`/api/work/apply`, `apply_focus_preset`), and "Tell Jarvis what you think" (`POST /api/presets/recommend/opinion`) revises the advice before the owner approves it. (5) The surface is the desktop's alone: the standing rule keeps the model catalogue off the phone and the phone's install is a typed name, so a phone version of this screen would be the catalogue - ARCHITECTURE §8 records it, and `tools/check_parity.py` classifies all five routes `deliberate`.
+
+**Deliberately not done.** No uncarded download and no auto-apply, and no second route for either: the advisor only asks questions, which is why `brain_model_recommend` refuses every action that is not one of its four. No automatic check when the Brain opens: **the owner's explicit click on "Check for new models" is the per-use trigger** for the Hugging Face lookup - no timer, no lookup at startup and no silent refresh - and that lookup is read-only and keyless, sending no user data and no query term derived from the owner. A candidate row shows what the catalogue actually reports - its ref, quantization, size and licence - and says "not reported by the catalogue" where a licence is missing rather than inventing one; `jarvis_models.discover()` carries no SHA-256, so no hash is shown at all. No on-disk cache of candidates or measurements: the PC's own `checked_at` dates the list and a benchmark is a fact about one day, so painting either as current after a restart would be a lie of the same kind `models-cache.js` exists to prevent. No new card, no new permission for the phone, and no phone half.
+
+**Proven by:** `jarvis-desktop/tests/model-advisor.mjs`, 31 checks, all passing - the pure reading and every honest state, then the REAL Brain page driven through the test harness against stubbed answers at the bridge: button -> progress -> candidates -> Download on the carded install shape -> benchmark shown as measured -> opinion revises -> Approve on the carded preset shape, plus the lookup-failed, no-advisor, no-candidates and benchmark-unavailable states, each in the PC's own words, the licence line (reported vs "not reported by the catalogue") and the no-hash sentence. The bridge is stubbed rather than `fetch` because the Brain window holds no token and calls no URL (apps security audit M2); the routes behind the four actions are pinned against `src-tauri/src/brain.rs` in the same suite. On the integration branch `cargo fmt --check`, `cargo check --target x86_64-pc-windows-msvc --all-targets` (which type-checks `model_recommend_tests` - the action/route/body table and the waits) and `cargo clippy --target x86_64-pc-windows-msvc --all-targets -- -D warnings` are all clean; **`cargo test` was still NOT RUN here**, so those Rust tests are compiled but unproven. `tools/check_parity.py`, `tools/check_feature_list.py`, `tools/check_command_acl.py` and `tools/check_invoke_grants.py` are clean.
+
+**Not proven:** the real backend routes. The backend half is a parallel branch, so no Hugging Face lookup, benchmark or preset recommendation has been run against a live backend here, and no window was rebuilt and installed - the panel has not been seen in the shipped Tauri shell, only in the harness. A real lookup's candidate shape, and how long a benchmark of an 8B model really takes on this PC, are both unmeasured.

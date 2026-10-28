@@ -1139,6 +1139,10 @@ pub fn run() {
             brain::inbox_tidy::inbox_tidy_undo,
             brain::form_review::form_review_picture,
             brain::brain_model,
+            // The model advisor (2026-10-28): a lookup, a local benchmark and two
+            // questions about preset changes. It downloads nothing and applies
+            // nothing - those are the two carded commands above and below.
+            brain::brain_model_recommend,
             attention::mark_digest_seen,
             attention::set_attention_muted,
             attention::set_attention_limits,

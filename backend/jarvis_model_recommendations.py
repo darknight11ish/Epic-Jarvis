@@ -127,7 +127,7 @@ THE SHAPES (the desktop half is built against these; JARVIS-API section 160)
     GET /api/models/recommendations
       {"checked_at": <epoch seconds or null>, "gpus": [{name, vram_gb, role}],
        "candidates": [{ref, name, family, params_b, quant, size_gb,
-                       context_tokens, fit, source_url, why}],
+                       context_tokens, licence, fit, source_url, why}],
        "recommendations": [{preset, changes: [{row, from, to, why}], evidence}],
        "benchmarked": {ref: {tokens_per_s, vram_gb, context_tokens, measured_at}}}
 
@@ -135,6 +135,13 @@ THE SHAPES (the desktop half is built against these; JARVIS-API section 160)
 "context" - because `preset` already names the row of `backend/jarvis_presets.py`
 (a `Preset` entry) the change belongs to. `fit` is "fits" / "tight" / "no",
 from the measured card sizes and the candidate's estimated need.
+
+`licence` is the repository's own declared licence, taken from the catalogue's
+`license:<id>` tag (Hugging Face publishes one) and `null` when the catalogue
+reports none - the desktop says "not reported by the catalogue" there rather
+than inventing one. The catalogue carries **no SHA-256** for any candidate, so
+no hash is published or shown: `jarvis_models.Model` has no such field, and the
+answer does not make one up.
 
     POST /api/models/check      {}            -> the same shape, refreshed
     POST /api/models/benchmark  {"ref": "..."}
@@ -288,6 +295,26 @@ def _clean_benchmark(value) -> Optional[dict]:
     return out
 
 
+def _licence(tags) -> Optional[str]:
+    """The repository's declared licence, when the catalogue carries one.
+
+    Hugging Face publishes it as a `license:<id>` tag on the model record, which
+    `jarvis_models.fetch_huggingface` already keeps in `Model.tags`. Nothing is
+    inferred from a model's name or size, and no tag means no licence - the
+    desktop says "not reported by the catalogue" there. There is no SHA-256 to
+    read at all: `Model` has no hash field, so none is invented.
+    """
+    for tag in tags if isinstance(tags, (list, tuple)) else []:
+        if not isinstance(tag, str):
+            continue
+        low = tag.strip().lower()
+        if low.startswith("license:") or low.startswith("licence:"):
+            value = tag.split(":", 1)[1].strip()
+            if value:
+                return value[:40]
+    return None
+
+
 def _clean_candidate(value) -> Optional[dict]:
     if not isinstance(value, dict):
         return None
@@ -305,6 +332,8 @@ def _clean_candidate(value) -> Optional[dict]:
                       if value.get("quant") else None),
             "size_gb": _optional_round(value.get("size_gb"), 2),
             "context_tokens": _optional_int(value.get("context_tokens")),
+            "licence": (str(value.get("licence"))[:40]
+                        if value.get("licence") else None),
             "fit": fit,
             "source_url": str(value.get("source_url") or "")[:300],
             "why": str(value.get("why") or "")[:1000]}
@@ -571,7 +600,7 @@ def _model_fields(model) -> dict:
         if not d:
             for name in ("ref", "source", "params", "bytes_", "size_gb",
                          "context", "quant", "downloads", "trending", "bench",
-                         "family"):
+                         "tags", "family"):
                 value = getattr(model, name, None)
                 if value is not None:
                     if name == "family" and callable(value):
@@ -671,6 +700,7 @@ def _candidate_row(model, gpus: list, estimate: Callable) -> Optional[dict]:
     return {"ref": ref, "name": name[:120], "family": family[:80],
             "params_b": params_b, "quant": (str(quant)[:24] if quant else None),
             "size_gb": round(size_gb, 2), "context_tokens": context,
+            "licence": _licence(d.get("tags")),
             "fit": fit, "source_url": _source_url(ref, source),
             "why": "; ".join(why[:MAX_REASONS])}
 

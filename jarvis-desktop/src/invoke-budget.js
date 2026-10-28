@@ -125,11 +125,19 @@ function bridge() {
 /**
  * Send one command with a budget. `kind` is "read" (the default) or "action";
  * it chooses the sentence, never the size - `budgetFor` owns the size.
+ *
+ * `budgetMs` is the exception, and it exists for ONE command: the model advisor
+ * (`model-advisor.js`) is a single command doing four different jobs behind four
+ * different waits - a Hugging Face lookup, a local benchmark of minutes, and two
+ * questions about preset changes (plain code answers both; no model is asked
+ * what the owner meant). `budgetFor` sees a command name and
+ * cannot tell those apart, so the caller passes the size it knows and the
+ * sentence still comes from `kind`. Omitted (the ordinary case), nothing changes.
  */
-export function call(command, args = {}, kind = "read") {
+export function call(command, args = {}, kind = "read", budgetMs = 0) {
   const invoke = bridge();
   return withBudget(invoke(command, args), {
-    ms: budgetFor(command, kind),
+    ms: budgetMs > 0 ? budgetMs : budgetFor(command, kind),
     late: lateWords(kind),
   });
 }

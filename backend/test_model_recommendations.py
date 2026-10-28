@@ -11,6 +11,9 @@ WHAT EACH BLOCK PROVES
     module is source-scanned for every download/apply/gate call it must not
     contain, and the check answer holds only the contract's own keys (plus a
     plain error on failure).
+  * a candidate carries the licence the catalogue reports (Hugging Face's
+    `license:` tag) and `null` where it reports none - never a guess - and no
+    candidate carries a SHA-256, because the catalogue has no hash to carry.
   * POST /api/models/benchmark REFUSES an uninstalled model before measuring,
     stores a real measurement when it has one, and stores nothing when it does
     not.
@@ -133,7 +136,8 @@ def t_the_read_answer_is_the_contract_shape_and_touches_no_network():
 MODELS = [
     {"ref": "acme/NewModel-GGUF", "source": "huggingface",
      "params": 8_000_000_000, "bytes_": 4 * 2 ** 30, "context": 131072,
-     "quant": "Q4_K_M", "trending": 10, "bench": {"humaneval+": 0.5}},
+     "quant": "Q4_K_M", "trending": 10, "bench": {"humaneval+": 0.5},
+     "tags": ["text-generation", "gguf", "license:apache-2.0"]},
     {"ref": "tiny:1b", "source": "ollama", "params": 1_000_000_000,
      "size_gb": 1.0, "context": 8192, "trending": 2},
     {"ref": "acme/NoSize-GGUF", "source": "huggingface", "context": 4096},
@@ -162,9 +166,18 @@ def t_the_check_caches_candidates_and_never_downloads():
     first = out["candidates"][0]
     check("a candidate carries exactly the contract fields",
           set(first) == {"ref", "name", "family", "params_b", "quant", "size_gb",
-                         "context_tokens", "fit", "source_url", "why"}, sorted(first))
+                         "context_tokens", "licence", "fit", "source_url", "why"},
+          sorted(first))
     check("... its fit is one of the three words",
           first["fit"] in ("fits", "tight", "no"), first["fit"])
+    check("... the licence the catalogue reports is carried, nothing invented",
+          first["licence"] == "apache-2.0", first["licence"])
+    check("... a candidate whose catalogue row has no licence says null, not a guess",
+          {c["ref"]: c["licence"] for c in out["candidates"]}.get("tiny:1b", "missing")
+          is None, out["candidates"])
+    check("... no candidate carries a SHA-256 the catalogue cannot report",
+          all("sha256" not in c and "sha_256" not in c for c in out["candidates"]),
+          out["candidates"])
     check("... its size, parameter count and context came through",
           first["ref"] == "acme/NewModel-GGUF" and first["size_gb"] == 4.0
           and first["params_b"] == 8.0 and first["context_tokens"] == 131072,

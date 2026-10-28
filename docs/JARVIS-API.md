@@ -26013,14 +26013,14 @@ PC's build from the PC's app and points at **Platform checks**, the phone's own
 update card, where the owner downloads its APK and Android's installer asks for
 the tap. Nothing installs itself on either device.
 
-## 160. Model and preset recommendations: one check, one measured benchmark, and the owner's opinion (backend half added 2026-10-28)
+## 160. Model and preset recommendations: one check, one measured benchmark, and the owner's opinion (desktop and backend, 2026-10-28)
 
-**What this is.** The desktop half of the owner's request of 2026-10-28: a
-button that looks through the public model catalogues, a carded download of
-whatever looks worth trying, a local benchmark of that model once it is here,
-and preset changes computed from the measured numbers. This section documents
-the backend contract the desktop is built against; the desktop screens are the
-next slice.
+**What this is.** The owner's request of 2026-10-28: a button that looks
+through the public model catalogues, a carded download of whatever looks worth
+trying, a local benchmark of that model once it is here, and preset changes
+computed from the measured numbers. This section documents the backend contract
+and the desktop Brain panel built against it (`brain.js`, `model-advisor.js`,
+the `brain_model_recommend` command).
 
 **Five routes, all PC-only.** Each answers 403 from any device but this PC,
 checked with `jarvis_owner_check.from_this_pc` before a body is read. This is
@@ -26045,7 +26045,8 @@ and no candidates. The shape:
  "gpus": [{"name": "NVIDIA GeForce RTX 2060", "vram_gb": 12.0, "role": "main"}],
  "candidates": [{"ref": "owner/model-GGUF", "name": "model-GGUF",
                  "family": "model", "params_b": 8.0, "quant": "Q4_K_M",
-                 "size_gb": 4.0, "context_tokens": 131072, "fit": "fits",
+                 "size_gb": 4.0, "context_tokens": 131072,
+                 "licence": "apache-2.0", "fit": "fits",
                  "source_url": "https://huggingface.co/owner/model-GGUF",
                  "why": "estimated to need about 5.9 GB, which the measured ..."}],
  "recommendations": [{"preset": "fast",
@@ -26062,6 +26063,13 @@ and no candidates. The shape:
 about (`model`, `lane` or `context`); `preset` names the row itself. `fit` is
 `fits` / `tight` / `no`, from the measured card sizes and the candidate's
 **estimated** need (the only estimate in the answer, labelled in `why`).
+
+`licence` is the repository's own declared licence, read from the catalogue's
+`license:<id>` tag (Hugging Face publishes one) and `null` when the catalogue
+reports none - the desktop says "not reported by the catalogue" rather than
+inventing one. **No SHA-256 is published or shown:** `jarvis_models.Model` has
+no hash field, so the answer carries none and the panel says so instead of
+inventing a value.
 
 **`POST /api/models/check` performs the lookup.** It calls the model manager's
 EXISTING public-catalogue pass, `jarvis_models.discover()` - fixed public URLs

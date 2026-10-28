@@ -3,7 +3,7 @@
 The owner's feature list, as data: 141 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 51ace85614b95c936f7de33beef294aef6cd5afac380250b15a0585e79c61616); the apps' Features pages read their own
+`features/features.json` (sha256 5a1ff27b2d216e712cc74fe4762e75a5356ab2501469d46e4dd75f1a0c920d35); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "51ace85614b95c936f7de33beef294aef6cd5afac380250b15a0585e79c61616"
+SOURCE_SHA256 = "5a1ff27b2d216e712cc74fe4762e75a5356ab2501469d46e4dd75f1a0c920d35"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1159,12 +1159,12 @@ FEATURES = (
         "id": "models",
         "group": "The PC itself",
         "title": "Models",
-        "what": "The models Jarvis can use - switch the everyday one, install another by name, roll back.",
-        "where": "Brain, Model, Models. On the phone, Brain, Models. The Model tab also holds Compute and Skills.",
-        "asks": "Switching or installing raises one approval card, and nothing downloads until you approve it.",
-        "limit": "There is no catalogue to scroll or search - you type the model's name by hand, the same as at a terminal.",
+        "what": "The models Jarvis can use - switch the everyday one, install another by name, roll back, and on the PC check Hugging Face for newer ones that fit your graphics cards.",
+        "where": "Brain, Model, Models. The \"Check for new models\" button is at the bottom of that list, with the candidates it finds, their benchmark, and the preset changes it suggests. On the phone, Brain, Models. The Model tab also holds Compute and Skills.",
+        "asks": "Switching or installing raises one approval card, and nothing downloads until you approve it. A check raises no card and downloads nothing; benchmarking measures this PC and changes nothing; the preset advice is applied only through the PC's own preset card.",
+        "limit": "On the PC the check shows a short list the PC chose from what fits your graphics cards - not a searchable catalogue, and nothing in it is called better until it has been measured on this PC. The phone still has no list at all: you type the model's name by hand, the same as at a terminal.",
         "surface": "both",
-        "covers": ["models", "brain.model.models", "brain.tab.faculties", "model-page"],
+        "covers": ["models", "model_recommendations", "brain.model.models", "brain.tab.faculties", "model-page"],
     },
     {
         "id": "compute",
