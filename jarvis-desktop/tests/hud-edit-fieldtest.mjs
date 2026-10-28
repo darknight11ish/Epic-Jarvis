@@ -706,9 +706,40 @@ async function fieldTest(label, original, revert) {
         `a real click on ${target.id}'s own Show control did not show it`);
       assert.equal(await page.locator(shell).isVisible(), true,
         `${target.id} is still a ghost after its Show control was pressed`);
+      const after = await page.evaluate((sel) => {
+        const card = document.querySelector(sel);
+        const word = card.querySelector(".hud-card-hidden-word");
+        return {
+          ghost: card.classList.contains("hud-card-hidden"),
+          wordShown: Boolean(word && !word.hidden),
+        };
+      }, shell);
+      assert.equal(after.ghost, false,
+        `${target.id} still carries the ghost mark after being shown`);
+      assert.equal(after.wordShown, false,
+        `${target.id} still says "hidden" after being shown`);
+      // (c) folds every card, and a folded card's body is folded away BY THE
+      // FOLD (.hud-card-collapsed .hud-card-body). So open the fold through the
+      // card's own control before asking whether the BODY came back: the
+      // question here is whether the hidden state's rule is still folding it,
+      // which is exactly what the old defect left behind for ever.
+      const folded = await page.evaluate((sel) => {
+        const button = document.querySelector(`${sel} [data-hud-edit-command="collapse"]`);
+        return Boolean(button && button.getAttribute("aria-pressed") === "true");
+      }, shell);
+      if (folded) {
+        await press(page, `${shell} [data-hud-edit-command="collapse"]`);
+        await settle(page);
+      }
       assert.equal(await page.evaluate((sel) => getComputedStyle(
         document.querySelector(`${sel} .hud-card-body`)).display !== "none", shell), true,
         `${target.id}'s card body did not come back with the card`);
+      if (folded) {
+        // Put the fold back, so this check leaves the document as (c) did and
+        // the revert below still restores it from the same starting point.
+        await press(page, `${shell} [data-hud-edit-command="collapse"]`);
+        await settle(page);
+      }
 
       // ...and the same control is the toggle back, so nothing is one-way.
       await page.locator(control).click({ timeout: 15000 });
@@ -851,21 +882,18 @@ await fieldTest("B", mine, {
       "the hand re-apply changed My layouts");
   },
 
-  // The cause on its own, named: a hidden card cannot be shown again.
+  // The cause on its own, named: every hidden card must be showable again.
   async after(page, original, info) {
     await check("B (e2): a card hidden in Edit HUD can be shown again", async () => {
       assert.deepEqual(info.stillHidden, [],
         `${(info.stillHidden || []).length} card(s) could not be shown again: `
-        + `${(info.stillHidden || []).join(", ")}. `
-        + "hud-edit.js:676 answers every press of a card's Hide control with "
-        + "`setVisible, visible: false`, so the control can only ever hide - even though the "
-        + "app paints it as a toggle (render() sets aria-pressed and swaps the cross for a "
-        + "circle, hud-edit.js:502-506). The one toggling path, the 'h' key at hud-edit.js:709, "
-        + "needs focus on that card's own handle, and a hidden card's shell is "
-        + "`display: none` (.hud-card[hidden] in jarvis_hud.html), so it cannot be focused "
-        + "either. After a reload the only ways back are Undo / Discard changes (same editing "
-        + "session only) or Reset to preset - which replaces the arrangement of a layout that "
-        + "is not the base preset, so the owner's own layout cannot be restored.");
+        + `${(info.stillHidden || []).join(", ")}. Since 2026-10-28 a card's Hide control is `
+        + "a real toggle (onToolbarClick sends `setVisible` with no fixed value), and while "
+        + "Edit HUD is on a hidden card is painted as a dimmed ghost whose own Show control "
+        + "is reachable (`shell.hidden = !card.visible && !editing`, with the page's ghost "
+        + "rule folding the card body away). If this fails, one of those two halves has "
+        + "regressed: either the control stopped toggling, or a hidden card's shell stopped "
+        + "being painted in edit mode.");
       if ((info.unreachable || []).length) {
         assert.fail(`controls the re-apply could not reach: ${info.unreachable.join(", ")}`);
       }
@@ -917,11 +945,17 @@ if (fails.length) {
  *     exactly (scenario A);
  *   - every region, place, size and fold of an owner's own layout can be put
  *     back by hand through the same controls (scenario B, which passes);
- *   - the two things that do NOT come back are told apart: the copy conversion
- *     on the first edit of a built-in layout is by design (asserted), and a
- *     hidden card cannot be shown again is a defect (the two failing checks).
+ *   - a hidden card can be shown again, in both scenarios: outside Edit HUD it is
+ *     not painted, inside it is a dimmed ghost whose own Show control a REAL
+ *     pointer click brings back (and the same control hides it again); the
+ *     hand-revert then restores all nine hidden cards through that control
+ *     (scenario B, (e2));
+ *   - the copy conversion on the first edit of a built-in layout is by design
+ *     (asserted, scenario A).
  *
  * IT DOES NOT prove:
+ *   - that the ghost's dimmed look is right: the screenshots show it, no check
+ *     measures a colour or a pixel;
  *   - that `hud_layout.rs` stores what it is given: the two IPC commands are
  *     stubbed here. The Rust store, its validation and the real
  *     `jarvis-desktop.json` write are a different test's business;
