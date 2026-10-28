@@ -27,6 +27,39 @@ What is proved, against the real `_origin_ok`:
   * with NO Origin, the request is allowed only with `X-Jarvis-Client: hud`
     exactly - no header, an empty one, the wrong value, the right value with
     different case or stray space, are all refused.
+
+WHICH jarvis_hud.py IS READ, AND WHY IT IS NEVER "NOTHING"
+
+Three cases, in this order (backend/_base.py holds the rule in one place):
+
+  1. `jarvis_hud.py` is in the folder this run reads - `JARVIS_BACKEND` when it
+     is set (the owner's PC, or the throwaway folder the runner staged), and
+     `backend/` otherwise (a dev container symlinks it there). That file is
+     read, and this repository's copy of an older one is never substituted.
+  2. No copy there, but the **published base** has one - which is CI and every
+     clone. `jarvis-backend/jarvis_hud.py` is read: real code, derived from the
+     owner's folder by `tools/gen_base_from_backend.py`, at the state the whole
+     patch stack left when it was last re-taken. The suite prints which folder
+     answered, so a green line never hides the difference.
+  3. Neither file exists. The checks then SKIP, honestly, on their own SKIPPED
+     list - and `run_suites.py`'s rule that a suite which passes nothing FAILS
+     means even that run cannot read as a pass.
+
+Until 2026-10-27 this suite had none of that: without the owner's file both
+checks SKIPPED, and `skip()` appended them to PASSED - so it printed
+`2 passed, 0 failed`, exit 0, in the required `backend` job, having read
+nothing. The job's green said the HUD's Origin check had been re-proved when
+`_origin_ok` had not been looked at. Both halves are fixed: `skip()` counts on
+its own SKIPPED list (never a pass), and the base means a clone now runs all
+14 checks for real instead of skipping 2:
+
+    $ python3 backend/test_origin_hud_header.py
+    14 passed, 0 skipped, 0 failed       (no owner install: the base was read)
+
+WHAT THE BASE RUN DOES NOT PROVE, plainly: it proves `_origin_ok` in
+`jarvis-backend/jarvis_hud.py` - the file this repository publishes and an
+installer starts from - and NOT in a patch newer than the base's last re-take.
+Run it on the owner's PC with `JARVIS_BACKEND` set for that half.
 """
 from __future__ import annotations
 
@@ -38,9 +71,34 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from _where import BACKEND, missing, explain  # noqa: E402
+from _where import BACKEND, explain  # noqa: E402
+import _base  # noqa: E402
 
+#: WHICH jarvis_hud.py this run reads - see the docstring's three cases. The
+#: published base is read only when there is no owner install and no copy in
+#: `backend/`; `_base.folder` is the one place that rule lives.
+BASE = _base.folder("jarvis_hud.py")
+if BASE is not None:
+    BACKEND = BASE
+    _base.put_on_path(BASE)
+    _base.say(BACKEND, "jarvis_hud.py")
 HUD = BACKEND / "jarvis_hud.py"
+
+
+def missing(*names):
+    """Which of `names` are not in the folder this run really reads.
+
+    `_where.missing` asks about `backend/`; after the fallback above the file
+    may be in `jarvis-backend/` instead, and asking the wrong folder would
+    report a file as absent while it is being read."""
+    return _base.missing(BACKEND, *names)
+
+
+def why_absent(name):
+    """Why neither file exists, for the skip this suite can then honestly make."""
+    return (f"{name} is in neither {HERE} nor {_base.BASE} "
+            f"(JARVIS_BACKEND is {'set' if os.environ.get('JARVIS_BACKEND') else 'unset'}); "
+            f"the published base is the fallback and it is not here either. {explain()}")
 
 #: The one origin the fake configuration answers on. `_served_origins` is the
 #: server's own answer to "what was I configured for"; it is replaced here with
@@ -50,7 +108,7 @@ HUD = BACKEND / "jarvis_hud.py"
 SERVED = "http://127.0.0.1:8765"
 OTHER = "http://attacker.example"
 
-FAILED, PASSED = [], []
+FAILED, PASSED, SKIPPED = [], [], []
 
 
 def check(name, cond, detail=""):
@@ -60,8 +118,10 @@ def check(name, cond, detail=""):
 
 
 def skip(name, why):
-    print(f"SKIP  {name}\n        {why}")
-    PASSED.append(name)
+    """A check this machine cannot make. NOT a pass: counted in its own list and
+    printed on its own line, the shape backend/test_price_sources.py uses."""
+    SKIPPED.append(name)
+    print(f"SKIP  {name}  (not a pass)\n        {why}")
 
 
 def real_origin_ok():
@@ -93,8 +153,7 @@ def t_allowed_when_no_origin():
     fn = real_origin_ok()
     if fn is None:
         return skip("an Origin-less request is only allowed with the HUD header",
-                    "jarvis_hud.py is not in " + str(BACKEND) + " (no _origin_ok "
-                    "to read). " + explain())
+                    why_absent("jarvis_hud.py"))
     check("sanity: the real _origin_ok was lifted, not a stand-in",
           fn.__name__ == "_origin_ok" and fn.__code__.co_filename == "<_origin_ok>",
           fn)
@@ -133,7 +192,7 @@ def t_the_fallback_is_not_a_blanket_yes():
     fn = real_origin_ok()
     if fn is None:
         return skip("the Origin-less fallback is not an unconditional yes",
-                    "jarvis_hud.py is not in " + str(BACKEND) + ". " + explain())
+                    why_absent("jarvis_hud.py"))
     refused = [h for h in ({}, {"X-Jarvis-Client": ""}, {"X-Jarvis-Client": "web"},
                            {"X-Jarvis-Client": "HUD"})
                if fn(_Handler(h)) is not False]
@@ -150,7 +209,9 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
+    if SKIPPED:
+        print("skipped, and NOT passes: " + ", ".join(SKIPPED))
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)
