@@ -751,6 +751,54 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 #model-warn b{color:var(--gold); font-weight:500;}
 #model-warn #model-warn-host{color:var(--dim); opacity:.85;}
 
+/* ---------- Jarvis Live's refusal popup ------------------------------ *
+ * The owner's field bug of 2026-10-27: clicking Live with no microphone
+ * "gives me a message but its in the left column and hard to read. it should
+ * be a pop up." The rail's own line (#rail-live-status, in the markup) is the
+ * screen-reader mirror of the same refusal; the READABLE surface is
+ * #live-refusal, in the stage. Its own plate, a width that never runs past
+ * the stage, words that wrap (never clipped), and a real Close button - a
+ * toast, not a modal: no dimming, no focus trap.
+ *
+ * It belongs to the stage, not the rail: the left column folds away in every
+ * narrow layout, and the refusal is exactly the moment a person needs to read
+ * the fix. 84px clears the composer in the Talk view. */
+.stage-toast{
+  position:absolute; left:50%; bottom:84px; transform:translateX(-50%);
+  z-index:60; width:min(520px, calc(100% - 32px));
+  padding:12px 14px; border:1px solid rgb(var(--warn-rgb) / .55);
+  border-left:3px solid var(--warn); border-radius:5px;
+  background:var(--plate); color:var(--text);
+  box-shadow:0 18px 44px rgb(var(--shade-rgb) / .55);
+  font-size:13px; line-height:1.45;
+}
+.stage-toast[hidden]{display:none;}
+.stage-toast:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.stage-toast .lr-head{display:flex; align-items:baseline; gap:10px;}
+.stage-toast .lr-title{
+  flex:1; font-family:var(--f-hud); font-size:12px; font-weight:600;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--warn);
+}
+.stage-toast .lr-close{
+  flex-shrink:0; padding:3px 10px; border:1px solid var(--line-hot);
+  border-radius:3px; background:var(--plate-2); color:var(--text);
+  font-family:var(--f-mono); font-size:11px;
+}
+.stage-toast .lr-close:hover{border-color:var(--ice); color:var(--ice);}
+.stage-toast p{
+  margin:6px 0 0; color:var(--text);
+  white-space:normal; overflow-wrap:anywhere;
+}
+/* The rail's line is the screen-reader mirror of the refusal. It had NO
+   .sr-only rule on this page - only #hud-stop-status and the presets dialog
+   ever styled that class - so it drew as ordinary toolbar text: the "in the
+   left column" half of the owner's report. Hidden for the eye now; the
+   popup's role="alert" is what announces the same fact. */
+#rail-live-status{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
+
 /* ---------- responsive ---------------------------------------------- */
 .rail-toggle{display:none; position:relative; z-index:30;}
 /* The visible way out of the right-rail drawer (field bug 2026-10-21: the
@@ -2202,11 +2250,14 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         </svg>
         <span class="rt-label">Live</span>
       </button>
-      <!-- Why Live did not start, in the PC's own sentence (live.rs), for a
-           screen reader. The button's title carries the on/off wording; this
-           carries the refusal, which is the part that would otherwise be
-           silent. The same shape #hud-stop-status uses. -->
-      <span class="sr-only" id="rail-live-status" role="status" aria-live="polite"></span>
+      <!-- Why Live did not start, for a screen reader. The button's title
+           carries the on/off wording; the READABLE refusal is the stage's
+           #live-refusal popup (the owner's field bug of 2026-10-27), and this
+           line is its hidden mirror, hidden by the #rail-live-status rule in
+           the style above. It carries no `sr-only` class on purpose: this page
+           never styled that class, which is why this line used to draw as
+           ordinary toolbar text in the rail. -->
+      <span id="rail-live-status" role="status" aria-live="polite"></span>
     </div>
 
     <div class="rail-section hide-sm rail-lanes" id="rail-lanes">
@@ -2518,6 +2569,25 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         </div>
       </div>
     </section>
+
+    <!-- Jarvis Live's refusal popup. The owner's field bug of 2026-10-27: "if
+         i click on the left column jarvis live icon, and since no mic is found
+         it gives me a message but its in the left column and hard to read. it
+         should be a pop up." It lives in the STAGE, not the rail, so the
+         refusal is readable in every layout (the left column folds away in
+         the narrow ones). Rust decides the refusal (`live.rs`: a stale link,
+         App lock, no microphone) and this page only repeats it - it never
+         says Live started when it did not, and Live raises no approval card.
+         role="alert" so it is announced once; tabindex="-1" so focus can be
+         moved into it. A toast, not a modal: no focus trap and no dimming,
+         and Close, Escape and a click outside all dismiss it. -->
+    <div id="live-refusal" class="stage-toast" role="alert" tabindex="-1" hidden>
+      <div class="lr-head">
+        <strong class="lr-title">Jarvis Live didn't start</strong>
+        <button class="lr-close" id="live-refusal-close" type="button">Close</button>
+      </div>
+      <p id="live-refusal-why"></p>
+    </div>
   </main>
 
   <!-- ============ RIGHT RAIL ============ -->
@@ -7947,6 +8017,20 @@ mountCurrentModels();
  * link, under App lock, or with no microphone - and, like the bar's, it
  * raises no approval card.
  *
+ * A REFUSED START IS SAID IN THE STAGE (the owner's field bug of 2026-10-27:
+ * "it gives me a message but its in the left column and hard to read. it
+ * should be a pop up."). `#rail-live-status` stays the screen-reader mirror
+ * and is now actually hidden (`#rail-live-status` in the style above); the
+ * readable surface is `#live-refusal`, a toast in the stage with its own
+ * plate, a Close button, Escape, a click outside and a 20 s fallback. The
+ * words are mapped for a person by `liveRefusalWords`, never the raw Rust
+ * text alone: "no microphone" becomes the Windows fix, and every other
+ * refusal is the PC's own sentence, which live.rs already writes for a
+ * person (a stale link, App lock, a non-local server). It is shown only
+ * when a START is refused - the popup's words are about a start - and a
+ * later success takes it away, so it can never say "didn't start" over a
+ * Live that is running.
+ *
  * It lives in THIS module, and it spells BOTH rules the bar uses instead of
  * importing them - on purpose, and this is the reason:
  *
@@ -7967,6 +8051,9 @@ mountCurrentModels();
 (function hudRailLive() {
   const button = document.getElementById("rail-live");
   const status = document.getElementById("rail-live-status");
+  const toast = document.getElementById("live-refusal");
+  const toastWhy = document.getElementById("live-refusal-why");
+  const toastClose = document.getElementById("live-refusal-close");
   if (!button) return;
   const core = window.__TAURI__ && window.__TAURI__.core;
   // A plain browser gets NO Live button: there is no shell to ask, and this
@@ -7997,6 +8084,78 @@ mountCurrentModels();
     const s = answer && typeof answer === "object" ? answer : {};
     paint(liveOnHere(s.status));
   };
+
+  /** The refusal in plain words. A plain declaration, not a closure over page
+   *  state, so the browser-free test can drive this exact table
+   *  (tests/hud-live-read-aloud.mjs). */
+  function liveRefusalWords(raw) {
+    const why = String(raw || "").trim();
+    // The owner's own case: no microphone at all. voice.rs says "no
+    // microphone was found", aec.rs says "no microphone" - one fact, and the
+    // fix is in Windows, so say where it is.
+    if (/no microphone/i.test(why)) {
+      return "This PC couldn't find a microphone. Plug in or turn on a microphone in Windows, then try again.";
+    }
+    // Everything else is already a sentence written for a person (live.rs: a
+    // stale link, App lock, a non-local server). Repeat it, never soften it,
+    // and never claim it started.
+    return why || "This PC did not say why. Check that Jarvis is running, then try again.";
+  }
+
+  let refusalTimer = 0;
+  let refusalFocus = null;
+  /** Hide it and give focus back to the control that asked - but only while
+   *  the focus is still ours to give, so the 20 s fallback can never pull the
+   *  caret out of something the owner has moved on to. */
+  const dismissRefusal = (restoreFocus) => {
+    if (!toast || toast.hidden) return;
+    clearTimeout(refusalTimer);
+    toast.hidden = true;
+    if (toastWhy) toastWhy.textContent = "";
+    const active = document.activeElement;
+    const ours = !active || active === document.body || active === toast || toast.contains(active);
+    // Back to where the click came from. A platform whose click does not
+    // focus a button leaves activeElement on <body>, and then the rail's own
+    // button is the only honest answer.
+    const back = refusalFocus && refusalFocus !== document.body && refusalFocus.isConnected
+      ? refusalFocus : button;
+    if (restoreFocus !== false && ours) back.focus();
+  };
+  /** 20 s: long enough to read one sentence, short enough that a stale
+   *  refusal does not sit over the stage. Hovering or tabbing into it stops
+   *  the clock, and it is armed again on the way out. */
+  const armRefusal = () => {
+    clearTimeout(refusalTimer);
+    refusalTimer = setTimeout(() => dismissRefusal(true), 20000);
+  };
+  const showRefusal = (raw) => {
+    if (!toast) return;
+    // Fill the words BEFORE showing it: role="alert" announces what it holds
+    // when it appears, so an empty box would announce nothing.
+    if (toastWhy) toastWhy.textContent = liveRefusalWords(raw);
+    refusalFocus = document.activeElement;
+    toast.hidden = false;
+    toast.focus();
+    armRefusal();
+  };
+  if (toast) {
+    if (toastClose) toastClose.addEventListener("click", () => dismissRefusal(true));
+    toast.addEventListener("pointerenter", () => clearTimeout(refusalTimer));
+    toast.addEventListener("pointerleave", () => { if (!toast.hidden) armRefusal(); });
+    toast.addEventListener("focusin", () => clearTimeout(refusalTimer));
+    toast.addEventListener("focusout", (event) => {
+      if (!toast.hidden && !toast.contains(event.relatedTarget)) armRefusal();
+    });
+    // Escape, wherever the focus is in the window, and a click anywhere else.
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !toast.hidden) dismissRefusal(true);
+    });
+    // An outside click dismisses it but does NOT take focus back: the owner
+    // has moved on to whatever they clicked.
+    document.addEventListener("pointerdown", (event) => {
+      if (!toast.hidden && !toast.contains(event.target)) dismissRefusal(false);
+    });
+  }
   button.addEventListener("click", () => {
     // One click at a time, as the bar does (main.js `live.busy`).
     if (busy) return;
@@ -8008,11 +8167,25 @@ mountCurrentModels();
       : core.invoke("live_start", { by: "button", conversationId: newConversationId() });
     asked.then((answer) => {
       paintStatus(answer);
+      // A success takes a stale refusal away: the popup may never say it did
+      // not start over a Live that is now running.
+      dismissRefusal(false);
       // The PC's own sentence when it gave one (live.rs payload `say`).
       say(answer && typeof answer.say === "string" ? answer.say : "");
     }, (error) => {
-      // Refused: the PC's own words, and never a claim that Live started.
-      say("Jarvis Live could not start: " + String((error && error.message) || error));
+      const words = String((error && error.message) || error);
+      if (on) {
+        // A refused STOP keeps the rail's screen-reader line: the popup's
+        // words are about a start, and saying "didn't start" there would be
+        // a lie about what the owner asked for.
+        say("Jarvis Live could not stop: " + words);
+      } else {
+        // Refused START: the stage popup is the readable surface (the owner's
+        // 2026-10-27 field bug). The rail's line is cleared so the same
+        // sentence is not announced twice.
+        say("");
+        showRefusal(words);
+      }
       // Ask the truth back rather than guessing from the refusal.
       core.invoke("live_status").then(paintStatus, () => {});
     }).then(() => {
