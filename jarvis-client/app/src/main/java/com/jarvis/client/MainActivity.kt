@@ -1208,12 +1208,22 @@ class MainActivity : FragmentActivity() {
         // And while an approval card shows the picture of a web form Jarvis
         // filled in (FormReview; the card raises this before it asks for it).
         val formPictureShown = com.jarvis.client.net.FormReview.shown.collectAsState().value > 0
-        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown, handoffShown, formPictureShown) {
+        // And while a backup's ONE-TIME RECOVERY CODE is drawn on the screen
+        // (BackupPlate's RecoveryCodeDialog raises this; privacy audit P-3,
+        // 2026-10-27). The code is shown once, Jarvis keeps no copy, and it is
+        // the whole key to a backup - so a screenshot, a cast or the
+        // recent-apps picture must not be able to take it.
+        val backupCodeShown = com.jarvis.client.net.Backup.codeShown.collectAsState().value > 0
+        LaunchedEffect(
+            security.appLock, security.privateLists, pairingKeyShown, handoffShown,
+            formPictureShown, backupCodeShown,
+        ) {
             val secure = SecurityRules.blockScreenCapture(
                 security,
                 keyShown = pairingKeyShown,
                 handoffShown = handoffShown,
                 formPictureShown = formPictureShown,
+                codeShown = backupCodeShown,
             )
             if (secure) {
                 // Set at once: nothing private waits for a fade to be protected.

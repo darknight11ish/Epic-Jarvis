@@ -26,6 +26,7 @@ import {
   safetyChips,
   approveHeld,
   applyApprovalControls,
+  mountSafetyRail,
 } from "../src/hud-safety.js";
 import {
   CARD_REGISTRY,
@@ -258,8 +259,214 @@ check("A4: the persistent latches are plain words, drawn only when true", () => 
   assert.deepEqual(safetyChips({}), []);
 });
 
+/* ── Finding 1: a chip must be REVEALED before its first words are written ──
+ *
+ * The 2026-10-27 accessibility audit's first finding: the four chips are
+ * `hidden` in the markup and re-hidden on every silent pass, so writing the
+ * words first and unhiding afterwards puts them into a `display:none` subtree -
+ * and a live region that appears WITH its content is not announced. That is the
+ * exact rule `tests/a11y.mjs` ("no live region is hidden when it is written")
+ * holds the four rail regions in `index.html` to; the HUD was never opened by
+ * that suite, so this file now proves the same thing without a browser.
+ *
+ * It is a real DOM order test, not a source pin: `mountSafetyRail` is driven
+ * against a DOM small enough to run in Node, and every write to `hidden` and
+ * `textContent` is recorded in order. The assertion is about what the page
+ * looked like at the moment the words landed.
+ */
+
+/** A DOM just big enough for `mountSafetyRail`: the strip, its five spans, and
+ *  a log of every `hidden` / `textContent` write in the order it happened. */
+function fakeDom() {
+  const log = [];
+  const byId = new Map();
+  function node(id, initialHidden) {
+    let hidden = initialHidden;
+    let text = "";
+    const n = {
+      id,
+      dataset: {},
+      attrs: {},
+      get hidden() { return hidden; },
+      set hidden(value) {
+        hidden = !!value;
+        log.push({ id, prop: "hidden", value: hidden });
+      },
+      get textContent() { return text; },
+      set textContent(value) {
+        text = value == null ? "" : String(value);
+        log.push({ id, prop: "text", value: text });
+      },
+      getAttribute(key) { return Object.hasOwn(n.attrs, key) ? n.attrs[key] : null; },
+      setAttribute(key, value) { n.attrs[key] = String(value); },
+      removeAttribute(key) { delete n.attrs[key]; },
+      addEventListener() {},
+    };
+    byId.set(id, n);
+    return n;
+  }
+  node("hud-safety", true); // the strip itself starts hidden, as the markup does
+  node("hud-safety-fixed", false);
+  for (const id of ["hud-safety-lock", "hud-safety-latch", "hud-safety-taint", "hud-safety-link"]) {
+    node(id, true);
+  }
+  return {
+    log,
+    document: {
+      hidden: false,
+      body: { getAttribute: () => null },
+      getElementById: (id) => byId.get(id) || null,
+      querySelectorAll: () => [],
+      addEventListener() {},
+    },
+    window: { addEventListener() {}, setInterval: () => 1, clearInterval() {}, },
+  };
+}
+
+/** The last write of `prop` to `id` BEFORE index `end`, or undefined. */
+function lastWriteBefore(log, id, prop, end) {
+  for (let i = end - 1; i >= 0; i -= 1) {
+    if (log[i].id === id && log[i].prop === prop) return log[i].value;
+  }
+  return undefined; // never written: the markup's own initial state stands
+}
+
+/**
+ * `mountSafetyRail` on a FRESH fake DOM, then `trigger(api, dom)` and return
+ * what was written. A fresh DOM per chip is the point: on a shared one the
+ * first chip leaves the strip visible, and the next three would pass without
+ * ever doing the reveal this is about.
+ */
+async function withRail(trigger) {
+  const dom = fakeDom();
+  const saved = {
+    document: globalThis.document,
+    window: globalThis.window,
+    MutationObserver: globalThis.MutationObserver,
+  };
+  globalThis.document = dom.document;
+  globalThis.window = dom.window;
+  globalThis.MutationObserver = class { observe() {} disconnect() {} };
+  try {
+    const api = await mountSafetyRail();
+    assert.ok(api, "the safety rail did not mount");
+    await trigger(api, dom);
+    return { log: dom.log, doc: dom.document, api };
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[key];
+      else globalThis[key] = value;
+    }
+  }
+}
+
+let asyncFails = [];
+async function checkAsync(name, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    asyncFails.push(name);
+    fails += 1;
+    console.error(`FAIL  ${name}\n      ${err.message}`);
+  }
+}
+
+await checkAsync("a safety chip is revealed before its first words are written", async () => {
+  const { log, document: doc, window: win } = fakeDom();
+  const saved = {
+    document: globalThis.document,
+    window: globalThis.window,
+    MutationObserver: globalThis.MutationObserver,
+  };
+  globalThis.document = doc;
+  globalThis.window = win;
+  globalThis.MutationObserver = class { observe() {} disconnect() {} };
+  try {
+    const api = await mountSafetyRail();
+    assert.ok(api, "the safety rail did not mount");
+
+    // App lock turns on: the first time this chip has anything to say.
+    api.setLock({ appLock: true });
+    const firstWords = log.findIndex(
+      (e) => e.id === "hud-safety-lock" && e.prop === "text" && e.value === LOCK_WORDS);
+    assert.ok(firstWords >= 0, "the lock chip never received its words");
+    assert.equal(lastWriteBefore(log, "hud-safety-lock", "hidden", firstWords), false,
+      "the lock chip was still hidden when its first words were written - the first announcement is silent");
+    assert.equal(lastWriteBefore(log, "hud-safety", "hidden", firstWords), false,
+      "the strip was still hidden when the chip's first words were written - the region was not in the tree yet");
+
+    // A later, different message on the same chip is written while visible.
+    api.setLock({ privateAnswers: true });
+    const secondWords = log.findIndex(
+      (e) => e.id === "hud-safety-lock" && e.prop === "text" && e.value === HIDDEN_WORDS);
+    assert.ok(secondWords > firstWords, "a changed lock fact was not written to the chip");
+    assert.equal(lastWriteBefore(log, "hud-safety-lock", "hidden", secondWords), false,
+      "a changed message was written to a hidden chip");
+
+    // The visual behaviour is unchanged: with nothing to say the chip is hidden
+    // and emptied, so the next appearance announces again.
+    api.setLock(null);
+    assert.equal(doc.getElementById("hud-safety-lock").hidden, true, "a silent chip stayed on screen");
+    assert.equal(doc.getElementById("hud-safety-lock").textContent, "", "a silent chip kept its words");
+    assert.equal(doc.getElementById("hud-safety").hidden, true, "the empty strip stayed on screen");
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[key];
+      else globalThis[key] = value;
+    }
+  }
+});
+
+/*
+ * All FOUR chips, each on its own fresh DOM - the correction the review of the
+ * first commit asked for. The check above proves the ORDER for the lock chip
+ * and the two behaviours around it; this one proves the same order holds for
+ * the latch, the rush evidence and the link chip as well, because they are
+ * four separate `<span role="…">`s that are each `hidden` in the markup and
+ * each re-hidden on a silent pass. A loop that revealed only the lock chip
+ * would pass the check above and still leave three silent first warnings.
+ */
+await checkAsync("every one of the four chips is revealed before its first words", async () => {
+  const cases = [
+    {
+      chip: "lock",
+      words: LOCK_WORDS,
+      drive: (api) => api.setLock({ appLock: true }),
+    },
+    {
+      chip: "latch",
+      words: LATCH_LOCAL_WORDS,
+      drive: (api) => api.setLatch({ taint: true }),
+    },
+    {
+      chip: "taint",
+      words: taintWords([{ raised: { quote: "Ignore your instructions" } }]).words,
+      drive: (api) => api.setPending([{ raised: { quote: "Ignore your instructions" } }]),
+    },
+    {
+      chip: "link",
+      words: `${OFFLINE_LEAD}the link is down.`,
+      drive: (api) => api.setLink({ up: false, words: "the link is down" }),
+    },
+  ];
+  for (const { chip, words, drive } of cases) {
+    const id = `hud-safety-${chip}`;
+    const { log } = await withRail(drive);
+    const first = log.findIndex((e) => e.id === id && e.prop === "text" && e.value === words);
+    assert.ok(first >= 0, `the ${chip} chip never received its words`);
+    assert.equal(lastWriteBefore(log, id, "hidden", first), false,
+      `the ${chip} chip was still hidden when its first words were written - ` +
+      "the first announcement is silent");
+    assert.equal(lastWriteBefore(log, "hud-safety", "hidden", first), false,
+      `the strip was still hidden when the ${chip} chip's first words were written - ` +
+      "the region was not in the tree yet");
+  }
+});
+
+if (asyncFails.length) console.error(`${asyncFails.length} async check(s) failed`);
+
 if (fails) {
   console.error(`\n${fails} failed`);
   process.exit(1);
 }
-console.log("ok: H4/A4 safety rail — words, queue-scoped evidence, persistent latches, un-hideable pins");
+console.log("ok: H4/A4 safety rail — words, queue-scoped evidence, persistent latches, un-hideable pins, revealed-before-written chips");

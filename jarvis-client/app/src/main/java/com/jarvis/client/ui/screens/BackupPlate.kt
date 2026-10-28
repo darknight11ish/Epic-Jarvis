@@ -15,6 +15,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -361,6 +362,19 @@ private fun RecoveryCodeDialog(
     val chrome = LocalChrome.current
     var saved by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+
+    // P-3 (privacy audit 2026-10-27): while this dialog is drawn, the ONE-TIME
+    // CODE is on screen, so MainActivity must block screenshots, screen
+    // recording, casting and the recent-apps picture - the same
+    // DisposableEffect + onDispose shape PairingScreen uses for the pairing
+    // token and code. The effect is keyed on nothing but the dialog's own
+    // presence, so the code is protected from the first frame to the last,
+    // including the sentence drawn under it after a write lands: the code is
+    // still readable there, and it is still the whole key to the backup.
+    DisposableEffect(Unit) {
+        Backup.enterCodeView()
+        onDispose { Backup.leaveCodeView() }
+    }
 
     Dialog(
         // A back press after a successful write closes the dialog; before it,

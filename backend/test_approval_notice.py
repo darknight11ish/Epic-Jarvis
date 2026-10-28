@@ -21,7 +21,25 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, explain
+import _base  # noqa: E402
+
+#: WHICH copy of the files this suite reads. The owner's install when
+#: `JARVIS_BACKEND` names one, `backend/` when the file is here, and
+#: otherwise the PUBLISHED BASE (`jarvis-backend/`, the state the whole
+#: patch stack left at its last re-take) - so the required backend job runs
+#: these checks for real instead of skipping the suite. backend/_base.py
+#: holds the rule; the line printed below says which folder answered.
+BASE = _base.folder("jarvis_gate.py", "jarvis_events.py")
+if BASE is not None:
+    BACKEND = BASE
+    _base.put_on_path(BASE)
+    _base.say(BACKEND, "jarvis_gate.py")
+
+
+def missing(*names):
+    """`_where.missing`, asked of the folder this run really reads."""
+    return _base.missing(BACKEND, *names)
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-notice-"))
 fw = types.ModuleType("jarvis_framework")

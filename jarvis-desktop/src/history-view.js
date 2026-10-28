@@ -28,6 +28,11 @@
 import { isSideTalk, SEEN } from "./live-rules.js";
 import { renderAnswer } from "./deep.js";
 import { DELETE_STAYS, DELETE_STAYS_TICKED } from "./chat-history.js";
+// The words both windows say, in ONE place (Gemini ruling, 2026-10-27): the
+// HUD's History sidebar reads the same two exports.
+import { DELETE_KEEPS_FACTS, deleteWords } from "./history-actions.js";
+
+export { DELETE_KEEPS_FACTS };
 
 /* ==========================================================================
    The chat audit (2026-09-28; docs/studio-2026-09-28/chat-audit-*.md) and
@@ -377,14 +382,16 @@ export const TAINT_TITLE =
 export const NOT_KEPT_LINE =
   "Jarvis's answer to this was not kept: it came from a cloud model, or it did not finish.";
 
-/** Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7), when
- *  there is nothing to offer: the chat taught no fact still in use, or this
- *  PC cannot list them. The phone's ChatLog.DELETE_KEEPS_FACTS. Since the
- *  chat audit (2026-09-28) it points to "Forget a time frame", not to
- *  forgetting "one by one". */
-export const DELETE_KEEPS_FACTS =
-  "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned " +
-  "over some days, use Forget a time frame. Copies in older backups stay until they age out.";
+/* Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7), when
+ * there is nothing to offer: the chat taught no fact still in use, or this PC
+ * cannot list them. The phone's ChatLog.DELETE_KEEPS_FACTS. Since the chat
+ * audit (2026-09-28) it points to "Forget a time frame", not to forgetting
+ * "one by one".
+ *
+ * The words live in `history-actions.js` now (the Gemini ruling of
+ * 2026-10-27): the HUD's History sidebar says the same sentence, and a second
+ * copy in that file is exactly how the two windows would come to say two
+ * things. This re-export keeps every existing importer working. */
 
 /* ── Deleting a chat offers to forget the facts it taught (2026-09-28) ──
  * JARVIS-API.md section 79; the phone's ChatLog, word for word. The list
@@ -659,13 +666,13 @@ export function notRecordingLine(v) {
 
 /**
  * The confirm shown before deleting ONE conversation (brain.js asks it with
- * `window.confirm`, like Forget on a fact).
+ * `window.confirm`, like Forget on a fact). Composed by `history-actions.js`
+ * so the HUD's sidebar says the SAME three sentences in its own box - it
+ * cannot use `window.confirm`, and a second copy of these words is how the two
+ * windows would come to say two things.
  */
 export function deleteQuestion(c, note = "") {
-  return (
-    `Delete this conversation?\n\n${c.title || "(no title)"}\n\n` +
-    `It is removed from this PC. This cannot be undone.\n\n${note || DELETE_KEEPS_FACTS}`
-  );
+  return deleteWords(c.title, note);
 }
 
 /**

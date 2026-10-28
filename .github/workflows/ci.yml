@@ -63,6 +63,19 @@ jobs:
     # the wrong half of every `#[cfg(windows)]`.
     runs-on: windows-latest
     timeout-minutes: 40
+    # A SKIPPED TEST IS NEVER A PASS (CLAUDE.md), and libtest CAPTURES BOTH
+    # `println!` and `eprintln!`, so until 2026-10-27 the one test that proves
+    # WDA_EXCLUDEFROMCAPTURE really removes pixels said "SKIP ..." seven ways
+    # and no line of it reached this job's log: a Windows runner has no
+    # composited desktop, so it always takes the skip, libtest records `ok`,
+    # and nothing was judged. The probe now writes those lines through the
+    # process's own stderr handle (which capture does not touch - see
+    # `skipped_here` in lock.rs, the same shape as `skipped_by_env`), and this
+    # turns capture off too, so every other test's own words reach the log.
+    # Two mechanisms on purpose: the handle is what works when someone runs
+    # `cargo test` at a desk without this variable set.
+    env:
+      RUST_TEST_NOCAPTURE: "1"
     defaults:
       run:
         working-directory: jarvis-desktop/src-tauri
@@ -145,8 +158,12 @@ jobs:
       # real pages in a headless Chromium (tests/uikit.mjs), which is why only
       # three used to run here. Playwright is not a dependency of the app
       # (tests/README.md says why), so it is installed for this job only.
-      # uikit.mjs is the harness, not a suite; shots.mjs only writes
-      # screenshots. poll-hygiene-measure.mjs and make-before-overlay.mjs are
+      # uikit.mjs is the harness, not a suite. shots.mjs IS one that can FAIL -
+      # it ends `process.exit(1)` when a page renders wrong (shots.mjs:120) -
+      # and it is excluded because it WRITES the screenshots into the tree, not
+      # because it cannot go red: a broken screenshot path is therefore not
+      # caught by any job (the partner test-health audit, F-07, 2026-10-27).
+      # poll-hygiene-measure.mjs and make-before-overlay.mjs are
       # NOT suites either (2026-10-27 test audit): the first prints one JSON
       # object and is documented "not part of npm run test:*", the second is
       # labelled "Scratch only" and copies src/ to src-old/. Neither asserts
@@ -222,14 +239,34 @@ jobs:
   backend:
     # The backend suites, including every contract test (the ones that read
     # the phone's Kotlin and the desktop's Rust and JS and check them against
-    # the real Python). Twelve suites test a patch against the owner's
-    # own jarvis_hud.py / jarvis_gate.py / jarvis_extract.py, which are not in
-    # this repository - backend/run_suites.py SKIPS those by name, with the
-    # files each is waiting for, and fails on anything else. (It was sixteen
-    # until 2026-10-27: the four whose checks can run without those files -
-    # test_bitemporal, test_extraction_wiring, test_gate_push,
-    # test_import_history - were measured against a staged backend and are now
-    # run by this job, gaining 61 checks.) The voice suites
+    # the real Python).
+    #
+    # WHAT THIS JOB NO LONGER SKIPS (2026-10-27, the partner test-health
+    # corrections). Fifteen suites test a patch against the owner's own
+    # jarvis_hud.py / jarvis_gate.py / jarvis_extract.py / jarvis_models.py,
+    # which are not in a checkout - and until this evening all fifteen were
+    # skipped here BY NAME, so a green backend check said nothing about any of
+    # them. TWELVE now RUN FOR REAL: `jarvis-backend/`, the published base
+    # (tools/gen_base_from_backend.py derives it from the owner's folder),
+    # carries all five of those files, and `backend/_base.py` points a suite at
+    # it when the folder the run reads has no copy. That is 285 checks this job
+    # did not have this morning - including the six-site approval-egress
+    # enumeration (test_gate_egress.py), test_memory_safety.py, the wildcard-bind
+    # refusal ORDER and the HUD's Origin check. Each of those suites prints
+    # which folder answered; they prove the PUBLISHED BASE, and the owner's PC
+    # is where the live file is checked.
+    #
+    # THREE ARE STILL SKIPPED BY NAME, and `run_suites.py`'s NEEDS_OWNER says
+    # why with a file:line each: test_events_pump.py, test_ollama_direct.py and
+    # test_tool_calling_wiring.py read text newer than the base's last re-take
+    # and fail against it. They run in the informational `backend-owner-env`
+    # job below, which prints each as a SKIPPED line and is never a pass. This
+    # job's run still ends with one `SKIPPED BY NAME` line naming every suite
+    # that did not run, and the Summary carries it.
+    #
+    # AND NOTHING HERE MAY PASS BY SKIPPING (same evening, item 3): a suite
+    # that exits 0 having passed no check is a FAILURE, with no allowlist. That
+    # is why Playwright is installed above. The voice suites
     # (test_speech, test_voice_contract, test_wakeword) need the three voice
     # packages from backend/requirements.txt, and test_chat_log needs
     # `cryptography` (chat history is encrypted); nothing else from it is needed,
@@ -336,6 +373,38 @@ jobs:
       # exactly, the version backend/requirements.lock pins for Python 3.12
       # (its golden numbers are backend/decks_fsrs_golden.json).
       - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
+      # PLAYWRIGHT IS INSTALLED HERE NOW, FOR ONE SUITE (2026-10-27, the
+      # partner test-health corrections). backend/run_suites.py fails any suite
+      # that exits 0 having PASSED nothing, and this job used to be green while
+      # test_browser_control_live.py printed one `SKIP: playwright is not
+      # installed` line and proved nothing: it was named on a `ZERO_CHECK_ALLOWED`
+      # list, and that list is gone. The suite drives the real Playwright
+      # actions against pages Python's own http.server serves on 127.0.0.1 -
+      # nothing touches the internet - so the honest fix is to install the
+      # package and the browser rather than excuse the skip. The same two
+      # commands as the frontend job's Playwright step (ci.yml, "Install
+      # Playwright's Chromium"), because the browser cache is the same shape.
+      # A machine that cannot install it now FAILS that one suite with this
+      # message, instead of counting a skip as a pass.
+      - name: Install Playwright's Chromium (backend/test_browser_control_live.py)
+        run: |
+          python -m pip install --disable-pip-version-check playwright
+          python -m playwright install --with-deps chromium
+      # THE CHECKER THAT CATCHES A SKIP COUNTED AS A PASS (2026-10-27, the
+      # partner test-health corrections, item 2). tools/check_vacuous_checks.py
+      # has run in the `audit` job since the five checkers were wired, and
+      # `audit` is INFORMATIONAL - so its four rules were enforced nowhere that
+      # gates a merge, and the fifth rule (a local `skip()` that appends to
+      # PASSED) is the exact shape F-01/F-03 shipped in two security suites.
+      # Both run here: the checker over every backend suite, then
+      # backend/test_vacuous_checks.py, which proves the new rule catches the
+      # old text and would catch it again. They also run inside the sweep below
+      # (the suite is a backend/test_*.py); this is the fail-fast copy, the same
+      # shape as the task-patch generator step above.
+      - name: No suite counts a skip as a pass
+        run: |
+          python tools/check_vacuous_checks.py
+          python backend/test_vacuous_checks.py
       # Fail fast (2026-10-25): this generator check used to sit after the
       # suites, in the "Job list" step, so a stale backend/tasks.patch was
       # reported only after ~35 minutes of suites. It needs nothing from those
@@ -379,7 +448,7 @@ jobs:
             echo "### Backend suites (Ubuntu)"
             echo ""
             echo '```'
-            grep -E '^(FAIL |skip |[0-9]+ passed)' "$RUNNER_TEMP/backend-suites.txt" | head -80 || true
+            grep -E '^(FAIL |skip |SKIPPED|[0-9]+ passed)' "$RUNNER_TEMP/backend-suites.txt" | head -120 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
@@ -480,6 +549,69 @@ jobs:
       # commands for real (bug audit 2026-09-27, desktop-rust finding #2).
       - name: Desktop command ACL parity
         run: python tools/check_command_acl.py
+
+  # THE SUITES THAT STILL NEED THE OWNER'S OWN FILES - INFORMATIONAL.
+  #
+  # WHY THIS JOB EXISTS (2026-10-27, the partner test-health corrections, item
+  # 4). A suite that is skipped in the required `backend` job proves nothing
+  # there, and a skip printed 400 lines before the totals proves nothing to a
+  # reader either. These three are the only suites left that cannot run against
+  # the published base, and each has a file:line reason (run_suites.py's
+  # NEEDS_OWNER carries them in full):
+  #
+  #   * test_events_pump.py         - its "25 pending produces one event" check
+  #     reads events text newer than jarvis-backend/jarvis_hud.py.
+  #   * test_ollama_direct.py       - the cloud lane's resolution
+  #     (_completions_url / _auth_headers and jarvis_chatbot_api's lane state)
+  #     is newer than the base's copy: 14 passed, 9 failed against the base.
+  #   * test_tool_calling_wiring.py - the base still reads `[tools].enabled`
+  #     inline (jarvis-backend/jarvis_hud.py:5431 and :5450), the second source
+  #     chat-stream.patch removed, so its one-source check fails there.
+  #
+  # WHAT IT DOES. Runs exactly those three through the same runner, so their
+  # lines are the runner's own `skip ... needs the owner's <file>` and one
+  # `SKIPPED BY NAME` sentence - never an `ok`, never a `passed` count. On a
+  # machine that has the owner's files (his PC, or a future re-take of the
+  # base) the same command runs them for real, which is why this job is not
+  # just a comment.
+  #
+  # IT IS NOT A REQUIRED CHECK, on purpose: the ruleset's seven required
+  # checks do not include it, and a skip must never be what holds a PR. It
+  # fails only when the run stops SAYING which suites it did not run - the one
+  # failure this job can honestly report from a checkout.
+  backend-owner-env:
+    name: backend-owner-env
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      # The same versions the required backend job installs, so a suite that
+      # runs here (now or after a re-take) gets the same environment.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3 pillow==13.0.0 fsrs==6.3.2
+      - name: The three suites that need the owner's own files - SKIPPED, and said so
+        run: |
+          set +e
+          python backend/run_suites.py test_events_pump.py test_ollama_direct.py             test_tool_calling_wiring.py 2>&1 | tee "$RUNNER_TEMP/owner-env.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### backend-owner-env - the suites that need the owner's own files"
+            echo ""
+            echo "None of these is a pass here unless it printed a check count."
+            echo ""
+            echo '```'
+            grep -E '^(skip |SKIPPED|FAIL |[0-9]+ passed|\(|[0-9]+ suite)' "$RUNNER_TEMP/owner-env.txt" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # A SKIP IS NEVER A PASS: the step fails if the run stopped saying
+          # which suites it did not run. It does not fail merely because they
+          # were skipped - naming them is the whole point of this job.
+          grep -q '^SKIPPED BY NAME' "$RUNNER_TEMP/owner-env.txt" || {
+            echo "::error::the owner-file suites did not report themselves as SKIPPED"; exit 1; }
+          exit "$status"
 
   backend-windows:
     # The Windows half of the backend job above. CI ran the backend suites on
@@ -637,8 +769,10 @@ jobs:
     # 90 minutes, chosen rather than derived. Measured on the owner's 24-core
     # PC while another audit was running: 31 minutes of suite time in repo mode
     # with the live model, 43 minutes in the CI-like pass with eight shards
-    # contending. The Ubuntu job that runs about 230 suites has a 25-minute
-    # limit; a Windows runner is slower and has no graphics card. The frontend
+    # contending. The Ubuntu job that runs about 450 suites has a 60-minute
+    # limit (measured 2026-10-27: `backend/test_*.py` is 451 files, and this
+    # line said "about 230 suites ... 25-minute", both stale); a Windows runner
+    # is slower and has no graphics card. The frontend
     # job above was CANCELLED at 45 minutes with every test still passing, so
     # this ceiling is deliberately generous rather than tight.
     timeout-minutes: 90
@@ -851,7 +985,19 @@ jobs:
             'test_notes.py',
             'test_obscura.py',
             'test_obsidian_notes.py',
-            'test_ollama_direct.py',
+            # test_ollama_direct.py was taken OFF this list on 2026-10-27
+            # (the partner test-health corrections). It used to pass here by
+            # SKIPPING: with no jarvis_hud.py and no jarvis_chatbot_api.py in a
+            # checkout it lifted nothing, ran 14 loose checks, skipped the nine
+            # cloud-lane ones and exited 0 - which this step's exit-code loop
+            # calls a pass. It now reads the published base
+            # (backend/_base.py), where those nine checks run and FAIL: the
+            # base's cloud-lane resolution is older than the one the suite is
+            # about (measured 2026-10-27: 14 passed, 9 failed against
+            # jarvis-backend/jarvis_hud.py). It is named in run_suites.py's
+            # NEEDS_OWNER list instead, and runs in the informational
+            # backend-owner-env job; the owner's PC is the only machine where
+            # it can run for real. A red line here would prove nothing.
             'test_open_chat.py',
             'test_optin_models.py',
             'test_ort_quiet.py',
@@ -1689,6 +1835,13 @@ jobs:
       # never as a pass. This reads every backend/test_*.py and
       # backend/eval_*.py and fails on a fake skip, on a string used as the
       # condition, and on a harness whose condition has a default.
+      #
+      # NOTE, so nobody reads this scan as coverage (F-14 of the partner
+      # test-health audit, 2026-10-27): the five backend/eval_*.py files are
+      # measured BY HAND - no job runs any of them (checked: no workflow names
+      # one). The scan still looks at them, because the fake-skip shape is a
+      # property of the file and not of who runs it; what it proves is the
+      # SHAPE, never that those files' checks have ever executed.
       - name: No suite check can pass while checking nothing
         run: python3 ../../tools/check_vacuous_checks.py
       # Review #8 (10-Review Playbook): every user-facing string in the backend's
@@ -1811,9 +1964,14 @@ jobs:
       #   check_work_claims.py - exits 2 without its input; it cannot pass here
       #                          and cannot fail here. DRIVEN BY
       #                          backend/test_work.py, which reports that no-input
-      #                          exit as a SKIP (green-but-honest) - but NOTE:
-      #                          test_work.py is in NO workflow's suite array, so
-      #                          this runs only when someone runs it by hand.
+      #                          exit as a SKIP (green-but-honest) - and that
+      #                          suite DOES run in CI: backend/run_suites.py
+      #                          globs every backend/test_*.py, so the required
+      #                          `backend` job runs test_work.py on every push.
+      #                          (This note used to say test_work.py was "in NO
+      #                          workflow's suite array" and ran only by hand;
+      #                          that was false on main when it was measured,
+      #                          2026-10-27 - the glob is the array.)
       # ---------------------------------------------------------------------
       # The published base's own uncovered corner (2026-10-14).
       #

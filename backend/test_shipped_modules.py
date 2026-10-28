@@ -158,6 +158,9 @@ NOT_SHIPPED = {
     "_where.py": "test plumbing",
     "_skeleton.py": "a template for new suites",
     "_stack.py": "test plumbing: the whole patch stack's stand-in for an owner's file",
+    "_base.py": "test plumbing: the published base (jarvis-backend/) as the fallback "
+                "for an owner's file this checkout does not hold, so the required "
+                "backend job runs a security suite instead of skipping it (2026-10-27)",
     "_gitapply.py": "test plumbing: `git apply` from a scratch folder inside a work tree, used "
                     "by _stack.py and _skeleton.py (2026-10-08)",
     "_fake_imap.py": "test plumbing: an in-memory IMAP server for the inbox-tidy suite and "

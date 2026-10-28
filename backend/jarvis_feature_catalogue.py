@@ -3,7 +3,7 @@
 The owner's feature list, as data: 141 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 51ace85614b95c936f7de33beef294aef6cd5afac380250b15a0585e79c61616); the apps' Features pages read their own
+`features/features.json` (sha256 5bb7bde3b84114999f270c615f8826eb473682572c48391cf501243cf7a80d0f); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "51ace85614b95c936f7de33beef294aef6cd5afac380250b15a0585e79c61616"
+SOURCE_SHA256 = "5bb7bde3b84114999f270c615f8826eb473682572c48391cf501243cf7a80d0f"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -491,7 +491,7 @@ FEATURES = (
         "group": "Memory",
         "title": "Your past chats",
         "what": "The chats Jarvis kept, with the switches that govern keeping them.",
-        "where": "Brain, History. On the phone, the History row in the Brain.",
+        "where": "Brain, History. In the HUD, the History button in the left column. On the phone, the History row in the Brain.",
         "asks": "Turning keeping back on raises a card; deleting one chat is instant; forgetting what a chat taught asks first.",
         "limit": "Kept on the PC, encrypted, by default. This phone keeps none of it.",
         "surface": "both",
@@ -523,10 +523,10 @@ FEATURES = (
         "id": "galaxy",
         "group": "Memory",
         "title": "Galaxy",
-        "what": "A map of what Jarvis knows, drawn from your own facts. On the desktop it can be drawn as the constellation, or as one of three flat layouts - Star map, Clean tree, Zen ring - and the choice is remembered on this PC. On the phone it is a read-only picture: at most 48 names, no labels, and a tap opens that name's facts.",
+        "what": "A map of what Jarvis knows, drawn from your own facts. On the desktop it opens on the Planetary Orrery, and you can pick any of eight looks from the Look menu beside the lenses: Planetary orbit, Neural arbor, Nebula, DNA helix, Radar dome, Star map, Clean tree and Zen ring. The choice is remembered on this PC. On a PC that can draw 3D the eight look like the demo page they came from - a real starfield, fog, and the guide shapes each look is built around - and each look has two small buttons of its own. On the phone it is a read-only picture: at most 48 names, no labels, and a tap opens that name's facts.",
         "where": "Brain, Galaxy (desktop). Brain, Memory, People and things (phone).",
         "asks": "No card.",
-        "limit": "Drawn from the same memory lists, so it hides with them. The phone's picture is read-only - no add, edit, merge or drag - and the names it leaves out stay in the list below.",
+        "limit": "Drawn from the same memory lists, so it hides with them. On a PC that cannot draw 3D - or with reduced motion on - each look is drawn flat instead, in the same shapes. Three of the looks would like details the PC does not send (a saved thing's topic, its date and its safety ring), so the Nebula, DNA helix and Radar dome work those out from what kind of thing each name is; the Radar dome's three rings are kinds of thing, not a claim about safety. The phone's picture is read-only - no add, edit, merge or drag - and the names it leaves out stay in the list below.",
         "surface": "both",
         "covers": ["brain.tab.galaxy", "memory-lists"],
     },

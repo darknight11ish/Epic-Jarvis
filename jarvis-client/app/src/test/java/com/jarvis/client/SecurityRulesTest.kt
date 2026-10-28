@@ -339,6 +339,32 @@ class SecurityRulesTest {
     }
 
     @Test
+    fun `a backup recovery code on screen blocks screenshots whatever the settings`() {
+        // P-3 of the 2026-10-27 privacy audit. The code is shown once, Jarvis
+        // keeps no copy, and it is the whole key to a backup holding memory,
+        // chat history and settings - so a screenshot, a cast or the
+        // recent-apps picture taken with the dialog up would hand it over.
+        // Same rule as the pairing token one test above.
+        assertTrue(
+            "defaults: a code on screen must still block",
+            SecurityRules.blockScreenCapture(Security(), codeShown = true),
+        )
+        assertTrue(SecurityRules.blockScreenCapture(Security(appLock = true), codeShown = true))
+        assertTrue(SecurityRules.blockScreenCapture(Security(privateLists = true), codeShown = true))
+        // Closed again: back to what the settings say, and nothing else keeps
+        // the block on.
+        assertFalse(SecurityRules.blockScreenCapture(Security(), codeShown = false))
+        // The two guards are independent reasons, not one shared flag: a code
+        // hidden while the pairing key is shown is still covered, and the
+        // other way round.
+        assertTrue(SecurityRules.blockScreenCapture(Security(), keyShown = true, codeShown = false))
+        assertTrue(SecurityRules.blockScreenCapture(Security(), keyShown = false, codeShown = true))
+        assertFalse(
+            SecurityRules.blockScreenCapture(Security(), keyShown = false, codeShown = false),
+        )
+    }
+
+    @Test
     fun theHiddenListsSettingSaysWhatItHidesInTheDesktopsWords() {
         val says = SecurityRules.PRIVATE_HIDES
         for (hid in listOf("deep questions", "timers, reminders and lists", "morning briefing's lines",

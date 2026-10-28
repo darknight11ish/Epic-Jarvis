@@ -34,7 +34,25 @@ sys.path.insert(0, str(HERE))
 # the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, explain
+import _base  # noqa: E402
+
+#: WHICH copy of the files this suite reads. The owner's install when
+#: `JARVIS_BACKEND` names one, `backend/` when the file is here, and
+#: otherwise the PUBLISHED BASE (`jarvis-backend/`, the state the whole
+#: patch stack left at its last re-take) - so the required backend job runs
+#: these checks for real instead of skipping the suite. backend/_base.py
+#: holds the rule; the line printed below says which folder answered.
+BASE = _base.folder("jarvis_hud.py")
+if BASE is not None:
+    BACKEND = BASE
+    _base.put_on_path(BASE)
+    _base.say(BACKEND, "jarvis_hud.py")
+
+
+def missing(*names):
+    """`_where.missing`, asked of the folder this run really reads."""
+    return _base.missing(BACKEND, *names)
 SRC = BACKEND / "jarvis_hud.py"
 
 FAILED, PASSED = [], []
