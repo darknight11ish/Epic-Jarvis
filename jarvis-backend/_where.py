@@ -417,6 +417,15 @@ SHIPPED = (
     # "save it" stores it through jarvis_manner's own save path. Called from
     # jarvis_quick.py's chat fast path; no route of its own, no patch.
     "jarvis_personality_creator.py",
+    # The Anti-Slop filter (2026-10-28): `miqdadbadjuber/anti-slop` v3.2.23
+    # (MIT) distilled into one shipped module - a compact prompt block scoped by
+    # the owner's copy/code/ui switches, a deterministic em-dash and
+    # code-comment scrub, and a HIGH/MEDIUM/LOW auditor for R-02, R-10, R-13,
+    # R-15, R-16, R-25 (unrounded), R-26, R-32 and antislop-code. Its routes
+    # (GET/POST /api/antislop, POST /api/antislop/audit) come from its own
+    # install(), called by plugins/ready/antislop - no patch of its own. A
+    # cardless preference either way, like the prompt coach.
+    "jarvis_antislop.py",
     "jarvis_card_words.py",
     # The approval card's short summary and the "Start short" / "Always show
     # everything" choice (the owner's request of 2026-10-09, card-prefs.patch):

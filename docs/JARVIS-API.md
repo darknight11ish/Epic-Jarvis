@@ -26012,3 +26012,87 @@ the phone carries no `desktop` field, so the reply says it can only check the
 PC's build from the PC's app and points at **Platform checks**, the phone's own
 update card, where the owner downloads its APK and Android's installer asks for
 the tap. Nothing installs itself on either device.
+
+## 159. The Anti-Slop filter: a cardless output-quality switch (added 2026-10-28)
+
+`miqdadbadjuber/anti-slop` v3.2.23 (MIT) distilled into one shipped module,
+`backend/jarvis_antislop.py` (+ its byte-identical twin). It filters the WORDS
+Jarvis writes and audits a page or a file; it opens no network door, reads no
+folder, takes no action and loosens no gate, so **turning it on or off raises no
+approval card** - the same class as the prompt coach (`docs/DECISIONS.md`,
+2026-10-28). Every change still leaves ONE action receipt with a one-click Undo
+through `jarvis_receipts.py`, action name `antislop`.
+
+The three routes come from the module's own `install(handler_cls, *, origin_ok,
+token_ok, read_body)` - the shape every drop-in module uses - which
+`plugins/ready/antislop/plugin.json` asks `jarvis_plugins.py` to call. **No
+patch of its own.** All three sit behind the server's usual origin and token
+checks, before anything is read.
+
+| Route | Body / query | Answer |
+|---|---|---|
+| `GET /api/antislop` | none | **200** `{ok, enabled, mode, scopes{ copy, code, ui }, dials{ energy, rhythm, motion }, show_delivery_gate_on_ui_tasks, updated_at, words, source, max_prompt_chars}`. A read. |
+| `POST /api/antislop` | any of `enabled` (bool), `mode` (`during`\|`after`), `scopes` (object of bools), `dials` (object of 1..3), `show_delivery_gate_on_ui_tasks` (bool) | **200** with the same shape as the GET. **400** `{"ok": false, "error": "unknown_setting", "message": "the anti-slop filter has no setting called X"}` for a key it does not have (a typo must never read back as "saved"), `"bad_mode"` for a mode that is not one of the two, `"refused"` for a dial outside 1..3, `"nothing_to_change"` for an empty body. |
+| `POST /api/antislop/audit` | `{"content": "...", "kind": "auto"\|"text"\|"html"\|"css"\|"js"\|"code"\|"ui"}` | **200** `{ok, kind, findings[{rule, tier, line, detail}], counts{HIGH, MEDIUM, LOW}, total, gate{blocks[4], passes, words}, checked, state, source, words}` and, for a UI kind in `during` mode, `delivery_gate`. Read-only: it changes no setting. **400** `"no_content"` / `"too_long"` (over 400,000 characters). |
+
+**A change takes effect on the very next turn** (no restart) and is announced on
+the event stream as kind `antislop` carrying the whole state, which is this
+backend's shape for a settings-class change (one kind per feature, like
+`appearance`, `devices` and `big-coder`). The blueprint for this feature called
+it a "settings" event; no such kind exists here and none was invented.
+
+### 159.1 What the filter does, and what it costs
+
+- **Off** (the default on a PC that has never run it): `prompt_block()` is the
+  empty string, `post_process_reply()` returns its input unchanged, and
+  `reply_filter()` returns `None`, so the agent adds **0 tokens and 0 calls**.
+- **On, `during`**: a `<antislop_filter mode="during">` system message of at
+  most 1,050 characters, placed just before the newest user message exactly like
+  the manner and focus notes (never first, so the rules block stays first), plus
+  a deterministic scrub of the words as they stream: em dashes out of prose
+  (R-02), decorative banners and emoji comments out of fenced code
+  (`antislop-code`). The scrub holds back only a trailing space, a trailing em
+  dash or a line inside a code block, so the answer still streams.
+- **On, `after`**: the note asks for a numbered findings list and no edits, and
+  the scrub is bypassed - an audit may quote the em dash it reports.
+- **`R-37` wins over `R-02`**: when "Write Like Me" is on and the owner's own
+  samples use em dashes, the ban yields in both the note and the scrub.
+
+### 159.2 The audit's rules and tiers
+
+| Rule | Tier | What it reports |
+|---|---|---|
+| `R-02` | HIGH | an em dash in agent-written prose |
+| `R-25` | HIGH | WCAG AA contrast below 4.5:1 (3:1 for large text), compared **unrounded** - `#777777` on white is 4.4781:1 and fails even though it rounds to 4.5; `#757575` is 4.6075:1 and passes |
+| `R-26` | HIGH | an `<a href="#">` / `javascript:void` link, or a `<button>` with no id, handler, form or data attribute |
+| `R-32` | HIGH | `outline: none` (or `0`) with no `:focus`/`:focus-visible` ring put back |
+| `R-10` | MEDIUM | more than 2 glassmorphism declarations (`backdrop-filter`) |
+| `R-13` | MEDIUM | more than 2 glow shadows (a `box-shadow` with no offset) |
+| `R-15` | LOW | a generic call to action ("Get Started", "Learn More", ...) |
+| `R-16` | LOW | an AI buzzword ("seamless", "revolutionary", ...) |
+| `antislop-code` | LOW | a decorative comment banner or an emoji comment |
+
+The answer also carries the rulebook's **4-block Delivery Gate** (Hard Gate,
+Purpose-Gate, Liveliness, Craftsmanship). Liveliness is reported as `NOT
+CHECKED`, never as a pass: a focal point, one accent and real whitespace are a
+judgement, and no regex may certify them. What the auditor cannot see at all -
+a rendered page, a real keyboard focus ring, the empty/loading/error states of a
+data source - is named here rather than silently passed.
+
+### 159.3 Saying it in chat
+
+All of these are answered by the fast path (`backend/jarvis_quick.py`, no model,
+**0 cards**): "turn on anti-slop", "turn off anti-slop", "enable anti-slop",
+"disable anti-slop", "is anti-slop on", "set anti-slop mode to during/after",
+"turn on/off anti-slop for copy/code/ui", and the generic "set `<name>` to
+`<value>`". `antislop` is a `BOOL_SETTINGS` row and `antislop_mode` a
+`CHOICE_SETTINGS` row, so a spoken change reaches the same setters this route
+does. `jarvis_feature_guide.read_state("antislop")` reads the switch itself, so
+"is it on?" can never be a guess.
+
+**What deliberately does not exist.** No model tool, no card, no background
+run, and no second rulebook: nothing of `anti-slop`'s own installer, Markdown
+skills or `npx` path is downloaded, run or shipped (see
+`THIRD-PARTY-NOTICES.txt`). The desktop Settings card and the phone's settings
+screen are the UI half of this feature and are not part of this section.
+
