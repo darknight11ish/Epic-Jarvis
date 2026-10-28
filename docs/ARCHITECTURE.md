@@ -3522,6 +3522,26 @@ reads it too), and Rust proves the id against the same
 is cosmetic, so the write raises no card, and the command carries no colour,
 binding or animal field: those stay the Faces window's.
 
+**The face size is this device's own look, and it is the desktop HUD's alone**
+(2026-10-28, the owner's ask: *"in the jarvis faces in the left column of the
+hud there should also be a size option on desktop"*). The same panel gains a
+`Face size` row - Small, Medium (the layout's own size) and Large - which
+multiplies whatever size the current shell gives the face by 0.75, 1 and 1.25
+through ONE `--face-scale` custom property that every `#reactor` width/height
+rule reads as `calc(base * var(--face-scale, 1))`. Width and height, never
+`transform: scale()`, so the wrap reserves the bigger box and a Large face
+pushes the log down instead of covering it; the 48px Studio dock and the
+96px pinned core (88px under the 760px rule, and the same CSS rule) are
+driven at all three sizes, not merely counted. The
+choice is THIS WebView's `localStorage` under `jarvis.face.size`, the same
+per-device road as `jarvis.theme`, and the HUD's head script reads it before
+first paint, so the first frame is already the chosen size and an app restart
+keeps it. It is a look, not a preference the PC owns: it calls no command,
+adds no route, raises no card, writes no other key, and changes neither the
+theme nor which face is worn. The phone has no HUD left column or faces
+panel, so there is nothing to port, `tools/check_parity.py` classifies nothing
+new, and `docs/JARVIS-API.md` is untouched because no route or command exists.
+
 **The phone's Right/Wrong pair moves into a per-message menu, and the new
 pinned messages stay on the phone: one-sided on purpose** (2026-10-27, the
 owner's request: *"i dont want a 'was this answer right' on every response
