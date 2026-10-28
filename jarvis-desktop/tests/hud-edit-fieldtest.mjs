@@ -400,8 +400,9 @@ async function changeEverything(page, before) {
     await settle(page);
   }
 
-  // 5. every card that may be hidden, hidden - last, because a hidden card's
-  //    own controls are hidden with it
+  // 5. every card that may be hidden, hidden - last, so every card is still on
+  //    screen at its final size for the measurement above. A hidden card is a
+  //    ghost in Edit HUD since the 2026-10-28 fix, so its controls stay usable.
   for (const card of hideable) {
     await press(page, `[data-hud-edit-command="hide"][data-hud-edit-card="${card.id}"]`);
     await settle(page);
@@ -448,8 +449,9 @@ async function revertWithReset(page) {
  * arrow buttons: walk each region's cards in the original order and move each
  * one up until it sits where it did.
  *
- * Returns what could NOT be restored, because that is the finding: a hidden
- * card's own "show" control is one-way (see the note in the report below).
+ * Returns what could NOT be restored, so a reachability regression is named
+ * rather than hidden: before 2026-10-28 that was every hidden card, because the
+ * only "show" control was one-way (see the note at the top of this file).
  */
 async function revertByHand(page, original) {
   const want = original.cards.filter((card) => MOVABLE.has(card.id));
