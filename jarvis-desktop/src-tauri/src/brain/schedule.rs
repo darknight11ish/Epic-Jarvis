@@ -1417,26 +1417,50 @@ pub(crate) fn show_quiet(app: &AppHandle, kind: Kind, title: &str, body: &str) {
 /// toast saying how it went, since the window is very likely not open.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) async fn snooze_from_toast(app: AppHandle, id: String) {
-    let said = match require_link_live(&app) {
-        Err(e) => format!("Not snoozed: {e}."),
+    let (said, refused) = match require_link_live(&app) {
+        Err(e) => (format!("Not snoozed: {e}."), true),
         Ok(()) => match act_body(&id, "snooze", Some(SNOOZE_SECONDS)) {
-            Err(e) => format!("Not snoozed: {e}"),
+            Err(e) => (format!("Not snoozed: {e}"), true),
             Ok(body) => match post(&app, "/api/schedule/act", body).await {
-                Ok(v) => v
-                    .get("said")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("Snoozed.")
-                    .to_string(),
-                Err(e) => format!("Not snoozed: {e}"),
+                Ok(v) => (
+                    v.get("said")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or(SNOOZED)
+                        .to_string(),
+                    false,
+                ),
+                Err(e) => (format!("Not snoozed: {e}"), true),
             },
         },
     };
     // The answer to the owner's own Snooze press - a job whose toast was
     // shown a moment ago, so there is no switch it could be failing to honour
-    // (notifications.rs `Kind::Other`) - and deliberately not gated: "not
-    // snoozed" is a refusal he must hear about.
-    commands::notify(&app, "Jarvis", &said);
+    // (notifications.rs `Kind::Other`) - and the answer is never hidden
+    // entirely: "not snoozed" is a refusal he must hear about.
+    //
+    // P-5 of the 2026-10-27 privacy audit: both halves of `said` can carry
+    // words that are not this app's - the PC's own `said` for the job, and the
+    // PC's error sentence in `Not snoozed: …` - so the toast goes through the
+    // guarded door. While App lock or the hidden lists is on it says a FIXED
+    // version of the same answer ([`SNOOZED`] or [`SNOOZE_REFUSED`]), which
+    // keeps the one thing the owner needs (did it work) and drops the words
+    // that were not ours to put on a toast.
+    commands::notify_guarded(
+        &app,
+        "Jarvis",
+        &said,
+        Some(if refused { SNOOZE_REFUSED } else { SNOOZED }),
+    );
 }
+
+/// The fixed answer to a Snooze press that worked (also the PC's own fallback
+/// sentence when its reply carries none).
+pub(crate) const SNOOZED: &str = "Snoozed.";
+
+/// The fixed answer while App lock or the hidden lists is on, when the press
+/// did not work: the fact, and where the reason is.
+pub(crate) const SNOOZE_REFUSED: &str =
+    "Not snoozed. Open Jarvis to see why - it will ask you to unlock it first.";
 
 pub(crate) async fn read_job(app: &AppHandle, base: &str, id: &str) -> Option<serde_json::Value> {
     let headers = commands::jarvis_headers(app).ok()?;
@@ -1631,6 +1655,41 @@ pub(crate) async fn post_with_timeout(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// P-5 of the 2026-10-27 privacy audit: a Snooze press is answered through
+    /// the guarded toast, and the fixed answers keep the one thing the owner
+    /// needs - did it work - without the PC's words.
+    #[test]
+    fn a_snooze_answer_goes_through_the_guarded_door_and_says_if_it_worked() {
+        assert_eq!(SNOOZED, "Snoozed.");
+        assert!(
+            SNOOZE_REFUSED.starts_with("Not snoozed."),
+            "the fixed refusal must still say the press did not work: {SNOOZE_REFUSED}"
+        );
+        // The pair is unmistakable: one says it worked, the other says it did
+        // not, so a locked toast is never ambiguous about that.
+        assert_ne!(SNOOZED, SNOOZE_REFUSED);
+        let src = include_str!("schedule.rs");
+        let start = src
+            .find("pub(crate) async fn snooze_from_toast")
+            .expect("the Snooze click's own task");
+        let rest = &src[start..];
+        let end = rest.find("\n}\n").expect("the end of that function");
+        let body = &rest[..end];
+        assert!(
+            body.contains("notify_guarded("),
+            "the Snooze answer no longer goes through the guarded door, so the PC's own \
+             `said` reaches a toast whatever the lock says:\n{body}"
+        );
+        assert!(
+            !body.contains("commands::notify("),
+            "the Snooze answer calls the unguarded notify again:\n{body}"
+        );
+        assert!(
+            body.contains("SNOOZE_REFUSED") && body.contains("SNOOZED"),
+            "the locked answer lost its own two fixed sentences:\n{body}"
+        );
+    }
 
     /// Phase 2 (2026-10-22): the three verbs' bodies, the owner's caps, and the
     /// verb choice the Lead settled - a list-only edit becomes `move`.

@@ -51,6 +51,33 @@ object LiveRules {
     const val DOT = " · "
     const val LINK_WORDS = "Paused: link lost - Live carries on when the link is back"
 
+    /**
+     * The lock-screen line, in place of the session's own state words, while
+     * notification content must be redacted (privacy audit P-7, 2026-10-27).
+     *
+     * One fixed sentence, and it says the one thing that cannot be avoided: a
+     * Live session puts a notification on this phone, and a foreground
+     * service's notification is drawn on the lock screen whatever its
+     * visibility says. What CAN be kept off that screen is everything else -
+     * the minutes left, "Mic off" / "Mic on", the PC's `muted_words` and
+     * `muted_why`, and the ended-words line under "Live ended - Resume". None
+     * of those is an owner's own words, but they are state, and every other
+     * Jarvis notifier on this phone already replaces state with a fixed line
+     * when the lock is on (`ScheduleNotifier.locked`). This is the same shape.
+     */
+    const val LOCKED_LINE = "Jarvis is on."
+
+    /**
+     * What a Live notice says: [title] and [text] as the session built them, or
+     * - when [locked] - this app's name and [LOCKED_LINE].
+     *
+     * Pure and in one place so the JVM test can hold both notices to the same
+     * rule (`LiveRulesTest`), and so the foreground notice and the "Live ended -
+     * Resume" one cannot drift into two different answers.
+     */
+    fun noticeWords(locked: Boolean, appName: String, title: String, text: String): List<String> =
+        if (locked) listOf(appName, LOCKED_LINE) else listOf(title, text)
+
     /** Said in the phone's own voice when the link to the PC drops during Live. */
     const val LINK_LOST_SAID = "I've lost the link to your PC."
 

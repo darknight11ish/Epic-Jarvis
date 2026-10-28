@@ -1,3 +1,12 @@
+<!doctype html>
+<!-- A11Y-2026-10-27 (finding 2): the doctype and the language were missing, so
+     this page was parsed in QUIRKS mode and had no language for a screen
+     reader. The bar, Settings, Brain, the Widget and both badges already open
+     with a doctype; this page and faces.html were the two that did not.
+     Keep the charset declaration below inside the first 1024 bytes: Tauri's
+     CSP hashes the inline scripts from the UTF-8 file, and if WebView2 guesses
+     windows-1252 for this page those scripts decode into different bytes. -->
+<html lang="en">
 <meta charset="utf-8">
 <!-- First, and not decoration. Without it WebView2 decodes this page as
      windows-1252, the non-ASCII characters in the main script change, and
@@ -190,6 +199,18 @@ body{
 }
 button{font:inherit; color:inherit; background:none; border:none; cursor:pointer;}
 :focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+/* A11Y-2026-10-27 (finding 4): a BARE `.sr-only`. The page had only compound
+   rules (`.hud-stop-status.sr-only`, `.hud-presets-status.sr-only`), so the
+   `class="sr-only"` on `#rail-live-status` matched nothing and a live region
+   that was meant to be silent on screen sat in the layout instead. The clip
+   pattern is the one those two rules already use; a future bare use of the
+   class now really hides. PR #912 removes that one use - it is moving the
+   class off `#rail-live-status` - and this rule is additive either way. */
+.sr-only{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); clip-path:inset(50%);
+  white-space:nowrap; border:0;
+}
 
 /* ---------- shell ------------------------------------------------- */
 #shell{
@@ -517,7 +538,14 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
   background:none; border:1px solid var(--line); color:var(--dim);
 }
 .msg.jarvis .speak-answer:hover{color:var(--text); border-color:var(--line-hot);}
-.msg.jarvis .speak-answer:focus-visible{outline:none; color:var(--ice); border-color:var(--line-hot);}
+/* A11Y-2026-10-27 (finding 5): this rule used `outline:none` and signalled
+   focus by colour alone. On a 1px line and an ice-blue glyph that is a 1.4.11
+   failure, and under Windows High Contrast the colour change does not survive
+   at all. The visible ring is the page's own (2px `--ice`), in the rule that
+   wins for these three controls: it is more specific than `theme.css`'s
+   forced-colours ring, which is why the ring is here and not only there. */
+.msg.jarvis .speak-answer:focus-visible{outline:2px solid var(--ice); outline-offset:2px;
+  color:var(--ice); border-color:var(--line-hot);}
 .msg.jarvis .speak-answer svg{width:14px; height:14px;}
 .msg.system .body{
   background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
@@ -1269,7 +1297,10 @@ html.hud-window-hidden *::after{
   transition:color .15s, border-color .15s, background .15s;
 }
 .rail-toolbar-btn:hover{color:var(--text); border-color:var(--line-hot);}
-.rail-toolbar-btn:focus-visible{outline:none; color:var(--ice); border-color:var(--line-hot);}
+/* A11Y-2026-10-27 (finding 5): the visible ring, not colour alone - see the
+   note on `.msg.jarvis .speak-answer:focus-visible` above. */
+.rail-toolbar-btn:focus-visible{outline:2px solid var(--ice); outline-offset:2px;
+  color:var(--ice); border-color:var(--line-hot);}
 .rail-toolbar-btn[aria-expanded="true"]{color:var(--ice); border-color:var(--line-hot);}
 .rail-toolbar-btn .glyph{width:14px; height:14px; flex:0 0 auto;}
 
@@ -1514,9 +1545,11 @@ html[data-hud-shell="split-stage"] .bento-waiting{display:flex; flex-direction:c
  *  the Cockpit's Bento card and the Ambient layout's slide-in rail all show
  *  this one panel, so nothing here is a second list. The words are the PC's
  *  own and are already blanked in Rust while App lock / the private lists
- *  are hidden (kinds, times and counts stay). Phase 1 is view + add + the
- *  existing one-job actions; editing an item and reordering need backend
- *  changes and a later deploy, and are NOT faked here.
+ *  are hidden (kinds, times and counts stay) - and because a page is only as
+ *  private as its LAST read, this panel is re-read when the PC says the lists
+ *  hid again (`private-hidden`, `forgetPrivateGraph` below). Phase 1 is
+ *  view + add + the existing one-job actions; editing an item and reordering
+ *  need backend changes and a later deploy, and are NOT faked here.
  * --------------------------------------------------------------------- */
 .reminders-body{display:flex; flex-direction:column; gap:10px;}
 .rem-note{margin:0; padding:7px 9px; border:1px solid var(--line); border-radius:4px;
@@ -2035,8 +2068,16 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
     border:1px solid transparent; border-radius:3px; background:transparent;
     color:var(--text); font-family:inherit; font-size:11.5px; cursor:pointer;
   }
-  .hud-presets-item:hover,.hud-presets-item:focus-visible{
-    border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice); outline:none;
+  .hud-presets-item:hover{
+    border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice);
+  }
+  /* A11Y-2026-10-27 (finding 5): was part of the hover rule above, with
+     `outline:none` on the shared selector list, so a keyboard reader of the
+     Layouts menu had colour alone. Split, so hover no longer suppresses a
+     ring it never needed to and focus gets the page's own visible one. */
+  .hud-presets-item:focus-visible{
+    border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice);
+    outline:2px solid var(--ice); outline-offset:2px;
   }
   .hud-presets-row{display:flex; align-items:center; gap:2px;}
   .hud-presets-row .hud-presets-item{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;}
@@ -2265,7 +2306,7 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
 /* History sidebar styles, moved out of hud-history.js on 2026-10-28:
    the packaged CSP refuses a <style> element built at run time, and this
    page's own <style> carries the nonce. Keep this text here, not in JS. */
-html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);outline:none;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);outline:none;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}.hh-sec[data-open="0"] .hh-head .glyph.hh-caret{transform:rotate(-90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);outline:none;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);outline:none;opacity:1;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);outline:none;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);outline:none;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);outline:none;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-ico:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);}.hh-head:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}.hh-sec[data-open="0"] .hh-head .glyph.hh-caret{transform:rotate(-90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);}.hh-open:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);opacity:1;}.hh-dots:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);}.hh-more:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);}#hh-new:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);}.hh-menu button:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
 </style>
 
 <!-- ==================================================================== *
@@ -2849,7 +2890,9 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
          from the SAME GET /api/schedule read the Brain's Coming up uses; the
          Studio stage tab / dock icon, the Cockpit Bento card and the Ambient
          rail all show this one panel. Its words are blanked in Rust while App
-         lock or the private lists are hidden. Phase 1: view, add and the six
+         lock or the private lists are hidden - and, because a page is only as
+         private as its last read, the panel is re-read when the PC says the
+         lists hid again (`private-hidden`). Phase 1: view, add and the six
          existing one-job actions. Phase 2 (2026-10-22, after backend #730):
          Edit/Up/Down on an editable row, drawn ONLY when the PC's own
          GET /api/schedule says phase2:true - an older backend shows exactly
@@ -3761,6 +3804,11 @@ const galaxy = (() => {
   let budgetCapped = false;
   let budgetTotal = 0;
   let lastBudgetKey = "";
+  // P-1 of the 2026-10-27 privacy audit: true while the PC is hiding the
+  // memory lists. It is the PC's own answer, read off the reply
+  // (`redact_graph` sets `hidden: true` only when it actually took memory
+  // out), never this page's guess - see `setPrivateHidden` and `forget`.
+  let privateHidden = false;
 
   /** True when the Galaxy fills a large window (the full Brain view); false
    *  for the inline stage/bento. SIZE is what the frame budget follows - the
@@ -3844,6 +3892,18 @@ const galaxy = (() => {
 
   function plural(n, one, many){ return `${n} ${n === 1 ? one : many}`; }
 
+  /** `hud-safety.js`'s hidden-lists sentence, or "".
+   *
+   *  THE SENTENCE IS NOT SPELLED HERE. `hud-safety.js` owns it (`HIDDEN_WORDS`)
+   *  and hands it over on the window object the page already uses for the
+   *  HUD's other cross-script facts (`__hudPhase2Words`, `__hudSafetyPending`),
+   *  so this page cannot drift into a second spelling of the same promise. If
+   *  that module is not there (an older shell/page pairing) the line stays
+   *  empty: it never invents wording of its own. */
+  function hiddenWords(){
+    return typeof window.__hudHiddenWords === "string" ? window.__hudHiddenWords : "";
+  }
+
   /** Which node groups this lens shows, as the legend row names. */
   function countLine(nodesIn){
     const byGroup = {};
@@ -3871,12 +3931,30 @@ const galaxy = (() => {
   }
 
   /** Tell assistive tech what is on screen now (the counts are computed).
-   *  When the node budget cut the lens, the same line says so in words. */
+   *  When the node budget cut the lens, the same line says so in words.
+   *
+   *  P-1 of the 2026-10-27 privacy audit: while the PC is hiding the memory
+   *  lists, the Memory and Unified lines cannot be counted. "no saved facts on
+   *  this PC yet" would be a lie - the facts are there and the PC is holding
+   *  them back - so the line says what is actually true instead, in
+   *  `hud-safety.js`'s own hidden-lists sentence (the strip beside it says the
+   *  same words). The Neural lens is the PC's own capabilities, which the
+   *  redaction never touches, so it still reports them - see the comment
+   *  inside, and `forget` for why an empty picture is not that. */
   function renderCounts(nodesIn){
     const el = document.getElementById("galaxy-counts");
     if(!el) return;
-    const line = countLine(nodesIn) + (budgetCapped
-      ? ` · showing ${nodesIn.length} of ${budgetTotal} nodes` : "");
+    // The Neural lens is the PC's own capabilities, which the redaction never
+    // touches - so it reports itself whenever the PC actually gave it
+    // something to count. An EMPTY picture is not that: it is what a forget
+    // leaves behind for the moment before the answer lands (or after a read
+    // that failed), and "no capability data from this PC yet" would be a
+    // claim about the PC that nothing here has measured.
+    const countable = lens === "neural" && nodesIn.length > 0;
+    const line = privateHidden && !countable
+      ? hiddenWords()
+      : countLine(nodesIn) + (budgetCapped
+        ? ` · showing ${nodesIn.length} of ${budgetTotal} nodes` : "");
     el.textContent = line;
     el.setAttribute("data-galaxy-counts", lens);
     el.setAttribute("data-galaxy-budget", budgetCapped ? "capped" : "all");
@@ -4853,6 +4931,50 @@ const galaxy = (() => {
     $("inspector").classList.remove("on");
   }
 
+  /** Drop every word this picture holds about the owner's memory.
+   *
+   *  P-1 of the 2026-10-27 privacy audit, and the whole repair. This window is
+   *  hidden only by App lock, so with App lock off it stays on screen; the
+   *  graph it read while a Show was in force carries the owner's saved fact
+   *  sentences and the names of the people in them. Rust redacts the NEXT read
+   *  (`hud_proxy.rs` / `redact_graph`), but it cannot reach a word this page
+   *  already has, and no poll of the settings can tell the page the show ended
+   *  (`get_lock_flags` answers with the two SETTINGS). So the page forgets.
+   *
+   *  Every reach point is cleared, not just the dots: the node list and its
+   *  links, the inspector's three lines (`focus` wrote a label, a connection
+   *  count and a detail sentence), the search box's query, the pointer's
+   *  hover, the recall trace (a fact sentence per hit) and the camera's
+   *  target. `applyLens` with an empty source then repaints an empty picture,
+   *  which also removes every node button from the overlay.
+   *
+   *  `privateHidden` is NOT touched here: the caller reads it off the PC's
+   *  reply (`setPrivateHidden`), so this stays one mechanical "forget". */
+  function forget(){
+    sourceGraph = { nodes: [], links: [] };
+    nodes = []; links = []; adj = new Map();
+    hoverId = null; query = "";
+    traceHits = traceNear = null;
+    clearFocus();
+    // The inspector's words are still in the DOM behind a removed class: a
+    // screen reader, a devtools look or an old screenshot must find nothing.
+    $("insp-kind").textContent = "node";
+    $("insp-title").textContent = "—";
+    $("insp-meta").textContent = "";
+    $("insp-detail").textContent = "";
+    applyLens();
+  }
+
+  /** The PC's own answer about this picture, from the read itself.
+   *
+   *  `redact_graph` sets `hidden: true` only when it actually took memory out,
+   *  so this is a fact about the reply, never a guess. It decides the counts
+   *  line (see `renderCounts`) and nothing else: turning it OFF paints nothing
+   *  by itself - the `load` that follows every read does that. */
+  function setPrivateHidden(on){
+    privateHidden = !!on;
+  }
+
   /** The swatch draws the group's actual shape, not just its colour - the
    * whole point of the fix (Q6) is that two groups on the same hue are
    * still told apart without colour, and a legend that only showed a
@@ -4889,6 +5011,9 @@ const galaxy = (() => {
 
   return {
     load, resize, setTrace, flyTo, setRunning, syncRunning, releaseCosmos,
+    /** P-1 (privacy audit 2026-10-27): drop every word this picture holds, and
+     *  record the PC's own answer about whether the lists are hidden. */
+    forget, setPrivateHidden,
     reset(){
       clearFocus();
       // A 3D look has a camera, not a yaw: its own reset puts the look back on
@@ -5176,6 +5301,12 @@ function showTrace(trace){
   const bar = $("trace-bar"), list = $("trace-list");
   if(!trace){
     bar.classList.add("off"); list.classList.add("off");
+    // P-1 of the 2026-10-27 privacy audit: the rows are recalled fact
+    // sentences, and "off" only hides them. Closing the trace - which is what
+    // the private-hidden handler does - must take the words out of the DOM
+    // too, not leave them one devtools click away. textContent, not
+    // innerHTML: this is a clear, not a parse.
+    list.textContent = "";
     renderTrail();
     return;
   }
@@ -6259,10 +6390,45 @@ async function boot(){
     }
   }
 
-  // Brain map
+  // Brain map. ONE read, shared with the private-hidden handler below, so
+  // there is a single place that decides what this picture may hold.
+  await readGraph({ atBoot: true });
+}
+
+/* The one /api/graph read this page makes: at boot, and again whenever the PC
+ * says the memory lists hid (or the security settings changed). P-1 of the
+ * 2026-10-27 privacy audit.
+ *
+ * Why a second read is the repair, and why it is not enough on its own:
+ * `hud_proxy.rs` redacts `/api/graph` in Rust while the lists are hidden, but
+ * Rust cannot reach a word the page already holds, and nothing polls the
+ * STATE (see `forgetPrivateGraph`). So the page forgets first and then asks
+ * again; the reply is redacted, and it alone decides what is painted.
+ *
+ * `atBoot` is boot's own case and only boot's: with no server at all the page
+ * falls back to the sample graph, which the banner above already declares
+ * ("Everything below is sample data"). A read after a hide never draws sample
+ * facts - a picture just cleared for privacy must not fill up with invented
+ * ones - and it stays quiet about an empty memory, because "your brain map is
+ * empty so far" would be false while the lists are hidden.
+ *
+ * One read at a time wins: a reply that lands after a newer read started is
+ * dropped, so an in-flight boot read cannot repaint an unredacted graph over
+ * a hide that happened while it was on the wire.
+ *
+ * Returns the graph it painted, or null when nothing was painted. */
+let graphRead = 0;
+async function readGraph({ atBoot = false } = {}){
+  const mine = ++graphRead;
   let graph = null;
   try{
     const r = await jfetch("/api/graph", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    // A re-read after a hide insists on a real answer: an HTTP 404/500 with a
+    // JSON body would otherwise be painted as "a graph with nothing in it",
+    // which is a claim about the owner's memory that nothing measured. Boot
+    // keeps its own older tolerance (the 404 there has always meant "an older
+    // PC that does not build graphs", and the page drew an empty map for it).
+    if(!atBoot && !r.ok) throw new Error(`the PC answered HTTP ${r.status}`);
     graph = await r.json();
     // A real graph that is still small is SHOWN as it is, not swapped for the
     // made-up one: that used to happen online too, with no banner, so a new
@@ -6272,13 +6438,22 @@ async function boot(){
     graph = graph && typeof graph === "object" ? graph : {};
     if(!Array.isArray(graph.nodes)) graph.nodes = [];
     if(!Array.isArray(graph.links)) graph.links = [];
-    if(graph.nodes.length < 3){
+    if(atBoot && graph.nodes.length < 3){
       addMessage("system", graph.nodes.length
         ? "Your brain map is small so far. It fills in as you keep facts Jarvis learns."
         : "Your brain map is empty so far. It fills in as you keep facts Jarvis learns.");
     }
-  }catch(e){ graph = demoGraph(); }
-
+  }catch(e){
+    graph = atBoot ? demoGraph() : null;
+  }
+  if(mine !== graphRead) return null;   // a newer read decides
+  if(!graph) return null;              // the PC did not answer: keep what is there
+  const hidden = graph.hidden === true;
+  galaxy.setPrivateHidden(hidden);
+  // An answer that came back redacted means the lists are hidden NOW: nothing
+  // from the previous read may survive it (the inspector's lines, the search
+  // box, the trace). This is the only place the reply itself clears.
+  if(hidden) clearMemoryWords();
   S.graph = graph;
   const c = graph.counts || {};
   $("r-facts").textContent = c.facts ?? "—";
@@ -6287,6 +6462,69 @@ async function boot(){
 
   galaxy.resize();
   galaxy.load(graph);
+  return graph;
+}
+
+/* P-1 of the 2026-10-27 privacy audit (High): the galaxy outlived the hide.
+ *
+ * The owner passes Windows Hello on the Brain's Show and opens - or reloads -
+ * this window while that reveal is in force, so its one /api/graph read comes
+ * back whole, as designed for a revealed window. The reveal then ends (the
+ * owner steps away, or the setting is switched off) and Rust redacts the NEXT
+ * read - but the fact sentences and the names of the people in them are
+ * already here, in `S.graph`, in the galaxy's nodes and their labels, in the
+ * inspector, in the search box and in the recall trace. This window is hidden
+ * by App lock only, so with App lock off it stays on screen, and one hover,
+ * one search or one click reads them back.
+ *
+ * `get_lock_flags` cannot tell this page: it answers with the two SETTINGS,
+ * not with "the reveal has ended", and the reveal is a transient state
+ * (`lock::private_hidden` clears it itself once the owner is no longer fresh).
+ * So the event is the only signal, and `emit_private_hidden` broadcasts it to
+ * every window now. */
+function clearMemoryWords(){
+  // The words go FIRST. If the read that follows fails, the picture stays
+  // empty and says why - it never falls back to what was on screen.
+  galaxy.setPrivateHidden(true);
+  galaxy.forget();
+  S.graph = { nodes: [], links: [], hidden: true };
+  $("gsearch").value = "";
+  // The trail is the owner's own earlier questions (up to 8, each with the
+  // fact sentences its answer recalled). "Turn this window" clears it too.
+  S.traces = [];
+  showTrace(null);
+}
+
+/** The reveal ended: forget now, then ask the PC what this window may show. */
+function forgetPrivateGraph(){
+  clearMemoryWords();
+  readGraph();
+  // The Reminders panel has the same shape (its words are blanked by Rust on
+  // every read, so it is only as private as its last one): re-read it now
+  // instead of waiting for the panel to be opened again.
+  if (typeof window.__hudRemindersRefresh === "function") window.__hudRemindersRefresh();
+}
+
+/** The security settings changed. The picture may now be hidden or shown
+ *  again, so ask - but do not empty it first: a change that hides nothing
+ *  (turning App lock on, say) must not flash the galaxy away and back. The
+ *  reply itself clears whatever the hiding made stale. The safety strip's two
+ *  answers come from the same settings, so it re-reads them now instead of on
+ *  its next 20-second beat. */
+function securityChanged(){
+  if(window.__hudSafety) window.__hudSafety.readLock();
+  readGraph();
+}
+
+/* Both events mean the same thing to this picture. `private-hidden` is the
+ * transient case (the reveal ended on its own), `security-changed` the setting
+ * being switched. Registered BEFORE boot's read, so a hide that lands while
+ * that read is still on the wire is not missed - and the read counter above
+ * makes whichever answer is newer the one that paints. */
+const privacyEvents = window.__TAURI__ && window.__TAURI__.event;
+if (privacyEvents && typeof privacyEvents.listen === "function") {
+  privacyEvents.listen("private-hidden", () => forgetPrivateGraph()).catch(() => {});
+  privacyEvents.listen("security-changed", () => securityChanged()).catch(() => {});
 }
 
 boot();
@@ -7577,7 +7815,9 @@ subscribe();
   //  Drawn from the SAME GET /api/schedule read the Brain's Coming up uses;
   //  the Studio stage tab / dock icon, the Cockpit Bento card and the Ambient
   //  rail all show this one panel. Its words are blanked in Rust while App
-  //  lock or the private lists are hidden. Phase 1: view, add, and the
+  //  lock or the private lists are hidden - and, because a page is only as
+  //  private as its last read, `forgetPrivateGraph` re-reads it the moment the
+  //  PC says the lists hid again. Phase 1: view, add, and the
   //  existing one-job actions - edit/move/reorder need backend changes and a
   //  later deploy, and are not faked here. It lives INSIDE the page's own
   //  layout script on purpose: another inline script block would be a fifth
@@ -8589,7 +8829,13 @@ if (typeof window.__hudRemindersRefresh === "function") window.__hudRemindersRef
  * untouched. It shows App lock / hidden lists, the queue-scoped rush
  * evidence and the catching-up state, and it keeps Deny enabled while the
  * link is stale (the command already holds only Approve). */
-import { mountSafetyRail } from "./hud-safety.js";
+import { mountSafetyRail, HIDDEN_WORDS } from "./hud-safety.js";
+/* P-1 of the 2026-10-27 privacy audit: the ONE hidden-lists sentence, handed to
+ * the page's own script so its counts line cannot spell a second version of it
+ * (`galaxy.renderCounts` reads this; the module owns the words, as it does for
+ * the strip). The page already passes its cross-script facts this way
+ * (`__hudPhase2Words`, `__hudSafetyPending`). */
+window.__hudHiddenWords = HIDDEN_WORDS;
 mountSafetyRail().then((rail) => {
   window.__hudSafety = rail;
   // H4-4: paint the queue once now, so a card that was already waiting at
@@ -8897,5 +9143,43 @@ window.hudHistoryHost = {
     S.conversationId = newConversationId();
   },
 };
+/* ── Text size (2026-10-27 accessibility audit, finding 3): this window never
+ *    called `followZoom`, so Settings' Text-size choice and Ctrl+= / Ctrl+- /
+ *    Ctrl+0 reached every other window and left the HUD at 14px. It is the
+ *    SAME function those windows use (`jarvis-link.js`), so there is one zoom
+ *    key, one set of steps and one Ctrl+0 - never a HUD-sized second idea.
+ *
+ *    A DYNAMIC import, guarded, for the same reason `./galaxy-presets.js` is
+ *    loaded that way: this page is also served on its own by the backend from
+ *    a CLOSED asset whitelist, and one module it cannot fetch must not take
+ *    the whole module graph (every mount above) down with it. A page with no
+ *    `./jarvis-link.js` beside it behaves exactly as it did before this line.
+ *    The capability is already held: `capabilities/hud.json` grants
+ *    `core:webview:allow-set-webview-zoom`, so no new grant is added here.
+ *    `tests/hud-text-size.mjs` proves the guard without a browser. */
+function followTextSize(load, canZoom){
+  // The SECOND half of "served alone": a plain browser has no webview to zoom,
+  // and its own Ctrl+= / Ctrl+- / Ctrl+0 already work. `followZoom` calls
+  // `preventDefault()` on those keys, so running it there would take the
+  // browser's zoom away and announce a size that never changed. Only the
+  // shell can apply a zoom, so only the shell follows one.
+  if (canZoom === undefined) {
+    const tauri = globalThis.window && globalThis.window.__TAURI__;
+    canZoom = Boolean(tauri && tauri.webview
+      && typeof tauri.webview.getCurrentWebview === "function");
+  }
+  // A microtask first, so a loader that throws SYNCHRONOUSLY is caught by the
+  // same `.catch` a refused import lands in - "the page never breaks" is the
+  // whole promise of this guard.
+  return Promise.resolve()
+    .then(load || function () { return import("./jarvis-link.js"); })
+    .then(function (mod) {
+      if (canZoom && mod && typeof mod.followZoom === "function") mod.followZoom();
+    })
+    .catch(function () {
+      /* no ./jarvis-link.js beside the page: the HUD keeps working as it did */
+    });
+}
+followTextSize();
 </script>
 

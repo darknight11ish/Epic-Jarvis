@@ -824,7 +824,24 @@ pub fn open_detached(app: &AppHandle, id: &str) {
             // One sentence, in a toast: a click that did nothing would read as
             // a broken button ("a silent failure looks like a broken feature",
             // open_app.rs). The same words the HUD shows.
-            crate::commands::notify(&app, "Jarvis", &e);
+            //
+            // P-5 of the 2026-10-27 privacy audit: `e` is the PC's own
+            // `action_problem` sentence, so these are SERVER words - and a
+            // toast is the one surface that can be read over a shoulder while
+            // App lock or "Hide memory lists and chat history" is on. Today it
+            // names no path or file; the first time it does, this is the leak.
+            // So the toast goes through the guarded door: the same sentence
+            // while the lock is off, and a fixed line - plus the log, scrubbed
+            // - while it is on.
+            crate::logfile::log(&format!(
+                "[jarvis] a reminder could not be opened: {}",
+                crate::crash_notes::scrub(e.trim())
+            ));
+            let locked_body = format!(
+                "That reminder could not be opened. {}",
+                crate::commands::DETAILS_IN_LOG
+            );
+            crate::commands::notify_guarded(&app, "Jarvis", &e, Some(&locked_body));
         }
     });
 }
@@ -1250,6 +1267,37 @@ mod tests {
             conf.contains(&format!("\"identifier\": \"{AUMID}\"")),
             "AUMID must track tauri.conf.json's own identifier, or the \
              shortcut this depends on will not match what this process claims"
+        );
+    }
+
+    #[test]
+    fn a_server_worded_failure_toast_goes_through_the_guarded_door() {
+        // P-5 of the 2026-10-27 privacy audit. An Open click's failure toast
+        // carries the PC's own `action_problem` sentence: SERVER words, on the
+        // one surface a person standing behind the owner can read without
+        // touching anything. Today it names no path or file; the pattern is
+        // what this pins, so the day the PC's sentence grows a file name it
+        // cannot reach a toast while App lock or the hidden lists is on.
+        let src = include_str!("winrt_toast.rs");
+        let start = src
+            .find("pub fn open_detached")
+            .expect("the Open click's own task");
+        let rest = &src[start..];
+        let end = rest.find("\n}\n").expect("the end of that function");
+        let body = &rest[..end];
+        assert!(
+            body.contains("notify_guarded("),
+            "the Open failure toast no longer goes through the guarded door, so the PC's \
+             own sentence reaches a toast whatever the lock says:\n{body}"
+        );
+        assert!(
+            !body.contains("commands::notify("),
+            "the Open failure toast calls the unguarded notify again:\n{body}"
+        );
+        // The raw sentence is not lost: it goes to the log, scrubbed.
+        assert!(
+            body.contains("crash_notes::scrub"),
+            "the PC's own sentence is neither shown safely nor logged scrubbed:\n{body}"
         );
     }
 }

@@ -285,9 +285,12 @@ pub mod events {
     /// (Settings' Windows Hello section). The Brain re-reads its memory
     /// lists, which may now be hidden or shown.
     pub const SECURITY_CHANGED: &str = "security-changed";
-    /// Payload: none. Sent to the Brain only: the owner was away longer than
-    /// "Lock again after", so a Show on the private lists has ended and they
-    /// are read again, hidden.
+    /// Payload: none. Sent to EVERY window: the owner was away longer than
+    /// "Lock again after" (or the setting was switched off), so a Show on the
+    /// private lists has ended and they are read again, hidden. Every window
+    /// that draws Jarvis's words re-reads or drops what it holds - the Brain's
+    /// lists, the bar's thread, the widget's board, the HUD's memory graph
+    /// (`lock::emit_private_hidden`, privacy audit P-1 of 2026-10-27).
     pub const PRIVATE_HIDDEN: &str = "private-hidden";
     /// Payload: `{ uri }` - a `data:audio/wav` URI. Sent to the quickbar
     /// only, by [`crate::brain::focus::play_callout`]: one focus-session

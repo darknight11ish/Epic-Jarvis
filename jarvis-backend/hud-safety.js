@@ -275,13 +275,23 @@ export function mountSafetyRail() {
         if (node.textContent) node.textContent = "";
         continue;
       }
+      // A11Y-2026-10-27 (finding 1): REVEAL FIRST, WRITE SECOND. The four chips
+      // are `hidden` in the markup and are re-hidden on every pass with nothing
+      // to say, so the first App-lock / latch / rush / stale sentence used to be
+      // inserted into a `display:none` subtree (old line order: text, then
+      // `hidden = false`). A live region that APPEARS with its words already in
+      // it is not announced - the same rule the rail's four regions in
+      // `index.html` are fixed for (tests/a11y.mjs, "no live region is hidden
+      // when it is written"). Unhiding the node while it is still empty, in the
+      // same pass, puts it in the tree before the words change. The strip
+      // itself is revealed above, so its ancestor is already visible.
+      if (node.hidden) node.hidden = false;
       // textContent on purpose: a quote from outside text is shown, never run.
       // Only a CHANGE re-announces (H4-LOW: a live region must not repeat the
       // same sentence on every poll).
       if (node.textContent !== chip.words) node.textContent = chip.words;
       node.dataset.tone = chip.tone;
       node.setAttribute("role", chip.role);
-      node.hidden = false;
     }
   }
 

@@ -1,5 +1,7 @@
 package com.jarvis.client.net
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -483,6 +485,33 @@ object Backup {
     const val RUN_GONE =
         "That backup run had expired, so nothing was written and your folder is unchanged. " +
             "Ask for a backup again."
+
+    /**
+     * How many screens are showing a one-time recovery code right now
+     * ([BackupPlate]'s RecoveryCodeDialog raises it while the code is drawn,
+     * and lowers it when the dialog goes). MainActivity blocks screenshots of
+     * Jarvis while this is above zero - the same shape as [FormReview.shown]
+     * for a form picture, and the same reason it is a counter rather than a
+     * boolean: a count can never be left stuck on by a screen that closed
+     * twice, because every leave is paired with an enter and it never goes
+     * below zero.
+     *
+     * WHY IT IS NEEDED AT ALL (privacy audit P-3, 2026-10-27): the code is
+     * shown once, Jarvis keeps no copy, and it is the whole key to a backup
+     * holding memory, chat history and settings - so a screenshot, a cast, or
+     * the recent-apps picture taken with the dialog up would hand it over.
+     * `SecurityRules.blockScreenCapture` reads this as its `codeShown` input.
+     */
+    private val codeShownCount = MutableStateFlow(0)
+    val codeShown: StateFlow<Int> get() = codeShownCount
+
+    fun enterCodeView() {
+        codeShownCount.value = codeShownCount.value + 1
+    }
+
+    fun leaveCodeView() {
+        codeShownCount.value = (codeShownCount.value - 1).coerceAtLeast(0)
+    }
 
     private fun quote(s: String): String = buildString {
         append('"')
