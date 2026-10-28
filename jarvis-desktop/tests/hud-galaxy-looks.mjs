@@ -10,18 +10,27 @@
  *      the other models" - and by galaxy they meant "the matrix of ideas and
  *      all sorts of things, not the jarvis face model". So the HUD's own Galaxy
  *      (the #brain view, the one with the Memory / Neural / Unified lenses) has
- *      a look switcher beside those lenses. It lists every look
- *      `galaxy-presets.js` builds - never a planned one, never one it does not
- *      build - and choosing one lays the SAME names out in that look, remembers
- *      the choice on this device under the module's own storage key, and brings
- *      it back on the next load. A stored value that is unknown, stale or
- *      nonsense is the constellation, not a broken picture.
+ *      a look switcher in its ONE Galaxy options panel, beside those lenses. It
+ *      lists every look `galaxy-presets.js` builds - never a planned one, never
+ *      one it does not build - and choosing one lays the SAME names out in that
+ *      look, remembers the choice on this device under the module's own storage
+ *      key, and brings it back on the next load. A stored value that is unknown,
+ *      stale or nonsense is the constellation, not a broken picture.
  *   2. "the icons on the left column dontt match the order of teh horizontal
  *      words in the jarvis hud (reminder is out of place for example)" - the
  *      #studio-dock icons and the #stage-tabs words were two different orders.
  *      They are pinned to each other here, in both directions: reorder one and
  *      this fails until the other follows, and a dock icon whose own title no
  *      longer names the word above it fails too.
+ *   3. The owner's same-day Galaxy options work: "i would to simplify all the
+ *      galaxy options ... to have it under Galaxy options", "have that as a new
+ *      icon on the left column of the jarvis hud", "and an option next to the
+ *      word telemetry", "also add presets as a word in the right order next to
+ *      the galaxy, approvals, reminders and other menu options", and "also, add
+ *      an option to hide the galaxy under the Galaxy Options menu". The one
+ *      panel holds every galaxy-only control, the dock's new icon and the two
+ *      words open it, "Presets" is the last word the row reads, and the hide
+ *      toggle hides the picture, remembers it on this device and comes back.
  *
  * WHAT "APPLIED" MEANS, MEASURED RATHER THAN TRUSTED. For every look the suite
  * reads the page's own layout (`galaxy.lookInfo()`, the seam that exists for
@@ -52,6 +61,7 @@ import {
   PRESET_STORAGE_KEY,
   layoutIsUsable,
 } from "../src/galaxy-presets.js";
+import { COSMOS_DEFAULT_LOOK } from "../src/galaxy-cosmos.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
@@ -102,6 +112,18 @@ function dockIcons(html) {
   return [...block.matchAll(
     /<button\b[^>]*?data-hud-tab-choice="([a-z]+)"[^>]*?title="([^"]*)"/g)]
     .map((m) => ({ id: m[1], title: m[2] }));
+}
+
+/** The stage words row as plain words, in the order written. These are the
+ *  MENU words beside the five section tabs (2026-10-27), not tabs: they open
+ *  the Galaxy options panel and the Presets menu. */
+function stageWords(html) {
+  const at = html.indexOf('id="stage-words"');
+  assert.ok(at > -1, "jarvis_hud.html has no #stage-words");
+  const end = html.indexOf("</div>", at);
+  assert.ok(end > at, "#stage-words has no closing </div>");
+  return [...html.slice(at, end).matchAll(/<button\b[^>]*>([^<]+)<\/button>/g)]
+    .map((m) => m[1].trim());
 }
 
 /** The layout script's own tab order (`var TABS = [...]`). */
@@ -159,7 +181,83 @@ await check("the reorder kept every id, data attribute and the Jarvis bar button
   }
 });
 
+/* ── 1b. The owner's Galaxy options surface and the two new words ───────── */
+
+await check("the stage words read Galaxy options, then Presets, after the five tabs", async () => {
+  assert.deepEqual(TABS.map((t) => t.word),
+    ["Galaxy", "Approvals", "Reminders", "Memory", "Telemetry"],
+    "the five section tabs changed order or lost a word");
+  assert.deepEqual(stageWords(HUD), ["Galaxy options", "Presets"],
+    "the menu words are missing or out of order - the owner asked for Presets " +
+    "\"in the right order next to the galaxy, approvals, reminders and other menu options\"");
+  // The words come AFTER Telemetry in the source, which is the owner's one
+  // placement rule: "an option next to the word telemetry".
+  const tabsAt = HUD.indexOf('id="stage-tabs"');
+  const wordsAt = HUD.indexOf('id="stage-words"');
+  const telemetryAt = HUD.indexOf('data-hud-tab-choice="telemetry"');
+  assert.ok(tabsAt > -1 && wordsAt > tabsAt && telemetryAt > -1 && telemetryAt < wordsAt,
+    "the menu words do not sit after the five tabs, beside Telemetry");
+  // They are NOT tabs: a tablist holds only tabs, and clicking one opens a
+  // menu instead of changing the stage.
+  const wordsBlock = HUD.slice(wordsAt, HUD.indexOf("</div>", wordsAt));
+  assert.doesNotMatch(wordsBlock, /data-hud-tab-choice/,
+    "a menu word is wired as a stage tab - it must open its menu, not a panel");
+  assert.doesNotMatch(wordsBlock, /role="tab"/,
+    "a menu word claims to be a tab outside the tablist");
+});
+
+await check("the new left-column icon is in the Studio dock, after the five sections", async () => {
+  const dockAt = HUD.indexOf('id="studio-dock"');
+  const dockEnd = HUD.indexOf("</nav>", dockAt);
+  const dock = HUD.slice(dockAt, dockEnd);
+  assert.match(dock, /id="dock-galaxy-options"/,
+    "the Studio dock has no Galaxy options icon");
+  assert.ok(dock.indexOf('id="dock-galaxy-options"') > dock.indexOf('data-hud-tab-choice="telemetry"'),
+    "the new icon is not in the left column's own order (it belongs after the five sections)");
+  assert.doesNotMatch(dock.slice(dock.indexOf('id="dock-galaxy-options"') - 400,
+    dock.indexOf('id="dock-galaxy-options"') + 500), /data-hud-tab-choice="galaxy-options"/,
+    "the new icon must not become a sixth section tab");
+  // The same word is its own door in the stage bar, beside Telemetry, in the
+  // shells whose stage has no word row (the Studio shell hides that one).
+  assert.match(HUD, /id="stage-bar-galaxy-options"[\s\S]{0,200}>Galaxy options</,
+    "the stage bar has no Galaxy options word beside Telemetry");
+  assert.match(HUD, /html\[data-hud-shell="split-stage"\] #stage-bar-galaxy-options\{display:none;\}/,
+    "the Studio shell would show the Galaxy options word twice");
+});
+
+await check("the Galaxy options panel exists once, after the shell, and holds every galaxy control", async () => {
+  assert.equal((HUD.match(/id="galaxy-options"/g) || []).length, 1,
+    "the page declares more than one Galaxy options panel");
+  const at = HUD.indexOf('id="galaxy-options"');
+  const panel = HUD.slice(at, HUD.indexOf("</section>", at));
+  for (const id of ["galaxy-options-title", "galaxy-options-close", "gsearch",
+    "g-reset", "g-spin", "galaxy-look-pick", "galaxy-look", "galaxy-counts",
+    "galaxy-hide", "galaxy-hide-note", "galaxy-show"]) {
+    assert.ok(panel.includes(`id="${id}"`), `the panel does not hold #${id}`);
+  }
+  assert.match(panel, /<input type="checkbox" id="galaxy-hide">/,
+    "the panel has no Hide the galaxy checkbox");
+  assert.equal((panel.match(/data-galaxy-lens=/g) || []).length, 3,
+    "the three lenses are not in the one panel");
+  // Every one of them is GONE from the picture itself: the stage keeps the
+  // canvas, the dot buttons and the hidden place holder, and no control bar.
+  const brainAt = HUD.indexOf('id="brain"');
+  const brain = HUD.slice(brainAt, HUD.indexOf("</section>", brainAt));
+  for (const id of ["gsearch", "g-reset", "g-spin", "galaxy-look", "galaxy-counts"]) {
+    assert.ok(!brain.includes(`id="${id}"`),
+      `#${id} is still loose on the Galaxy stage as well as in the panel`);
+  }
+  assert.doesNotMatch(brain, /class="brain-search"/,
+    "the old floating galaxy bar is still in the picture");
+  assert.match(brain, /id="galaxy-hidden"/, "the hidden galaxy has no place holder");
+  // The preference is a device-local view choice, not a route or a card.
+  assert.match(HUD, /jarvis\.galaxy\.hidden/, "the hide choice has no storage key");
+  assert.match(HUD, /data-galaxy-hidden/, "nothing marks the galaxy as hidden");
+  assert.doesNotMatch(panel, /fetch\(/, "the panel reaches the network itself");
+});
+
 /* ── 2. the switcher, in the real HUD ───────────────────────────────────── */
+
 
 const { base, close } = await K.serve();
 const browser = await K.launch();
@@ -173,16 +271,53 @@ const realErrors = (page) => (page.__errors || [])
 const LOOK_LABEL = new Map([[DEFAULT_PRESET, "Constellation"],
   ...BUILT_PRESETS.map((p) => [p.id, p.label])]);
 
-/** Open the HUD, show the Brain view (the Galaxy), and stop the spin so a flat
- *  look's picture is stationary and square-on before anything is measured. */
-async function openGalaxy(pageOptions = {}) {
+/** Open the ONE Galaxy options panel through whichever door this shell shows:
+ *  the Studio dock's icon (#dock-galaxy-options), the word in the stage's
+ *  words row (#stage-galaxy-options), or - in every shell whose stage bar
+ *  shows the Telemetry toggle - the word beside it
+ *  (#stage-bar-galaxy-options). Returns the door's id so a caller can assert
+ *  what focus came back to.
+ */
+async function openGalaxyOptions(page) {
+  const opened = await page.evaluate(() => {
+    const panel = document.getElementById("galaxy-options");
+    if (panel && !panel.hidden) return { id: "already-open", shown: true };
+    const ids = ["dock-galaxy-options", "stage-galaxy-options", "rail-galaxy-options", "stage-bar-galaxy-options"];
+    const door = ids.map((id) => document.getElementById(id))
+      .find((b) => b && b.getClientRects().length > 0);
+    if (!door) return null;
+    door.click();
+    return { id: door.id, shown: Boolean(panel && !panel.hidden) };
+  });
+  assert.ok(opened, "no Galaxy options door is on screen in this shell");
+  assert.equal(opened.shown, true, `${opened.id} did not open the Galaxy options panel`);
+  await page.waitForTimeout(150);
+  return opened.id;
+}
+
+/** Open the HUD, show the Brain view (the Galaxy), open its options panel and
+ *  stop the spin so a flat look's picture is stationary and square-on before
+ *  anything is measured.
+ *
+ *  `flat` (the default) asks for REDUCED MOTION, which is the page's own flat
+ *  path: since 2026-10-27 the eight looks are drawn in 3D when the machine can
+ *  draw them, and this suite's layout measurements are about the flat picture
+ *  the page falls back to. Driving that path deliberately means these checks do
+ *  not depend on whether three.js happens to sit beside the page - and the 3D
+ *  path gets its own check at the end of this file. */
+async function openGalaxy(pageOptions = {}, { flat = true } = {}) {
   const page = await K.open(browser, base, "jarvis_hud.html",
     { pending: [] }, { width: 1200, height: 900, ...pageOptions });
+  if(flat){
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.reload();
+  }
   await page.waitForFunction(() =>
     document.querySelectorAll(".galaxy-node-btn").length > 0, null, { timeout: 15000 });
   await page.locator('[data-view="brain"]').click();
   await page.waitForFunction(() =>
     document.getElementById("galaxy-look").options.length > 0, null, { timeout: 10000 });
+  await openGalaxyOptions(page);
   await page.locator("#g-spin").click();          // Pause spin: a still picture
   await page.waitForTimeout(200);
   return page;
@@ -257,29 +392,111 @@ async function choose(page, id) {
   return picture(page);
 }
 
-await check("the Galaxy view has one look switcher, in the search bar beside the lenses", async () => {
+await check("the Galaxy view has ONE options panel, and every picker lives inside it", async () => {
   const page = await openGalaxy();
   const where = await page.evaluate(() => {
+    const panel = document.getElementById("galaxy-options");
     const pick = document.getElementById("galaxy-look-pick");
     const select = document.getElementById("galaxy-look");
-    const bar = document.querySelector(".brain-search");
+    const inPanel = (id) => Boolean(panel && panel.contains(document.getElementById(id)));
     return {
-      inBar: Boolean(bar && pick && bar.contains(pick) && bar.contains(select)),
-      shown: Boolean(pick) && !pick.hidden,
-      lenses: document.querySelectorAll("button[data-galaxy-lens]").length,
+      exists: Boolean(panel),
+      shown: Boolean(panel) && !panel.hidden,
+      panels: document.querySelectorAll("#galaxy-options").length,
+      role: panel ? panel.getAttribute("role") : null,
+      title: panel && panel.querySelector("#galaxy-options-title")
+        ? panel.querySelector("#galaxy-options-title").textContent.trim() : null,
+      controls: ["gsearch", "g-reset", "g-spin", "galaxy-look", "galaxy-counts"].map(inPanel),
+      lenses: panel ? panel.querySelectorAll("button[data-galaxy-lens]").length : 0,
+      hide: Boolean(panel && panel.querySelector('#galaxy-hide[type="checkbox"]')),
+      inBar: Boolean(document.querySelector(".brain-search")),
+      shownPick: Boolean(pick) && !pick.hidden,
       label: select ? select.getAttribute("aria-label") : null,
-      dock: Boolean(document.getElementById("studio-dock")),
       canvas: Boolean(document.getElementById("galaxy")),
       overlay: Boolean(document.getElementById("galaxy-overlay")),
     };
   });
-  assert.equal(where.inBar, true, "the switcher is not in the Galaxy's own search bar");
-  assert.equal(where.shown, true, "the switcher stayed hidden even though the module loaded");
+  assert.equal(where.exists, true, "the page has no Galaxy options panel");
+  assert.equal(where.panels, 1, "the page has more than one Galaxy options panel");
+  assert.equal(where.shown, true, "the panel did not stay open");
+  assert.equal(where.role, "dialog", "the panel is not a dialog for assistive technology");
+  assert.equal(where.title, "Galaxy options", "the panel has no plain accessible name");
+  assert.deepEqual(where.controls, [true, true, true, true, true],
+    "a galaxy control is still loose outside the one panel");
+  assert.equal(where.inBar, false, "the old floating galaxy bar is still on the stage");
   assert.equal(where.lenses, 3, "the Memory / Neural / Unified lenses are no longer three");
+  assert.equal(where.hide, true, "the panel carries no Hide the galaxy checkbox");
+  assert.equal(where.shownPick, true, "the switcher stayed hidden even though the module loaded");
   assert.equal(where.label, "Galaxy look", "the switcher has no accessible name");
   assert.equal(where.canvas, true, "the Galaxy canvas is gone");
   assert.equal(where.overlay, true, "the Galaxy's dot buttons are gone");
-  assert.equal(where.dock, true, "the Studio dock is gone");
+  assert.deepEqual(realErrors(page), [], `the page logged: ${realErrors(page).join("; ")}`);
+  await page.close();
+});
+
+await check("Hide the galaxy hides the picture, remembers it, and comes back", async () => {
+  const page = await openGalaxy();
+  const before = await page.evaluate(() => ({
+    attr: document.documentElement.hasAttribute("data-galaxy-hidden"),
+    canvas: getComputedStyle(document.getElementById("galaxy")).display,
+    placeholder: getComputedStyle(document.getElementById("galaxy-hidden")).display,
+    checked: document.getElementById("galaxy-hide").checked,
+    stored: localStorage.getItem("jarvis.galaxy.hidden"),
+  }));
+  assert.equal(before.attr, false, "the galaxy starts hidden");
+  assert.notEqual(before.canvas, "none", "the galaxy canvas is not drawn at first");
+  assert.equal(before.placeholder, "none", "the hidden place holder is on screen at first");
+  assert.equal(before.checked, false, "the hide box starts ticked");
+
+  await page.locator("#galaxy-hide").check();
+  await page.waitForTimeout(200);
+  const hidden = await page.evaluate(() => ({
+    attr: document.documentElement.hasAttribute("data-galaxy-hidden"),
+    canvas: getComputedStyle(document.getElementById("galaxy")).display,
+    overlay: getComputedStyle(document.getElementById("galaxy-overlay")).display,
+    placeholder: getComputedStyle(document.getElementById("galaxy-hidden")).display,
+    checked: document.getElementById("galaxy-hide").checked,
+    stored: localStorage.getItem("jarvis.galaxy.hidden"),
+    showShown: !document.getElementById("galaxy-show").hidden,
+    placeholderButton: Boolean(document.getElementById("galaxy-show-placeholder")),
+  }));
+  assert.equal(hidden.attr, true, "ticking Hide the galaxy did not mark the map hidden");
+  assert.equal(hidden.canvas, "none", "the canvas is still drawn after Hide the galaxy");
+  assert.equal(hidden.overlay, "none", "the dot buttons are still drawn after Hide the galaxy");
+  assert.notEqual(hidden.placeholder, "none", "the hidden place holder did not appear");
+  assert.equal(hidden.checked, true, "the box does not say the galaxy is hidden");
+  assert.equal(hidden.stored, "1", "the hide choice was not remembered on this device");
+  assert.equal(hidden.showShown, true, "the panel offers no way back");
+  assert.equal(hidden.placeholderButton, true, "the picture's place holder offers no way back");
+
+  // It survives a reload, and the place holder is the way back from there.
+  await page.reload();
+  await page.waitForTimeout(1500);
+  await page.locator('[data-view="brain"]').click();
+  await page.waitForTimeout(400);
+  const afterReload = await page.evaluate(() => ({
+    attr: document.documentElement.hasAttribute("data-galaxy-hidden"),
+    canvas: getComputedStyle(document.getElementById("galaxy")).display,
+    placeholder: getComputedStyle(document.getElementById("galaxy-hidden")).display,
+    stored: localStorage.getItem("jarvis.galaxy.hidden"),
+  }));
+  assert.equal(afterReload.attr, true, "the hidden choice did not survive a reload");
+  assert.equal(afterReload.canvas, "none", "the canvas came back after a reload anyway");
+  assert.notEqual(afterReload.placeholder, "none", "the place holder is gone after a reload");
+  assert.equal(afterReload.stored, "1", "the stored hide choice changed on reload");
+
+  await page.locator("#galaxy-show-placeholder").click();
+  await page.waitForTimeout(300);
+  const shown = await page.evaluate(() => ({
+    attr: document.documentElement.hasAttribute("data-galaxy-hidden"),
+    canvas: getComputedStyle(document.getElementById("galaxy")).display,
+    placeholder: getComputedStyle(document.getElementById("galaxy-hidden")).display,
+    stored: localStorage.getItem("jarvis.galaxy.hidden"),
+  }));
+  assert.equal(shown.attr, false, "Show the galaxy did not mark the map shown");
+  assert.notEqual(shown.canvas, "none", "Show the galaxy did not bring the canvas back");
+  assert.equal(shown.placeholder, "none", "the place holder stayed after Show the galaxy");
+  assert.equal(shown.stored, null, "the hide key was not cleared when the galaxy came back");
   assert.deepEqual(realErrors(page), [], `the page logged: ${realErrors(page).join("; ")}`);
   await page.close();
 });
@@ -309,8 +526,16 @@ await check("it lists every built look and no planned one, in one order", async 
 await check("choosing each look really applies that layout to the names on screen", async () => {
   const page = await openGalaxy();
   const before = await picture(page);
-  assert.equal(before.look, DEFAULT_PRESET, "the window did not open on the constellation");
-  assert.equal(before.layout, null, "the constellation should have no flat layout");
+  // Since 2026-10-27 the window opens on the owner's default look, the
+  // Planetary Orrery, and with reduced motion that is the flat layout of the
+  // SAME id - which is exactly what this check then measures for all eight.
+  assert.equal(before.look, COSMOS_DEFAULT_LOOK,
+    "the window did not open on the owner's default look");
+  assert.ok(before.layout && before.layout.id === COSMOS_DEFAULT_LOOK,
+    "the default look came back without its flat layout");
+  assert.equal(await page.evaluate(() =>
+    document.getElementById("galaxy-counts").getAttribute("data-galaxy-engine")), "flat",
+  "reduced motion must draw the flat picture, not a 3D scene");
   for (const meta of BUILT_PRESETS) {
     const pic = await choose(page, meta.id);
     assert.equal(pic.look, meta.id, `${meta.id}: the page does not think that look is on`);
@@ -371,6 +596,7 @@ await check("the choice is remembered on this device and comes back on the next 
   await page.waitForFunction(() =>
     document.getElementById("galaxy-counts").getAttribute("data-galaxy-look") === "radar-dome",
   null, { timeout: 10000 });
+  await openGalaxyOptions(page);
   await page.locator("#g-spin").click();
   await page.waitForTimeout(250);
   const after = await picture(page);
@@ -435,14 +661,131 @@ await check("the switcher is one keyboard stop and does not steal the page's key
   assert.equal(focused.isIt, true, "the look switcher cannot take the focus");
   assert.ok(focused.tabIndex >= 0, "the look switcher is not in the tab order");
   assert.equal(focused.space, "false", "the microphone's own state changed");
+  // One step down the list from whatever is showing. The list's own order is
+  // the page's, so this cannot go stale when the default look changes.
+  const was = await page.evaluate(() => document.getElementById("galaxy-look").value);
   await page.keyboard.press("ArrowDown");
   await page.waitForTimeout(150);
+  const next = await page.evaluate((from) => {
+    const values = [...document.getElementById("galaxy-look").options].map((o) => o.value);
+    return values[values.indexOf(from) + 1];
+  }, was);
   const look = await page.evaluate(() => galaxy.look());
-  assert.equal(look, BUILT_PRESETS[0].id,
-    "the arrow keys on the switcher do not choose the next look");
+  assert.equal(look, next,
+    `the arrow keys on the switcher did not choose the next look (was ${was}, got ${look})`);
   assert.deepEqual(realErrors(page), [], `the page logged: ${realErrors(page).join("; ")}`);
   await page.close();
 });
+
+/* ── 3. the 3D engine, when the page can draw it ─────────────────────────── */
+
+await check("the 3D engine draws the eight looks when the page can, and the buttons ride its camera",
+  async () => {
+    const page = await openGalaxy({}, { flat: false });
+    const first = await page.evaluate(() => galaxy.engineInfo());
+    assert.equal(first.module, true, "galaxy-cosmos.js did not load beside the page");
+    assert.equal(first.look, COSMOS_DEFAULT_LOOK, "the 3D page did not open on the default look");
+
+    if(first.failed || !first.ready){
+      // /three.min.js is not in this tree yet - it is vendored by its own pull
+      // request. The page must then be on the flat picture of the same look,
+      // with no error, no empty canvas and no button that does nothing.
+      assert.equal(first.engine, "flat", "no three.js, but the page claims a 3D engine");
+      assert.deepEqual(first.actions, [], "controls appeared with no engine to drive them");
+      assert.deepEqual(realErrors(page), [],
+        `without three.js the page logged: ${realErrors(page).join("; ")}`);
+      console.log("      /three.min.js is not beside the page yet (the vendoring PR owns it): "
+        + "the flat picture drew, and the page said so");
+      await page.close();
+      return;
+    }
+
+    assert.equal(first.engine, "webgl", "the engine is ready but the page says it is not drawing");
+    assert.equal(first.actions.length, 2, "the look's own two controls are missing");
+
+    for(const meta of BUILT_PRESETS){
+      await page.selectOption("#galaxy-look", meta.id);
+      await page.waitForFunction((want) => {
+        const at = document.getElementById("galaxy-counts");
+        return at.getAttribute("data-galaxy-look") === want
+          && at.getAttribute("data-galaxy-engine") === "webgl";
+      }, meta.id, { timeout: 20000 });
+      const now = await page.evaluate(() => ({
+        info: galaxy.engineInfo(),
+        controls: [...document.querySelectorAll("#galaxy-look-actions button")].map((b) => ({
+          key: b.getAttribute("data-galaxy-action"), text: b.textContent,
+        })),
+      }));
+      assert.equal(now.info.preset, meta.id, `${meta.id}: the engine is drawing ${now.info.preset}`);
+      assert.ok(now.info.info && now.info.info.draws > 0, `${meta.id}: the engine never drew a frame`);
+      assert.equal(now.controls.length, 2, `${meta.id}: the look lost its two controls`);
+      for(const control of now.controls){
+        assert.ok(control.key && control.text && control.text.length > 3,
+          `${meta.id}: a control has no plain name (${JSON.stringify(control)})`);
+      }
+    }
+
+    // THE CAMERA IS THE ENGINE'S. Dragging orbits the 3D camera, and every node
+    // button is projected from it, so the buttons must move with the picture.
+    await page.selectOption("#galaxy-look", "planetary-orbit");
+    await page.waitForFunction(() =>
+      document.getElementById("galaxy-counts").getAttribute("data-galaxy-engine") === "webgl",
+    null, { timeout: 20000 });
+    const before = await picture(page);
+    const box = await page.locator("#galaxy").boundingBox();
+    // A drag has to start on the CANVAS: the stage bar floats over it and every
+    // node is a real button on top of it, so the test looks for a pixel where
+    // the canvas itself is what the pointer would hit.
+    const grab = await page.evaluate(() => {
+      const canvas = document.getElementById("galaxy");
+      const r = canvas.getBoundingClientRect();
+      for (let fy = 0.32; fy <= 0.72; fy += 0.04) {
+        for (let fx = 0.32; fx <= 0.72; fx += 0.04) {
+          const x = r.left + r.width * fx;
+          const y = r.top + r.height * fy;
+          if (document.elementFromPoint(x, y) === canvas) return { x, y };
+        }
+      }
+      return null;
+    });
+    assert.ok(grab, "the canvas has no free pixel to drag from");
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    await page.mouse.move(grab.x + 170, grab.y + 50, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const after = await picture(page);
+    const moved = after.dots.filter((dot) => {
+      const was = before.dots.find((d) => d.id === dot.id);
+      return !was || Math.hypot(dot.x - was.x, dot.y - was.y) > 3;
+    });
+    assert.ok(moved.length > before.dots.length / 2,
+      `dragging the 3D camera moved only ${moved.length} of ${before.dots.length} buttons - `
+      + "the buttons are not riding the engine's projection");
+    for(const dot of after.dots){
+      assert.ok(dot.x > box.x - 40 && dot.x < box.x + box.width + 40
+        && dot.y > box.y - 40 && dot.y < box.y + box.height + 40,
+      `a node button landed outside the canvas (${Math.round(dot.x)}, ${Math.round(dot.y)})`);
+    }
+
+    // THE IDLE RULE. A Galaxy that is not on screen must not keep drawing.
+    // The view switch itself takes a few frames, so the count is taken once it
+    // has settled and then watched: a stopped loop cannot draw at all.
+    await page.locator('[data-view="talk"]').click();
+    await page.waitForTimeout(300);
+    const settled = (await page.evaluate(() => galaxy.engineInfo())).info.draws;
+    await page.waitForTimeout(600);
+    const idle = (await page.evaluate(() => galaxy.engineInfo())).info.draws;
+    assert.ok(idle - settled <= 1,
+      `the engine drew ${idle - settled} frames with the Galaxy off screen`);
+    await page.locator('[data-view="brain"]').click();
+    await page.waitForTimeout(400);
+    const awake = (await page.evaluate(() => galaxy.engineInfo())).info.draws;
+    assert.ok(awake > idle, "the engine did not start again when the Galaxy came back");
+
+    assert.deepEqual(realErrors(page), [], `the page logged: ${realErrors(page).join("; ")}`);
+    await page.close();
+  });
 
 await browser.close();
 await close();

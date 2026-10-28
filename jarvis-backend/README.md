@@ -56,7 +56,9 @@ plus these six files:
         theme.css, fonts.css, and seven *.woff2 faces     from backend/static/
         lane-warning.js, hud-actions.js, hud-safety.js,   from backend/static/
         hud-edit.js, hud-presets.js,
+        hud-history.js, history-actions.js (the History sidebar, 2026-10-27),
         galaxy-presets.js (the Galaxy's looks, 2026-10-27),
+        galaxy-cosmos.js (the Galaxy's 3D engine, 2026-10-27),
         private-speech.js,
         face-voice.js, face-moments.js, face-tuning.js,
         animal-shared.js, hud-layout.js, hud-layout-store.js,

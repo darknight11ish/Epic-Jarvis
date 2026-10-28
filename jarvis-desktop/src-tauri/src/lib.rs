@@ -954,6 +954,15 @@ pub fn run() {
             // routes the Brain uses, held on a stale link. HUD window only.
             hud_schedule::hud_schedule_add,
             hud_schedule::hud_schedule_act,
+            // The HUD History sidebar's one write (2026-10-27, the owner's
+            // request: "pinnable chats, project organization by chat"):
+            // pin/unpin ONE chat, file ONE chat under a tag, or delete ONE
+            // chat - the three routes the Brain's History tab already uses.
+            // It lives with those commands (brain/history.rs) so the bodies,
+            // the id check and the two guards are the same ones; the page's
+            // own POST is still refused by hud_bootstrap.js, and nothing here
+            // raises a card or loosens a rule. HUD window only.
+            brain::history::hud_history_act,
             // A reminder's own action (2026-10-27, the owner's request): the
             // Open button on a reminder that went off. The id ONLY - never a
             // URL or a path from the page - so the PC reads the target back

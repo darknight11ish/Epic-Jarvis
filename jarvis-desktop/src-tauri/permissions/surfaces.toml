@@ -2011,6 +2011,32 @@ permissions = [
   "allow-hud-schedule-act",
 ]
 
+# The HUD History sidebar's ONE write (2026-10-27, the owner's request: "both
+# should have pinnable chats, project organization by chat, and more"). The
+# sidebar's READS need nothing new: they are `hud-get`'s three History paths
+# (`/api/history`, `/api/history/conversation?id=`, `/api/history/tags`), whose
+# query is checked in `brain/history.rs::history_read_path` and whose words are
+# taken out in `lock/rules.rs` while App lock or the private lists are hidden.
+#
+# This set is the one write command, `hud_history_act`, and it carries exactly
+# three actions on ONE chat: pin/unpin (`POST /api/history/pin`, section 18.3),
+# file under one of the owner's existing tags or unfiled (`POST
+# /api/history/tag`, section 99), and delete (`POST /api/history/delete`, the
+# same one-chat route the Brain uses). Every action is held on a stale link,
+# refused while the lists are hidden, and raises NO approval card - they are
+# the owner's own tidying, the same three things the Brain's History tab does
+# with the same routes, and none of them loosens a rule or takes anything away
+# except the one chat the owner named. There is no delete-all, no clear-list
+# and no route or body this command can be talked into sending: the action, the
+# id and the two optional fields are the whole surface, and `hud_act_body`
+# refuses anything else (including a field the chosen action does not use).
+[[set]]
+identifier = "hud-history"
+description = "Pin or unpin ONE chat, file ONE chat under one of the owner's tags (or unfiled), or delete ONE chat. No card, no delete-all, held on a stale link."
+permissions = [
+  "allow-hud-history-act",
+]
+
 # A reminder's own action (2026-10-27, the owner's request: "a reminder that
 # opens a specific image or webpage"). ONE command, and it takes the job's ID
 # and nothing else - never a URL and never a path. The PC reads the target back
