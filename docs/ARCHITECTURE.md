@@ -2432,6 +2432,49 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+**The model advisor is the desktop's alone, and that is one-sided on purpose**
+(2026-10-28; the owner's request: *"can you give jarvis the ability to recommend
+a change to presets (for the local ai models being used) with a one click check
+for new models button and it will look on hugging face for newer potentially
+better models, give me a card to approve a download and a bench mark testing
+locally, then it will recommend changing the presets based on the local gpus and
+what model goes where and i can approve or give my opinion and jarvis can change
+the preset recommendations then i approve?"*). The Brain's Model card gained a
+**Check for new models** button (`brain.js`, `model-advisor.js`): one press asks
+the PC to look on Hugging Face and shows what it found with each candidate's
+repository ref, size, quantization, licence (when the catalogue reports one -
+"not reported by the catalogue" when it does not) and fit ("fits", "tight",
+"does not fit"); the catalogue carries no SHA-256, so no hash is shown rather
+than an invented one. A **Download**
+goes through the EXISTING carded `/api/models/install` (`brain_model`); a
+**Benchmark on this PC** loads a model that is already installed and shows
+tokens a second, graphics memory and context under the words "measured on this
+PC"; and a **Preset recommendation** lists the proposed preset-row changes with
+their evidence, where **Approve changes** is the EXISTING carded
+`/api/work/apply` (`apply_focus_preset`), and **Tell Jarvis what you think**
+sends the owner's own note back so the advice is revised before they approve it.
+**The phone has none of this, and the reason is a standing rule rather than a
+gap:** `CLAUDE.md` says do not build the model catalogue on the phone, and the
+owner's 2026-09-20 decision makes the phone's install a name TYPED by hand - a
+list of what could be installed is exactly the thing kept off it, and a phone
+version of this screen would be that list. The benchmark is the other half of
+the reason: it measures the PC's own graphics cards, which the phone cannot run
+or see. So the five routes the advisor uses (`GET /api/models/recommendations`,
+`POST /api/models/check`, `POST /api/models/benchmark`, `POST
+/api/presets/recommend`, `POST /api/presets/recommend/opinion`) are
+`deliberate` in `tools/check_parity.py`, and neither app claims a phone half.
+**Nothing here adds an uncarded way to change the machine:** the download and
+the preset apply are the two commands that already existed, each raising its own
+PC card, and the advisor itself only asks questions - the check sends an empty
+body, and no command it uses can write a file, switch a model or apply a preset.
+**Honest limits, said plainly:** the check needs the PC online and can take a
+while (the panel shows "Looking…" and, on failure, the PC's own sentence); a
+benchmark loads a model, so it is minutes of real work on a slow card and the
+panel says it is measuring rather than guessing; and **no candidate is called
+better than what the owner has until it has been measured on this PC** - when
+the PC's answer carries no measurement the panel says exactly that, in its own
+words, rather than letting a newer version number read as an upgrade.
+
 **A reminder's own action: the desktop CREATES it and the PC OPENS it, and that
 is one-sided on purpose** (2026-10-27, the owner's request: *"id likee to set
 custom reminders that open something ... like makinf a reminder that opens a
@@ -3418,6 +3461,37 @@ copy: a page that said "every anti-slop rule is enforced" would be describing a
 targets, real theme switching and whether a quote is genuine need a rendered
 page or a person, and the Playwright suites are what prove them. The full split
 is in JARVIS-API §159.2.
+**Model and preset recommendations are the desktop's, and that is the owner's
+standing rule rather than a missing phone screen** (2026-10-28; their words:
+*"can you give jarvis the ability to recommend a change to presets (for the
+local ai models being used) with a one click check for new models button and it
+will look on hugging face for newer potentially better models ... then it will
+recommend changing the presets based on the local gpus and what model goes
+where"*; `docs/JARVIS-API.md` section 160). The five routes
+(`GET /api/models/recommendations`, `POST /api/models/check`,
+`POST /api/models/benchmark`, `POST /api/presets/recommend` and
+`POST /api/presets/recommend/opinion`) are PC-only in the backend itself: each
+one answers 403 from any device but this PC, checked with
+`jarvis_owner_check.from_this_pc` **before** a body is read - the same rule the
+media index's write route and the Brain's read routes use. The reason is
+`CLAUDE.md`'s existing line that the phone must not grow a model catalogue
+(the install-from-phone amendment allows a TYPED ref; it never allowed
+browsing), and a phone screen listing "what you could install" is that
+catalogue however it is worded. **Nothing here is an auto-apply or an
+auto-download:** checking the public catalogues and benchmarking an installed
+model are read-only (the benchmark loads the model to answer one fixed prompt,
+which is what asking it anything does); a download is still the EXISTING
+`/api/models/install` card, and applying a preset is still the EXISTING
+`/api/work/apply` card. **The desktop half is the only caller:** `brain.js`'s
+Model panel asks all five through `brain_model_recommend`, and
+`tools/check_parity.py` classifies each one `deliberate` with this paragraph as
+its reason (a phone call is then a failure). **The owner's click is the per-use
+trigger for the one lookup that leaves the PC:** nothing checks on a timer, at
+startup or when the Brain opens, and the panel never auto-checks - a Hugging
+Face request happens only when the owner presses "Check for new models". That
+lookup is read-only and keyless: `jarvis_models.discover()` asks fixed public
+catalogue URLs, with no token, no cookie and no query term derived from the
+owner, and no user data is sent.
 
 ## 9. Where the backend lives
 

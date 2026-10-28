@@ -371,6 +371,14 @@ export const BRAIN = {
             installed: [{ ref: "qwen3:8b", size: 5_100_000_000, family: "qwen3" },
                         { ref: "llama3.1:8b", size: 4_900_000_000, family: "llama" },
                         { ref: "nomic-embed-text", size: 274_000_000, family: "nomic" }] },
+  // The model advisor's last answer (2026-10-28, `GET /api/models/recommendations`
+  // in the backend contract). An empty answer with `checked_at: 0` means NOBODY
+  // HAS CHECKED YET, and the panel says exactly that - an empty candidate list
+  // alone would be read as "the PC looked and found nothing", which is a claim
+  // about a lookup that never ran. A scenario replaces this and stubs the POSTs
+  // (see `advisor` in `bridge` and tests/model-advisor.mjs) to drive the flow.
+  model_recommendations: { available: true, checked_at: 0, gpus: [], candidates: [],
+                           recommendations: [], benchmarked: false },
   // jarvis_compute.Plan.as_dict() (backend/rebuilt/jarvis_compute.py), one card.
   compute: { text_model: "qwen3:8b", text_on: "cuda:0", vision_resident: false,
              tts_resident: false, simulated: false, prefer: "speed",
@@ -609,7 +617,7 @@ export const UPDATE_BOTH = {
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
   altSpace, reclaimAltSpace, bigCoder, chatHistory,
-  tutorials, faq, hudLayout }) {
+  tutorials, faq, hudLayout, advisor }) {
   const listeners = {};
   window.__calls = [];
   // H3 (post-merge audit): the Settings picker reads/writes the one HUD layout
@@ -657,6 +665,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__emailSending = emailSending || null;
   // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
   window.__folders = folders || null;
+  // The model advisor (2026-10-28, model-advisor.js): the POST answers a
+  // scenario seeds, and every call the window really made, in order. Empty, the
+  // page behaves like a PC whose advisor has never been asked - which is exactly
+  // what K.BRAIN's `model_recommendations` says.
+  window.__advisor = advisor ? JSON.parse(JSON.stringify(advisor)) : {};
+  window.__advisorCalls = [];
   // devices.rs (docs/PAIRING-DESIGN.md): { list, address, start, startFails,
   // sessions, removeFails, sharedFails } (devices.mjs). Unset, a PC whose
   // backend has no pairing yet - the Devices card says so and nothing else.
@@ -1675,6 +1689,45 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "brain_remove_skill":
           case "brain_model":
             return { ok: true };
+          // The one carded preset apply (focus_presets.rs). The Brain's "Approve
+          // changes" goes through this EXISTING command - no new route, one card -
+          // so the test can prove the advisor asks for a preset the same way the
+          // quickbar and Settings do, and applies nothing itself.
+          case "apply_focus_preset":
+            return { ok: true, waiting: true, preset: args.preset };
+          // The model advisor (2026-10-28, src/model-advisor.js). ONE command
+          // for four questions, so the scenario is keyed by ACTION:
+          //
+          //   advisor: { answers: { check, benchmark, recommend, opinion },
+          //              errors:  { <action>: "the PC's own words" } }
+          //
+          // The window names an action and never a route; Rust turns each one
+          // into its own path (`brain.rs` model_recommend_request), which
+          // `tests/model-advisor.mjs` reads back from that file. Every call is
+          // recorded with its arguments, so a test can prove the download went
+          // to the EXISTING carded `brain_model` (above) and not here.
+          //
+          // `window.__advisorHold = true` before a click parks the answer until
+          // `window.__advisorRelease()`, which is how the progress state is
+          // observed rather than raced with a timer.
+          case "brain_model_recommend": {
+            const a = window.__advisor || (window.__advisor = {});
+            a.calls = a.calls || [];
+            a.calls.push(JSON.parse(JSON.stringify(args || {})));
+            window.__advisorCalls = a.calls;
+            if (window.__advisorHold) {
+              await new Promise((done) => { window.__advisorRelease = done; });
+              window.__advisorRelease = null;
+              window.__advisorHold = false;
+            }
+            const failed = ((a.errors || {})[args.action]);
+            if (failed) throw new Error(failed);
+            const answer = (a.answers || {})[args.action];
+            if (answer === undefined) {
+              throw new Error(`no answer is stubbed for the model advisor's ${args.action}`);
+            }
+            return JSON.parse(JSON.stringify(answer));
+          }
           // Recorded rather than just acknowledged: the memory pane's whole
           // contract is ONE fact per call, so a test has to be able to count
           // the calls and read the ids, not merely see that nothing threw.

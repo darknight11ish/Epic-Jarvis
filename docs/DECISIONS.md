@@ -4550,3 +4550,68 @@ field-test row, not a pass.
 **Decided (say what is enforced, and only that).** The card, the phone plate, the feature list's `limit` line and `JARVIS-API` §159 now state the enforcement split in one sentence: the filter guides generation, then deterministically checks a fixed list in code (em-dashes, buzzwords, comment banners, dead buttons, contrast, focus rings, glass and glow caps), while layout, taste and rendered sizes are guidance only. Live horizontal overflow, 44px tap targets, a real theme switch and whether a quote is genuine need a rendered page or a person, and the Playwright suites are what prove those, where anything does. So no screen and no record claims "every anti-slop rule is mechanically enforced".
 
 **Deliberately not done.** No typed phrase for the em-dash box (it is a Settings checkbox; a phrase would be a second control surface the PC's grammar does not have), and no 30th registry row (it is one field on the existing `antislop` switch). This slice also does not claim the PC already stores the field: `backend/jarvis_antislop.py` is the engine slice's, and until its `allow_em_dashes` lands the PC refuses the key with its own `unknown_setting` sentence and the box springs back - which `jarvis-desktop/tests/antislop-settings.mjs` proves against a stub.
+## 2026-10-28 — Jarvis recommends a model or preset change; only the owner's cards download and apply
+
+**The owner's request, in their words:** *"can you give jarvis the ability to
+recommend a change to presets (for the local ai models being used) with a one
+click check for new models button and it will look on hugging face for newer
+potentially better models, give me a card to approve a download and a bench
+mark testing locally, then it will recommend changing the presets based on the
+local gpus and what model goes where and i can approve or give my opinion and
+jarvis can change the preset recommendations then i approve?"*
+
+**Decided.** (1) Three read-only, cardless answers for the desktop: a cached
+catalogue check (`POST /api/models/check`), a bounded benchmark of a model
+**already installed** (`POST /api/models/benchmark`), and preset changes
+computed from measured numbers (`POST /api/presets/recommend`), plus the read
+that combines them (`GET /api/models/recommendations`). (2) The owner's note
+refines the recommendation through **deterministic rules** - keep / lower the
+footprint / raise the candidate pool / quality / recorded only - never through a
+model's guess at what they meant, and never by inventing a measurement.
+(3) **Nothing downloads and nothing applies.** A download stays the EXISTING
+`/api/models/install` card, and a preset change stays the EXISTING
+`/api/work/apply` card; this feature adds no install route, no apply route, no
+gate action and no tier line. (4) The five routes are **PC-only**, refused 403
+from another device before the body is read, because the standing rule keeps a
+model catalogue off the phone. (5) The Hugging Face lookup reuses the existing
+capability, `jarvis_models.discover()`'s fixed public catalogue URLs - no new
+key, no token, and no query term derived from the owner. (6) A preset change is
+justified only by numbers this PC measured: tokens/second from Ollama's own
+reply timings, video memory from `/api/ps`, context from `/api/show`, card sizes
+from `nvidia-smi`. A model with no local benchmark is never compared, and a
+candidate with no measured video memory or context is never chosen.
+
+**Deliberately not done.** No timer, watcher or background job: every call is
+the owner's click. No "newest" claim: the existing catalogue pass sorts the
+Hugging Face GGUF list by trending and discards `lastModified`, so the answer
+says "the public trending list" and never "newer than yours". No estimate in a
+preset recommendation (only the candidate list's fit is an estimate, and its own
+sentence says so). No phone screen and no phone route.
+
+**Proven by:** `backend/test_model_recommendations.py` (121 checks) - the check
+endpoint never downloads (source-scanned for every download/apply/gate call),
+the benchmark refuses an uninstalled model before measuring and stores nothing
+when it cannot measure, recommendations quote only benchmark-store rates and
+`nvidia-smi` card sizes, a faster model that would shrink the window is refused,
+an opinion changes the suggestion without changing a single measured number,
+a candidate carries the licence only when the catalogue reports one and carries
+no hash at all, the five routes refuse a phone before reading a body, and the
+existing `/api/models/install` and `/api/work/apply` cards are untouched.
+**Not proven
+here:** the live Hugging Face lookup - this checkout has no network, so every
+test injects the catalogue pass; the first real click on the owner's PC is the
+field test (and it is a read-only request either way). Also not proven: any
+model's quality. This feature compares speed, memory and context window, and
+says so.
+
+## 2026-10-28 - Jarvis may recommend models and preset changes, and the owner still approves every change
+
+**The owner's ask, in their words:** "can you give jarvis the ability to recommend a change to presets (for the local ai models being used) with a one click check for new models button and it will look on hugging face for newer potentially better models, give me a card to approve a download and a bench mark testing locally, then it will recommend changing the presets based on the local gpus and what model goes where and i can approve or give my opinion and jarvis can change the preset recommendations then i approve?"
+
+**Decided:** (1) the Brain's Model card gets ONE "Check for new models" button, which asks the PC to look on Hugging Face - it downloads nothing and raises no card. (2) A candidate's Download is the EXISTING carded install (`/api/models/install`, `brain_model`): the owner sees one card and nothing downloads until it is approved. (3) A model already installed can be measured with "Benchmark on this PC" (`/api/models/benchmark`), and the numbers are labelled "measured on this PC" - a newer model is never called better without one. (4) The preset advice (`POST /api/presets/recommend`) shows its proposed rows, their Why and its evidence; Approve changes is the EXISTING carded preset apply (`/api/work/apply`, `apply_focus_preset`), and "Tell Jarvis what you think" (`POST /api/presets/recommend/opinion`) revises the advice before the owner approves it. (5) The surface is the desktop's alone: the standing rule keeps the model catalogue off the phone and the phone's install is a typed name, so a phone version of this screen would be the catalogue - ARCHITECTURE §8 records it, and `tools/check_parity.py` classifies all five routes `deliberate`.
+
+**Deliberately not done.** No uncarded download and no auto-apply, and no second route for either: the advisor only asks questions, which is why `brain_model_recommend` refuses every action that is not one of its four. No automatic check when the Brain opens: **the owner's explicit click on "Check for new models" is the per-use trigger** for the Hugging Face lookup - no timer, no lookup at startup and no silent refresh - and that lookup is read-only and keyless, sending no user data and no query term derived from the owner. A candidate row shows what the catalogue actually reports - its ref, quantization, size and licence - and says "not reported by the catalogue" where a licence is missing rather than inventing one; `jarvis_models.discover()` carries no SHA-256, so no hash is shown at all. No on-disk cache of candidates or measurements: the PC's own `checked_at` dates the list and a benchmark is a fact about one day, so painting either as current after a restart would be a lie of the same kind `models-cache.js` exists to prevent. No new card, no new permission for the phone, and no phone half.
+
+**Proven by:** `jarvis-desktop/tests/model-advisor.mjs`, 31 checks, all passing - the pure reading and every honest state, then the REAL Brain page driven through the test harness against stubbed answers at the bridge: button -> progress -> candidates -> Download on the carded install shape -> benchmark shown as measured -> opinion revises -> Approve on the carded preset shape, plus the lookup-failed, no-advisor, no-candidates and benchmark-unavailable states, each in the PC's own words, the licence line (reported vs "not reported by the catalogue") and the no-hash sentence. The bridge is stubbed rather than `fetch` because the Brain window holds no token and calls no URL (apps security audit M2); the routes behind the four actions are pinned against `src-tauri/src/brain.rs` in the same suite. On the integration branch `cargo fmt --check`, `cargo check --target x86_64-pc-windows-msvc --all-targets` (which type-checks `model_recommend_tests` - the action/route/body table and the waits) and `cargo clippy --target x86_64-pc-windows-msvc --all-targets -- -D warnings` are all clean; **`cargo test` was still NOT RUN here**, so those Rust tests are compiled but unproven. `tools/check_parity.py`, `tools/check_feature_list.py`, `tools/check_command_acl.py` and `tools/check_invoke_grants.py` are clean.
+
+**Not proven:** the real backend routes. The backend half is a parallel branch, so no Hugging Face lookup, benchmark or preset recommendation has been run against a live backend here, and no window was rebuilt and installed - the panel has not been seen in the shipped Tauri shell, only in the harness. A real lookup's candidate shape, and how long a benchmark of an 8B model really takes on this PC, are both unmeasured.

@@ -932,6 +932,121 @@ pub async fn brain_model(
 }
 
 // ---------------------------------------------------------------------------
+// The model advisor (2026-10-28)
+// ---------------------------------------------------------------------------
+
+/// The model advisor's four POST budgets. They are different jobs, so they get
+/// different waits, each from what the PC has to do before it can answer:
+///
+/// * `check` asks the PC to look on Hugging Face, so the wait is the internet —
+///   the same 120 s the desktop gives every other network command
+///   (`invoke-budget.js`'s `NETWORK_BUDGET_MS`).
+/// * `recommend` asks the PC to work out preset changes; `opinion` asks again
+///   with the owner's own words, which the PC classifies with deterministic
+///   rules (no model is asked what they meant) — so the opinion gets the longer
+///   of the two.
+/// * `benchmark` loads a model on the graphics card and measures it: minutes of
+///   real work rather than a wait. Nine minutes is the ceiling for a wedged run,
+///   not an expected wait. The page's own budget is a little longer again, so
+///   the PC's honest refusal arrives before the page gives up on it.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(120);
+const RECOMMEND_TIMEOUT: Duration = Duration::from_secs(90);
+const OPINION_TIMEOUT: Duration = Duration::from_secs(150);
+const BENCHMARK_TIMEOUT: Duration = Duration::from_secs(540);
+
+/// A note to Jarvis about a proposed preset change is a sentence or two, not an
+/// essay. Longer than this is not something the owner typed into the box, so it
+/// is refused here rather than sent.
+const OPINION_MAX_CHARS: usize = 2_000;
+
+/// Looks for newer models, measures one that is already installed, and asks what
+/// the focus presets should change to — then asks again with the owner's own
+/// opinion (the owner's request of 2026-10-28: *"a one click check for new models
+/// button … give me a card to approve a download and a bench mark testing
+/// locally, then it will recommend changing the presets … and i can approve or
+/// give my opinion"*).
+///
+/// Four routes behind ONE command and a fixed allowlist of action names, so the
+/// window names an action and never a URL — the same shape [`brain_model`] uses
+/// for its three. **Nothing here downloads or applies anything.** A download is
+/// the EXISTING carded `/api/models/install` ([`brain_model`]) and applying a
+/// preset is the EXISTING carded `/api/work/apply` (`focus_presets.rs`), so this
+/// command adds no power to change the machine: it only asks questions.
+///
+/// `check` is the one action that leaves the PC (a Hugging Face lookup, sent by
+/// the PC's own advisor) and it carries nothing about the owner — the body is
+/// empty. Nothing here logs the pairing token, and `opinion`'s words are never
+/// logged either.
+#[tauri::command]
+pub async fn brain_model_recommend(
+    app: AppHandle,
+    action: String,
+    reference: Option<String>,
+    text: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let (path, body, budget) = model_recommend_request(&action, reference, text)?;
+    // Rule 4: nothing acts on a stale link. Benchmarking loads a model on the
+    // graphics card, which is an action, so it is held. A lookup is not: it
+    // changes nothing here, and refusing a question because the event stream is
+    // catching up would be a refusal about the wrong thing — the request's own
+    // failure is said plainly instead.
+    if action == "benchmark" {
+        require_link_live(&app)?;
+    }
+    post_with(&app, path, body, budget).await
+}
+
+/// What one advisor action sends, checked before a request is built: the exact
+/// route, the body, and the wait. Pure, so the contract can be asserted without
+/// a window, a Tauri app or a network.
+fn model_recommend_request(
+    action: &str,
+    reference: Option<String>,
+    text: Option<String>,
+) -> Result<(&'static str, serde_json::Value, Duration), String> {
+    match action {
+        "check" => Ok(("/api/models/check", serde_json::json!({}), CHECK_TIMEOUT)),
+        "recommend" => Ok((
+            "/api/presets/recommend",
+            serde_json::json!({}),
+            RECOMMEND_TIMEOUT,
+        )),
+        "benchmark" => {
+            let reference = reference.unwrap_or_default().trim().to_string();
+            if reference.is_empty() {
+                return Err("a benchmark needs the name of the model to measure".to_string());
+            }
+            // A model reference is a name and a tag, not a paragraph.
+            if reference.chars().count() > 200 {
+                return Err("that model name is too long to be one".to_string());
+            }
+            Ok((
+                "/api/models/benchmark",
+                serde_json::json!({ "ref": reference }),
+                BENCHMARK_TIMEOUT,
+            ))
+        }
+        "opinion" => {
+            let words = text.unwrap_or_default().trim().to_string();
+            if words.is_empty() {
+                return Err("type what you think first — an empty note changes nothing".to_string());
+            }
+            if words.chars().count() > OPINION_MAX_CHARS {
+                return Err(format!(
+                    "that note is longer than {OPINION_MAX_CHARS} characters — shorten it and try again"
+                ));
+            }
+            Ok((
+                "/api/presets/recommend/opinion",
+                serde_json::json!({ "text": words }),
+                OPINION_TIMEOUT,
+            ))
+        }
+        other => Err(format!("`{other}` is not a model recommendation action")),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Plumbing
 // ---------------------------------------------------------------------------
 
@@ -1021,10 +1136,25 @@ async fn post(
     path: &str,
     body: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    post_with(app, path, body, WRITE_TIMEOUT).await
+}
+
+/// [`post`] with a wait of its own.
+///
+/// A lookup or a benchmark is not an ordinary write and must not be cut off at
+/// the 20 s every other write gets: [`brain_model_recommend`]'s four actions say
+/// their own budgets (see [`CHECK_TIMEOUT`]). Everything else about the request
+/// and the failure wording is [`post`]'s, unchanged.
+async fn post_with(
+    app: &AppHandle,
+    path: &str,
+    body: serde_json::Value,
+    budget: Duration,
+) -> Result<serde_json::Value, String> {
     let base = commands::jarvis_base(app);
     let client = reqwest::Client::builder()
         .connect_timeout(READ_TIMEOUT)
-        .timeout(WRITE_TIMEOUT)
+        .timeout(budget)
         .no_proxy()
         // Never follow a redirect: reqwest would carry X-Jarvis-Token to
         // wherever it points (apps security audit L1).
@@ -1040,6 +1170,8 @@ async fn post(
         .map_err(|e| {
             if e.is_connect() {
                 format!("could not reach the Jarvis server at {base}")
+            } else if e.is_timeout() {
+                format!("{path} did not answer within {}s", budget.as_secs())
             } else {
                 format!("{path} failed: {e}")
             }
@@ -1051,6 +1183,117 @@ async fn post(
     }
     Ok(serde_json::from_str(&text)
         .unwrap_or_else(|_| serde_json::json!({ "ok": true, "status": status.as_u16() })))
+}
+
+#[cfg(test)]
+mod model_recommend_tests {
+    use super::*;
+
+    /// The four routes are the contract the backend half builds against, written
+    /// down once. A renamed route on either side fails here rather than in a
+    /// window nobody is looking at.
+    #[test]
+    fn every_action_posts_its_own_route_and_nothing_else() {
+        assert_eq!(
+            model_recommend_request("check", None, None).unwrap().0,
+            "/api/models/check"
+        );
+        assert_eq!(
+            model_recommend_request("recommend", None, None).unwrap().0,
+            "/api/presets/recommend"
+        );
+        assert_eq!(
+            model_recommend_request("benchmark", Some("qwen3:8b".into()), None)
+                .unwrap()
+                .0,
+            "/api/models/benchmark"
+        );
+        assert_eq!(
+            model_recommend_request("opinion", None, Some("use the smaller one".into()))
+                .unwrap()
+                .0,
+            "/api/presets/recommend/opinion"
+        );
+        // The three writes that DO change the machine are not reachable here:
+        // they are the existing carded commands (brain_model, apply_focus_preset)
+        // and stay there, so this command can never become a second, uncarded
+        // road to a download or an applied preset.
+        for action in ["install", "switch", "rollback", "apply", "download", ""] {
+            assert!(
+                model_recommend_request(action, Some("qwen3:8b".into()), None).is_err(),
+                "`{action}` was offered through the advisor"
+            );
+        }
+    }
+
+    /// Only the field each action needs is sent: no `ref` on a lookup, no free
+    /// text on a benchmark, and the owner's note trimmed rather than padded.
+    #[test]
+    fn each_body_carries_only_its_own_field() {
+        let (_, check, _) =
+            model_recommend_request("check", Some("ignored:1b".into()), None).unwrap();
+        assert_eq!(check, serde_json::json!({}));
+        let (_, recommend, _) = model_recommend_request("recommend", None, None).unwrap();
+        assert_eq!(recommend, serde_json::json!({}));
+        let (_, benchmark, _) = model_recommend_request(
+            "benchmark",
+            Some("  qwen3:8b  ".into()),
+            Some("ignore me".into()),
+        )
+        .unwrap();
+        assert_eq!(benchmark, serde_json::json!({ "ref": "qwen3:8b" }));
+        let (_, opinion, _) = model_recommend_request(
+            "opinion",
+            Some("qwen3:8b".into()),
+            Some("  slower is fine\n".into()),
+        )
+        .unwrap();
+        assert_eq!(opinion, serde_json::json!({ "text": "slower is fine" }));
+    }
+
+    /// A missing or empty name, an empty note and an essay are refused before a
+    /// request is built, with words the window can show as they are.
+    #[test]
+    fn what_cannot_be_sent_is_refused_before_it_is_built() {
+        assert!(model_recommend_request("benchmark", None, None).is_err());
+        assert!(model_recommend_request("benchmark", Some("   ".into()), None).is_err());
+        assert!(
+            model_recommend_request("benchmark", Some("x".repeat(201)), None).is_err(),
+            "a 201-character model name was sent"
+        );
+        assert!(model_recommend_request("opinion", None, None).is_err());
+        assert!(model_recommend_request("opinion", None, Some("\n\t ".into())).is_err());
+        assert!(
+            model_recommend_request("opinion", None, Some("x".repeat(OPINION_MAX_CHARS + 1)))
+                .is_err(),
+            "an over-long note was sent"
+        );
+        // The boundary itself is allowed, so the cap cannot drift downwards.
+        assert!(
+            model_recommend_request("opinion", None, Some("x".repeat(OPINION_MAX_CHARS))).is_ok()
+        );
+    }
+
+    /// A benchmark is minutes of work and the page must not give up before the
+    /// PC does; a lookup must not be bounded like one.
+    #[test]
+    fn the_waits_are_sized_for_the_work_each_action_does() {
+        assert!(
+            BENCHMARK_TIMEOUT > CHECK_TIMEOUT,
+            "a benchmark is bounded like an internet lookup"
+        );
+        assert!(
+            BENCHMARK_TIMEOUT.as_secs() >= 300,
+            "a model load plus a measurement can take minutes"
+        );
+        assert!(
+            CHECK_TIMEOUT.as_secs() >= 60,
+            "a Hugging Face lookup is not a loopback read"
+        );
+        // The benchmark is the only action that touches the graphics card, so
+        // it is the only one held on a stale link (see brain_model_recommend).
+        assert_eq!(OPINION_MAX_CHARS, 2_000);
+    }
 }
 
 #[cfg(test)]

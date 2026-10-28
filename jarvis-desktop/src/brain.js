@@ -605,6 +605,17 @@ import {
   runningCount,
 } from "./deep.js";
 import { loadModelsCache, saveModelsCache } from "./models-cache.js";
+// The model advisor (2026-10-28, the owner's ask): one button that looks for
+// newer models, a download the owner approves on its OWN card, a benchmark
+// measured here, and preset changes the owner can approve or argue with.
+// `model-advisor.js` holds the words and the reading, so they can be proved
+// without a browser; this window draws them.
+import * as Advisor from "./model-advisor.js";
+import { applyPreset } from "./focus-presets-bridge.js";
+// The one budget every window sends its commands with. The advisor passes its
+// own per-action size (see model-advisor.js BUDGETS_MS) - one command, four very
+// different waits.
+import { call, LATE_ACTION, LATE_READ } from "./invoke-budget.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -652,7 +663,10 @@ const VIEW_SECTIONS = {
   // `graph` any more: privacy finding B1 (brain/routes.rs).
   galaxy: ["memory_entities"],
   now: ["attention", "status"],
-  faculties: ["models", "compute", "skills", "memory", "memory_pending"],
+  // The model advisor's last answer, for showing it when the view opens rather
+  // than a blank panel: the GET is a read of what the PC last worked out, dated
+  // by its own `checked_at`. A fresh check is the POST behind the one button.
+  faculties: ["models", "model_recommendations", "compute", "skills", "memory", "memory_pending"],
   // memory_entities: the names under each fact, for "About <name>"
   // (memory-entities.js). Hidden with the other memory lists.
   memory: ["memory_facts", "memory_pending", "memory_entities"],
@@ -1663,6 +1677,10 @@ function renderModels() {
 
   dom.models.append(installForm());
 
+  // "Check for new models" (2026-10-28, the owner's ask): the candidates, the
+  // benchmark measured here, and the preset changes to approve or argue with.
+  dom.models.append(advisorPanel());
+
   const comp = state.data.compute || {};
   const compPlan = comp.plan && typeof comp.plan === "object" ? comp.plan : comp;
   const devices = Array.isArray(compPlan.devices) ? compPlan.devices : [];
@@ -1718,6 +1736,576 @@ function installForm() {
   });
   line.append(input, go);
   wrap.append(line);
+  return wrap;
+}
+
+/**
+ * The model advisor's own state, for this window's lifetime only.
+ *
+ * NOTHING HERE IS WRITTEN TO DISK, on purpose. A check's answer is a list of
+ * models that fitted the graphics cards at one moment, and a benchmark is a
+ * measurement of this PC on one day; painting either as current after a restart
+ * would be the same mistake `models-cache.js` exists to prevent for the model
+ * list. The PC's own `checked_at` is what dates the answer, and it is shown.
+ */
+const advisor = {
+  /** idle | looking | done | failed - only the check has a "looking" state. */
+  phase: "idle",
+  /** The last answer shown, and which question produced it. */
+  payload: null,
+  source: "", // "check" | "recommend" | "opinion" | "read"
+  /** When THIS window received a POST answer (the PC may not date it). */
+  at: 0,
+  /** The PC's own words for the last failure - never replaced with a generic. */
+  error: "",
+  /** ref -> the PC's benchmark answer, and the ref being measured right now. */
+  benchmarks: {},
+  benchmarking: "",
+  /** The opinion last sent, and whether the shown advice came back from one. */
+  opinion: "",
+  revised: false,
+  /** What is in the "Tell Jarvis what you think" box, kept across re-renders. */
+  opinionDraft: "",
+  /** A preset apply asked for and waiting on the PC's card; and any refusal. */
+  presetAsk: null,
+  presetError: "",
+  /** The explicit "ask for preset recommendations" action (no card, no apply). */
+  recommend: { phase: "idle", error: "" },
+};
+
+/** The one bridge call, with the action's own wait and the right late sentence. */
+async function advisorAsk(action, options = {}) {
+  if (!IS_TAURI) return { ok: false, why: "No desktop backend — this is a browser preview." };
+  try {
+    const answer = await call(
+      Advisor.ADVISOR_COMMAND,
+      Advisor.advisorArgs(action, options),
+      action === Advisor.ACTION_BENCHMARK || action === Advisor.ACTION_OPINION ? "action" : "read",
+      Advisor.BUDGETS_MS[action]
+    );
+    return { ok: true, answer };
+  } catch (error) {
+    return { ok: false, why: advisorFailure(error, action) };
+  }
+}
+
+/**
+ * The PC's own failure, except for the budget module's two generic sentences:
+ * they are written for Settings ("this part of Settings may be out of date"), and
+ * a benchmark that timed out needs a different, more careful sentence - the
+ * measurement may still be running on the PC, and pressing again too soon would
+ * measure it twice.
+ */
+function advisorFailure(error, action) {
+  const message = typeof error === "string" ? error : (error && error.message) || "";
+  if (message === LATE_READ || message === LATE_ACTION) {
+    if (action === Advisor.ACTION_BENCHMARK) {
+      return "Jarvis has not answered yet. The benchmark may still be running on the PC — " +
+        "look again in a minute before measuring it twice.";
+    }
+    if (action === Advisor.ACTION_OPINION) {
+      return "Jarvis has not answered yet, so whether it read your note is not known. " +
+        "Try again in a moment.";
+    }
+    return "Jarvis has not answered yet. Nothing has changed — try again in a moment.";
+  }
+  return Advisor.advisorFailureWords(error);
+}
+
+/** The answer the panel should draw: a fresh POST first, else the PC's last read. */
+function advisorAnswer() {
+  if (advisor.payload) return { payload: advisor.payload, source: advisor.source };
+  const live = sectionState("model_recommendations");
+  const body = state.data.model_recommendations;
+  if (body && body.available !== false) return { payload: body, source: "read", live };
+  return null;
+}
+
+/** "Checked …" for the panel: this window's own moment, or the PC's own stamp. */
+function advisorCheckedLine(payload, source) {
+  // A POST answer we just received can be dated by us, because we watched it
+  // arrive; a stored read can only be dated by the PC's own `checked_at`.
+  const own = source === "read" ? 0 : advisor.at;
+  const words = Advisor.checkedWords((payload && payload.checked_at) || 0)
+    || (own ? Advisor.checkedWords(own) : "");
+  return words;
+}
+
+/** Is the model really installed, and can this window read the list right now? */
+function installedNow() {
+  const live = sectionState("models");
+  const body = state.data.models;
+  if (live.kind !== "data" || !body || body.available === false) {
+    return { known: false, refs: new Set() };
+  }
+  return { known: true, refs: Advisor.installedRefs(body) };
+}
+
+/** Why a benchmark button cannot be pressed for `ref`, or "" when it can. */
+function benchmarkWhyNot(ref) {
+  const installed = installedNow();
+  if (!installed.known) {
+    return "Jarvis cannot say which models are installed right now, so there is nothing it could measure.";
+  }
+  if (!Advisor.isInstalled(ref, installed.refs)) return Advisor.NOT_INSTALLED;
+  return "";
+}
+
+/** The PC's own benchmark sentence for `ref`, once it has answered. */
+function measuredLine(ref) {
+  const result = advisor.benchmarks[Advisor.bareRef(ref)] || advisor.benchmarks[ref];
+  return Advisor.benchmarkLine(result);
+}
+
+/**
+ * Has ANYTHING on screen been measured on this PC - either in the PC's own
+ * benchmark index, or by a benchmark this window just ran? The note under the
+ * list must never say "nothing here has been measured" while a row above it
+ * carries the measured label.
+ */
+function anyMeasuredNow(payload) {
+  if (Advisor.anyMeasured(payload)) return true;
+  return Object.values(advisor.benchmarks).some((row) => Advisor.benchmarkWords(row).measured);
+}
+
+/** The check itself: one POST, then the answer (or the PC's refusal) on screen. */
+async function checkForModels() {
+  if (advisor.phase === "looking") return;
+  advisor.phase = "looking";
+  advisor.error = "";
+  renderModels();
+  announce("Looking for newer models on Hugging Face.");
+  const out = await advisorAsk(Advisor.ACTION_CHECK);
+  advisor.at = Date.now();
+  if (!out.ok) {
+    advisor.phase = "failed";
+    advisor.error = out.why;
+    announce(out.why, "assertive");
+  } else if (!Advisor.looksLikeAnswer(out.answer)) {
+    advisor.phase = "failed";
+    advisor.error = Advisor.UNREADABLE;
+    announce(Advisor.UNREADABLE, "assertive");
+  } else {
+    advisor.phase = "done";
+    advisor.payload = out.answer;
+    advisor.source = "check";
+    advisor.revised = false;
+    advisor.presetAsk = null;
+    advisor.presetError = "";
+    const count = Advisor.candidateRows(out.answer).length;
+    announce(count ? `Found ${count} model${count === 1 ? "" : "s"}.` : Advisor.NO_CANDIDATES);
+  }
+  if (state.view === "faculties") renderModels();
+}
+
+/** Ask again for preset changes only (no card, no apply, no download). */
+async function askPresetRecommendations() {
+  if (advisor.recommend.phase === "thinking") return;
+  advisor.recommend = { phase: "thinking", error: "" };
+  renderModels();
+  const out = await advisorAsk(Advisor.ACTION_RECOMMEND);
+  if (!out.ok) {
+    advisor.recommend = { phase: "failed", error: out.why };
+  } else if (!Advisor.looksLikeAnswer(out.answer)) {
+    advisor.recommend = { phase: "failed", error: Advisor.UNREADABLE };
+  } else {
+    advisor.recommend = { phase: "idle", error: "" };
+    advisor.payload = out.answer;
+    advisor.source = "recommend";
+    advisor.at = Date.now();
+    advisor.revised = false;
+    advisor.presetAsk = null;
+    advisor.presetError = "";
+  }
+  if (state.view === "faculties") renderModels();
+}
+
+/** Send the owner's own note and show the advice that comes back. */
+async function sendOpinion() {
+  const problem = Advisor.opinionProblem(advisor.opinionDraft);
+  if (problem) {
+    toast(problem, "bad");
+    return;
+  }
+  if (advisor.recommend.phase === "thinking") return;
+  const words = advisor.opinionDraft.trim();
+  advisor.recommend = { phase: "thinking", error: "" };
+  renderModels();
+  const out = await advisorAsk(Advisor.ACTION_OPINION, { text: words });
+  if (!out.ok) {
+    advisor.recommend = { phase: "failed", error: out.why };
+    announce(out.why, "assertive");
+  } else if (!Advisor.looksLikeAnswer(out.answer)) {
+    advisor.recommend = { phase: "failed", error: Advisor.UNREADABLE };
+  } else {
+    advisor.recommend = { phase: "idle", error: "" };
+    advisor.payload = out.answer;
+    advisor.source = "opinion";
+    advisor.at = Date.now();
+    advisor.opinion = words;
+    advisor.revised = true;
+    advisor.presetAsk = null;
+    advisor.presetError = "";
+    announce("Jarvis revised its recommendation. Nothing has changed yet.");
+  }
+  if (state.view === "faculties") renderModels();
+}
+
+/**
+ * "Approve changes": the EXISTING carded preset apply (`apply_focus_preset` ->
+ * `POST /api/work/apply`). It approves nothing itself - the PC raises its own
+ * switch_model card, and the recommendation stays a recommendation until that
+ * card is answered. Nothing here marks a preset as applied.
+ */
+async function approvePresetChanges(preset) {
+  if (!IS_TAURI) {
+    toast("No desktop backend — this is a browser preview.", "bad");
+    return;
+  }
+  advisor.presetError = "";
+  try {
+    const answer = await applyPreset(preset);
+    advisor.presetAsk = { preset, answer };
+    announce(`Waiting for your approval to apply the ${preset} preset.`);
+  } catch (error) {
+    advisor.presetAsk = null;
+    advisor.presetError = advisorFailure(error, "apply");
+    announce(advisor.presetError, "assertive");
+  }
+  if (state.view === "faculties") renderModels();
+}
+
+/** "Benchmark on this PC" for one installed model. Nothing is downloaded. */
+async function benchmarkModel(ref) {
+  const whyNot = benchmarkWhyNot(ref);
+  if (whyNot) {
+    toast(whyNot, "bad");
+    return;
+  }
+  const key = Advisor.bareRef(ref);
+  if (advisor.benchmarking) return;
+  advisor.benchmarking = key;
+  renderModels();
+  const out = await advisorAsk(Advisor.ACTION_BENCHMARK, { ref });
+  advisor.benchmarking = "";
+  advisor.benchmarks[key] = out.ok
+    ? out.answer
+    : { available: false, why: out.why };
+  const line = Advisor.benchmarkLine(advisor.benchmarks[key]);
+  announce(line || (advisor.benchmarks[key] && advisor.benchmarks[key].why) || "The benchmark did not answer.");
+  if (state.view === "faculties") renderModels();
+}
+
+/** One candidate row: what the PC said about it, and the one action it allows. */
+function advisorCandidateRow(candidate) {
+  const item = el("div", "row-item advisor-candidate");
+  const tag = el("span", "row-tag", candidate.fitLabel);
+  if (candidate.fitState) tag.dataset.state = candidate.fitState;
+  item.append(tag);
+
+  const main = el("div", "row-main");
+  main.append(el("span", "row-title", candidate.name));
+  for (const line of Advisor.candidateMeta(candidate)) main.append(el("span", "row-meta", line));
+  const installed = installedNow();
+  const isHere = installed.known && Advisor.isInstalled(candidate.ref, installed.refs);
+  if (isHere) main.append(el("span", "row-meta", "Already installed on this PC."));
+  const measured = measuredLine(candidate.ref);
+  if (measured) main.append(el("span", "row-meta model-advisor-measured", measured));
+  if (advisor.benchmarking && advisor.benchmarking === Advisor.bareRef(candidate.ref)) {
+    main.append(el("span", "row-meta model-advisor-measured", "Measuring on this PC…"));
+  } else if (!measured) {
+    // A benchmark the PC answered but could not do: its OWN reason, on the row
+    // whose button was pressed. Never silence, and never the measured label.
+    const answer = advisor.benchmarks[Advisor.bareRef(candidate.ref)];
+    const why = answer ? Advisor.benchmarkWords(answer).why : "";
+    if (why) main.append(el("span", "row-meta", why));
+  }
+  if (!installed.known) {
+    main.append(
+      el(
+        "span",
+        "row-meta",
+        "Jarvis cannot tell whether this is already installed right now, so Download is the only thing it can offer."
+      )
+    );
+  }
+  if (candidate.sourceUrl) {
+    // A plain sentence, never a link: this window has no permission to open an
+    // address, and a stray link in a webview could navigate the window away.
+    main.append(el("span", "row-meta", `On Hugging Face: ${candidate.sourceUrl}`));
+  }
+  item.append(main);
+
+  const actions = el("div", "row-actions");
+  if (isHere) {
+    const whyNot = benchmarkWhyNot(candidate.ref);
+    if (whyNot) {
+      // Said rather than a greyed-out button, the same way a model that cannot
+      // chat loses its "Use" and gets a line instead (see renderModels above).
+      main.append(el("span", "row-meta", whyNot));
+    } else {
+      actions.append(
+        button(
+          advisor.benchmarking === Advisor.bareRef(candidate.ref) ? "Measuring…" : "Benchmark on this PC",
+          () => benchmarkModel(candidate.ref),
+          {
+            title: "Loads this model on the PC and measures it. Nothing is downloaded or changed.",
+            live: true,
+          }
+        )
+      );
+    }
+  } else {
+    actions.append(
+      button("Download", () => modelAction("install", candidate.ref), {
+        title: `Ask to install this model. You approve it ${APPROVE_WHERE} — nothing downloads until you do.`,
+        live: true,
+      })
+    );
+  }
+  item.append(actions);
+  return item;
+}
+
+/** One recommended preset, its rows' changes, its evidence, and Approve. */
+function advisorPresetBlock(recommendation) {
+  const block = el("div", "advisor-preset");
+  block.append(el("p", "advisor-preset-name", `Preset: ${recommendation.preset}`));
+  if (recommendation.changes.length) {
+    const list = el("ul", "advisor-changes");
+    for (const change of recommendation.changes) {
+      const line = el("li", "");
+      line.append(el("span", "advisor-change", Advisor.changeWords(change)));
+      if (change.why) line.append(el("span", "advisor-change-why", change.why));
+      list.append(line);
+    }
+    block.append(list);
+  } else {
+    block.append(el("p", "note", "The PC gave no row-by-row change for this preset."));
+  }
+  if (recommendation.evidence) {
+    block.append(el("p", "note advisor-evidence", `Evidence: ${recommendation.evidence}`));
+  }
+  block.append(
+    button(`Approve changes to ${recommendation.preset}`, () => approvePresetChanges(recommendation.preset), {
+      title: `Asks the PC to apply this preset on its usual approval card. Nothing changes until you approve that card.`,
+      live: true,
+    })
+  );
+  return block;
+}
+
+/**
+ * The advisor panel: the one button, the candidates, and the preset advice with
+ * its two doors (approve on the PC's card, or say what you think and see the
+ * advice change). Every state says something - never silence.
+ */
+function advisorPanel() {
+  const wrap = el("section", "model-advisor");
+  wrap.id = "model-advisor";
+  const title = el("h3", "model-advisor-title", "Newer models");
+  title.id = "model-advisor-title";
+  wrap.append(title);
+  wrap.append(
+    el(
+      "p",
+      "model-advisor-lede",
+      "Ask Jarvis to look on Hugging Face for newer local models that fit this " +
+        "computer's graphics cards. It is a suggestion, not an upgrade: a model is " +
+        "only better here once it has been measured here."
+    )
+  );
+
+  const actions = el("div", "row-actions");
+  const check = button("Check for new models", checkForModels, {
+    title: "Asks your PC to look on Hugging Face for newer models that fit its graphics cards. Nothing downloads.",
+  });
+  check.id = "model-check";
+  if (advisor.phase === "looking") {
+    check.disabled = true;
+    check.textContent = "Looking…";
+  }
+  actions.append(check);
+  wrap.append(actions);
+
+  if (advisor.phase === "looking") {
+    const status = el(
+      "p",
+      "model-advisor-status",
+      "Looking on Hugging Face. This can take a moment, and nothing is downloading."
+    );
+    status.setAttribute("role", "status");
+    wrap.append(status);
+    // The box that will hold the answer keeps its place, so the panel does not
+    // jump when the answer lands.
+    wrap.append(el("p", "note", "Waiting for your PC's answer…"));
+    return wrap;
+  }
+
+  if (advisor.phase === "failed") {
+    wrap.append(el("p", "banner model-advisor-failed", advisor.error));
+    return wrap;
+  }
+
+  // The last stored answer, for a window that has not pressed the button yet.
+  const answer = advisorAnswer();
+  const stored = sectionState("model_recommendations");
+  if (!answer) {
+    if (stored.kind === "reading") {
+      wrap.append(el("p", "note", "Reading what the PC last worked out…"));
+    } else if (stored.kind === "absent") {
+      wrap.append(el("p", "banner model-advisor-missing", Advisor.MISSING_MODULE));
+    } else if (stored.kind === "failed") {
+      wrap.append(el("p", "banner model-advisor-failed", `Could not read this: ${stored.why || "no reason given"}`));
+    } else {
+      wrap.append(el("p", "note", Advisor.NOT_CHECKED_YET));
+    }
+    return wrap;
+  }
+
+  const payload = answer.payload;
+  if (stored.kind === "stale" && answer.source === "read") {
+    // The read failed and this is the last one that worked. It carries the PC's
+    // own checked_at, so it is shown dated rather than painted as live.
+    wrap.append(
+      el(
+        "p",
+        "banner models-offline",
+        `Jarvis isn't answering right now, so this is the last answer it gave: ${stored.why || "the read failed"}.`
+      )
+    );
+  }
+
+  const checked = advisorCheckedLine(payload, answer.source);
+  wrap.append(
+    el(
+      "p",
+      "note model-advisor-when",
+      checked
+        ? `${checked}.`
+        : "The PC did not say when it checked, so this may be from an earlier run."
+    )
+  );
+
+  const gpus = Advisor.gpuWords(payload.gpus);
+  if (gpus.length) {
+    wrap.append(el("p", "note", `Graphics cards it measured against: ${gpus.join(", ")}.`));
+  }
+
+  const candidates = Advisor.candidateRows(payload);
+  // A real check is the only thing that may say "found nothing": an answer with
+  // no `checked_at` has simply never been checked, and NO_CANDIDATES would be a
+  // claim about a lookup nobody ran.
+  const everChecked = Boolean((payload && payload.checked_at) || (answer.source !== "read" && advisor.at));
+  if (candidates.length) {
+    const list = el("div", "rows");
+    for (const candidate of candidates) list.append(advisorCandidateRow(candidate));
+    wrap.append(list);
+    wrap.append(el("p", "note", anyMeasuredNow(payload) ? Advisor.MEASURED_SOMEWHERE : Advisor.NOT_MEASURED));
+    wrap.append(el("p", "note", Advisor.NO_HASH));
+    wrap.append(el("p", "note", Advisor.DOWNLOAD_IS_CARDED));
+  } else if (everChecked) {
+    wrap.append(el("p", "note", Advisor.NO_CANDIDATES));
+  } else {
+    wrap.append(el("p", "note", Advisor.NOT_CHECKED_YET));
+  }
+
+  wrap.append(advisorPresetPanel(payload, everChecked));
+  return wrap;
+}
+
+/** The preset recommendation: the changes, their evidence, Approve, and the box. */
+function advisorPresetPanel(payload, everChecked) {
+  const wrap = el("section", "model-advisor-presets");
+  const heading = el("h4", "", "Preset recommendation");
+  wrap.append(heading);
+
+  const rows = Advisor.recommendationRows(payload);
+  if (advisor.revised && advisor.opinion) {
+    wrap.append(
+      el("p", "note advisor-revised", `Revised from what you said: “${advisor.opinion}”`)
+    );
+  }
+  if (advisor.recommend.phase === "thinking") {
+    const status = el("p", "model-advisor-status", "Asking the PC, with your note…");
+    status.setAttribute("role", "status");
+    wrap.append(status);
+  }
+  if (advisor.recommend.phase === "failed") {
+    wrap.append(el("p", "banner model-advisor-failed", advisor.recommend.error));
+  }
+
+  if (rows.length) {
+    for (const recommendation of rows) wrap.append(advisorPresetBlock(recommendation));
+    wrap.append(
+      el(
+        "p",
+        "note",
+        "Approve changes asks the PC to apply that preset on its usual approval card. " +
+          "Nothing changes until you approve the card."
+      )
+    );
+  } else if (everChecked) {
+    wrap.append(el("p", "note", "The PC has no preset change to suggest from this answer."));
+    const again = button("Ask for preset recommendations", askPresetRecommendations, {
+      title: "Asks the PC what it would change in its presets. It changes nothing and raises no card.",
+    });
+    again.id = "model-recommend";
+    if (advisor.recommend.phase === "thinking") again.disabled = true;
+    const box = el("div", "row-actions");
+    box.append(again);
+    wrap.append(box);
+  } else {
+    wrap.append(
+      el("p", "note", "Preset changes appear here after a check, worked out from this PC's graphics cards.")
+    );
+  }
+
+  if (advisor.presetAsk) {
+    wrap.append(
+      el(
+        "p",
+        "banner model-ask",
+        `Waiting for your approval: applying the ${advisor.presetAsk.preset} preset. ` +
+          `Approve it ${APPROVE_WHERE} — nothing changes until you do.`
+      )
+    );
+  }
+  if (advisor.presetError) {
+    wrap.append(el("p", "banner model-advisor-failed", advisor.presetError));
+  }
+
+  // The opinion box. Its draft lives in `advisor` so a re-render (a benchmark,
+  // a refusal, the answer itself) cannot silently eat what the owner typed.
+  const label = el("label", "advisor-opinion-label", "Tell Jarvis what you think");
+  label.setAttribute("for", "model-opinion-text");
+  wrap.append(label);
+  const box = el("textarea", "field advisor-opinion");
+  box.id = "model-opinion-text";
+  box.rows = 3;
+  box.value = advisor.opinionDraft;
+  box.placeholder = "For example: keep voice on the fast card, and let chat use the bigger one";
+  box.setAttribute("aria-label", "Tell Jarvis what you think about the preset recommendation");
+  box.addEventListener("input", () => {
+    advisor.opinionDraft = box.value;
+  });
+  wrap.append(box);
+  const opinionActions = el("div", "row-actions");
+  const tell = button(
+    "Tell Jarvis what you think",
+    sendOpinion,
+    {
+      title:
+        "Sends your note to the PC, which may revise its recommendation. Nothing is applied and no card is raised.",
+    }
+  );
+  tell.id = "model-opinion";
+  if (advisor.recommend.phase === "thinking") tell.disabled = true;
+  opinionActions.append(tell);
+  wrap.append(opinionActions);
+  wrap.append(
+    el("p", "note", "Jarvis reads your note and revises its suggestion. You still approve it afterwards.")
+  );
   return wrap;
 }
 

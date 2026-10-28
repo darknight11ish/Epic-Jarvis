@@ -175,8 +175,8 @@ never in the repository at first. `docs/ARCHITECTURE.md:2290-2295`:
 > is worse than no copy."*
 
 So the repository held **changes to a program it did not contain**. That is why
-there is a `backend/` folder of 145 `.patch` files
-(`Get-ChildItem backend/*.patch` → 145), each with a test that proves it works,
+there is a `backend/` folder of 161 `.patch` files
+(`Get-ChildItem backend/*.patch` → 161), each with a test that proves it works,
 applied in one fixed order by `scripts/apply-patches.ps1`. The order is not
 decoration: *"many patches edit lines an earlier one wrote"*, and *"above all,
 `memory-safety` must land first: without it the first accepted proposal retires
@@ -251,8 +251,8 @@ of them are named `check_*.py` under `tools/` (`Get-ChildItem tools/check_*.py`
 The checkers that gate changes include:
 
 - `tools/check_claims.py` — *"one row per thing this project says about itself,
-  with a check a machine runs"* (`docs/CLAIMS.tsv`, 168 rows). On the tree this
-  page was written from it reports **168 claims: 153 built, 7 still open, 8 unverifiable** — *"and every `open` one is still a real gap."*
+  with a check a machine runs"* (`docs/CLAIMS.tsv`, 174 rows). On the tree this
+  page was written from it reports **174 claims: 159 built, 7 still open, 8 unverifiable** — *"and every `open` one is still a real gap."*
 - `tools/check_parity.py` — did a feature land in both apps, or is one side
   deliberately left out?
 - `tools/check_feature_list.py` — is `features/features.json` (the "Everything
@@ -528,7 +528,7 @@ goes with it.
 
 The register is not a museum: on the tree this page was written from,
 `docs/defect-register.tsv` holds **16 rows, 15 closed and 1 open** — DEF-002 (a
-measured 4,598 ms against 9 ms, `docs/DEFECT-REGISTER.md:107`). And 7 of the 168 claims in `docs/CLAIMS.tsv` are still marked open.
+measured 4,598 ms against 9 ms, `docs/DEFECT-REGISTER.md:107`). And 7 of the 174 claims in `docs/CLAIMS.tsv` are still marked open.
 
 ---
 
@@ -543,14 +543,14 @@ estimates, and they change — re-run the command rather than trusting the numbe
 | Commits | **3,713** (845 of them merges) | `git rev-list --count HEAD`; `git rev-list --merges --count HEAD` |
 | First commit | **2026-09-12**, `e7c466a4` "Initial commit" | `git log --reverse` |
 | Last *numbered* release | **0.2.0** | `VERSION`; `CHANGELOG.md:10` ("the last *numbered* release"; newer work sits above it under "Not in a numbered version yet") |
-| Features in the list | **139**, in 9 groups: 110 on both apps, 21 on the desktop only, 8 on the phone only | `features/features.json`, checked by `tools/check_feature_list.py` |
-| Backend patches | **154** | `Get-ChildItem backend/*.patch` |
+| Features in the list | **142**, in 9 groups: 110 on both apps, 21 on the desktop only, 8 on the phone only | `features/features.json`, checked by `tools/check_feature_list.py` |
+| Backend patches | **161** | `Get-ChildItem backend/*.patch` |
 | Backend test suites | **428** | `Get-ChildItem backend/test_*.py` |
 | Desktop test suites | **226** `.mjs` files | `Get-ChildItem jarvis-desktop/tests/*.mjs` |
 | Phone test files | **247** `*Test.kt` | `Get-ChildItem jarvis-client -Recurse -Filter *Test.kt` |
 | Documents | **403** markdown files, about 10.5 MB | `Get-ChildItem docs -Recurse -Filter *.md`; `docs/README.md` carries the live copy, and `tools/check_docs_map.py` checks it |
 | Checkers named `check_*` | **39** | `Get-ChildItem tools/check_*.py` |
-| Claims about itself, each with a machine check | **168 rows**, 153 built / 7 open / 8 unverifiable | `python -B tools/check_claims.py` |
+| Claims about itself, each with a machine check | **174 rows**, 159 built / 7 open / 8 unverifiable | `python -B tools/check_claims.py` |
 | Defect register | **16 rows**, 15 closed / 1 open | `docs/defect-register.tsv` |
 | Launch videos kept | **6** numbered versions, v1–v6, never replaced | `videos/README.md`; the owner's rule of 2026-09-24 (`CLAUDE.md`) |
 
@@ -572,7 +572,7 @@ checks are expected."* is dated evidence from while it was still six).
 
 - `python -B tools/check_docs_map.py` — `docs map OK: 403 documents, 10,477,392 bytes, and README.md agrees`
 - `python -B tools/check_feature_list.py` — `139 entries in 9 groups; 128 of 145 route sections and menu ids covered, 18 named in INTERNAL` / `8 passed, 0 failed`
-- `python -B tools/check_claims.py` — `168 claim(s) checked against the code: 153 built, 7 still open, 8 unverifiable (the reason is in each row).`
+- `python -B tools/check_claims.py` — `174 claim(s) checked against the code: 159 built, 7 still open, 8 unverifiable (the reason is in each row).`
 - `python -B tools/check_vacuous_checks.py` — `433 suite file(s) read, 31510 check() call(s) looked at: no check is a fake skip, none has a string or defaulted condition.`
 - `python -B tools/check_parity.py` — `No undecided drift.` (with two `planned` warnings, which it prints rather than hides)
 
@@ -744,7 +744,7 @@ and it is the part the project already has machinery for:
    check a machine runs"*, and `tools/check_claims.py` *"says so when a gap
    closes ... so the row cannot outlive the build the way CLAUDE.md's 'not yet
    built' queue outlived tap-to-talk."* The countable statements in §6 of this
-   page are the obvious first rows. **Honest caution:** 8 of the 168 rows are `unverifiable` and say why, so a claim in the chapter that no machine can
+   page are the obvious first rows. **Honest caution:** 8 of the 174 rows are `unverifiable` and say why, so a claim in the chapter that no machine can
    check should be written as a quotation with a date on it, not as a fact.
 3. **The numbers are re-measured, never remembered.** §6's table names the
    command for every figure, and `tools/check_docs_map.py` already re-measures

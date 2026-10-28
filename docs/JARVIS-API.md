@@ -26362,3 +26362,126 @@ one of the generated `<label class="toggle">` rows that
 `tools/gen_settings_cases.py` owns, so the switch's `bool_settings` entry is
 recorded as `planned` with that reason - the same recording "Write like me"
 already has for the same reason.
+## 160. Model and preset recommendations: one check, one measured benchmark, and the owner's opinion (desktop and backend, 2026-10-28)
+
+**What this is.** The owner's request of 2026-10-28: a button that looks
+through the public model catalogues, a carded download of whatever looks worth
+trying, a local benchmark of that model once it is here, and preset changes
+computed from the measured numbers. This section documents the backend contract
+and the desktop Brain panel built against it (`brain.js`, `model-advisor.js`,
+the `brain_model_recommend` command).
+
+**Five routes, all PC-only.** Each answers 403 from any device but this PC,
+checked with `jarvis_owner_check.from_this_pc` before a body is read. This is
+the standing rule that the phone must not grow a model catalogue
+(`docs/ARCHITECTURE.md` §8), not a missing phone screen.
+
+```
+GET  /api/models/recommendations
+POST /api/models/check                    {}
+POST /api/models/benchmark                {"ref": "<installed model>"}
+POST /api/presets/recommend               {}
+POST /api/presets/recommend/opinion       {"text": "<the owner's words>"}
+```
+
+**`GET /api/models/recommendations` is read-only and network-free.** It reads
+one JSON file (`model-recommendations.json` in the settings folder) and the
+PC's own measured card list; with no cached check it answers `checked_at: null`
+and no candidates. The shape:
+
+```json
+{"checked_at": 1761700000,
+ "gpus": [{"name": "NVIDIA GeForce RTX 2060", "vram_gb": 12.0, "role": "main"}],
+ "candidates": [{"ref": "owner/model-GGUF", "name": "model-GGUF",
+                 "family": "model", "params_b": 8.0, "quant": "Q4_K_M",
+                 "size_gb": 4.0, "context_tokens": 131072,
+                 "licence": "apache-2.0", "fit": "fits",
+                 "source_url": "https://huggingface.co/owner/model-GGUF",
+                 "why": "estimated to need about 5.9 GB, which the measured ..."}],
+ "recommendations": [{"preset": "fast",
+                      "changes": [{"row": "model", "from": "qwen3.5:4b",
+                                   "to": "best:7b",
+                                   "why": "measured 61.0 tokens/s here ..."}],
+                      "evidence": "measured on this PC only: ..."}],
+ "benchmarked": {"qwen3.5:9b": {"tokens_per_s": 45.0, "vram_gb": 9.17,
+                                "context_tokens": 196608,
+                                "measured_at": 1761700000}}}
+```
+
+`row` is the FIELD of a `backend/jarvis_presets.py` preset row the change is
+about (`model`, `lane` or `context`); `preset` names the row itself. `fit` is
+`fits` / `tight` / `no`, from the measured card sizes and the candidate's
+**estimated** need (the only estimate in the answer, labelled in `why`).
+
+`licence` is the repository's own declared licence, read from the catalogue's
+`license:<id>` tag (Hugging Face publishes one) and `null` when the catalogue
+reports none - the desktop says "not reported by the catalogue" rather than
+inventing one. **No SHA-256 is published or shown:** `jarvis_models.Model` has
+no hash field, so the answer carries none and the panel says so instead of
+inventing a value.
+
+**`POST /api/models/check` performs the lookup.** It calls the model manager's
+EXISTING public-catalogue pass, `jarvis_models.discover()` - fixed public URLs
+for the Hugging Face GGUF list, the Ollama library and EvalPlus, with no token,
+cookie or query term derived from the owner - bounds it (16 models, one Ollama
+page, four enriched repos), caches the shaped candidates and returns the shape
+above. It never downloads: no `/api/pull`, no install call, no weights. With no
+measured graphics card it looks nothing up and says so; a catalogue pass that
+returns nothing is a 503 and does not overwrite the last good cache. **"Newer"
+is not claimed:** the existing pass sorts by trending and discards
+`lastModified`, so the answer says "the public trending list" and no date is
+invented.
+
+**`POST /api/models/benchmark {"ref": ...}` measures an INSTALLED model only.**
+It refuses 409 when `/api/tags` does not list the model, and 503 when Ollama
+will not answer its model list or will not give timings (so a down Ollama is
+never reported as "not installed"). The measurement is the existing bounded benchmark
+`jarvis_speed.measure()`: ONE fixed prompt through Ollama's native
+`/api/generate`, a 64-token cap, temperature 0 and a fixed seed - so it loads
+the model to answer, exactly as asking it a question would, and the answer says
+so. Tokens/second come from Ollama's own `eval_count`/`eval_duration`; video
+memory from `/api/ps` while the model is loaded for the benchmark - that is the
+window the benchmark ran at, NOT every preset's window, so a 196k conversation
+can need more than the figure and every recommendation's evidence says so;
+context from the model's own metadata via `/api/show`. The raw row lands in
+`speed.jsonl` (the speed record's store, unchanged) and the four-field index
+above is written to `model-recommendations.json`. No card: a measurement
+changes no setting and downloads nothing.
+
+**`POST /api/presets/recommend` computes changes from measurements only.** No
+network, no clock, no store write: it reads the benchmark index and the measured
+cards. For each preset row (`jarvis_presets.PRESETS`) it may propose one model
+change (a benchmarked model that fits the row's measured card with room, covers
+the row's full context window, and is at least 5% faster), one lane change (the
+current model does not fit its named card but does fit another measured card),
+and one context correction (the row asks for more tokens than the model on this
+PC reports). A preset with no benchmark for its CURRENT model gets no model or
+lane change - there is nothing to compare. Pending and heavy-mode rows are never
+recommended. Every `why` quotes the measured numbers; `evidence` names the
+benchmark store and `docs/MEASURED-2026-10-05-owner-pc.md` /
+`docs/MODEL-TOPOLOGY.md`.
+
+**`POST /api/presets/recommend/opinion {"text": ...}` records the owner's own
+words locally and refines the SAME computation with one deterministic rule:**
+`keep` (no model or lane change; a genuine context correction stays), `lower`
+(smallest measured video memory, no slower than 95% of the current model),
+`raise` (any measured speed gain, not the 5% bar), `quality` (at least 10%
+faster, preferring the longest measured context window - context is the only
+capability figure measured here, and the evidence says so), or `note` (recorded;
+ranking unchanged). The last opinion is re-applied on later reads; the previous
+twenty are kept. It cannot invent a measurement: a candidate lacking a measured
+rate, video memory or context is simply not eligible.
+
+**What deliberately does not exist.** No install route and no apply route: a
+download stays the EXISTING `/api/models/install` card (`jarvis_models.install`,
+tier `ask`) and a preset change stays the EXISTING `/api/work/apply` card
+(`jarvis_presets.apply_preset`, one `switch_model` card). No auto-download, no
+auto-apply, no timer and no background job. No gate action or tier row: the
+five routes are reads and one local measurement. No phone route and no phone
+screen.
+
+**What was not exercised here.** The live Hugging Face lookup: this checkout has
+no network, so the suite injects the catalogue pass. The shape and the refusal
+paths are tested; the first real click on the owner's PC is the field test. And
+no model's QUALITY is measured by any of this - the feature compares tokens per
+second, video memory and context window, and says exactly that.

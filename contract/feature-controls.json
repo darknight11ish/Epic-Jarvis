@@ -5571,7 +5571,7 @@
       "name": "Models",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Brain, Model, Models. On the phone, Brain, Models. The Model tab also holds Compute and Skills.",
+      "where": "Brain, Model, Models. The \"Check for new models\" button is at the bottom of that list, with the candidates it finds, their benchmark, and the preset changes it suggests. On the phone, Brain, Models. The Model tab also holds Compute and Skills.",
       "control": {
         "type": "refused",
         "setting_keys": [],
