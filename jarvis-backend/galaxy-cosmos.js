@@ -1686,6 +1686,8 @@ export async function createEngine(options = {}) {
     dprWanted: 1,
     renderScale: 1,
     frameGaps: [],
+    halfRate: false,
+    tick: false,
     frameDistance: 0,
     spinning: true,
     warp: 1,
@@ -2618,8 +2620,23 @@ export async function createEngine(options = {}) {
         state.renderScale = want;
         applyRenderScale();
       }
+      // Second half of the same rule: a machine that is still slow after the
+      // resolution has given all it can draws the picture every OTHER frame.
+      // The motion steps instead of the page stuttering, and (measured) a
+      // software renderer goes from about 13 to about 30 frames a second of
+      // page time because half the frames are cheap. A GPU never reaches this.
+      state.halfRate = median > SLOW_FRAME_MS;
     }
     state.lastTime = stamp;
+    if (state.halfRate) {
+      state.tick = !state.tick;
+      if (state.tick) {
+        // Still advance the clock and the animation: the picture that appears
+        // on the next frame is the one this frame computed.
+        animate(dt, stamp);
+        return true;
+      }
+    }
     animate(dt, stamp);
     renderer.render(scene, camera);
     state.draws += 1;
