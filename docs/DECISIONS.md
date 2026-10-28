@@ -5,6 +5,14 @@ from `CLAUDE.md` on 2026-10-12, because that file had grown to about 150 KB and 
 harness loads only the first 64 KB of it - silently. The rules themselves stayed in
 `CLAUDE.md`; the dated reasoning behind them lives here.
 
+**From 2026-10-28 a new decision is written as one file under `decisions.d/`,**
+not as an edit to this file. Two pull requests that both appended here always
+conflicted, and a conflicted pull request gets **no CI at all**; the fragments end
+that race exactly the way `changelog.d/` ended it for `CHANGELOG.md` on
+2026-10-23. `decisions.d/README.md` says how to write one, and
+`tools/roll_decisions.py` folds them in here, at the end of this file, when a roll
+is run on a quiet `main`. Everything above that point is unchanged history.
+
 Nothing in this file was reworded while moving. The blocks are in their original order.
 Read `CLAUDE.md` to know a rule; read this to know **when** it was decided, what the
 owner's own words were, and what it replaced.
@@ -4418,3 +4426,12 @@ field-test row, not a pass.
 **Proven by local builds, both directions.** A release APK of this tree with PR #908's InputMerger keep applied passes in 0.82 s (6,824 classes parsed, all four targets and both sweeps OK). The same tree **without** that keep fails in 0.63 s (6,815 classes): `FAIL: reflective instantiation hole - androidx.work.OverwritingInputMerger`, `its constructor <init>()V is missing (the class itself is there)`, and the same for `ArrayCreatingInputMerger`; `dexdump` on that `classes.dex` independently shows the class with no `<init>` at all. A third build, with the keep applied but the Room keep rule removed, fails naming `androidx.work.impl.WorkDatabase_Impl` (6,581 classes), and `dexdump` again agrees - so the prior instance is guarded, not just the one that bit. `--self-test` proves the judgement and the wording with fabricated inventories, including an unlisted concrete `*InputMerger` that must be reported and an abstract one that must not. CI cost: under a second on the release APK the job already builds.
 
 **Not proven, and not claimed:** the table knows only the reflective entry points listed in it, plus the two family sweeps - a future reflective hole in a class nobody has listed will still ship, and adding one is a one-line entry with a comment. The check reads the dex R8 produced, so it asserts the result; it cannot tell whether the keep rules themselves are the right ones. And a build signed with a throwaway key still passes it: signing stays the separate step above it.
+
+## Decisions written as `decisions.d/` fragments, folded in here in date order
+
+From 2026-10-28, a pull request records a new decision as ONE file under
+`decisions.d/` (`decisions.d/README.md` says how) and does not edit this file.
+`tools/roll_decisions.py` folds those fragments in below this heading, at the end
+of the file and in date order, and removes the fragment files. The roll is
+deliberate and is never run by a feature pull request. This heading is that
+tool's anchor: do not rename or remove it.
