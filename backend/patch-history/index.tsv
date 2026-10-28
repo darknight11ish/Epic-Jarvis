@@ -31,6 +31,7 @@ briefing.patch	briefing/a0305da.patch	a0305dabd58fb35767fc11f2cbc914701eaf2057	2
 briefing.patch	briefing/5350f7f.patch	5350f7f719f299875b3529c2304821dbf9176bce	2026-09-25T04:20:17Z	Morning briefing and the back-off for offers (backend)
 browser-engine.patch	browser-engine/39b759a.patch	39b759a47a0282cb2738f525f153fad88403f734	2026-09-29T18:47:05Z	Obscura review fixes: backend (switch, fence, limits, hidden text, rule 1)
 browser-engine.patch	browser-engine/cc915b7.patch	cc915b7886c815291cd20daca463d9965203c3d3	2026-09-29T17:43:09Z	Add the headless browser, Obscura, as a second browser Jarvis may choose
+chat-history.patch	chat-history/041fe41.patch	041fe41726dd559e344c8c03efaea431a992374b	2026-09-30T09:10:52Z	WIP: Money-Off, sayable topics, model_free; overnight tags backend in progress
 chat-history.patch	chat-history/878d28e.patch	878d28eab5982580248ceff2b7226d298be3d2de	2026-09-30T06:17:52Z	Fork from here: backend built (JARVIS-API 110), apps next
 chat-history.patch	chat-history/d42ede8.patch	d42ede85239584fdb8f7e68db54924ced2ce475d	2026-09-30T05:32:01Z	Design: quiz decks and Spanish practice; record owner answers and second-card list verdicts
 chat-history.patch	chat-history/d1d2515.patch	d1d2515f681cdee0e95267f3c64b41f2e2294df1	2026-09-25T01:15:59Z	Voice in both apps: interrupt by talking, "One moment.", "I heard you"
@@ -150,6 +151,9 @@ speed-record.patch	speed-record/0d1c469.patch	0d1c469e95d24e06fdf6221a06bc032bc0
 spending.patch	spending/86a889d.patch	86a889dfe8a64d2e796e0d53058dc4cfcd8aff2a	2026-09-30T06:07:36Z	Chat tags: audit fixes (focus, error sentences, names, counts, docs) and tagging while history is off
 support-chat.patch	support-chat/d85b573.patch	d85b573f18b1bf34b3b4d966e8e9f8d9dd02db60	2026-09-28T17:46:12Z	Customer-support chats, backend: the details card, the support last check, offers, the window
 tag-suggest.patch	tag-suggest/041fe41.patch	041fe41726dd559e344c8c03efaea431a992374b	2026-09-30T09:10:52Z	WIP: Money-Off, sayable topics, model_free; overnight tags backend in progress
+tasks.patch	tasks/faa6eca.patch	faa6eca196d9e0eeb247cfac94b9542921719029	2026-10-27T17:26:30-07:00	fix(hud): tasks.patch is what its generator builds - the two STATIC_ASSETS lines moved its hunk offsets
+tasks.patch	tasks/568c99c.patch	568c99ce24474182f2dcec18cfffa2d1a3caea91	2026-10-27T16:54:34-07:00	feat(hud): the Galaxy's eight looks are drawn in 3D, opening on the Planetary Orrery
+tasks.patch	tasks/258ef5a.patch	258ef5a42ad5e78d2cfab3662ef3f10b6dc29128	2026-10-27T13:30:45Z	feat(hud): the Galaxy looks and their switch, the dock order, the Live button and opt-in read-aloud speakers (#891)
 tasks.patch	tasks/1fb6ac0.patch	1fb6ac08f8d879fa2f296b1c320e18c25487164b	2026-10-25T07:04:09-07:00	refactor(patches): regenerate tasks.patch for the served HUD files
 tasks.patch	tasks/fd9ce2e.patch	fd9ce2e2a67aae45a50bc0981354e4a752088fac	2026-10-23T15:40:10-07:00	feat(hud): serve the browser's own files (closed-world static whitelist, PWA Slice 3a) (#763)
 tasks.patch	tasks/ac43030.patch	ac4303079849ec14ed60386f2deb8869570e38f5	2026-10-23T12:33:34-07:00	feat(status): persistent taint/rush latch in /api/status and #hud-safety (Seam A4) (#757)

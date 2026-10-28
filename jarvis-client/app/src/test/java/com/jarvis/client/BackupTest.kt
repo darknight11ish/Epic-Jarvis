@@ -1,5 +1,7 @@
 package com.jarvis.client
 
+import com.jarvis.client.data.Security
+import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.Backup
 import com.jarvis.client.net.JarvisJson
@@ -253,6 +255,37 @@ class BackupTest {
         // pressed, and its words are the model's own.
         assertTrue(plate.contains("Backup.CODE_WARNING"))
         assertTrue(model.contains("recovery code"))
+    }
+
+    @Test
+    fun theOneTimeCodeIsCountedWhileItIsOnScreenAndTheCaptureBlockFollows() {
+        // P-3 (privacy audit 2026-10-27): the recovery code is the whole key to
+        // a backup and Jarvis keeps no copy, so while it is drawn the screen
+        // must not be capturable. MainActivity asks exactly this
+        // (`Backup.codeShown.collectAsState().value > 0` ->
+        // SecurityRules.blockScreenCapture's `codeShown`), so the counter is
+        // checked the way it is used.
+        val off = Security()
+        Backup.leaveCodeView()   // a stray leave must not push it below zero
+        assertEquals(0, Backup.codeShown.value)
+        assertFalse(
+            "the code is not on screen, and no setting blocks a capture",
+            SecurityRules.blockScreenCapture(off, codeShown = Backup.codeShown.value > 0),
+        )
+        Backup.enterCodeView()
+        assertEquals(1, Backup.codeShown.value)
+        assertTrue(
+            "the code is on screen and a capture is still allowed",
+            SecurityRules.blockScreenCapture(off, codeShown = Backup.codeShown.value > 0),
+        )
+        // Closed: back to what the settings say, immediately.
+        Backup.leaveCodeView()
+        assertEquals(0, Backup.codeShown.value)
+        assertFalse(SecurityRules.blockScreenCapture(off, codeShown = Backup.codeShown.value > 0))
+        // And the plate is what raises it, from the first frame to the last.
+        val plate = code(PLATE)
+        assertTrue("the dialog never raises the capture guard", plate.contains("Backup.enterCodeView()"))
+        assertTrue("the dialog never lowers it", plate.contains("Backup.leaveCodeView()"))
     }
 
     @Test

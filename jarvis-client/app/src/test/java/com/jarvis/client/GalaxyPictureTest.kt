@@ -15,6 +15,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
@@ -380,6 +381,74 @@ class GalaxyPictureTest {
         assertEquals(points, again)
     }
 
+    // ------------------------------- the TalkBack boxes do not cover each other ---
+
+    /** True when two axis-aligned squares of side [a] and [b], whose centres are
+     *  [dx], [dy] apart, share any area at all. */
+    private fun boxesCover(a: Float, b: Float, dx: Float, dy: Float): Boolean =
+        abs(dx) < (a + b) / 2f && abs(dy) < (a + b) / 2f
+
+    @Test
+    fun aDotsTalkBackBoxNeverCoversItsNeighbour() {
+        // 2026-10-27 accessibility audit, finding 7: the plate laid one fixed
+        // 48dp box on every dot of a picture whose names are ~18dp apart, so a
+        // box was covered two or three deep by the boxes drawn after it - and a
+        // finger exploring the picture only ever reaches the topmost node. The
+        // boxes now come from `semanticSides`, and this is the promise they make.
+        val cap = 132f // 48dp at ~2.75x: the size the plate used to use, now a ceiling
+        val grid = listOf(
+            screenDot("a", x = 0f, y = 0f, r = 6f),
+            screenDot("b", x = 18f, y = 0f, r = 6f),
+            screenDot("c", x = 36f, y = 0f, r = 6f),
+            screenDot("d", x = 9f, y = 16f, r = 6f),
+        )
+        val sides = GalaxyPicture.semanticSides(grid, cap)
+        assertEquals(grid.size, sides.size)
+        for (i in grid.indices) {
+            assertTrue("dot ${grid[i].id} got no box (${sides[i]})", sides[i] > 0f)
+            assertTrue("a box grew past its cap (${sides[i]} > $cap)", sides[i] <= cap + 1e-6f)
+        }
+        for (i in grid.indices) {
+            for (j in i + 1 until grid.size) {
+                assertFalse(
+                    "the boxes over ${grid[i].id} and ${grid[j].id} overlap: " +
+                        "${sides[i]} and ${sides[j]} at ${grid[j].x - grid[i].x},${grid[j].y - grid[i].y}",
+                    boxesCover(sides[i], sides[j], grid[j].x - grid[i].x, grid[j].y - grid[i].y),
+                )
+            }
+        }
+
+        // The real picture at the size the plate draws it: 48 names fitted to a
+        // 264dp-tall canvas at 2.75x, with the plate's 14dp padding.
+        val picture = GalaxyPicture.build(entitiesOf(case("cap")))
+        assertEquals(48, picture.dots.size)
+        val dots = GalaxyPicture.fit(picture, 726f, 726f, 38.5f)
+        val real = GalaxyPicture.semanticSides(dots, cap)
+        assertEquals(48, real.size)
+        var smallest = Float.MAX_VALUE
+        for (i in dots.indices) {
+            assertTrue("a real dot got no box: ${dots[i].id}", real[i] > 0f)
+            smallest = minOf(smallest, real[i])
+            for (j in i + 1 until dots.size) {
+                assertFalse(
+                    "the real picture's boxes over ${dots[i].id} and ${dots[j].id} overlap",
+                    boxesCover(real[i], real[j], dots[j].x - dots[i].x, dots[j].y - dots[i].y),
+                )
+            }
+        }
+        // And it is honest about WHY it is smaller than 48dp: the names really
+        // are that close together. If a future layout makes 48dp fit everywhere,
+        // this test's premise has changed and a reader should see it here.
+        assertTrue(
+            "the smallest real box is $smallest, not under the $cap cap - the picture is less dense than this test assumes",
+            smallest < cap,
+        )
+        // A lone dot has no neighbour to avoid, so it takes the whole cap.
+        val lone = GalaxyPicture.semanticSides(listOf(grid[0]), cap).single()
+        assertTrue("a lone dot did not take its whole cap ($lone)", abs(lone - cap) < 1e-6f)
+        assertEquals(emptyList<Float>(), GalaxyPicture.semanticSides(emptyList(), cap))
+    }
+
     // -------------------------------- the ring numbers the 48 names rely on ---
 
     @Test
@@ -576,6 +645,21 @@ class GalaxyPictureTest {
             plate.contains("Entities.pictureSaid(picture.dots.size, picture.connections)"),
         )
         assertTrue("a dot does not open its name from TalkBack", plate.contains("onOpen(dot.id)"))
+
+        // 2026-10-27 accessibility audit, finding 7 (4.1.2 / 2.5.8): a name with
+        // an action attached is not announced as a button unless the node says
+        // so, and a fixed 48dp box on a picture whose names are ~18dp apart was
+        // covered two or three deep by its siblings - so touch exploration only
+        // reached the last-drawn dot of a cluster.
+        assertTrue("a dot's node is not a button to TalkBack", plate.contains("role = Role.Button"))
+        assertTrue(
+            "the dot boxes are a fixed size again, not sized to their own dot",
+            plate.contains("GalaxyPictureData.semanticSides(dots, targetPx)"),
+        )
+        assertFalse(
+            "a dot's box went back to the fixed 48dp",
+            plate.contains(".size(DOT_TARGET)"),
+        )
 
         // The cap is honest: when the picture leaves names out, the plate says
         // so in the existing "Showing n of total" words rather than pretending

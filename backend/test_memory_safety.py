@@ -18,7 +18,25 @@ sys.path.insert(0, str(HERE))
 # in the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, explain
+import _base  # noqa: E402
+
+#: WHICH copy of the files this suite reads. The owner's install when
+#: `JARVIS_BACKEND` names one, `backend/` when the file is here, and
+#: otherwise the PUBLISHED BASE (`jarvis-backend/`, the state the whole
+#: patch stack left at its last re-take) - so the required backend job runs
+#: these checks for real instead of skipping the suite. backend/_base.py
+#: holds the rule; the line printed below says which folder answered.
+BASE = _base.folder("jarvis_extract.py")
+if BASE is not None:
+    BACKEND = BASE
+    _base.put_on_path(BASE)
+    _base.say(BACKEND, "jarvis_extract.py")
+
+
+def missing(*names):
+    """`_where.missing`, asked of the folder this run really reads."""
+    return _base.missing(BACKEND, *names)
 
 import jarvis_memory as M
 import jarvis_extract as X
@@ -131,21 +149,123 @@ def t_accept_retires_only_what_was_shown():
 
 
 # ------------------------------------------------------- 2. the embedder swap
+def _can_do_vectors(where):
+    """Can a vec0 table be created HERE at all? Asked of sqlite, not the store.
+
+    THE BRANCH MUST NOT BE CHOSEN BY THE THING UNDER TEST (2026-10-28).
+    `status()["vector_search"]` is itself one of the claims this suite checks, so
+    a store that answered True where nothing works - the exact failure
+    `_connect`'s docstring describes - would otherwise pick its own branch and be
+    judged by checks written for the other one. This probe asks sqlite directly,
+    on a throwaway database, and the test then compares the store's claim
+    against the answer. Measured, not assumed, on both sides.
+    """
+    c = sqlite3.connect(str(Path(where) / "vec-probe.db"))
+    try:
+        if not M.MemoryStore._load_vec(c):
+            return False
+        c.execute("CREATE VIRTUAL TABLE probe USING vec0("
+                  "id INTEGER PRIMARY KEY, embedding float[2])")
+        return True
+    except Exception:
+        return False
+    finally:
+        c.close()
+
+
 def t_embedder_swap_does_not_brick_writes():
+    """The model arrives after facts were already stored: writes keep working.
+
+    THE DEFECT THIS PINS (memory-safety.patch). A 256-dim stand-in was replaced
+    by a 384-dim model and `facts_vec` stayed DECLARED AT THE OLD WIDTH, because
+    the rebuild used DELETE where it needed DROP. Every later insert of a
+    differently sized vector then failed silently inside `_embed_rows`:
+    unembedded only ever climbed, `backfill_embeddings` returned 0 for ever, and
+    `status()` said "vector_search": true throughout. The fix is the
+    DROP-and-recreate in `_init`; this test is the control that keeps it.
+
+    WHICH HALF OF IT RUNS IS MEASURED, NOT ASSUMED (2026-10-28). The required
+    `backend` job installs no sqlite-vec - `ci.yml` says so twice, at :273 and
+    :803: "the memory ones (onnxruntime and the meaning model, sqlite-vec) are
+    left out on purpose - the suites use a hash embedder and must pass without
+    them". There `_load_vec` raises on `import sqlite_vec`, `_vec_ok` is False,
+    `facts_vec` is never created, and a check demanding `float[384]` in its DDL
+    cannot pass on ANY machine without the extension. Measured on 2026-10-28,
+    one tree, both ways: with sqlite-vec every check passes; without it the
+    three vector ones fail with exactly CI's detail - DDL "", "backfilled 0",
+    "4 unembedded" - which is the red this suite went and got when the base
+    fallback let it run in CI for the first time.
+
+    SO EACH CHECK ASKS THE BRANCH THIS MACHINE IS REALLY IN - MEASURED FROM
+    SQLITE IN `_can_do_vectors`, NEVER FROM THE STORE'S OWN CLAIM - AND SAYS
+    WHICH IN ITS OWN NAME. Without vectors the width invariant is still tested:
+    through the width the store now ENFORCES (`_usable_vector` against the new
+    dim), the claim `status()` makes about it, and the table it must not pretend
+    to have. That is the "a capability that reports itself available and does
+    nothing" rule `_connect`'s docstring was written for. No check is skipped
+    either way, the count is the same either way, and the line printed below
+    says out loud which half this machine ran, so a green line is never read as
+    a proof it did not earn.
+    """
     d = Path(tempfile.mkdtemp(prefix="jarvis-mem-"))
     db = d / "memory.db"
     s1 = M.MemoryStore(path=db, embedder=M.HashEmbedder())
-    for t in ("Mario runs Linux Mint", "Mario uses vim keybindings", "Mario drinks oat milk"):
-        s1.add_fact(t)
+    old_ids = [s1.add_fact(t) for t in ("Mario runs Linux Mint",
+                                        "Mario uses vim keybindings",
+                                        "Mario drinks oat milk")]
     before = s1.status()
 
     s2 = M.MemoryStore(path=db, embedder=Fake384())          # the model arrived
-    ddl = ""
-    with sqlite3.connect(db) as c:
+    st = s2.status()
+    # MEASURED, NOT ASSUMED - and never from `st["vector_search"]`, which is a
+    # claim under test below (see _can_do_vectors).
+    vec = _can_do_vectors(d)
+    print("      vectors in use here: "
+          + ("yes - the rebuild and the backfill below are the vector ones"
+             if vec else
+             "NO (no sqlite-vec, as in the required backend job) - the checks below "
+             "prove the store says so and still works, NOT that facts_vec was rebuilt"))
+
+    c = sqlite3.connect(db)
+    try:
         row = c.execute("SELECT sql FROM sqlite_master WHERE name='facts_vec'").fetchone()
         ddl = row[0] if row else ""
-    check("facts_vec is rebuilt at the new width", "float[384]" in ddl,
-          f"DDL still says: {ddl}")
+        # Every vector of the old model is stale whichever half runs: this
+        # UPDATE is outside `if self._vec_ok` in _init, and it is what makes
+        # the rebuild mean something rather than what the rebuild does.
+        stale = [c.execute("SELECT embedded FROM facts WHERE id=?",
+                           (i,)).fetchone()[0] for i in old_ids]
+        name_now = c.execute("SELECT v FROM meta WHERE k='embedder'").fetchone()[0]
+    finally:
+        c.close()
+
+    # THE CLAIM, AGAINST THE MEASURED ANSWER, WHICHEVER BRANCH IS TAKEN. This is
+    # the check that catches a store saying True where nothing works - the
+    # failure _connect()'s docstring records ("a capability that reports itself
+    # available and does nothing"), and the one a branch chosen from that same
+    # claim could never see.
+    check("status reports vector search only where a vec0 table can be made",
+          st["vector_search"] == vec,
+          f"status says {st['vector_search']!r}, and vec0 "
+          f"{'can' if vec else 'cannot'} be made here")
+
+    if vec:
+        check("facts_vec is rebuilt at the new width", "float[384]" in ddl,
+              f"DDL still says: {ddl}")
+    else:
+        # No sqlite-vec: there must be no table at all (the claim is checked
+        # above). The WIDTH is still checked: the store must now expect 384
+        # floats and refuse the old 64, which is the half of the defect a
+        # machine without the extension can measure.
+        check("the store expects the new width with no table to hold it",
+              not ddl
+              and M._usable_vector([0.1] * 384, int(s2.embedder.dim))
+              and not M._usable_vector([0.1] * 64, int(s2.embedder.dim)),
+              f"DDL {ddl!r}, dim {s2.embedder.dim}")
+
+    check("the model change is recorded and every old vector is marked stale",
+          name_now == Fake384.name and stale == [0, 0, 0],
+          f"meta says {name_now!r}, embedded flags {stale}")
 
     ok, err = True, ""
     try:
@@ -155,9 +275,20 @@ def t_embedder_swap_does_not_brick_writes():
     check("a write after the model arrives succeeds", ok, err)
 
     n = s2.backfill_embeddings()
-    check("backfill re-embeds the rows stored before the model", n >= 3, f"backfilled {n}")
-    check("nothing is left unembedded", s2.status()["unembedded"] == 0,
-          f"{s2.status()['unembedded']} unembedded")
+    if vec:
+        check("backfill re-embeds the rows stored before the model", n >= 3,
+              f"backfilled {n}")
+        check("nothing is left unembedded", s2.status()["unembedded"] == 0,
+              f"{s2.status()['unembedded']} unembedded")
+    else:
+        # Nothing CAN be embedded without the extension. The honest answers are
+        # "no progress claimed" and a count that says every fact is waiting -
+        # never a 0 that would read as "all embedded".
+        check("backfill claims no progress it did not make, with no vector store",
+              n == 0, f"backfilled {n}")
+        check("every fact is reported unembedded rather than claimed embedded",
+              s2.status()["unembedded"] == s2.status()["facts"] == before["facts"] + 1,
+              f"{s2.status()['unembedded']} unembedded of {s2.status()['facts']} facts")
     check("CONTROL no facts were lost in the swap",
           s2.status()["facts"] == before["facts"] + 1)
     shutil.rmtree(d, ignore_errors=True)

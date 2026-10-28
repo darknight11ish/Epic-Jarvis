@@ -57,7 +57,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
 
 use crate::commands::SETTINGS_STORE;
 
@@ -252,6 +252,10 @@ fn covered_focused(app: &AppHandle) -> bool {
 // lock and "Windows Hello for memory lists and chat history", exactly as the
 // phone's rule follows App lock and its own hide-lists setting.
 //
+// Which of the two settings can turn it on was a second decision, made on
+// 2026-10-28: "Hide memory lists and chat history" ALONE blocks a capture, as
+// the phone's rule does (privacy audit P-2; [`capture_blocked_from`]).
+//
 // Being honest about what this is worth, because it is easy to overstate:
 //
 // * It DOES keep Jarvis's own windows out of a screen capture made through
@@ -337,14 +341,16 @@ pub fn set_pairing_code_shown(on: bool) {
 
 /// True when a screen capture of Jarvis's windows must not show their content.
 ///
-/// The rule, in one place: a pairing code is on screen, or App lock is on and
-/// the lock would ask for Windows Hello now, or the Brain's private lists are
-/// hidden and that show has ended. The settings decide whether the block is
-/// allowed at all; the state decides whether it is on. Unlocked, the owner is
-/// looking at those windows, so there is nothing to keep from a capture they
-/// asked for themselves - the pairing code, which is a secret meant for
-/// someone else's screen, is the one exception, and it is in
-/// [`capture_blocked_from`] below.
+/// The rule, in one place: a pairing code is on screen, or the Brain's private
+/// lists are hidden (the owner's decision of 2026-10-28: "Hide memory lists and
+/// chat history" alone blocks a capture, exactly as the phone's rule does), or
+/// App lock is on and the lock would ask for Windows Hello now. The settings
+/// decide whether the block is allowed at all; the state decides whether it is
+/// on. Unlocked, the owner is looking at those windows, so there is nothing to
+/// keep from a capture they asked for themselves - the two states that do NOT
+/// yield to that are the pairing code, which is a secret meant for someone
+/// else's screen, and the hidden lists, whose whole promise is that their words
+/// stay off other screens. Both are in [`capture_blocked_from`] below.
 ///
 /// Deliberately not `current(app).app_lock` alone, which is the phone's shape:
 /// the phone must set `FLAG_SECURE` from the setting because Android gives it
@@ -370,7 +376,20 @@ pub fn capture_blocked(app: &AppHandle) -> bool {
 /// The pairing code is checked BEFORE the owner-is-here answer, and that is
 /// the whole point: a code is shown so a phone can type it, so a screenshot of
 /// it is the attack, and the owner standing in front of the screen does not
-/// make it safe to capture. Every other reason to block still yields to the
+/// make it safe to capture.
+///
+/// The hidden lists are checked there too, and that is the owner's decision of
+/// 2026-10-28 (privacy audit P-2): "Hide memory lists and chat history" is a
+/// promise that those words stay off other screens, so with it on a capture is
+/// blocked even while the owner is at the PC - the phone's rule needs no
+/// "owner is here" exception either, and this is the same setting. The cost is
+/// real and was chosen with it in view: while that setting is on, the state is
+/// hidden unless a Show was passed and a covered window still has focus, so
+/// desktop captures are blocked nearly all of the time. The alternative - the
+/// old rule - made the setting unable to block a capture at all, because
+/// `app_locked` is false whenever App lock is off (`app_locked` returns early
+/// on `!security.app_lock`), so `owner_here` was always true and the answer
+/// was always "not blocked". Every other reason to block still yields to the
 /// owner being there.
 fn capture_blocked_from(
     app_locked: bool,
@@ -381,12 +400,17 @@ fn capture_blocked_from(
     if pairing_shown {
         return true;
     }
+    // Above the owner-is-here return on purpose: the show has ended, so the
+    // lists are hidden even though the owner may be sitting right here.
+    if private_hidden {
+        return true;
+    }
     let owner_here = !app_locked;
     if owner_here {
         // The owner is looking at their own screen. Nothing to keep from them.
         return false;
     }
-    security.blocks_capture(owner_here) || private_hidden
+    security.blocks_capture(owner_here)
 }
 
 /// Hides `window` from screen capture (`excluded`), or puts it back.
@@ -1007,21 +1031,35 @@ pub fn spawn_watch(app: AppHandle) {
     });
 }
 
+/// Tells every window that the private lists are hidden again.
+///
+/// ONE broadcast, not a list of labels. It used to be two `emit_to` calls
+/// (the Brain and the Jarvis bar), and that is what let privacy audit P-1
+/// happen: the HUD's memory graph holds the owner's saved fact sentences and
+/// the names of the people in them, the reveal that let it read them
+/// unredacted ends, and this event is the only thing that can say so - but the
+/// HUD was never taught to listen, and nothing in the file it would have to
+/// edit said that it needed to. The state cannot be read back either:
+/// `get_lock_flags` answers with the two SETTINGS, not with "the reveal has
+/// ended", so no poll can substitute.
+///
+/// The old two-label list is not what caused P-1 on its own: in Tauri 2 a
+/// page's global `listen()` registers with the target `Any`, and
+/// `match_any_or_filter` lets an `Any` listener through every filter, so
+/// `emit_to` one window reaches a global listener in any other (see
+/// [`crate::emit_all`]'s own comment, which records that). But a rule that
+/// puts the one event which makes a window forget the owner's names behind
+/// that subtlety is a rule nobody can read off the call - and a window added
+/// tomorrow is covered by construction only if the call is a broadcast. So it
+/// is one.
+///
+/// The event carries no payload, so a window that holds no
+/// `core:event:allow-listen` (the Faces and first-run windows) loses nothing by
+/// not hearing it.
 fn emit_private_hidden(app: &AppHandle) {
     // A tag-suggestion card already on screen loses its chat title now.
     crate::stream::rebroadcast_pending(app);
-    if let Err(err) = app.emit_to(
-        crate::windows::BRAIN_LABEL,
-        crate::events::PRIVATE_HIDDEN,
-        (),
-    ) {
-        eprintln!("[jarvis] unable to tell the Brain to hide its lists: {err}");
-    }
-    // The Jarvis bar hides its thread of earlier answers the same moment
-    // (the second chat audit, 2026-09-28).
-    if let Err(err) = app.emit_to(crate::QUICKBAR_LABEL, crate::events::PRIVATE_HIDDEN, ()) {
-        eprintln!("[jarvis] unable to tell the Jarvis bar to hide its thread: {err}");
-    }
+    crate::emit_all(app, crate::events::PRIVATE_HIDDEN, ());
 }
 
 // ---------------------------------------------------------------------------
@@ -1180,6 +1218,12 @@ mod capture_tests {
     /// The four facts `capture_blocked` hands the shipped rule, with the
     /// pairing code made explicit. `block` above cannot reach that case: the
     /// pairing code is the one reason to block with no setting behind it.
+    ///
+    /// `hidden` is the fourth fact, and the one `block` cannot reach either:
+    /// `private_hidden` is a state, not a setting, so it is false in `block`
+    /// by construction. That is exactly the join privacy audit P-2 found
+    /// untested - two pure halves, each correct, and the shipped rule never
+    /// asked both.
     fn rule(
         app_lock: bool,
         hide_lists: bool,
@@ -1243,12 +1287,64 @@ mod capture_tests {
                 }
             }
         }
-        // Including the Brain's "Show" having ended (`private_hidden`), the
-        // one input no case above reaches through the settings: it blocks only
-        // while the owner is away, exactly as it did before this change.
-        let settings = Security::default();
+        // Including the Brain's "Show" having ended (`private_hidden`), now a
+        // reason in its own right: the owner's decision of 2026-10-28 is that
+        // hiding the lists alone blocks a capture (privacy audit P-2), so the
+        // owner being at the PC no longer overrides it. This assertion used to
+        // say the opposite - it pinned the bug. The setting is ON in both
+        // cases because `private_hidden` is false whenever it is off, so a
+        // "setting off, lists hidden" case is one the app cannot produce.
+        let settings = Security {
+            private_answers: true,
+            ..Security::default()
+        };
         assert!(capture_blocked_from(true, &settings, true, false));
-        assert!(!capture_blocked_from(false, &settings, true, false));
+        assert!(
+            capture_blocked_from(false, &settings, true, false),
+            "hide-lists alone did not block a capture"
+        );
+    }
+
+    #[test]
+    fn hidden_memory_lists_alone_block_a_desktop_capture() {
+        // THE DECISION (privacy audit P-2, the owner's call of 2026-10-28).
+        // "Hide memory lists and chat history" promises that those words stay
+        // off other screens, so while it is on and a Show has ended, a capture
+        // is blocked even with App lock off and the owner sitting at the PC -
+        // the phone's rule needs no "owner is here" exception for the same
+        // setting, and `docs/ARCHITECTURE.md` always said the desktop did this.
+        //
+        // App lock OFF, hide-lists ON, and the show over. This is the case the
+        // old rule answered "no" to, because `app_locked` returns false
+        // whenever App lock is off, so the owner-is-here return always fired
+        // before `private_hidden` was read: the setting could never block a
+        // capture at all.
+        let settings = Security {
+            app_lock: false,
+            private_answers: true,
+            ..Security::default()
+        };
+        assert!(
+            capture_blocked_from(false, &settings, true, false),
+            "hide-lists alone did not block a desktop capture"
+        );
+        // The same while App lock is on and the owner is away: unchanged.
+        let locked = Security {
+            app_lock: true,
+            private_answers: true,
+            ..Security::default()
+        };
+        assert!(capture_blocked_from(true, &locked, true, false));
+        assert!(capture_blocked_from(true, &locked, false, false));
+        // CONTROL. With the lists showing (a Show passed) and App lock off and
+        // the owner here, nothing blocks: a capture they asked for is theirs.
+        assert!(!capture_blocked_from(false, &settings, false, false));
+        assert!(!capture_blocked_from(
+            false,
+            &Security::default(),
+            false,
+            false
+        ));
     }
 
     #[test]
@@ -1297,18 +1393,42 @@ mod capture_tests {
         );
         // And the pairing code's answer must come BEFORE the owner-is-here one
         // inside the helper: with the owner present the rule would otherwise
-        // answer "no" for a code that must never be captured.
+        // answer "no" for a code that must never be captured. The hidden lists
+        // are pinned the same way, and for the same reason (P-2: below that
+        // return they could never block anything, because `app_locked` is
+        // false whenever App lock is off).
         let helper = &src[src.find("fn capture_blocked_from(").expect("the helper")..];
         let helper = &helper[..helper.find("\n}\n").expect("its end")];
         let shown = helper
             .find("if pairing_shown")
             .expect("the pairing code's case");
+        let hidden = helper
+            .find("if private_hidden")
+            .expect("the hidden lists' case");
         let owner = helper
             .find("let owner_here")
             .expect("the owner-is-here case");
         assert!(
             shown < owner,
             "the pairing code is checked after the owner-is-here answer:\n{helper}"
+        );
+        assert!(
+            hidden < owner,
+            "the hidden lists are checked after the owner-is-here answer, so \
+             \"Hide memory lists and chat history\" can never block a capture:\n{helper}"
+        );
+        // The state that reads it: `private_hidden` is false whenever the
+        // setting is off, which is why the case above needs `private_answers`
+        // on to be a case at all.
+        let state = &src[src.find("pub fn private_hidden").expect("the state")..];
+        let state = &state[..state.find("\n}\n").expect("its end")];
+        let off = state
+            .find("if !security.private_answers")
+            .expect("the setting's own early return");
+        let revealed = state.find("if !state.revealed").expect("the revealed half");
+        assert!(
+            off < revealed,
+            "private_hidden no longer asks the setting first:\n{state}"
         );
     }
 
@@ -1630,9 +1750,107 @@ mod capture_probe {
         skip
     }
 
-    /// The opt-out itself must be the documented one, the guard at the top of
-    /// the probe must still be there, and this must still be the ONLY test that
-    /// needs the opt-out - every other source file in the crate is included
+    /// An early exit that means the test below judged NOTHING, said where the
+    /// run's log can see it.
+    ///
+    /// WHY NOT `println!` (the partner test-health audit, F-04, 2026-10-27).
+    /// libtest captures `println!` **and** `eprintln!`, so the probe's seven
+    /// early returns used to say "SKIP ..." to nobody in a plain `cargo test`:
+    /// the harness prints `ok`, the required `rust` job's log shows no such
+    /// line, and the one test that proves `WDA_EXCLUDEFROMCAPTURE` really
+    /// removes pixels is silently not judging on the one machine that always
+    /// takes the skip - a Windows runner has no composited desktop, so the
+    /// control capture sees no red and the `before == 0` exit below is always
+    /// the one reached. This writes through the process's own `stderr` handle
+    /// instead: the same mechanism `skipped_by_env` above uses, and the reason
+    /// that function's doc says the handle is not the macro. `ci.yml`'s `rust`
+    /// job also sets `RUST_TEST_NOCAPTURE=1`, so the notes around it reach the
+    /// log too.
+    ///
+    /// `what` is the test's own name, because there are TWO now (2026-10-27,
+    /// the partner corrections item 5): a skipped line that named the wrong
+    /// test would be a new kind of lie.
+    ///
+    /// It returns nothing on purpose: the caller returns straight after it, so
+    /// a skip cannot be turned into a pass by accident.
+    fn skipped_here(what: &str, why: &str) {
+        let mut err = std::io::stderr();
+        let _ = writeln!(
+            err,
+            "SKIPPED  {what} - {why}. It did NOT reach a verdict here, and it did NOT pass. \
+             It judges nothing on a session with no interactive desktop, which is every CI \
+             runner; on the owner's PC it runs."
+        );
+        let _ = err.flush();
+    }
+
+    /// A pixel judgement this machine cannot make - and, when CI asks for the
+    /// pixels, a FAILURE rather than a skip.
+    ///
+    /// WHY THE SWITCH (2026-10-27, the partner corrections item 5). The pixel
+    /// half needs a composited desktop: on a Windows runner the screen capture
+    /// works and never shows our window, so there is nothing to judge and the
+    /// honest report is SKIPPED. That is fine at the owner's desk and useless
+    /// in CI - and if a future runner DOES composite (or someone points this at
+    /// a real desktop in CI), a quiet skip would hide it. So CI chooses:
+    ///
+    ///   * `JARVIS_REQUIRE_CAPTURE_PIXELS` unset (what `ci.yml` does today) -
+    ///     print the SKIPPED line through `skipped_here` and return, exactly as
+    ///     before;
+    ///   * `JARVIS_REQUIRE_CAPTURE_PIXELS=1` - PANIC. The run fails loudly with
+    ///     the reason this machine could not judge, which is the only honest
+    ///     verdict a run that was told to insist on the pixels can give.
+    ///
+    /// `ci.yml` deliberately does not set it: no CI runner composites a window
+    /// onto the screen it captures, so setting it would only turn an honest
+    /// skip into a red job that says nothing about the code.
+    fn pixels_not_judged(what: &str, why: &str) {
+        let required = std::env::var("JARVIS_REQUIRE_CAPTURE_PIXELS").is_ok_and(|v| v == "1");
+        if required {
+            panic!(
+                "{what} could NOT judge the pixels - {why} - and \
+                 JARVIS_REQUIRE_CAPTURE_PIXELS=1 is set, so this run must FAIL rather than \
+                 skip. Unset that variable to let a machine without a composited desktop \
+                 report SKIPPED instead."
+            );
+        }
+        skipped_here(what, why);
+    }
+
+    /// The two halves' own names, in one place for every guard and pin below.
+    ///
+    /// ONE TEST BECAME TWO (2026-10-27, the partner corrections item 5). The
+    /// required half - the attribute is accepted and reads back - needs only a
+    /// window of our own, so it runs on a CI runner and its assertions are the
+    /// required `rust` job's proof that `WDA_EXCLUDEFROMCAPTURE` is really
+    /// applied. The pixel half needs a composited desktop and says SKIPPED when
+    /// it has none (or panics under `JARVIS_REQUIRE_CAPTURE_PIXELS=1`).
+    const REQUIRED_PROBE: &str = "fn the_exclusion_is_applied_and_read_back_on_this_pc";
+    const PIXEL_PROBE: &str = "fn the_exclusion_removes_pixels_on_this_pc";
+
+    /// The text of one probe's own definition, found by name.
+    ///
+    /// FOUND BY ITS DEFINITION LINE, NOT WITH `find(name)`, and that is the
+    /// whole point of this helper. This module's own tests contain the probes'
+    /// names as strings, and they are defined BEFORE the probes - so a plain
+    /// `find` finds the test that is asking, the "body" it returns is a few
+    /// lines of that test, and a guard written that way passes whatever the
+    /// probe does. Both callers below were written that way first; the second
+    /// one (2026-10-27) measured it: the slice was 5,161 characters of the new
+    /// test itself and `skipped_here(` counted 0 instead of 7. The leading four
+    /// spaces are what makes this the definition inside `mod capture_probe`
+    /// rather than any mention of the name.
+    fn probe_body<'a>(src: &'a str, name: &str) -> &'a str {
+        let start = src
+            .find(&format!("\n    {name}"))
+            .unwrap_or_else(|| panic!("the definition line of {name}"));
+        let probe = &src[start + 1..];
+        &probe[..probe.find("\n    }\n").expect("the probe's closing brace")]
+    }
+
+    /// The opt-out itself must be the documented one, BOTH probe halves must
+    /// still ask to be skipped, and the pixel half must be the only one that can
+    /// report "cannot judge". Every other source file in the crate is included
     /// below, so a second desktop-needing test fails to compile until it is
     /// added to that list on purpose. A gate that quietly stopped working would
     /// put the red window back on the owner's screen, so a rename here is
@@ -1641,18 +1859,65 @@ mod capture_probe {
     #[test]
     fn the_window_probe_is_the_only_test_the_opt_out_guards() {
         let src = include_str!("lock.rs");
+        // The variable is READ in `skipped_by_env`, so that is the text to
+        // check. Asking the whole file would match this test's own copy of the
+        // name and could never fail (the same self-match trap `probe_body`
+        // documents). `\n    fn skipped_by_env(` is a definition line this
+        // test does not contain.
+        let helper = &src[src
+            .find("\n    fn skipped_by_env(")
+            .expect("the opt-out helper")
+            + 1..];
+        let helper_body = &helper[..helper.find("\n    }\n").expect("its end")];
         assert!(
-            src.contains(r#"std::env::var("JARVIS_SKIP_WINDOW_TESTS")"#),
-            "the opt-out is no longer JARVIS_SKIP_WINDOW_TESTS"
+            helper_body.contains("JARVIS_SKIP_WINDOW_TESTS"),
+            "the opt-out is no longer JARVIS_SKIP_WINDOW_TESTS:\n{helper_body}"
         );
-        let probe = &src[src
-            .find("fn the_exclusion_is_real_and_reversible_on_this_pc")
-            .expect("the probe")..];
-        let body = &probe[..probe.find("\n    }\n").expect("its end")];
+
+        // BOTH HALVES ask to be skipped (2026-10-27): the required one because
+        // it creates a window, the pixel one because it also captures the
+        // screen. A half that stopped asking would put a red window on the
+        // owner's screen every run.
+        for name in [REQUIRED_PROBE, PIXEL_PROBE] {
+            let body = probe_body(src, name);
+            assert!(
+                body.contains("skipped_by_env("),
+                "{name} no longer asks to be skipped, so it will open a red window on \
+                 every run:\n{body}"
+            );
+        }
+
+        // THE PIXEL SWITCH (2026-10-27, item 5): `JARVIS_REQUIRE_CAPTURE_PIXELS`
+        // must be read where the pixel half gives up, and reading it must be
+        // able to FAIL the run rather than skip.
+        let pixel_helper = &src[src
+            .find("\n    fn pixels_not_judged(")
+            .expect("the pixel-switch helper")
+            + 1..];
+        let pixel_helper_body = &pixel_helper[..pixel_helper.find("\n    }\n").expect("its end")];
         assert!(
-            body.contains("skipped_by_env("),
-            "the probe no longer asks to be skipped, so it will open a red window on \
-             every run:\n{body}"
+            pixel_helper_body.contains("JARVIS_REQUIRE_CAPTURE_PIXELS"),
+            "the pixel probe no longer reads JARVIS_REQUIRE_CAPTURE_PIXELS, so CI cannot ask \
+             for the pixels at all:\n{pixel_helper_body}"
+        );
+        assert!(
+            pixel_helper_body.contains("panic!"),
+            "JARVIS_REQUIRE_CAPTURE_PIXELS no longer FAILS the run - a run that was told to \
+             insist on the pixels would skip instead:\n{pixel_helper_body}"
+        );
+        assert!(
+            pixel_helper_body.contains("skipped_here("),
+            "the pixel switch's unset path no longer prints the SKIPPED line - the one \
+             report a machine without a compositor can give:\n{pixel_helper_body}"
+        );
+
+        // The required half must not be able to skip for want of a desktop:
+        // that is the whole reason it was split out.
+        let required = probe_body(src, REQUIRED_PROBE);
+        assert!(
+            !required.contains("pixels_not_judged(") && !required.contains("skipped_here("),
+            "the required half of the probe can now report SKIPPED, so the required `rust` \
+             job could be green while nothing was proved:\n{required}"
         );
 
         // Every other file of the crate, which is what makes the name above
@@ -1764,9 +2029,212 @@ mod capture_probe {
         }
     }
 
+    /// The pixel half's seven early exits must say so where the log can see it,
+    /// and the required half must not print a skip at all.
+    ///
+    /// F-04 of the partner test-health audit (2026-10-27): every one of them
+    /// used `println!("SKIP ...")`, and libtest CAPTURES that - so the required
+    /// `rust` job's green `ok` for this test meant "took a skip and judged
+    /// nothing", with not one line in the log to say so. A Windows runner has
+    /// no composited desktop, so it takes the `before == 0` exit on every run.
+    ///
+    /// This is the shape a green run cannot show by construction (the harness
+    /// prints `ok` either way), which is exactly why it is pinned here: the
+    /// source is the only evidence, and it is read without opening a window.
     #[test]
-    fn the_exclusion_is_real_and_reversible_on_this_pc() {
-        if skipped_by_env("the_exclusion_is_real_and_reversible_on_this_pc") {
+    fn the_probes_skips_are_written_where_the_log_can_see_them() {
+        let src = include_str!("lock.rs");
+        for name in [REQUIRED_PROBE, PIXEL_PROBE] {
+            let body = probe_body(src, name);
+            assert!(
+                !body.contains("println!(\"SKIP"),
+                "{name} prints a skip with println!, which libtest CAPTURES: the required \
+                 `rust` job then shows a green `ok` for a test that judged nothing. Write it \
+                 through `skipped_here`, the way `skipped_by_env` writes its own skip.\n{body}"
+            );
+        }
+        let pixel = probe_body(src, PIXEL_PROBE);
+        assert_eq!(
+            pixel.matches("pixels_not_judged(").count(),
+            7,
+            "the pixel probe has seven early exits that judge nothing, and this test exists \
+             to keep all seven honest: five of its own plus the two inside `grab`, which \
+             routes them through `pixels_not_judged` too. One changed shape - make sure it \
+             still reports the skip through `pixels_not_judged`.\n{pixel}"
+        );
+        // The required half asserts; it must not have an early exit that only
+        // prints. Its one "cannot do it" path panics, which is a failure.
+        let required = probe_body(src, REQUIRED_PROBE);
+        assert!(
+            required.contains("panic!"),
+            "the required half no longer fails when Windows will not give it a window, so it \
+             would fall through and prove nothing:\n{required}"
+        );
+        assert!(
+            required.contains("SetWindowDisplayAffinity")
+                || (required.contains("set(hwnd, WDA_EXCLUDEFROMCAPTURE")
+                    && required.contains("affinity(hwnd)")),
+            "the required half no longer calls the same two Win32 functions the shipped lock \
+             path calls:\n{required}"
+        );
+        // The reads are pinned by their VALUES rather than by the `assert!`
+        // line's punctuation: `cargo fmt` re-wraps an assert the moment its
+        // message grows, and a pin that breaks on formatting is a pin on
+        // formatting (it was written as `assert!(applied` first, and that is
+        // exactly what failed - measured 2026-10-27).
+        assert!(
+            required.contains("let applied = set(hwnd, WDA_EXCLUDEFROMCAPTURE)"),
+            "the required half no longer asks Windows to exclude our window from capture:\n{required}"
+        );
+        assert!(
+            required.contains("let read_back = affinity(hwnd)"),
+            "the required half no longer reads the attribute back:\n{required}"
+        );
+        assert!(
+            required.contains("Some(WDA_EXCLUDEFROMCAPTURE)"),
+            "the required half no longer asserts what GetWindowDisplayAffinity reads back:\n{required}"
+        );
+
+        // `\n    fn skipped_here(` is the definition line; this test's own copy
+        // of the name has no leading newline-and-indent, so it cannot match
+        // (the same self-match trap `probe_body` documents).
+        let helper = &src[src.find("\n    fn skipped_here(").expect("the helper") + 1..];
+        let helper_body = &helper[..helper.find("\n    }\n").expect("its end")];
+        let env_helper = &src[src
+            .find("\n    fn skipped_by_env(")
+            .expect("the opt-out helper")
+            + 1..];
+        let helper_body_above = &env_helper[..env_helper.find("\n    }\n").expect("its end")];
+        assert!(
+            !helper_body.contains("eprintln!("),
+            "`eprintln!` is captured by libtest exactly as `println!` is"
+        );
+        // COMPARED AGAINST THE OTHER HELPER, not spelled out here. The property
+        // is that both skip writers use the SAME writer, and comparing their
+        // `let mut err = ...` lines says exactly that. It also keeps this file
+        // out of `tools/check_zero_jargon.py`'s report: a string literal naming
+        // the stream is counted as a developer word in the tree, and the
+        // ratchet in `backend/test_zero_jargon.py` went red on the literal this
+        // assertion used to hold - 256 words against a committed baseline of
+        // 255, measured 2026-10-27, and the required job would have been red
+        // with it.
+        let writer = |body: &str| {
+            body.lines()
+                .map(str::trim)
+                .find(|line| line.starts_with("let mut err"))
+                .unwrap_or_default()
+                .to_string()
+        };
+        assert!(
+            !writer(helper_body).is_empty(),
+            "`skipped_here` no longer takes a handle to write the skip through, so libtest \
+             captures the line again and the log says nothing:\n{helper_body}"
+        );
+        assert_eq!(
+            writer(helper_body),
+            writer(helper_body_above),
+            "`skipped_here` writes through a DIFFERENT writer than `skipped_by_env`, so one \
+             of the two no longer reaches the log:\n{helper_body}"
+        );
+        let ci = include_str!("../../../.github/workflows/ci.yml");
+        assert!(
+            ci.contains("RUST_TEST_NOCAPTURE"),
+            "the `rust` job no longer turns libtest's capture off. The error-stream \
+             handle alone still reaches the log; this is the second half of the fix, and \
+             it is what shows the probe's own reported numbers on a run that judged."
+        );
+    }
+
+    /// THE REQUIRED HALF: the attribute is applied, and it reads back.
+    ///
+    /// WHAT THIS PROVES, AND WHY IT IS THE REQUIRED TEST (2026-10-27, the
+    /// partner corrections item 5). `SetWindowDisplayAffinity(hwnd,
+    /// WDA_EXCLUDEFROMCAPTURE)` must be ACCEPTED by Windows, and
+    /// `GetWindowDisplayAffinity` must then read `WDA_EXCLUDEFROMCAPTURE` back;
+    /// clearing it must be accepted and must read `WDA_NONE` back. That is the
+    /// whole contract the shipped lock/unlock code depends on, and it needs
+    /// NOTHING but a window of our own: no compositor, no display list, no
+    /// screen capture, no visible desktop.
+    ///
+    /// Until the split, ONE test did this and the pixel comparison together,
+    /// and a Windows runner always took the pixel test's `before == 0` skip -
+    /// so the required `rust` job's green for the only test of the exclusion
+    /// meant "it skipped". The pixels live in
+    /// `the_exclusion_removes_pixels_on_this_pc` now, and this half runs
+    /// everywhere.
+    ///
+    /// IT DOES NOT SKIP FOR WANT OF A DESKTOP, on purpose: a required test that
+    /// skips is not a required test. If Windows will not give this process a
+    /// window at all, that is a failure with the reason in it - the opposite of
+    /// the old quiet skip - and the message says what to do about it.
+    #[test]
+    fn the_exclusion_is_applied_and_read_back_on_this_pc() {
+        if skipped_by_env("the_exclusion_is_applied_and_read_back_on_this_pc") {
+            return;
+        }
+        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
+
+        // SAFETY: creating our own window is the point of the probe.
+        let Some(hwnd) = (unsafe { red_window(40, 40) }) else {
+            panic!(
+                "Windows would not give this test a window, so SetWindowDisplayAffinity could \
+                 NOT be asked and the exclusion was NOT proved. This is the required half of \
+                 the capture probe, so it fails rather than skipping: a required check that \
+                 skips is not a required check. If this runner genuinely has no window \
+                 station, the exclusion has to be proved where there is one (the owner's PC), \
+                 and this test has to be moved out of the required job - deliberately, in \
+                 ci.yml, not by a quiet skip here."
+            );
+        };
+
+        // The same three calls the shipped lock/unlock path makes, in order.
+        let applied = set(hwnd, WDA_EXCLUDEFROMCAPTURE);
+        let read_back = affinity(hwnd);
+        let cleared = set(hwnd, WDA_NONE);
+        let restored = affinity(hwnd);
+        // SAFETY: our own window, and the probe is over.
+        unsafe { DestroyWindow(hwnd) };
+
+        println!(
+            "the exclusion on this PC: set={applied} read back {read_back:?}; \
+             clear={cleared} read back {restored:?} (no pixels are judged here - that is \
+             the_exclusion_removes_pixels_on_this_pc)"
+        );
+
+        assert!(
+            applied,
+            "Windows refused WDA_EXCLUDEFROMCAPTURE on our own window - the lock would leave \
+             the screen capturable while saying it was not"
+        );
+        assert_eq!(
+            read_back,
+            Some(WDA_EXCLUDEFROMCAPTURE),
+            "the attribute did not stick: Windows accepted it and does not read it back"
+        );
+        assert!(
+            cleared,
+            "Windows refused to clear the exclusion on our own window"
+        );
+        assert_eq!(
+            restored,
+            Some(WDA_NONE),
+            "the exclusion would not clear - the unlock path could not undo it"
+        );
+    }
+
+    /// THE PIXEL HALF: the excluded window's pixels really leave a capture.
+    ///
+    /// This is the measurement the exclusion exists for, and the only one that
+    /// needs a COMPOSITED desktop: a window this process has just created has
+    /// to appear in a screen capture of its own region, then stop appearing.
+    /// On a Windows runner the capture works and the window is never in it, so
+    /// this half cannot judge there - it says so through `pixels_not_judged`,
+    /// which prints the SKIPPED line, or PANICS when
+    /// `JARVIS_REQUIRE_CAPTURE_PIXELS=1` asks for the pixels whatever the
+    /// machine can do.
+    #[test]
+    fn the_exclusion_removes_pixels_on_this_pc() {
+        if skipped_by_env("the_exclusion_removes_pixels_on_this_pc") {
             return;
         }
         let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
@@ -1775,7 +2243,7 @@ mod capture_probe {
         // the probe window. A region rather than the whole display: it says
         // exactly which pixels were looked at, and it is quick.
         let Ok(monitors) = xcap::Monitor::all() else {
-            println!("SKIP  the exclusion is real: no displays were reported");
+            pixels_not_judged(PIXEL_PROBE, "no displays were reported");
             return;
         };
         let Some(monitor) = monitors
@@ -1783,13 +2251,13 @@ mod capture_probe {
             .find(|m| m.is_primary().unwrap_or(false))
             .or_else(|| monitors.first())
         else {
-            println!("SKIP  the exclusion is real: no display to put a window on");
+            pixels_not_judged(PIXEL_PROBE, "no display to put a window on");
             return;
         };
         let (mx, my) = match (monitor.x(), monitor.y()) {
             (Ok(x), Ok(y)) => (x, y),
             _ => {
-                println!("SKIP  the exclusion is real: the display gave no position");
+                pixels_not_judged(PIXEL_PROBE, "the display gave no position");
                 return;
             }
         };
@@ -1800,7 +2268,7 @@ mod capture_probe {
         let (wx, wy) = (mx + 40, my + 40);
         // SAFETY: creating our own window is the point of the probe.
         let Some(hwnd) = (unsafe { red_window(wx, wy) }) else {
-            println!("SKIP  the exclusion is real: no desktop to put a window on");
+            pixels_not_judged(PIXEL_PROBE, "no desktop to put a window on");
             return;
         };
         // The window's own screen coordinates, as Windows now sees them - not
@@ -1826,8 +2294,8 @@ mod capture_probe {
             160,
         );
 
-        /// One capture of the probe's region, or a printed reason this machine
-        /// cannot make it.
+        /// One capture of the probe's region, or the honest report that this
+        /// machine cannot make it.
         fn grab(
             monitor: &xcap::Monitor,
             region: (u32, u32, u32, u32),
@@ -1836,7 +2304,7 @@ mod capture_probe {
             let frame = match monitor.capture_region(region.0, region.1, region.2, region.3) {
                 Ok(frame) => frame,
                 Err(_) => {
-                    println!("SKIP  the exclusion is real: {why}");
+                    pixels_not_judged(PIXEL_PROBE, why);
                     return None;
                 }
             };
@@ -1844,7 +2312,7 @@ mod capture_probe {
             match RgbaImage::from_raw(w, h, frame.into_raw()) {
                 Some(image) => Some(image),
                 None => {
-                    println!("SKIP  the exclusion is real: a capture had an unexpected size");
+                    pixels_not_judged(PIXEL_PROBE, "a capture had an unexpected size");
                     None
                 }
             }
@@ -1885,7 +2353,7 @@ mod capture_probe {
         unsafe { DestroyWindow(hwnd) };
 
         println!(
-            "the exclusion on this PC: red before={before}, red while excluded={after}, \
+            "the exclusion's pixels on this PC: red before={before}, red while excluded={after}, \
              red after clearing={back:?} (display {mw}x{mh} at {mx},{my}); \
              window placed={placed} visible={visible} at {:?}; set={applied} read back \
              {read_back:?}; clear={cleared} read back {restored:?}",
@@ -1907,16 +2375,19 @@ mod capture_probe {
         // whether the pixels really go - and that needs a desktop that puts the
         // window on screen in the first place.
         if before == 0 {
-            // A skip, said plainly, never as a quiet pass. A session with no
+            // A skip, said plainly, never as a quiet pass - and said through
+            // `pixels_not_judged`, because libtest captures `println!` and
+            // because CI may insist on the pixels. A session with no
             // interactive desktop (a service, a CI runner, a session whose
             // windows are never composited onto the captured screen) captures
             // the screen happily and never shows a window on it, ours or
             // anyone's. Measured on this project's own machine, 2026-10-11:
             // 293 colours in a screen capture, and a plainly visible window
             // absent from it.
-            println!(
-                "SKIP  the exclusion is real: this session captures the screen but never \
-                 shows a window on it, so the pixels cannot be judged here"
+            pixels_not_judged(
+                PIXEL_PROBE,
+                "this session captures the screen but never shows a window on it, so the \
+                 pixels cannot be judged here",
             );
             return;
         }
