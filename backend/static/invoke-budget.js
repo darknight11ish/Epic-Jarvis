@@ -138,13 +138,24 @@ function bridge(win) {
 
 /**
  * Send one command with a budget. `kind` is "read" (the default) or "action";
- * it chooses the sentence, never the size - `budgetFor` owns the size. `win`
- * is optional and only for a caller holding a window object (see `bridge`).
+ * it chooses the sentence, never the size - `budgetFor` owns the size.
+ *
+ * The optional fourth argument serves the two callers that know more than a
+ * command name:
+ *   - a NUMBER is the size for ONE command whose jobs have different waits -
+ *     the model advisor (`model-advisor.js`) is a single command doing four
+ *     different jobs (a Hugging Face lookup, a benchmark of minutes, two plain
+ *     questions); omitted, the ordinary per-command budget applies;
+ *   - a WINDOW OBJECT is the caller's own window, for the HUD panels that take
+ *     it as a local (see `bridge`), so their calls keep going through here.
+ * Anything else in that place is ignored, exactly as before.
  */
-export function call(command, args = {}, kind = "read", win) {
+export function call(command, args = {}, kind = "read", winOrBudgetMs) {
+  const win = winOrBudgetMs && typeof winOrBudgetMs === "object" ? winOrBudgetMs : undefined;
+  const budgetMs = typeof winOrBudgetMs === "number" ? winOrBudgetMs : 0;
   const invoke = bridge(win);
   return withBudget(invoke(command, args), {
-    ms: budgetFor(command, kind),
+    ms: budgetMs > 0 ? budgetMs : budgetFor(command, kind),
     late: lateWords(kind),
   });
 }

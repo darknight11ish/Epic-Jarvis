@@ -636,6 +636,7 @@ def t_hygiene():
              # relay's postscript lines). It has no hunk in jarvis_hud.py's screen wrapper, so it
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
+             "model-recommendations.patch",
              "cloud-honesty.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order

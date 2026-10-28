@@ -232,10 +232,12 @@ def t_setting_links_are_real():
     # combined mode and two suggestion switches). `background_learning` and
     # `learn_sensitive_topics` LEFT this list on 2026-10-28, when the settings
     # audit's G1 gave them the `learning` card and its two rows - they are
-    # linked above now. So the list is thirteen.
+    # linked above now. `antislop` joined on the same day: its desktop control
+    # is the bespoke card in "How Jarvis talks", not a generated toggle row, so
+    # the list is fourteen.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known thirteen",
-          orphans == ["big_coder", "big_model",
+    check("...and the BoolSettings with no desktop row are the known fourteen",
+          orphans == ["antislop", "big_coder", "big_model",
                       "big_model_deep_questions", "big_model_wiki", "chat_history",
                       "lights_without_card", "media_index",
                       "phone_notifications", "second_card_combined",
@@ -321,9 +323,18 @@ def t_bool_settings_is_the_measured_thirteen():
     say why neither direction raises a card - and `jarvis_quick.py` matches the
     phrase and dispatches on the same key, so both phrases really work. Any
     further growth has to be argued the same way.
+
+    Thirty-two since 2026-10-28: `antislop`, the Anti-Slop filter. A cardless
+    preference in both directions (it changes the words Jarvis writes, opens no
+    network door and loosens no gate), so it is one of the orphans above rather
+    than a linked row: its desktop control is the bespoke card in "How Jarvis
+    talks" (master switch, three scopes, the During/After choice, the Delivery
+    Gate and three dials), not one of the generated `<label class="toggle">`
+    rows this file counts. Its `section` is "manner", so "open how jarvis
+    talks" lands on the card that draws it.
     """
-    check("BOOL_SETTINGS holds its thirty-one spoken settings",
-          len(R.BOOL_SETTINGS) == 31, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-two spoken settings",
+          len(R.BOOL_SETTINGS) == 32, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

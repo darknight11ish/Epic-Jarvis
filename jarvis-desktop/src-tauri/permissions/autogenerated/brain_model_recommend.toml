@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-model-recommend"
+description = "Enables the brain_model_recommend command without any pre-configured scope."
+commands.allow = ["brain_model_recommend"]
+
+[[permission]]
+identifier = "deny-brain-model-recommend"
+description = "Denies the brain_model_recommend command without any pre-configured scope."
+commands.deny = ["brain_model_recommend"]

@@ -163,11 +163,15 @@ await check("CONTROL: Rust holds what makes Jarvis watch, fetches the line as so
     assert.ok(!caps(other).some((c) => FOCUS_SESSION.includes(c)), `${other} holds a focus session set`);
   }
   // The other half of the same grant: the preset card lives in the command bar
-  // and in Settings, so those two MUST hold the unrelated focus-presets set;
-  // the Brain and the widget have no preset surface and must not gain it.
+  // and in Settings, so those two MUST hold the unrelated focus-presets set.
+  // The Brain holds it too since the model advisor landed (2026-10-28): its
+  // "recommended preset" answer offers the PC's own card, so the Brain asks
+  // the PC to apply one - never applying or approving anything itself. The
+  // widget has no preset surface and must not gain it.
   assert.ok(caps("quickbar").includes("focus-presets"), "the quickbar cannot open the preset card");
   assert.ok(caps("settings").includes("focus-presets"), "Settings cannot draw the preset page");
-  assert.ok(!caps("brain").includes("focus-presets"), "the Brain does not need the preset UI set");
+  assert.ok(caps("brain").includes("focus-presets"),
+    "the Brain cannot offer the PC's preset card for an advisor recommendation");
   assert.ok(!caps("widget").includes("focus-presets"), "the widget does not need the preset UI set");
 });
 

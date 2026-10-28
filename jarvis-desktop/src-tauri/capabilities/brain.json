@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "brain",
-  "description": "The Brain: the memory graph, the live trace, and every faculty the backend exposes. It reads widely and can revert, cancel, watch, remove a skill, change the model, and decide one memory fact at a time \u2014 but it cannot answer an approval, and it has no path to the connection settings or backend supervision.",
+  "description": "The Brain: the memory graph, the live trace, and every faculty the backend exposes. It reads widely, can revert, cancel, watch, remove a skill, change the model, ask the model advisor what to look at or change (a lookup, a benchmark, and two questions - it downloads and applies nothing itself), decide one memory fact at a time, and ask the PC to apply one focus preset (the PC's own card) - but it cannot answer an approval, and it has no path to the connection settings or backend supervision.",
   "windows": [
     "brain"
   ],
@@ -52,6 +52,7 @@
     "attention-surface",
     "brain-pictures",
     "brain-guardian",
-    "brain-people"
+    "brain-people",
+    "focus-presets"
   ]
 }

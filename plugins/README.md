@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **37 drop-in modules**, in [`ready/`](ready/) -
+- **39 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
-  - **27** replace a patch, and are generated from it;
-  - **10** replace no patch: they were born as folders, and
+  - **28** replace a patch, and are generated from it;
+  - **11** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **133 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -52,10 +52,11 @@ the catalogue cannot account for is refused, never silently left out.
 | 144 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
 | 151 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
 | 153 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
+| 155 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
 
 ## Drop-in modules with no patch of their own
 
-These 10 were never patches. There is nothing in the core
+These 11 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -72,8 +73,9 @@ it is one `apply-patches.ps1` copies in.
 | 150 | `notion-obsidian` | bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo. |
 | 152 | `self-improve` | two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do. |
 | 154 | `media-index` | searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (on asks once), and Delete the stored words. |
-| 155 | `vault-organizer` | plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice. |
-| 156 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
+| 156 | `vault-organizer` | plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice. |
+| 157 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
+| 158 | `antislop` | the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings. |
 
 ## What stays in the core
 

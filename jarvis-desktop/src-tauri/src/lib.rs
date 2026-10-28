@@ -22,6 +22,7 @@ pub mod account_addresses;
 pub mod account_secrets;
 pub mod aec;
 pub mod animal;
+pub mod antislop;
 pub mod appearance;
 pub mod asks_first;
 pub mod attention;
@@ -1165,6 +1166,10 @@ pub fn run() {
             brain::inbox_tidy::inbox_tidy_undo,
             brain::form_review::form_review_picture,
             brain::brain_model,
+            // The model advisor (2026-10-28): a lookup, a local benchmark and two
+            // questions about preset changes. It downloads nothing and applies
+            // nothing - those are the two carded commands above and below.
+            brain::brain_model_recommend,
             attention::mark_digest_seen,
             attention::set_attention_muted,
             attention::set_attention_limits,
@@ -1262,6 +1267,15 @@ pub fn run() {
             // loosens no rule. Settings window only.
             prompt_coach::get_prompt_coach,
             prompt_coach::set_prompt_coach,
+            // Settings' "Anti-Slop filter" (2026-10-28, JARVIS-API section
+            // 159): the whole state (a read) and ONE change - the master
+            // switch, one scope, the During/After mode or a Liveliness dial.
+            // At once in BOTH directions, no approval card either way and
+            // NEVER held on a stale link: it filters the wording of an answer,
+            // opens no way out of the PC, reads no folder and takes no action.
+            // Settings window only.
+            antislop::get_antislop,
+            antislop::set_antislop,
             // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
             // critique of the words in the box plus the last few turns, asked
             // of the same local model the chat would use. It SENDS NOTHING and

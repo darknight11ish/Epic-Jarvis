@@ -11,7 +11,7 @@ current state directly". The feature list existed all along -
 no chat path read it.
 
 WHAT THIS PROVES
-  1. THE FACTS ARE THE LIST'S OWN. Every one of the 140 rows is found by its id,
+  1. THE FACTS ARE THE LIST'S OWN. Every one of the 142 rows is found by its id,
      and the answer's facts equal the JSON word for word (groups, what, where,
      asks, limit, surface, covers) - nothing is reworded into the facts, and
      the generated copy the PC carries is current (`tools/
@@ -154,6 +154,13 @@ OWNER_QUESTIONS = (
 OWNER_QUESTION_EXCEPTIONS = {
     ("briefing", "is {} on"): {"briefing_list"},
     ("briefing", "what is {}"): {"briefing_now"},
+    # The Anti-Slop filter answers "is it on?" in its own words
+    # (`settings_antislop_state`, jarvis_antislop.status_words()), which reads
+    # the same switch the guide's state answer would - so the older, more
+    # specific intent owns this one question, exactly as the briefing's does.
+    # The other eight questions still explain the row, and the state answer is
+    # still checked against the module in backend/test_antislop.py.
+    ("anti-slop", "is {} on"): {"settings_antislop_state"},
 }
 
 
@@ -227,7 +234,7 @@ def t_every_row_is_looked_up_and_its_facts_equal_the_json():
             bad.append((row["id"], "words lost limit", row["limit"][:40]))
         if not row.get("limit") and "gives no limit" not in out["words"]:
             bad.append((row["id"], "empty limit not said", ""))
-    check("every one of the 140 rows is found by id, with facts equal to the JSON",
+    check("Every one of the 142 rows is found by id, with facts equal to the JSON",
           not bad, bad[:6])
     # A row whose words are not the list's is a reworded fact. Each answer is
     # assembled from the row the module's own `features()` returns; prove the
@@ -1107,7 +1114,7 @@ def _names(row: dict) -> list:
 
 
 def t_every_feature_answers_every_owner_question():
-    """All 140 rows, all nine questions - by title, by id and by alias.
+    """All 142 rows, all nine questions - by title, by id and by alias.
 
     This is the completeness check the owner's request needs: it fails for a
     row whose name no phrasing reaches, and for an answer that lost one of the
@@ -1176,7 +1183,7 @@ def t_every_feature_answers_every_owner_question():
             missing = [label for label, present in required if not present]
             if missing:
                 thin.append((row["id"], hit[1], missing))
-    check("every one of the 140 rows answers all nine owner questions", not misses,
+    check("Every one of the 142 rows answers all nine owner questions", not misses,
           misses[:8])
     check("...and every answer names the feature, what it does, where it lives, "
           "whether it asks first, and which apps have it", not thin, thin[:8])
@@ -1885,12 +1892,12 @@ def t_the_card_sentence_is_only_where_a_card_really_is():
     single = [r for r in SOURCE
               if FG.label_for(r) == FG.LABEL_SWITCH_ADJUST
               and len(FG.feature_switches(r)) == 1]
-    # 13 since 2026-10-28: the settings audit's G1 gave the learning switches a
-    # Settings card, and `memory-saved`'s covers now name the `learning` section
-    # - which owns TWO switches (background learning and the sensitive-topics
-    # one), so it is no longer a single-switch row. Being multi-switch, it is
-    # not one of the rows this check's sentence applies to.
-    check("there are single-switch Switchable rows to check", len(single) == 13,
+    # 14 after both 2026-10-28 batches: `anti-slop` joins the single-switch rows
+    # (its registry switch is one key), while `memory-saved` LEFT it when the
+    # settings audit's G1 gave its learning switches the `learning` card and its
+    # covers now name TWO switches - so the counts are not the same side's 15 or
+    # 13, they are the merged tree's 14.
+    check("there are single-switch Switchable rows to check", len(single) == 14,
           len(single))
     R = FG._registry()
     real_keys = {b.key for b in getattr(R, "BOOL_SETTINGS", ())}
@@ -1914,7 +1921,8 @@ def t_the_card_sentence_is_only_where_a_card_really_is():
           not wrong, wrong)
     # The four the read proved false, and four that really do card: both
     # directions pinned by NAME so a reword cannot quietly drop either half.
-    for fid in ("manner", "prompt-coach", "write-like-me", "pictures"):
+    for fid in ("manner", "prompt-coach", "write-like-me", "pictures",
+                "anti-slop"):
         check(f"{fid} no longer promises a card its setter never raises",
               sent not in FG.change_words(FG.row_by_id(fid)),
               FG.change_words(FG.row_by_id(fid)))

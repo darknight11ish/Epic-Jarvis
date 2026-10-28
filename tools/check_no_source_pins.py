@@ -81,6 +81,11 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # tool found on the day it landed, so an increase is caught and a
     # decrease is visible. A flag-day rewrite of 116 files is how this becomes
     # a PR that conflicts with everything, so the debt is recorded, not paid.
+    # 2026-10-28: the anti-slop suite landed with eight pins. Its "bite" harness
+    # reads the vendored module as TEXT and mutates it to prove each test bites,
+    # and the ordering test pins anchors in the agent source - recorded debt,
+    # not an approval; the ratchet only turns DOWN.
+    "backend/test_antislop.py": 8,
     "backend/test_account_secrets.py": 1,
     "backend/test_animal.py": 6,
     "backend/test_api_doc.py": 3,

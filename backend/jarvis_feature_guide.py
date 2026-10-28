@@ -361,6 +361,17 @@ def _read_prompt_coach():
     return M.enabled() is True
 
 
+def _read_antislop():
+    """The Anti-Slop filter's master switch (2026-10-28).
+
+    Read from the module itself, never from a copy of the rule: OFF is also
+    what a PC that cannot answer reads as far as `read_state` is concerned, and
+    `A.is_enabled()` fails to OFF - so a damaged file can never read as "on".
+    """
+    import jarvis_antislop as M
+    return M.is_enabled() is True
+
+
 def _read_auto_learn(key: str):
     import jarvis_auto_learn as M
     return M.settings().get(key) is True
@@ -506,6 +517,7 @@ STATE_READERS = {
     "learn_sensitive_topics": lambda: _read_auto_learn("auto_sensitive"),
     "lights_without_card": _read_lights_without_card,
     "prompt_coach": _read_prompt_coach,
+    "antislop": _read_antislop,
     "ask_before_every_search": lambda: _read_search("ask_every_time"),
     "web_search": lambda: _read_search("enabled"),
     "smartwatch_notifications": _read_watch_notify,
@@ -2040,7 +2052,7 @@ CARD_ON_LOOSENING = frozenset({
     "lights_without_card",   # request_lights(...) registry:605-611
     "sandbox_exec",          # "ON is ONE normal approval card" registry:700-705
 })
-#: ...and the four whose setter says it never asks. `humour` is the row the
+#: ...and the five whose setter says it never asks. `humour` is the row the
 #: semantic read caught: `set_humor` - "At once either way - it changes wording
 #: only." (registry:910-912).
 CARD_FREE_SWITCHES = frozenset({
@@ -2048,6 +2060,8 @@ CARD_FREE_SWITCHES = frozenset({
     "humor",          # "At once either way" registry:910-912
     "write_like_me",  # "No card either way" registry:976-979
     "pictures",       # "BOTH directions ... neither asks" registry:736-738
+    "antislop",       # "No card either way - it changes only how an answer is
+                      # worded" (the Anti-Slop filter's own setter, 2026-10-28)
 })
 
 #: The Settings place the owner is sent to for an ability with no switch. The

@@ -26211,3 +26211,379 @@ the phone carries no `desktop` field, so the reply says it can only check the
 PC's build from the PC's app and points at **Platform checks**, the phone's own
 update card, where the owner downloads its APK and Android's installer asks for
 the tap. Nothing installs itself on either device.
+
+## 159. The Anti-Slop filter: three routes, a card on the desktop and three controls on the phone (added 2026-10-28)
+
+`GET` and `POST /api/antislop`, plus the read-only `POST /api/antislop/audit`,
+are the whole contract. They carry the state of the **Anti-Slop filter** - a
+wording and output-quality filter over what Jarvis writes - whose rules are the
+MIT-licensed [`miqdadbadjuber/anti-slop`](https://github.com/miqdadbadjuber/anti-slop)
+ruleset (`v3.2.23`), distilled on the PC into `backend/jarvis_antislop.py` (and
+its byte-identical `jarvis-backend/` twin) to the few rules that fit a local
+model's prompt budget. Nothing is fetched at run time: no `npx`, no network, no
+folder beyond the PC's own config file, and none of the source rulebook's
+installer or Markdown skills is downloaded, run or shipped. The credit line is
+in `THIRD-PARTY-NOTICES.txt`.
+
+The three routes come from the module's own
+`install(handler_cls, *, origin_ok, token_ok, read_body)` - the shape every
+drop-in module uses - which `plugins/ready/antislop/plugin.json` asks
+`jarvis_plugins.py` to call. **No patch of its own.** All three sit behind the
+server's usual origin and token checks, before anything is read.
+
+It filters the **words** Jarvis writes and audits a page or a file. It opens no
+network door, reads no folder, takes no action and loosens no gate, so
+**turning it on or off raises no approval card** - the same class as the prompt
+coach (`docs/DECISIONS.md`, 2026-10-28). Every change still leaves ONE action
+receipt with a one-click Undo through `jarvis_receipts.py`, action name
+`antislop`.
+
+**OFF is inert, and that is a promise the card repeats in one line:** the
+prompt block is the empty string, `post_process_reply()` returns its input
+unchanged and `reply_filter()` returns `None`, so nothing is added to a prompt
+(**0 prompt tokens**) and no reply is rewritten. ON adds a short rules block
+matched to the parts the owner ticked.
+
+### 159.1 What it does, and what it costs
+
+* **On, `during`** (the default when switched ON): a
+  `<antislop_filter mode="during">` system message of at most 1,050 characters
+  (about 240 tokens), placed just before the newest user message exactly like
+  the manner and focus notes (never first, so the rules block stays first),
+  plus a deterministic scrub of the words as they stream: em dashes out of
+  prose (R-02), and decorative banners and emoji comments out of fenced code
+  (`antislop-code`). The scrub holds back only a trailing space, a trailing em
+  dash or a line inside a code block, so the answer still streams.
+* **On, `after`**: the note asks for a numbered findings list and no edits, and
+  the scrub is bypassed - an audit may quote the very em dash it reports.
+* **`R-37` wins over `R-02`, always.** When "Write Like Me" is on and the
+  owner's own writing samples use em dashes, the ban yields in both the note
+  and the scrub, because the owner's own prose is direction rather than slop.
+  `jarvis_antislop.voiceprint_uses_em_dash()` is the single place that decides,
+  and it answers False whenever it cannot read the samples - no exemption is
+  ever invented.
+* **The owner can allow em dashes outright**: `allow_em_dashes` (default
+  `false`) drops the R-02 line from the note and leaves prose dashes alone
+  while the REST of the copy scope keeps working - generic CTAs (R-15) and AI
+  buzzwords (R-16) are still flagged in the audit and still named in the note.
+  It is a stored flag rather than a second voiceprint reading, so a preference
+  the owner set cannot move when their samples change. It is the blanket "keep
+  them everywhere" on top of `R-37`, deliberately not the voiceprint rule.
+* **The scrub only ever sees the model's own chat words**: its prose and the
+  fenced code blocks inside that answer. Never a tool's input or output, a file
+  Jarvis writes, a diff or a patch, or a file already in a repository - and
+  `audit_text_or_ui` is read-only, so a file handed to it is reported on and
+  left exactly as it was. Inside fenced code it removes **only** a wordless
+  separator line (`# ============`) or a comment led by one of the ten
+  decorative emoji; a shebang, a coding/`type`/`noqa`/`pragma` line, a Rust doc
+  comment, a diff header and any comment carrying real words are never touched.
+  A headed banner (`# --- Phase 2: Database Migration ---`) is left to the
+  prompt rule and the `after` audit.
+
+### 159.2 What is enforced, and what is only guided
+
+The audit report says which is which, on every run, in its own `words` header
+and in the `enforcement` object, before any finding is read. The split is data
+(`ENFORCEMENT_CLASS_A` / `ENFORCEMENT_CLASS_B` in `jarvis_antislop.py`), so the
+header cannot drift from what the code really does.
+
+| Class | Rules | How it is described |
+|---|---|---|
+| **A - deterministic, checked here** | `R-02` (with the `R-37` voiceprint exemption and the `allow_em_dashes` override), `R-10` / `R-13` dose caps, `R-15`, `R-16`, `R-17`/`R-36`/`R-38` (through `jarvis_claims.py`), `R-24`/`R-26` **static** dead links and unwired buttons, `R-25` **unrounded** WCAG 2.1 contrast on a static hex pair, `R-32` **static** `outline: none` with no ring put back, `antislop-code` banners | may be claimed as checked by `jarvis_antislop.py` |
+| **B - prompt-guided only** | `R-03` dynamic overflow and rendered 44x44 tap targets, `R-18` a fabricated testimonial, `R-20` the identity test, `R-23` asset confirmation, `R-27` semantic state completeness, `R-28` a generic FAQ, `R-30` clone detection, `R-34`/`R-35` live theme switching and click-through | **PROMPT-GUIDED ONLY, never mechanically enforced** - they need a live browser, a person's judgement or the data source. The project's Playwright suites (`themecheck.mjs`, `hud.mjs`) are what prove R-34/R-35, not this module |
+
+The card carries that split as ONE sentence (the `REALITY` line in
+`src/antislop.js`, the same words in `net/Antislop.kt`), and
+`jarvis-desktop/tests/antislop.mjs` fails if the line stops saying "guidance
+only", or starts naming a browser-only rule as checked. No screen and no record
+may claim that every anti-slop rule is mechanically enforced.
+
+### 159.3 The routes
+
+Three routes, written method-first on their own lines - the shape
+`tools/check_parity.py` reads a documented route from, so none of them can go
+missing from its parity check:
+
+    GET  /api/antislop          the whole state, in the PC's own shape
+    POST /api/antislop          one control sends ONE change, through its own setter
+    POST /api/antislop/audit    read-only: the rule findings for text the caller already has
+
+**`GET /api/antislop`** - the whole state, in the PC's own shape:
+
+```json
+{
+  "ok": true,
+  "enabled": false,
+  "mode": "during",
+  "scopes": {"copy": true, "code": true, "ui": true},
+  "dials": {"energy": 1, "rhythm": 2, "motion": 1},
+  "allow_em_dashes": false,
+  "show_delivery_gate_on_ui_tasks": true,
+  "updated_at": 1793164200.0,
+  "words": "The Anti-Slop filter is off, so it adds nothing to the prompt and changes nothing in an answer.",
+  "source": "miqdadbadjuber/anti-slop v3.2.23 (MIT), rules distilled and vendored",
+  "max_prompt_chars": 1050
+}
+```
+
+`mode` is `during` (filter while writing - the default when switched ON) or
+`after` (change nothing; list numbered findings by `R-01..R-38` and let the
+owner pick). `scopes` is what is filtered; `dials` are the Liveliness Toolkit's
+three 1-3 dials (ENERGY, RHYTHM, MOTION). `allow_em_dashes` is the em-dash
+exemption and is **OFF unless it is a real `true`** - a backend that predates
+the field simply has no key, and both apps paint the box unticked, which is the
+state that PC really holds. `words` is the same state as one plain sentence,
+and `max_prompt_chars` is the hard ceiling the prompt block can never pass. A
+read is never held.
+
+A PC whose backend predates this section answers `404`, or `503` with
+`{"available": false, "why": "..."}`. **A body with no `enabled` yes-or-no is
+never read as "off":** both apps say the route is missing, because a state
+nobody could read is not a filter that is switched off.
+
+**`POST /api/antislop`** - one control sends ONE change; the route accepts
+several parts at once and applies each through its own setter:
+
+| Body | What it changes |
+| --- | --- |
+| `{"enabled": true \| false}` | the master switch |
+| `{"mode": "during" \| "after"}` | the mode |
+| `{"scopes": {"copy" \| "code" \| "ui": true \| false}}` | one scope |
+| `{"dials": {"energy" \| "rhythm" \| "motion": 1..3}}` | one or more dials |
+| `{"show_delivery_gate_on_ui_tasks": true \| false}` | the Delivery Gate on a finished screen |
+| `{"allow_em_dashes": true \| false}` | keep em-dashes everywhere (the blanket exemption) |
+
+The PC merges the named field(s) into its stored state and answers with the
+whole state back (`ok`, the fields above and `words`), so a client paints the
+PC's answer rather than its own optimism. Errors are named rather than generic:
+`unknown_setting` for a key the PC does not have (a typo must never read back
+as "saved"), `bad_mode` for a mode that is neither, `bad_value` for a dial
+outside 1..3 or a value a setter refuses, `nothing_to_change` for an empty
+body, and `bad_body` when the body is not a JSON object; a write that throws is
+`503` with the error named. There is no `tier`, no card and no Windows Hello in
+either direction.
+
+**Takes effect on the very next turn** (the state is read per turn, never
+cached at start-up), and is announced on the event stream as kind
+**`antislop`** carrying the whole state - one kind per feature, the shape
+`appearance`, `devices` and `big-coder` already use. The blueprint called it a
+"settings" event; no such kind exists in this backend and none was invented.
+The desktop Settings card re-reads on that frame, and so does the phone's
+plate (`JarvisRuntime.antislopTick`) - a change made by chat, by the desktop
+card or by another phone reaches an OPEN plate without reopening Settings. The
+phone's plate also re-reads after every write of its own, and while it is not
+open nothing is fetched for it.
+
+**`POST /api/antislop/audit`** - read-only; it changes no setting:
+
+| Body | Answer |
+|---|---|
+| `{"content": "...", "kind": "auto"\|"text"\|"markdown"\|"md"\|"html"\|"css"\|"js"\|"code"\|"ui"}` | **200** `{ok, kind, findings[{rule, tier, line, detail}], counts{HIGH, MEDIUM, LOW}, total, gate{blocks[4], passes, words}, checked, state, source, enforcement{class_a, class_b, class_b_enforced, header}, words}` and, for a UI kind in `during` mode, `delivery_gate`. **400** `"no_content"` / `"too_long"` (over 400,000 characters). An unknown `kind` falls back to `auto`, which reads the content's own shape. |
+
+Each finding names the rule it comes from and the line it is on, sorted by line
+and then rule so two runs are byte-identical:
+
+| Rule | Tier | What it reports |
+|---|---|---|
+| `R-02` | HIGH | an em dash in agent-written prose |
+| `R-25` | HIGH | WCAG AA contrast below 4.5:1 (3:1 for large text), compared **unrounded** - `#777777` on white is 4.4781:1 and fails even though it rounds to 4.5; `#757575` is 4.6075:1 and passes |
+| `R-26` | HIGH | an `<a href="#">` / `javascript:void` link, or a `<button>` with no id, handler, form or data attribute |
+| `R-32` | HIGH | `outline: none` (or `0`) with no `:focus`/`:focus-visible` ring put back |
+| `R-10` | MEDIUM | more than 2 glassmorphism declarations (`backdrop-filter`) |
+| `R-13` | MEDIUM | more than 2 glow shadows (a `box-shadow` with no offset) |
+| `R-15` | LOW | a generic call to action ("Get Started", "Learn More", ...) |
+| `R-16` | LOW | an AI buzzword ("seamless", "revolutionary", ...) |
+| `antislop-code` | LOW | a decorative comment banner or an emoji comment |
+
+The answer also carries the rulebook's **4-block Delivery Gate** (Hard Gate,
+Purpose-Gate, Liveliness, Craftsmanship). Liveliness is reported as `NOT
+CHECKED`, never as a pass: a focal point, one accent and real whitespace are a
+judgement, and no regex may certify them. The Class B rules above are not
+reported as passes either - they are named in the header as prompt-guided, and
+no finding is ever attributed to one of them. What the auditor cannot see at
+all - a rendered page, a real keyboard focus ring, the empty/loading/error
+states of a data source - is named here rather than silently passed.
+
+### 159.4 The two apps
+
+**Desktop - Settings, How Jarvis talks, Anti-Slop filter**
+(`src/antislop-settings.js`, drawn from `src/antislop.js`; two Rust commands in
+`src-tauri/src/antislop.rs`, granted to the Settings window alone by
+`permissions/surfaces.toml`). The card has the master switch, the three scope
+pills, the "Allow em-dashes (—)" box inside "What it filters", the During/After
+radio, the Delivery Gate switch and the three dials, and the ON-only halves are
+hidden while it is off. Each control sends one change and re-reads afterwards;
+a refusal shows the PC's own sentence and springs the control back. **None of
+it is held on a stale link, on purpose:** the filter opens no way out of the PC
+and takes no action, so a link that is catching up says nothing about whether
+an answer should be de-slopped. That is a decision, not an omission - it is
+said in the module, in `surfaces.toml` and in `src-tauri/src/antislop.rs`.
+
+**Phone - Settings, How Jarvis talks** (`net/Antislop.kt`,
+`ui/screens/AntislopPlate.kt`), bound to the same route: the master switch, the
+"Allow em-dashes (—)" box and the During/After mode, in the same words. The
+scopes, the gate switch and the dials are the desktop card's on purpose - the
+phone is a settings mirror, not a second editor (`docs/ARCHITECTURE.md` §8).
+Its writes ARE held on a stale link (`JarvisRuntime.setAntislop`,
+`setAntislopMode`, `setAntislopEmDashes`), the same reading every other phone
+setting takes: "at once" means no approval card, not "works while the link is
+down".
+
+**By asking, on either app** (`backend/jarvis_settings_registry.py`,
+`backend/jarvis_quick.py`): "turn on anti-slop", "turn off anti-slop", "enable
+anti-slop", "disable anti-slop", "is anti-slop on?", "set anti-slop mode to
+during/after", "turn on/off anti-slop for copy/code/ui", and the generic "set
+`<name>` to `<value>`". Typed on the PC's fast path, so no client change is
+needed for them and no model is called. `antislop` is a `BOOL_SETTINGS` row and
+`antislop_mode` a `CHOICE_SETTINGS` row, so a spoken change reaches the same
+setters this route does, and `jarvis_feature_guide.read_state("antislop")`
+reads the switch itself, so "is it on?" can never be a guess. The `antislop`
+row's `section` is `None` on purpose: its desktop control is a bespoke card,
+not one of the generated `<label class="toggle">` rows, and pointing the guide
+at `manner` made the manner feature carry two switches - which
+`backend/test_feature_guide.py`'s single-switch count caught. `antislop_mode`
+names `manner` because the mode does live on that card. The em-dash exemption
+has **no** typed phrase of its own: it is a checkbox in Settings, and inventing
+a spoken name for it would be a second control surface the PC's grammar does
+not have.
+
+**What deliberately does not exist.** No model tool, no card, no background
+run, and no second rulebook: nothing of `anti-slop`'s own installer, Markdown
+skills or `npx` path is downloaded, run or shipped (see
+`THIRD-PARTY-NOTICES.txt`).
+
+### 159.5 One checkable consequence
+
+`tools/check_feature_controls.py` holds the contract
+(`contract/feature-controls.json`) to the real files: every catalogue feature
+has a row, every `BOOL_SETTINGS` switch and every `CHOICE_SETTINGS` choice has
+an entry, and the displayed phrases are run through `jarvis_quick.match()`.
+The anti-slop row is `Switchable / Adjustable`, `bool_key: antislop`,
+`choice_key: antislop_mode`. Its desktop control is a BESPOKE card rather than
+one of the generated `<label class="toggle">` rows that
+`tools/gen_settings_cases.py` owns, so the switch's `bool_settings` entry is
+recorded as `planned` with that reason - the same recording "Write like me"
+already has for the same reason.
+## 160. Model and preset recommendations: one check, one measured benchmark, and the owner's opinion (desktop and backend, 2026-10-28)
+
+**What this is.** The owner's request of 2026-10-28: a button that looks
+through the public model catalogues, a carded download of whatever looks worth
+trying, a local benchmark of that model once it is here, and preset changes
+computed from the measured numbers. This section documents the backend contract
+and the desktop Brain panel built against it (`brain.js`, `model-advisor.js`,
+the `brain_model_recommend` command).
+
+**Five routes, all PC-only.** Each answers 403 from any device but this PC,
+checked with `jarvis_owner_check.from_this_pc` before a body is read. This is
+the standing rule that the phone must not grow a model catalogue
+(`docs/ARCHITECTURE.md` §8), not a missing phone screen.
+
+```
+GET  /api/models/recommendations
+POST /api/models/check                    {}
+POST /api/models/benchmark                {"ref": "<installed model>"}
+POST /api/presets/recommend               {}
+POST /api/presets/recommend/opinion       {"text": "<the owner's words>"}
+```
+
+**`GET /api/models/recommendations` is read-only and network-free.** It reads
+one JSON file (`model-recommendations.json` in the settings folder) and the
+PC's own measured card list; with no cached check it answers `checked_at: null`
+and no candidates. The shape:
+
+```json
+{"checked_at": 1761700000,
+ "gpus": [{"name": "NVIDIA GeForce RTX 2060", "vram_gb": 12.0, "role": "main"}],
+ "candidates": [{"ref": "owner/model-GGUF", "name": "model-GGUF",
+                 "family": "model", "params_b": 8.0, "quant": "Q4_K_M",
+                 "size_gb": 4.0, "context_tokens": 131072,
+                 "licence": "apache-2.0", "fit": "fits",
+                 "source_url": "https://huggingface.co/owner/model-GGUF",
+                 "why": "estimated to need about 5.9 GB, which the measured ..."}],
+ "recommendations": [{"preset": "fast",
+                      "changes": [{"row": "model", "from": "qwen3.5:4b",
+                                   "to": "best:7b",
+                                   "why": "measured 61.0 tokens/s here ..."}],
+                      "evidence": "measured on this PC only: ..."}],
+ "benchmarked": {"qwen3.5:9b": {"tokens_per_s": 45.0, "vram_gb": 9.17,
+                                "context_tokens": 196608,
+                                "measured_at": 1761700000}}}
+```
+
+`row` is the FIELD of a `backend/jarvis_presets.py` preset row the change is
+about (`model`, `lane` or `context`); `preset` names the row itself. `fit` is
+`fits` / `tight` / `no`, from the measured card sizes and the candidate's
+**estimated** need (the only estimate in the answer, labelled in `why`).
+
+`licence` is the repository's own declared licence, read from the catalogue's
+`license:<id>` tag (Hugging Face publishes one) and `null` when the catalogue
+reports none - the desktop says "not reported by the catalogue" rather than
+inventing one. **No SHA-256 is published or shown:** `jarvis_models.Model` has
+no hash field, so the answer carries none and the panel says so instead of
+inventing a value.
+
+**`POST /api/models/check` performs the lookup.** It calls the model manager's
+EXISTING public-catalogue pass, `jarvis_models.discover()` - fixed public URLs
+for the Hugging Face GGUF list, the Ollama library and EvalPlus, with no token,
+cookie or query term derived from the owner - bounds it (16 models, one Ollama
+page, four enriched repos), caches the shaped candidates and returns the shape
+above. It never downloads: no `/api/pull`, no install call, no weights. With no
+measured graphics card it looks nothing up and says so; a catalogue pass that
+returns nothing is a 503 and does not overwrite the last good cache. **"Newer"
+is not claimed:** the existing pass sorts by trending and discards
+`lastModified`, so the answer says "the public trending list" and no date is
+invented.
+
+**`POST /api/models/benchmark {"ref": ...}` measures an INSTALLED model only.**
+It refuses 409 when `/api/tags` does not list the model, and 503 when Ollama
+will not answer its model list or will not give timings (so a down Ollama is
+never reported as "not installed"). The measurement is the existing bounded benchmark
+`jarvis_speed.measure()`: ONE fixed prompt through Ollama's native
+`/api/generate`, a 64-token cap, temperature 0 and a fixed seed - so it loads
+the model to answer, exactly as asking it a question would, and the answer says
+so. Tokens/second come from Ollama's own `eval_count`/`eval_duration`; video
+memory from `/api/ps` while the model is loaded for the benchmark - that is the
+window the benchmark ran at, NOT every preset's window, so a 196k conversation
+can need more than the figure and every recommendation's evidence says so;
+context from the model's own metadata via `/api/show`. The raw row lands in
+`speed.jsonl` (the speed record's store, unchanged) and the four-field index
+above is written to `model-recommendations.json`. No card: a measurement
+changes no setting and downloads nothing.
+
+**`POST /api/presets/recommend` computes changes from measurements only.** No
+network, no clock, no store write: it reads the benchmark index and the measured
+cards. For each preset row (`jarvis_presets.PRESETS`) it may propose one model
+change (a benchmarked model that fits the row's measured card with room, covers
+the row's full context window, and is at least 5% faster), one lane change (the
+current model does not fit its named card but does fit another measured card),
+and one context correction (the row asks for more tokens than the model on this
+PC reports). A preset with no benchmark for its CURRENT model gets no model or
+lane change - there is nothing to compare. Pending and heavy-mode rows are never
+recommended. Every `why` quotes the measured numbers; `evidence` names the
+benchmark store and `docs/MEASURED-2026-10-05-owner-pc.md` /
+`docs/MODEL-TOPOLOGY.md`.
+
+**`POST /api/presets/recommend/opinion {"text": ...}` records the owner's own
+words locally and refines the SAME computation with one deterministic rule:**
+`keep` (no model or lane change; a genuine context correction stays), `lower`
+(smallest measured video memory, no slower than 95% of the current model),
+`raise` (any measured speed gain, not the 5% bar), `quality` (at least 10%
+faster, preferring the longest measured context window - context is the only
+capability figure measured here, and the evidence says so), or `note` (recorded;
+ranking unchanged). The last opinion is re-applied on later reads; the previous
+twenty are kept. It cannot invent a measurement: a candidate lacking a measured
+rate, video memory or context is simply not eligible.
+
+**What deliberately does not exist.** No install route and no apply route: a
+download stays the EXISTING `/api/models/install` card (`jarvis_models.install`,
+tier `ask`) and a preset change stays the EXISTING `/api/work/apply` card
+(`jarvis_presets.apply_preset`, one `switch_model` card). No auto-download, no
+auto-apply, no timer and no background job. No gate action or tier row: the
+five routes are reads and one local measurement. No phone route and no phone
+screen.
+
+**What was not exercised here.** The live Hugging Face lookup: this checkout has
+no network, so the suite injects the catalogue pass. The shape and the refusal
+paths are tested; the first real click on the owner's PC is the field test. And
+no model's QUALITY is measured by any of this - the feature compares tokens per
+second, video memory and context window, and says exactly that.
