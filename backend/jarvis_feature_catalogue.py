@@ -3,7 +3,7 @@
 The owner's feature list, as data: 141 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 9e4da942a364e9c41a8eaab44fc36fd3485e3db91f0946374c43396a39be471c); the apps' Features pages read their own
+`features/features.json` (sha256 5bb7bde3b84114999f270c615f8826eb473682572c48391cf501243cf7a80d0f); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "9e4da942a364e9c41a8eaab44fc36fd3485e3db91f0946374c43396a39be471c"
+SOURCE_SHA256 = "5bb7bde3b84114999f270c615f8826eb473682572c48391cf501243cf7a80d0f"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -491,7 +491,7 @@ FEATURES = (
         "group": "Memory",
         "title": "Your past chats",
         "what": "The chats Jarvis kept, with the switches that govern keeping them.",
-        "where": "Brain, History. On the phone, the History row in the Brain.",
+        "where": "Brain, History. In the HUD, the History button in the left column. On the phone, the History row in the Brain.",
         "asks": "Turning keeping back on raises a card; deleting one chat is instant; forgetting what a chat taught asks first.",
         "limit": "Kept on the PC, encrypted, by default. This phone keeps none of it.",
         "surface": "both",
