@@ -87,6 +87,25 @@
   } catch (e) {
     /* private mode, cleared site data - the default theme is correct */
   }
+  /*
+    The face size, before first paint, from THIS device's own choice (the
+    owner's ask of 2026-10-28: "in the jarvis faces in the left column of the
+    hud there should also be a size option on desktop"). Like the theme above,
+    it is a per-device look kept in localStorage, not a shell setting: the
+    faces panel writes "jarvis.face.size" and this makes the FIRST frame the
+    size the owner chose, so the face never paints at the layout's own size
+    and jumps. The three values are the only ones the stylesheet knows
+    (`--face-scale` beside `#reactor`); anything else, or unreadable storage,
+    is the layout's own size, which is Medium.
+  */
+  try {
+    var jarvisFaceSize = localStorage.getItem("jarvis.face.size");
+    if (["small", "medium", "large"].indexOf(jarvisFaceSize) >= 0) {
+      document.documentElement.setAttribute("data-face-size", jarvisFaceSize);
+    }
+  } catch (e) {
+    /* private mode, cleared site data - the layout's own size is correct */
+  }
   /* The HUD's shell and density, before first paint (H3, 2026-10-22; Q5).
      ONE truth is the saved layout document in the desktop settings store
      (H1/H2/H3). The async store read may land after this frame, so the shell
@@ -430,12 +449,31 @@ html[data-hud-shell="split-stage"] .rail-menu-mode{display:none;}
   position:relative; display:flex; align-items:center; justify-content:center;
   padding:10px 0 4px; flex-shrink:0;
 }
+/* THE FACE SIZE (the owner's ask of 2026-10-28: "in the jarvis faces in the
+   left column of the hud there should also be a size option on desktop").
+   ONE multiplier, set on :root from THIS device's saved choice before first
+   paint (the head script above): Small 0.75x, Medium the layout's own size,
+   Large 1.25x.
+
+   Every rule below that sizes the face keeps ITS OWN base and multiplies it,
+   so no shell needs a second rule and none loses its size: the 232px page
+   default, the 150px narrow page, Cockpit's 220px and its 96/88px pinned
+   core, Studio's 48px dock, and Ambient's 320/240/190px core all move
+   together. Width and height, never `transform: scale()`: the wrap has to
+   RESERVE the bigger box, or a Large face would overlap the log instead of
+   pushing it down. 0.75 and 1.25 stay sane at the smallest base (36px/60px
+   for Studio's dock, 66px/120px for the pinned core). */
+html{--face-scale:1;}
+html[data-face-size="small"]{--face-scale:.75;}
+html[data-face-size="medium"]{--face-scale:1;}
+html[data-face-size="large"]{--face-scale:1.25;}
 /* An iframe now, not a canvas: the kit face, see "Arc reactor" in the script.
    Same box as before, click-through so it reads as part of this page rather
    than a window inside it. Round, like the Widget's: the face paints its own
    near-black well edge to edge, and a square of it on this stage's gradient
    read as a hole cut in the page rather than a reactor sitting on it. */
-#reactor{width:232px; height:232px; display:block; border:0; background:transparent;
+#reactor{width:calc(232px * var(--face-scale, 1)); height:calc(232px * var(--face-scale, 1));
+         display:block; border:0; background:transparent;
          border-radius:50%; pointer-events:none;}
 .reactor-state{
   position:absolute; bottom:-2px; left:50%; transform:translateX(-50%);
@@ -1034,7 +1072,7 @@ html[data-galaxy-hidden] .galaxy-off{display:flex !important;}
   }
   .rail.left .modes{flex-direction:row; padding:8px 4px;}
   .rail.left .hide-sm{display:none;}
-  #reactor{width:150px; height:150px;}
+  #reactor{width:calc(150px * var(--face-scale, 1)); height:calc(150px * var(--face-scale, 1));}
   #log{padding:12px 14px 6px;}
   .msg{max-width:100%;}
   .composer{padding:10px 12px 14px;}
@@ -1404,7 +1442,7 @@ html[data-hud-shell="three-column"] .preset{
 }
 html[data-hud-shell="three-column"] .preset-cloud{margin-top:5px; padding:5px 7px; font-size:10px;}
 html[data-hud-shell="three-column"] .preset-words{font-size:9px;}
-html[data-hud-shell="three-column"] #reactor{width:220px; height:220px;}
+html[data-hud-shell="three-column"] #reactor{width:calc(220px * var(--face-scale, 1)); height:calc(220px * var(--face-scale, 1));}
 html[data-hud-shell="three-column"] .core-expand{
   /* Beside the core, not at the far edge of a full-width wrap: the wrap is
      the whole stage row, so a right:0 button floated far from what it
@@ -1412,7 +1450,7 @@ html[data-hud-shell="three-column"] .core-expand{
   display:inline-flex; position:absolute; left:calc(50% + 118px); bottom:10px;
   font-size:10px; padding:4px 8px;
 }
-html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:96px; height:96px;}
+html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:calc(96px * var(--face-scale, 1)); height:calc(96px * var(--face-scale, 1));}
 html[data-hud-shell="three-column"] #shell[data-core="pinned"] .reactor-wrap{
   flex-direction:row; justify-content:flex-start; gap:16px; padding:6px 22px 4px;
 }
@@ -1517,7 +1555,7 @@ html[data-hud-shell="split-stage"][data-hud-tab="galaxy"] #brain{display:flex;}
 html[data-hud-shell="split-stage"] .reactor-wrap{
   flex-direction:row; justify-content:flex-start; gap:14px; padding:10px 18px 4px;
 }
-html[data-hud-shell="split-stage"] #reactor{width:48px; height:48px;}
+html[data-hud-shell="split-stage"] #reactor{width:calc(48px * var(--face-scale, 1)); height:calc(48px * var(--face-scale, 1));}
 html[data-hud-shell="split-stage"] .reactor-state{
   position:static; transform:none; font-size:9px;
 }
@@ -1746,7 +1784,7 @@ html[data-hud-shell="center-core"] #talk{align-items:center; position:relative;}
 html[data-hud-shell="center-core"] .reactor-wrap{
   margin-top:58px; padding:0; flex-shrink:0;
 }
-html[data-hud-shell="center-core"] #reactor{width:320px; height:320px;}
+html[data-hud-shell="center-core"] #reactor{width:calc(320px * var(--face-scale, 1)); height:calc(320px * var(--face-scale, 1));}
 html[data-hud-shell="center-core"] .reactor-rings{display:block;}
 html[data-hud-shell="center-core"] .reactor-state{bottom:-8px; letter-spacing:.34em;}
 html[data-hud-shell="center-core"] .core-expand{display:none;}
@@ -1800,17 +1838,17 @@ html[data-hud-shell="center-core"] .composer{
   html[data-hud-shell="split-stage"] #stage{grid-template-columns:minmax(0,1fr);}
   html[data-hud-shell="split-stage"] #brain{display:none !important;}
   html[data-hud-shell="split-stage"][data-hud-tab="galaxy"] #rail-right{display:none;}
-  html[data-hud-shell="center-core"] #reactor{width:240px; height:240px;}
+  html[data-hud-shell="center-core"] #reactor{width:calc(240px * var(--face-scale, 1)); height:calc(240px * var(--face-scale, 1));}
   html[data-hud-shell="center-core"] #log{max-height:26vh;}
 }
 @media (max-width:760px){
-  html[data-hud-shell="three-column"] #reactor{width:150px; height:150px;}
+  html[data-hud-shell="three-column"] #reactor{width:calc(150px * var(--face-scale, 1)); height:calc(150px * var(--face-scale, 1));}
   html[data-hud-shell="three-column"] .core-expand{left:calc(50% + 84px);}
-  html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:88px; height:88px;}
+  html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:calc(88px * var(--face-scale, 1)); height:calc(88px * var(--face-scale, 1));}
   html[data-hud-shell="split-stage"] #shell{grid-template-columns:52px minmax(0,1fr);}
   html[data-hud-shell="center-core"] .stage-bar{max-width:calc(100vw - 32px); flex-wrap:wrap; border-radius:16px;}
   html[data-hud-shell="center-core"] #ambient-status{max-width:calc(100vw - 32px);}
-  html[data-hud-shell="center-core"] #reactor{width:190px; height:190px;}
+  html[data-hud-shell="center-core"] #reactor{width:calc(190px * var(--face-scale, 1)); height:calc(190px * var(--face-scale, 1));}
 }
 /* The <=720 rules go LAST: the layout blocks above (`narrower windows`, whose
    <=1080 rule sets the Cockpit's two columns) are just as specific, so the
@@ -2176,6 +2214,23 @@ body[data-hud-edit="on"] .hud-card-hidden .hud-card-body{display:none;}
     background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
   }
   .hud-faces-item[aria-pressed="true"] .hud-faces-id{color:var(--ice);}
+  /* The Face size row (the owner's ask of 2026-10-28: "in the jarvis faces in
+     the left column of the hud there should also be a size option on desktop").
+     It sits under the panel's title, above the 25-face list, so it is seen
+     without scrolling. The three choices ARE the panel's own
+     `.hud-presets-item` buttons (same border, hover and focus ring); only the
+     row's layout and the chosen state are added here, and the chosen one takes
+     the same ice-pressed look as the current face above. */
+  .hud-faces-size{display:flex; align-items:center; gap:8px; margin:2px 0 6px;}
+  .hud-faces-size-label{flex:0 0 auto; font-size:9.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--dimmer);}
+  .hud-faces-sizes{display:flex; flex:1 1 auto; gap:2px; min-width:0;}
+  .hud-faces-size-item{display:block; flex:1 1 0; width:auto; min-width:0;
+    text-align:center; margin:0; padding:3px 4px; font-size:10px;}
+  .hud-faces-size-item[aria-pressed="true"]{
+    border-color:var(--ice); color:var(--ice);
+    background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
+  }
   .hud-presets-dialog{
     width:min(560px, calc(100vw - 32px)); max-height:82vh; overflow:auto;
     border:1px solid var(--line-hot); border-radius:6px; padding:14px;
