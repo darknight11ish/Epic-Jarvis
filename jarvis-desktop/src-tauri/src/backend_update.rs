@@ -238,7 +238,12 @@ fn pid_is_running(pid: u32) -> bool {
 /// The folder Jarvis keeps its own data in: `OPENJARVIS_CONFIG_DIR`, then
 /// `JARVIS_CONFIG_DIR`, then `~/.openjarvis` - the same order the backend and
 /// the Python tool use.
-fn lock_dir(app: &AppHandle) -> Option<PathBuf> {
+///
+/// Shared with `update.rs`, which writes the desktop update record into the same
+/// folder: the update lock and the pending install are two halves of one story,
+/// and a record and a lock that could end up in different folders on a machine
+/// with `OPENJARVIS_CONFIG_DIR` set would be two stories.
+pub(crate) fn config_dir(app: &AppHandle) -> Option<PathBuf> {
     for name in ["OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"] {
         if let Some(explicit) = std::env::var_os(name) {
             return Some(PathBuf::from(explicit));
@@ -252,7 +257,7 @@ fn lock_dir(app: &AppHandle) -> Option<PathBuf> {
 
 /// The lock file's path, when this PC has a data folder it can name.
 pub fn update_lock_path(app: &AppHandle) -> Option<PathBuf> {
-    lock_dir(app).map(|dir| dir.join(LOCK_NAME))
+    config_dir(app).map(|dir| dir.join(LOCK_NAME))
 }
 
 /// The VALID update lock held right now, or `None`. Never panics and never
@@ -491,6 +496,111 @@ pub fn locate(app: &AppHandle) -> Where {
         modes: Vec::new(),
         modes_note: None,
         blocked,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Which source each half came from
+// ---------------------------------------------------------------------------
+//
+// "Both halves updated" used to mean "both halves each finished", never "the
+// two match": the backend is patched from whatever clone the owner points at
+// (`locate`), and nothing compared that clone with the release the desktop half
+// installed. A desktop half one month ahead of the patches applied underneath
+// it is exactly the "half-updated machine that looks updated" this feature
+// exists to prevent, so at least the two commits are now read and SAID.
+//
+// Read, not enforced: a mismatch does not block the update. What it must never
+// do is stay invisible while the card paints two green lines.
+
+/// How long the one `git` read may take.
+///
+/// Local and normally milliseconds, but it runs before an update the owner has
+/// already asked for, and a wedged `git` on a network folder must not become a
+/// hang with no explanation. `commands::run_with_deadline` kills it instead.
+const GIT_LIMIT: Duration = Duration::from_secs(3);
+
+/// The commit this binary was built from.
+///
+/// Written by `build.rs` (`git rev-parse`) into the compile environment. `None`
+/// in a build made from a source copy with no `.git`, and the line below then
+/// says the two halves cannot be compared rather than inventing a number. It is
+/// **not** a release check and involves no network: it is the same number for
+/// every launch of one binary.
+pub fn app_commit() -> Option<String> {
+    normalise_commit(option_env!("JARVIS_BUILD_COMMIT").unwrap_or(""))
+}
+
+/// The commit the Jarvis program folder is checked out at, when the owner has
+/// said where that folder is and it is a git checkout.
+pub fn repo_commit(repo: Option<&str>) -> Option<String> {
+    let repo = repo.map(str::trim).filter(|r| !r.is_empty())?;
+    let mut command = std::process::Command::new("git");
+    command
+        .arg("-C")
+        .arg(repo)
+        .arg("rev-parse")
+        .arg("HEAD")
+        .stdin(std::process::Stdio::null());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = crate::commands::run_with_deadline(
+        "reading the backend folder's git commit",
+        command,
+        GIT_LIMIT,
+    )?
+    .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    normalise_commit(text.trim())
+}
+
+/// A commit as this module shows it: lower-case hex, twelve characters.
+///
+/// `None` for anything that is not a commit — an error message, an empty
+/// string, a path — so a failed read can never be displayed as a real one.
+pub fn normalise_commit(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if !(7..=40).contains(&raw.len()) || !raw.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(
+        raw.chars()
+            .take(12)
+            .collect::<String>()
+            .to_ascii_lowercase(),
+    )
+}
+
+/// The honest sentence about which source each half came from.
+///
+/// Always says which half is unknown rather than dropping the comparison: a
+/// line that goes missing when `git` is missing would be read as "they match".
+pub fn halves_line(app: Option<&str>, backend: Option<&str>) -> String {
+    let app = app.and_then(normalise_commit);
+    let backend = backend.and_then(normalise_commit);
+    match (app.as_deref(), backend.as_deref()) {
+        (Some(app), Some(backend)) if app == backend => {
+            format!("Backend at {backend}, app at {app}; they match.")
+        }
+        (Some(app), Some(backend)) => format!("Backend at {backend}, app at {app}; they differ."),
+        (Some(app), None) => format!(
+            "App at {app}; the backend folder's commit could not be read, so the two \
+             halves cannot be compared."
+        ),
+        (None, Some(backend)) => format!(
+            "Backend at {backend}; this build did not record its own commit, so the two \
+             halves cannot be compared."
+        ),
+        (None, None) => "Neither this build nor the backend folder can name its commit, so \
+                         the two halves cannot be compared."
+            .to_string(),
     }
 }
 
@@ -1139,10 +1249,11 @@ pub fn set_update_folders(
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_folder, folder_of_hud, known_mode, parse_mode_plan, parse_update_lock,
-        read_verdict, refuse, start_blocked_words, tail_of, tool_args, unknown_mode_words,
-        update_lock_is_valid, update_running_words, ModeInfo, UpdateLock, Verdict, BACKEND_ENV,
-        HUD, LOCK_CEILING_SECONDS, LOCK_CLOCK_SKEW_SECONDS, LOCK_HEARTBEAT_SECONDS,
+        backend_folder, folder_of_hud, halves_line, known_mode, normalise_commit, parse_mode_plan,
+        parse_update_lock, read_verdict, refuse, repo_commit, start_blocked_words, tail_of,
+        tool_args, unknown_mode_words, update_lock_is_valid, update_running_words, ModeInfo,
+        UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS, LOCK_CLOCK_SKEW_SECONDS,
+        LOCK_HEARTBEAT_SECONDS,
     };
 
     fn args(items: &[&str]) -> Vec<String> {
@@ -1549,5 +1660,63 @@ mod tests {
             );
         }
         assert!(start_blocked_words(None).is_none());
+    }
+
+    // ---- which source each half came from --------------------------------
+
+    #[test]
+    fn a_commit_is_shown_as_twelve_lower_case_characters() {
+        // The whole SHA reads as the short one, so the desktop half's embedded
+        // value and the backend folder's cannot differ only by length.
+        let full = "1BA56874B3A6177A93BA3BBB4E71219E56EF86ED";
+        assert_eq!(normalise_commit(full).as_deref(), Some("1ba56874b3a6"));
+        assert_eq!(
+            normalise_commit(" 1ba56874b\n").as_deref(),
+            Some("1ba56874b")
+        );
+        // Not a commit: an error message, a path, a short word, an empty
+        // answer. None of these may be printed as if it were one.
+        for junk in ["", " ", "not-a-commit", "zzzzzzz", "1ba5", "abcdef"] {
+            assert_eq!(normalise_commit(junk), None, "accepted junk: {junk:?}");
+        }
+        let too_long = "a".repeat(41);
+        assert_eq!(normalise_commit(&too_long), None);
+    }
+
+    #[test]
+    fn the_halves_line_says_match_differ_or_which_one_is_unknown() {
+        assert_eq!(
+            halves_line(
+                Some("1ba56874b3a6"),
+                Some("1BA56874B3A6177A93BA3BBB4E71219E56EF86ED")
+            ),
+            "Backend at 1ba56874b3a6, app at 1ba56874b3a6; they match."
+        );
+        let differ = halves_line(Some("aaaaaaaaaaaa"), Some("bbbbbbbbbbbb"));
+        assert!(differ.contains("aaaaaaaaaaaa"), "{differ}");
+        assert!(differ.contains("bbbbbbbbbbbb"), "{differ}");
+        assert!(differ.contains("they differ"), "{differ}");
+        // A half that could not be read is SAID - a line that silently dropped
+        // it would be read as "they match".
+        let no_repo = halves_line(Some("aaaaaaaaaaaa"), None);
+        assert!(no_repo.contains("could not be read"), "{no_repo}");
+        assert!(!no_repo.contains("they match"), "{no_repo}");
+        let no_app = halves_line(None, Some("bbbbbbbbbbbb"));
+        assert!(no_app.contains("did not record"), "{no_app}");
+        assert!(!no_app.contains("they match"), "{no_app}");
+        let neither = halves_line(None, None);
+        assert!(neither.contains("cannot be compared"), "{neither}");
+        // ...and an unknown is never printed as a commit-shaped value.
+        for said in [&no_repo, &no_app, &neither] {
+            assert!(!said.contains("Backend at None"), "{said}");
+            assert!(!said.contains("app at None"), "{said}");
+        }
+    }
+
+    #[test]
+    fn no_folder_means_no_commit_is_read() {
+        // Pure: this must not spawn `git` for a folder the owner never named.
+        assert_eq!(repo_commit(None), None);
+        assert_eq!(repo_commit(Some("   ")), None);
     }
 }

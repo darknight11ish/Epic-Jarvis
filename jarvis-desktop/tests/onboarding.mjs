@@ -148,6 +148,25 @@ check("it says how to talk to it", () => {
   assert.match(screen.html, /<kbd>Esc<\/kbd>/, "there is no word about getting rid of the bar");
 });
 
+check("it sends a new owner to voice training before inviting speech", () => {
+  // Voice ships ON but fail-closed: `[voice] mode = "owner"` in
+  // backend/rebuilt/jarvis-framework.toml, and "no model, no profile, or a
+  // processing error all mean 'not the owner'". So a walkthrough that invites
+  // speech first tells a new owner to do the one thing that is refused.
+  const talk = screens.find((s) => /talking to it/i.test(s.text));
+  assert.ok(talk, "no screen is about talking to Jarvis");
+  assert.match(talk.text, /once you have taught it your voice[^.]*microphone/i,
+    "the walkthrough invites speech without saying training comes first");
+  assert.match(talk.text, /teach it yours first/i,
+    "the walkthrough never says to teach Jarvis your voice first");
+  assert.match(talk.text, /refused rather than obeyed/i,
+    "the walkthrough does not say an unlearned voice is refused");
+  const settings = screens.find((s) => /settings/i.test(s.text) && /tray/i.test(s.text));
+  assert.ok(settings, "no screen says where the settings are");
+  assert.match(settings.text, /Voice teaches\s+Jarvis your voice/i,
+    "the walkthrough never says where voice training lives");
+});
+
 check("it says where the settings live", () => {
   const screen = screens.find((s) => /settings/i.test(s.text) && /tray/i.test(s.text));
   assert.ok(screen, "no screen says where the settings are");
