@@ -50,15 +50,43 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
     2. HUD DELTAS for the five patched base files (`jarvis_hud.py`, `jarvis_gate.py`,
        `jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py`). Those files are
        never replaced, because the live copies are newer than the published base. For
-       every `.patch` in `$PATCHES` that touches one of them, the tool decides
-       ALREADY_PRESENT from that patch's distinctive added lines; when absent it inserts
-       the patch's added lines at the logical anchor the stack uses. The anchors are a
+       every `.patch` in `$PATCHES` that touches one of them, the tool first decides
+       whether the patch is ALREADY PRESENT - and only from evidence that can tell the
+       two files apart. An "added" line that is ALREADY IN THE PATCH'S OWN PRE-IMAGE
+       proves NOTHING: a patch that re-writes a signature or an indentation lists that
+       line on both its `-` and its `+` side, so a rule of "any added line is present"
+       calls a file that has none of the patch's hunks ALREADY_PRESENT. That is exactly
+       what happened to `cloud-escalate.patch` (measured 2026-10-27): its added side
+       carries `_says = _api.CloudAnswer(` and `def _lane_names() -> list:`, both of
+       which its own hunks show in the old text, while all three of its hunks were
+       missing from the live file - so `--apply` would have called the deploy a success
+       with the patch still absent. Presence is therefore decided only from added lines
+       that appear NOWHERE in that patch's pre-image for that file, plus the explicit
+       probes of a `DELTA_TABLE` entry. When the tool can prove neither presence nor
+       absence - every line the patch adds is a re-written line - the patch is REFUSED
+       by name, never skipped and never guessed at.
+       The published base is deliberately NOT that reference, and that is a measured
+       correction (2026-10-28): `jarvis-backend/` is a snapshot of the owner's LIVE
+       folder, which already carries the whole patch stack, so **132 of the 160 patches
+       in `$PATCHES` have every one of their added lines in it** (e.g. `_PUMP =
+       _ev.Pump(engine=_ENGINE)`, added by `events-pump.patch`, is at
+       `jarvis-backend/jarvis_hud.py:6307`). Excluding base lines would refuse 132
+       patches on ANY live file and the tool could never deploy again. The pre-image is
+       the file the patch was cut against, which is the thing "unchanged" actually
+       means.
+       When the patch is provably absent it inserts the patch's own added lines at
+       the logical anchor the stack uses, or replays the patch's own hunks in order
+       (a patch that changes several disjoint regions of one file). The anchors are a
        small data table (`DELTA_TABLE`) - today app-control's route block before
        `if route == "/api/memory/decide":`, setup's install block and plugin-loader's
-       block in their stack order. A patch that is absent, touches a patched file, and
-       has no anchor rule is REFUSED loudly: the tool changes nothing and names the
-       patch, the file and what it would need. A missing or ambiguous anchor is refused
-       the same way - it never guesses. A delta that has no safe anchor at all is
+       block in their stack order, and the four 2026-10-27 patches (cloud-escalate,
+       f01-manual-lane-gate, reminder-actions, update-in-chat) as their own hunks. A
+       patch that is absent, touches a patched file, and has no rule is REFUSED
+       loudly: the tool changes nothing and names the patch, the file and what it
+       would need - and says how to apply it by hand instead
+       (`scripts/apply-patches.ps1 -BackendPath <live>`). A missing or ambiguous
+       anchor is refused the same way - it never guesses. A delta that has no safe
+       anchor at all is
        recorded in `BLOCKED_DELTAS` with its evidence, printed as BLOCKED LIVE
        DELTAS, and never staged: blocked is reported, not guessed. That table is
        EMPTY on purpose since 2026-10-23: its one entry (F10 `traces.db` retention,
@@ -120,13 +148,25 @@ USAGE
     Run it from a worktree checked out at `--ref` (the default `origin/main`). If
     HEAD is another commit it refuses and says so; `--allow-worktree-mismatch`
     overrides that for tests and exotic checkouts, and `--ref <commit>` chooses a
-    different commit to deploy.
+    different commit to deploy. The working checkout is usually NOT at `origin/main`
+    (it is a feature branch, or behind it), so the exact procedure is to make a
+    second copy at the commit being deployed - a `git worktree`, which is a second
+    checkout of the same repository on another branch - and run the tool from there:
+
+        git worktree add --detach "<repo>\\.dsh-scratch\\reconcile-wt" origin/main
+        cd "<repo>\\.dsh-scratch\\reconcile-wt"
+        py -3 tools/reconcile_live_backend.py --backend-path "<live backend>"   # dry run
+        py -3 tools/reconcile_live_backend.py --backend-path "<live backend>" --apply
+
+    The dry run prints `to add` / `to update` / `unchanged`, then every refusal it
+    found, and writes nothing; `--apply` is a no-op pass only once the dry run is
+    clean.
 
 EXIT CODES
     0 success (dry run planned cleanly, or apply + all probes PASS)
     1 a plugin add or a route probe failed
     2 refused before writing (bad arguments, working tree not at --ref, unknown HUD
-      delta, missing anchor, rehearsal)
+      delta, missing anchor, a patch whose presence cannot be proved, rehearsal)
 """
 from __future__ import annotations
 
@@ -585,6 +625,92 @@ DELTA_TABLE = {
             "hunks": True,
         },
     },
+    # cloud-escalate.patch (2026-10-27, #896): the standing cloud switch, the honest
+    # lane list, and the `auto=`/`fallback=` CloudAnswer. THREE hunks in disjoint
+    # regions, so `"hunks": True`: each pre-image block is replaced by its post-image
+    # block, in file order, and a pre-image that is missing or not exactly once
+    # refuses the whole file. This entry is also the fix for the measured silent skip
+    # (2026-10-28): without it the loose "any added line is present" rule matched
+    # `_says = _api.CloudAnswer(` and `def _lane_names() -> list:` - two lines that
+    # are on the patch's ADDED side and already in the old file - so a live HUD with
+    # none of the three hunks was reported ALREADY_PRESENT. The probes are one
+    # post-image line from each region and none of them exists in the published base
+    # or in the pre-image, so only a file that really carries all three regions counts
+    # as present; a half-applied file finishing the job is left to the per-hunk check.
+    # Region 1's probe is a line of its own COMMENT block on purpose:
+    # f01-manual-lane-gate.patch rewrites the `owner_said_yes=(` code line below it (a
+    # manual pick counts as the owner's yes), so that code line is GONE once F-01 is
+    # deployed, while the comment above it survives both patches. A probe on the code
+    # line would make a fully deployed pair look like a missing cloud-escalate and
+    # re-refuse it on the second run.
+    # Measured read-only against the published base: all three pre-image blocks appear
+    # exactly once (`backend/test_reconcile_live_backend.py` proves the chain and that
+    # applying the entry's hunks reproduces the patch byte for byte).
+    "cloud-escalate.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                "# `cloud_yes` while the PC's escalation box is on",
+                'auto=bool(getattr(decision, "auto", False)),',
+                "return list(jarvis_presets.cloud_lanes())",
+            ),
+            "hunks": True,
+        },
+    },
+    # f01-manual-lane-gate.patch (2026-10-27, #896, F-01): BOTH lane paths go through
+    # the one jarvis_router.choose() call, a manual pick stands in for the owner's yes,
+    # and `_manual_lane()` is the rule. FIVE hunks in disjoint regions, so
+    # `"hunks": True`. Its hunk 2 and 3 pre-images are cloud-escalate's POST-image
+    # bytes, so the order in $PATCHES matters and apply-patches.ps1 already puts
+    # cloud-escalate directly before it (its comment says the test suite asserts that
+    # order); the tool walks the same list in order, so it sees the same staged text.
+    # The probes are one post-image line from four of the five regions, so only a file
+    # that carries the gate really counts as present.
+    "f01-manual-lane-gate.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                'manual_pick = not body.get("auto", True)',
+                "or manual_pick),",
+                'decision = _manual_decision(body.get("lane") or local_model,',
+                "def _manual_lane(decide, chosen, local_model: str, lanes=None):",
+            ),
+            "hunks": True,
+        },
+    },
+    # reminder-actions.patch (2026-10-27, #894): the gate's `schedule_action` tier
+    # entry and the reason-dict row that says what the card does. TWO insertions in
+    # disjoint regions of `jarvis_gate.py` (the frozenset of actions with no rule from
+    # a denial, and `_ACTION_REASONS`), so `"hunks": True` - one anchor insert cannot
+    # express two places. The rest of the patch is `jarvis_schedule.py`, a SHIPPED
+    # module that deploy step 1 copies in whole, so only the gate half is a delta.
+    # Both pre-image blocks appear exactly once in the published base gate.
+    "reminder-actions.patch": {
+        "jarvis_gate.py": {
+            "probes": (
+                '    "schedule_action",        # jarvis_schedule.py acts only on tier '
+                '"ask" (reminder-actions.patch)',
+                '"schedule_action": ("yes", "local", "does the one thing a reminder '
+                'you set asked for',
+            ),
+            "hunks": True,
+        },
+    },
+    # update-in-chat.patch (2026-10-26): `desktop_update` is added to the gate's
+    # `_NO_RULE_FROM_DENIAL` set, so a "no" on the update card answers that one card
+    # and never becomes a standing rule. ONE hunk, a pure one-line insertion before
+    # the set's closing `})` - and that closing line is far too common to anchor on,
+    # which is why this is carried as its hunk rather than `anchor`. The pre-image
+    # block must appear exactly once in the live gate; a gate older than the
+    # `uncensored-optins.patch` lines beside it refuses, which is the honest answer
+    # (apply-patches.ps1 is then the route, and the refusal says so).
+    "update-in-chat.patch": {
+        "jarvis_gate.py": {
+            "probes": (
+                '"desktop_update",  # jarvis_quick.py acts only on tier "ask": ONE '
+                "card per start of an update",
+            ),
+            "hunks": True,
+        },
+    },
 }
 
 #: Live-HUD deltas that are RECORDED BUT DELIBERATELY NOT APPLIED. They are kept
@@ -639,6 +765,22 @@ _GENERIC_PROBES = frozenset({
     "try:", "except Exception:", "except Exception as exc:", "pass", "return True",
     "return False", "import os", "import sys", "import json", "else:", "endif",
 })
+
+#: The three answers a presence decision may give. ONLY "present" is allowed to mean
+#: "already there"; "absent" may be carried by a DELTA_TABLE rule; "unproven" is
+#: refused, because a guess in either direction is a silent skip in one direction and
+#: a duplicated block in the other (see `patch_presence`).
+PRESENT = "present"
+ABSENT = "absent"
+UNPROVEN = "unproven"
+
+#: What a human can do when the tool refuses a patch it cannot carry itself. The
+#: patch stack script is the route that carries a patch AND the beside-files; the
+#: deploy must then be re-planned to prove the result.
+APPLY_HINT = (
+    "Apply the stack by hand instead: powershell -ExecutionPolicy Bypass -File "
+    "scripts/apply-patches.ps1 -BackendPath <live> (then restart Jarvis), and re-run "
+    "this tool's --dry-run - it must then report 0 refusals.")
 
 #: A file that must never be sourced from the base folder (stale snapshot).
 _NEVER_FROM_BASE = ("jarvis-backend/",)
@@ -848,7 +990,10 @@ def check_worktree_at_ref(repo: Path, ref: str,
         f"ready plug-ins and every other working-tree read come from {head_sha}. "
         f"Check {ref} out in this worktree (git checkout {ref}), or run the tool from a "
         f"worktree already at {ref}; pass --allow-worktree-mismatch only when you really "
-        f"mean to use this checkout.")
+        f"mean to use this checkout. The exact command for a separate copy at {ref} is: "
+        f'git worktree add --detach "<repo>\\.dsh-scratch\\reconcile-wt" {ref} ; then run '
+        f"this tool from that folder (py -3 tools/reconcile_live_backend.py "
+        f'--backend-path "<live backend>").')
 
 
 def plan_shipped(repo: Path, ref: str, live: Path, shipped: list,
@@ -952,7 +1097,10 @@ def probe_candidates(added: Iterable[str], limit: int = 3) -> tuple:
     """The most distinctive added lines of one patch/file, best first.
 
     A line is distinctive when it is long enough to mean something and is not one of the
-    generic Python shapes every patch contains. Routes and install() calls rank highest."""
+    generic Python shapes every patch contains. Routes and install() calls rank highest.
+    NOTE: "distinctive" here is about wording only. Whether a line can PROVE a patch is
+    applied is a different question, answered by `distinctive_added_lines` against the
+    published base - see the cloud-escalate trap described there."""
     scored = []
     seen = set()
     for raw in added:
@@ -975,29 +1123,135 @@ def probe_candidates(added: Iterable[str], limit: int = 3) -> tuple:
     return tuple(s for _score, s in scored[:limit])
 
 
-def patch_present(patch: str, target: str, added: Iterable[str], live_text: str,
-                  table: Optional[dict] = None,
-                  state_patches: Optional[Iterable[str]] = None) -> bool:
-    """Is this patch's delta already in the live file?
+def patch_pre_image(patch_text: str, target: str) -> str:
+    """The text one patch's hunks expect for `target`: every `-` and context line.
 
-    Table entries carry their own distinctive probes and ALL must be present (so a
-    half-inserted block is not mistaken for present). Other patches use their most
-    distinctive added lines - any one is enough, because later patches legitimately
-    rewrite neighbouring lines. When the lines cannot prove anything (a very old patch
-    later rewritten), the live `_jarvis-state.json` patch list is the honest fallback."""
+    This is the file the patch was cut against, as far as this patch is concerned, and
+    it is the reference a presence probe is proved against: an "added" line that also
+    appears here is a RE-WRITTEN line (the same text on both sides of a hunk), so it is
+    present whether or not the patch was applied. A patch with no hunks for the file
+    falls back to its `-` lines, which is the same thing without the context.
+
+    The published base is NOT this reference, and that is measured rather than
+    preferred: `jarvis-backend/` is a snapshot of the owner's live folder, so it
+    already carries the whole patch stack applied up to 2026-10-14 - **132 of the 160
+    patches in `$PATCHES` have every one of their added lines in it** (checked
+    2026-10-28; `_PUMP = _ev.Pump(engine=_ENGINE)`, added by `events-pump.patch`, sits
+    at `jarvis-backend/jarvis_hud.py:6307`). A rule of "absent from the base" would
+    therefore call 132 patches unprovable on ANY live file and refuse the whole
+    deploy. The patch's own pre-image is both stricter and correct: it is exactly the
+    text "unchanged" means for that patch.
+    """
+    hunks = patch_hunks(patch_text, target)
+    if hunks:
+        return "\n".join(line for hunk in hunks for line in hunk["old"])
+    removed = (parse_patch_files(patch_text).get(target) or {}).get("removed") or []
+    return "\n".join(str(line) for line in removed)
+
+
+def distinctive_added_lines(added: Iterable[str],
+                            pre_image: Optional[str]) -> tuple:
+    """The added lines that can tell an applied patch from a re-written one.
+
+    A patch's "added" side is not only new code. A patch that re-writes a signature, a
+    block of comments or an indentation lists the SAME line on its `-` and its `+` side,
+    so some of its added lines are already in the file the patch was cut against. Such
+    a line proves nothing: it is present whether or not the patch was applied.
+
+    `cloud-escalate.patch` is the measured case (2026-10-28). Its added side carries
+    `_says = _api.CloudAnswer(` and `def _lane_names() -> list:`, and its OWN hunks show
+    both in the old text (the first inside `_says = _api.CloudAnswer("event-stream" in
+    str(`, the second as a whole line of the function it rewrites). A live HUD with
+    NONE of its three hunks matched one of them, so the old rule reported the patch
+    ALREADY_PRESENT and `--apply` would have finished `RESULT: PASS` with the
+    cloud-escalation hunks absent.
+
+    So only lines that appear NOWHERE in the patch's pre-image are returned, and only
+    those may be used as probes. An empty tuple means "this patch cannot be proved
+    either way from its own lines" - the caller refuses it rather than guessing. A
+    `pre_image` of None or "" means the same unprovable state, not a licence to match
+    anything.
+    """
+    out, seen = [], set()
+    for raw in added:
+        s = str(raw).strip()
+        if len(s) < 12 or s in _GENERIC_PROBES or s in seen:
+            continue
+        if pre_image is not None and s in pre_image:
+            continue          # a re-written line: present with or without the patch
+        seen.add(s)
+        out.append(s)
+    return tuple(out)
+
+
+def patch_presence(patch: str, target: str, added: Iterable[str], live_text: str,
+                   table: Optional[dict] = None,
+                   state_patches: Optional[Iterable[str]] = None,
+                   pre_image: Optional[str] = None) -> tuple:
+    """(state, why): is this patch's delta proved PRESENT, proved ABSENT, or neither?
+
+    Three answers, never two, because the two wrong answers cost differently:
+
+    * A table entry has explicit probes, chosen from several regions of the patch, and
+      ALL of them must be present - so a half-inserted block is not mistaken for a
+      complete one. Absent probes mean ABSENT (there is a rule to carry it).
+    * A patch with no entry is PRESENT when at least one of its added lines that is
+      absent from its OWN pre-image is present. Later patches legitimately rewrite
+      neighbouring lines, so any one such line is enough; but a line that is also on
+      the `-` side (or in the hunks' context) is not evidence and is never used (see
+      `distinctive_added_lines`).
+    * When every added line is a re-written line, the answer is UNPROVEN and the caller
+      refuses it by name. It is NOT "absent": inserting a block that may already be
+      there would duplicate it. And it is not "present": that is the silent skip this
+      whole decision exists to prevent.
+
+    `state_patches` (the live `_jarvis-state.json` patch list) is NOT proof. It records
+    what a patcher ran once, not what the live bytes hold now - on this PC the live tree
+    is a hybrid of an old patch run and newer module deploys - so it is used only to
+    make a refusal's message more useful. `why` is that message.
+    """
     table = DELTA_TABLE if table is None else table
     entry = ((table.get(patch) or {}).get(target) or {})
     probes = tuple(entry.get("probes") or ())
     if probes:
-        return all(str(p) in live_text for p in probes)
-    candidates = probe_candidates(added)
-    if candidates and any(c in live_text for c in candidates):
-        return True
-    # A patch applied long ago can have its added lines rewritten by later patches, so
-    # its text may no longer survive. The live deploy's own patch list is the fallback
-    # evidence: if the PC recorded that patch as applied, it is not missing again.
+        missing = [str(p) for p in probes if str(p) not in live_text]
+        if not missing:
+            return PRESENT, ""
+        return ABSENT, (f"{len(missing)} of its {len(probes)} probe(s) are absent from "
+                        f"the live file")
+    unique = distinctive_added_lines(added, pre_image)
+    if unique:
+        present = [line for line in unique if line in live_text]
+        if present:
+            return PRESENT, ""
+        return ABSENT, (f"none of its {len(unique)} distinctive added line(s) is in the "
+                        f"live file")
     state = {str(s).replace("\\", "/").split("/")[-1] for s in (state_patches or ())}
-    return patch.split("/")[-1] in state
+    recorded = patch.split("/")[-1] in state
+    why = ("every line it adds also appears in the patch's own pre-image (the `-` and "
+           "context lines of its hunks for this file), so it cannot be proved either "
+           "way - each one is a re-written line, present with the patch or without it")
+    sample = probe_candidates(added, limit=1)
+    if sample:
+        why += f" (its likeliest probe, {sample[0]!r}, is one of those re-written lines)"
+    if recorded:
+        why += (". The live deploy's own patch list records it as applied, but that "
+                "list is a record of a past run, not of the bytes now in the file")
+    return UNPROVEN, why
+
+
+def patch_present(patch: str, target: str, added: Iterable[str], live_text: str,
+                  table: Optional[dict] = None,
+                  state_patches: Optional[Iterable[str]] = None,
+                  pre_image: Optional[str] = None) -> bool:
+    """True only when `patch_presence` PROVED the patch is already in the live file.
+
+    Kept as the boolean face of the decision for callers that only need "is it done";
+    anything that has to act on "not present" must use `patch_presence`, because
+    UNPROVEN is not the same answer as ABSENT (see its docstring)."""
+    state, _why = patch_presence(patch, target, added, live_text, table=table,
+                                 state_patches=state_patches, pre_image=pre_image)
+    return state == PRESENT
 
 
 def insert_before_anchor(text: str, block_lines: Iterable[str], anchor: str,
@@ -1041,6 +1295,9 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
     """(deltas, staged_texts, refusals) for the five patched files. Reads only.
 
     `show(repo, ref, "<patch>")` supplies the patch text (tests inject it).
+    Each patch's presence is proved against its OWN pre-image (`patch_pre_image`), the
+    text its hunks expect for the file - see `distinctive_added_lines` for why the
+    published base cannot be that reference.
     The staged_texts dict holds a new copy for each changed file; nothing is written."""
     show = show or git_show
     repo = Path(repo) if repo is not None else Path(__file__).resolve().parent.parent
@@ -1048,6 +1305,7 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
     state = list(state_patches) if state_patches is not None else _live_state_patches(live)
     live_text = {}
     staged = {}
+
     for name in PATCHED_FILES:
         path = Path(live) / name
         if path.is_file():
@@ -1073,8 +1331,23 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
             if not added:
                 continue
             text = staged.get(target) or live_text[target]
-            if patch_present(patch, target, added, text, table=table, state_patches=state):
+            pre_image = patch_pre_image(raw, target)
+            state_name, why = patch_presence(patch, target, added, text, table=table,
+                                             state_patches=state, pre_image=pre_image)
+            if state_name == PRESENT:
                 deltas.append(DeltaAction(patch, target, "already"))
+                continue
+            if state_name == UNPROVEN:
+                # NEVER applied on a guess. Inserting a block that may already be
+                # there duplicates it; reporting "already" is the silent skip that
+                # let cloud-escalate.patch pass a live file that had none of its
+                # hunks. Neither answer is allowed, so nothing is staged and the
+                # patch is named.
+                refusals.append(
+                    f"{patch} -> {target}: its presence cannot be proved either way - "
+                    f"{why}. Refusing rather than guessing. Add a DELTA_TABLE entry "
+                    f"(hunks/anchor + probes) for it, or check the live file by hand. "
+                    f"{APPLY_HINT}")
                 continue
             entry = (table.get(patch) or {}).get(target) or {}
             regions = entry.get("regions") or ()
@@ -1162,7 +1435,7 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
                         region_error = (
                             f"{patch} -> {target}: hunk {index}'s pre-image block "
                             f"appears {count} time(s) in the live file; expected "
-                            f"exactly 1. Refusing rather than guessing.")
+                            f"exactly 1. Refusing rather than guessing. {APPLY_HINT}")
                         break
                     text = text.replace(old, new, 1)
                     changed = True
@@ -1179,7 +1452,7 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
                 refusals.append(
                     f"{patch} touches {target} and is not present, but there is no "
                     f"insertion rule for it. Add one to DELTA_TABLE (anchor + probes) "
-                    f"after reading the patch; refusing to guess.")
+                    f"after reading the patch; refusing to guess. {APPLY_HINT}")
                 continue
             try:
                 text = insert_before_anchor(text, added, anchor,
@@ -1221,9 +1494,21 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
             if not lines:
                 continue
             text = staged.get(target) or live_text.get(target, "")
-            if patch_present(patch, target, (), text, table=table,
-                             state_patches=state):
+            # A literal entry has no patch text, so there is no pre-image to prove
+            # against: it MUST carry `probes` (all of them present = already there),
+            # and an entry without them is refused below rather than matched loosely.
+            literal_state, literal_why = patch_presence(
+                patch, target, (), text, table=table, state_patches=state,
+                pre_image=None)
+            if literal_state == PRESENT:
                 deltas.append(DeltaAction(patch, target, "already"))
+                continue
+            if literal_state == UNPROVEN:
+                refusals.append(
+                    f"{patch} -> {target}: its presence cannot be proved either way - "
+                    f"{literal_why}. Refusing rather than guessing. Give the entry "
+                    f"`probes` (post-image lines only it contains) so presence is "
+                    f"proved. {APPLY_HINT}")
                 continue
             old = str(entry.get("replace") or "")
             if not old and entry.get("replace_file"):
@@ -1827,8 +2112,21 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     plan.deltas = deltas
     plan.staged = staged
     if refusals:
+        # EVERY refusal is printed, never summarised away: this list is the reason
+        # the deploy writes nothing, and a truncated list is a list a human cannot
+        # act on. Each line says what the tool would need or how to apply the patch
+        # by hand, and the last line says what to do next.
         out("HUD DELTAS - REFUSED (nothing has been written):")
-        _summ(out, "refusals", refusals, limit=20)
+        out(f"  refusals: {len(refusals)}")
+        for line in refusals:
+            out(f"      {line}")
+        out("")
+        out("Nothing was planned for these patches, so nothing may be applied: a "
+            "patch the tool cannot prove is absent could already be there, and a "
+            "second copy of a block is worse than a refusal.")
+        out("Next: add the DELTA_TABLE rule each refusal names, or apply the stack "
+            "with scripts/apply-patches.ps1 -BackendPath <live>, restart Jarvis, and "
+            "re-run this dry run until it reports 0 refusals.")
         return 2
     already = [d for d in deltas if d.status == "already"]
     inserts = [d for d in deltas if d.status == "insert"]

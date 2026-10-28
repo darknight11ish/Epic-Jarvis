@@ -66,8 +66,9 @@ replaced the two hand-written scripts used for the 2026-10-20 deploy:
   live folder byte-for-byte (no line-ending rewriting), backing up every file it
   overwrites;
 - for the five patched base files it adds only the HUD deltas a patch really
-  needs, and **refuses** when an anchor is missing or a patch has no rule - it
-  never guesses;
+  needs, and **refuses** when an anchor is missing, when a patch has no rule, or
+  when it cannot prove the patch is absent (see "A patch is PROVED applied or
+  absent" below) - it never guesses;
 - it also carries the HUD fixes that live in the published base but in **no**
   `.patch` as literal deltas (DEF-002's status cache, its start call and the
   cached `/api/status` route, and the reasoning fallback); a REPLACE delta's old
@@ -95,8 +96,9 @@ route, below), 9 ready plug-ins present and 0 to add, planned changes 153 (1 HUD
 route insert + 152 stale `.pyc` files; "DRY RUN, nothing written"). A second dry
 run half an hour later planned 168 for the same two reasons (the running server
 keeps writing `.pyc`, so only the 1 HUD route insert is stable). Its own
-suite, `backend/test_reconcile_live_backend.py`, passes (144 checks, all on
-temporary folders). As an extra read-only check (Area 12), its `run_probes()`
+suite, `backend/test_reconcile_live_backend.py`, passes (144 checks on
+2026-10-20; **371 checks on 2026-10-28**, all on temporary folders). As an
+extra read-only check (Area 12), its `run_probes()`
 was called directly against `http://127.0.0.1:4719` - no `--apply`, nothing
 written - and all four probes PASS (setup 200, media-index 200, app-control 409
 while off, voice 200).
@@ -155,6 +157,74 @@ replaces, and its dry run above proves the live HUD already has those deltas.
 **Do not run or copy them**; use the tool. They are untracked scratch files, so
 nothing in the repository depends on them and no tracked file was deleted.
 
+**A patch is PROVED applied or absent, never inferred (2026-10-28, measured bug).**
+The live-drift audit of 2026-10-27 (`.dsh-scratch/AUDITS-NEXT-2026-10-28/LIVE-DRIFT.md`
+§4.3) found that this tool would have **silently skipped `cloud-escalate.patch`** and
+still finished `RESULT: PASS`. Its presence rule was "any one distinctive added line is
+already in the live file", and two of that patch's *added* lines are lines its own hunks
+show in the old text - `_says = _api.CloudAnswer(` and `def _lane_names() -> list:` - so
+a live HUD with none of its three hunks read as `ALREADY_PRESENT`. The rule is now:
+
+- a probe is an added line that appears **nowhere in that patch's own pre-image** (the
+  `-` and context lines of its hunks for that file: a line on both sides is a re-written
+  line, present with or without the patch), plus the explicit `probes` of a
+  `DELTA_TABLE` entry, where **every** probe must be present;
+- a patch that can be proved neither way - every line it adds is a re-written line - is
+  **REFUSED by name**, with what it would need and how to apply it by hand. It is never
+  inserted on a guess (a second copy of a block) and never called already-there (the
+  silent skip);
+- the live `_jarvis-state.json` patch list is **not** proof. It records what a patcher
+  ran once, not what the live bytes hold now, so it only appears in a refusal's message.
+
+**Why the pre-image and not `jarvis-backend/`, measured 2026-10-28.** The published
+base was the first candidate for "the old file", and it is the wrong one: that folder is
+a snapshot of the owner's **live** folder, which already carries the whole patch stack,
+so 132 of the 160 patches in `$PATCHES` have every one of their added lines in it
+(`_PUMP = _ev.Pump(engine=_ENGINE)`, from `events-pump.patch`, is at
+`jarvis-backend/jarvis_hud.py:6307`). "Absent from the base" would refuse 132 patches on
+any live file and the tool could never deploy again. The patch's own pre-image is the
+text "unchanged" actually means, and both lines the audit named are in it.
+
+The four 2026-10-27 patches now have exact rules, each carried as its own hunks
+(`"hunks": True`) because each changes several disjoint regions of one file:
+`cloud-escalate.patch` and `f01-manual-lane-gate.patch` on `jarvis_hud.py`,
+`reminder-actions.patch` (`schedule_action` in both gate places) and
+`update-in-chat.patch` (`desktop_update` in the never-a-standing-rule set) on
+`jarvis_gate.py`. The suite proves each rule's staged text is **byte-for-byte** what
+`git apply` makes of the same patch on the published base, that a second run reports
+`ALREADY_PRESENT`, and that a shifted live file is refused. Order matters for one pair:
+F-01's hunks 2 and 3 rewrite cloud-escalate's post-image, so `cloud-escalate` must be
+applied first - `$PATCHES` already puts it immediately before F-01, and the tool walks
+that list in order.
+
+**The exact procedure for a future live sync** (measured safe order; the tool is
+dry-run by default and refuses rather than planning a partial deploy):
+
+```powershell
+# 0. The checkout is usually NOT at origin/main (a feature branch, or behind it), and the
+#    tool refuses to run from another commit BY DESIGN. Make a second copy of the repo at
+#    that commit (a "worktree") and run from there - do not switch your own checkout.
+git worktree add --detach "<repo>\.dsh-scratch\reconcile-wt" origin/main
+cd "<repo>\.dsh-scratch\reconcile-wt"
+
+# 1. DRY RUN. Writes nothing. Expect to add / to update / unchanged, then EVERY refusal.
+py -3 tools\reconcile_live_backend.py --backend-path "<live backend>"
+
+# 2. While the dry run refuses anything, the patcher is the route that carries the patch
+#    stack AND the beside-files (it backs up first, and appends only missing TOML keys).
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "<live backend>"
+
+# 3. RESTART Jarvis yourself (neither tool restarts it) and read the start-up banner.
+
+# 4. DRY RUN AGAIN. It must say to add 0 / to update 0 and 0 refusals. Only then is
+#    --apply a no-op safety pass rather than a change.
+py -3 tools\reconcile_live_backend.py --backend-path "<live backend>"
+```
+
+A dry run that reports refusals is **not** a partial success: it plans no delta for the
+refused patches and exits 2, so nothing is written. That is the point - `--apply` can no
+longer claim a reconcile over a patch whose hunks are absent.
+
 ## 4. Limits worth knowing
 
 - The reconcile tool writes only that repository's `$SHIPPED` Python modules and
@@ -165,3 +235,14 @@ nothing in the repository depends on them and no tracked file was deleted.
   banner; the probes only prove the routes answer while the new code is running.
 - `jarvis-backend/` is never copied over the live folder - it is a snapshot of
   the published base, not the runtime tree.
+- A patch with **no** `DELTA_TABLE` entry is still judged by "any one pre-image-absent
+  added line is present". That is strong enough to reject a re-written line, but it is
+  not a byte-exact proof: a half-applied patch whose surviving lines happen to include
+  one of them would read as present. The patches that must be provable - the four
+  2026-10-27 ones - are carried as their own hunks with all-of-several-regions probes,
+  so they are not in that class. Adding an entry is one small table edit, not new code.
+- **Not measured against the owner's live folder by this change.** The new rule is
+  stricter than the old one, so a dry run against the PC may now name patches that the
+  old state-file fallback used to wave through; each is either genuinely absent (run
+  `apply-patches.ps1`, then step 4 above) or present-but-rewritten (add a rule). The
+  tests prove the decisions on temporary folders and the published base only.
