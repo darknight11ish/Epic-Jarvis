@@ -52,7 +52,73 @@
 //! `desktop_update` card - never from a page, a timer or a setting.
 //! [`crate::backend_update`] owns the backend half and its own refusals. The
 //! order, and why it is that order, is written out on [`update_both`] itself.
+//!
+//! ## What really happens on Windows, and why the ending is written down
+//!
+//! `tauri-plugin-updater`'s Windows installer path ends this process with
+//! `std::process::exit(0)` *after* it has launched the installer. The crate says
+//! so itself on `Update::install` ("this function exits the app after launching
+//! the updater installer successfully"), and the pinned source shows the order:
+//! the `on_before_exit` hook, then `ShellExecuteW`, then the exit. Nothing after
+//! the install call in this process can run - not a line of ours, not
+//! `RunEvent::ExitRequested`, not `Drop` - so the desktop half **cannot report
+//! its own ending**. This module does not pretend otherwise:
+//!
+//! * the package is downloaded and its signature verified **before anything on
+//!   this PC is changed** ([`verify_desktop_package`]);
+//! * a record (`pending-desktop-update.json`, in `~/.openjarvis` beside the
+//!   update lock) is then written **atomically** and read back - naming the
+//!   version being replaced, the version being installed, which commit each
+//!   half came from, and what the backend half did ([`write_desktop_record`]);
+//! * only then is the Python backend stopped, waiting at most three seconds
+//!   ([`crate::sidecar::stop_for_installer`]), and only then is the installer
+//!   called - last ([`install_now`]);
+//! * the updater's own `on_before_exit` hook marks the record "installer
+//!   launched" immediately before `ShellExecuteW`. If this process dies before
+//!   that line, the record still says the installer never ran, which is the
+//!   truth;
+//! * the **next launch** reconciles that record against the version actually
+//!   running and says what really happened (a notification, a log line, and a
+//!   line in the chat the update may have started from), then deletes it.
+//!
+//! The order is not a comment. Each step produces the value the next one needs
+//! ([`VerifiedDesktop`] -> [`RecordedDesktop`] -> [`StoppedDesktop`]), so an
+//! edit that tried to install first, or to stop the backend before the record
+//! was written, would not compile. See [`prepare_desktop_half`].
+//!
+//! That is the only success path for the desktop half on Windows. It is why
+//! [`BothOutcome::updated_both`] is not reachable there: an in-process "both
+//! succeeded" would be a claim made after a process that has already ended. The
+//! chat path therefore says what is about to happen before it happens, and the
+//! next launch says how it ended; neither promises an ending it cannot see.
+//!
+//! ## What the controls say BEFORE they are pressed
+//!
+//! The Windows installer closes Jarvis and the new version starts again
+//! afterwards. That is said before the press, not after it
+//! ([`INSTALL_CLOSES_AND_RESTARTS`]): in the data the Updates card already reads
+//! (`Status::install_notice`), in the notification that announces a new version,
+//! in the first line the desktop half emits, and in the chat line an approved
+//! update starts with. The Settings page renders that field in its own four
+//! lines; that page belongs to another lane, so this module supplies the words
+//! and the field rather than editing it.
 
+//!
+//! ## There is no rollback
+//!
+//! Nothing here can put the previous desktop version back. Every publish
+//! recreates the rolling release with only the new installers
+//! (`.github/workflows/desktop-release.yml`), the run copy kept as an artifact
+//! expires, and `allowDowngrades` is `false` in `tauri.conf.json`, so an older
+//! installer may refuse to run even where one still exists. A bad desktop
+//! release is an owner decision to recover from (install a build you already
+//! have, or a fresh clone and build); this module deliberately does not grow a
+//! half-built rollback system that would imply otherwise. The backend half is
+//! the only one with file backups (`_jarvis-backup-<date>`, made by
+//! `scripts/apply-patches.ps1`).
+
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
@@ -71,6 +137,20 @@ const CHECK_ON_START: &str = "updates.check_on_start";
 /// enough to hold anything up. A missed check costs a day.
 const CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
 
+/// The sentence the update controls must carry BEFORE they are pressed.
+///
+/// The Windows installer closes Jarvis, and the new version is started again by
+/// the installer when it is done (the crate's `restart_after_install` defaults
+/// to true and this build does not turn it off). Somebody about to press a
+/// button in the middle of something deserves that sentence first, not
+/// afterwards - so it is in the data the Updates card already reads
+/// ([`Status::install_notice`]), in the notification that announces a new
+/// version, in the first line the desktop half emits, and in the chat line an
+/// approved update starts with.
+pub const INSTALL_CLOSES_AND_RESTARTS: &str =
+    "Jarvis closes while this installs, and starts again by itself when it is \
+     done. Save anything you are working on first.";
+
 /// What a check found. Serialised straight into the Settings window.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Status {
@@ -88,6 +168,11 @@ pub struct Status {
     pub supported: bool,
     /// Whether the app looks on its own at startup.
     pub check_on_start: bool,
+    /// What the Install / Update-both controls must say before they are pressed:
+    /// the app closes while it installs and starts again afterwards. `None` when
+    /// there is nothing to install, so a card with no Install button has nothing
+    /// to warn about.
+    pub install_notice: Option<String>,
 }
 
 /// How far a download has gotten. Sent while `install_update` is in flight —
@@ -197,6 +282,9 @@ pub async fn look(app: &AppHandle) -> Status {
             status.available = Some(update.version.clone());
             status.notes = update.body.clone();
             status.date = update.date.map(|d| d.to_string());
+            // The Install control is about to exist on the card, so the
+            // sentence it must carry before the press exists with it.
+            status.install_notice = install_notice_for(status.available.as_deref());
         }
         Ok(None) => {}
         Err(err) => {
@@ -204,6 +292,15 @@ pub async fn look(app: &AppHandle) -> Status {
         }
     }
     status
+}
+
+/// The pre-click sentence, or `None` when there is no Install control to show.
+///
+/// Pure, so the rule is a test: the sentence is offered exactly when there is a
+/// version to install - and never for a build that cannot verify a download,
+/// because that build shows no Install button at all.
+fn install_notice_for(available: Option<&str>) -> Option<String> {
+    available.map(|_| INSTALL_CLOSES_AND_RESTARTS.to_string())
 }
 
 /// Turns the transport's wording into something worth reading.
@@ -270,34 +367,178 @@ pub fn set_update_check_on_start(app: AppHandle, enabled: bool) -> Result<bool, 
 
 /// Downloads, verifies and installs — and is reachable only from the button.
 ///
-/// This is the only function in the module that writes anything to disk. It is
-/// separate from `check_for_update` rather than a flag on it, so that no future
+/// Separate from `check_for_update` rather than a flag on it, so that no future
 /// edit can make checking install something by passing `true`.
+///
+/// The lone **Install** button is the second door into the desktop half, and it
+/// goes through the same ordered preparation as "update both halves": the
+/// package is downloaded and checked, the record is written, the backend is
+/// stopped, and only then is the installer called. Before this round it reached
+/// the installer with a supervised backend still running.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<String, String> {
-    install_now(&app).await
+    let here = crate::backend_update::locate(&app);
+    let backend_commit = crate::backend_update::repo_commit(here.repo.as_deref());
+    // Said before anything is downloaded: on Windows this process ends when the
+    // installer starts, so there is no second chance to say it.
+    crate::logfile::log(&format!("[jarvis] {INSTALL_CLOSES_AND_RESTARTS}"));
+    say_in_hud(&app, "running", INSTALL_CLOSES_AND_RESTARTS);
+    let ready = prepare_desktop_half(&app, None, backend_commit).await?;
+    install_now(&app, ready).await
 }
 
-/// The install, with no command wrapper on it — so the one button that updates
-/// **both** halves can use the same code rather than a second copy of it.
+// ---------------------------------------------------------------------------
+// The desktop half: verify, record, stop, and only then install
+// ---------------------------------------------------------------------------
+//
+// The four steps are values rather than a comment, so their order cannot be
+// rearranged by a later edit without the compiler objecting:
+//
+//   (b) `verify_desktop_package` -> `VerifiedDesktop`
+//   (c) `write_desktop_record`   -> `RecordedDesktop`
+//   (d) `stop_backend_for_installer` -> `StoppedDesktop`
+//   (e) `install_now` takes a `StoppedDesktop`, so it cannot be reached before
+//       (b), (c) and (d) have happened.
+//
+// A second, ordered list in one place documents the same thing for the tests
+// and for a reader: [`DESKTOP_HALF`].
+
+/// One step of the desktop half, in the order the design fixes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DesktopHalf {
+    /// (b) Download the package and check its signature. Changes nothing local.
+    VerifyPackage,
+    /// (c) Write the pending-install record, atomically, and read it back.
+    WriteRecord,
+    /// (d) Stop the supervised backend, waiting at most three seconds.
+    StopBackend,
+    /// (e) Hand the verified package to the installer. Last, and the only step
+    /// that can end this process on Windows.
+    Install,
+}
+
+/// The order, in one place.
 ///
-/// Nothing else in this module may call this: it is the half of an update that
-/// replaces the executable, and the only two doors into it are the Install
-/// button and [`update_both`]'s second step.
-async fn install_now(app: &AppHandle) -> Result<String, String> {
+/// A value rather than a comment: this is the fix (the backend is stopped and
+/// the record is written before the installer can replace files), and an edit
+/// that moved the install earlier - or the stop after the install, where it
+/// could never run on Windows - would be changing this array.
+const DESKTOP_HALF: [DesktopHalf; 4] = [
+    DesktopHalf::VerifyPackage,
+    DesktopHalf::WriteRecord,
+    DesktopHalf::StopBackend,
+    DesktopHalf::Install,
+];
+
+/// The order above, as one line for the log of every install.
+///
+/// It reads [`DESKTOP_HALF`] rather than repeating it, so the log the owner can
+/// send names the order the run actually used - and so the array is not a
+/// comment in disguise: it is written into the log before the desktop half
+/// starts, and a real update's log is where a wrong order would first be seen.
+fn desktop_half_trace() -> String {
+    DESKTOP_HALF
+        .iter()
+        .map(|step| match step {
+            DesktopHalf::VerifyPackage => "check the package",
+            DesktopHalf::WriteRecord => "write the record",
+            DesktopHalf::StopBackend => "stop the backend",
+            DesktopHalf::Install => "install",
+        })
+        .collect::<Vec<_>>()
+        .join(" -> ")
+}
+
+/// A desktop package that has been downloaded and whose signature has been
+/// checked, but that has not been installed. Step (b).
+struct VerifiedDesktop {
+    update: tauri_plugin_updater::Update,
+    /// The bytes the installer will run. `download` verifies them before it
+    /// returns; nothing here is executed until step (e).
+    bytes: Vec<u8>,
+    /// The version this package installs.
+    target: String,
+}
+
+/// ... and whose record is on disk and readable. Step (c).
+struct RecordedDesktop {
+    verified: VerifiedDesktop,
+    /// Where the record is. Also the path the updater's hook marks "launched".
+    record: PathBuf,
+}
+
+/// ... and whose backend has been stopped. Step (d).
+///
+/// The only value [`install_now`] accepts, which is what makes step (e) last.
+struct StoppedDesktop {
+    recorded: RecordedDesktop,
+}
+
+/// Steps (b), (c) and (d) of the desktop half, in the fixed order.
+///
+/// The order is not a comment here either: each step consumes the value the
+/// previous one produced. What it buys:
+///
+/// * the package is known good **before** anything on this PC is changed, so a
+///   refused signature or a failed download leaves the backend running and
+///   writes no record;
+/// * the record is on disk - and read back - **before** the backend is stopped,
+///   so a process that dies during the stop still leaves the truth ("the
+///   installer never ran");
+/// * the backend is stopped **before** the installer can replace the files it is
+///   running from, and the wait is bounded so a wedged backend cannot hold the
+///   installer for ever.
+async fn prepare_desktop_half(
+    app: &AppHandle,
+    backend: Option<BackendHalf>,
+    backend_commit: Option<String>,
+) -> Result<StoppedDesktop, String> {
+    let Some(record) = pending_path(app) else {
+        // No record means no honest ending: the desktop half would vanish with
+        // nothing left behind to read. Refusing is the smaller failure.
+        return Err(
+            "Jarvis could not find the folder where its update record has to go, so it \
+             did not start the installer. Nothing was changed."
+                .to_string(),
+        );
+    };
+    // The order this run will use, written into the log the owner can send, so
+    // a wrong order would be visible in a real update's log rather than only in
+    // this file. It reads `DESKTOP_HALF`; it does not restate it.
+    crate::logfile::log(&format!(
+        "[jarvis] desktop half order: {}",
+        desktop_half_trace()
+    ));
+    let verified = verify_desktop_package(app, &record).await?;
+    let recorded = write_desktop_record(app, &record, verified, backend, backend_commit)?;
+    Ok(stop_backend_for_installer(app, recorded))
+}
+/// Step (b): checks for a newer release, downloads it and verifies its
+/// signature. Nothing on this PC is changed, and nothing is executed.
+///
+/// The updater's `on_before_exit` hook is registered HERE rather than at the
+/// install, because the crate keeps the hook on the updater that produced the
+/// `Update`: a hook added later would never run at all. It is the last code of
+/// ours that runs on Windows (pinned source: the hook, then `ShellExecuteW`,
+/// then `process::exit(0)`).
+async fn verify_desktop_package(app: &AppHandle, record: &Path) -> Result<VerifiedDesktop, String> {
     if !configured(app) {
         return Err("this build has no update key, so it cannot verify a download".to_string());
     }
+    let hook_app = app.clone();
+    let hook_record = record.to_path_buf();
     let updater = app
-        .updater()
+        .updater_builder()
+        .on_before_exit(move || before_installer_runs(&hook_app, &hook_record))
+        .build()
         .map_err(|e| format!("the updater could not start: {e}"))?;
     let update = updater
         .check()
         .await
         .map_err(|e| friendly(&e.to_string()))?
         .ok_or_else(|| "there is no newer version to install".to_string())?;
+    let target = update.version.clone();
 
-    let version = update.version.clone();
     // `on_chunk` reports the size of the piece JUST received, not a running
     // total — the settings window showed no percentage at all before this,
     // for exactly that reason: nothing here was turning "another chunk
@@ -305,9 +546,12 @@ async fn install_now(app: &AppHandle) -> Result<String, String> {
     let downloaded = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let progress_app = app.clone();
     let progress_downloaded = downloaded.clone();
-    // The signature is checked inside this call, before anything is executed.
-    update
-        .download_and_install(
+    // The signature is checked inside this call, before the bytes come back and
+    // before anything can run: a release replaced at the CDN, a hijacked DNS
+    // answer or a proxy rewriting the response all fail here, with nothing on
+    // this PC changed.
+    let bytes = update
+        .download(
             move |chunk_len, total| {
                 let so_far = progress_downloaded
                     .fetch_add(chunk_len as u64, std::sync::atomic::Ordering::Relaxed)
@@ -323,8 +567,549 @@ async fn install_now(app: &AppHandle) -> Result<String, String> {
             || {},
         )
         .await
-        .map_err(|e| format!("the update failed to install: {e}"))?;
-    Ok(version)
+        .map_err(|e| friendly(&e.to_string()))?;
+    Ok(VerifiedDesktop {
+        update,
+        bytes,
+        target,
+    })
+}
+
+/// Step (c): the record, written atomically and read back before anything is
+/// stopped or installed.
+///
+/// A record the next launch cannot read is the same as no record at all, so the
+/// write is checked by reading it back with the same function the next launch
+/// uses.
+fn write_desktop_record(
+    app: &AppHandle,
+    record: &Path,
+    verified: VerifiedDesktop,
+    backend: Option<BackendHalf>,
+    backend_commit: Option<String>,
+) -> Result<RecordedDesktop, String> {
+    let pending = PendingDesktopInstall {
+        target_version: verified.target.clone(),
+        from_version: version(app),
+        started_at: unix_now(),
+        installer_launched: false,
+        app_commit: crate::backend_update::app_commit(),
+        backend_commit,
+        backend_step: backend,
+    };
+    write_pending(record, &pending).map_err(|err| {
+        format!(
+            "Jarvis could not write its update record ({err}), so it did not start the \
+             installer. Nothing was changed."
+        )
+    })?;
+    if read_pending(record) != Some(pending) {
+        clear_pending(record);
+        return Err(
+            "Jarvis wrote its update record but could not read it back, so it did not \
+             start the installer. Nothing was changed."
+                .to_string(),
+        );
+    }
+    Ok(RecordedDesktop {
+        verified,
+        record: record.to_path_buf(),
+    })
+}
+
+/// Step (d): stop the supervised backend, bounded, and hand (e) its value.
+///
+/// The stop is the same function the updater's own hook calls, so the two
+/// cannot disagree about how a backend is stopped - and it is idempotent: by
+/// the time the hook runs, this app has already let go of the child, so the
+/// hook's own stop is a no-op.
+fn stop_backend_for_installer(app: &AppHandle, recorded: RecordedDesktop) -> StoppedDesktop {
+    let outcome = crate::sidecar::stop_for_installer(app);
+    crate::logfile::log(&format!(
+        "[jarvis] {}",
+        crate::sidecar::stop_for_installer_words(outcome)
+    ));
+    StoppedDesktop { recorded }
+}
+
+/// Step (e), LAST: hands the verified package to the Windows installer.
+///
+/// It takes a [`StoppedDesktop`], so there is no way to call it before the
+/// package was verified, the record was written and the backend was stopped:
+/// the order is the type, not a comment.
+///
+/// # What happens after the last line of this function on Windows
+///
+/// Nothing of ours. This call reaches the crate's Windows installer path, which
+/// launches the installer and then calls `std::process::exit(0)`; the `Ok`/`Err`
+/// returned here is reached only when the installer was NOT launched (a failed
+/// extraction) or on a platform without that exit. The ending is therefore
+/// written down first, and reported by the next launch - see this module's own
+/// docs.
+async fn install_now(app: &AppHandle, ready: StoppedDesktop) -> Result<String, String> {
+    let RecordedDesktop { verified, record } = ready.recorded;
+    let VerifiedDesktop {
+        update,
+        bytes,
+        target,
+    } = verified;
+    crate::logfile::log(&format!(
+        "[jarvis] installing Jarvis Desktop {target} over {}: the record is written and \
+         the backend is stopped.",
+        version(app)
+    ));
+    let result = update.install(&bytes);
+
+    // On Windows this point is reached only when the installer was NOT
+    // launched - the process that launched it is already gone. This process is
+    // still here, so it says what happened itself and clears the record.
+    clear_pending(&record);
+    result.map_err(|e| format!("the update failed to install: {e}"))?;
+    Ok(target)
+}
+
+// ---------------------------------------------------------------------------
+// The desktop half across the process that ends it
+// ---------------------------------------------------------------------------
+//
+// The crate's Windows path is: `on_before_exit` hook -> `ShellExecuteW` ->
+// `std::process::exit(0)`. The hook is the only place left to act, and the next
+// launch is the only place left to report. Everything below is that hand-over:
+// a small JSON record written before the backend is stopped, marked "launched"
+// by the hook immediately before the installer runs, and reconciled against the
+// running version on the next start.
+
+/// The record's file name, inside the folder Jarvis keeps its own data in.
+///
+/// `~/.openjarvis` - or `OPENJARVIS_CONFIG_DIR` / `JARVIS_CONFIG_DIR` when one
+/// is set, the same order `backend_update::config_dir` uses for the update lock.
+/// It is deliberately NOT this app's log folder: a log can be cleared, and the
+/// record has to be readable by the next launch even then.
+const PENDING_FILE: &str = "pending-desktop-update.json";
+
+/// What the backend half did in the same press.
+///
+/// Carried across the restart so the next launch can say whether BOTH halves
+/// finished - and never say more than the two states support.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackendHalf {
+    /// The same `ok` / `partial` / `failed` / `skipped` as [`Step::state`].
+    pub state: String,
+    /// The sentence the card already shows for that half.
+    pub detail: String,
+}
+
+/// The desktop half, written to disk before the backend is stopped and before
+/// the installer can run.
+///
+/// It has to survive this process: the Windows installer path ends it, so
+/// nothing here can report the ending. Nothing secret goes in it - two versions,
+/// two commit hashes and the backend half's own sentence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingDesktopInstall {
+    /// The version the installer was asked to put on disk.
+    #[serde(alias = "target")]
+    pub target_version: String,
+    /// The version this process was running when it asked.
+    #[serde(alias = "from")]
+    pub from_version: String,
+    /// Unix seconds. The record is never acted on by age; this is so a person
+    /// reading the file knows when it was written.
+    pub started_at: u64,
+    /// True only once the updater's own `on_before_exit` hook has run - after the
+    /// backend is stopped and immediately before the installer is launched. A
+    /// record that still says `false` is an install that never reached the
+    /// installer.
+    pub installer_launched: bool,
+    /// The commit the app being replaced was built from.
+    pub app_commit: Option<String>,
+    /// The commit the backend folder was at, when it could be read.
+    pub backend_commit: Option<String>,
+    /// The backend half's ending, when the same press ran one. Named
+    /// `backend_step` because that is what it is: the backend [`Step`]'s own
+    /// state and sentence, carried across the restart.
+    #[serde(alias = "backend")]
+    pub backend_step: Option<BackendHalf>,
+}
+
+/// What the next launch can honestly say about the desktop half.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DesktopEnding {
+    /// The version running now is the one the installer was asked for.
+    Finished {
+        from: String,
+        target: String,
+        backend: Option<BackendHalf>,
+    },
+    /// The record exists but the hook never ran: the installer never started.
+    NotLaunched {
+        from: String,
+        target: String,
+        backend: Option<BackendHalf>,
+    },
+    /// The installer was started, and the version running is the OLD one.
+    NotInstalled {
+        from: String,
+        target: String,
+        running: String,
+        backend: Option<BackendHalf>,
+    },
+    /// The installer was started and neither the old nor the target version is
+    /// running. Say so rather than guessing which one won.
+    OtherVersion {
+        from: String,
+        target: String,
+        running: String,
+        backend: Option<BackendHalf>,
+    },
+}
+
+/// Reads the record against the version actually running.
+///
+/// Pure, so every branch is a test: this is the one place in the module that
+/// decides whether a desktop update is allowed to count as done.
+pub fn reconcile(pending: Option<&PendingDesktopInstall>, running: &str) -> Option<DesktopEnding> {
+    let pending = pending?;
+    let backend = pending.backend_step.clone();
+    if same_version(running, &pending.target_version) {
+        return Some(DesktopEnding::Finished {
+            from: pending.from_version.clone(),
+            target: pending.target_version.clone(),
+            backend,
+        });
+    }
+    if !pending.installer_launched {
+        return Some(DesktopEnding::NotLaunched {
+            from: pending.from_version.clone(),
+            target: pending.target_version.clone(),
+            backend,
+        });
+    }
+    if same_version(running, &pending.from_version) {
+        return Some(DesktopEnding::NotInstalled {
+            from: pending.from_version.clone(),
+            target: pending.target_version.clone(),
+            running: running.to_string(),
+            backend,
+        });
+    }
+    Some(DesktopEnding::OtherVersion {
+        from: pending.from_version.clone(),
+        target: pending.target_version.clone(),
+        running: running.to_string(),
+        backend,
+    })
+}
+
+/// Two version strings name the same release.
+///
+/// Both sides are semver and normally identical character for character. The
+/// only differences forgiven here are the ones a person would forgive - case and
+/// a leading `v`. Build metadata is NOT stripped: it is part of what a version
+/// says.
+fn same_version(a: &str, b: &str) -> bool {
+    let norm = |s: &str| {
+        s.trim()
+            .trim_start_matches(['v', 'V'])
+            .trim()
+            .to_ascii_lowercase()
+    };
+    norm(a) == norm(b)
+}
+
+/// The plain sentence for the owner, from the reconciled ending.
+///
+/// Every branch names the versions it actually knows and what it cannot see.
+/// The backend sentence is assembled from the state the backend half really
+/// ended in, so "both halves are done" can only appear for a desktop half that
+/// landed AND a backend half that was `ok` (which already means proven).
+pub fn ending_words(
+    ending: &DesktopEnding,
+    app_commit: Option<&str>,
+    backend_commit: Option<&str>,
+) -> String {
+    let halves = crate::backend_update::halves_line(app_commit, backend_commit);
+    match ending {
+        DesktopEnding::Finished {
+            from,
+            target,
+            backend,
+            ..
+        } => format!(
+            "Jarvis Desktop is now {target}; it was {from} when the Windows installer \
+             started.{} {halves}",
+            backend_finished_sentence(backend)
+        ),
+        DesktopEnding::NotLaunched {
+            from,
+            target,
+            backend,
+        } => format!(
+            "A desktop update from {from} to {target} was started, but the Windows \
+             installer never ran, so Jarvis Desktop is still {from}. Press Install in \
+             Settings, then Updates, to try again.{} {halves}",
+            backend_missing_sentence(backend)
+        ),
+        DesktopEnding::NotInstalled {
+            from,
+            target,
+            running,
+            backend,
+        } => format!(
+            "The Windows installer for {target} was started, but Jarvis came back as \
+             {running} (it was {from} when the installer started), so the desktop half \
+             has not taken effect - it may have been cancelled, or it may still be \
+             running.{} {halves}",
+            backend_missing_sentence(backend)
+        ),
+        DesktopEnding::OtherVersion {
+            from,
+            target,
+            running,
+            backend,
+        } => format!(
+            "Jarvis is running {running}; an installer for {target} was started from \
+             {from}. This launch cannot say which version the installer left, so check \
+             Settings, then Updates.{} {halves}",
+            backend_missing_sentence(backend)
+        ),
+    }
+}
+
+/// One sentence about the backend half, when the desktop half did land.
+fn backend_finished_sentence(backend: &Option<BackendHalf>) -> &'static str {
+    match backend.as_ref().map(|half| half.state.as_str()) {
+        Some("ok") => {
+            " The backend half had already finished before the installer ran, so both \
+             halves are done."
+        }
+        Some("partial") => {
+            " The backend half had patched but its checks were skipped, so it is not \
+             proven; only the desktop half finished cleanly."
+        }
+        Some(_) => " The backend half did not finish, so only the desktop half changed.",
+        None => " No backend update ran with it, so only the desktop half changed.",
+    }
+}
+
+/// One sentence about the backend half, when the desktop half did not land.
+fn backend_missing_sentence(backend: &Option<BackendHalf>) -> &'static str {
+    match backend.as_ref().map(|half| half.state.as_str()) {
+        Some("ok") => " The backend half had already finished.",
+        Some("partial") => " The backend half had patched but its checks were skipped.",
+        Some(_) => " The backend half did not finish.",
+        None => "",
+    }
+}
+
+/// The notification's title: never "updated" about a half that did not.
+fn ending_title(ending: &DesktopEnding) -> &'static str {
+    match ending {
+        DesktopEnding::Finished { .. } => "Jarvis Desktop is updated",
+        DesktopEnding::NotLaunched { .. } | DesktopEnding::NotInstalled { .. } => {
+            "Jarvis Desktop was not updated"
+        }
+        DesktopEnding::OtherVersion { .. } => "Jarvis Desktop update: check what happened",
+    }
+}
+
+/// The state word for the HUD's chat line (`UpdateWord`).
+fn ending_state(ending: &DesktopEnding) -> &'static str {
+    match ending {
+        DesktopEnding::Finished { .. } => "ok",
+        _ => "failed",
+    }
+}
+
+/// The two things that must happen between "the installer is about to run" and
+/// the installer running, in the only order that keeps the record true.
+///
+/// A value rather than a comment: the order is the fix for the orphaned backend,
+/// and an edit that swaps it - marking the record "launched" before the stop -
+/// would make a process that dies during the stop leave a record claiming an
+/// installer that never ran. The test holds this array.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BeforeInstaller {
+    /// Ask the Python backend to stop, and wait for it. The installer replaces
+    /// files the running backend has already imported.
+    StopBackend,
+    /// Only now write "installer launched" into the record.
+    MarkLaunched,
+}
+
+const BEFORE_INSTALLER: [BeforeInstaller; 2] =
+    [BeforeInstaller::StopBackend, BeforeInstaller::MarkLaunched];
+
+/// The updater's `on_before_exit` hook: the last code of ours that runs on
+/// Windows, immediately before the crate launches the installer and exits.
+fn before_installer_runs(app: &AppHandle, path: &Path) {
+    for step in BEFORE_INSTALLER {
+        match step {
+            BeforeInstaller::StopBackend => stop_sidecar_for_installer(app),
+            BeforeInstaller::MarkLaunched => mark_launched(path),
+        }
+    }
+    let words = "Installing Jarvis Desktop now. Jarvis is closing, and the next start says \
+                 whether the desktop half finished.";
+    crate::logfile::log(&format!("[jarvis] {words}"));
+    announce_step(app, &Step::running(STEP_DESKTOP, words));
+}
+
+/// Stops the supervised backend from inside the updater's hook - the second,
+/// last-gate check, after [`stop_backend_for_installer`]'s bounded one.
+///
+/// The hook runs on the async runtime's thread (inside the install call's
+/// `.await`), and [`crate::sidecar::stop_on_exit`] uses `block_on` - calling it
+/// straight from here would be a nested `block_on` on the same runtime, which
+/// panics. So the stop moves to a plain OS thread and this waits for it: the
+/// hook must not return until the backend is gone, because the installer starts
+/// the moment it does.
+///
+/// This one is deliberately NOT bounded, unlike the explicit stop three seconds
+/// earlier: by the time the hook runs the app has already let go of the child,
+/// so this is a no-op (`stop_on_exit` returns immediately when nothing is
+/// owned) - and if it is not a no-op, a wedged backend must hold the installer
+/// rather than let it replace files the backend is still using. A panic in the
+/// stop is reported and swallowed rather than aborting the install, and it
+/// cannot leave the news unsaid, because the record is already on disk.
+fn stop_sidecar_for_installer(app: &AppHandle) {
+    let handle = app.clone();
+    let joined = std::thread::spawn(move || crate::sidecar::stop_on_exit(&handle)).join();
+    if joined.is_err() {
+        crate::logfile::log(
+            "[jarvis] the backend could not be stopped on the way into the installer; the \
+             installer still runs, so the backend may be left running",
+        );
+    }
+}
+
+/// Marks the record "installer launched" - after the backend is stopped, and
+/// before the crate reaches `ShellExecuteW`.
+fn mark_launched(path: &Path) {
+    let Some(mut pending) = read_pending(path) else {
+        return;
+    };
+    pending.installer_launched = true;
+    if let Err(err) = write_pending(path, &pending) {
+        crate::logfile::log(&format!(
+            "[jarvis] the update record could not be marked as launched: {err}"
+        ));
+    }
+}
+
+/// Where the record lives: the folder Jarvis keeps its own data in
+/// (`~/.openjarvis`), beside the update lock.
+///
+/// The folder is created by the write when it is not there. A folder that cannot
+/// be named at all is a refusal, never a silent install: without a record there
+/// is no honest ending to report.
+fn pending_path(app: &AppHandle) -> Option<PathBuf> {
+    crate::backend_update::config_dir(app).map(|dir| dir.join(PENDING_FILE))
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0)
+}
+
+/// Reads a record, or `None` when there is none or it is not readable.
+///
+/// A half-written record reads as "no record" rather than as a guess: the file
+/// is written before the installer runs, so the only way to see half of one is
+/// a crash during that write, and in that case there is nothing true to say.
+/// [`write_pending`] makes even that unlikely: the record is replaced by a
+/// rename, so a reader sees the whole old one or the whole new one.
+fn read_pending(path: &Path) -> Option<PendingDesktopInstall> {
+    let text = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// Writes the record atomically, and flushes it to disk before returning.
+///
+/// Two things this has to promise:
+///
+/// * **It is on disk, not only in the page cache.** The process the installer
+///   ends never gets another chance to flush.
+/// * **A reader never sees half of it.** The text goes to a temporary file in
+///   the same folder (same volume), is flushed, and is then moved over the
+///   record with one rename. Before the rename a reader sees the old record,
+///   after it the new one; the only way to see a partial file would be to read
+///   the temporary name, which nothing does.
+fn write_pending(path: &Path, pending: &PendingDesktopInstall) -> Result<(), String> {
+    let text = serde_json::to_string_pretty(pending)
+        .map_err(|err| format!("the record could not be written: {err}"))?;
+    let dir = path
+        .parent()
+        .ok_or_else(|| format!("{}: the record has no folder", path.display()))?;
+    std::fs::create_dir_all(dir).map_err(|err| format!("{}: {err}", dir.display()))?;
+    // The process id keeps two Jarvises on one PC from writing the same
+    // temporary name; the rename below is the only thing a reader can see.
+    let temporary = dir.join(format!("{PENDING_FILE}.{}.tmp", std::process::id()));
+    let written = (|| -> std::io::Result<()> {
+        let mut file = std::fs::File::create(&temporary)?;
+        file.write_all(text.as_bytes())?;
+        file.sync_all()
+    })();
+    if let Err(err) = written {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!("{}: {err}", path.display()));
+    }
+    if let Err(err) = std::fs::rename(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!("{}: {err}", path.display()));
+    }
+    Ok(())
+}
+
+fn clear_pending(path: &Path) {
+    let _ = std::fs::remove_file(path);
+}
+
+/// The next launch's half of the hand-over: says what the previous one's
+/// installer really did, then forgets it.
+///
+/// Called once, from `lib.rs`'s setup, after the log folder exists and after the
+/// notification plugin is up. The notification is the reliable half; the HUD
+/// line is the chat's own surface and is best-effort (the page runs its own
+/// bootstrap, so it is given a few seconds).
+pub fn reconcile_pending_at_startup(app: &AppHandle) {
+    let Some(path) = pending_path(app) else {
+        return;
+    };
+    let Some(pending) = read_pending(&path) else {
+        return;
+    };
+    let Some(ending) = reconcile(Some(&pending), &version(app)) else {
+        return;
+    };
+    let words = ending_words(
+        &ending,
+        crate::backend_update::app_commit().as_deref(),
+        pending.backend_commit.as_deref(),
+    );
+    // Forgot before it is said: the sentence is in memory and in the log, and a
+    // notification that fails must not make the same news arrive on every launch.
+    clear_pending(&path);
+    crate::logfile::log(&format!("[jarvis] {words}"));
+    commands::notify(app, ending_title(&ending), &words);
+
+    let handle = app.clone();
+    let state = ending_state(&ending).to_string();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+        crate::push_to_hud(
+            &handle,
+            "update",
+            &UpdateWord {
+                state,
+                detail: words,
+            },
+        );
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +1135,29 @@ const DESKTOP_SKIPPED_DETAIL: &str =
     "Not installed. The backend step did not finish, so nothing was put on top of \
      it. Fix what the log above says, then run this again - and Install on its own \
      below still works if you only want the desktop half.";
+
+/// The words for the other refusal: the backend patched, but its own checks
+/// could not run, so it is not **proven** - and an unproven half is not a pass
+/// in this project.
+///
+/// A separate sentence rather than reusing the one above, because "did not
+/// finish" would be false about a backend that did patch.
+const DESKTOP_UNPROVEN_DETAIL: &str =
+    "Not installed. The backend step patched, but its own checks could not run, so \
+     it is not proven - and an unproven backend is not treated as a pass here, so \
+     nothing was put on top of it. Fix what the log above says, then run this \
+     again - and Install on its own below still works if you only want the \
+     desktop half.";
+
+/// Whether the desktop half may start: only for a backend half that is `ok`,
+/// which [`update_both`] builds only when the patcher proved itself.
+///
+/// `partial` is its own state precisely so this can be a plain decision rather
+/// than a judgement call: a backend whose checks were skipped is patched and is
+/// not proven, and the installer does not go on top of it.
+fn desktop_half_allowed(backend: &Step) -> bool {
+    backend.state == "ok"
+}
 
 /// One half of a two-half update, as it ended.
 #[derive(Debug, Clone, Serialize)]
@@ -405,6 +1213,15 @@ impl Step {
         }
     }
 
+    /// A half that is under way right now. Used by [`step_starting`] and by the
+    /// installer hook, where the line is the last one the card will get.
+    fn running(step: &str, detail: impl Into<String>) -> Step {
+        Step {
+            state: "running".to_string(),
+            ..Step::ok(step, detail)
+        }
+    }
+
     /// The backend half's own log and last lines, folded onto any of the four
     /// endings above. The desktop half has neither, so this is only ever used
     /// on that one.
@@ -428,6 +1245,13 @@ pub struct BothOutcome {
     /// **True only when every step is `ok`.** This is the one boolean the card
     /// is allowed to paint green, and the rule it encodes is the whole point of
     /// the feature: a half-updated machine must never look updated.
+    ///
+    /// **On Windows a successful desktop half never reaches this struct.** The
+    /// installer ends the process (see this module's docs), so `update_both`
+    /// returns only when the desktop half did NOT hand off - a failed download,
+    /// a refused signature - or on a platform without that exit. The successful
+    /// both-halves ending is the one the NEXT launch reconciles from disk
+    /// ([`reconcile_pending_at_startup`]), never a value this process invents.
     pub updated_both: bool,
     /// Whether the app or the backend was stopped and wants starting again.
     pub restart_needed: bool,
@@ -439,7 +1263,15 @@ pub fn both_updated(steps: &[Step]) -> bool {
 }
 
 /// **The order, in one place: backend first, the executable second, and the
-/// executable not at all if the backend step did not finish.**
+/// executable not at all unless the backend step proved itself.**
+///
+/// The desktop half has its own fixed order after that, and it is held by the
+/// types rather than by this comment: the package is downloaded and its
+/// signature checked (`verify_desktop_package`), the pending-install record is
+/// written atomically and read back (`write_desktop_record`), the backend is
+/// stopped and waited for (`stop_backend_for_installer`, at most three seconds),
+/// and only then is the installer called (`install_now`, which takes the value
+/// those three steps produce). See [`DESKTOP_HALF`].
 ///
 /// The owner also chooses the BACKEND's pace when the card asks: the three
 /// paces (`max_speed`, `responsive`, `safe`) and their worker counts and ETA
@@ -561,13 +1393,21 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
             .map(|row| (row.label.clone(), row.workers))
             .unwrap_or_else(|| (mode.clone(), 1))
     };
+    // Which source each half is coming from. Read and said, never enforced: an
+    // older program folder still patches the backend, and this sentence is what
+    // stops "both halves" from meaning only "both ran".
+    let backend_commit = crate::backend_update::repo_commit(here.repo.as_deref());
+    let halves = crate::backend_update::halves_line(
+        crate::backend_update::app_commit().as_deref(),
+        backend_commit.as_deref(),
+    );
     let mut steps: Vec<Step> = Vec::new();
 
     // ---- 1. the backend ------------------------------------------------
     let opening = format!(
         "Patching the backend folder at the {mode_label} pace ({workers} check(s) at a \
          time). This can take several minutes - it applies every patch and then runs the \
-         test suites."
+         test suites. {halves}"
     );
     announce_step(&app, &step_starting(STEP_BACKEND, Some(&opening)));
     let backend = crate::backend_update::run(&app, &mode, &mode_label).await;
@@ -581,16 +1421,30 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         Step::partial(STEP_BACKEND, backend.detail.clone())
     }
     .with_log(backend.log_dir.clone(), backend.tail.clone());
+    // What the backend half did rides into the desktop half's record, so the
+    // next launch can say whether BOTH finished. Built before the step is moved
+    // into the list.
+    let backend_half = BackendHalf {
+        state: backend_step.state.clone(),
+        detail: backend_step.detail.clone(),
+    };
     announce_step(&app, &backend_step);
-    let backend_ok = backend.ok;
+    let backend_proved = desktop_half_allowed(&backend_step);
     let backend_stopped = backend.stopped;
+    let backend_failed = backend_step.state == "failed";
     steps.push(backend_step);
 
-    if !backend_ok {
-        // STOP. The desktop half is not attempted, and the card is told so in
+    if !backend_proved {
+        // STOP. The desktop half is not attempted - not for a backend that
+        // failed, and not for one that patched without proving its own checks
+        // either (an unproven half is not a pass here). The card is told so in
         // as many words rather than being left to infer it from a green line
         // that is not there.
-        let skipped = Step::skipped(STEP_DESKTOP, DESKTOP_SKIPPED_DETAIL);
+        let skipped = if backend_failed {
+            Step::skipped(STEP_DESKTOP, DESKTOP_SKIPPED_DETAIL)
+        } else {
+            Step::skipped(STEP_DESKTOP, DESKTOP_UNPROVEN_DETAIL)
+        };
         announce_step(&app, &skipped);
         steps.push(skipped);
         return Ok(BothOutcome {
@@ -602,12 +1456,47 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
         });
     }
 
-    // ---- 2. the executable ---------------------------------------------
+    // ---- 2. the executable: verify, record, stop, and install LAST ------
+    //
+    // The order is the fix, and it is held by the values `prepare_desktop_half`
+    // produces: the package is verified, then the record is written atomically
+    // and read back, then the backend is stopped (bounded), and only then can
+    // `install_now` be called - it takes the `StoppedDesktop` value and there is
+    // no other way to get one. See [`DESKTOP_HALF`].
+    //
+    // On Windows the install call does not come back: the crate launches the
+    // installer and exits the process (see the module docs). Everything the
+    // owner is told about this half is therefore written to disk first and said
+    // by the NEXT launch. The `Ok` arm below is reached only when the installer
+    // was not launched (or off Windows), and it says only what that arm can know.
     announce_step(&app, &step_starting(STEP_DESKTOP, None));
-    let desktop_step = match install_now(&app).await {
-        Ok(version) => Step::ok(
+    let ready = match prepare_desktop_half(&app, Some(backend_half), backend_commit).await {
+        Ok(ready) => ready,
+        Err(err) => {
+            // Refused before anything on this PC was replaced: say so, and say
+            // that the backend half above is not undone by it.
+            let failed = Step::failed(
+                STEP_DESKTOP,
+                format!(
+                    "Jarvis Desktop was NOT installed: {err}. The backend half above is \
+                     done; press Install on its own below to try this half again."
+                ),
+            );
+            announce_step(&app, &failed);
+            steps.push(failed);
+            return Ok(BothOutcome {
+                updated_both: both_updated(&steps),
+                steps,
+                // The refusal happens before the desktop half stops anything,
+                // so Jarvis is off only if the backend half itself stopped it.
+                restart_needed: backend_stopped,
+            });
+        }
+    };
+    let desktop_step = match install_now(&app, ready).await {
+        Ok(target) => Step::ok(
             STEP_DESKTOP,
-            format!("Jarvis Desktop {version} is installed and restarts as {version}."),
+            format!("Jarvis Desktop {target} is installed. Restart Jarvis to run it."),
         ),
         Err(err) => Step::failed(
             STEP_DESKTOP,
@@ -652,6 +1541,11 @@ pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, St
 /// the published release can move: if there is nothing newer now, nothing is
 /// changed and the chat says so. A failure anywhere is said in the chat and
 /// never painted as done.
+///
+/// **The desktop half's ending is not said here on Windows.** That half ends
+/// this process, so the chat gets what is about to happen before it happens,
+/// and the next start says how it ended (see the module docs). The
+/// `updated_both` arm below is reachable only off Windows.
 pub async fn run_approved_update(app: AppHandle) {
     let status = look(&app).await;
     if let Some(err) = status.error.clone() {
@@ -670,6 +1564,17 @@ pub async fn run_approved_update(app: AppHandle) {
         );
         return;
     }
+    // Said BEFORE the run: the desktop half closes Jarvis when its installer
+    // starts, so this is the last sentence the chat can be given about it in
+    // this process. It promises no ending - that is the next start's job.
+    say_in_hud(
+        &app,
+        "running",
+        format!(
+            "Starting the update: the backend half first, then Jarvis Desktop. \
+             {INSTALL_CLOSES_AND_RESTARTS} The next start says whether both halves finished."
+        ),
+    );
     match update_both(app.clone(), "responsive".to_string()).await {
         Ok(outcome) if outcome.updated_both => {
             say_in_hud(
@@ -721,21 +1626,29 @@ pub async fn run_approved_update(app: AppHandle) {
 /// is running rather than sitting silent for the minutes a patch run takes.
 /// The backend half carries the chosen pace's own words (`opening`).
 fn step_starting(step: &str, opening: Option<&str>) -> Step {
-    Step {
-        step: step.to_string(),
-        state: "running".to_string(),
-        detail: if step == STEP_BACKEND {
+    if step == STEP_BACKEND {
+        return Step::running(
+            step,
             opening.map(str::to_string).unwrap_or_else(|| {
                 "Patching the backend folder. This can take several minutes - it \
-                     applies every patch and then runs the test suites."
+                 applies every patch and then runs the test suites."
                     .to_string()
-            })
-        } else {
-            "Downloading and verifying Jarvis Desktop.".to_string()
-        },
-        log_dir: None,
-        tail: String::new(),
+            }),
+        );
     }
+    // The desktop half never returns on Windows (see the module docs): the
+    // installer ends this process, and the next start says how it ended. The
+    // card must not imply this line will be followed by a result in THIS run -
+    // and it says what happens to the window BEFORE the download, because after
+    // it there may be no window left to say it in.
+    Step::running(
+        step,
+        format!(
+            "Downloading and checking Jarvis Desktop before anything on this PC is changed. \
+             {INSTALL_CLOSES_AND_RESTARTS} The next start says whether the desktop half \
+             finished."
+        ),
+    )
 }
 
 /// Restarts the app — reachable only from the button the install's own
@@ -832,11 +1745,12 @@ pub fn spawn_startup_check(app: &AppHandle) {
             println!("[jarvis] update available: {version}");
             // Told, not acted upon. The notification names the version and
             // says where to go; it cannot install anything and neither can the
-            // tray row it points at.
+            // tray row it points at. It also says, BEFORE anyone presses that
+            // button, that Jarvis closes while the install runs.
             commands::notify(
                 &handle,
                 "Jarvis Desktop update available",
-                &format!("Version {version} is ready to install from Settings."),
+                &format!("Version {version} is ready to install from Settings. {INSTALL_CLOSES_AND_RESTARTS}"),
             );
         }
         crate::tray::on_update_status(&handle, status.available.as_deref());
@@ -847,8 +1761,12 @@ pub fn spawn_startup_check(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        both_updated, chat_facts, claim_update_both, friendly, is_update_card, step_starting, Step,
-        DESKTOP_SKIPPED_DETAIL, STEP_BACKEND, STEP_DESKTOP,
+        both_updated, chat_facts, claim_update_both, clear_pending, desktop_half_allowed,
+        desktop_half_trace, ending_words, friendly, install_notice_for, is_update_card,
+        mark_launched, read_pending, reconcile, same_version, step_starting, write_pending,
+        BackendHalf, BeforeInstaller, DesktopEnding, DesktopHalf, PendingDesktopInstall, Status,
+        Step, BEFORE_INSTALLER, DESKTOP_HALF, DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL,
+        INSTALL_CLOSES_AND_RESTARTS, PENDING_FILE, STEP_BACKEND, STEP_DESKTOP,
     };
 
     // ---- what the chat answers read (2026-10-26) --------------------------
@@ -1066,6 +1984,525 @@ mod tests {
         assert!(
             claim_update_both().is_some(),
             "the slot was not released when the first run ended"
+        );
+    }
+
+    // ---- the desktop half across the process that ends it ----------------
+    //
+    // The Windows installer path calls `std::process::exit(0)`, so the desktop
+    // half cannot report its own ending. What CAN be tested without an
+    // installer is the whole decision: what is written down, and what the next
+    // launch is allowed to say about it.
+
+    fn a_pending(
+        target: &str,
+        launched: bool,
+        backend: Option<BackendHalf>,
+    ) -> PendingDesktopInstall {
+        PendingDesktopInstall {
+            target_version: target.to_string(),
+            from_version: "0.2.412".to_string(),
+            started_at: 1_760_000_000,
+            installer_launched: launched,
+            app_commit: Some("111111111111".to_string()),
+            backend_commit: Some("222222222222".to_string()),
+            backend_step: backend,
+        }
+    }
+
+    fn an_ok_backend_half() -> BackendHalf {
+        BackendHalf {
+            state: "ok".to_string(),
+            detail: "The backend is patched and proven.".to_string(),
+        }
+    }
+
+    #[test]
+    fn the_next_launch_says_the_desktop_half_finished_only_when_that_version_runs() {
+        let pending = a_pending("0.2.500", true, Some(an_ok_backend_half()));
+        let ending = reconcile(Some(&pending), "0.2.500").expect("a record was there");
+        assert_eq!(
+            ending,
+            DesktopEnding::Finished {
+                from: "0.2.412".to_string(),
+                target: "0.2.500".to_string(),
+                backend: Some(an_ok_backend_half()),
+            }
+        );
+        let said = ending_words(&ending, Some("333333333333"), Some("222222222222"));
+        assert!(said.contains("is now 0.2.500"), "{said}");
+        assert!(said.contains("was 0.2.412"), "{said}");
+        // ONLY a finished desktop half plus a backend half that ended `ok`
+        // (which already means proven) may say both are done.
+        assert!(said.contains("both halves are done"), "{said}");
+        // ...and the version comparison is part of the same sentence, from the
+        // NEW app's commit, so "both halves" is never just "both ran".
+        assert!(said.contains("they differ"), "{said}");
+        assert!(said.contains("222222222222"), "{said}");
+        assert!(said.contains("333333333333"), "{said}");
+    }
+
+    #[test]
+    fn a_partial_backend_half_may_never_be_painted_as_both_done() {
+        let partial = BackendHalf {
+            state: "partial".to_string(),
+            detail: "Patched, unproven.".to_string(),
+        };
+        let pending = a_pending("0.2.500", true, Some(partial));
+        let ending = reconcile(Some(&pending), "0.2.500").expect("a record was there");
+        let said = ending_words(&ending, Some("333333333333"), Some("222222222222"));
+        assert!(!said.contains("both halves are done"), "{said}");
+        assert!(said.contains("not proven"), "{said}");
+        assert!(
+            said.contains("only the desktop half finished cleanly"),
+            "{said}"
+        );
+        // The desktop half did finish, so it is still said to have.
+        assert!(said.contains("is now 0.2.500"), "{said}");
+
+        // A lone Install (no backend half at all) can never say both either.
+        let lone = a_pending("0.2.500", true, None);
+        let ending = reconcile(Some(&lone), "0.2.500").expect("a record was there");
+        let said = ending_words(&ending, None, None);
+        assert!(!said.contains("both halves are done"), "{said}");
+        assert!(said.contains("No backend update ran with it"), "{said}");
+        assert!(said.contains("cannot be compared"), "{said}");
+    }
+
+    #[test]
+    fn a_record_that_never_reached_the_installer_is_not_reported_as_installed() {
+        // The download failed, or the owner quit during it: the hook never ran,
+        // so the installer never started. The old version is still running.
+        let pending = a_pending("0.2.500", false, Some(an_ok_backend_half()));
+        let ending = reconcile(Some(&pending), "0.2.412").expect("a record was there");
+        assert!(matches!(ending, DesktopEnding::NotLaunched { .. }));
+        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"));
+        assert!(said.contains("installer never ran"), "{said}");
+        assert!(said.contains("still 0.2.412"), "{said}");
+        assert!(said.contains("Press Install"), "{said}");
+        // The backend half DID finish before the desktop half was attempted.
+        assert!(
+            said.contains("The backend half had already finished."),
+            "{said}"
+        );
+        assert!(!said.contains("is now 0.2.500"), "{said}");
+    }
+
+    #[test]
+    fn an_installer_that_left_the_old_version_running_is_not_reported_as_done() {
+        let pending = a_pending("0.2.500", true, Some(an_ok_backend_half()));
+        let ending = reconcile(Some(&pending), "0.2.412").expect("a record was there");
+        assert_eq!(
+            ending,
+            DesktopEnding::NotInstalled {
+                from: "0.2.412".to_string(),
+                target: "0.2.500".to_string(),
+                running: "0.2.412".to_string(),
+                backend: Some(an_ok_backend_half()),
+            }
+        );
+        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"));
+        assert!(said.contains("has not taken effect"), "{said}");
+        assert!(said.contains("cancelled"), "{said}");
+        assert!(!said.contains("is now 0.2.500"), "{said}");
+    }
+
+    #[test]
+    fn a_third_version_is_never_claimed_either_way() {
+        let pending = a_pending("0.2.500", true, None);
+        let ending = reconcile(Some(&pending), "0.2.501").expect("a record was there");
+        assert!(matches!(ending, DesktopEnding::OtherVersion { .. }));
+        let said = ending_words(&ending, Some("111111111111"), Some("222222222222"));
+        assert!(said.contains("cannot say which version"), "{said}");
+        assert!(!said.contains("is now 0.2.500"), "{said}");
+        assert!(!said.contains("both halves"), "{said}");
+    }
+
+    #[test]
+    fn no_record_means_nothing_to_say() {
+        assert_eq!(reconcile(None, "0.2.412"), None);
+    }
+
+    #[test]
+    fn a_version_with_a_leading_v_is_the_same_release() {
+        // The manifest and `package_info()` are both semver; the only slips a
+        // person would forgive are case and a leading `v`.
+        assert!(same_version("0.2.500", "0.2.500"));
+        assert!(same_version("v0.2.500", "0.2.500"));
+        assert!(same_version(" 0.2.500\n", "V0.2.500"));
+        assert!(!same_version("0.2.500", "0.2.501"));
+        assert!(!same_version("0.2.500", "0.2.5001"));
+        assert!(!same_version("", "0.2.500"));
+    }
+
+    /// The record has to survive the process, so a write/read round trip on the
+    /// real serializer is the test - not a hand-typed JSON fixture that could
+    /// drift from the struct.
+    #[test]
+    fn the_record_round_trips_through_the_disk() {
+        let path = std::env::temp_dir().join(format!(
+            "jarvis-pending-update-test-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            read_pending(&path).is_none(),
+            "a missing file read as a record"
+        );
+        let pending = a_pending("0.2.500", false, Some(an_ok_backend_half()));
+        write_pending(&path, &pending).expect("the record could not be written");
+        assert_eq!(read_pending(&path), Some(pending));
+        // Marking it launched is a read-modify-write, and the flag must stick.
+        mark_launched(&path);
+        let read = read_pending(&path).expect("the record disappeared after marking it");
+        assert!(read.installer_launched, "the launched mark was not written");
+        // The update's own identity is unchanged by marking.
+        assert_eq!(read.target_version, "0.2.500");
+        assert_eq!(read.from_version, "0.2.412");
+        clear_pending(&path);
+        assert!(read_pending(&path).is_none(), "the record was not cleared");
+        // Junk reads as "no record" rather than as a guess.
+        std::fs::write(&path, "{ not json").expect("the test could not write junk");
+        assert!(read_pending(&path).is_none());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The order inside the hook is the fix for the orphaned backend: stop it
+    /// FIRST, and only then write "launched". If this array is swapped, a
+    /// process that dies during the stop would leave a record claiming an
+    /// installer that never ran.
+    #[test]
+    fn the_backend_is_stopped_before_the_record_says_the_installer_is_launched() {
+        assert_eq!(
+            BEFORE_INSTALLER,
+            [BeforeInstaller::StopBackend, BeforeInstaller::MarkLaunched]
+        );
+        // ...and the hook really walks that array, rather than keeping a second
+        // copy of the order in its body.
+        let src = include_str!("update.rs");
+        let body = &src[src
+            .find("fn before_installer_runs(")
+            .expect("update.rs has no before_installer_runs")..];
+        assert!(
+            body.contains("for step in BEFORE_INSTALLER"),
+            "the hook no longer follows BEFORE_INSTALLER"
+        );
+    }
+
+    // ---- the desktop half's order (corrections round, 2026-10-27) ---------
+    //
+    // The design: (a) the backend half proves itself, (b) the desktop package
+    // is downloaded and its signature checked, (c) the record is written
+    // atomically and read back, (d) the backend is stopped and waited for, (e)
+    // the installer is called LAST. These hold the order; the types in
+    // `prepare_desktop_half` make it impossible to build differently.
+
+    /// The order, in one place, and the code really walking it: the prepare
+    /// half verifies, records and stops - in that order - and never calls the
+    /// installer; `update_both` hands the prepared value to the installer last.
+    #[test]
+    fn the_desktop_half_is_verified_recorded_stopped_then_installed() {
+        assert_eq!(
+            DESKTOP_HALF,
+            [
+                DesktopHalf::VerifyPackage,
+                DesktopHalf::WriteRecord,
+                DesktopHalf::StopBackend,
+                DesktopHalf::Install,
+            ]
+        );
+        // ...and it is the order the log of a real run names, from that array.
+        assert_eq!(
+            desktop_half_trace(),
+            "check the package -> write the record -> stop the backend -> install"
+        );
+        let src = include_str!("update.rs");
+
+        // (b), (c), (d) in that order, and no install among them.
+        let prepare = &src[src
+            .find("async fn prepare_desktop_half(")
+            .expect("update.rs has no prepare_desktop_half")..];
+        let prepare = &prepare[..prepare.find("\n}\n").expect("it has no end")];
+        let verify = prepare
+            .find("verify_desktop_package(")
+            .expect("the package is never verified");
+        let record = prepare
+            .find("write_desktop_record(")
+            .expect("the record is never written");
+        let stop = prepare
+            .find("stop_backend_for_installer(")
+            .expect("the backend is never stopped for the installer");
+        assert!(
+            verify < record,
+            "the record is written before the package is verified"
+        );
+        assert!(
+            record < stop,
+            "the backend is stopped before the record is written - a process that \
+             dies during the stop would leave no record at all"
+        );
+        assert!(
+            !prepare.contains("install_now("),
+            "the install is called from the prepare half, so it can happen before the stop"
+        );
+
+        // (e) is last, and it is last because it takes the value (d) produced:
+        // there is no other way to obtain one. The slice stops at the section
+        // that follows, so the tests further down cannot make this pass (or
+        // fail) by naming the same calls.
+        let install_fn = &src[src
+            .find("async fn install_now(")
+            .expect("update.rs has no install_now")..];
+        let install_fn = &install_fn[..install_fn
+            .find("\n// ---------------------------------------------------------------------------\n// The desktop half across the process that ends it")
+            .expect("install_now has no end")];
+        assert!(
+            install_fn.contains("ready: StoppedDesktop"),
+            "the install step no longer requires the stopped value"
+        );
+        assert!(
+            install_fn.contains("update.install(&bytes)"),
+            "the install step no longer installs the bytes step (b) verified"
+        );
+        assert!(
+            !install_fn.contains(".download("),
+            "the install step downloads, so the package is not verified before it"
+        );
+        assert!(
+            !install_fn.contains(".on_before_exit(") && !install_fn.contains("write_pending("),
+            "the hook or the record moved into the last step"
+        );
+
+        let both = &src[src
+            .find("pub async fn update_both")
+            .expect("update.rs has no update_both")..];
+        let prepared = both
+            .find("prepare_desktop_half(&app")
+            .expect("update_both prepares no desktop half");
+        let installed = both
+            .find("install_now(&app")
+            .expect("update_both never installs");
+        assert!(
+            prepared < installed,
+            "update_both installs before it verifies, records and stops"
+        );
+    }
+
+    /// A backend half that patched but could not prove its checks is NOT a pass,
+    /// so the desktop half is not started on top of it.
+    #[test]
+    fn a_backend_half_that_did_not_prove_itself_stops_the_desktop_half() {
+        assert!(desktop_half_allowed(&Step::ok(
+            STEP_BACKEND,
+            "patched and proven"
+        )));
+        for unproven in [
+            Step::partial(STEP_BACKEND, "patched, checks skipped"),
+            Step::failed(STEP_BACKEND, "did not finish"),
+            Step::skipped(STEP_BACKEND, "not attempted"),
+            Step::running(STEP_BACKEND, "under way"),
+        ] {
+            assert!(
+                !desktop_half_allowed(&unproven),
+                "the desktop half was allowed after a backend that ended {}",
+                unproven.state
+            );
+        }
+        // The two refusals are two sentences, because "did not finish" is false
+        // about a backend that did patch. Neither may read as an install.
+        assert!(
+            DESKTOP_SKIPPED_DETAIL.contains("did not finish"),
+            "{DESKTOP_SKIPPED_DETAIL}"
+        );
+        assert!(
+            DESKTOP_UNPROVEN_DETAIL.contains("could not run"),
+            "{DESKTOP_UNPROVEN_DETAIL}"
+        );
+        for words in [DESKTOP_SKIPPED_DETAIL, DESKTOP_UNPROVEN_DETAIL] {
+            assert!(words.contains("Not installed"), "{words}");
+            assert!(!words.contains("is installed"), "{words}");
+        }
+    }
+
+    /// The record names the backend step and the target version, is replaced by
+    /// a rename rather than truncated in place, and leaves no temporary file.
+    #[test]
+    fn the_record_is_written_atomically_and_names_the_backend_step() {
+        let dir = std::env::temp_dir().join(format!(
+            "jarvis-pending-atomic-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        // The folder is created by the write when it is not there: the Jarvis
+        // data folder may not exist on a fresh PC, and that must not refuse an
+        // update the owner asked for.
+        let path = dir.join(PENDING_FILE);
+        let first = a_pending("0.2.500", false, None);
+        write_pending(&path, &first).expect("the first write");
+        assert_eq!(read_pending(&path), Some(first));
+        // A second write replaces it whole.
+        let second = a_pending("0.2.501", true, Some(an_ok_backend_half()));
+        write_pending(&path, &second).expect("the replace");
+        assert_eq!(read_pending(&path), Some(second));
+        // No temporary file is left behind.
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+            .expect("the record's folder")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "temporary files left: {leftovers:?}");
+        // The file is a complete JSON object that names what step (c) must
+        // name: the backend step and the target version.
+        let text = std::fs::read_to_string(&path).expect("the record reads");
+        let json: serde_json::Value =
+            serde_json::from_str(&text).expect("the record is not complete JSON");
+        assert_eq!(json["targetVersion"], "0.2.501");
+        assert_eq!(json["fromVersion"], "0.2.412");
+        assert_eq!(json["backendStep"]["state"], "ok");
+        assert_eq!(json["installerLaunched"], true);
+        // ...and the replace is one rename in the same folder, flushed first.
+        // A source pin: a single-threaded test cannot observe the atomicity
+        // itself, only the mechanism that gives it.
+        let src = include_str!("update.rs");
+        let body = &src[src.find("fn write_pending(").expect("no write_pending")..];
+        let body = &body[..body.find("\n}\n").expect("it has no end")];
+        assert!(
+            body.contains("std::fs::rename"),
+            "the record is not replaced by a rename"
+        );
+        assert!(
+            body.contains("sync_all"),
+            "the record is not flushed before the rename"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A record written by an older build - `target` / `from` / `backend` -
+    /// still reads, so this round extends the record rather than replacing it.
+    #[test]
+    fn an_older_record_still_reads() {
+        let old = serde_json::json!({
+            "target": "0.2.500",
+            "from": "0.2.412",
+            "startedAt": 1_760_000_000,
+            "installerLaunched": true,
+            "appCommit": "111111111111",
+            "backendCommit": "222222222222",
+            "backend": { "state": "ok", "detail": "done" }
+        });
+        let read: PendingDesktopInstall =
+            serde_json::from_value(old).expect("an older record no longer reads");
+        assert_eq!(read.target_version, "0.2.500");
+        assert_eq!(read.from_version, "0.2.412");
+        assert_eq!(
+            read.backend_step.map(|half| half.state),
+            Some("ok".to_string())
+        );
+        // And the record is still written under the name the design fixes, in
+        // the folder Jarvis keeps its own data in.
+        assert_eq!(PENDING_FILE, "pending-desktop-update.json");
+    }
+
+    /// The sentence the controls must carry BEFORE the press, and the places it
+    /// reaches without a page being edited: the data the card reads, the
+    /// notification, the desktop half's first line and the chat's opening line.
+    #[test]
+    fn the_install_controls_say_the_app_closes_before_they_are_pressed() {
+        // No Install control, no sentence.
+        assert_eq!(install_notice_for(None), None);
+        let notice = install_notice_for(Some("0.2.500")).expect("a notice");
+        assert_eq!(notice, INSTALL_CLOSES_AND_RESTARTS);
+        for expected in ["closes", "starts again", "Save anything"] {
+            assert!(
+                notice.contains(expected),
+                "`{expected}` missing from the pre-click sentence: {notice}"
+            );
+        }
+        // It rides the same struct the Updates card already reads, so a card can
+        // paint it before the press without this module changing a page.
+        let status = Status {
+            available: Some("0.2.500".to_string()),
+            install_notice: install_notice_for(Some("0.2.500")),
+            ..Status::default()
+        };
+        let json = serde_json::to_value(&status).expect("Status serialises");
+        assert_eq!(json["install_notice"], INSTALL_CLOSES_AND_RESTARTS);
+
+        // The desktop half's own running line says it, before the download.
+        let step = step_starting(STEP_DESKTOP, None);
+        assert!(step.detail.contains("closes"), "{}", step.detail);
+        assert!(step.detail.contains("starts again"), "{}", step.detail);
+        assert!(step.detail.contains("Downloading"), "{}", step.detail);
+
+        // ...and it is used in at least four places in this module: the
+        // constant itself, the check that offers it, the startup notification,
+        // the chat's opening line and the desktop step's line.
+        let src = include_str!("update.rs");
+        let production = &src[..src.find("#[cfg(test)]").expect("no test module")];
+        assert!(
+            production.matches("INSTALL_CLOSES_AND_RESTARTS").count() >= 5,
+            "the pre-click sentence is no longer said everywhere it must be"
+        );
+    }
+
+    /// The hook is registered before the download (a hook added later would
+    /// never run), and the record is written before the install call - the two
+    /// hand-over invariants, now held by the prepare half rather than by
+    /// `install_now`.
+    #[test]
+    fn the_hook_and_the_record_come_before_the_installer_can_run() {
+        let src = include_str!("update.rs");
+        let verify = &src[src
+            .find("async fn verify_desktop_package(")
+            .expect("update.rs has no verify_desktop_package")..];
+        let verify = &verify[..verify.find("\n}\n").expect("it has no end")];
+        let hook = verify
+            .find(".on_before_exit(")
+            .expect("the updater's on_before_exit hook is no longer registered");
+        let download = verify
+            .find(".download(")
+            .expect("the package is no longer downloaded here");
+        assert!(
+            hook < download,
+            "the hook is registered after the download - the crate would never call it"
+        );
+        let record = &src[src
+            .find("fn write_desktop_record(")
+            .expect("update.rs has no write_desktop_record")..];
+        let record = &record[..record.find("\n}\n").expect("it has no end")];
+        assert!(
+            record.contains("write_pending(record, &pending)"),
+            "the record is no longer written"
+        );
+        assert!(
+            record.contains("read_pending(record) != Some(pending)"),
+            "the record is no longer read back - a record the next launch cannot \
+             read is the same as no record"
+        );
+        assert!(
+            !record.contains("install("),
+            "the record step installs something"
+        );
+    }
+
+    /// The startup reconcile is only worth anything if something calls it.
+    /// `lib.rs` owns startup, and a call that is deleted there is otherwise
+    /// silent.
+    #[test]
+    fn the_next_launch_really_reconciles_the_record() {
+        let src = include_str!("lib.rs");
+        assert!(
+            src.contains("update::reconcile_pending_at_startup(&handle);"),
+            "lib.rs no longer reconciles the desktop update record at startup"
         );
     }
 }
