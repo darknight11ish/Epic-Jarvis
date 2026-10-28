@@ -711,13 +711,79 @@ pub fn show_settings(app: &AppHandle) -> Result<(), String> {
     show_settings_unlocked(app)
 }
 
+/// Places in Settings another surface may name - the Settings twin of
+/// [`BRAIN_PLACES`], added for the owner's report of 2026-10-27: the tray's
+/// "Update available — v…" row "only opens the settings page", leaving him to
+/// find the card himself.
+///
+/// `"updates"` is `settings.html`'s own card id, so a NEW window is opened at
+/// `settings.html#updates`, and an open one hears [`SETTINGS_PLACE_EVENT`].
+/// Navigation only: nothing here checks, downloads or installs, and App lock
+/// still applies exactly as it does for [`show_settings`].
+pub(crate) const SETTINGS_PLACES: [&str; 1] = ["updates"];
+
+/// The event an open Settings hears a place by. The page's own copy of this
+/// spelling is `settings-place.js`; the test
+/// `the_settings_place_event_is_one_name_in_both_languages` below holds the
+/// two together.
+pub(crate) const SETTINGS_PLACE_EVENT: &str = "settings-place";
+
+/// The place asked for, kept until Settings is really shown - App lock may ask
+/// Windows Hello first (lock.rs), and the window is built only then.
+static PENDING_SETTINGS_PLACE: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
+
+/// One of [`SETTINGS_PLACES`], or an error naming nothing that exists.
+///
+/// Pure on purpose: the tray's destination is decided by a value this small,
+/// and a value this small is the part that can be tested without a window.
+fn settings_place(place: &str) -> Result<&'static str, String> {
+    SETTINGS_PLACES
+        .iter()
+        .copied()
+        .find(|p| *p == place)
+        .ok_or_else(|| "That is not a place in Settings.".to_string())
+}
+
+/// The page a new Settings window is built at: the card's own anchor when a
+/// place was asked for (`settings.html#updates`), plain Settings otherwise.
+fn settings_page(place: Option<&str>) -> String {
+    match place {
+        Some(p) => format!("settings.html#{p}"),
+        None => "settings.html".to_string(),
+    }
+}
+
+fn take_pending_settings_place() -> Option<&'static str> {
+    PENDING_SETTINGS_PLACE
+        .lock()
+        .ok()
+        .and_then(|mut pending| pending.take())
+}
+
+/// Opens Settings at one of [`SETTINGS_PLACES`] - the tray's "Update
+/// available — v…" row is the caller (the owner, 2026-10-27). Navigation only;
+/// App lock still applies, as for [`show_settings`].
+pub fn show_settings_at(app: &AppHandle, place: &str) -> Result<(), String> {
+    let place = settings_place(place)?;
+    if let Ok(mut pending) = PENDING_SETTINGS_PLACE.lock() {
+        *pending = Some(place);
+    }
+    show_settings(app)
+}
+
 /// [`show_settings`] without the app lock. Only lock.rs calls this.
 pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
+    let place = take_pending_settings_place();
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
         window
             .show()
             .map_err(|e| format!("unable to show settings: {e}"))?;
         let _ = window.unminimize();
+        // The page is already loaded, so the place travels as an event rather
+        // than as a fragment: a window shown from the tray must not reload.
+        if let Some(place) = place {
+            let _ = tauri::Emitter::emit_to(app, SETTINGS_LABEL, SETTINGS_PLACE_EVENT, place);
+        }
         return window
             .set_focus()
             .map_err(|e| format!("unable to focus settings: {e}"));
@@ -726,7 +792,7 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
     let window = tauri::WebviewWindowBuilder::new(
         app,
         SETTINGS_LABEL,
-        tauri::WebviewUrl::App("settings.html".into()),
+        tauri::WebviewUrl::App(settings_page(place).into()),
     )
     .title("Jarvis Desktop — Settings")
     .inner_size(680.0, 760.0)
@@ -2033,5 +2099,56 @@ mod tests {
         })
         .expect("serialisable");
         assert!(round.contains("\"clickThrough\":true"), "{round}");
+    }
+
+    /// The tray's "Update available — v…" row names a place, and only a name
+    /// this app really has is one: the list is short and closed, so a typo in
+    /// the tray cannot open an arbitrary fragment of the page (the owner's
+    /// report of 2026-10-27 - the row used to open plain Settings).
+    #[test]
+    fn only_a_named_place_is_a_place_in_settings() {
+        assert_eq!(
+            settings_place("updates").expect("updates is a place"),
+            "updates"
+        );
+        for bad in [
+            "",
+            "settings",
+            "Updates",
+            "updates#more",
+            "../updates",
+            "rare",
+        ] {
+            assert!(settings_place(bad).is_err(), "accepted `{bad}` as a place");
+        }
+        assert!(SETTINGS_PLACES.contains(&"updates"));
+    }
+
+    /// A place changes what a NEW window loads and nothing else: the anchor is
+    /// the card's own id, and no place means the page it always was.
+    #[test]
+    fn a_place_opens_a_new_settings_window_at_its_own_card() {
+        assert_eq!(settings_page(Some("updates")), "settings.html#updates");
+        assert_eq!(settings_page(None), "settings.html");
+    }
+
+    /// Two spellings, one event: Rust emits this name and the page listens for
+    /// it. A rename on one side alone would leave the tray opening Settings at
+    /// the top while every test here still passed - and the page has to hold a
+    /// card with that id, or the place scrolls nowhere.
+    #[test]
+    fn the_settings_place_event_is_one_name_in_both_languages() {
+        let js = include_str!("../../src/settings-place.js");
+        assert!(
+            js.contains(&format!(
+                "SETTINGS_PLACE_EVENT = \"{SETTINGS_PLACE_EVENT}\""
+            )),
+            "settings-place.js does not name the event `{SETTINGS_PLACE_EVENT}`"
+        );
+        let html = include_str!("../../src/settings.html");
+        assert!(
+            html.contains("<section class=\"card\" id=\"updates\">"),
+            "there is no `updates` card for the place to land on"
+        );
     }
 }

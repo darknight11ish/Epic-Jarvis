@@ -962,7 +962,8 @@ export const MENUS = [
     "why": "On the phone it is the \"Check for new versions\" row on Platform checks; there is no separate row to hide.",
     "names": [
       "updates",
-      "app updates"
+      "app updates",
+      "update"
     ]
   },
   {
@@ -3031,6 +3032,7 @@ export const ALIASES = {
   "tutorials": "brain.tab.tutorials",
   "tutorials and the faq": "brain.tab.tutorials",
   "undo shelf": "brain.work.undo",
+  "update": "settings.updates",
   "updates": "settings.updates",
   "voice": "settings.voice",
   "voice check": "entry.voice-check",

@@ -5,7 +5,11 @@
  * they assert ids and words, and search adds neither. What has to be checked is
  * behaviour, in a real page:
  *
- *   - it filters live, and the section headings of what is left stay visible;
+ *   - it filters live, and the page's one group heading goes away with the
+ *     jump list while a search is on, then comes back;
+ *   - it RANKS what it shows by where the words matched (2026-10-27), so
+ *     searching "update" puts Updates first rather than leaving it in page
+ *     order behind cards that merely mention updating;
  *   - it matches the label AND the detail under it, not just the title;
  *   - it says nothing matched, in words, and says how to get everything back;
  *   - clearing the box restores the page EXACTLY - same cards, same values;
@@ -49,7 +53,7 @@ const showing = (page) => page.evaluate(() =>
     .filter((c) => !c.hidden)
     .map((c) => c.id || "(no id)"));
 
-/** Band headings that are actually on screen. */
+/** The one group heading, when it is on screen. */
 const bands = (page) => page.evaluate(() =>
   [...document.querySelectorAll("main .settings-group-heading")]
     .filter((h) => !h.hidden)
@@ -96,7 +100,7 @@ await check("Settings opens with a search box, above the jump list", async () =>
 
 /* ── Filtering, live, with the headings kept ────────────────────────────── */
 
-await check("typing filters the cards, and keeps the band of what is left", async () => {
+await check("typing filters the cards, and puts the page's heading away with the jump list", async () => {
   const page = await open();
   const all = await showing(page);
   await type(page, "backup");
@@ -104,9 +108,14 @@ await check("typing filters the cards, and keeps the band of what is left", asyn
   assert.ok(left.length < all.length, "typing did not hide anything");
   assert.ok(left.includes("backup"), `Backups is not among ${left.join(", ")}`);
   assert.ok(!left.includes("voice"), "a card that cannot match is still drawn");
-  const shownBands = await bands(page);
-  assert.ok(shownBands.length >= 1,
-    "every band heading was hidden, so the page no longer says where the card lives");
+  // The Everyday/Rare bands went on 2026-10-27; the one heading left is
+  // "What Jarvis does", and a ranked list must not carry a category heading
+  // partway down it, so it is put away while the box has words in it.
+  assert.deepEqual(await bands(page), [],
+    "a group heading is still drawn in the middle of a ranked list");
+  await type(page, "");
+  assert.deepEqual(await bands(page), ["What Jarvis does"],
+    "the page's heading did not come back when the box was cleared");
   await page.close();
 });
 
@@ -160,6 +169,52 @@ await check("a switch is found by its own label, not only by its detail", async 
   await type(page, clickLabel.toLowerCase());
   assert.ok((await showing(page)).includes("appearance-card"),
     `typing "${clickLabel}" did not find the Appearance card: ${(await showing(page)).join(", ")}`);
+  await page.close();
+});
+
+/* ── Results are ranked by where the words matched (2026-10-27) ─────────── */
+
+await check("searching 'update' lists Updates first", async () => {
+  // The owner, 2026-10-27: "when i search update in the settings page on the
+  // jarvis desktop, updates is not the first thing that comes up". Before the
+  // ranking the card was FIFTH: four cards that merely mention updating sat
+  // above the card named for it, because results were drawn in page order and
+  // the old Everyday/Rare split had put Updates in Rare. The order here is
+  // read off the screen (the blocks are really moved), not off a list this
+  // test keeps itself.
+  const page = await open();
+  await type(page, "update");
+  const left = await showing(page);
+  assert.ok(left.includes("updates"), `"update" hid the Updates card: ${left.join(", ")}`);
+  assert.equal(left[0], "updates",
+    `"update" put ${left[0] ?? "nothing"} first, not Updates: ${left.join(", ")}`);
+  assert.ok(left.indexOf("tool-updates") > left.indexOf("updates"),
+    "the tool-updates card came before the Updates card");
+  await page.close();
+});
+
+await check("a title or catalogue alias outranks a card that only mentions the word", async () => {
+  const page = await open();
+  // "app updates" is one of the names the menus catalogue already answers to
+  // for this card, not a word printed on the page.
+  await type(page, "app updates");
+  assert.equal((await showing(page))[0], "updates",
+    `"app updates" did not put Updates first: ${(await showing(page)).join(", ")}`);
+  // A heading word beats the same word buried in a paragraph.
+  await type(page, "voice");
+  assert.equal((await showing(page))[0], "voice",
+    `"voice" did not put the Voice card first: ${(await showing(page)).join(", ")}`);
+  await page.close();
+});
+
+await check("equally good matches go by the shorter title, never by where the card sat", async () => {
+  const page = await open();
+  await type(page, "updates");
+  const left = await showing(page);
+  assert.equal(left[0], "updates",
+    `"updates" put ${left[0]} first: ${left.join(", ")}`);
+  assert.ok(left.includes("tool-updates"),
+    "the second card whose own title says updates was hidden");
   await page.close();
 });
 
@@ -420,6 +475,42 @@ await check("every case in the SHARED cross-app fixture matches the desktop engi
     assert.equal(fuzzyBudget("x".repeat(Number(len))), want,
       `fuzzyBudget for ${len} letters is no longer ${want}`);
   }
+});
+
+/* ── The ranking rules, without a browser (2026-10-27) ──────────────────── */
+
+await check("the ranking rules are pure and live in the shipped module", async () => {
+  // No page, no Playwright: `cardRank` and `compareMatches` are the whole of
+  // the ordering rule and they are exported from the module the box runs.
+  const { cardRank, compareMatches } = await import("../src/settings-search.js");
+  // The words on the Updates card once the catalogue gained "update": its
+  // title plus the names `menu-catalog.js` answers to for it.
+  const updates = { label: "updates updates app updates update", text: "", rows: [] };
+  const tools = { label: "check for tool updates tool updates", text: "", rows: [] };
+  assert.equal(cardRank(updates, "update"), EXACT,
+    "an alias that IS the word typed is not the top tier");
+  assert.equal(cardRank(tools, "update"), PREFIX,
+    "a title word that only starts with the word typed is not the prefix tier");
+  assert.ok(cardRank(updates, "update") > cardRank(tools, "update"),
+    "Updates and Check for tool updates rank equally for 'update'");
+  // The floor is the detail text; a word that is not on the card is nothing.
+  assert.equal(cardRank({ label: "", text: "this copy checks for updates", rows: [] }, "update"),
+    DETAIL, "a word buried in the detail text fell out of the match");
+  assert.equal(cardRank({ label: "", text: "nothing here", rows: [] }, "update"), NONE,
+    "a word that is not on the card matched it");
+  // Equal ranks: the shorter title wins...
+  assert.ok(
+    compareMatches({ rank: EXACT, title: "updates" },
+      { rank: EXACT, title: "check for tool updates" }) < 0,
+    "the shorter title did not win an equal match",
+  );
+  // ...and equal titles fall back to the title's own letters, never to where
+  // the card happens to sit on the page ("alpha" and "bravo" are both five
+  // letters, so the length rule cannot decide this one).
+  assert.ok(compareMatches({ rank: EXACT, title: "alpha" },
+    { rank: EXACT, title: "bravo" }) < 0, "equal matches did not fall back to the title");
+  assert.ok(compareMatches({ rank: DETAIL, title: "a" },
+    { rank: EXACT, title: "z" }) > 0, "a detail match outranked an exact one");
 });
 
 await browser.close(); close();

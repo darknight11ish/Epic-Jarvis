@@ -339,6 +339,76 @@ await check("CONTROL: only one endpoint, and it is the releases URL", async () =
     "the endpoint carries a query string, so it is sending something");
 });
 
+/* ── The tray's "Update available" row lands on THIS card (2026-10-27) ───── */
+
+await check("the place Rust names opens Settings scrolled to the Updates card", async () => {
+  // The owner: "when i right click the jarvis tray icon, click on update
+  // available, it only opens the settings page". `windows.rs`'s
+  // `show_settings_at` now builds a NEW window at `settings.html#updates`, and
+  // `settings.js` consumes that fragment. The tray row really names this place
+  // (the Rust half is pinned in source here so the two halves cannot drift).
+  const tray = read("src-tauri/src/tray.rs");
+  assert.match(tray, /ID_UPDATE => Some\("updates"\)/,
+    "the tray's Update row no longer names the Updates place");
+  const page = await K.open(browser, base, "settings.html#updates",
+    { update: { ...K.UPDATE_NONE, ...FOUND } }, VIEW);
+  await page.waitForFunction(() => {
+    const card = document.getElementById("updates");
+    return card && Math.abs(card.getBoundingClientRect().top) < 60;
+  }, null, { timeout: 3000 }).catch(() => {});
+  const seen = await page.evaluate(() => {
+    const card = document.getElementById("updates");
+    return {
+      top: card.getBoundingClientRect().top,
+      active: document.activeElement && document.activeElement.id,
+      inside: card.contains(document.activeElement),
+      hash: location.hash,
+      state: document.getElementById("update-state").textContent,
+    };
+  });
+  await page.close();
+  assert.ok(seen.top >= -4 && seen.top < 60,
+    `the Updates card is ${Math.round(seen.top)}px from the top of the window`);
+  assert.equal(seen.inside, true,
+    `focus is on "${seen.active}", outside the card the tray named`);
+  assert.equal(seen.hash, "",
+    "the place stayed in the address, so opening Settings again would jump back to it");
+  assert.match(seen.state, /0\.2\.0/, `the card does not show the version: "${seen.state}"`);
+});
+
+await check("an OPEN window hears the place instead of being reloaded", async () => {
+  // The other door: Rust finds the window already open and emits
+  // `settings-place` rather than building a new one, which would lose whatever
+  // was typed in it. The page must move; a place it does not have must be
+  // ignored rather than throwing.
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => window.__emit("settings-place", "updates"));
+  await page.waitForFunction(() => {
+    const card = document.getElementById("updates");
+    return card && Math.abs(card.getBoundingClientRect().top) < 60;
+  }, null, { timeout: 3000 }).catch(() => {});
+  const seen = await page.evaluate(() => {
+    const card = document.getElementById("updates");
+    return {
+      top: card.getBoundingClientRect().top,
+      active: document.activeElement && document.activeElement.id,
+      inside: card.contains(document.activeElement),
+    };
+  });
+  const errorsBefore = page.__errors.length;
+  await page.evaluate(() => window.__emit("settings-place", "no-such-card"));
+  await page.waitForTimeout(100);
+  const errorsAfter = page.__errors.length;
+  await page.close();
+  assert.ok(seen.top >= -4 && seen.top < 60,
+    `the Updates card is ${Math.round(seen.top)}px from the top of the window`);
+  assert.equal(seen.inside, true,
+    `focus is on "${seen.active}", outside the card the event named`);
+  assert.equal(errorsAfter, errorsBefore, "a place the page does not have threw");
+});
+
 await check("CONTROL: no page threw", async () => {
   const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
   await page.waitForTimeout(400);
