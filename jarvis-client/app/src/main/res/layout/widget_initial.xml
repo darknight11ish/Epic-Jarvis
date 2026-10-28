@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What every Jarvis home-screen widget shows BEFORE its first Glance update
+  lands - and, if an update can never run, what it keeps showing.
+
+  This file exists because of a real, owner-visible bug (2026-10-27): all five
+  widgets were pointed at @layout/glance_default_loading_layout, Glance's own
+  little layout whose whole content is a ProgressBar. That is fine as a
+  placeholder only while updates really do arrive. In the release APK they
+  could not: WorkManager was unable to create its InputMerger (see
+  app/proguard-rules.pro), so no Glance worker ever ran, no widget was ever
+  drawn, and the launcher sat on that ProgressBar for ever. The owner's report
+  was exactly that - "every widget is buffering indefinitely" - on two phones.
+
+  A spinner is a promise that something is on its way. A widget nobody can
+  update cannot keep that promise, so the promise is gone: this is a static
+  sentence, not a spinner, and it tells the reader what to do. It cannot be
+  tappable (an AppWidgetProviderInfo.initialLayout is inflated by the
+  launcher, with no PendingIntent of ours attached), which is why it reads as
+  an instruction rather than a button.
+
+  RemoteViews supports a small set of views only; these two TextViews and the
+  LinearLayout are all inside it. Colours are literal because a RemoteViews
+  host in another process cannot reach this app's theme - the same reason
+  ApprovalWidget.kt keeps its own flat Palette.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:padding="12dp"
+    android:background="#04070C">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/widget_initial_headline"
+        android:textColor="#E6EEF7"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="@string/widget_initial_words"
+        android:textColor="#93A6BA"
+        android:textSize="11sp" />
+</LinearLayout>
