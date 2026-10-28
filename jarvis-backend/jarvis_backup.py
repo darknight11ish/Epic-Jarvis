@@ -826,14 +826,13 @@ RESTORE_PC_ONLY = ("Restoring has to be done in Jarvis on your PC, so nothing wa
 LOST_CODE = ("Write this down or save it somewhere safe now - Jarvis will not show it "
              "again, and cannot recover it. If it is lost, this backup can never be "
              "opened again; there is no other way in.")
-#: The two sentences a backup's result adds when the archive is not what a bare
-#: "Backed up." would claim (data-integrity audit F1 and F4, 2026-10-28). They
-#: are used by `backup_message`, which BOTH the PC's own "Back up now" and the
-#: phone's commit answer with - so the apps cannot drift from the manifest.
-LEFT_OUT_WORDS = ("{names} could not be read, so {it} NOT in this backup")
-LOCKED_HISTORY_WORDS = ("your chat history is in this backup but LOCKED: the key that opens "
-                        "it was not on this PC, so keep the chat-history key from the PC "
-                        "that made it")
+#: WHY a database is not in the archive, in the brackets each `excluded_dbs`
+#: entry carries (data-integrity audit F1 and F4, 2026-10-28). The chat-history
+#: reason is the audit's own ruling: a history whose key is not on this PC, or
+#: is not the one that opens it, is left out rather than carried unreadable.
+CHAT_HISTORY_KEY_MISSING = ("encryption key missing or mismatched in Windows "
+                            "Credential Manager")
+SNAPSHOT_FAILED = "could not be read"
 ERASE_LIMIT = ("\"Erase the words\" cannot reach into an older backup: an erased fact's "
                "original words may still be readable in a backup kept from before it was "
                "erased, until that backup ages out of the last {keep} kept. A chat you "
@@ -1279,14 +1278,14 @@ def _chat_history_key_b64() -> Optional[str]:
     provider MINTS a fresh key when Credential Manager holds no entry - so a
     backup taken on a PC whose key was gone made a new key, embedded it, and
     recorded `chat_history_key: true` for an archive nothing could open. It now
-    asks `jarvis_chat_log.existing_key()`, which never makes one, and the
-    result is only used when it PROVES itself against the database: see
-    `_chat_history_key_opens` and `build_archive`.
+    asks `jarvis_chat_log.get_existing_key()`, which never makes one, and the
+    result is only used when it PROVES itself against the archived database:
+    see `_chat_history_key_opens` and `build_archive`.
 
     Read the SAME way jarvis_chat_log.py reads it - not copied."""
     try:
         import jarvis_chat_log
-        key = jarvis_chat_log.existing_key()
+        key = jarvis_chat_log.get_existing_key()
     except Exception:                              # noqa: BLE001 - reported by absence
         return None
     if not isinstance(key, (bytes, bytearray)) or len(bytes(key)) != 32:
@@ -1298,30 +1297,53 @@ def _chat_history_key_opens(key_b64, db_path) -> bool:
     """True only when the base64 key really opens the chat history at
     `db_path` (the `meta` `k='check'` row, read read-only).
 
-    The test itself is jarvis_chat_log.py's own (`key_opens_db`), not a copy:
-    the seal format, the associated data and the check row all live there.
-    False for anything else - a key that is not base64, a missing module, a
-    database this PC cannot read."""
+    The test itself is jarvis_chat_log.py's own (`verify_key_opens_db`), not a
+    copy: the seal format, the associated data and the check row all live
+    there. False for anything else - a key that is not base64, a missing
+    module, a database this PC cannot read."""
     if not key_b64:
         return False
     try:
         import jarvis_chat_log
         key = base64.b64decode(str(key_b64).encode("ascii"), validate=True)
-        return bool(jarvis_chat_log.key_opens_db(key, db_path))
+        return bool(jarvis_chat_log.verify_key_opens_db(db_path, key))
     except Exception:                              # noqa: BLE001 - reported by False
         return False
+
+
+def _db_has_rows(db_path) -> bool:
+    """True when any table of the database at `db_path` holds a row.
+
+    Used by `build_archive` to tell an EMPTY chat history (nothing to protect,
+    so it may ride without a key) from one that holds the owner's conversations
+    or tag names (which must never be carried without a key that opens them).
+    A database this PC cannot read answers True: the cautious half, because the
+    alternative would carry it with no key and call it complete."""
+    counts = _table_counts(db_path)
+    if not counts:
+        return True
+    return any(int(n or 0) > 0 for n in counts.values())
 
 
 def _study_decks_key_b64() -> Optional[str]:
     """The review decks' own encryption key, base64, or None when it cannot
     be read. Read the SAME way jarvis_decks.py reads it (its own Credential
     Manager entry, "Jarvis Backend/study decks key"), and only called when
-    study.db exists, so a backup never makes a key for decks nobody has."""
+    study.db exists.
+
+    READ-ONLY (data-integrity audit F1, 2026-10-28, same rule as the chat
+    history): `jarvis_decks`'s own provider makes a key on first use, and a
+    backup must not. Minting one here would put a fresh key into the archive
+    beside a `study.db` sealed with the OLD one - a database nothing can open,
+    printed as a complete backup. No readable key means no file (see
+    `build_archive`)."""
     try:
         import jarvis_chat_log
         import jarvis_decks
-        key = jarvis_chat_log.CredentialKey(jarvis_decks.KEY_TARGET)()
-        return base64.b64encode(key).decode("ascii")
+        key = jarvis_chat_log.CredentialKey(jarvis_decks.KEY_TARGET).get_existing()
+        if not isinstance(key, (bytes, bytearray)) or len(bytes(key)) != 32:
+            return None
+        return base64.b64encode(bytes(key)).decode("ascii")
     except Exception:
         return None
 
@@ -1329,13 +1351,17 @@ def _study_decks_key_b64() -> Optional[str]:
 def _medical_key_b64() -> Optional[str]:
     """The medical store's own encryption key, base64, or None when it cannot
     be read. Read the SAME way jarvis_medical_advocate.py reads it - through
-    that module's own key provider and its own Credential Manager entry,
-    "Jarvis Backend/medical key", never chat history's - and only called when
-    health.db exists, so a backup never makes a medical key for a record
-    nobody has. No key, no health.db in the archive: see build_archive."""
+    that module's own Credential Manager entry, "Jarvis Backend/medical key",
+    never chat history's - and only called when health.db exists.
+
+    READ-ONLY for the same reason as the review decks: the module's provider
+    mints on first use, and a backup that minted would carry health.db under a
+    key that opens nothing. No readable key, no health.db in the archive: see
+    `build_archive`."""
     try:
+        import jarvis_chat_log
         import jarvis_medical_advocate as medical
-        key = medical.key_provider()
+        key = jarvis_chat_log.CredentialKey(medical.KEY_TARGET).get_existing()
         if not isinstance(key, (bytes, bytearray)) or len(bytes(key)) != 32:
             return None
         return base64.b64encode(bytes(key)).decode("ascii")
@@ -1423,15 +1449,14 @@ def build_archive() -> tuple:
                 # stays as 0 for older readers.
                 "voice_profile_backed_up": False,
                 "voice_note": VOICE_REENROL_NOTE,
-                # F1 (2026-10-28): `chat_history_key` is true ONLY when the
-                # archive holds a key that was PROVED against the database.
-                # `chat_history_locked` says the database rode in without one,
-                # and `databases_left_out` names every database whose snapshot
-                # failed (F4) - both are spoken in the result and the panel.
+                # F1/F4 (2026-10-28): `chat_history_key` is true ONLY when the
+                # archive holds a key that was PROVED against the database
+                # beside it, and `excluded_dbs` names every database this PC
+                # has and the archive does not - each entry carrying its own
+                # reason in brackets. Both are spoken in the result and the
+                # panel, so a backup can never read as complete when it is not.
                 "chat_history_key": False,
-                "chat_history_key_opens_db": False,
-                "chat_history_locked": False,
-                "databases_left_out": [],
+                "excluded_dbs": [],
                 "study_decks_key": False, "medical_key": False,
                 "framework_toml": False,
                 "source_files": 0, "named_settings": {}}
@@ -1465,21 +1490,25 @@ def build_archive() -> tuple:
                     if not medical_key_b64:
                         continue
                 made = _snapshot_db(src, dest)
-                if name == CHAT_HISTORY_DB and made:
-                    # PROVE THE KEY OPENS THIS HISTORY BEFORE CLAIMING IT (F1,
-                    # 2026-10-28). The database itself is still carried when the
-                    # proof fails - it is the owner's only copy of every
-                    # conversation, and the key from the PC that made it may
-                    # exist elsewhere - but it is carried LOCKED, with no key
-                    # that opens nothing, and both the result and the panel say
-                    # so. Never again a `chat_history_key: true` over an
-                    # archive nothing can open.
+                excluded = ""
+                if made and name == CHAT_HISTORY_DB:
+                    # PROVE THE KEY OPENS THIS HISTORY BEFORE CARRYING IT (F1,
+                    # 2026-10-28). The database is sealed per row, so an archive
+                    # that holds it without a key that opens it is an archive
+                    # nothing can read: it is EXCLUDED instead, and named in the
+                    # result and the panel. A backup never mints a key
+                    # (`_chat_history_key_b64` is read-only), so "no key here"
+                    # means exactly that. An EMPTY history is the one exception -
+                    # there is nothing in it to be unable to read - and it rides
+                    # with no key at all.
                     chat_key_b64 = _chat_history_key_b64()
-                    if _chat_history_key_opens(chat_key_b64, dest):
-                        manifest["chat_history_key_opens_db"] = True
-                    else:
-                        chat_key_b64 = None
-                        manifest["chat_history_locked"] = True
+                    if not _chat_history_key_opens(chat_key_b64, dest):
+                        if _db_has_rows(dest):
+                            chat_key_b64 = None
+                            made = False
+                            excluded = CHAT_HISTORY_KEY_MISSING
+                        else:
+                            chat_key_b64 = None
                 if made:
                     manifest["databases"][name] = _table_counts(dest)
                     arcname = (f"db/{MEDICAL_ARCHIVE_DB}" if name == MEDICAL_DB
@@ -1501,7 +1530,8 @@ def build_archive() -> tuple:
                     # this point when their own key cannot be read, and that
                     # deliberate rule is documented at their `continue`s above -
                     # if one of them reaches here, its snapshot really failed.
-                    manifest["databases_left_out"].append(name)
+                    manifest["excluded_dbs"].append(
+                        f"{name} ({excluded or SNAPSHOT_FAILED})")
             own = {name.casefold() for name in _own_settings_files()}
             for jf in sorted(conf.glob("*.json")):
                 if jf.name.casefold() in own:
@@ -1996,42 +2026,58 @@ def manifest_warnings(manifest) -> list:
     """Plain sentences for what an archive does NOT have, or [] when it has
     everything this module meant to put in it.
 
-    Two things are spoken (data-integrity audit F1 and F4, 2026-10-28):
-
-      * every database whose snapshot failed, by name, as NOT in the backup
-        (`build_archive` puts them in `databases_left_out`);
-      * a chat history the key could not be proved to open
-        (`chat_history_locked`), which is carried so the sealed words are not
-        lost, and called locked so nobody believes a restore will open it.
+    ONE list is spoken (data-integrity audit F1 and F4, 2026-10-28):
+    `excluded_dbs`, which `build_archive` fills with every database that is on
+    this PC and is not in the archive - each entry already carrying its reason
+    in brackets ("chat-history.db (encryption key missing or mismatched in
+    Windows Credential Manager)", "memory.db (could not be read)").
 
     The manifest is the one source. `backup_message` below turns these into the
-    sentence the apps show, and the desktop panel's preview reads the same two
-    fields for its own sentence."""
+    sentence the apps show, and the desktop panel's preview reads the same
+    field for its own sentence, so the two cannot disagree."""
     manifest = manifest if isinstance(manifest, dict) else {}
-    left = [str(n) for n in (manifest.get("databases_left_out") or []) if n]
-    locked = bool(manifest.get("chat_history_locked"))
-    bits = []
-    if left:
-        bits.append(LEFT_OUT_WORDS.format(
-            names=_name_list(left),
-            it="it is" if len(left) == 1 else "they are"))
-    if locked:
-        bits.append(LOCKED_HISTORY_WORDS)
-    return bits
+    excluded = [str(n) for n in (manifest.get("excluded_dbs") or []) if n]
+    if not excluded:
+        return []
+    return [f"{_name_list(excluded)} "
+            f"{'is' if len(excluded) == 1 else 'are'} NOT in this backup"]
 
 
 def backup_message(manifest) -> str:
     """The sentence the owner is shown after a backup, on either app.
 
     NEVER a bare "Backed up." over an archive something is missing from (the
-    same audit): both problems `manifest_warnings` names are said first, then
-    the recovery-code warning. `request_backup_now`, `request_commit` and the
-    fresh backup in "Delete older backups" all answer with this - one wording,
-    so the apps cannot drift from the manifest."""
-    bits = manifest_warnings(manifest)
-    if not bits:
+    same audit): a database left out is named, with its reason, and the count
+    is the number that really went in. `request_backup_now`, `request_commit`
+    and the fresh backup in "Delete older backups" all answer with this - one
+    wording, so the apps cannot drift from the manifest.
+
+    The shape is the audit's own: "Backed up N databases, except chat-history.db
+    (...), left out to prevent an unreadable backup."."""
+    manifest = manifest if isinstance(manifest, dict) else {}
+    excluded = [str(n) for n in (manifest.get("excluded_dbs") or []) if n]
+    if not excluded:
         return f"Backed up. {LOST_CODE}"
-    return "Backed up, but " + "; and ".join(bits) + ". " + LOST_CODE
+    kept = manifest.get("databases")
+    n = len(kept) if isinstance(kept, dict) else 0
+    return (f"Backed up {n} database{'' if n == 1 else 's'}, except "
+            f"{_name_list(excluded)}, left out to prevent an unreadable backup. "
+            f"{LOST_CODE}")
+
+
+def _excludes_chat_history(manifest) -> bool:
+    """True when the archive itself says its chat history was left out.
+
+    Reads the ONE field `build_archive` writes - an `excluded_dbs` entry whose
+    name is `chat-history.db` (data-integrity audit F1, 2026-10-28) - so the
+    restore card can say the chats stay as they are instead of leaving the
+    owner to find out afterwards."""
+    if not isinstance(manifest, dict):
+        return False
+    for entry in manifest.get("excluded_dbs") or []:
+        if str(entry).split(" (", 1)[0].strip() == CHAT_HISTORY_DB:
+            return True
+    return False
 
 
 def request_backup_now(body=None, *, peer=None, local=None, here: Optional[bool] = None,
@@ -2573,19 +2619,21 @@ KEY_REFUSED_WARNING = ("WARNING: the chat-history key inside this backup does no
                        "chat history inside it, so the key on this PC was left exactly as it "
                        "was - the restored chats may not open. Keep the chat-history key from "
                        "the PC that made this backup.")
-#: Added to "restored" when the archive carries a chat history with NO key that
-#: opens it (`chat_history_locked` in its manifest, written by `build_archive`
-#: since 2026-10-28). The words are restored, and nothing can read them yet.
-LOCKED_HISTORY_WARNING = ("WARNING: the chat history in this backup is LOCKED - the key that "
-                          "opens it was not in the backup, so Jarvis cannot read those chats "
-                          "after this restore. Keep the chat-history key from the PC that made "
-                          "this backup; without it those chats cannot be opened again.")
-#: The same fact, in the CARD, so the owner knows it before he approves rather
-#: than only afterwards. Short on purpose: the card is not the place for a
-#: paragraph, and it must not name a file the gate protects.
-LOCKED_HISTORY_CARD = ("This backup's chat history is LOCKED: the key that opens it is not in "
-                       "the backup, so Jarvis will not be able to read those chats after this "
-                       "restore. Everything else in it restores normally.")
+#: Added to "restored" when the chat history in the archive could not be opened
+#: here at all (data-integrity audit F1's restore rule, 2026-10-28): neither the
+#: archive's key nor this PC's own key decrypts the staged database's `check`
+#: row. The live `chat-history.db` and the live key are then left EXACTLY as
+#: they were, and the database is named so nobody wonders what was skipped.
+HISTORY_REFUSED_WARNING = ("WARNING: chat-history.db in this backup could not be opened - "
+                           "neither the key inside the backup nor the key on this PC opens it - "
+                           "so chat-history.db on this PC was left exactly as it was and the "
+                           "backup's chat history was NOT restored. Your chats are still the "
+                           "ones you had before this restore.")
+#: Said in the CARD, before the owner approves, when the archive has no chat
+#: history in it (`excluded_dbs` named it when the backup was made). Nothing on
+#: this PC is replaced for it - the DB is simply not in the archive.
+NO_HISTORY_IN_BACKUP_CARD = ("This backup has no chat history in it (it was left out when the "
+                             "backup was made), so your chats stay exactly as they are now.")
 
 
 def restore_card(name: str, manifest: dict) -> str:
@@ -2623,11 +2671,11 @@ def restore_card(name: str, manifest: dict) -> str:
         "Before doing this, Jarvis will back up your CURRENT data first, with a fresh "
         "recovery code shown once, so this restore itself can be undone.",
         "",
-        # Said BEFORE the owner approves it, when the archive knows its own chat
-        # history is locked (data-integrity audit F1, 2026-10-28): a restore he
-        # believes brings his chats back, and does not, is exactly the claim this
-        # change exists to stop.
-        *([LOCKED_HISTORY_CARD] if manifest.get("chat_history_locked") else []),
+        # Said BEFORE the owner approves it, when the archive has no chat
+        # history in it (data-integrity audit F1's backup rule, 2026-10-28): a
+        # restore he believes brings his chats back, and does not, is exactly
+        # the claim this change exists to stop.
+        *([NO_HISTORY_IN_BACKUP_CARD] if _excludes_chat_history(manifest) else []),
         "",
         ERASE_LIMIT,
         "",
@@ -3084,12 +3132,11 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                "voice_note": "",
                "skipped": 0, "chat_history_key_failed": False, "study_decks_key_failed": False,
                "medical_key_failed": False,
-               # F1 (2026-10-28): the archive SAID its chat history is locked
-               # (`chat_history_locked` in its manifest), and/or the key it
-               # carries does not open the history on this PC. Either way the
-               # live Credential Manager entry is left alone and the outcome
-               # says so.
-               "chat_history_locked": False, "chat_history_key_refused": False,
+               # F1 (2026-10-28): the archive's `chat-history.db` could not be
+               # opened by ANY key this restore could use - not the one inside
+               # the archive, not the one on this PC - so the live database was
+               # left exactly as it was and no key was written.
+               "chat_history_refused": False, "chat_history_key_refused": False,
                # The EXACT names behind those counts (2026-10-20, ruling 8.1).
                # Filled below and handed to the audit record and the receipt.
                "restored": {"databases": [], "settings_files": [], "notes_files": [],
@@ -3121,11 +3168,6 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 archive_manifest = json.loads(zf.read("manifest.json") or b"{}")
         except Exception:
             archive_manifest = {}
-        if isinstance(archive_manifest, dict) and archive_manifest.get("chat_history_locked") is True:
-            # The archive already knows its own chat history is locked (F1,
-            # 2026-10-28): it carries the sealed words and no key that opens
-            # them. Nothing here can change that; the outcome says it plainly.
-            applied["chat_history_locked"] = True
         for info in zf.infolist():
             name = info.filename
             if name.endswith("/") or name == "manifest.json":
@@ -3243,8 +3285,47 @@ def _apply_restore(zip_bytes: bytes) -> dict:
         raise BackupRestoreRefusedError(
             "the backup was refused, and nothing on this PC was changed: "
             + "; ".join(bad[:3]) + ".")
+    # F1's RESTORE RULE (data-integrity audit, 2026-10-28): a chat history whose
+    # `meta` `check` row NEITHER the archive's own key NOR this PC's current key
+    # opens must never replace the live one. Applying it would swap a readable
+    # history for bytes nothing here can read - and could pair it with a key
+    # that opens nothing. So it is not applied: the live `chat-history.db`, the
+    # live Credential Manager entry and the live `-wal`/`-shm` stay exactly as
+    # they were, and the outcome NAMES the database.
+    history_tmp = next((tmp for dest, tmp, is_db, _g, _s in staged
+                        if is_db and dest.name == CHAT_HISTORY_DB), None)
+    history_refused = False
+    if history_tmp is not None:
+        archive_key = None
+        if key_data is not None:
+            try:
+                candidate = base64.b64decode(
+                    bytes(key_data).decode("ascii", "ignore").strip(), validate=True)
+                archive_key = bytes(candidate) if len(candidate) == 32 else None
+            except Exception:                      # noqa: BLE001 - not a key, then
+                archive_key = None
+        opens = False
+        try:
+            import jarvis_chat_log
+            if archive_key is not None and jarvis_chat_log.verify_key_opens_db(
+                    history_tmp, archive_key):
+                opens = True
+            else:
+                live_key = jarvis_chat_log.get_existing_key()
+                if live_key is not None and jarvis_chat_log.verify_key_opens_db(
+                        history_tmp, live_key):
+                    opens = True
+        except Exception:                          # noqa: BLE001 - unreadable is refused
+            opens = False
+        if not opens:
+            history_refused = True
+            applied["chat_history_refused"] = True
+            applied["databases"] = max(0, applied["databases"] - 1)
     try:
         for dest, tmp, is_db, group, shown in staged:
+            if history_refused and is_db and dest.name == CHAT_HISTORY_DB:
+                # Refused just above: the live file (and its key) is untouched.
+                continue
             old = None
             if dest.exists():
                 old = dest.parent / f".{dest.name}.{tag}.old"
@@ -3270,8 +3351,9 @@ def _apply_restore(zip_bytes: bytes) -> dict:
         raise RestoreError(f"could not replace a file ({type(exc).__name__})",
                            "partial" if problems else "unchanged",
                            applied=applied if problems else None) from exc
-    _remove_all([old for _d, old in swapped if old] + [m for _p, m in aside])
-    if key_data is not None:
+    _remove_all([old for _d, old in swapped if old] + [m for _p, m in aside]
+                + ([history_tmp] if history_refused and history_tmp else []))
+    if key_data is not None and not history_refused:
         # A KEY THAT OPENS NOTHING MUST NEVER REPLACE THE LIVE ONE (data-
         # integrity audit F1, 2026-10-28). An archive made by an older version
         # can carry a key that does not open the chat history inside it, and a
@@ -3582,11 +3664,13 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
     _audit("backup.restored", {"applied": applied})
     key_failed = bool(isinstance(applied, dict) and applied.get("chat_history_key_failed"))
     # F1 (2026-10-28): a chat history that cannot be opened after the restore is
-    # NEVER left for the owner to discover. `key_refused` means the archive's
-    # own key did not open it and the live key was left alone; `locked` means
-    # the archive said in its manifest that it carried no key that opens it.
+    # NEVER left for the owner to discover. `key_refused` means the archive's own
+    # key did not open it and the live key was left alone; `history_refused`
+    # means the archive's history was not applied at all (neither key opened it)
+    # and both the live database and the live key were left exactly as they
+    # were.
     key_refused = bool(isinstance(applied, dict) and applied.get("chat_history_key_refused"))
-    history_locked = bool(isinstance(applied, dict) and applied.get("chat_history_locked"))
+    history_refused = bool(isinstance(applied, dict) and applied.get("chat_history_refused"))
     # POST-APPLY RE-CHECK (audit 2026-10-21, LOW-5): the safety backup was
     # verified before the apply; say plainly if it is not there any more.
     lost = _safety_after_restore_problem(safety_out, folder)
@@ -3595,8 +3679,8 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
         extras.append(KEY_WARNING)
     if key_refused:
         extras.append(KEY_REFUSED_WARNING)
-    if history_locked:
-        extras.append(LOCKED_HISTORY_WARNING)
+    if history_refused:
+        extras.append(HISTORY_REFUSED_WARNING)
     warning = " ".join(extras)
     message = RESTORE_LAST_WORDS["restored"] + (" " + warning if warning else "")
     if lost:

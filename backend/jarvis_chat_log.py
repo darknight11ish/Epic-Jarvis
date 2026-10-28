@@ -261,7 +261,7 @@ _VACUUM_EVERY = 3600
 _CHECK = b"jarvis chat history"
 #: The associated data of the `meta` row `k='check'` - the proof that a key
 #: opens this history. One statement of it, so `_cipher_locked` and
-#: `key_opens_db` cannot drift.
+#: `verify_key_opens_db` cannot drift.
 _CHECK_AAD = b"check"
 
 CARD_TEXT = "\n".join([
@@ -331,6 +331,14 @@ class CredentialKey:
                                  f"({type(exc).__name__})") from None
 
     def __call__(self) -> bytes:
+        """The key, MADE when Credential Manager holds no entry.
+
+        This is the raw store-level mint, kept because a provider is "any
+        callable that returns the key". Production code does not call it
+        directly: `get_or_create_key()` is the guarded API, and it refuses to
+        make one unless the chat history at that path is brand-new and empty
+        (data-integrity audit F1, 2026-10-28). A caller that must only report
+        what exists asks `get_existing_key()`."""
         store = self._store()
         try:
             text = store.read()
@@ -355,17 +363,17 @@ class CredentialKey:
                                  "a 32-byte key")
         return key
 
-    def peek(self) -> Optional[bytes]:
+    def get_existing(self) -> Optional[bytes]:
         """The key ALREADY on this PC, or None when there is none - and this
         NEVER makes one.
 
         `__call__` above mints a fresh key when Credential Manager holds no
-        entry, which is right for recording a turn and wrong for anything that
-        only reports what exists. `jarvis_backup.py` called it, so a backup
-        taken on a PC whose key was gone made a NEW key, embedded it, and said
-        the archive carried the chat history: an archive nothing could open.
-        The data-integrity audit (F1, 2026-10-28) is why this exists; a backup
-        must never be the thing that makes a key.
+        entry, which is right for a brand-new history and wrong for anything
+        that only reports what exists. `jarvis_backup.py` used to call it, so a
+        backup taken on a PC whose key was gone made a NEW key, embedded it, and
+        said the archive carried the chat history: an archive nothing could
+        open. The data-integrity audit (F1, 2026-10-28) is why this exists; a
+        backup must never be the thing that makes a key.
 
         None for "no entry". Raises KeyUnavailable for "Credential Manager
         could not be used", so the caller can tell the two apart."""
@@ -388,21 +396,77 @@ class CredentialKey:
         return key
 
 
-def existing_key(target: str = KEY_TARGET, store_factory: Optional[Callable] = None
-                 ) -> Optional[bytes]:
+def _history_is_new_or_empty(db_path) -> bool:
+    """True only for a chat history that holds nothing yet.
+
+    "Brand-new" means the file is not there, and "empty" means it has no row in
+    any of its three tables - no `check` row (never sealed), no conversation and
+    no turn. Anything this PC cannot read is NOT new: the answer is False, so
+    the caller refuses rather than making a key over data it could not see.
+
+    This is what `get_or_create_key()` guards the mint with (data-integrity
+    audit F1, 2026-10-28). It opens the file read-only and closes it at once."""
+    path = Path(db_path)
+    if not path.is_file():
+        return True
+    try:
+        if path.stat().st_size == 0:
+            return True
+        conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            for table in ("meta", "conversations", "turns"):
+                try:
+                    row = conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
+                except sqlite3.Error:
+                    continue        # no such table: nothing kept in it
+                if row is not None:
+                    return False
+        finally:
+            conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def get_existing_key(target: str = KEY_TARGET, store_factory: Optional[Callable] = None
+                     ) -> Optional[bytes]:
     """The chat-history key already on this PC (32 bytes), or None.
 
-    Never makes one, and never raises: a missing entry, no Credential Manager
-    and a damaged entry all answer None. For a caller that has to PROVE a key
-    opens the history before claiming it can restore it - `key_opens_db` below
-    is the other half (data-integrity audit F1, 2026-10-28)."""
+    READ-ONLY: it never makes a key, and never raises - a missing entry, no
+    Credential Manager and a damaged entry all answer None. This is the half a
+    backup and a restore ask for, because neither may ever be the thing that
+    creates a key for history it did not make (data-integrity audit F1,
+    2026-10-28). The other half is `verify_key_opens_db` below, which PROVES a
+    key opens a particular history."""
     try:
-        return CredentialKey(target, store_factory).peek()
+        return CredentialKey(target, store_factory).get_existing()
     except Exception:
         return None
 
 
-def key_opens_db(key, db_path) -> bool:
+def get_or_create_key(db_path, target: str = KEY_TARGET,
+                      store_factory: Optional[Callable] = None) -> bytes:
+    """The chat-history key, MAKING one only when `db_path` holds no history.
+
+    The rule the data-integrity audit's F1 asks for, in one place: a key may be
+    minted while a history is being started, and never over a history that
+    already exists. An existing history whose key is gone is a history that
+    cannot be read; making a fresh key would silently replace the only thing
+    that could ever open it, so this raises `KeyUnavailable` and writes
+    nothing.
+
+    `db_path` is required on purpose: there is no call that mints without
+    naming the history it is for."""
+    if not _history_is_new_or_empty(db_path):
+        raise KeyUnavailable(
+            "there is no chat history key on this PC, and the chat history already "
+            "kept here cannot be opened without it - so nothing was made and nothing "
+            "is written. Keep the chat-history key from the PC that made this history, "
+            f"or delete {db_path} to start an empty one.")
+    return CredentialKey(target, store_factory)()
+
+
+def verify_key_opens_db(db_path, key_bytes) -> bool:
     """True only when `key` really opens the chat history at `db_path`.
 
     The proof is the one this module already keeps: the `meta` row `k='check'`,
@@ -417,7 +481,7 @@ def key_opens_db(key, db_path) -> bool:
     that way (SQLite needs the `-shm` file), so that one failure falls back to a
     normal connection with `PRAGMA query_only = 1` - still a SELECT of one row,
     and a connection the caller closes at once."""
-    if not isinstance(key, (bytes, bytearray)) or len(key) != 32:
+    if not isinstance(key_bytes, (bytes, bytearray)) or len(key_bytes) != 32:
         return False
     path = Path(db_path)
     if not path.is_file() or AESGCM is None:
@@ -443,9 +507,24 @@ def key_opens_db(key, db_path) -> bool:
     if row is None or row[0] is None:
         return False
     try:
-        return ChatLog._open(AESGCM(bytes(key)), row[0], _CHECK_AAD) == _CHECK
+        return ChatLog._open(AESGCM(bytes(key_bytes)), row[0], _CHECK_AAD) == _CHECK
     except Exception:
         return False
+
+
+def _history_key_provider(db_path) -> Callable[[], bytes]:
+    """The production key provider for one chat history: never mints over data.
+
+    `get_existing_key()` first; a key is made only when the history at
+    `db_path` is brand-new and empty (`get_or_create_key`). A history whose key
+    is gone therefore fails closed with plain words instead of being given a
+    key that opens nothing (data-integrity audit F1, 2026-10-28)."""
+    def provide() -> bytes:
+        existing = get_existing_key()
+        if existing is not None:
+            return existing
+        return get_or_create_key(db_path)
+    return provide
 
 
 def _config_dir() -> Path:
@@ -3242,7 +3321,7 @@ def _log() -> ChatLog:
         if _DEFAULT is None:
             d = _config_dir()
             _DEFAULT = ChatLog(d / "chat-history.db", d / "chat-history.json",
-                               CredentialKey())
+                               _history_key_provider(d / "chat-history.db"))
         return _DEFAULT
 
 
