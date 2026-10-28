@@ -942,10 +942,16 @@ import {
 
     /* ---- the writes ---- */
 
-    function invoke(command, args) {
+    /** The ONE command this window may call. Its name is a LITERAL, never
+     *  built at runtime: `tools/check_invoke_grants.py` reads every page's
+     *  invoke calls and holds the name against `lib.rs`, `build.rs` and the
+     *  window's capability, so a name assembled from pieces would be a call
+     *  nobody can check. What varies - which action, which chat - is in the
+     *  args, and the Rust command refuses anything outside its three actions. */
+    function invoke(args) {
       var tauri = root.__TAURI__;
       if (tauri && tauri.core && typeof tauri.core.invoke === "function") {
-        return tauri.core.invoke(command, args);
+        return tauri.core.invoke("hud_history_act", args);
       }
       // A browser: the page talks to the backend itself, exactly as the rest
       // of this page does. The route each action is the one the PC documents,
@@ -979,7 +985,7 @@ import {
         return Promise.resolve(false);
       }
       announce("Saving…");
-      return invoke("hud_history_act", args).then(function () {
+      return invoke(args).then(function () {
         announce(action === "pin" ? (value ? "Pinned." : "Unpinned.") : "Saved.");
         return refresh().then(function () {
           return true;
