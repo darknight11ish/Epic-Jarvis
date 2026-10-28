@@ -4884,7 +4884,7 @@ await check("P-1: private-hidden empties the galaxy, and it re-reads what the PC
     graphNodes: S.graph ? S.graph.nodes.length : -1,
     hiddenFlag: Boolean(S.graph && S.graph.hidden),
   }), FACT_SENTENCE);
-  assert.ok(before.labels.some((label) => label.includes(sentence)),
+  assert.ok(before.labels.some((label) => label.includes(FACT_SENTENCE)),
     "fixture: the fact sentence never reached the picture, so this check proves nothing");
   assert.ok(before.labels.some((label) => label.includes("Priya")),
     "fixture: the person's name never reached the picture");
@@ -4899,10 +4899,14 @@ await check("P-1: private-hidden empties the galaxy, and it re-reads what the PC
   await page.keyboard.press("Enter");
   await page.fill("#gsearch", "Priya");
   await page.evaluate((sentence) => {
-    // The page's own trace path (what an answer with recalled facts draws).
-    showTrace({ q: "who is my sister", at: Date.now(),
+    // The page's own trace path: `recall()` unshifts the trace onto S.traces
+    // and hands it to showTrace, so the chip (the owner's own question) and
+    // the rows (a fact sentence per hit) are both really on screen.
+    const trace = { q: "who is my sister", at: Date.now(),
       hits: [{ id: "fact:1", text: sentence, score: 0.9 }],
-      near: [{ id: "entity:1", text: "Priya", score: 0.4 }] });
+      near: [{ id: "entity:1", text: "Priya", score: 0.4 }] };
+    S.traces.unshift(trace);
+    showTrace(trace);
   }, FACT_SENTENCE);
   await page.waitForTimeout(200);
   const held = await page.evaluate(() => ({
