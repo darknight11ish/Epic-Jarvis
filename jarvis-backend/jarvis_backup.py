@@ -832,6 +832,13 @@ LOST_CODE = ("Write this down or save it somewhere safe now - Jarvis will not sh
 #: is not the one that opens it, is left out rather than carried unreadable.
 CHAT_HISTORY_KEY_MISSING = ("encryption key missing or mismatched in Windows "
                             "Credential Manager")
+#: The same reason for the two OTHER sealed stores (`study.db`, `health.db`),
+#: whose key is only ever READ here and never proved against the file - so the
+#: honest word is "unreadable", not "mismatched" (data-integrity audit F1,
+#: 2026-10-28). A database whose own key could not be read is left out of the
+#: archive AND named, exactly like a chat history whose key does not open it.
+SEALED_KEY_UNREADABLE = ("encryption key missing or unreadable in Windows "
+                         "Credential Manager")
 SNAPSHOT_FAILED = "could not be read"
 ERASE_LIMIT = ("\"Erase the words\" cannot reach into an older backup: an erased fact's "
                "original words may still be readable in a backup kept from before it was "
@@ -1478,6 +1485,17 @@ def build_archive() -> tuple:
                         continue
                     study_key_b64 = _study_decks_key_b64()
                     if not study_key_b64:
+                        # LEFT OUT **AND NAMED** (data-integrity audit F1,
+                        # 2026-10-28 - the same rule the chat history gets).
+                        # This `continue` used to be silent, so a PC whose decks'
+                        # key was gone got an archive without study.db and a
+                        # sentence that read as complete. Only a deck store that
+                        # really holds something is worth a line in the result;
+                        # an empty one is left out without a warning, because
+                        # nothing in it can be lost.
+                        if _db_has_rows(src):
+                            manifest["excluded_dbs"].append(
+                                f"{name} ({SEALED_KEY_UNREADABLE})")
                         continue
                 if name == MEDICAL_DB:
                     # The same rule for the medical record (2026-10-24): every
@@ -1489,6 +1507,12 @@ def build_archive() -> tuple:
                         continue
                     medical_key_b64 = _medical_key_b64()
                     if not medical_key_b64:
+                        # Named for the same reason as study.db above: the
+                        # record is the one store whose loss a bare "Backed up."
+                        # would hide worst.
+                        if _db_has_rows(src):
+                            manifest["excluded_dbs"].append(
+                                f"{name} ({SEALED_KEY_UNREADABLE})")
                         continue
                 made = _snapshot_db(src, dest)
                 excluded = ""
