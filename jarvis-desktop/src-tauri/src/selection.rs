@@ -20,8 +20,11 @@
 //! shape with a sentence. It logs nothing, keeps nothing, and is not held on
 //! a stale link (a read changes nothing).
 //!
-//! The command [`read_selection`] is the same read for an explicit call. The
-//! bar itself is served by [`read_selection_quiet`] before it takes focus.
+//! The bar is served by [`read_selection_quiet`] before it takes focus. There
+//! is no page-callable command: the explicit `read_selection` command was dead
+//! IPC surface - registered and granted, but invoked by no page (2026-10-28
+//! audit) - so it and its ACL entry were removed. The read above is the one
+//! path the chip needs, and it stays.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -108,7 +111,7 @@ fn unavailable() -> serde_json::Value {
     })
 }
 
-/// [`read_selection`]'s reading of the answer, on its own so it can be tested
+/// The bar read's reading of the answer, on its own so it can be tested
 /// against the real shape (200: the Python dict, possibly its own refusal;
 /// 404/501/503: an older backend, said in words; anything else: refused).
 pub(crate) fn selection_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
@@ -128,7 +131,7 @@ pub(crate) fn selection_answer(status: u16, body: &str) -> Result<serde_json::Va
     Err(backend_refusal(status, body))
 }
 
-/// The one GET, shared by the command and the bar-open path.
+/// The one GET the bar-open path makes.
 async fn ask(app: &AppHandle) -> Result<serde_json::Value, String> {
     let base = jarvis_base(app);
     let response = jarvis_client(Some(SELECTION_TIMEOUT))?
@@ -140,12 +143,6 @@ async fn ask(app: &AppHandle) -> Result<serde_json::Value, String> {
     let status = response.status().as_u16();
     let body = response.text().await.unwrap_or_default();
     selection_answer(status, &body)
-}
-
-/// The same read for an explicit call. Returns the 24-A dict unchanged.
-#[tauri::command]
-pub async fn read_selection(app: AppHandle) -> Result<serde_json::Value, String> {
-    ask(&app).await
 }
 
 /// The bar-open read: the answer, or a same-shape refusal when the transport
