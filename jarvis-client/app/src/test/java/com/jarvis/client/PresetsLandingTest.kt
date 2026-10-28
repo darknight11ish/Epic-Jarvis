@@ -203,4 +203,32 @@ class PresetsLandingTest {
         )
         assertTrue("the presets asking line is blank", FocusPresets.ASKING.isNotBlank())
     }
+
+    @Test
+    fun `the open preset and its refusal survive a rotation`() {
+        // 2026-10-27 accessibility audit, finding 9 (WCAG 1.3.4, orientation):
+        // `open` and `notice` decide what is on screen, and a plain `remember`
+        // threw them away when the phone rotated - so a preset the owner had
+        // expanded closed itself, and an in-flight "Asking…" vanished.
+        val plate = source("ui/screens/FocusPresetsPlate.kt")
+        assertTrue(
+            "the open preset is not saveable across a rotation",
+            plate.contains("var open by rememberSaveable { mutableStateOf(false) }"),
+        )
+        assertTrue(
+            "a refusal is not saveable across a rotation",
+            plate.contains("var notice by rememberSaveable { mutableStateOf<String?>(null) }"),
+        )
+        assertTrue(
+            "rememberSaveable is not imported",
+            plate.contains("import androidx.compose.runtime.saveable.rememberSaveable"),
+        )
+        // `busy` must NOT be saveable: the coroutine that set it dies with the
+        // composition, so a restored `busy` would be a row stuck on "Asking…"
+        // for ever - worse than losing the line.
+        assertTrue(
+            "an in-flight ask is now saveable and can come back stuck",
+            plate.contains("var busy by remember { mutableStateOf<String?>(null) }"),
+        )
+    }
 }

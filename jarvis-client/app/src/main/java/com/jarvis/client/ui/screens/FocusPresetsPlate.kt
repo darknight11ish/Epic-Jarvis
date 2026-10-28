@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
@@ -53,9 +54,15 @@ fun FocusPresetChip(link: LinkState, stale: Boolean) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     val read by JarvisRuntime.focusPresets.collectAsState()
-    var open by remember { mutableStateOf(false) }
+    // 2026-10-27 accessibility audit, finding 9: `open` and `notice` decide what
+    // is on screen, so a rotation must not silently throw them away - rotating
+    // with a preset expanded closed it, and dropped an in-flight "Asking…".
+    // `busy` stays a plain `remember` on purpose: the coroutine that set it dies
+    // with the composition, so a saved `busy` would come back as a button row
+    // stuck on "Asking…" for ever.
+    var open by rememberSaveable { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
+    var notice by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { JarvisRuntime.refreshFocusPresets() }
     val view = (read as? FocusPresets.Read.Loaded)?.view
     Column(Modifier.fillMaxWidth()) {
