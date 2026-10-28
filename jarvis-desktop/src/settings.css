@@ -96,9 +96,10 @@ body {
 
 .settings-jump-group:last-of-type { margin-bottom: 0; }
 
-/* A band (Everyday / Rare / What Jarvis does) is a heading on the page, not a
-   place you can go: its own label is text, never a link, and the links under
-   it belong to the place rows below. */
+/* A band label is a heading in the jump list, not a place you can go: its own
+   text is never a link, and the links under it belong to the place rows below.
+   The "Everyday" and "Rare" labels went on 2026-10-27 with the page bands; the
+   one this still draws is "What Jarvis does", the read-only group. */
 .settings-jump-label {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -237,9 +238,12 @@ body {
   color: var(--text-muted);
 }
 
-/* Everyday / Rare / Read-only dividers between groups of cards. Deliberately
-   not `.card h2` (uppercase, bold, boxed) - this is a page-level divider,
-   not a card title, so it gets its own smaller, quieter style. */
+/* The read-only divider between the editable cards and "What Jarvis does".
+   Deliberately not `.card h2` (uppercase, bold, boxed) - this is a page-level
+   divider, not a card title, so it gets its own smaller, quieter style.
+   It used to draw three of these (Everyday, Rare, Read-only); the two
+   frequency bands were removed on 2026-10-27, so the rule now draws the one
+   heading that is left. */
 .settings-group-heading {
   margin: 24px 0 10px;
   padding-top: 4px;

@@ -397,10 +397,16 @@ MENUS: tuple = (
     # and the FAQ's own answer. Each app checks its OWN release page, so this
     # is one feature both apps have. It has no separate phone Settings row to
     # hide: the Platform checks card is where it lives, so `hide` is False.
+    #
+    # "update" (singular) joined the names on 2026-10-27: the owner searched
+    # "update" in Settings and Updates was not the first card. The desktop's
+    # settings search ranks a card's title and these names above its detail
+    # text, so this is the alias that puts the card he means at the top - and
+    # "open update" now names it too, which it did not before.
     _m("settings.updates", "Updates", "New versions of this app.", BOTH,
        hide=False, collapse=False,
        why="On the phone it is the \"Check for new versions\" row on Platform checks; there is no separate row to hide.",
-       names=("updates", "app updates")),
+       names=("updates", "app updates", "update")),
     _m("settings.tool-updates", "Check for tool updates", "Outdated packages and tools.",
        (DESKTOP,), names=("tool updates",)),
     _m("settings.more-options", "More options", "Startup, logs and crash notes.", (DESKTOP,),
