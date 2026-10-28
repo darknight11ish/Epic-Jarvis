@@ -415,11 +415,12 @@ async function changeEverything(page, before) {
 /* ── the owner's "revert back", the two real paths ────────────────────────── */
 
 /**
- * Choose a region in a card's own "Move to" select. A visible card is driven
- * with the real pointer action; a card the layout has hidden is driven by
- * setting the select and firing the `change` event the same control sends,
- * because a hidden card has no visible control to click. The revert counts how
- * many needed the second road, and reports it rather than hiding it.
+ * Choose a region in a card's own "Move to" select. A card that is on screen is
+ * driven with the real pointer action; a card that is not (a layout can hide a
+ * card without Edit HUD painting it, e.g. outside edit mode) is driven by setting
+ * the select and firing the `change` event the same control sends. Since the
+ * 2026-10-28 fix a hidden card is a ghost in Edit HUD, so the fallback should not
+ * be needed there - the revert counts how many needed it, and reports it.
  */
 async function chooseRegion(page, id, region, { mustBeReachable = false } = {}) {
   const visible = await page.locator(`[data-hud-edit-region="${id}"]`).isVisible();
@@ -477,9 +478,9 @@ async function revertByHand(page, original) {
     await press(page, `[data-hud-edit-command="collapse"][data-hud-edit-card="${card.id}"]`);
     await settle(page);
   }
-  // visibility: the card's own control is the only per-card one there is, and
-  // it is painted as a toggle (aria-pressed, a circle instead of a cross), so
-  // press it exactly as a user would - on every card that should be shown.
+  // visibility: the card's own control is the only per-card one there is. Since
+  // 2026-10-28 it is a real toggle, so press it exactly as a user would - on
+  // every card that should be shown.
   const stillHidden = [];
   for (const card of want) {
     if (PROTECTED.has(card.id) || !card.visible) continue;
@@ -648,6 +649,82 @@ async function fieldTest(label, original, revert) {
       `the page threw while editing: ${page.__pageErrors.join(" | ")}`);
   });
   shotsWritten.push(await shot(page, `${label}-3-changed-reloaded`));
+
+  /* (d2) a hidden card is reachable again: the fix, driven on the real page */
+  await check(`${label} (d2): a hidden card can be shown again in Edit HUD`, async () => {
+    // The widest hidden card is used for the real pointer click: a 12-column
+    // card's own toolbar fits inside it, so the click cannot land on a
+    // neighbouring card's control. That separate narrow-card overlap is measured
+    // in the `note` above and is not what this check is about.
+    const hiddenCards = summary.changed.cards.filter((card) => MOVABLE.has(card.id)
+      && !PROTECTED.has(card.id) && card.visible === false)
+      .sort((a, b) => b.col_span - a.col_span || a.id.localeCompare(b.id));
+    const target = hiddenCards[0];
+    assert.ok(target, "the changed layout has no hidden card to show again");
+    const shell = `[data-hud-card="${target.id}"]`;
+    const control = `${shell} [data-hud-edit-command="hide"]`;
+
+    // Outside Edit HUD the card is exactly as hidden as it has always been.
+    assert.equal(await page.locator(shell).isVisible(), false,
+      `${target.id} is painted outside Edit HUD although the saved layout hides it`);
+
+    await enterEdit(page);
+    try {
+      const ghost = await page.evaluate((sel) => {
+        const card = document.querySelector(sel);
+        const body = card.querySelector(".hud-card-body");
+        const word = card.querySelector(".hud-card-hidden-word");
+        const button = card.querySelector('[data-hud-edit-command="hide"]');
+        return {
+          painted: card.getBoundingClientRect().height > 1,
+          hiddenAttribute: Boolean(card.hidden),
+          ghost: card.classList.contains("hud-card-hidden"),
+          bodyShown: getComputedStyle(body).display !== "none",
+          wordShown: Boolean(word && !word.hidden),
+          pressed: button ? button.getAttribute("aria-pressed") : null,
+          label: button ? (button.getAttribute("aria-label") || "") : "",
+          enabled: Boolean(button && !button.disabled),
+        };
+      }, shell);
+      assert.equal(ghost.painted, true, `${target.id}'s shell is not painted in Edit HUD`);
+      assert.equal(ghost.hiddenAttribute, false,
+        `${target.id}'s shell still carries the hidden attribute in Edit HUD`);
+      assert.equal(ghost.ghost, true, `${target.id} is not marked as a hidden ghost`);
+      assert.equal(ghost.bodyShown, false,
+        `${target.id}'s card body is shown although the saved layout hides the card`);
+      assert.equal(ghost.wordShown, true, `${target.id}'s ghost does not say it is hidden`);
+      assert.equal(ghost.enabled, true, `${target.id}'s Show control is disabled`);
+      assert.equal(ghost.pressed, "true",
+        `${target.id}'s Hide control does not say the card is hidden (aria-pressed=${ghost.pressed})`);
+      assert.match(ghost.label, /^Show /,
+        `${target.id}'s control does not offer Show: "${ghost.label}"`);
+
+      // The road a user has: a real pointer click on the control on screen.
+      await page.locator(control).click({ timeout: 15000 });
+      await settle(page);
+      assert.equal(cardOf(await adopted(page), target.id).visible, true,
+        `a real click on ${target.id}'s own Show control did not show it`);
+      assert.equal(await page.locator(shell).isVisible(), true,
+        `${target.id} is still a ghost after its Show control was pressed`);
+      assert.equal(await page.evaluate((sel) => getComputedStyle(
+        document.querySelector(`${sel} .hud-card-body`)).display !== "none", shell), true,
+        `${target.id}'s card body did not come back with the card`);
+
+      // ...and the same control is the toggle back, so nothing is one-way.
+      await page.locator(control).click({ timeout: 15000 });
+      await settle(page);
+      assert.equal(cardOf(await adopted(page), target.id).visible, false,
+        `pressing ${target.id}'s control a second time did not hide it again`);
+    } finally {
+      if (await page.evaluate(() => document.body.getAttribute("data-hud-edit") === "on")) {
+        await leaveEdit(page);
+      }
+    }
+    assert.equal(await page.locator(shell).isVisible(), false,
+      `${target.id} stayed painted after Edit HUD ended`);
+    assert.deepEqual(page.__pageErrors, [],
+      `the page threw while showing a hidden card: ${page.__pageErrors.join(" | ")}`);
+  });
 
   /* (e) revert, by this scenario's real path */
   let info = {};
