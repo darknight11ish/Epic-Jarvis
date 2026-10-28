@@ -27,6 +27,15 @@
  *      speaker at all, and the shell still refuses to speak its words even when
  *      asked directly - so there is no path from that bubble to the room;
  *   6. B. turning the switch off takes every speaker away at once.
+ *   7. A. a REFUSED start is readable: the refusal is a popup in the stage
+ *      (role=alert, its own plate, a real Close button, Escape, a click
+ *      outside and a 20 s fallback), not the one screen-reader line in the
+ *      rail - the owner's field bug of 2026-10-27: "it gives me a message but
+ *      its in the left column and hard to read. it should be a pop up." The
+ *      words are his PC's, in plain language: "no microphone" becomes the
+ *      Windows fix, and a stale link / App lock keep live.rs's own sentence.
+ *      The mapping is driven through the page's own `liveRefusalWords`, so it
+ *      cannot drift without a browser.
  *
  * The page is served the way the packaged app serves it (Tauri's header CSP with
  * a sha256 per inline script) and the shell's bootstrap is injected first,
@@ -135,6 +144,122 @@ await check("A: the HUD is granted status/start/stop and nothing else of Live", 
   for (const denied of ["allow-live-act", "allow-live-mute", "allow-live-hold"]) {
     assert.equal(set.includes(denied), false, `the HUD was granted ${denied}`);
   }
+});
+
+/* ── A3. Refused: READABLE in the stage, not tucked into the rail ────────── */
+
+const STAGE = between(HUD, '<main id="stage">', "</main>", 20000);
+const LEFT_RAIL = between(HUD, 'id="rail-left"', "</aside>", 30000);
+
+await check("A: a refused start shows a readable popup in the stage", () => {
+  // The owner's field bug of 2026-10-27: "if i click on the left column jarvis
+  // live icon, and since no mic is found it gives me a message but its in the
+  // left column and hard to read. it should be a pop up." The old refusal was
+  // one screen-reader line in the rail - and this page never styled .sr-only,
+  // so it also drew as cramped toolbar text.
+  assert.match(STAGE, /id="live-refusal"/, "the stage has no refusal popup");
+  assert.doesNotMatch(LEFT_RAIL, /id="live-refusal"/, "the popup is inside the left rail");
+  assert.match(STAGE, /<div id="live-refusal" class="stage-toast" role="alert" tabindex="-1" hidden>/,
+    "the popup must be a hidden role=alert stage toast that can take focus");
+  assert.match(STAGE, /<p id="live-refusal-why"><\/p>/,
+    "the popup has no empty line for the PC's reason");
+  assert.match(STAGE, /<button class="lr-close" id="live-refusal-close" type="button">Close<\/button>/,
+    "the popup has no real, plainly labelled Close button");
+  assert.match(STAGE, /<strong class="lr-title">Jarvis Live didn't start<\/strong>/,
+    "the popup has no honest heading");
+});
+
+await check("A: the popup is legible in the stage, and its words wrap", () => {
+  // "hard to read" was half the report, so the surface itself is pinned: its
+  // own plate, a width bounded by the stage, wrapping words that cannot be
+  // clipped, and a [hidden] rule that really takes it away.
+  assert.match(HUD, /\.stage-toast\{[^}]*position:absolute/,
+    "the popup is not placed over the stage");
+  assert.match(HUD, /\.stage-toast\{[^}]*width:min\(520px, calc\(100% - 32px\)\)/,
+    "the popup has no width bounded by the stage");
+  assert.match(HUD, /\.stage-toast\{[^}]*background:var\(--plate\)/,
+    "the popup has no surface of its own");
+  assert.match(HUD, /\.stage-toast p\{[^}]*white-space:normal; overflow-wrap:anywhere/,
+    "the reason does not wrap - it could be clipped or overflow the stage");
+  assert.match(HUD, /\.stage-toast\[hidden\]\{display:none;\}/,
+    "a hidden popup would still be drawn over the stage");
+});
+
+await check("A: the refusal words are the PC's, in plain language", () => {
+  const fn = HUD.match(/function liveRefusalWords\(raw\) \{([\s\S]*?)\n  \}/);
+  assert.ok(fn, "jarvis_hud.html no longer carries liveRefusalWords");
+  // eslint-disable-next-line no-new-func
+  const words = new Function("raw", fn[1]);
+  // The owner's own case: a PC with no microphone gets the fix, not the raw
+  // Rust text. Both of the PC's spellings are the same fact.
+  assert.match(words("no microphone"), /couldn't find a microphone/,
+    "'no microphone' is not mapped to a readable sentence");
+  assert.match(words("no microphone was found"),
+    /Plug in or turn on a microphone in Windows, then try again\./,
+    "the no-microphone sentence does not say what to do");
+  // A stale link and App lock keep the PC's own sentence, word for word:
+  // live.rs already wrote them for a person.
+  const stale = "The connection to Jarvis is catching up, so Jarvis Live is held "
+    + "until it does - try again in a moment.";
+  assert.equal(words(stale), stale, "the PC's stale-link sentence was rewritten");
+  const locked = "Jarvis is locked (App lock). Open the Jarvis bar and unlock it "
+    + "with Windows Hello, then start Jarvis Live.";
+  assert.equal(words(locked), locked, "the PC's App-lock sentence was rewritten");
+  // Never an empty box, and never a claim that Live started.
+  assert.match(words(""), /did not say why/, "an empty refusal has no honest fallback");
+  for (const raw of ["no microphone", stale, locked, "", "boom"]) {
+    assert.doesNotMatch(words(raw), /Jarvis Live is (on|running)|Live started/i,
+      `a refusal (${JSON.stringify(raw)}) claims Live started`);
+  }
+});
+
+await check("A: the popup appears on a refused start only, and dismisses cleanly", () => {
+  const live = between(HUD, "(function hudRailLive() {", "}());", 16000);
+  // Opened in the refusal branch of a START and nowhere else.
+  assert.equal((live.match(/showRefusal\(/g) || []).length, 1,
+    "the popup is opened somewhere other than a refused start");
+  assert.match(live, /if \(on\) \{[\s\S]{0,400}?\} else \{[\s\S]{0,300}?showRefusal\(words\);/,
+    "the popup is opened for a refused stop too");
+  // Filled first, then shown; the rail's mirror is cleared so the same
+  // sentence is not announced twice.
+  assert.match(live, /if \(toastWhy\) toastWhy\.textContent = liveRefusalWords\(raw\);/,
+    "the reason is not filled before the popup is shown");
+  assert.match(live, /toast\.hidden = false;\s*\n\s*toast\.focus\(\);/,
+    "the popup appears without taking focus");
+  assert.match(live, /say\(""\);\s*\n\s*showRefusal\(words\);/,
+    "a refused start leaves the old rail line behind to be announced twice");
+  // Every way out: Close, Escape, a click outside, and the 20 s fallback.
+  assert.match(live, /toastClose\.addEventListener\("click", \(\) => dismissRefusal\(true\)\)/,
+    "the Close button is not wired");
+  assert.match(live, /event\.key === "Escape" && !toast\.hidden/,
+    "Escape does not dismiss the popup");
+  assert.match(live, /"pointerdown"[\s\S]{0,200}?dismissRefusal\(false\)/,
+    "a click outside does not dismiss the popup without taking focus");
+  // The auto-dismiss CHOICE, stated so it can be argued with: 20 s, and the
+  // clock is cleared while the pointer or the keyboard focus is inside the
+  // popup, so a slow reader is never cut off mid-sentence. The text is one
+  // short sentence, so 20 s is a readable interval, not a blink.
+  assert.match(live, /setTimeout\(\(\) => dismissRefusal\(true\), 20000\)/,
+    "the popup has no 20 s fallback");
+  assert.match(live, /addEventListener\("pointerenter", \(\) => clearTimeout\(refusalTimer\)\)/,
+    "hovering the popup does not pause its 20 s clock");
+  assert.match(live, /addEventListener\("focusin", \(\) => clearTimeout\(refusalTimer\)\)/,
+    "tabbing into the popup does not pause its 20 s clock");
+  // Focus goes back to the control that asked, and a later success takes a
+  // stale refusal away so it can never sit over a running Live.
+  assert.match(live, /back\.focus\(\)/, "dismissing does not return focus");
+  assert.match(live, /dismissRefusal\(false\);[\s\S]{0,200}?say\(answer/,
+    "a later success leaves the stale refusal on screen");
+});
+
+await check("A: the rail's line is a hidden mirror, not the refusal surface", () => {
+  assert.match(LEFT_RAIL, /<span id="rail-live-status" role="status" aria-live="polite"><\/span>/,
+    "the rail's status line was removed instead of kept as the mirror");
+  assert.match(HUD, /#rail-live-status\{[^}]*clip:rect/,
+    "the rail's line is still drawn as ordinary text in the column");
+  // ...and the old rail-only wording is gone from the page.
+  assert.doesNotMatch(HUD, /Jarvis Live could not start/,
+    "the refusal is still written as a rail-only line");
 });
 
 /* ── B1. The setting: OFF by default, and the page's copy agrees ─────────── */
