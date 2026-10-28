@@ -19,12 +19,14 @@ import java.io.File
  * `ui/screens/AntislopPlate.kt`; backend `jarvis_antislop.py`; docs/JARVIS-API
  * section 159).
  *
- * WHAT THIS HOLDS. The phone shows the master switch and the During/After
- * mode, and it shows them from the PC's own answer: the payloads below are the
- * SHAPE `jarvis_antislop.get_state()` really writes, key for key (`enabled`,
- * `mode`, `scopes`, `dials`, `show_delivery_gate_on_ui_tasks`). The two bodies
- * this side can send carry ONE field each, so setting the switch never resets
- * the mode and vice versa - the same promise the desktop card keeps.
+ * WHAT THIS HOLDS. The phone shows the master switch, the em-dash exemption and
+ * the During/After mode, and it shows them from the PC's own answer: the
+ * payloads below are the SHAPE `jarvis_antislop.get_state()` really writes, key
+ * for key (`enabled`, `mode`, `scopes`, `dials`,
+ * `show_delivery_gate_on_ui_tasks`, `allow_em_dashes`). The three bodies this
+ * side can send carry ONE field each, so setting the switch never resets the
+ * mode, the mode never resets the switch, and the em-dash box touches neither -
+ * the same promise the desktop card keeps.
  *
  * The case a hand-written fixture would miss is the last group: a PC whose
  * backend has no route, or answers without a yes-or-no, must NOT be drawn as a
@@ -38,6 +40,8 @@ class AntislopTest {
         enabled: Boolean = false,
         mode: String = "during",
         gate: Boolean = true,
+        emDashes: Boolean = false,
+        withEmDashes: Boolean = true,
     ): JsonObject = buildJsonObject {
         put("enabled", enabled)
         put("mode", mode)
@@ -52,6 +56,8 @@ class AntislopTest {
             put("motion", 1)
         })
         put("show_delivery_gate_on_ui_tasks", gate)
+        // `withEmDashes = false` models a PC whose backend predates the field.
+        if (withEmDashes) put("allow_em_dashes", emDashes)
         put("updated_at", 1793164200.0)
     }
 
@@ -65,10 +71,63 @@ class AntislopTest {
         // The phone's words are the desktop's, so the two screens read alike.
         assertEquals(Antislop.OFF_NOTE, v.offNote)
         assertTrue(v.offNote.contains("0 prompt tokens"))
+        // OFF is the PC's default for the em-dash exemption too.
+        assertFalse(v.allowEmDashes)
 
         val on = Antislop.parse(state(enabled = true, mode = "after"))!!
         assertTrue(on.enabled)
         assertEquals("after", on.mode)
+    }
+
+    @Test
+    fun `the em-dash exemption is OFF unless the PC sends a real yes`() {
+        assertTrue(Antislop.parse(state(emDashes = true))!!.allowEmDashes)
+        assertFalse(Antislop.parse(state(emDashes = false))!!.allowEmDashes)
+        // A backend that predates the field: unticked, which is what it holds.
+        assertFalse(Antislop.parse(state(withEmDashes = false))!!.allowEmDashes)
+        // And a stray string is not a ticked box.
+        val stray = buildJsonObject {
+            put("enabled", true)
+            put("allow_em_dashes", "true")
+        }
+        assertFalse(Antislop.parse(stray)!!.allowEmDashes)
+    }
+
+    @Test
+    fun `the em-dash row says who already wins, so it is not read as the voiceprint`() {
+        // Gemini review Q3: Write Like Me's own habit wins on its own; this box
+        // is the blanket "keep them everywhere" on top of it.
+        assertEquals("Allow em-dashes (\u2014)", Antislop.EM_DASH_LABEL)
+        assertTrue(Antislop.EM_DASH_DETAIL.contains("Write Like Me"))
+        assertTrue(Antislop.EM_DASH_DETAIL.contains("already wins"))
+        assertTrue(Antislop.EM_DASH_DETAIL.contains("everywhere"))
+        assertTrue(Antislop.EM_DASH_SAID.getValue(true).contains("everywhere"))
+        assertTrue(Antislop.EM_DASH_SAID.getValue(false).contains("stripped"))
+        assertFalse(
+            "the em-dash row must not reuse the mode's sentence",
+            Antislop.EM_DASH_SAID.getValue(true) == Antislop.MODE_SAID.getValue("during"),
+        )
+    }
+
+    @Test
+    fun `the enforcement line names what is checked in code and calls the rest guidance`() {
+        // Gemini review Q1: the deterministic half is a fixed list, named; the
+        // live-browser half is guidance and must not be sold as enforced.
+        assertTrue(Antislop.REALITY.contains("fixed list in code"))
+        assertTrue(Antislop.REALITY.contains("guidance only"))
+        for (said in listOf("em-dashes", "buzzwords", "contrast")) {
+            assertTrue("the fixed list must name $said", Antislop.REALITY.contains(said))
+        }
+        assertFalse(
+            "the card may never claim every rule is enforced",
+            Regex("every rule|all the rules", RegexOption.IGNORE_CASE)
+                .containsMatchIn(Antislop.REALITY),
+        )
+        assertFalse(
+            "browser-only rules must not be listed as checked",
+            Regex("tap targets|overflow", RegexOption.IGNORE_CASE)
+                .containsMatchIn(Antislop.REALITY),
+        )
     }
 
     @Test
@@ -111,6 +170,16 @@ class AntislopTest {
     }
 
     @Test
+    fun `the em-dash box sends one field, in the PC's own spelling`() {
+        // Gemini review Q3: `{change: {allow_em_dashes}}` on the same route,
+        // and nothing else - ticking it must never reset the switch or the mode.
+        assertEquals("""{"allow_em_dashes":true}""", Antislop.emDashBody(true))
+        assertEquals("""{"allow_em_dashes":false}""", Antislop.emDashBody(false))
+        assertFalse(Antislop.emDashBody(true).contains("enabled"))
+        assertFalse(Antislop.emDashBody(true).contains("mode"))
+    }
+
+    @Test
     fun `the two bodies never carry each other's field`() {
         assertFalse(Antislop.enabledBody(true).contains("mode"))
         assertFalse(Antislop.modeBody("after")!!.contains("enabled"))
@@ -124,18 +193,22 @@ class AntislopTest {
         val ok = ApiResult.Ok(buildJsonObject { put("said", "PC said it.") })
         assertEquals("PC said it.", Antislop.replyLine(ok, true))
         assertEquals("PC said it.", Antislop.modeReplyLine(ok, "after"))
+        assertEquals("PC said it.", Antislop.emDashReplyLine(ok, true))
 
         val silent = ApiResult.Ok(buildJsonObject { put("enabled", true) })
         assertEquals(Antislop.SAID.getValue(true), Antislop.replyLine(silent, true))
         assertEquals(Antislop.MODE_SAID.getValue("after"), Antislop.modeReplyLine(silent, "after"))
+        assertEquals(Antislop.EM_DASH_SAID.getValue(true), Antislop.emDashReplyLine(silent, true))
 
         // A PC that refuses says so in its own words, and a PC without the
         // route is named - never a silent success.
         val refused = ApiResult.Ok(buildJsonObject { put("error", "the settings file is busy") })
         assertEquals("the settings file is busy", Antislop.replyLine(refused, true))
+        assertEquals("the settings file is busy", Antislop.emDashReplyLine(refused, false))
         val gone = ApiResult.Failed(ApiError.NotFound)
         assertEquals(Antislop.MISSING, Antislop.replyLine(gone, true))
         assertEquals(Antislop.MISSING, Antislop.modeReplyLine(gone, "during"))
+        assertEquals(Antislop.MISSING, Antislop.emDashReplyLine(gone, true))
     }
 
     @Test
@@ -152,7 +225,7 @@ class AntislopTest {
     fun `the phone is a mirror - it grows no scope list and no dials`() {
         // ARCHITECTURE section 8: scopes, the gate switch and the dials are the
         // desktop card's. This side must not offer a control whose body it
-        // cannot send, and the two bodies above are the whole vocabulary.
+        // cannot send, and the three bodies above are the whole vocabulary.
         // A JVM unit test's working directory is the module on some runners and
         // the repo on others, so both spellings are tried (the same shape
         // AppControlSensitiveFindTest uses).
@@ -164,6 +237,13 @@ class AntislopTest {
         assertFalse(
             "the phone holds the Delivery Gate switch it cannot set",
             source.contains("show_delivery_gate"),
+        )
+        // The em-dash exemption IS here on purpose: it is the owner's own
+        // writing voice rather than tuning, it is one switch with one field,
+        // and the PC's voiceprint precedence is explained beside it.
+        assertTrue(
+            "the phone must carry the em-dash exemption (Gemini review Q3)",
+            source.contains("allow_em_dashes"),
         )
     }
 

@@ -3037,7 +3037,8 @@ object JarvisRuntime {
     // ------------------------------------------------- anti-slop filter ----
     // "Anti-Slop filter" (2026-10-28) - see
     // [com.jarvis.client.net.Antislop] and ui/screens/AntislopPlate.kt. The
-    // master switch and the During/After mode, under "How Jarvis talks". NO
+    // master switch, the em-dash exemption and the During/After mode, under
+    // "How Jarvis talks". NO
     // approval card either way: it changes only the wording of an answer, so
     // rule 4's stale-link hold is the only holding that applies - and "at once"
     // means no card, not "works while the link is down", the same reading
@@ -3070,6 +3071,24 @@ object JarvisRuntime {
         return com.jarvis.client.net.Antislop.modeReplyLine(
             writeNoticingCards { api.antislopPost(body) },
             mode,
+        )
+    }
+
+    /**
+     * The em-dash exemption (2026-10-28): "Allow em-dashes (—)", off by
+     * default. One field (`allow_em_dashes`) on the same route and under the
+     * same stale-link hold as [setAntislop], so ticking it never resets the
+     * switch or the mode - and it is NOT the voiceprint rule, which the PC
+     * applies on its own whether this is on or off.
+     * @return the sentence to show under the row.
+     */
+    suspend fun setAntislopEmDashes(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        return com.jarvis.client.net.Antislop.emDashReplyLine(
+            writeNoticingCards {
+                api.antislopPost(com.jarvis.client.net.Antislop.emDashBody(on))
+            },
+            on,
         )
     }
 

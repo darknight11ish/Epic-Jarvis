@@ -3375,26 +3375,42 @@ settings row is NOT in the registry the phone mirrors
 into `jarvis-client`. That is also why `features/features.json` - three
 byte-identical copies, one inside `jarvis-client` - was not extended.
 
-**The Anti-Slop filter: the desktop card has five controls and the phone has
-two, and that is one-sided on purpose** (2026-10-28; JARVIS-API §159;
-`backend/jarvis_antislop.py`; route `/api/antislop`, classified `ported` by
-`tools/check_parity.py`). BOTH apps call the one route, so this is not a
-missing half: the desktop's card (`src/antislop-settings.js`, drawn from
-`src/antislop.js`; the two Rust commands in `src-tauri/src/antislop.rs`) has
-the master switch, the three scope pills (Copy & answers, Code comments, Web &
-UI design), the During/After mode, the Delivery Gate switch and the three
-Liveliness dials. The phone (`net/Antislop.kt`, `ui/screens/AntislopPlate.kt`,
-under Settings -> How Jarvis talks) has the master switch and the mode only.
-The reason is the standing rule that the phone is a settings MIRROR and not a
-second editor: it already keeps the same two-shape control for How Jarvis talks
-and for Voice, the scopes and dials are tuning rather than a state to check on
-the go, and each control the phone gained would be one more thing it has to
-carry into a smaller screen with no model list or catalogue to hang it on
-(`CLAUDE.md`'s standing rule). Nothing is a lie about the other app: each
-screen says which controls it has, and the feature list's own `limit` line says
-the same. The switch's spoken name is in the PC's registry, so "turn on
-anti-slop" and "set anti-slop mode to after" work from either app's chat box -
-that half is typed on the PC and needs no client at all.
+**The Anti-Slop filter: the desktop card has six controls and the phone has
+three, and that is one-sided on purpose** (2026-10-28, extended the same day for
+the em-dash exemption; JARVIS-API §159; `backend/jarvis_antislop.py`; route
+`/api/antislop`, classified `ported` by `tools/check_parity.py`). BOTH apps call
+the one route, so this is not a missing half: the desktop's card
+(`src/antislop-settings.js`, drawn from `src/antislop.js`; the two Rust commands
+in `src-tauri/src/antislop.rs`) has the master switch, the three scope pills
+(Copy & answers, Code comments, Web & UI design), the "Allow em-dashes (—)" box,
+the During/After mode, the Delivery Gate switch and the three Liveliness dials.
+The phone (`net/Antislop.kt`, `ui/screens/AntislopPlate.kt`, under Settings ->
+How Jarvis talks) has the master switch, the em-dash box and the mode. The
+reason is the standing rule that the phone is a settings MIRROR and not a second
+editor: it already keeps the same few-shape control for How Jarvis talks and for
+Voice, the scopes and dials are tuning rather than a state to check on the go,
+and each control the phone gained would be one more thing it has to carry into a
+smaller screen with no model list or catalogue to hang it on (`CLAUDE.md`'s
+standing rule). The em-dash box is the one addition that passed that test: it is
+the owner's own writing voice rather than tuning, it is a single yes/no with a
+one-field body, and the same one-line explanation travels with it, so the two
+apps cannot say different things about what Write Like Me already does. Nothing
+is a lie about the other app: each screen says which controls it has, and the
+feature list's own `limit` line says the same. The switch's spoken name is in
+the PC's registry, so "turn on anti-slop" and "set anti-slop mode to after" work
+from either app's chat box - that half is typed on the PC and needs no client at
+all. The em-dash exemption deliberately has no spoken name: it is a checkbox in
+Settings, and a phrase for it would be a second control surface the PC's grammar
+does not have.
+
+**What neither app may claim about enforcement.** The card's one-line reality
+sentence (Gemini review Q1, 2026-10-28) names the rules that really are checked
+in code and calls the rest guidance. That is an ARCHITECTURE rule rather than
+copy: a page that said "every anti-slop rule is enforced" would be describing a
+`jarvis_antislop.py` that does not exist, because live horizontal overflow, tap
+targets, real theme switching and whether a quote is genuine need a rendered
+page or a person, and the Playwright suites are what prove them. The full split
+is in JARVIS-API §159.1.
 
 ## 9. Where the backend lives
 

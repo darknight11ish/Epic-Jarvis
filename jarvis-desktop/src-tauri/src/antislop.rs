@@ -7,7 +7,7 @@
 //!
 //! * [`get_antislop`] - `GET /api/antislop`: the whole state, in the PC's own
 //!   shape (`enabled`, `mode`, `scopes`, `dials`,
-//!   `show_delivery_gate_on_ui_tasks`). A read, never held.
+//!   `show_delivery_gate_on_ui_tasks`, `allow_em_dashes`). A read, never held.
 //! * [`set_antislop`] - `POST /api/antislop` carrying ONE change.
 //!
 //! NEITHER DIRECTION IS HELD ON A STALE LINK and neither raises an approval
@@ -110,12 +110,19 @@ pub struct Change {
     /// its state carries, and a second spelling would need a translation table
     /// on both sides.
     pub gate: Option<bool>,
+    /// The em-dash exemption (2026-10-28): keep em-dashes everywhere. Its own
+    /// field on the PC, `allow_em_dashes`, sent in that spelling for the same
+    /// reason as `gate`. It is NOT the voiceprint rule - the PC's own `R-37`
+    /// precedence over `R-02` applies whether this is on or off - so this side
+    /// only carries the owner's blanket choice and never guesses at the other.
+    pub allow_em_dashes: Option<bool>,
 }
 
 /// The POST body a change becomes: exactly the fields that moved, and nothing
 /// else. `{"enabled": true}` for the master switch, `{"mode": "after"}` for the
 /// mode radio, `{"scopes": {"code": false}}` for one scope pill, `{"dials":
-/// {"energy": 2}}` for one dial.
+/// {"energy": 2}}` for one dial, `{"allow_em_dashes": true}` for the em-dash
+/// exemption.
 pub(crate) fn change_body(change: Change) -> serde_json::Map<String, serde_json::Value> {
     let mut body = serde_json::Map::new();
     if let Some(on) = change.enabled {
@@ -147,6 +154,9 @@ pub(crate) fn change_body(change: Change) -> serde_json::Map<String, serde_json:
             "show_delivery_gate_on_ui_tasks".to_string(),
             serde_json::json!(gate),
         );
+    }
+    if let Some(on) = change.allow_em_dashes {
+        body.insert("allow_em_dashes".to_string(), serde_json::json!(on));
     }
     body
 }
@@ -255,7 +265,8 @@ mod tests {
     const VIEW: &str = r#"{"enabled": false, "mode": "during",
         "scopes": {"copy": true, "code": true, "ui": true},
         "dials": {"energy": 1, "rhythm": 2, "motion": 1},
-        "show_delivery_gate_on_ui_tasks": true, "updated_at": 1793164200.0}"#;
+        "show_delivery_gate_on_ui_tasks": true, "allow_em_dashes": false,
+        "updated_at": 1793164200.0}"#;
 
     fn change(json: &str) -> Change {
         serde_json::from_str::<Change>(json).unwrap()
@@ -334,7 +345,8 @@ mod tests {
     fn every_field_at_once_is_still_one_body_in_the_pcs_own_spelling() {
         let body = change_body(change(
             r#"{"enabled": true, "mode": "during", "scope": "ui", "on": true,
-                "dials": {"energy": 1, "rhythm": 3, "motion": 2}, "gate": false}"#,
+                "dials": {"energy": 1, "rhythm": 3, "motion": 2}, "gate": false,
+                "allow_em_dashes": true}"#,
         ));
         assert_eq!(
             serde_json::Value::Object(body),
@@ -343,9 +355,33 @@ mod tests {
                 "mode": "during",
                 "scopes": {"ui": true},
                 "dials": {"energy": 1, "rhythm": 3, "motion": 2},
-                // The PC's own field name, not a second spelling of it.
-                "show_delivery_gate_on_ui_tasks": false
+                // The PC's own field names, not a second spelling of either.
+                "show_delivery_gate_on_ui_tasks": false,
+                "allow_em_dashes": true
             })
+        );
+    }
+
+    #[test]
+    fn the_em_dash_exemption_sends_only_its_own_field() {
+        // 2026-10-28: ticking "Allow em-dashes" must never drag a scope, the
+        // mode, a dial or the gate along with it - the same promise every other
+        // control on this card keeps.
+        let body = change_body(change(r#"{"allow_em_dashes": true}"#));
+        assert_eq!(
+            body.len(),
+            1,
+            "the em-dash box may not drag other fields in"
+        );
+        assert_eq!(
+            serde_json::Value::Object(body),
+            serde_json::json!({"allow_em_dashes": true})
+        );
+        let body = change_body(change(r#"{"allow_em_dashes": false}"#));
+        assert_eq!(
+            serde_json::Value::Object(body),
+            serde_json::json!({"allow_em_dashes": false}),
+            "unticking sends the no, not nothing"
         );
     }
 

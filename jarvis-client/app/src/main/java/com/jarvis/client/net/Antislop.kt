@@ -17,13 +17,16 @@ import kotlinx.serialization.json.contentOrNull
  * asks or remembers - so neither direction raises an approval card. OFF costs
  * 0 prompt tokens and rewrites nothing.
  *
- * WHAT THE PHONE HAS, AND WHAT IT DELIBERATELY DOES NOT. The desktop's card
- * also carries the three scopes, the Delivery Gate switch and the three
- * Liveliness dials; the phone has the master switch and the mode only. That is
- * a settings MIRROR, not a second editor: it is the same pair of controls the
- * phone already keeps for "How Jarvis talks" and Voice, in the same words. It
- * adds no model list, no preset browser and no new route (ARCHITECTURE
- * section 8's one-sided-on-purpose note, and `tools/check_parity.py`).
+ * WHAT THE PHONE HAS, AND WHAT IT DELIBERATELY DOES NOT. The phone has the
+ * master switch, the em-dash exemption and the During/After mode. The desktop's
+ * card also carries the three scopes, the Delivery Gate switch and the three
+ * Liveliness dials, and those stay there. That is a settings MIRROR, not a
+ * second editor: it is the same shape the phone already keeps for "How Jarvis
+ * talks" and Voice, in the same words. The em-dash exemption is on the phone
+ * because it is the owner's own writing voice rather than tuning, and the same
+ * one-line explanation rides with it (2026-10-28, Gemini review Q3). It adds no
+ * model list, no preset browser and no new route (ARCHITECTURE section 8's
+ * one-sided-on-purpose note, and `tools/check_parity.py`).
  *
  * Pure Kotlin, no Android types, so it runs on a plain JVM (AntislopTest).
  */
@@ -35,13 +38,37 @@ object Antislop {
     const val DEFAULT_MODE = "during"
 
     const val DETAIL =
-        "Checks what Jarvis writes against the anti-slop rules and takes out the tells that " +
-            "read as machine-made: em-dashes in prose, AI buzzwords, decorative comment " +
-            "banners, dead buttons and unreadable contrast."
+        "Watches what Jarvis writes for the tells that read as machine-made: em-dashes in " +
+            "prose, AI buzzwords, decorative comment banners, dead buttons and unreadable " +
+            "contrast."
     const val OFF_NOTE =
         "Off: costs 0 prompt tokens. Nothing is added to a prompt and no answer is rewritten."
     const val MISSING =
         "Your PC's Jarvis cannot filter AI slop yet - run apply-patches.ps1 on the PC."
+
+    /**
+     * What is really enforced, in ONE sentence (2026-10-28, Gemini review Q1),
+     * in the desktop card's own words. The rules split two ways and the screen
+     * may not blur them: the fixed list (em-dashes, buzzwords, comment banners,
+     * dead buttons, contrast, focus rings, glass and glow caps) is checked in
+     * code on the PC, while layout, taste and rendered sizes are guidance that
+     * only a real browser or a person can judge. `AntislopTest` fails if the
+     * sentence stops saying "guidance only".
+     */
+    const val REALITY =
+        "Guides what Jarvis writes, then checks a fixed list in code (em-dashes, buzzwords, " +
+            "comment banners, dead buttons, contrast, focus rings, glass and glow caps); " +
+            "layout, taste and rendered sizes are guidance only."
+
+    /**
+     * The em-dash exemption (2026-10-28, Gemini review Q3; `R-02` vs `R-37`).
+     * OFF is the PC's default. It is NOT the voiceprint rule: Write Like Me
+     * already wins on its own when the owner's samples use em-dashes, whatever
+     * this says - this is the blanket "keep them everywhere" on top.
+     */
+    const val EM_DASH_LABEL = "Allow em-dashes (\u2014)"
+    const val EM_DASH_DETAIL =
+        "Write Like Me's own em-dash habit already wins; this keeps them everywhere."
 
     /** What each mode is called, in the desktop card's own words. */
     val MODE_LABEL: Map<String, String> = linkedMapOf(
@@ -64,11 +91,16 @@ object Antislop {
         "during" to "Anti-Slop will filter while Jarvis writes.",
         "after" to "Anti-Slop will audit and list findings, and change nothing.",
     )
+    val EM_DASH_SAID: Map<Boolean, String> = mapOf(
+        true to "Em-dashes are allowed everywhere now.",
+        false to "Em-dashes are stripped from prose again.",
+    )
 
     /** The half of the PC's answer this screen shows. */
     data class View(
         val enabled: Boolean,
         val mode: String,
+        val allowEmDashes: Boolean = false,
         val detail: String = DETAIL,
         val offNote: String = OFF_NOTE,
     )
@@ -92,6 +124,9 @@ object Antislop {
         return View(
             enabled = enabled,
             mode = mode,
+            // OFF unless the PC says a real `true`: a backend that predates the
+            // field paints the box unticked, which is the state it holds.
+            allowEmDashes = (body["allow_em_dashes"] as? JsonPrimitive)?.booleanOrNull == true,
             detail = body.text("detail") ?: DETAIL,
             offNote = body.text("off_note") ?: OFF_NOTE,
         )
@@ -111,6 +146,14 @@ object Antislop {
     fun modeBody(mode: String): String? =
         if (mode in MODES) buildJsonObject { put("mode", JsonPrimitive(mode)) }.toString() else null
 
+    /**
+     * The ONE change the em-dash exemption sends, in the PC's own spelling
+     * (`allow_em_dashes`). Ticking it never resets the switch or the mode.
+     */
+    fun emDashBody(on: Boolean): String = buildJsonObject {
+        put("allow_em_dashes", JsonPrimitive(on))
+    }.toString()
+
     /** What to say after a change: the PC's sentence, or the plain words of the failure. */
     fun replyLine(result: ApiResult<JsonObject>, on: Boolean): String = when (result) {
         is ApiResult.Ok -> (result.value["said"] as? JsonPrimitive)?.contentOrNull
@@ -125,6 +168,15 @@ object Antislop {
         is ApiResult.Ok -> (result.value["said"] as? JsonPrimitive)?.contentOrNull
             ?: (result.value["error"] as? JsonPrimitive)?.contentOrNull
             ?: MODE_SAID.getValue(mode)
+        is ApiResult.Failed ->
+            if (missing(result.error)) MISSING else PlainErrors.forApiError(result.error).text
+    }
+
+    /** The same shape for the em-dash exemption. */
+    fun emDashReplyLine(result: ApiResult<JsonObject>, on: Boolean): String = when (result) {
+        is ApiResult.Ok -> (result.value["said"] as? JsonPrimitive)?.contentOrNull
+            ?: (result.value["error"] as? JsonPrimitive)?.contentOrNull
+            ?: EM_DASH_SAID.getValue(on)
         is ApiResult.Failed ->
             if (missing(result.error)) MISSING else PlainErrors.forApiError(result.error).text
     }

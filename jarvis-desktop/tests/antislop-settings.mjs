@@ -21,6 +21,12 @@
  *     change is the PC's, never the click's);
  *   - each scope pill sends only its own scope, the mode radio only the mode,
  *     a dial only the three dials, the gate switch only the gate;
+ *   - "Allow em-dashes (—)" reflects the GET state, sends only
+ *     `{change: {allow_em_dashes}}`, and OFF -> ON -> OFF round-trips too
+ *     (2026-10-28, Gemini review Q3);
+ *   - the one-sentence enforcement line names the fixed list checked in code
+ *     and calls the rest guidance, and never claims every rule is enforced
+ *     (Gemini review Q1);
  *   - a refusal shows the PC's own words and springs the switch back to what
  *     the PC really holds;
  *   - a PC without the route says so and never claims "off";
@@ -57,6 +63,7 @@ function pcState(over = {}) {
     scopes: { copy: true, code: true, ui: true },
     dials: { energy: 1, rhythm: 2, motion: 1 },
     show_delivery_gate_on_ui_tasks: true,
+    allow_em_dashes: false,
     updated_at: 1793164200.0,
     ...over,
   };
@@ -98,6 +105,7 @@ function bridge(scenario) {
       if (c.scope !== undefined) s.scopes = { ...s.scopes, [c.scope]: c.on };
       if (c.dials !== undefined) s.dials = c.dials;
       if (c.gate !== undefined) s.show_delivery_gate_on_ui_tasks = c.gate;
+      if (c.allow_em_dashes !== undefined) s.allow_em_dashes = c.allow_em_dashes;
       return { ok: true, said: "PC said it.", ...JSON.parse(JSON.stringify(s)) };
     }
     return inner(cmd, args);
@@ -145,6 +153,28 @@ await check("the card renders the PC's own words and is OFF by default", async (
   assert.match(got.offNote, /nothing is rewritten|no answer is rewritten/i);
   assert.equal(got.checked, false, "the filter ships OFF");
   assert.equal(got.label, "Anti-Slop filter");
+});
+
+await check("the card says what is checked in code and what is only guidance", async () => {
+  const page = await pageFor({ state: pcState() });
+  const got = await page.evaluate(() => ({
+    reality: document.getElementById("asf-reality").textContent,
+    detail: document.getElementById("asf-detail").textContent,
+  }));
+  await page.close();
+  // Gemini review Q1: the deterministic half is a fixed list, named; the
+  // live-browser half is guidance and must not be sold as enforced.
+  assert.match(got.reality, /fixed list in code/, got.reality);
+  assert.match(got.reality, /guidance only/, got.reality);
+  assert.match(got.reality, /em-dashes/, "the fixed list must name a rule it checks");
+  assert.ok(!/every rule|all the rules/i.test(got.reality),
+    "the card may never claim every rule is enforced: " + got.reality);
+  assert.ok(!/tap targets|overflow/i.test(got.reality),
+    "browser-only rules must not be listed as checked: " + got.reality);
+  // And the description watches for tells; it does not promise to remove all.
+  assert.match(got.detail, /Watches/, got.detail);
+  assert.ok(!/takes out/i.test(got.detail),
+    "the description may not claim it takes every tell out: " + got.detail);
 });
 
 await check("while it is OFF the four ON-only blocks are hidden", async () => {
@@ -282,6 +312,106 @@ await check("the gate switch is hidden when the UI scope is off", async () => {
   await page.close();
   assert.equal(got.gate, true, "a gate for a scope that is not filtered is noise");
   assert.equal(got.scopes, false, "the filter is still ON, so its scopes are drawn");
+});
+
+/* ── 3b. "Allow em-dashes (—)" (2026-10-28, Gemini review Q3) ───────────── */
+
+await check("the em-dash box reflects the PC's GET state, and lives in the scope block", async () => {
+  const page = await pageFor({ state: pcState({ enabled: true }) });
+  const got = await page.evaluate(() => {
+    const box = document.getElementById("asf-em-dash");
+    return {
+      checked: box.checked,
+      label: document.getElementById("asf-em-dash-label").textContent,
+      detail: document.getElementById("asf-em-dash-detail").textContent,
+      inScopes: Boolean(document.getElementById("asf-scopes-block").contains(box)),
+      scopesHidden: document.getElementById("asf-scopes-block").hidden,
+    };
+  });
+  await page.close();
+  assert.equal(got.checked, false, "OFF is the PC's default, so the box is unticked");
+  assert.equal(got.label, A.EM_DASH_LABEL);
+  assert.match(got.detail, /Write Like Me/, "the row must say who already wins");
+  assert.match(got.detail, /everywhere/);
+  // Inside the scope block, so the card's own OFF state hides it with the
+  // scopes - an exemption from a filter that is not running is noise.
+  assert.equal(got.inScopes, true, "the row belongs to What it filters");
+  assert.equal(got.scopesHidden, false, "the filter is ON, so the block is drawn");
+
+  const ticked = await pageFor({ state: pcState({ enabled: true, allow_em_dashes: true }) });
+  const on = await ticked.evaluate(() => document.getElementById("asf-em-dash").checked);
+  await ticked.close();
+  assert.equal(on, true, "the PC's yes is what is painted, not a guess");
+});
+
+await check("the em-dash box sends only its own field", async () => {
+  const page = await pageFor({ state: pcState({ enabled: true }) });
+  await page.locator("#asf-em-dash").check();
+  await page.waitForTimeout(400);
+  const got = await page.evaluate(() => window.__a.calls);
+  await page.close();
+  assert.deepEqual(got, [{
+    cmd: "set_antislop",
+    args: { change: { allow_em_dashes: true } },
+  }]);
+  assert.deepEqual(Object.keys(got[0].args), ["change"], "one nested change object only");
+});
+
+await check("the em-dash box OFF -> ON -> OFF round-trips, and drags nothing else", async () => {
+  const page = await pageFor({ state: pcState({ enabled: true }) });
+  await page.locator("#asf-em-dash").check();
+  await page.waitForTimeout(400);
+  const on = await page.evaluate(() => ({
+    checked: document.getElementById("asf-em-dash").checked,
+    status: document.getElementById("asf-status").textContent,
+    scopes: document.querySelectorAll("#asf-scopes .asf-scope").length,
+    scopeStates: [...document.querySelectorAll("#asf-scopes .asf-scope input")]
+      .map((i) => i.checked),
+    gate: document.getElementById("asf-gate").checked,
+    mode: document.querySelector('#asf-modes input[value="during"]').checked,
+  }));
+  await page.locator("#asf-em-dash").uncheck();
+  await page.waitForTimeout(400);
+  const off = await page.evaluate(() => ({
+    checked: document.getElementById("asf-em-dash").checked,
+    calls: window.__a.calls.map((c) => c.args.change),
+  }));
+  await page.close();
+  assert.equal(on.checked, true, "the PC said yes, so the box is ticked");
+  assert.equal(on.status, "PC said it.", "the PC's own sentence is what is shown");
+  assert.equal(on.scopes, 3, "the three scopes are still drawn");
+  assert.deepEqual(on.scopeStates, [true, true, true], "this box reset no scope");
+  assert.equal(on.gate, true, "and not the gate switch");
+  assert.equal(on.mode, true, "and not the mode");
+  assert.equal(off.checked, false, "the PC said no, so the box is unticked again");
+  assert.deepEqual(off.calls, [
+    { allow_em_dashes: true },
+    { allow_em_dashes: false },
+  ], "two one-field changes, in that order");
+});
+
+await check("a refused em-dash change springs the box back and says why", async () => {
+  // The state a PC whose backend does not know the field yet really answers:
+  // `unknown_setting` (400). The box must not be left looking ticked.
+  const page = await pageFor({
+    state: pcState({ enabled: true }),
+    refuse: "the anti-slop filter has no setting called allow_em_dashes",
+  });
+  // `.click()`, not `.check()`: the box is SUPPOSED to spring back.
+  await page.locator("#asf-em-dash").click();
+  await page.waitForFunction(
+    () => document.getElementById("asf-status").textContent !== "Sending…",
+    null, { timeout: 15000 });
+  const got = await page.evaluate(() => ({
+    status: document.getElementById("asf-status").textContent,
+    tone: document.getElementById("asf-status").dataset.tone,
+    checked: document.getElementById("asf-em-dash").checked,
+  }));
+  await page.close();
+  assert.match(got.status, /no setting called allow_em_dashes/,
+    "the PC's own refusal, not one of the page's: " + got.status);
+  assert.equal(got.tone, "bad");
+  assert.equal(got.checked, false, "a refused tick must not leave the box looking on");
 });
 
 /* ── 4. A refusal shows the PC's own words and springs back ──────────────── */

@@ -11,6 +11,18 @@
  * nothing at all: no prompt block, no rewriting (the PC returns the reply
  * unchanged).
  *
+ * TWO THINGS THE CARD MUST NOT GET WRONG (2026-10-28, Gemini review Q1/Q3):
+ *
+ * 1. Not every rule is mechanically checked. The deterministic ones are listed
+ *    in `REALITY` and really are run in code on the PC; the rest - live
+ *    horizontal overflow, tap targets, real theme switching, whether a quote is
+ *    genuine - are PROMPT-GUIDED and are proven by the Playwright suites, if at
+ *    all. `REALITY` says which half is which, in one sentence.
+ * 2. "Allow em-dashes" is the owner's blanket exemption, NOT the voiceprint
+ *    rule. Write Like Me's own `em_dash_rate` already wins under `R-37` whether
+ *    this box is ticked or not; ticking it keeps em-dashes everywhere else too.
+ *    `EM_DASH_DETAIL` says exactly that, and OFF is the PC's default.
+ *
  * This module is PURE - antislop-settings.js draws it. The PC sends its own
  * state with every GET /api/antislop and the page shows that; the words below
  * are the same words, used only when an answer lacks them, exactly as
@@ -21,11 +33,43 @@
 
 export const TITLE = "Anti-Slop filter";
 export const DETAIL =
-  "Checks what Jarvis writes against the anti-slop rules and takes out the tells that read as machine-made: em-dashes in prose, AI buzzwords, decorative comment banners, dead buttons and unreadable contrast.";
+  "Watches what Jarvis writes for the tells that read as machine-made: em-dashes in prose, AI buzzwords, decorative comment banners, dead buttons and unreadable contrast.";
 export const OFF_NOTE =
   "Off: costs 0 prompt tokens. Nothing is added to a prompt and no answer is rewritten.";
 export const MISSING =
   "Your PC's Jarvis cannot filter AI slop yet - run apply-patches.ps1 on the PC.";
+
+/**
+ * What is really enforced, in ONE sentence, in the owner's plain words
+ * (2026-10-28, Gemini review Q1). The rules split in two and the card may not
+ * blur them:
+ *
+ * - Class A is deterministic: the PC checks it in code on every answer, so the
+ *   sentence below may name those rules outright (em-dashes, buzzwords, comment
+ *   banners, dead buttons, contrast, focus rings, glass and glow caps).
+ * - Class B needs a rendered page or a human eye: horizontal overflow at a real
+ *   width, 44px tap targets, whether a testimonial is real, whether a layout is
+ *   an unasked Vercel clone, a live theme switch, a click-through. Those are
+ *   PROMPT-GUIDED - the rules block asks the model to respect them - and the
+ *   Playwright suites (themecheck.mjs, hud.mjs) are what actually prove them.
+ *
+ * So the card never says "every rule is enforced". It says guidance up front,
+ * then a fixed list that really is checked, and names the rest as guidance.
+ * `tests/antislop.mjs` fails if that shape leaves the copy.
+ */
+export const REALITY =
+  "Guides what Jarvis writes, then checks a fixed list in code (em-dashes, buzzwords, comment banners, dead buttons, contrast, focus rings, glass and glow caps); layout, taste and rendered sizes are guidance only.";
+
+/**
+ * The em-dash exemption (2026-10-28, Gemini review Q3; `R-02` vs `R-37`).
+ * OFF is the PC's default. It is NOT the voiceprint rule and must never be
+ * explained as one: Write Like Me already wins on its own when the owner's
+ * stored samples use em-dashes, whatever this box says - this box is the
+ * owner's blanket "keep them everywhere" on top of that.
+ */
+export const EM_DASH_LABEL = "Allow em-dashes (\u2014)";
+export const EM_DASH_DETAIL =
+  "Write Like Me's own em-dash habit already wins; this keeps them everywhere.";
 
 /** The three scopes, in the order the card shows them. */
 export const SCOPES = Object.freeze([
@@ -101,6 +145,13 @@ export function saidFor(what, on) {
       ? "A finished screen now closes with the four-block Delivery Gate."
       : "A finished screen no longer closes with the Delivery Gate.";
   }
+  // The em-dash exemption. Its OFF sentence does not promise a strip that the
+  // voiceprint precedence may still overrule - `EM_DASH_DETAIL` says who wins.
+  if (what === "em_dash") {
+    return on
+      ? "Em-dashes are allowed everywhere now."
+      : "Em-dashes are stripped from prose again.";
+  }
   const scope = SCOPES.find((s) => s.id === what);
   const name = scope ? scope.label : what;
   return on ? `${name}: filtered.` : `${name}: not filtered.`;
@@ -125,13 +176,19 @@ function step(v, fallback) {
 /**
  * GET /api/antislop, read:
  * `{enabled, mode, scopes: {copy, code, ui}, dials: {energy, rhythm, motion},
- * show_delivery_gate_on_ui_tasks}`, or `{available: false, why}`.
+ * show_delivery_gate_on_ui_tasks, allow_em_dashes}`, or `{available: false,
+ * why}`.
  *
  * A body with no `enabled` yes-or-no is NOT read as "off" - it is
  * `available: false`, because a state nobody could read is not a filter that is
  * switched off. The rest of the shape is forgiven field by field: a PC whose
  * backend answers the switch but not the dials yet still paints its switch, and
  * the dials keep their defaults, which is what it actually holds.
+ *
+ * `allow_em_dashes` is OFF unless the PC says a real `true`. A backend that
+ * predates the field therefore paints the box unticked, which is the state it
+ * really holds - and is why this is a plain `=== true` rather than a truthy
+ * read of whatever arrived.
  */
 export function readAntislop(raw) {
   const v = raw && typeof raw === "object" ? raw : {};
@@ -156,6 +213,7 @@ export function readAntislop(raw) {
     scopes,
     dials,
     gate: v.show_delivery_gate_on_ui_tasks !== false,
+    allowEmDashes: v.allow_em_dashes === true,
     title: text(v.title, TITLE),
     detail: text(v.detail, DETAIL),
     offNote: text(v.off_note, OFF_NOTE),

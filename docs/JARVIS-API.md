@@ -26013,7 +26013,7 @@ PC's build from the PC's app and points at **Platform checks**, the phone's own
 update card, where the owner downloads its APK and Android's installer asks for
 the tap. Nothing installs itself on either device.
 
-## 159. The Anti-Slop filter: one route, a card on the desktop and two controls on the phone (added 2026-10-28)
+## 159. The Anti-Slop filter: one route, a card on the desktop and three controls on the phone (added 2026-10-28)
 
 ### 159.1 What it is, and what it is not
 
@@ -26021,9 +26021,10 @@ the tap. Nothing installs itself on either device.
 **Anti-Slop filter** - a wording and output-quality filter over what Jarvis
 writes - whose rules are the MIT-licensed
 [`miqdadbadjuber/anti-slop`](https://github.com/miqdadbadjuber/anti-slop)
-ruleset (`v3.2.23`, credited in `THIRD-PARTY-NOTICES.txt`), distilled on the
-PC to the few that fit a local model's prompt budget. Nothing is fetched at run
-time: no `npx`, no network, no folder beyond the PC's own config file.
+ruleset (`v3.2.23`; the credit line lands in `THIRD-PARTY-NOTICES.txt` with the
+engine slice, `backend/jarvis_antislop.py`), distilled on the PC to the few that
+fit a local model's prompt budget. Nothing is fetched at run time: no `npx`, no
+network, no folder beyond the PC's own config file.
 
 What it can take out: em-dashes in prose, AI buzzwords (`seamless`,
 `revolutionary`, `next-generation`, `effortless`, `delve`), decorative ASCII
@@ -26036,6 +26037,36 @@ neither direction raises an approval card.
 is added to a prompt (0 prompt tokens) and no reply is rewritten. ON adds a
 short rules block matched to the parts the owner ticked.
 
+**What is really checked, and what is only guidance** (2026-10-28, the Gemini
+review's Q1 ruling). The rulebook splits two ways, and neither app may claim
+the whole of it is enforced:
+
+- **Checked in code, on every answer** (deterministic, no model involved):
+  `R-02` em-dashes in prose, `R-15` generic calls to action, `R-16` AI
+  buzzwords, `antislop-code` decorative comment banners and emoji comments,
+  `R-24`/`R-26` dead `href="#"` links and un-wired buttons, `R-25` unrounded
+  WCAG AA contrast on static colour pairs, `R-32` `outline: none` with no
+  focus ring put back, and `R-10`/`R-13` glass and glow dose caps.
+- **Prompt-guided only** (the rules block asks the model for them; no static
+  check proves them): real horizontal overflow and 44px tap targets at
+  375/768/1440px, whether a quote or testimonial is genuine, semantic
+  empty/loading/error states, whether a layout is an unasked Linear/Vercel
+  clone, live theme switching and element-by-element click-through. Those are
+  proven, where they are proven at all, by the Playwright suites
+  (`themecheck.mjs`, `hud.mjs`) - never by `jarvis_antislop.py`.
+
+The card carries that split as ONE sentence (the `REALITY` line in
+`src/antislop.js`, the same words in `net/Antislop.kt`), and
+`jarvis-desktop/tests/antislop.mjs` fails if the line stops saying "guidance
+only" or starts naming a browser-only rule as checked.
+
+**`R-37` (Write Like Me) wins over `R-02` (em-dashes), always.** When the
+owner's stored writing samples use em-dashes, the PC exempts them whether or not
+`allow_em_dashes` is on, because the owner's own prose is direction rather than
+slop. `allow_em_dashes` is the separate, blanket "keep them everywhere" - OFF by
+default - and each app's own sentence next to the box says exactly that, so it
+is never mistaken for the voiceprint rule.
+
 ### 159.2 `GET /api/antislop`
 
 The whole state, in the PC's own shape:
@@ -26047,6 +26078,7 @@ The whole state, in the PC's own shape:
   "scopes": {"copy": true, "code": true, "ui": true},
   "dials": {"energy": 1, "rhythm": 2, "motion": 1},
   "show_delivery_gate_on_ui_tasks": true,
+  "allow_em_dashes": false,
   "updated_at": 1793164200.0
 }
 ```
@@ -26054,7 +26086,10 @@ The whole state, in the PC's own shape:
 `mode` is `during` (filter while writing - the default when switched ON) or
 `after` (change nothing; list numbered findings by `R-01..R-38` and let the
 owner pick). `scopes` is what is filtered; `dials` are the Liveliness Toolkit's
-three 1-3 dials (ENERGY, RHYTHM, MOTION). A read is never held.
+three 1-3 dials (ENERGY, RHYTHM, MOTION). `allow_em_dashes` is the em-dash
+exemption and is **OFF unless it is a real `true`** - a backend that predates
+the field simply has no key, and both apps paint the box unticked, which is the
+state that PC really holds. A read is never held.
 
 A PC whose backend predates this section answers `404`, or `503` with
 `{"available": false, "why": "..."}`. **A body with no `enabled` yes-or-no is
@@ -26072,11 +26107,14 @@ ONE change per call, naming only the field that moved:
 | `{"scopes": {"copy" \| "code" \| "ui": true \| false}}` | one scope |
 | `{"dials": {"energy" \| "rhythm" \| "motion": 1..3}}` | one or more dials |
 | `{"show_delivery_gate_on_ui_tasks": true \| false}` | the Delivery Gate on a finished screen |
+| `{"allow_em_dashes": true \| false}` | keep em-dashes everywhere (the blanket exemption) |
 
 The PC merges the named field into its stored state and answers with the WHOLE
 state back, so a client paints the PC's answer rather than its own optimism.
-An unknown `mode` is refused with the PC's own sentence. There is no `tier`, no
-card and no Windows Hello in either direction.
+An unknown `mode` is refused with the PC's own sentence; a key the PC does not
+have is refused with `"unknown_setting"` rather than read back as "saved", which
+is why a client must send `allow_em_dashes` and nothing else when that box
+moves. There is no `tier`, no card and no Windows Hello in either direction.
 
 **Takes effect on the very next turn** (the state is read per turn, never
 cached at start-up), and emits the existing **`settings`** SSE event so an open
@@ -26088,27 +26126,31 @@ Settings window - on the PC or the other app - repaints without a reload.
 (`src/antislop-settings.js`, drawn from `src/antislop.js`; two Rust commands in
 `src-tauri/src/antislop.rs`, granted to the Settings window alone by
 `permissions/surfaces.toml`). The card has the master switch, the three scope
-pills, the During/After radio, the Delivery Gate switch and the three dials,
-and the ON-only halves are hidden while it is off. Each control sends one
-change and re-reads afterwards; a refusal shows the PC's own sentence and
-springs the control back. **None of it is held on a stale link, on purpose:**
-the filter opens no way out of the PC and takes no action, so a link that is
-catching up says nothing about whether an answer should be de-slopped. That is
-a decision, not an omission - it is said in the module, in
-`surfaces.toml` and in `src-tauri/src/antislop.rs`.
+pills, the "Allow em-dashes (—)" box inside "What it filters", the During/After
+radio, the Delivery Gate switch and the three dials, and the ON-only halves are
+hidden while it is off. Each control sends one change and re-reads afterwards; a
+refusal shows the PC's own sentence and springs the control back. **None of it
+is held on a stale link, on purpose:** the filter opens no way out of the PC and
+takes no action, so a link that is catching up says nothing about whether an
+answer should be de-slopped. That is a decision, not an omission - it is said in
+the module, in `surfaces.toml` and in `src-tauri/src/antislop.rs`.
 
 **Phone - Settings, How Jarvis talks** (`net/Antislop.kt`,
-`ui/screens/AntislopPlate.kt`), bound to the same route: the master switch and
-the During/After mode, in the same words. The scopes, the gate switch and the
-dials are the desktop card's on purpose - the phone is a settings mirror, not
-a second editor (`docs/ARCHITECTURE.md` §8). Its writes ARE held on a stale
-link (`JarvisRuntime.setAntislop`), the same reading every other phone setting
-takes: "at once" means no approval card, not "works while the link is down".
+`ui/screens/AntislopPlate.kt`), bound to the same route: the master switch, the
+"Allow em-dashes (—)" box and the During/After mode, in the same words and with
+the same one-line explanation. The scopes, the gate switch and the dials are the
+desktop card's on purpose - the phone is a settings mirror, not a second editor
+(`docs/ARCHITECTURE.md` §8). Its writes ARE held on a stale link
+(`JarvisRuntime.setAntislop`, `setAntislopMode`, `setAntislopEmDashes`), the
+same reading every other phone setting takes: "at once" means no approval card,
+not "works while the link is down".
 
 **By asking, on either app** (`backend/jarvis_settings_registry.py`):
 `"turn on anti-slop"`, `"turn off anti-slop"`, `"is anti-slop on?"`,
 `"set anti-slop mode to after"`. Typed on the PC's fast path, so no client
-change is needed for them.
+change is needed for them. The em-dash exemption has **no** typed phrase of its
+own: it is a checkbox in Settings, and inventing a spoken name for it would be a
+second control surface the PC's grammar does not have.
 
 ### 159.5 One checkable consequence
 

@@ -31,6 +31,7 @@ const STATE = {
   scopes: { copy: true, code: true, ui: true },
   dials: { energy: 1, rhythm: 2, motion: 1 },
   show_delivery_gate_on_ui_tasks: true,
+  allow_em_dashes: false,
   updated_at: 1793164200.0,
 };
 
@@ -43,6 +44,8 @@ check("the PC's own shape is read as the card draws it", () => {
   assert.deepEqual(v.scopes.map((s) => s.on), [true, true, true]);
   assert.deepEqual(v.dials, { energy: 1, rhythm: 2, motion: 1 });
   assert.equal(v.gate, true);
+  // OFF is the PC's default for the em-dash exemption too (Gemini review Q3).
+  assert.equal(v.allowEmDashes, false);
   // The three scope names are the card's own words, in that order.
   assert.deepEqual(v.scopes.map((s) => s.label),
     ["Copy & answers", "Code comments", "Web & UI design"]);
@@ -120,6 +123,47 @@ check("the three scopes and the two modes are exactly the contract's", () => {
 check("a dial pill's words name the dial and the step", () => {
   assert.equal(A.dialWords("energy", 2), "Energy 2 of 3");
   assert.equal(A.dialWords("motion", 3), "Motion 3 of 3");
+});
+
+/* ── The em-dash exemption (Gemini review Q3) ───────────────────────────── */
+
+check("the em-dash exemption is OFF unless the PC says a real yes", () => {
+  assert.equal(A.readAntislop(STATE).allowEmDashes, false);
+  assert.equal(A.readAntislop({ ...STATE, allow_em_dashes: true }).allowEmDashes, true);
+  // A PC that predates the field: unticked, which is the state it holds.
+  const { allow_em_dashes: _gone, ...older } = STATE;
+  assert.equal(A.readAntislop(older).allowEmDashes, false);
+  // Only a real `true` is a yes - a stray string is not a ticked box.
+  assert.equal(A.readAntislop({ ...STATE, allow_em_dashes: "true" }).allowEmDashes, false);
+  assert.equal(A.readAntislop({ ...STATE, allow_em_dashes: 1 }).allowEmDashes, false);
+});
+
+check("the em-dash row says the voiceprint already wins, and OFF is the default", () => {
+  assert.equal(A.EM_DASH_LABEL, "Allow em-dashes (\u2014)");
+  assert.match(A.EM_DASH_DETAIL, /Write Like Me/);
+  assert.match(A.EM_DASH_DETAIL, /already wins/);
+  assert.match(A.EM_DASH_DETAIL, /everywhere/);
+  // Its own sentences, and neither promises more than the box does.
+  assert.match(A.saidFor("em_dash", true), /allowed everywhere/);
+  assert.match(A.saidFor("em_dash", false), /stripped from prose/);
+  assert.notEqual(A.saidFor("em_dash", true), A.saidFor("gate", true),
+    "the em-dash box must not reuse another control's sentence");
+});
+
+/* ── The enforcement reality (Gemini review Q1) ─────────────────────────── */
+
+check("the card names what is checked in code and calls the rest guidance", () => {
+  assert.match(A.REALITY, /fixed list in code/);
+  assert.match(A.REALITY, /guidance only/);
+  // The deterministic list is named, so the sentence is checkable.
+  for (const said of ["em-dashes", "buzzwords", "comment banners", "contrast"]) {
+    assert.ok(A.REALITY.includes(said), `the fixed list must name ${said}`);
+  }
+  // And it never claims the live-browser rules are mechanically enforced.
+  assert.ok(!/every rule|all the rules|everything is (checked|enforced)/i.test(A.REALITY),
+    "the card may not claim every rule is mechanically enforced: " + A.REALITY);
+  assert.ok(!/tap targets|overflow|theme/i.test(A.REALITY),
+    "browser-only rules must not be listed as checked: " + A.REALITY);
 });
 
 if (fails.length) {

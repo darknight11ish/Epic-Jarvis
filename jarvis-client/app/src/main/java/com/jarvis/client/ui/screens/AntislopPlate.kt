@@ -32,16 +32,23 @@ import kotlinx.coroutines.launch
  * Anti-Slop filter, and the same route (2026-10-28; docs/JARVIS-API.md section
  * 159; backend `jarvis_antislop.py`).
  *
- * The PHONE has the master switch and the During/After mode. The desktop's card
- * also carries the three scopes, the Delivery Gate switch and the three
- * Liveliness dials; those are not mirrored here on purpose - this is a settings
- * mirror, not a second editor, and it grows no catalogue (CLAUDE.md's standing
- * rule; docs/ARCHITECTURE.md section 8).
+ * The PHONE has the master switch, the em-dash exemption and the During/After
+ * mode. The desktop's card also carries the three scopes, the Delivery Gate
+ * switch and the three Liveliness dials; those are not mirrored here on purpose
+ * - this is a settings mirror, not a second editor, and it grows no catalogue
+ * (CLAUDE.md's standing rule; docs/ARCHITECTURE.md section 8).
  *
- * One tap is one change, held on a stale link ([JarvisRuntime.setAntislop] and
- * [JarvisRuntime.setAntislopMode]) and re-read after every write, so what is on
- * screen is the PC's truth and never the tap's. Neither direction raises an
- * approval card: it changes only the wording of an answer.
+ * Two sentences here are honesty rather than decoration (2026-10-28, Gemini
+ * review Q1/Q3): the line under the description names which rules are really
+ * checked in code and which are only guidance, and the "Allow em-dashes (—)"
+ * row's detail says that Write Like Me's own habit already wins - the box is
+ * the blanket "keep them everywhere", not the voiceprint rule.
+ *
+ * One tap is one change, held on a stale link ([JarvisRuntime.setAntislop],
+ * [JarvisRuntime.setAntislopMode] and [JarvisRuntime.setAntislopEmDashes]) and
+ * re-read after every write, so what is on screen is the PC's truth and never
+ * the tap's. Neither direction raises an approval card: it changes only the
+ * wording of an answer.
  */
 @Composable
 internal fun AntislopPlate(canAct: Boolean) {
@@ -107,6 +114,11 @@ internal fun AntislopPlate(canAct: Boolean) {
         }
         else -> {
             Text(v.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Gap(4)
+            // The enforcement reality, in one sentence: the fixed list really is
+            // checked in code, the layout and taste rules are guidance only.
+            Text(Antislop.REALITY, style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo)
             Gap(8)
             // One switch with its words: the row takes the taps and TalkBack
             // reads the title with its on/off state - the same shape as the
@@ -136,6 +148,33 @@ internal fun AntislopPlate(canAct: Boolean) {
             // drawn with the switch's own state rather than offered over an
             // off filter - the desktop card does the same.
             if (v.enabled) {
+                // The em-dash exemption (2026-10-28, Gemini review Q3). ON-only,
+                // like the desktop card's row: an exemption from a filter that
+                // is not running would be a control that does nothing. The row
+                // reads "Allow em-dashes (—)", and its detail line says who
+                // already wins - Write Like Me's own habit - so the box is
+                // never read as that rule.
+                Gap(12)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = v.allowEmDashes,
+                            enabled = canAct && !busy,
+                            role = Role.Switch,
+                            onValueChange = { on ->
+                                write { JarvisRuntime.setAntislopEmDashes(on) }
+                            },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(Antislop.EM_DASH_LABEL, style = MaterialTheme.typography.titleSmall,
+                        color = chrome.textHi, modifier = Modifier.weight(1f))
+                    Switch(checked = v.allowEmDashes, enabled = canAct && !busy,
+                        onCheckedChange = null)
+                }
+                Text(Antislop.EM_DASH_DETAIL, style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid)
                 Gap(12)
                 Text("How it applies", style = MaterialTheme.typography.titleSmall,
                     color = chrome.textHi)

@@ -651,7 +651,7 @@
       "name": "Anti-Slop filter",
       "group": "Talking",
       "surface": "both",
-      "where": "Settings, How Jarvis talks, Anti-Slop filter. On the phone, Settings, How Jarvis talks, which has the switch and the During/After mode.",
+      "where": "Settings, How Jarvis talks, Anti-Slop filter. On the phone, Settings, How Jarvis talks, which has the switch, the em-dash exemption and the During/After mode.",
       "control": {
         "type": "title",
         "setting_keys": [
@@ -696,7 +696,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on anti-slop",
-        "screen_path": "desktop Settings: How Jarvis talks, Anti-Slop filter; phone: Settings, How Jarvis talks (the switch and the mode)"
+        "screen_path": "desktop Settings: How Jarvis talks, Anti-Slop filter; phone: Settings, How Jarvis talks (the switch, the em-dash exemption and the mode)"
       },
       "command": {
         "status": "switch",

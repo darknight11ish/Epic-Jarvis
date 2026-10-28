@@ -3,7 +3,7 @@
 The owner's feature list, as data: 142 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 d82ae9896131a545161ed44745b18e8c4809f2c93b6ada721146ea7c7827c7af); the apps' Features pages read their own
+`features/features.json` (sha256 82e5352ebf8330ab2f2363f6bc2064e90fb684244fb3dd51dd3eb79c079c1ee0); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "d82ae9896131a545161ed44745b18e8c4809f2c93b6ada721146ea7c7827c7af"
+SOURCE_SHA256 = "82e5352ebf8330ab2f2363f6bc2064e90fb684244fb3dd51dd3eb79c079c1ee0"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -148,10 +148,10 @@ FEATURES = (
         "id": "anti-slop",
         "group": "Talking",
         "title": "Anti-Slop filter",
-        "what": "Takes the tells that make writing read as machine-made out of what Jarvis writes: em-dashes in prose, AI buzzwords like seamless and revolutionary, decorative comment banners in code, dead buttons and unreadable contrast. The rules are distilled from the MIT-licensed miqdadbadjuber/anti-slop ruleset, which is vendored on this PC - nothing is downloaded when it runs.",
-        "where": "Settings, How Jarvis talks, Anti-Slop filter. On the phone, Settings, How Jarvis talks, which has the switch and the During/After mode.",
+        "what": "Watches what Jarvis writes for the tells that make it read as machine-made: em-dashes in prose, AI buzzwords like seamless and revolutionary, decorative comment banners in code, dead buttons and unreadable contrast. The rules are distilled from the MIT-licensed miqdadbadjuber/anti-slop ruleset, which is vendored on this PC - nothing is downloaded when it runs.",
+        "where": "Settings, How Jarvis talks, Anti-Slop filter. On the phone, Settings, How Jarvis talks, which has the switch, the em-dash exemption and the During/After mode.",
         "asks": "No card either way - it changes only how an answer is worded.",
-        "limit": "Off costs 0 prompt tokens: nothing is added to a prompt and no answer is rewritten. The three scopes (copy, code and UI), the Delivery Gate switch and the three Liveliness dials are on the desktop card only, and the phone deliberately has the switch and the mode.",
+        "limit": "Off costs 0 prompt tokens: nothing is added to a prompt and no answer is rewritten. The rules really checked in code are a fixed list (em-dashes, buzzwords, comment banners, dead buttons, contrast, focus rings, glass and glow caps); layout, taste and rendered sizes are guidance only, and the Playwright suites are what prove those. The three scopes, the Delivery Gate switch and the three Liveliness dials are on the desktop card only; the phone has the switch, the em-dash exemption and the mode. Allow em-dashes is off by default, and Write Like Me's own em-dash habit already wins whether it is on or off.",
         "surface": "both",
         "aliases": ["anti slop", "slop filter", "ai slop"],
         "covers": ["settings.manner"],

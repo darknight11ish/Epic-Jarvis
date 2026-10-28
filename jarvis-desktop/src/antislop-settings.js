@@ -5,7 +5,8 @@
  * Two Rust commands (src-tauri/src/antislop.rs), Settings only:
  *  - get_antislop: the whole state, in the PC's own shape;
  *  - set_antislop {change}: ONE change - the master switch, one scope, the
- *    During/After mode or a Liveliness dial.
+ *    During/After mode, the Delivery Gate, the Liveliness dials or the em-dash
+ *    exemption.
  *
  * NEITHER IS HELD ON A STALE LINK, and neither raises an approval card, in
  * either direction. The anti-slop filter changes the wording and the output
@@ -27,9 +28,12 @@ import {
   DIALS,
   DIAL_KEYS,
   DIAL_STEPS,
+  EM_DASH_DETAIL,
+  EM_DASH_LABEL,
   GATE_DETAIL,
   GATE_LABEL,
   MODES,
+  REALITY,
   dialsAfter,
   dialWords,
   modeSaid,
@@ -53,12 +57,16 @@ const el = {
   state: $("asf-state"),
   body: $("asf-body"),
   detail: $("asf-detail"),
+  reality: $("asf-reality"),
   offNote: $("asf-off-note"),
   enabled: $("asf-enabled"),
   enabledLabel: $("asf-enabled-label"),
   enabledDetail: $("asf-enabled-detail"),
   scopesBlock: $("asf-scopes-block"),
   scopes: $("asf-scopes"),
+  emDash: $("asf-em-dash"),
+  emDashLabel: $("asf-em-dash-label"),
+  emDashDetail: $("asf-em-dash-detail"),
   modesBlock: $("asf-modes-block"),
   modes: $("asf-modes"),
   gateRow: $("asf-gate-row"),
@@ -130,6 +138,11 @@ function paint() {
   if (el.body) el.body.hidden = false;
   if (el.title) el.title.textContent = view.title;
   say(el.detail, view.detail);
+  // The page's own sentence, not the PC's: the filter's enforcement split is a
+  // fact about THIS version of the feature (a fixed list checked in code, the
+  // rest prompt-guided), and a backend that sent its own words for it would be
+  // free to drift from what the audit really does. Gemini review Q1.
+  say(el.reality, REALITY);
   say(el.offNote, view.offNote);
   if (el.enabled) el.enabled.checked = view.enabled;
   if (el.enabledLabel) el.enabledLabel.textContent = view.title;
@@ -156,6 +169,13 @@ function paint() {
       el.scopes.append(row);
     }
   }
+
+  // The em-dash exemption sits inside the scopes block - a hole cut in that
+  // list, not a fourth scope - so paintLive() hides it with the block. OFF
+  // unless the PC says a real yes (readAntislop reads `=== true`).
+  if (el.emDashLabel) el.emDashLabel.textContent = EM_DASH_LABEL;
+  if (el.emDashDetail) el.emDashDetail.textContent = EM_DASH_DETAIL;
+  if (el.emDash) el.emDash.checked = view.allowEmDashes;
 
   if (el.modes) {
     el.modes.replaceChildren();
@@ -277,12 +297,26 @@ async function changeGate(on) {
   if (!ok && el.gate && view && view.available) el.gate.checked = view.gate;
 }
 
+/**
+ * The em-dash exemption. ONE field, in the PC's own spelling
+ * (`allow_em_dashes`), so ticking it cannot reset a scope, the mode, a dial or
+ * the gate. It is NOT the voiceprint rule: Write Like Me already wins on its
+ * own (`R-37`), and the row's detail line says so.
+ */
+async function changeEmDash(on) {
+  const ok = await send({ allow_em_dashes: on === true }, saidFor("em_dash", on === true));
+  if (!ok && el.emDash && view && view.available) {
+    el.emDash.checked = view.allowEmDashes;
+  }
+}
+
 async function changeDial(key, value) {
   await send({ dials: dialsAfter(view, key, value) }, `${DIALS[key].label} set to ${value}.`);
 }
 
 if (el.enabled) el.enabled.addEventListener("change", () => changeEnabled(el.enabled.checked));
 if (el.gate) el.gate.addEventListener("change", () => changeGate(el.gate.checked));
+if (el.emDash) el.emDash.addEventListener("change", () => changeEmDash(el.emDash.checked));
 
 // A change made anywhere else - the phone, or "turn on anti-slop" typed into
 // chat - arrives on the bus as one "settings" frame. The event is a doorbell,
