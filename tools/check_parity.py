@@ -713,15 +713,6 @@ PHONE_ONLY = {
     # needs. Move this to CLASSIFICATION as "ported" the moment the desktop's own
     # card calls the route.
     "/api/card-prefs": ("desktop-todo", "\"Approval cards read short\" (the owner's request of 2026-10-09; docs/JARVIS-API.md section 127; backend/jarvis_card_summary.py, card-prefs.patch): the \"Start short\" / \"Always show everything\" choice for each approval card, kept in card-prefs.json so both apps read one value. The PHONE has it today (net/CardSummary.kt, ui/screens/ApprovalCardsPlate.kt, Settings under Appearance); the desktop's own card is NOT built yet, which is why this is desktop-todo rather than phone-only. docs/DESKTOP-APPROVAL-CARD-PREF.md names what it needs (src/main.js's refreshApproval, a settings.html card, and the `mode` field it reads); until then the desktop changes the setting by asking, and jarvis_settings_registry.SECTIONS keeps its settings.approval-cards row app=\"phone\" so \"open approval cards\" never names a place the desktop does not have."),
-    # Chat pins (the owner's ask of 2026-10-27: "both should have pinnable
-    # chats"): POST /api/history/pin {"id", "pinned"} is metadata only - no
-    # approval card, no word of the chat - and GET /api/history's rows carry
-    # "pinned". The PHONE has it (net/ChatLog.kt, JarvisRuntime.pinChat, the
-    # History row menu). The DESKTOP's own History has no pin yet: that is the
-    # parallel PC/HUD lane's half. "desktop-todo", never "phone-only" - the
-    # owner asked for both. Move this to CLASSIFICATION as "ported" the moment
-    # the desktop's History calls the route.
-    "/api/history/pin": ("desktop-todo", "Pin a kept conversation to the top of History, or take the pin off (the owner's ask of 2026-10-27; the shared contract with the PC/HUD lane; docs/JARVIS-API.md gain a section when the server half lands): POST {\"id\", \"pinned\"} -> 200 {\"ok\": true, \"id\", \"pinned\"}, 404 an unknown id, 400 a bad body; GET /api/history rows carry \"pinned\": bool. Metadata only: no approval card and no word of the chat is sent. The PHONE calls it (net/ChatLog.kt, JarvisRuntime.pinChat, ui/screens/HistoryScreen.kt's row menu) and reads the field in ChatLog.page/ChatLog.search. The DESKTOP's History does not have a pin yet - the PC/HUD lane is building that half - which is why this is desktop-todo rather than phone-only. Move it to CLASSIFICATION as \"ported\" once the desktop's own History calls it."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 
