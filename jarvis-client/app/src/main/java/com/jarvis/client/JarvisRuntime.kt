@@ -3043,6 +3043,12 @@ object JarvisRuntime {
     // rule 4's stale-link hold is the only holding that applies - and "at once"
     // means no card, not "works while the link is down", the same reading
     // [setPromptCoach] takes.
+    //
+    // These three call `api.antislopPost` DIRECTLY, never through
+    // [writeNoticingCards]: that wrapper refreshes the approval queue and
+    // returns a `DesktopWrite.Outcome`, and this route can never raise a card
+    // (the filter only changes the words of an answer). Wrapping it would both
+    // be a type mismatch and imply a card this feature must never have.
 
     /** `GET /api/antislop`. A read: never held. */
     suspend fun antislop(): ApiResult<JsonObject> = api.antislop()
@@ -3054,7 +3060,7 @@ object JarvisRuntime {
     suspend fun setAntislop(on: Boolean): String {
         actionBlocker()?.let { return it }
         return com.jarvis.client.net.Antislop.replyLine(
-            writeNoticingCards { api.antislopPost(com.jarvis.client.net.Antislop.enabledBody(on)) },
+            api.antislopPost(com.jarvis.client.net.Antislop.enabledBody(on)),
             on,
         )
     }
@@ -3069,7 +3075,7 @@ object JarvisRuntime {
         val body = com.jarvis.client.net.Antislop.modeBody(mode)
             ?: return "That is not one of the two modes."
         return com.jarvis.client.net.Antislop.modeReplyLine(
-            writeNoticingCards { api.antislopPost(body) },
+            api.antislopPost(body),
             mode,
         )
     }
@@ -3085,9 +3091,7 @@ object JarvisRuntime {
     suspend fun setAntislopEmDashes(on: Boolean): String {
         actionBlocker()?.let { return it }
         return com.jarvis.client.net.Antislop.emDashReplyLine(
-            writeNoticingCards {
-                api.antislopPost(com.jarvis.client.net.Antislop.emDashBody(on))
-            },
+            api.antislopPost(com.jarvis.client.net.Antislop.emDashBody(on)),
             on,
         )
     }
