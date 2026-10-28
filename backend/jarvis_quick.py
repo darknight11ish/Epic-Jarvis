@@ -246,14 +246,16 @@ from Notion to transfer them to Obsidian" - false, twice: this PC has
 `jarvis_documents.import_notion` (unzip a Notion export into a NEW folder in a
 listed folder; PC only; no card, because that folder was approved when it was
 listed) and `jarvis_notion_obsidian.py` (the export tidied into an Obsidian
-vault, `/api/notion/import`; PC only; ONE card). The model has no Notion tool
-and the feature list it may read has no row for either one, so it answered
-the only way it could. This file now answers instead, from the real steps and
-the real limits: the export itself is made in Notion, the import unpacks into
-a NEW folder and edits nothing on Notion's side, and the vault converter is
-built but has no button in either app yet - so the answer says that rather
-than promising either half is automatic. It reads nothing, changes nothing,
-opens no card, and is in READ_ONLY_INTENTS.
+vault, `/api/notion/import`; PC only; ONE card). The model can drive neither:
+it is offered no Notion tool, and the guide it may ask mentions the folder
+import only inside the `folders` row (asking it for "notion export" answers
+"I do not have a feature called ...") and has no row at all for the converter.
+So it answered the only way it could. This file now answers instead, from the
+real steps and the real limits: the export itself is made in Notion, the import
+unpacks into a NEW folder and edits nothing on Notion's side, and the vault
+converter is built but has no button in either app yet - so the answer says
+that rather than promising either half is automatic. It reads nothing, changes
+nothing, opens no card, and is in READ_ONLY_INTENTS.
 """
 from __future__ import annotations
 
@@ -5645,16 +5647,21 @@ def _run_update_start(desktop, *, fetch=None, tier_of=None, spawn=None) -> Resul
 # "I cannot directly access or process files from Notion to transfer them to
 # Obsidian without explicit file paths or content provided here." The PC has
 # two real things for that request (jarvis_documents.import_notion, and
-# jarvis_notion_obsidian's /api/notion/import), but the model is offered no
-# Notion tool and the feature list it can read has no row for either - so the
-# one honest thing a machine here can do is answer with the steps, the limits,
-# and which half of it has no button yet.
+# jarvis_notion_obsidian's /api/notion/import), but the model can drive neither:
+# it is offered no Notion tool, and the guide it can ask mentions the folder
+# import only inside the `folders` row (asking for "notion export" answers that
+# it does not have that feature) and has no row for the converter - so the one
+# honest thing a machine here can do is answer with the steps, the limits, and
+# which half of it has no button yet.
 #
-# THE WORDS ARE PINNED TO THE REAL ONES. `test_notion_answer.py` reads
-# `jarvis_documents.NOTION_DETAIL`, `jarvis_notion_obsidian.PATHS` and the
-# desktop's own `NOTION_LABEL` (jarvis-desktop/src/folders.js) and holds the
-# sentences below to them, so a renamed button, moved route or reworded export
-# step fails a suite instead of quietly leaving a wrong answer in place.
+# THE WORDS ARE HELD TO THE REAL ONES. `test_notion_answer.py` checks every
+# step below against `jarvis_documents.NOTION_DETAIL` and `NOTION_TITLE`,
+# against `jarvis_notion_obsidian.PATHS` and its gate action, and against the
+# shipped `jarvis-framework.toml`'s `import_notion_export = "ask"` tier - so a
+# reworded export step, a moved route or a loosened tier fails a suite instead
+# of quietly leaving a wrong answer in place. It also drives the folder import
+# end to end on a real zip in a temp folder, because "I unpack it into a NEW
+# folder" is a promise and not a sentence.
 #
 # NOTHING IS DONE BY SAYING THIS: the .zip is chosen with this PC's own file
 # picker (folders.rs `import_notion`, PC only), so the answer can only say

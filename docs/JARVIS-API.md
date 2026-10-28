@@ -6100,22 +6100,25 @@ form, and the Brain window's own Coming up row has no Open control - the HUD's
 The owner asked exactly that on 2026-10-27 at 20:57:32 and Jarvis answered
 *"I cannot directly access or process files from Notion to transfer them to
 Obsidian without explicit file paths or content provided here"* - false about
-this PC. Two real things exist for that request, and the model has neither:
-`jarvis_documents.import_notion` (POST `/api/folders/import`, PC only, no card
-of its own - the folder it writes into was approved when it was put on the
-list), and `jarvis_notion_obsidian.py` (POST `/api/notion/preview` and
+this PC. Two real things exist for that request, and the model can drive
+neither: `jarvis_documents.import_notion` (POST `/api/folders/import`, PC only,
+no card of its own - the folder it writes into was approved when it was put on
+the list), and `jarvis_notion_obsidian.py` (POST `/api/notion/preview` and
 `POST /api/notion/import`, PC only, ONE `import_notion_export` card; §152).
-The model is offered no Notion tool, and the owner's feature list
-(`features/features.json`, which the `feature_guide` tool answers from) has no
-row for either one, so it answered the only way it could.
+The model is offered no Notion tool, and the feature guide it can ask
+(`features/features.json`) describes neither as a thing it can do: the folder
+import is mentioned only inside the `folders` row ("The folders Jarvis is
+allowed to read, and the Notion export"), asking the guide for "notion export"
+answers "I do not have a feature called ...", and the vault converter has no
+row at all. So it answered the only way it could.
 
 `jarvis_quick.py` now answers instead - `quick: "notion_export"`, no model, no
 state read, no card, and in `READ_ONLY_INTENTS` so it does not take away what
 "cancel that" would undo. It matches a whole sentence that asks to
-process / import / convert / move / transfer / copy / migrate / bring / export /
-sync Notion notes, pages, files or export into Obsidian, including the question
-forms ("how do I ...", "what's the best way to ..."), plus "import my Notion
-export" on its own. The answer is the real flow, in Notion's own words: Notion's
+process / import / convert / move / transfer / copy / migrate / bring / pull /
+load / put / export / sync / take Notion notes, pages, files or export into
+Obsidian, including the question forms ("how do I ...", "what's the best way
+to ..."), plus "import my Notion export" on its own. The answer is the real flow, in Notion's own words: Notion's
 Settings, Export all workspace content, as Markdown & CSV; on this PC, Settings,
 Folders Jarvis may look in, then Bring in a Notion export - pick a folder from
 the list and Choose the .zip. It says the notes land in a **NEW** folder there
@@ -6133,7 +6136,7 @@ to the model, which may still answer it badly - the fix is the phrasings above,
 not a Notion tool. And in a private chat every read-only fast-path answer goes
 to the model by design (§156), so this one does too.
 
-Tests: `backend/test_notion_answer.py` - the owner's sentence and 13 close
+Tests: `backend/test_notion_answer.py` - the owner's sentence and 15 close
 phrasings answered with no model, 9 near misses keeping their own answer, every
 step checked against `NOTION_DETAIL`, `NOTION_TITLE`, `jarvis_notion_obsidian.PATHS`
 and the shipped TOML's `import_notion_export = "ask"` tier, the folder import

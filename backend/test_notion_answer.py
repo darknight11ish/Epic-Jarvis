@@ -17,10 +17,12 @@ and Jarvis answered:
 Every sentence of that is wrong about this PC. `jarvis_documents.import_notion`
 unzips a Notion export into a NEW folder in a folder the owner listed (PC only,
 no card), and `jarvis_notion_obsidian.py` turns that export into an Obsidian
-vault (`/api/notion/import`, PC only, ONE card). The model has no Notion tool
-and the owner's feature list has no row for either one, so it answered the only
-way it could. The fix is a fixed answer in `jarvis_quick.py`, and this suite is
-what holds it to the truth:
+vault (`/api/notion/import`, PC only, ONE card). The model can drive neither:
+it is offered no Notion tool, and the guide it may ask mentions the folder
+import only inside the `folders` row - asking it for "notion export" answers
+"I do not have a feature called ..." - and has no row at all for the converter.
+So it answered the only way it could. The fix is a fixed answer in
+`jarvis_quick.py`, and this suite is what holds it to the truth:
 
   1. the owner's exact sentence, and close phrasings, are answered without the
      model, and a sentence with one more condition ("... tomorrow at 5") is not;
@@ -159,6 +161,11 @@ def t_the_owners_own_sentence_is_answered_without_the_model():
 
 def t_close_phrasings_and_the_follow_up():
     said = (
+        # `normalise` leaves "i'd" contracted, so the grammar takes that form
+        # as written (it used to demand "i 'd like", which normalise never
+        # produces - the exact bug this pair holds fixed).
+        "I'd like to move all my notion notes into obsidian",
+        "I'd love to convert my notion notes to obsidian",
         "process all of my notion notes into obsidian",
         "convert my notion notes to obsidian",
         "import my notion export into obsidian",
@@ -176,6 +183,10 @@ def t_close_phrasings_and_the_follow_up():
     for s in said:
         i = Q.match(s)
         check(f"{s!r} is answered without the model", i is not None and i.name == "notion_export", i)
+
+    # The premise of the contracted form above: normalise does not expand it.
+    check("... 'i'd like to' stays contracted through normalise",
+          Q.normalise("I'd like to move all my notion notes into obsidian").startswith("i'd like"))
 
     # The follow-up on its own: the .zip is picked with the PC's own picker, so
     # the answer can only say where - and it must not re-run the export steps
