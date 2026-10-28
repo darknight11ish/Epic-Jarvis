@@ -25,6 +25,11 @@
  * their visible words from the PC at read time; for those the fixture says
  * `fallback: true` and this file only requires the page to keep showing the
  * same fallback words.
+ *
+ * It DOES prove one thing the order alone could not: that each row is drawn
+ * INSIDE the card its `section` names (2026-10-28, the settings audit's G3 -
+ * `supervise` was drawn in the Pictures card while the registry, the generated
+ * fixture and every checker said "Starting Jarvis for you").
  */
 
 import assert from "node:assert/strict";
@@ -146,11 +151,11 @@ await check("the catalogue is the fixture, row for row and in order", async () =
   }
 });
 
-await check("the fixture says how many rows there are, and it is 29 desktop toggles", async () => {
-  assert.equal(FIX.counts.desktop, 29);
-  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 29);
+await check("the fixture says how many rows there are, and it is 31 desktop toggles", async () => {
+  assert.equal(FIX.counts.desktop, 31);
+  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 31);
   assert.equal(FIX.counts.phone, 3);
-  assert.equal(FIX.counts.all, 32);
+  assert.equal(FIX.counts.all, 34);
   // The number this whole feature was briefed with was wrong once already
   // ("all 19"): the 19 is the count of rows with a BARE `<label class="toggle">`,
   // and the seven rows that also carry a label id were left out of it.
@@ -160,8 +165,10 @@ await check("the fixture says how many rows there are, and it is 29 desktop togg
   // so both moved by one again - 20 to 21, 27 to 28.
   // "Data and maths sandbox" (LM-1C, 2026-10-18) is a bare one as well: 21 to
   // 22, 28 to 29 (and two phone rows to three).
+  // The two Learning rows (2026-10-28, the settings audit's G1) are bare too:
+  // 22 to 24, 29 to 31 (and three phone rows stay three).
   const bare = (HTML.match(/^[ \t]*<label class="toggle">[ \t]*$/gm) || []).length;
-  assert.equal(bare, 22, "the bare-label count moved - re-read the 29 claim");
+  assert.equal(bare, 24, "the bare-label count moved - re-read the 31 claim");
   assert.equal(FIX.counts.desktop, bare + 7);
 });
 
@@ -177,6 +184,93 @@ await check("exactly one row is flagged as not being a setting", async () => {
 await check("the page has one toggle row per catalogue row, in order", async () => {
   const want = FIX.rows.filter((r) => r.owner === "desktop").map((r) => r.id);
   assert.deepEqual(PAGE.map((r) => r.inputId), want);
+});
+
+/* ── 2b. The row really sits INSIDE the card its `section` names ─────────── */
+
+/**
+ * The ids of the `<section>`/`<details>` containers open at `at`, nearest
+ * first. A row's `section` is a card id (`start-jarvis`) or the "More options"
+ * drawer (`more-options`, which is a `<details>` holding cards of its own), so
+ * walking every open container - not just the nearest - is what makes both
+ * spellings checkable: `autostart` is inside `start-jarvis` INSIDE
+ * `more-options`, and both are true.
+ *
+ * Nothing else checked this before: the fixture's `section` field was copied
+ * from the registry into the catalogue, but a row could be drawn inside a
+ * different card while the registry said otherwise - which is exactly how
+ * `supervise` ("Let Jarvis Desktop start and stop Jarvis") came to live inside
+ * the Pictures card while every checker agreed it was in "Starting Jarvis for
+ * you", and the Pictures body being hidden could hide the switch (2026-10-28
+ * settings audit, G3).
+ */
+function containerIds(html, at) {
+  const re = /<(\/?)(section|details)\b([^>]*)>/g;
+  const stack = [];
+  let m;
+  while ((m = re.exec(html)) && m.index < at) {
+    if (m[1] === "/") {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].tag === m[2]) {
+          stack.splice(i, 1);
+          break;
+        }
+      }
+    } else {
+      const id = /\bid="([^"]+)"/.exec(m[3]);
+      stack.push({ tag: m[2], id: id ? id[1] : "" });
+    }
+  }
+  return stack.map((s) => s.id).filter(Boolean);
+}
+
+await check("every row is drawn inside the card its section names", async () => {
+  for (const c of FIX.rows.filter((r) => r.owner === "desktop")) {
+    const at = HTML.indexOf(`id="${c.input}"`);
+    assert.ok(at > 0, `${c.id}: its <input> is not on the page`);
+    const chain = containerIds(HTML, at);
+    assert.ok(
+      chain.includes(c.section),
+      `${c.id} is not inside #${c.section} - it is inside ${chain.join(" < ") || "(no card)"}`,
+    );
+  }
+});
+
+/* ── 2c. The read-aloud feature names controls that really exist ─────────── */
+
+/**
+ * The 2026-10-28 settings audit's G2: `features/features.json` told the owner
+ * "Settings, Voice, \"Read aloud\"" - a switch that does not exist. Read-aloud
+ * is on by default and no switch turns it off; the Voice card's real controls
+ * are two choices ("Answers that use what Jarvis remembers" / "Answers that
+ * use sensitive saved facts"), and the HUD card's "Read-aloud buttons on
+ * answers" row adds a speaker to a finished answer WITHOUT turning read-aloud
+ * on or off.
+ *
+ * So this holds the prose to the page, not to another sentence: every quoted
+ * control the row names must exist in settings.html, and the row must say what
+ * the HUD row is not. A future rewrite that points at a control nobody built
+ * fails here.
+ */
+await check("read-aloud names real Settings controls, and says what the HUD row is not", async () => {
+  const FEATURES = JSON.parse(read("../features/features.json"));
+  const row = FEATURES.find((f) => f.id === "read-aloud");
+  assert.ok(row, "read-aloud is not in features/features.json");
+  assert.ok(/Read-aloud buttons on answers/.test(row.where),
+    "the HUD row's own words are not named");
+  assert.ok(/does not turn read-aloud on or off/.test(row.where),
+    "the row no longer says the HUD buttons are not the switch");
+  assert.ok(!/Settings, Voice, "Read aloud"/.test(row.where),
+    "the old claim (a Voice switch called \"Read aloud\") is back");
+  const quoted = [...row.where.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(quoted.length >= 3, `only ${quoted.length} control(s) named: ${quoted}`);
+  for (const name of quoted) {
+    assert.ok(HTML.includes(name), `settings.html has no control called "${name}"`);
+  }
+  // The HUD row is a real <input>, and it is not a read-aloud switch: its own
+  // detail says it adds the speaker a finished answer can be read out from.
+  assert.ok(HTML.includes('id="hud-read-aloud-icons"'), "the HUD read-aloud row is gone");
+  assert.ok(/speaker/i.test(row.what), "the per-answer speaker is not mentioned");
 });
 
 await check("every row's id, span ids, label, detail and attributes match the page", async () => {

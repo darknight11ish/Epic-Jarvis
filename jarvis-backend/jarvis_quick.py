@@ -4417,6 +4417,18 @@ def _feature_own_controls(row: dict) -> tuple:
     except Exception:
         return (), ()
     fid = str((row or {}).get("id") or "")
+    # An Always-On SAFETY RULE owns no switch (the same rule
+    # `jarvis_feature_guide._build_matrix` applies through ALWAYS_ON_IDS,
+    # Lead's 2026-10-22 ruling). It matters here because `switches_for` links a
+    # switch through the SECTION a feature's covers name, and a section can be
+    # shared: "Lock Jarvis" (app-lock) and the chat-history switch both live in
+    # Settings, Security. Without this, "turn on Lock Jarvis" found exactly one
+    # switch in its section and would have turned chat history on - the one
+    # thing this matcher must never do. Caught by
+    # tools/check_feature_controls.py guard 2 on 2026-10-28, when
+    # chat_history.section became "security" (the settings audit's G5).
+    if fid in (getattr(FG, "ALWAYS_ON_IDS", frozenset()) or ()):
+        return (), ()
     keys = list((getattr(FG, "EXTRA_CONTROLS", {}) or {}).get(fid, ()))
     if not keys:
         own = (getattr(FG, "OWN_CONTROLS", {}) or {}).get(fid) or ()

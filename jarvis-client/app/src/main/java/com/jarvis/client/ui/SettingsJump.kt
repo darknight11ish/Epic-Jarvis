@@ -108,6 +108,11 @@ object SettingsJump {
         // desktop jump list's own words for the same section (settings.html,
         // `#sandbox`).
         Entry("Data and maths sandbox", "sandbox"),
+        // "Learning" (2026-10-28, the settings audit's G1): the two learning
+        // switches (background learning and the sensitive-topics one), the
+        // same switches the Brain's Memory tab draws. Its own row on the
+        // screen, right after the sandbox, so its entry goes here too.
+        Entry("Learning", "learning"),
         // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
         // fourteen questions and its READ-ONLY plan. It is the last row on the
         // screen, so it is the last entry here too - the label is the desktop

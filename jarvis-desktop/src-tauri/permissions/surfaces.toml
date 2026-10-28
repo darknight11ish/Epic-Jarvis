@@ -1671,6 +1671,29 @@ permissions = [
 ]
 
 # ---------------------------------------------------------------------------
+# The two learning switches for Settings (2026-10-28, the settings audit's G1;
+# `brain/auto_learn.rs` and `brain.rs`, the routes the Brain already uses -
+# GET /api/memory/learning, POST /api/memory/learning and
+# POST /api/memory/learning/sensitive). The owner's requirement of 2026-10-22:
+# every switch must be findable AND adjustable in Settings. These are the
+# Brain's OWN three narrow commands, granted so a change here is the same write
+# path as the Brain and the typed sentence, not a second idea of learning.
+# Deliberately NOT the fact list, the "saved unseen" ids, Forget or export:
+# only the switch's state and the two switch writes are reachable here, so
+# this window still cannot read a saved fact. ON raises the PC's ONE
+# `learning_enable`/`learning_sensitive_enable` card; OFF is at once; both
+# writes are held on a stale link in Rust (rule 4). Settings only.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "learning-settings"
+description = "Read the two learning switches and their waiting cards, turn background learning on (one approval card on this PC) or off at once, and turn automatic remembering of sensitive topics on (one card) or off. Settings only; it never reads a saved fact, never forgets one and never exports anything."
+permissions = [
+  "allow-brain-memory-learning",
+  "allow-brain-memory-learning-status",
+  "allow-brain-memory-learning-sensitive",
+]
+
+# ---------------------------------------------------------------------------
 # The big coding model's switch (2026-10-22; `big_coder.rs`; backend
 # `jarvis_big_coder.py`, route added by `big-coder.patch`, JARVIS-API §126).
 # Read the switch and ask for it ON (the PC raises ONE approval card) or OFF at

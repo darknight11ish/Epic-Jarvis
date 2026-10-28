@@ -32,18 +32,20 @@ WHAT IT CHECKS
   4. each row's `indent` is the page's real indentation - the number the
      generator needs to put the row back where it found it;
   5. the count is stated out loud, so a number that moves is noticed rather
-     than absorbed. It is **29** (28 until "Making pictures" was added on
-     2026-10-11, 26 before "Click through to what is behind" on 2026-10-10),
-     and it has been mis-reported as 19: a bare `<label class="toggle">`
-     string match misses the rows that also carry a label id;
+     than absorbed. It is **31** (29 until the two Learning rows joined on
+     2026-10-28, 28 until "Making pictures" was added on 2026-10-11, 26
+     before "Click through to what is behind" on 2026-10-10), and it has been
+     mis-reported as 19: a bare `<label class="toggle">` string match misses
+     the rows that also carry a label id;
   6. every row's `setting` names a real BoolSetting, or is None. None is the
-     normal case (21 of the 28): those rows have no spoken "adjust", and
+     normal case (13 of the 31): those rows have no spoken "adjust", and
      putting them in BOOL_SETTINGS would make the phrase match and the
      dispatch then fail - `jarvis_quick.py:2788` matches on that table and
-     `:3703` dispatches on the same key. Seven desktop rows ARE the same
-     switch as a spoken setting ("Making pictures" joined them on
-     2026-10-11: "turn on making pictures" and the row are one switch
-     through one function, `set_pictures`).
+     `:3703` dispatches on the same key. Eighteen desktop rows ARE the same
+     switch as a spoken setting ("Making pictures" joined them on 2026-10-11:
+     "turn on making pictures" and the row are one switch through one
+     function, `set_pictures`; the two Learning rows joined on 2026-10-28 for
+     the settings audit's G1).
 
 WHAT IT DOES NOT CHECK
 
@@ -79,7 +81,10 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: is exactly what this constant is here to catch.
 #: 29 since LM-1C (2026-10-18) gave the data and maths sandbox its own card
 #: and its one switch - the row that makes the sandbox clickable on the PC.
-EXPECTED_ROWS = 29
+#: 31 since the settings audit's G1 (2026-10-28) gave the two learning switches
+#: their own Settings card - the only real switch features with no Settings row
+#: on either app before that.
+EXPECTED_ROWS = 31
 
 #: The rows that are not settings switches, with the reason. These are in
 #: SETTINGS_ROWS (so the page and the table still agree) but carry
@@ -156,11 +161,11 @@ def t_the_count_is_what_it_is():
           f"re-count and update EXPECTED_ROWS and SETTINGS_ROWS together")
     bare = len(re.findall(r'^[ \t]*<label class="toggle">[ \t]*$',
                           SETTINGS_HTML.read_text(encoding="utf-8"), re.M))
-    check("22 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
-          bare == 22 and len(page) - bare == 7,
+    check("24 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
+          bare == 24 and len(page) - bare == 7,
           f"bare={bare}, with-id={len(page) - bare} - this is the trap that "
           f"produced the wrong '19'")
-    check("all 29 desktop rows are described",
+    check("all 31 desktop rows are described",
           len(R.DESKTOP_ROWS) == EXPECTED_ROWS, str(len(R.DESKTOP_ROWS)))
     check("the three phone rows are described too",
           len(R.SETTINGS_ROWS) == EXPECTED_ROWS + 3, str(len(R.SETTINGS_ROWS)))
@@ -209,28 +214,30 @@ def t_setting_links_are_real():
            if r.setting and r.setting not in keys]
     check("every row's `setting` names a real BoolSetting", not bad, "; ".join(bad))
     linked = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.setting)
-    check("sixteen desktop rows are the same switch as a spoken setting",
-          len(linked) == 16, f"{linked} - if this grew, the row was given a setter")
-    # The spoken settings with no desktop toggle. Three have no switch row at
-    # all on this page (two are on the Brain's Memory tab, one is a row inside
-    # "What asks first"), and two are the phone's own. `big_coder` joined them
-    # on 2026-10-11: the 30B coder's opt-in has a route and a spoken switch,
-    # and no page row yet. `sandbox_exec` was one of these from LM-1 until
+    check("eighteen desktop rows are the same switch as a spoken setting",
+          len(linked) == 18, f"{linked} - if this grew, the row was given a setter")
+    # The spoken settings with no desktop toggle. Two have no switch row at
+    # all on this page (one is a row inside "What asks first", one is the
+    # 30B coder's own opt-in), two are the phone's own, and the rest are
+    # hand-written cards rather than generated toggle rows. `big_coder` joined
+    # them on 2026-10-11. `sandbox_exec` was one of these from LM-1 until
     # LM-1C (2026-10-18) gave it the real card and row - so it is linked now.
     # `media_index` joined on 2026-10-19 (F5 S2): the owner chose readable
     # transcript text kept ON by default; its desktop Settings card is a
     # hand-written panel (disclosure, switch, one Delete) drawn from its own
     # route rather than a generated toggle row, and the phone has no card yet
     # (ARCHITECTURE section 8 records that follow-up). The universal-control pass
-    # (2026-10-22) gave `background_learning` and `learn_sensitive_topics` real rows
-    # (the `memory-learning` card) and added eight switches with no toggle row of
-    # their own (chat history, Write like me, three big-model switches, the second
-    # card's combined mode and two suggestion switches), so the list is thirteen.
+    # (2026-10-22) added eight switches with no toggle row of their own (chat
+    # history, Write like me, three big-model switches, the second card's
+    # combined mode and two suggestion switches). `background_learning` and
+    # `learn_sensitive_topics` LEFT this list on 2026-10-28, when the settings
+    # audit's G1 gave them the `learning` card and its two rows - they are
+    # linked above now. So the list is thirteen.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known fifteen",
-          orphans == ["background_learning", "big_coder", "big_model",
+    check("...and the BoolSettings with no desktop row are the known thirteen",
+          orphans == ["big_coder", "big_model",
                       "big_model_deep_questions", "big_model_wiki", "chat_history",
-                      "learn_sensitive_topics", "lights_without_card", "media_index",
+                      "lights_without_card", "media_index",
                       "phone_notifications", "second_card_combined",
                       "second_card_suggest_correction", "second_card_suggest_struggle",
                       "smartwatch_notifications", "write_like_me"], str(orphans))
@@ -290,6 +297,8 @@ def t_bool_settings_is_the_measured_thirteen():
     already had a route and a tier; the change adds the PHRASE and nothing
     else, and each setter calls the same function the Settings screen calls.
     They raise the rows they are the same switch as from seven to fifteen,
+    and the two Learning rows took that to eighteen on 2026-10-28 (the
+    settings audit's G1) - this text is only the history of the number.
     which this file's other check states.
 
     Twenty-two since 2026-10-18 (LM-1): `sandbox_exec`, the data and maths
