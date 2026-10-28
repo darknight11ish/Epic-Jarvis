@@ -149,7 +149,8 @@ export const TREE_COL_GAP = 26;
  *  draws glow, fog and wireframe bodies, where a softer edge is nearly
  *  invisible, so it is the one that gives way when a machine cannot present
  *  six million pixels a frame. `nextRenderScale` is the rule, and it is pure so
- *  a test can drive it without a GPU.
+ *  a test can drive it without a GPU; `nextFrameScale` is the half that asks
+ *  for the pixels back, and it is pure for the same reason.
  *
  *  It matters most where it was measured: a software renderer (headless CI, a
  *  machine with no usable GPU) presents a 2880x2206 canvas at about seven
@@ -173,6 +174,165 @@ export function nextRenderScale(scale, medianMs) {
   if (medianMs > SLOW_FRAME_MS) return Math.max(RENDER_SCALE_MIN, now * 0.75);
   if (medianMs < FAST_FRAME_MS && now < 1) return Math.min(1, now / 0.75);
   return now;
+}
+
+/* ---- and how the pixels come BACK ------------------------------------ *
+ *
+ *  The 2026-10-28 audit of this rule (batch B1, finding 4) found the half that
+ *  was missing. `nextRenderScale` climbs only under `FAST_FRAME_MS` (19 ms),
+ *  and a 30 Hz display hands out a frame every 33.3 ms even when the page does
+ *  nothing at all. On that screen the interval never drops under 19 ms, so a
+ *  picture that stepped down once during a slow moment - a shader compiling, a
+ *  window being resized, another program taking the graphics card for a second
+ *  - stayed soft until the page was reloaded. Driven through the real rule, 40
+ *  frames at 33.3 ms leave 0.25 at 0.25; the same 40 frames at 16.7 ms restore
+ *  1.0.
+ *
+ *  The interval alone cannot settle it. "33.3 ms" is the same number for a
+ *  30 Hz display with a machine that is keeping up and for a machine that can
+ *  only manage 30 frames a second on a 60 Hz display. No statistic over the
+ *  intervals tells those apart, and climbing on a wider threshold ("anything
+ *  under SLOW_FRAME_MS") would hand pixels to a machine that cannot afford
+ *  them - the failure the whole budget exists to avoid. The only question left
+ *  is "can this machine afford the next step?", and the only way to answer it
+ *  is to try.
+ *
+ *  So: a bounded probational climb.
+ *
+ *    - A probe is ONE step up, by the same 0.75 factor as every other step, so
+ *      a refused probe is undone by the arithmetic that made it.
+ *    - It is only asked for after `PROBE_STEADY_SAMPLES` samples in a row that
+ *      land within `PROBE_STEADY_MS` of each other and in the "cannot tell"
+ *      band (`FAST_FRAME_MS` <= median <= `SLOW_FRAME_MS`). A machine that is
+ *      really struggling has a median over `SLOW_FRAME_MS` or one that jumps
+ *      about, and never gets here.
+ *    - The answer is the very next sample. Slower than `SLOW_FRAME_MS`: the
+ *      picture goes back to EXACTLY the scale it was at (the number is
+ *      remembered, not multiplied back), the half-rate switch goes back with
+ *      it, and the next probe is postponed. Not slower: the pixels were free,
+ *      keep them, and after another steady run ask for the next step.
+ *
+ *  Why this cannot oscillate. A refusal is not a step DOWN - it is the probe
+ *  being taken back - so the picture returns to the operating point it had
+ *  held for seconds, never to a new one, and every refusal doubles the wait
+ *  before the next attempt, up to `PROBE_BACKOFF_MAX` samples (about four
+ *  minutes even at 30 frames a second). A genuinely slow machine sees a
+ *  handful of brief dips early on and then essentially nothing; a machine that
+ *  was only busy for a moment earns its pixels back within a few seconds. That
+ *  bound is the difference between this and "climb whenever the frame is not
+ *  slow", which would soften a slow machine's picture for ever.
+ *
+ *  The half-rate switch belongs to the same problem. It used to be re-derived
+ *  from every sample, but while it is ON the intervals measure the DISPLAY,
+ *  not the work - exactly the number this probe exists to see past - so a
+ *  machine that half rate had rescued could read "not slow any more", switch
+ *  off, slow down and switch on again: a two-frame flicker at precisely the
+ *  machine class the switch is for. It is latched now: ON only at
+ *  `RENDER_SCALE_MIN` with a genuinely slow sample, OFF only once the picture
+ *  has earned pixels back above the floor, which a probe has to prove first.
+ *  Its threshold did not move, so one stall over `VERY_SLOW_FRAME_MS` still
+ *  drops the picture to the floor and latches the half rate as it always did -
+ *  what changed is that the latch is cleared by the first probe that succeeds,
+ *  about a second later, instead of flapping on and off every other sample.
+ *  ---------------------------------------------------------------------- */
+
+/** How many steady samples earn one probational step up. */
+export const PROBE_STEADY_SAMPLES = 3;
+/** What "steady" means: this close to the sample before, in milliseconds. */
+export const PROBE_STEADY_MS = 3;
+/** Samples to wait after a refused probe, doubling with each refusal. */
+export const PROBE_BACKOFF_SAMPLES = 40;
+/** The longest that wait ever grows to (about four minutes at 30 fps). */
+export const PROBE_BACKOFF_MAX = 2400;
+
+/** A scale clamped into the range the canvas may draw at. */
+function scaleOf(value) {
+  const now = Number.isFinite(value) && value > 0 ? value : 1;
+  return Math.min(1, Math.max(RENDER_SCALE_MIN, now));
+}
+
+/** The frame budget's memory: what it is drawing at, and what it has learnt.
+ *
+ *  A plain object, and `nextFrameScale` never changes it in place, so a test
+ *  can hold a frozen one and drive it exactly as the frame loop does. */
+export function createFrameScale(scale = 1) {
+  return {
+    scale: scaleOf(scale),
+    halfRate: false,
+    steady: 0,      // samples in a row that landed at the same interval
+    lastMedian: 0,  // the sample before, so "the same" has something to mean
+    refusals: 0,    // probes refused in a row, which lengthens the next wait
+    backoff: 0,     // samples still to wait before the next probe
+    probe: null,    // { scale, halfRate } - what a refused probe must put back
+  };
+}
+
+/** One sample of the frame budget: the next state after `medianMs`.
+ *
+ *  `nextRenderScale` still decides the pixels and is still the only rule that
+ *  gives them away; this adds the slow, bounded, self-reverting question about
+ *  getting them back. See the comment above for why it is shaped like this. */
+export function nextFrameScale(frameScale, medianMs) {
+  const next = { ...frameScale };
+  if (!Number.isFinite(medianMs) || medianMs <= 0) return next;
+  const stepped = nextRenderScale(next.scale, medianMs);
+  if (!next.probe && next.backoff > 0) next.backoff -= 1;
+  if (stepped < next.scale - 1e-9) {
+    if (next.probe) {
+      // The probe's own answer: frames got slower the moment more pixels were
+      // spent. Put the picture back EXACTLY where it was - the half-rate
+      // switch too - and wait twice as long before asking again. This is a
+      // refusal, not a step down: the machine is no worse than it was.
+      next.scale = next.probe.scale;
+      next.halfRate = next.probe.halfRate;
+      next.probe = null;
+      next.steady = 0;
+      next.refusals = Math.min(12, next.refusals + 1);
+      next.backoff = Math.min(PROBE_BACKOFF_MAX,
+        PROBE_BACKOFF_SAMPLES * 2 ** (next.refusals - 1));
+    } else {
+      // A genuine slowdown: the old rule, unchanged, including the one way the
+      // half-rate switch is allowed in.
+      next.scale = stepped;
+      next.probe = null;
+      next.steady = 0;
+      next.halfRate = medianMs > SLOW_FRAME_MS
+        && next.scale <= RENDER_SCALE_MIN + 1e-9;
+    }
+  } else if (stepped > next.scale + 1e-9) {
+    // Comfortably fast: the old climb, immediate, and it answers by itself the
+    // question a probe was going to ask - a frame under FAST_FRAME_MS is room.
+    next.scale = stepped;
+    next.probe = null;
+    next.steady = 0;
+    next.refusals = 0;
+    next.backoff = 0;
+    next.halfRate = false;
+  } else if (medianMs > SLOW_FRAME_MS) {
+    // Slow, and the resolution has nothing left to give (or `stepped` would
+    // have been below `scale`): the floor, where the half-rate switch may turn
+    // on, and where it now stays until pixels are earned back above the floor.
+    next.probe = null;
+    next.steady = 0;
+    if (next.scale <= RENDER_SCALE_MIN + 1e-9) next.halfRate = true;
+  } else if (next.probe) {
+    // The probational step held: those pixels cost nothing this sample, so
+    // they are kept, and another steady run earns the next step.
+    next.probe = null;
+    next.steady = 0;
+    next.refusals = 0;
+  } else if (next.backoff === 0 && next.scale < 1 - 1e-9) {
+    next.steady = Math.abs(medianMs - next.lastMedian) <= PROBE_STEADY_MS
+      ? next.steady + 1 : 1;
+    if (next.steady >= PROBE_STEADY_SAMPLES) {
+      next.probe = { scale: next.scale, halfRate: next.halfRate };
+      next.scale = scaleOf(next.scale / 0.75);
+      next.halfRate = false;
+      next.steady = 0;
+    }
+  }
+  next.lastMedian = medianMs;
+  return next;
 }
 
 /** One look's palette, camera and Gemini name.
@@ -1682,9 +1842,11 @@ export async function createEngine(options = {}) {
     height: 2,
     aspect: 1.6,
     dprWanted: 1,
-    renderScale: 1,
+    // The adaptive resolution's memory, and the only place the scale and the
+    // half-rate switch live: `nextFrameScale` owns both, so a test of the rule
+    // is a test of the engine's behaviour.
+    scaleGov: createFrameScale(1),
     frameGaps: [],
-    halfRate: false,
     tick: false,
     frameDistance: 0,
     spinning: true,
@@ -2602,7 +2764,7 @@ export async function createEngine(options = {}) {
 
   function applyRenderScale() {
     const ratio = Math.min(2, Math.max(RENDER_SCALE_MIN,
-      state.dprWanted * state.renderScale));
+      state.dprWanted * state.scaleGov.scale));
     renderer.setPixelRatio(ratio);
     renderer.setSize(state.width, state.height, false);
     return ratio;
@@ -2622,7 +2784,7 @@ export async function createEngine(options = {}) {
     // stage's shape really changed, so a window resize can never strand a name.
     if (positions.length && Math.abs(state.aspect - wasAspect) > 0.005) setCamera();
     return { width: state.width, height: state.height, aspect: state.aspect,
-      ratio: state.dprWanted * state.renderScale };
+      ratio: state.dprWanted * state.scaleGov.scale };
   }
 
   function frame(now) {
@@ -2633,30 +2795,28 @@ export async function createEngine(options = {}) {
     // The adaptive resolution rule: every few frames, look at how fast frames
     // are really arriving and give the 3D canvas more or fewer pixels. Slow
     // frames never touch the picture's size on screen, the camera or a label -
-    // only how much of the display the glow is drawn with.
+    // only how much of the display the glow is drawn with. The one exception
+    // is a slow renderer that has already lost all the pixels it can: that one
+    // draws every OTHER frame, so the motion steps instead of the page
+    // stuttering, and (measured) a software renderer goes from about 13 to
+    // about 30 frames a second of page time because half the frames are cheap.
+    // A GPU never reaches that floor.
     if (state.lastTime) state.frameGaps.push(stamp - state.lastTime);
     if (state.frameGaps.length >= 6) {
       const gaps = state.frameGaps.slice().sort((a, b) => a - b);
       const median = gaps[Math.floor(gaps.length / 2)];
-      const want = nextRenderScale(state.renderScale, median);
+      const before = state.scaleGov.scale;
       state.frameGaps.length = 0;
-      if (Math.abs(want - state.renderScale) > 0.001) {
-        state.renderScale = want;
-        applyRenderScale();
-      }
-      // Second half of the same rule: a machine that is still slow after the
-      // resolution has given all it can draws the picture every OTHER frame.
-      // The motion steps instead of the page stuttering, and (measured) a
-      // software renderer goes from about 13 to about 30 frames a second of
-      // page time because half the frames are cheap. A GPU never reaches this.
-      // The `renderScale` guard is not cosmetic: this sample is the one that
-      // only STEPS the resolution, so without it a 40 ms machine halves the
-      // rate while still at full resolution - the order the comment above and
-      // `galaxy-cosmos.mjs` both say it must not do.
-      state.halfRate = median > SLOW_FRAME_MS && state.renderScale <= RENDER_SCALE_MIN + 1e-9;
+      state.scaleGov = nextFrameScale(state.scaleGov, median);
+      if (Math.abs(state.scaleGov.scale - before) > 0.001) applyRenderScale();
     }
     state.lastTime = stamp;
-    if (state.halfRate) {
+    // The half-rate switch comes from the governor and is NOT re-derived from
+    // this sample: while it is on, the intervals are the display's, not the
+    // page's work, so reading it back out of them is how the picture comes to
+    // flicker between thirty drawn frames and fifteen. `nextFrameScale` says
+    // when it turns on and what has to happen before it turns off.
+    if (state.scaleGov.halfRate) {
       state.tick = !state.tick;
       if (state.tick) {
         // Still advance the clock and the animation: the picture that appears
@@ -2778,10 +2938,10 @@ export async function createEngine(options = {}) {
         // The frame budget, so a test can read it: `scale` is the adaptive
         // resolution's own step and `ratio` is what the 3D canvas is really
         // drawn at (the 2D label canvas stays at the display's ratio).
-        scale: state.renderScale,
+        scale: state.scaleGov.scale,
         ratio: Math.min(2, Math.max(RENDER_SCALE_MIN,
-          state.dprWanted * state.renderScale)),
-        halfRate: state.halfRate,
+          state.dprWanted * state.scaleGov.scale)),
+        halfRate: state.scaleGov.halfRate,
         aspect: state.aspect,
         distance: camera.position.distanceTo(target),
         frameDistance: state.frameDistance,

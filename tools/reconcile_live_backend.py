@@ -712,6 +712,69 @@ DELTA_TABLE = {
             "hunks": True,
         },
     },
+    # briefing.patch (2026-10-27): the morning briefing. FIVE HUD hunks in disjoint
+    # regions (the three /api/briefing routes, the sleep card's "not now" write,
+    # the conversation note and the tools_ran record) plus ONE gate hunk (the
+    # `schedule_repeat` risk line gains the briefing words), so each file is
+    # carried as its own hunks entry. Every pre-image block must appear exactly
+    # once in the live file, or the whole file is refused rather than guessed at.
+    "briefing.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                'if path == "/api/briefing":',
+                'if route == "/api/briefing/now":',
+                'if route == "/api/briefing/senders":',
+                "jarvis_backoff.note_conversation()",
+                '"tools_ran": list(getattr(_quick, "read", None) or [])',
+            ),
+            "hunks": True,
+        },
+        "jarvis_gate.py": {
+            # The LIVE gate is newer than this patch's pre-image: its
+            # `schedule_repeat` row already names the morning briefing ("sets up a
+            # morning briefing, which reads your calendar and email..."), which is
+            # the whole intent of this one-line hunk. Probing the live wording
+            # makes a re-deploy report it ALREADY_PRESENT instead of refusing; a
+            # fresh base would still refuse, and that is the honest answer (the
+            # hunk's own pre-image is not what the owner's file holds).
+            "probes": ("sets up a morning briefing, which reads your calendar",),
+        },
+    },
+    # learning-extract-reason.patch (2026-10-28, DEF-017): the extractor records
+    # WHY its last local-model call failed (closed-world: kind, status, seconds,
+    # done_reason - never a prompt and never an answer) and asks a hybrid
+    # reasoning model to ANSWER with `think: false` so a 200 with an empty
+    # `response` cannot be read as a good answer. Several hunks in
+    # jarvis_extract.py, so `"hunks": True`; the probes are post-image lines from
+    # different regions, so only a fully applied file counts as present.
+    "learning-extract-reason.patch": {
+        "jarvis_extract.py": {
+            "probes": (
+                "def local_llm_failure() -> Optional[dict]:",
+                "LAST_LLM_FAILURE = reason",
+                '"think": False',
+            ),
+            "hunks": True,
+        },
+    },
+    # model-recommendations.patch (2026-10-28): the model/preset advisor's ONE
+    # install block, on the owner's own lines immediately before the main socket
+    # call (the same shape as picture-card.patch). The module itself is a SHIPPED
+    # module carried by deploy step 1; this hunk only wires its five routes into
+    # the HUD. ONE hunk with a one-line pre-image ("Before the main socket..."),
+    # which must appear exactly once in the live HUD or the file is refused; the
+    # probes are post-image lines from the block, so a second deploy sees them
+    # and skips it instead of inserting twice.
+    "model-recommendations.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                "# model-recommendations.patch (2026-10-28",
+                "jarvis_model_recommendations.install(Handler, origin_ok=_origin_ok,",
+                "models     NOT ON",
+            ),
+            "hunks": True,
+        },
+    },
 }
 
 #: Live-HUD deltas that are RECORDED BUT DELIBERATELY NOT APPLIED. They are kept

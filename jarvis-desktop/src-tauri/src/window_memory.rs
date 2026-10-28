@@ -3,8 +3,9 @@
 //!
 //! Brain, Settings, Faces and the HUD open where the owner last left them, at
 //! the size they left them, and maximised if they were. Built on
-//! `tauri-plugin-window-state` 2.4.1 - the newest release that builds on this
-//! crate's Rust 1.89 (2.5.0 needs 1.90).
+//! `tauri-plugin-window-state` 2.5 (Cargo.toml asks for `"2.5"`; Cargo.lock
+//! resolves 2.5.0) on this crate's Rust 1.90 - the 2.4.1 / Rust 1.89 pairing
+//! this comment used to name went with the 2026-10-13 dependency bump.
 //!
 //! Three things the plugin does NOT get to decide here, each for a reason:
 //!

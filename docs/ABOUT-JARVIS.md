@@ -551,7 +551,7 @@ estimates, and they change — re-run the command rather than trusting the numbe
 | Documents | **403** markdown files, about 10.5 MB | `Get-ChildItem docs -Recurse -Filter *.md`; `docs/README.md` carries the live copy, and `tools/check_docs_map.py` checks it |
 | Checkers named `check_*` | **39** | `Get-ChildItem tools/check_*.py` |
 | Claims about itself, each with a machine check | **175 rows**, 160 built / 7 open / 8 unverifiable | `python -B tools/check_claims.py` |
-| Defect register | **16 rows**, 15 closed / 1 open | `docs/defect-register.tsv` |
+| Defect register | **17 rows**, 16 closed / 1 open | `docs/defect-register.tsv` |
 | Launch videos kept | **6** numbered versions, v1–v6, never replaced | `videos/README.md`; the owner's rule of 2026-09-24 (`CLAUDE.md`) |
 
 **What runs when a change is pushed.** Ten jobs are declared in

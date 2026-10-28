@@ -59,6 +59,15 @@
  *     pinned too, so the half-rate switch cannot drift away from the resolution
  *     rule that is supposed to have gone first.
  *
+ *     AND THE PIXELS COME BACK ON A 30 Hz SCREEN. A display that presents every
+ *     33.3 ms never looks "fast", so the fast threshold alone left a picture
+ *     that had stepped down soft until reload (audit B1, finding 4). The
+ *     probational climb is pinned here as maths too: a steady 30 Hz picture
+ *     recovers full resolution, a genuinely slow one never leaves the floor and
+ *     takes the half rate exactly once, a refused probe puts the picture back
+ *     unchanged and asks less and less often, and a picture finds the
+ *     resolution it can really afford instead of guessing.
+ *
  * The render layer (three.js, the GPU, the canvas) is proved by the HUD suites
  * and by CI's browser run, not here.
  */
@@ -79,6 +88,10 @@ import {
   NEBULA_POINTS,
   NEBULA_WELLS,
   PRESET_ACTIONS,
+  PROBE_BACKOFF_MAX,
+  PROBE_BACKOFF_SAMPLES,
+  PROBE_STEADY_MS,
+  PROBE_STEADY_SAMPLES,
   RENDER_SCALE_MIN,
   ROLE_OF_GROUP,
   SENTINEL_RINGS,
@@ -94,6 +107,7 @@ import {
   byRole,
   cameraFor,
   cameraFrame,
+  createFrameScale,
   fitDistance,
   fogDensityAt,
   hexToInt,
@@ -101,6 +115,7 @@ import {
   isCosmosLook,
   mulberry32,
   nebulaCloud,
+  nextFrameScale,
   nextRenderScale,
   parentOf,
   presetGuides,
@@ -985,6 +1000,12 @@ check("every look has its two plain-word controls, and no look is missing one", 
  * with no usable GPU instead of crawling. Two halves, in this order - fewer
  * pixels, then fewer frames - and the second only turns on once the first has
  * given all it can.
+ *
+ * The audit of 2026-10-28 added the other direction: earning PIXELS BACK when
+ * the display, not the machine, is what holds the frame rate down. That is
+ * `nextFrameScale`, and the last five checks here drive it exactly as the
+ * frame loop does - one sample per six frames - because the bug it fixes is a
+ * bug about a SEQUENCE of samples, not about one.
  * ---------------------------------------------------------------------- */
 
 check("the frame budget's thresholds are ordered, and the floor is a fraction", () => {
@@ -1077,6 +1098,200 @@ check("the rule is monotone: worse frames never give a picture more pixels", () 
     assert.ok(previous >= RENDER_SCALE_MIN && previous <= 1,
       `the slowest frame left the scale at ${previous}`);
   }
+});
+
+/* -------------------------------------------------------------------------
+ * 11b. Getting the pixels BACK (audit B1, finding 4, 2026-10-28)
+ *
+ * The base rule above only ever climbs under FAST_FRAME_MS, which a 30 Hz
+ * display never reaches - so these five checks drive the layer above it,
+ * sample by sample, and pin the three things that make the recovery safe: a
+ * steady 30 Hz picture climbs, a genuinely slow one never does, and a refused
+ * probe is undone exactly and then asked for less and less often.
+ * ---------------------------------------------------------------------- */
+
+/* The frame loop's own rhythm, for the checks below: six gaps make one sample
+ * and the sample's median is what `nextFrameScale` is fed (`frame()`, six
+ * lines of it). `gapFor(state, index)` is the display's answer for the picture
+ * being drawn: a 30 Hz display answers 33.3 ms whatever the scale, a machine
+ * that cannot afford more answers slower as soon as it is asked, and a machine
+ * with room answers the same either way. Returns every state after each
+ * sample, so a scenario reads as a list of observations. */
+function driveScale(start, samples, gapFor) {
+  const seen = [];
+  let state = createFrameScale(start);
+  for (let i = 0; i < samples; i += 1) {
+    state = nextFrameScale(state, gapFor(state, i));
+    seen.push(state);
+  }
+  return seen;
+}
+
+/** How many times the picture asked for more pixels (a probational step up). */
+function climbs(seen) {
+  let count = 0;
+  for (let i = 1; i < seen.length; i += 1) {
+    if (seen[i].scale > seen[i - 1].scale + 1e-9) count += 1;
+  }
+  return count;
+}
+
+check("the probe's numbers are ordered, and a sample never changes the state it was given", () => {
+  assert.ok(PROBE_STEADY_SAMPLES >= 2, "a single sample is not a steady run");
+  assert.ok(PROBE_STEADY_MS > 0 && PROBE_STEADY_MS < FAST_FRAME_MS,
+    `a ${PROBE_STEADY_MS} ms "steady" window cannot tell a steady display from a jittery one`);
+  assert.ok(PROBE_BACKOFF_SAMPLES >= PROBE_STEADY_SAMPLES,
+    "the wait after a refused probe is shorter than the evidence needed to ask");
+  assert.ok(PROBE_BACKOFF_MAX >= PROBE_BACKOFF_SAMPLES,
+    "the longest wait is shorter than the first one");
+  // A frozen state may be read and never written: the frame loop keeps the
+  // state it had before the sample, and so must a test.
+  const frozen = Object.freeze(createFrameScale(RENDER_SCALE_MIN));
+  const after = nextFrameScale(frozen, 33.3);
+  assert.equal(frozen.scale, RENDER_SCALE_MIN, "the rule changed the state it was given");
+  assert.equal(frozen.steady, 0, "the rule counted a sample into the state it was given");
+  // One sample is not yet evidence, so it moves nothing.
+  assert.equal(after.scale, RENDER_SCALE_MIN);
+  assert.equal(after.steady, 1, `one sample counted as ${after.steady}`);
+  // A sample that is not a usable number is the identity, as in the base rule.
+  assert.equal(nextFrameScale(frozen, Number.NaN).scale, RENDER_SCALE_MIN);
+  assert.equal(nextFrameScale(frozen, 0).scale, RENDER_SCALE_MIN);
+});
+
+check("a 30 Hz display is not a slow machine: the picture climbs back to full", () => {
+  // THE BUG THIS PINS (audit B1, finding 4). A 30 Hz display hands out a frame
+  // every 33.3 ms even when the page does nothing, so on that screen nothing is
+  // ever under FAST_FRAME_MS and the base rule - correctly, for its own job -
+  // holds: 40 frames at 33.3 ms leave the floor at the floor. Widening the base
+  // rule's threshold is the UNSAFE fix, because 33.3 ms is also exactly what a
+  // machine that can only manage 30 frames a second shows; the recovery has to
+  // be a question, not a threshold, which is what the layer above is.
+  let plain = RENDER_SCALE_MIN;
+  for (let i = 0; i < 40; i += 1) plain = nextRenderScale(plain, 33.3);
+  assert.equal(plain, RENDER_SCALE_MIN);
+  // The frame loop's own rhythm: 40 FRAMES is under seven samples, and it is
+  // already off the floor - this is the exact sequence the audit measured.
+  const frames = driveScale(RENDER_SCALE_MIN, 7, () => 33.3);
+  assert.ok(frames[6].scale > RENDER_SCALE_MIN + 1e-9,
+    `40 frames at 33.3 ms left the scale at ${frames[6].scale}`);
+  // 40 SAMPLES - 240 frames, about eight seconds at 30 Hz - is full resolution,
+  // and it got there climbing, never flapping: every sample is at or above the
+  // one before it.
+  const seen = driveScale(RENDER_SCALE_MIN, 40, () => 33.3);
+  assert.equal(seen[seen.length - 1].scale, 1,
+    `40 steady samples at 33.3 ms left the scale at ${seen[seen.length - 1].scale}`);
+  for (let i = 1; i < seen.length; i += 1) {
+    assert.ok(seen[i].scale >= seen[i - 1].scale - 1e-9,
+      `the recovery went backwards: ${seen[i - 1].scale} then ${seen[i].scale}`);
+  }
+  assert.equal(seen[seen.length - 1].halfRate, false,
+    "the half rate stayed on once the picture had all its pixels back");
+  // A real 30 Hz display is not exactly 30 Hz: timestamps jitter by a few
+  // tenths of a millisecond and the peak refresh is 33.0 ms on some panels. The
+  // steady window has to be wide enough for that, and narrow enough that a
+  // machine whose frames jump about never counts as steady.
+  const jittered = driveScale(RENDER_SCALE_MIN, 40, (_state, i) =>
+    [33.0, 33.6, 33.2, 33.4][i % 4]);
+  assert.equal(jittered[jittered.length - 1].scale, 1,
+    `a 30 Hz display that jitters by 0.6 ms recovered only to ${jittered[jittered.length - 1].scale}`);
+  // And at full resolution a steady 30 Hz display stays there: the probe has
+  // nothing to ask for and must not invent anything.
+  for (const state of driveScale(1, 40, () => 33.3)) {
+    assert.equal(state.scale, 1, "a picture at full resolution moved");
+  }
+});
+
+check("a genuinely slow machine stays at the floor and takes the half rate there, once", () => {
+  // 45-60 ms is 17-22 frames a second: there is no interval here that a 30 Hz
+  // display could be mistaken for, so the probe must never fire, and the
+  // half-rate switch must come on exactly once - at the floor, as its rule says
+  // - and then stay on, even though at the half rate the intervals improve.
+  const seen = driveScale(1, 60, (_state, i) => 45 + (i % 3) * 7.5);
+  for (let i = 0; i < seen.length; i += 1) {
+    assert.ok(seen[i].scale >= RENDER_SCALE_MIN, `the scale fell to ${seen[i].scale}`);
+    if (i > 0) assert.ok(seen[i].scale <= seen[i - 1].scale + 1e-9,
+      `a slow machine gained pixels: ${seen[i - 1].scale} then ${seen[i].scale}`);
+  }
+  assert.equal(seen[seen.length - 1].scale, RENDER_SCALE_MIN);
+  assert.equal(climbs(seen), 0, "a genuinely slow machine was asked to spend more pixels");
+  const floorAt = seen.findIndex((state) => state.scale <= RENDER_SCALE_MIN + 1e-9);
+  assert.ok(floorAt > 0, "the picture never reached the floor");
+  assert.equal(seen[floorAt].halfRate, true, "the half rate did not come on at the floor");
+  let flips = 0;
+  for (let i = 1; i < seen.length; i += 1) {
+    if (seen[i].halfRate !== seen[i - 1].halfRate) flips += 1;
+  }
+  assert.equal(flips, 1, `the half rate switched ${flips} times instead of once`);
+  // The switch is LATCHED. A single improved interval - which is exactly what
+  // the half rate produces, since the cheap frame is the one that is skipped -
+  // must not read as "not slow any more" and switch it off again. That
+  // re-derivation is the two-frame flicker this replaced: with half rate on,
+  // the intervals measure the display, not the work.
+  let after = nextFrameScale(seen[seen.length - 1], 33.3);
+  assert.equal(after.halfRate, true, "one improved interval switched the half rate off");
+  after = nextFrameScale(after, 45);
+  assert.equal(after.halfRate, true, "the half rate flapped back on a genuinely slow machine");
+  assert.equal(after.scale, RENDER_SCALE_MIN, "the picture left the floor");
+});
+
+check("a refused probe puts the picture back unchanged, and asks less and less often", () => {
+  // A 30 Hz display whose machine is exactly at its limit: it holds 33.3 ms at
+  // the floor and needs 45 ms the moment more pixels are spent. This is the
+  // machine the fix must NOT punish - it is fine, but only just - and it is the
+  // one the audit's "climb whenever the frame is not slow" fix would have
+  // softened for ever.
+  const seen = driveScale(RENDER_SCALE_MIN, 300,
+    (state) => (state.scale <= RENDER_SCALE_MIN + 1e-9 ? 33.3 : 45));
+  const ups = [];
+  for (let i = 1; i < seen.length; i += 1) {
+    if (seen[i].scale > seen[i - 1].scale + 1e-9) ups.push(i);
+  }
+  assert.ok(ups.length >= 1, "the picture never asked for pixels, so nothing was tested");
+  assert.ok(ups.length <= 6,
+    `the picture asked for pixels ${ups.length} times in 300 samples - that is a visible flap`);
+  for (const i of ups) {
+    // One probational step, by the base rule's own factor, and the refusal is
+    // the very next sample taking it back to the floor - not lower.
+    assert.equal(seen[i].scale, RENDER_SCALE_MIN / 0.75,
+      `a probe went to ${seen[i].scale}, not one step up`);
+    assert.ok(i + 1 < seen.length, "the run ended during a probe");
+    assert.equal(seen[i + 1].scale, RENDER_SCALE_MIN,
+      `a refused probe left the picture at ${seen[i + 1].scale}, not where it was`);
+    assert.equal(seen[i + 1].halfRate, false,
+      "a refused probe cost a machine that holds 30 fps its full frame rate");
+  }
+  // The waits grow, so a machine that cannot afford more is asked a handful of
+  // times early and then essentially never.
+  for (let k = 1; k < ups.length; k += 1) {
+    assert.ok(ups[k] - ups[k - 1] > ups[k - 1] - (ups[k - 2] ?? 0),
+      `the wait before probe ${k + 1} did not grow: at samples ${ups.join(", ")}`);
+  }
+  const last = seen[seen.length - 1];
+  assert.equal(last.scale, RENDER_SCALE_MIN, "the picture did not end where it started");
+  assert.equal(last.halfRate, false);
+});
+
+check("the picture settles at the resolution the machine can really afford", () => {
+  // Afford up to 60% of the display's ratio: 33.3 ms at or below it, 45 ms
+  // above. The rule should find that step and stay on it - neither the floor
+  // (which is the bug) nor full resolution (which is the unsafe fix).
+  const seen = driveScale(RENDER_SCALE_MIN, 120,
+    (state) => (state.scale <= 0.6 + 1e-9 ? 33.3 : 45));
+  const last = seen[seen.length - 1];
+  assert.ok(last.scale > 0.5, `the picture settled at ${last.scale}, barely off the floor`);
+  assert.ok(last.scale <= 0.6 + 1e-9, `the picture settled at ${last.scale}, past what is affordable`);
+  assert.equal(last.halfRate, false);
+  // Never runs away: the highest step it ever took is one probe above what the
+  // machine can afford, and that probe was refused.
+  const highest = Math.max(...seen.map((state) => state.scale));
+  assert.ok(highest <= 0.6 / 0.75 + 1e-9, `the picture reached ${highest}`);
+  // And it is settled, not wandering: the last 30 samples are all at the step
+  // it chose. A probe may be refused inside that window, so allow the sample of
+  // the probe itself - but the picture is back where it was on the next one.
+  const tail = seen.slice(-30);
+  const off = tail.filter((state) => Math.abs(state.scale - last.scale) > 1e-9);
+  assert.ok(off.length <= 2,
+    `${off.length} of the last 30 samples were away from ${last.scale.toFixed(4)} - the picture is wandering`);
 });
 
 /* -------------------------------------------------------------------------

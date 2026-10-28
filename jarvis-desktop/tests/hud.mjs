@@ -3489,24 +3489,59 @@ await check("G2: the capped Galaxy keeps its frame work under 16.7 ms at deviceS
     const sorted = values.slice().sort((x, y) => x - y);
     return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
   };
-  let costs = await sample();
-  let p95 = p95of(costs.map((cost) => cost.js));
-  // A shared CI runner can hiccup for one sample. The budget does not move:
-  // the measurement is simply taken once more and the better sample judged,
-  // so a scheduling spike on the runner cannot fail a page that is fine.
-  if (!(p95 <= 16.7)) {
-    await page.waitForTimeout(500);
-    const again = await sample();
-    if (again.length >= 120) { costs = again; p95 = p95of(costs.map((cost) => cost.js)); }
+  const medianOf = (values) => {
+    const sorted = values.slice().sort((x, y) => x - y);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
+  // THE RETEST IS NOT A LOWERED BAR (audit B1, finding 2, 2026-10-28). A shared
+  // CI runner can hiccup, and 16.7 ms is still the bar. What used to happen
+  // after a failed first sample was ONE more sample and the BETTER of the two
+  // judged - which is how a real regression that comes and goes can pass: it
+  // needs only one good sample out of two. The policy now is a median of at
+  // most three samples, with every sample's p95 printed, so the evidence is on
+  // screen whether this check passes or fails:
+  //   - one scheduling spike among three good samples cannot move the median
+  //     over the bar, so a shared runner stays trustworthy;
+  //   - a regression that is really there shows up in most of the three, so
+  //     the median is over the bar and the check fails;
+  //   - and a page that is fine still costs ONE sample - the other two are only
+  //     spent once the first sample is already over budget.
+  // Judging the median of what was measured is the honest reading of "is this
+  // page over budget?", and it is stricter than best-of-two, not looser.
+  const samples = [];
+  const take = async () => {
+    const costs = await sample();
+    samples.push({
+      frames: costs.length,
+      js: p95of(costs.map((cost) => cost.js)),
+      total: p95of(costs.map((cost) => cost.total)),
+    });
+    return samples[samples.length - 1];
+  };
+  await take();
+  if (!(samples[0].js <= 16.7)) {
+    // Two more samples, and the MEDIAN of all three decides - not the best one.
+    while (samples.length < 3) {
+      await page.waitForTimeout(500);
+      await take();
+    }
   }
-  const total95 = p95of(costs.map((cost) => cost.total));
+  const p95 = medianOf(samples.map((each) => each.js));
+  const total95 = medianOf(samples.map((each) => each.total));
+  const evidence = samples.map((each, index) =>
+    `sample ${index + 1}: p95 JS ${each.js.toFixed(2)} ms, p95 total (3D render`
+    + ` included) ${each.total.toFixed(2)} ms, ${each.frames} frames`).join("; ");
   await page.close();
-  assert.ok(costs.length >= 120, `only ${costs.length} frames were measured`
-    + ` (p95 before subtracting the 3D render: ${Number.isFinite(total95) ? total95.toFixed(2) : "?"} ms)`);
+  assert.ok(samples.every((each) => each.frames >= 120),
+    `fewer than 120 frames were measured, so a sample cannot be judged - ${evidence}`);
   assert.ok(Number.isFinite(p95) && p95 <= 16.7,
-    `p95 frame work was ${p95.toFixed(2)} ms, over the 16.7 ms budget (dsf 1.5, 1920x1230); `
-    + `the whole callback, three.js render included, was p95 ${total95.toFixed(2)} ms - the gap is the GPU's`);
-  console.log(`      ${costs.length} frames: p95 JS ${p95.toFixed(2)} ms, p95 total (3D render included) ${total95.toFixed(2)} ms`);
+    `p95 frame work was ${p95.toFixed(2)} ms (the median of ${samples.length} sample(s)),`
+    + ` over the 16.7 ms budget (dsf 1.5, 1920x1230); the whole callback, three.js`
+    + ` render included, was p95 ${total95.toFixed(2)} ms - the gap is the GPU's.`
+    + ` The samples were: ${evidence}`);
+  console.log(`      ${samples.length} sample(s) judged by their median: ${evidence};`
+    + ` the median p95 JS is ${p95.toFixed(2)} ms`);
 });
 /* ── The Reminders tab (2026-10-21, the owner's dedicated HUD menu) ──────── *
  *  Phase 1 is the tab itself, grouped rows from the PC's own GET
