@@ -2046,6 +2046,31 @@ permissions = [
   "allow-hud-switch-personality",
 ]
 
+# The HUD's face models icon (2026-10-28, the owner's ask: "add a jarvis model
+# icon to the left column of the jarvis desktop that has all of the jarvis
+# models (face models)"). ONE command, ONE face id. Two narrow guarantees, and
+# both are the point:
+#
+#   * the id is PROVED against the spec before anything is stored
+#     (`spec.rs::has_face`, parsed from the same jarvis-visual-spec.json the
+#     Faces window draws), so no invented face can enter the appearance
+#     document - `faces.html` would silently draw its first face for one;
+#   * the save is the SAME `set_appearance` the Faces window's "Use this face"
+#     uses (this PC's store, then POST /api/appearance), so the phone sees it
+#     and a reload keeps it - this window stores nothing of its own.
+#
+# A face is cosmetic, so no card is raised (backend/README.md says why the
+# appearance route needs none), and the command carries no binding, colour,
+# pattern or animal field: this window can change WHICH face is worn and
+# nothing about how anything looks. It cannot read the appearance document
+# through this set either - the shell pushes that into the page in any case.
+[[set]]
+identifier = "hud-faces"
+description = "Switch WHICH face model Jarvis wears: one face id, proved against the spec and saved through the Faces window's own appearance save. Cosmetic - no card, no colours, no bindings and no animal switch are reachable here."
+permissions = [
+  "allow-hud-set-face",
+]
+
 # The HUD Presets menu's Cloud escalation switch (2026-10-27). The owner asked
 # for a "Cloud" preset beside coder/general/fast and a real checkbox: "Escalate
 # to the cloud when the work is too complex". The page holds no token (apps

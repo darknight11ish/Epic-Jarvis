@@ -547,6 +547,8 @@ await check("H3 added no WRITE capability of its own - and the HUD's writes stay
   // write-capable sets and exactly these three: the layout store (H2/H3), the
   // personalities set (wording only, no card, held on a stale link) and the
   // escalate switch (one boolean; ON raises the PC's card, OFF is instant).
+  // 2026-10-28: the face models icon adds a FOURTH - `hud-faces`, one face id,
+  // cosmetic, no card, saved through the Faces window's own appearance save.
   // Nothing else may be added without this list changing.
   const writes = capability.permissions.filter((name) => /write/.test(name));
   assert.deepEqual(writes, ["hud-layout-write"],
@@ -555,6 +557,8 @@ await check("H3 added no WRITE capability of its own - and the HUD's writes stay
     "the HUD's personality commands are granted by no set, or by more than one");
   assert.equal(capability.permissions.filter((name) => name === "hud-cloud-escalate").length, 1,
     "the HUD's cloud escalate command is granted by no set, or by more than one");
+  assert.equal(capability.permissions.filter((name) => name === "hud-faces").length, 1,
+    "the HUD's face models command is granted by no set, or by more than one");
   // Same commands as H2: H3 added none.
   const lib = read("src-tauri/src/lib.rs");
   assert.match(lib, /hud_layout::get_hud_layout/);

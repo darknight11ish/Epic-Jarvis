@@ -1297,6 +1297,11 @@ pub fn run() {
             animal::migrate_animal_still,
             appearance::get_appearance,
             appearance::set_appearance,
+            // The HUD's face models icon (2026-10-28, the owner's ask): ONE
+            // face id, proved against the spec and saved through the SAME
+            // `set_appearance` above. Cosmetic, no card, and no binding,
+            // colour or animal field can ride along.
+            appearance::hud_set_face,
             appearance::appearance_snapshot,
             appearance::appearance_colours,
             update::update_status,
