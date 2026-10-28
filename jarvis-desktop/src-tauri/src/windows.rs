@@ -751,6 +751,24 @@ fn take_pending_settings_place() -> Option<&'static str> {
         .and_then(|mut pending| pending.take())
 }
 
+/// Forgets any place a window was asked to open at but never really showed -
+/// App lock refused, or the owner cancelled Windows Hello.
+///
+/// WHY THIS EXISTS (Batch C audit, 2026-10-28). The place is stored before
+/// `show_settings`/`show_brain` run, and `take_pending*` is the only thing
+/// that clears it - but those two take it only when the window is really
+/// opened. A prompt the owner dismissed left the place set, so a LATER plain
+/// "Settings and help..." (or a tray "Chat history...") opened straight into
+/// that card. One call from `lock.rs`'s failure arms clears both.
+pub(crate) fn forget_pending_places() {
+    if let Ok(mut pending) = PENDING_SETTINGS_PLACE.lock() {
+        *pending = None;
+    }
+    if let Ok(mut pending) = PENDING_PLACE.lock() {
+        *pending = None;
+    }
+}
+
 /// Opens Settings at one of [`SETTINGS_PLACES`] - the tray's "Update
 /// available — v…" row is the caller (the owner, 2026-10-27). Navigation only;
 /// App lock still applies, as for [`show_settings`].

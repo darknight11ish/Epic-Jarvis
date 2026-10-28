@@ -892,9 +892,16 @@ fn start_unlock(app: &AppHandle, which: Covered) {
                 sweep(&app);
                 open_now(&app, which);
             }
-            // Dismissed: the owner's own answer, nothing to say.
-            Err(_) if outcome == Outcome::Cancelled => {}
-            Err(why) => crate::commands::notify(&app, "Jarvis is locked", &format!("{why}.")),
+            // Dismissed: the owner's own answer, nothing to say - but the
+            // place this window was asked to open at never happened, and a
+            // later plain entry must not jump there (Batch C audit, 2026-10-28).
+            Err(_) if outcome == Outcome::Cancelled => {
+                crate::windows::forget_pending_places();
+            }
+            Err(why) => {
+                crate::windows::forget_pending_places();
+                crate::commands::notify(&app, "Jarvis is locked", &format!("{why}."));
+            }
         }
     });
 }
