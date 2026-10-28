@@ -109,6 +109,21 @@ check("each state has its own sentence, and OFF says what it costs", () => {
   assert.match(A.modeSaid("during"), /filter while Jarvis writes/);
 });
 
+check("the PC's own sentence is read from `words`, the key it really sends", () => {
+  // `jarvis_antislop` answers `words` on both routes (status_words()); the card
+  // used to look for `said`, which no backend sends, so the PC's sentence was
+  // never shown (2026-10-28 audit). `said` here is deliberately WRONG and must
+  // be ignored: this proves the right key wins rather than both being read.
+  const v = A.readAntislop({
+    ...STATE,
+    words: "The Anti-Slop filter is off, so it changes nothing.",
+    said: "not a key any backend sends",
+  });
+  assert.equal(v.words, "The Anti-Slop filter is off, so it changes nothing.");
+  // A PC that sends no sentence leaves it null rather than inventing one.
+  assert.equal(A.readAntislop(STATE).words, null);
+});
+
 check("the three scopes and the two modes are exactly the contract's", () => {
   assert.deepEqual(A.SCOPES.map((s) => s.id), ["copy", "code", "ui"]);
   assert.deepEqual(A.MODES.map((m) => m.id), ["during", "after"]);

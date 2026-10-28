@@ -176,8 +176,9 @@ function step(v, fallback) {
 /**
  * GET /api/antislop, read:
  * `{enabled, mode, scopes: {copy, code, ui}, dials: {energy, rhythm, motion},
- * show_delivery_gate_on_ui_tasks, allow_em_dashes}`, or `{available: false,
- * why}`.
+ * show_delivery_gate_on_ui_tasks, allow_em_dashes, words}`, or
+ * `{available: false, why}`. `words` is the PC's own one-sentence status
+ * (`jarvis_antislop.status_words()`) and is `null` when it sent none.
  *
  * A body with no `enabled` yes-or-no is NOT read as "off" - it is
  * `available: false`, because a state nobody could read is not a filter that is
@@ -217,9 +218,11 @@ export function readAntislop(raw) {
     title: text(v.title, TITLE),
     detail: text(v.detail, DETAIL),
     offNote: text(v.off_note, OFF_NOTE),
-    // The PC's own words for a state, when it sends them: the page never
-    // repaints a sentence the backend wrote.
-    said: v.said && typeof v.said === "object" ? v.said : null,
+    // The PC's own words for the state it holds, when it sends them. The key
+    // is `words` - that is what `jarvis_antislop` answers with (both routes'
+    // `status_words()`); this used to read `said`, a key no backend sends, so
+    // the page always fell back to its own copy (2026-10-28 audit).
+    words: text(v.words, null),
   };
 }
 

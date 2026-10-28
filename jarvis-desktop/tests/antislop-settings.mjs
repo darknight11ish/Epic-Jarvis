@@ -106,7 +106,7 @@ function bridge(scenario) {
       if (c.dials !== undefined) s.dials = c.dials;
       if (c.gate !== undefined) s.show_delivery_gate_on_ui_tasks = c.gate;
       if (c.allow_em_dashes !== undefined) s.allow_em_dashes = c.allow_em_dashes;
-      return { ok: true, said: "PC said it.", ...JSON.parse(JSON.stringify(s)) };
+      return { ok: true, words: "PC said it.", ...JSON.parse(JSON.stringify(s)) };
     }
     return inner(cmd, args);
   };

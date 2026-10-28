@@ -81,7 +81,7 @@ SOFTWARE.
 miqdadbadjuber/anti-slop (v3.2.23, commit 6732aee)
 Source: https://github.com/miqdadbadjuber/anti-slop
 License: MIT
-Copyright (c) 2025-2026 Miqdad Badjuber
+Copyright (c) 2026 Miqdad Badjuber (antislop)
 Used for: Distilled design, copywriting, accessibility (unrounded WCAG 2.1 contrast formula), and code-comment quality rules in backend/jarvis_antislop.py.
 
 What was taken, in detail: the rulebook's checkable rules are re-expressed as
@@ -104,7 +104,7 @@ its files are shipped.
 
 MIT License
 
-Copyright (c) 2025-2026 Miqdad Badjuber
+Copyright (c) 2026 Miqdad Badjuber (antislop)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

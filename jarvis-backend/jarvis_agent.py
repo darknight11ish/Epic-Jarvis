@@ -8169,9 +8169,20 @@ def with_focus_note(msgs: list) -> list:
 
 def _antislop_dash_exemption() -> bool:
     """Whether "Write Like Me" owns the prose style (R-37) - read ONCE a turn,
-    because it reads the owner's own samples and they do not change mid-turn."""
+    because it reads the owner's own samples and they do not change mid-turn.
+
+    THE SWITCH IS ASKED FIRST, AND THAT ORDER IS THE WHOLE POINT. The reader,
+    `voiceprint_uses_em_dash()`, opens the owner's voiceprint store, so calling
+    it before the switch meant every turn read that file even with the Anti-Slop
+    filter OFF - the one thing "OFF does no work" promises not to do (2026-10-28
+    audit). With the switch off this returns before any store is opened, and
+    `backend/test_antislop.py` proves the reader is never called by making it
+    record.
+    """
     try:
         import jarvis_antislop as AS
+        if not AS.is_enabled():
+            return False
         return bool(AS.voiceprint_uses_em_dash())
     except Exception:
         return False

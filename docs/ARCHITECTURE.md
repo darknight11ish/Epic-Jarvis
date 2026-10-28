@@ -3491,9 +3491,11 @@ model are read-only (the benchmark loads the model to answer one fixed prompt,
 which is what asking it anything does); a download is still the EXISTING
 `/api/models/install` card, and applying a preset is still the EXISTING
 `/api/work/apply` card. **The desktop half is the only caller:** `brain.js`'s
-Model panel asks all five through `brain_model_recommend`, and
-`tools/check_parity.py` classifies each one `deliberate` with this paragraph as
-its reason (a phone call is then a failure). **The owner's click is the per-use
+Model panel reads the GET through the Brain's read allowlist (it is the
+`model_recommendations` section of `brain_read`, `brain/routes.rs`) and asks the
+other four through `brain_model_recommend`, and `tools/check_parity.py`
+classifies each one `deliberate` with this paragraph as its reason (a phone call
+is then a failure). **The owner's click is the per-use
 trigger for the one lookup that leaves the PC:** nothing checks on a timer, at
 startup or when the Brain opens, and the panel never auto-checks - a Hugging
 Face request happens only when the owner presses "Check for new models". That

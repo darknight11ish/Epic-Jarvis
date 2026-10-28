@@ -465,13 +465,23 @@ def set_enabled(on: bool) -> dict:
     return _change(summary, lambda s: s.__setitem__("enabled", on))
 
 
-def set_mode(mode: str) -> dict:
-    """`during` (filter as it writes) or `after` (audit and list findings).
-    An unknown mode is refused in words, never guessed at."""
+def _mode_checked(mode) -> str:
+    """The mode a caller gave, normalised, or ValueError.
+
+    ONE validator, used by `set_mode` and by `_apply`'s validate-everything-
+    first pass (2026-10-28 audit), so the two can never disagree about what a
+    mode is."""
     want = str(mode or "").strip().lower()
     if want not in MODES:
         raise ValueError(f"\"{mode}\" is not a mode; the two are "
                          f"{' and '.join(MODES)}.")
+    return want
+
+
+def set_mode(mode: str) -> dict:
+    """`during` (filter as it writes) or `after` (audit and list findings).
+    An unknown mode is refused in words, never guessed at."""
+    want = _mode_checked(mode)
     words = ("during - filter live" if want == "during"
              else "after - audit and list findings first")
     return _change(f"Anti-Slop mode set to {words}.",
@@ -490,11 +500,12 @@ def set_scope(scope: str, on: bool) -> dict:
     return state
 
 
-def set_dials(energy: Optional[int] = None, rhythm: Optional[int] = None,
-              motion: Optional[int] = None) -> dict:
-    """Set the three Liveliness dials (1..3). A dial left out keeps its value;
-    one outside 1..3 is refused rather than clamped, because a silent clamp
-    reads back as "your setting moved" when it did not."""
+def _dials_checked(energy=None, rhythm=None, motion=None) -> dict:
+    """The three dials `set_dials` would write, or ValueError.
+
+    ONE validator, used by `set_dials` and by `_apply`'s validate-everything-
+    first pass (2026-10-28 audit), so a refused dial can never be written by
+    one door and refused by the other."""
     wanted = {"energy": energy, "rhythm": rhythm, "motion": motion}
     now = _on_disk()["dials"]
     picked = {}
@@ -509,6 +520,15 @@ def set_dials(energy: Optional[int] = None, rhythm: Optional[int] = None,
             raise ValueError(f"{name} must be from {DIAL_MIN} to {DIAL_MAX}, "
                              f"not {value}.")
         picked[name] = value
+    return picked
+
+
+def set_dials(energy: Optional[int] = None, rhythm: Optional[int] = None,
+              motion: Optional[int] = None) -> dict:
+    """Set the three Liveliness dials (1..3). A dial left out keeps its value;
+    one outside 1..3 is refused rather than clamped, because a silent clamp
+    reads back as "your setting moved" when it did not."""
+    picked = _dials_checked(energy, rhythm, motion)
 
     def edit(state: dict) -> None:
         state["dials"].update(picked)
@@ -905,10 +925,18 @@ def post_process_reply(text: str, *, voiceprint_uses_em_dash: bool = False) -> s
     WHAT IT MAY BE GIVEN, AND WHAT IT MAY NEVER BE GIVEN (Gemini's Q4 ruling).
     Only the words the model wrote in a CHAT answer. Never a tool's input or
     output, never a file Jarvis writes, never a diff or a patch, never a file
-    that is already in a repository - and `run_local_turn` is its only caller
-    in the backend, on the model's own stream. This function rewrites nothing
-    on disk and opens nothing; a file handed to `audit_text_or_ui` instead is
-    read, reported on, and left exactly as it was.
+    that is already in a repository. This function rewrites nothing on disk and
+    opens nothing; a file handed to `audit_text_or_ui` instead is read, reported
+    on, and left exactly as it was.
+
+    WHAT CALLS IT, AND WHY IT EXISTS ANYWAY (corrected 2026-10-28). Nothing in
+    production does: `run_local_turn` runs the streaming `ReplyFilter` and calls
+    its `flush()` directly as the words go out, because a whole-answer rewrite
+    after the stream has gone would change nothing on screen. So this is the
+    TESTED unit of the whole-text half - `backend/test_antislop.py` is its only
+    caller, and it is what proves the whole-text and piece-by-piece results
+    cannot drift apart (t_the_stream_filter_matches_the_whole_text_scrub). Do
+    not put it back in the turn's path.
     """
     filt = reply_filter(voiceprint_uses_em_dash=voiceprint_uses_em_dash)
     if filt is None:
@@ -1352,6 +1380,12 @@ def _apply(body: dict) -> dict:
     REFUSED (a typo must not read back as "your setting was saved"), and the
     body may carry several parts at once, which the Settings page does when it
     saves a whole card.
+
+    EVERY PART IS VALIDATED BEFORE ANY PART IS WRITTEN (2026-10-28 audit). Each
+    setter writes as it is called, so a body carrying a valid scope and a bad
+    mode used to save the scope and THEN answer 400 - a refusal that had already
+    changed something. The checks below run first and the setters only after
+    them, so a body any part of which is refused changes nothing at all.
     """
     known = {"enabled", "mode", "scopes", "dials", "allow_em_dashes",
              "show_delivery_gate_on_ui_tasks"}
@@ -1360,37 +1394,39 @@ def _apply(body: dict) -> dict:
         return {"ok": False, "error": "unknown_setting",
                 "message": f"the anti-slop filter has no setting called "
                            f"{unknown[0]}"}
-    touched = False
+    steps: list = []
     if isinstance(body.get("scopes"), dict):
         for name in SCOPES:
             if isinstance(body["scopes"].get(name), bool):
-                set_scope(name, body["scopes"][name])
-                touched = True
+                steps.append(lambda name=name,
+                             on=body["scopes"][name]: set_scope(name, on))
     if isinstance(body.get("dials"), dict):
         dials = body["dials"]
-        set_dials(energy=dials.get("energy"), rhythm=dials.get("rhythm"),
-                  motion=dials.get("motion"))
-        touched = True
+        # Raises ValueError before anything is written; handle_post answers
+        # that as "bad_value", the same error this body got before.
+        picked = _dials_checked(dials.get("energy"), dials.get("rhythm"),
+                                dials.get("motion"))
+        steps.append(lambda picked=picked: set_dials(**picked))
     if "mode" in body:
         try:
-            set_mode(body.get("mode"))
+            mode = _mode_checked(body.get("mode"))
         except ValueError as exc:
             return {"ok": False, "error": "bad_mode", "message": str(exc)}
-        touched = True
+        steps.append(lambda mode=mode: set_mode(mode))
     if isinstance(body.get("show_delivery_gate_on_ui_tasks"), bool):
-        set_delivery_gate(body["show_delivery_gate_on_ui_tasks"])
-        touched = True
+        steps.append(lambda on=body["show_delivery_gate_on_ui_tasks"]:
+                     set_delivery_gate(on))
     # The owner's own override for R-02 (Gemini's Q3 ruling). The Settings
     # checkbox and the phone can both send this key; the route is the one door.
     if isinstance(body.get("allow_em_dashes"), bool):
-        set_allow_em_dashes(body["allow_em_dashes"])
-        touched = True
+        steps.append(lambda on=body["allow_em_dashes"]: set_allow_em_dashes(on))
     if isinstance(body.get("enabled"), bool):
-        set_enabled(body["enabled"])
-        touched = True
-    if not touched:
+        steps.append(lambda on=body["enabled"]: set_enabled(on))
+    if not steps:
         return {"ok": False, "error": "nothing_to_change",
                 "message": "the request named no setting to change"}
+    for step in steps:
+        step()
     return {"ok": True}
 
 

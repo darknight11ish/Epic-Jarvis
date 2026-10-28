@@ -190,7 +190,13 @@ class AntislopTest {
 
     @Test
     fun `the sentence after a change is the PC's, and ours only as a fallback`() {
-        val ok = ApiResult.Ok(buildJsonObject { put("said", "PC said it.") })
+        // `words` is the key `jarvis_antislop` answers with on both routes; a
+        // leftover `said` is deliberately wrong here and must be ignored, which
+        // is what proves the phone reads the real one (2026-10-28 audit).
+        val ok = ApiResult.Ok(buildJsonObject {
+            put("words", "PC said it.")
+            put("said", "not a key any backend sends")
+        })
         assertEquals("PC said it.", Antislop.replyLine(ok, true))
         assertEquals("PC said it.", Antislop.modeReplyLine(ok, "after"))
         assertEquals("PC said it.", Antislop.emDashReplyLine(ok, true))

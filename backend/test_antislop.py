@@ -238,6 +238,45 @@ def t_the_switch_is_zero_tokens_and_zero_work_when_off():
           "# ==========\n" in A.post_process_reply("```py\n# ==========\nx = 1\n```\n"))
 
 
+def t_off_reads_no_voiceprint_at_all():
+    """"0 work when off" covers the DISK too, not just the prompt.
+
+    `_antislop_dash_exemption()` runs on every turn, and it used to read the
+    owner's voiceprint samples BEFORE asking the switch - so OFF added no token
+    and still opened a file every turn (2026-10-28 audit). The reader below
+    RECORDS every call and raises, so one call cannot be missed; the ON half of
+    this check is what stops it passing for the wrong reason, because the same
+    reader must still be asked when the filter is on.
+    """
+    calls = []
+
+    def reader(*_a, **_k):
+        calls.append("read")
+        raise AssertionError("the voiceprint store was read")
+
+    real = A.voiceprint_uses_em_dash
+    A.voiceprint_uses_em_dash = reader
+    try:
+        reset()
+        _one_turn("hi")
+        check("OFF: a whole turn never opens the owner's voiceprint samples",
+              calls == [], calls)
+        A.set_enabled(True)
+        calls.clear()
+        on = _one_turn("hi")
+        check("ON: the same reader IS asked once (so the OFF check is not vacuous)",
+              calls == ["read"], calls)
+        # A reader that fails must not invent an exemption: R-02 stays in the
+        # prompt, which is the safe direction.
+        check("...and a reader that fails leaves R-02 in the prompt",
+              "R-02" in json.dumps(on["request"].get("messages") or []),
+              json.dumps(on["request"].get("messages") or [])[-300:])
+    finally:
+        A.voiceprint_uses_em_dash = real
+        A.set_enabled(False)
+    reset()
+
+
 def t_turning_it_on_writes_the_file_an_event_and_one_receipt():
     reset()
     receipts_before = _receipt_count()
@@ -1043,6 +1082,17 @@ def t_the_routes_answer_through_the_core_handler():
     code, out = core.call("POST", "/api/antislop", {"mode": "sideways"})
     check("an unknown mode is refused with the two real ones",
           code == 400 and "during" in str(out), (code, out))
+    # 2026-10-28 audit: a body with one valid part and one invalid part must
+    # change NOTHING. This used to save the scope first and then answer 400, so
+    # a refusal had already changed a setting.
+    before = A.get_state()
+    code, out = core.call("POST", "/api/antislop",
+                          {"scopes": {"code": True}, "mode": "sideways"})
+    check("a two-part body with a bad mode is refused (400)",
+          code == 400 and "during" in str(out), (code, out))
+    check("...and NOTHING is written: the valid scope did not half-apply",
+          A.get_state()["scopes"] == before["scopes"],
+          (before["scopes"], A.get_state()["scopes"]))
     code, out = core.call("POST", "/api/antislop/audit",
                           {"content": "a — b", "kind": "text"})
     check("POST /api/antislop/audit answers a findings report",
@@ -1420,6 +1470,8 @@ def run_bites():
 CHECKS = [
     t_the_default_is_off_and_says_so,
     t_the_switch_is_zero_tokens_and_zero_work_when_off,
+    # 2026-10-28 audit: OFF must not open the voiceprint store either.
+    t_off_reads_no_voiceprint_at_all,
     t_turning_it_on_writes_the_file_an_event_and_one_receipt,
     t_the_prompt_block_is_scoped_and_bounded,
     t_after_mode_asks_for_an_audit_and_rewrites_nothing,

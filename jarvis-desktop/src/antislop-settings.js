@@ -252,6 +252,12 @@ async function load() {
 /**
  * ONE change. The Rust command builds the POST body from the fields that were
  * given, so the switch's own call still sends exactly `{"enabled": bool}`.
+ *
+ * THE PC'S OWN SENTENCE IS `words`, NEVER `said` (2026-10-28 audit): both
+ * routes answer `words` (`jarvis_antislop.status_words()`, the whole state in
+ * one line), and `said` is a key no backend has ever sent - so this used to
+ * show the page's fallback every time. A 200 always carries it; `error` stays
+ * as the second read because a refusal body names its own error.
  */
 async function send(change, said) {
   if (busy) return false;
@@ -261,7 +267,7 @@ async function send(change, said) {
   let ok = false;
   try {
     const out = await invoke("set_antislop", { change });
-    const words = String((out && (out.said || out.error)) || said || "Done.");
+    const words = String((out && (out.words || out.error)) || said || "Done.");
     ok = !(out && out.ok === false);
     say(el.status, words, ok ? "ok" : "bad");
     announce(words);

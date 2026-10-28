@@ -26300,6 +26300,14 @@ may claim that every anti-slop rule is mechanically enforced.
 
 ### 159.3 The routes
 
+Three routes, written method-first on their own lines - the shape
+`tools/check_parity.py` reads a documented route from, so none of them can go
+missing from its parity check:
+
+    GET  /api/antislop          the whole state, in the PC's own shape
+    POST /api/antislop          one control sends ONE change, through its own setter
+    POST /api/antislop/audit    read-only: the rule findings for text the caller already has
+
 **`GET /api/antislop`** - the whole state, in the PC's own shape:
 
 ```json

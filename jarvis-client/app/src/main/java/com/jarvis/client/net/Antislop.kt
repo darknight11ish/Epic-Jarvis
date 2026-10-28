@@ -167,9 +167,16 @@ object Antislop {
         put("allow_em_dashes", JsonPrimitive(on))
     }.toString()
 
-    /** What to say after a change: the PC's sentence, or the plain words of the failure. */
+    /**
+     * What to say after a change: the PC's sentence, or the plain words of the
+     * failure. The key is `words` - what `jarvis_antislop` answers with on both
+     * routes (`status_words()`, the whole state in one line). It used to read
+     * `said`, which no backend sends, so this always fell back to [SAID]
+     * (2026-10-28 audit). `error` stays as the second read because a refusal
+     * body names its own error.
+     */
     fun replyLine(result: ApiResult<JsonObject>, on: Boolean): String = when (result) {
-        is ApiResult.Ok -> (result.value["said"] as? JsonPrimitive)?.contentOrNull
+        is ApiResult.Ok -> (result.value["words"] as? JsonPrimitive)?.contentOrNull
             ?: (result.value["error"] as? JsonPrimitive)?.contentOrNull
             ?: SAID.getValue(on)
         is ApiResult.Failed ->
@@ -178,7 +185,7 @@ object Antislop {
 
     /** The same shape for the mode radio. */
     fun modeReplyLine(result: ApiResult<JsonObject>, mode: String): String = when (result) {
-        is ApiResult.Ok -> (result.value["said"] as? JsonPrimitive)?.contentOrNull
+        is ApiResult.Ok -> (result.value["words"] as? JsonPrimitive)?.contentOrNull
             ?: (result.value["error"] as? JsonPrimitive)?.contentOrNull
             ?: MODE_SAID.getValue(mode)
         is ApiResult.Failed ->
@@ -187,7 +194,7 @@ object Antislop {
 
     /** The same shape for the em-dash exemption. */
     fun emDashReplyLine(result: ApiResult<JsonObject>, on: Boolean): String = when (result) {
-        is ApiResult.Ok -> (result.value["said"] as? JsonPrimitive)?.contentOrNull
+        is ApiResult.Ok -> (result.value["words"] as? JsonPrimitive)?.contentOrNull
             ?: (result.value["error"] as? JsonPrimitive)?.contentOrNull
             ?: EM_DASH_SAID.getValue(on)
         is ApiResult.Failed ->
