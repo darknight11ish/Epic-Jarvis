@@ -69,10 +69,21 @@ class QuickLinkWidget : GlanceAppWidget() {
         // Same guard ApprovalWidget uses, for the same reason: called bare
         // from a Glance worker, a Keystore or preferences failure here is an
         // uncaught exception in the update coroutine, not a screen this app
-        // controls.
-        val ready = runCatching { JarvisRuntime.initialize(context) }.isSuccess &&
-            JarvisRuntime.isInitialized
+        // controls. And the same ceiling: a startup that never finishes is
+        // "Open Jarvis", not an open-ended suspension.
+        val ready = WidgetRuntime.start(context) && JarvisRuntime.isInitialized
+        val paired = ready && JarvisRuntime.isPaired()
         val link = if (ready) JarvisRuntime.link.value else LinkState.OFFLINE
+        // The raw LinkState is not enough here: a process the launcher woke
+        // only to draw this has a CONNECTED-or-OFFLINE value that means "not
+        // looked", and it may not be paired at all. WidgetStates.link adds
+        // those two, so this widget also always ends in words.
+        val state = WidgetStates.link(
+            ready = ready,
+            paired = paired,
+            connected = ready && link == LinkState.CONNECTED,
+            reconnecting = ready && link == LinkState.RECONNECTING,
+        )
 
         provideContent {
             Row(
@@ -84,14 +95,10 @@ class QuickLinkWidget : GlanceAppWidget() {
                     .clickable(actionStartActivity<MainActivity>()),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                StatusDot(link)
+                StatusDot(state)
                 Spacer(GlanceModifier.width(8.dp))
                 Text(
-                    text = when (link) {
-                        LinkState.CONNECTED -> "Connected"
-                        LinkState.RECONNECTING -> "Reconnecting"
-                        LinkState.OFFLINE -> "Offline"
-                    },
+                    text = WidgetStates.linkWords(state),
                     style = TextStyle(
                         color = QuickLinkPalette.TextMuted,
                         fontSize = 11.sp,
@@ -121,14 +128,20 @@ class QuickLinkWidget : GlanceAppWidget() {
     }
 
     @Composable
-    private fun StatusDot(link: LinkState) {
+    private fun StatusDot(state: WidgetStates.Link) {
         Box(
             modifier = GlanceModifier
                 .background(
-                    when (link) {
-                        LinkState.CONNECTED -> QuickLinkPalette.StatusOk
-                        LinkState.RECONNECTING -> QuickLinkPalette.StatusWarn
-                        LinkState.OFFLINE -> QuickLinkPalette.StatusBad
+                    when (state) {
+                        WidgetStates.Link.CONNECTED -> QuickLinkPalette.StatusOk
+                        WidgetStates.Link.RECONNECTING -> QuickLinkPalette.StatusWarn
+                        // Offline, or nothing here to be connected WITH: the
+                        // dot is a warning either way, and the words beside it
+                        // say which of the two it is.
+                        WidgetStates.Link.OFFLINE,
+                        WidgetStates.Link.NOT_STARTED,
+                        WidgetStates.Link.NOT_PAIRED,
+                        -> QuickLinkPalette.StatusBad
                     },
                 )
                 .cornerRadius(4.dp)
