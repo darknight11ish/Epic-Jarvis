@@ -442,6 +442,10 @@ import {
   whenLine,
   whenWords,
 } from "./history-view.js";
+// The row words the HUD's History sidebar also says, in ONE place (Gemini
+// ruling, 2026-10-27): the two windows edit the same chats through the same
+// routes, so they read the same table.
+import { ACTION_LABELS } from "./history-actions.js";
 import {
   ADD_TAG,
   ALL as TAG_ALL,
@@ -5035,7 +5039,7 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     actions: [
       button(open ? "Close" : "Open", () => toggleConversation(c.id, needle),
         { title: open ? "Close the conversation." : "Read the conversation. Nothing changes." }),
-      button("Delete", () => deleteConversation(c),
+      button(ACTION_LABELS.delete, () => deleteConversation(c),
         { danger: true, live: true, title: "Delete this conversation from this PC. There is no undo." }),
     ],
   });

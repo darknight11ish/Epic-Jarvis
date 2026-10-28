@@ -583,6 +583,24 @@ pub fn redact_hud_read(path: &str, body: &str) -> String {
             Ok(v) => crate::brain::schedule::redact_list(v).to_string(),
             Err(_) => serde_json::json!({ "available": false, "hidden": true }).to_string(),
         },
+        // The HUD's History sidebar (2026-10-27). A chat's title is the
+        // owner's own words and a tag NAME is too, so the SAME redaction the
+        // Brain's History tab uses applies here: the list keeps its counts
+        // and its status (`hidden`, `hidden_count`) with no conversation in
+        // it, a tag keeps its id, order and count with no name, and an
+        // opened conversation is refused whole - the page shows its "hidden"
+        // line instead of a chat.
+        "/api/history" => match serde_json::from_str::<serde_json::Value>(body) {
+            Ok(v) => crate::brain::history::redact_list(v).to_string(),
+            Err(_) => serde_json::json!({ "available": false, "hidden": true }).to_string(),
+        },
+        "/api/history/conversation" => {
+            serde_json::json!({ "available": false, "hidden": true }).to_string()
+        }
+        "/api/history/tags" => match serde_json::from_str::<serde_json::Value>(body) {
+            Ok(v) => crate::brain::history::redact_tags(v).to_string(),
+            Err(_) => serde_json::json!({ "available": false, "hidden": true }).to_string(),
+        },
         _ => body.to_string(),
     }
 }
