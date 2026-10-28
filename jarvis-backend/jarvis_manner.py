@@ -53,6 +53,7 @@ import os
 import re
 import sys
 import threading
+import time
 from pathlib import Path
 
 WARM = "warm"
@@ -700,12 +701,93 @@ def set_temporary(conversation_id: str, manner: str) -> bool:
 def _read_settings() -> dict:
     """`manner.json`, as a plain dict - `{}` for a missing or damaged file.
     Never raises. The one place both `current()` and `humor_enabled()` read
-    the file, and what `handle_set()` merges its one changed key into."""
+    the file. This is the READ path, and being tolerant is right for showing a
+    setting: a damaged file shows the safe defaults. A WRITE must not use it -
+    see `_read_settings_for_write` below."""
     try:
         doc = json.loads(settings_path().read_text(encoding="utf-8"))
         return doc if isinstance(doc, dict) else {}
     except Exception:
         return {}
+
+
+#: Said when `manner.json` exists but cannot be read, so the write is REFUSED
+#: instead of merged onto an empty document (data-integrity audit F3,
+#: 2026-10-28). A damaged file used to read as `{}` and the next write replaced
+#: the whole file from that `{}`: one silent write wiped every saved
+#: personality, the four dials, humour and the voice-lock switch.
+DAMAGED_WORDS = (
+    "I could not read your saved personalities, so I did not change anything. "
+    "manner.json in the settings folder is damaged; I kept a copy of it beside itself as "
+    "{copy}. Fix or delete manner.json, then try again.")
+DAMAGED_WORDS_NO_COPY = (
+    "I could not read your saved personalities, so I did not change anything. "
+    "manner.json in the settings folder is damaged and I could not copy it aside. Fix or "
+    "delete it, then try again.")
+#: An OSError while writing is the old, unchanged answer.
+SAVE_FAILED = "I could not save that just now ({why})."
+
+
+def _keep_damaged_copy(p: Path) -> str:
+    """Keep the damaged `manner.json` as `manner.json.corrupt-<stamp>`, and
+    return the copy's name ("" when it could not be written).
+
+    ONE copy per distinct damaged content: a second refused write of the same
+    bytes reuses the first copy rather than adding another file every time the
+    owner tries again. Nothing is moved or deleted - the file stays exactly
+    where it was, so it can be repaired by hand."""
+    try:
+        raw = p.read_bytes()
+    except OSError:
+        return ""
+    try:
+        for old in sorted(p.parent.glob(p.name + ".corrupt-*")):
+            try:
+                if old.read_bytes() == raw:
+                    return old.name
+            except OSError:
+                continue
+        name = f"{p.name}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}"
+        if p.with_name(name).exists():
+            name = f"{p.name}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
+        p.with_name(name).write_bytes(raw)
+        return name
+    except OSError:
+        return ""
+
+
+def _read_settings_for_write() -> tuple:
+    """(doc, problem) for a read-merge-write of `manner.json`.
+
+    ABSENT and UNREADABLE are different answers here, and that is the whole
+    fix (data-integrity audit F3, 2026-10-28):
+
+      * no file      -> ({}, ""). A fresh settings folder is normal, and the
+                        write creates it.
+      * a JSON object -> (doc, ""). The merge keeps every key it does not touch
+                        (the #881 shape).
+      * anything else -> ({}, plain-words refusal), and a copy of the damaged
+                        bytes is kept beside it. The caller refuses the write
+                        and says so; nothing is merged from `{}`.
+
+    Never raises. The same shape chat tags already use: `_load_tags` raises
+    rather than guessing when the stored value cannot be read."""
+    p = settings_path()
+    if not p.exists():
+        return {}, ""
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        copy = _keep_damaged_copy(p)
+        return {}, (DAMAGED_WORDS.format(copy=copy) if copy else DAMAGED_WORDS_NO_COPY)
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        doc = None
+    if not isinstance(doc, dict):
+        copy = _keep_damaged_copy(p)
+        return {}, (DAMAGED_WORDS.format(copy=copy) if copy else DAMAGED_WORDS_NO_COPY)
+    return doc, ""
 
 
 def current(conversation_id: str | None = None) -> str:
@@ -816,14 +898,16 @@ def handle_set(body) -> tuple:
     said = []
     if changed_manner:
         legacy_pid = _LEGACY[m]
-        if not _merge_setting({"manner": m, "personality": legacy_pid,
-                               "personality_explicit": False,
-                               "dials": dict(_BY_ID[legacy_pid]["dials"])}):
-            return 500, {"ok": False, "error": "could not save the setting - please try again"}
+        ok, why = _merge_setting({"manner": m, "personality": legacy_pid,
+                                  "personality_explicit": False,
+                                  "dials": dict(_BY_ID[legacy_pid]["dials"])})
+        if not ok:
+            return 500, {"ok": False, "error": why}
         said.append(SAID[m])
     if changed_humor:
-        if not _merge_setting({"humor": h}):
-            return 500, {"ok": False, "error": "could not save the setting - please try again"}
+        ok, why = _merge_setting({"humor": h})
+        if not ok:
+            return 500, {"ok": False, "error": why}
         said.append(HUMOR_SAID[h])
     # ---- personality switch ----
     if "personality" in body:
@@ -1021,20 +1105,39 @@ def normalize_personality_id(value) -> "str | None":
     return None
 
 
-def _merge_setting(patch: dict) -> bool:
-    """Read-merge-write `manner.json`. False (nothing changed) on an OSError."""
+def _merge_setting(patch: dict) -> tuple:
+    """Read-merge-write `manner.json`. (ok, plain words when it did not).
+
+    A damaged file is REFUSED, not merged onto `{}` (data-integrity audit F3,
+    2026-10-28). Before this, `_read_settings()` answered `{}` for a file that
+    existed but did not parse, so `doc.update(patch)` wrote a `manner.json`
+    holding only the one changed key: every saved personality, the dials,
+    humour and the voice-lock switch gone in a silent 200 OK. The damaged file
+    is kept as `manner.json.corrupt-<stamp>` and the owner is told to fix or
+    delete it.
+
+    Before each replace, the file that is still valid is copied to
+    `manner.json.bak` - the last good copy, beside the live one. A missing
+    `.bak` write is never a reason to refuse a save (a read-only settings
+    folder is its own failure, reported by the replace below)."""
     with _LOCK:
-        doc = _read_settings()
+        doc, problem = _read_settings_for_write()
+        if problem:
+            return False, problem
         doc.update(patch)
         p = settings_path()
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.with_name(p.name + ".tmp")
             tmp.write_text(json.dumps(doc), encoding="utf-8")
+            try:
+                p.with_name(p.name + ".bak").write_bytes(p.read_bytes())
+            except OSError:
+                pass                # no last-good copy this time; the save still goes on
             os.replace(tmp, p)
-            return True
-        except OSError:
-            return False
+            return True, ""
+        except OSError as exc:
+            return False, SAVE_FAILED.format(why=type(exc).__name__)
 
 
 def user_personalities() -> list:
@@ -1336,8 +1439,9 @@ def set_personality(pid, *, keep_dials: bool = False) -> tuple:
              "manner": "warm" if active["id"] == "warm_peer" else "plain"}
     if not keep_dials:
         patch["dials"] = dict(active["dials"])
-    if not _merge_setting(patch):
-        return False, "I could not save that just now."
+    ok, why = _merge_setting(patch)
+    if not ok:
+        return False, why
     return True, str(active.get("switch_ack") or "")
 
 
@@ -1352,8 +1456,9 @@ def set_dial(name: str, value) -> tuple:
     saved = _read_settings().get("dials")
     merged = dict(saved) if isinstance(saved, dict) else {}
     merged[name] = canonical
-    if not _merge_setting({"dials": merged}):
-        return False, "I could not save that just now."
+    ok, why = _merge_setting({"dials": merged})
+    if not ok:
+        return False, why
     word = _HUMOR_WORD[canonical] if name == "humor" else (
         _ADDRESS_WORD[canonical] if name == "address" else str(canonical))
     return True, f"Done - {name} is now {word}."
@@ -1363,8 +1468,9 @@ def set_sync_voice(on: bool) -> tuple:
     """Turn "switch Jarvis's spoken voice to match the personality" on or off."""
     if not isinstance(on, bool):
         return False, "The voice-sync switch takes true or false."
-    if not _merge_setting({"sync_voice_with_personality": on}):
-        return False, "I could not save that just now."
+    ok, why = _merge_setting({"sync_voice_with_personality": on})
+    if not ok:
+        return False, why
     if on:
         return True, "Done - Jarvis's voice will now follow the chosen personality."
     return True, "Done - Jarvis will keep your current voice when you switch personalities."
@@ -1479,13 +1585,21 @@ def save_user_personality(spec, *, suggested_id=None) -> tuple:
     if speed is not None:
         item["voice_speed"] = float(speed)
     items.append(item)
-    if not _merge_setting({"user_personalities": items}):
-        return False, "I could not save that just now."
+    ok, why = _merge_setting({"user_personalities": items})
+    if not ok:
+        return False, why
     return True, item
 
 
 def delete_user_personality(pid, *, confirm: bool = False) -> tuple:
     """Delete a custom preset. `confirm=False` only asks; nothing is removed."""
+    # A DAMAGED FILE IS NOT "NO SUCH PERSONALITY" (data-integrity audit F3,
+    # 2026-10-28): the tolerant read returns an empty list, which would answer
+    # "There is no saved personality by that name" about a file whose saved
+    # ones simply cannot be read. Say what is really wrong, and change nothing.
+    _doc, problem = _read_settings_for_write()
+    if problem:
+        return False, problem
     ids = {item["id"]: item for item in user_personalities()}
     key = normalize_personality_id(pid)
     if key not in ids:
@@ -1500,8 +1614,9 @@ def delete_user_personality(pid, *, confirm: bool = False) -> tuple:
         patch["personality_explicit"] = False
         patch["dials"] = dict(_BY_ID[_DEFAULT_PERSONALITY]["dials"])
         patch["manner"] = "warm"
-    if not _merge_setting(patch):
-        return False, "I could not save that just now."
+    ok, why = _merge_setting(patch)
+    if not ok:
+        return False, why
     return True, f"Deleted {name}."
 
 
