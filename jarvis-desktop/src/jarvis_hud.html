@@ -1914,6 +1914,19 @@ body[data-hud-edit="on"] .hud-card-head{
 }
 body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;}
 .hud-card-body .rail-section{margin-top:0;}
+/* 2026-10-28 (the owner's Edit HUD field test): a hidden card used to be
+ * unreachable in Edit HUD. Its shell was `display: none`, so the Hide control -
+ * already painted as a toggle - could only ever hide, and after a reload nothing
+ * on the page could show the card again. While Edit HUD is on, a hidden card is
+ * now painted as a dimmed ghost: its header, the word "hidden" and its own Show
+ * control, with its body folded away so the card itself is still hidden. Outside
+ * edit mode `.hud-card[hidden]` hides the whole shell exactly as before. */
+body[data-hud-edit="on"] .hud-card-hidden{opacity:.6; border-style:dotted;}
+body[data-hud-edit="on"] .hud-card-hidden .hud-card-body{display:none;}
+.hud-card-hidden-word{
+  font-family:var(--f-mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--dim); border:1px solid var(--line); border-radius:2px; padding:0 4px;
+}
 @media (max-width:720px){
   .hud-edit-words{display:none;}
 }
