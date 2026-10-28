@@ -87,6 +87,7 @@ import json
 import math
 import os
 import re
+import sqlite3
 import sys
 import threading
 import time
@@ -1768,29 +1769,62 @@ def _store():
     return M.store()
 
 
+def _add_note_column(c, name: str, decl: str) -> None:
+    """ALTER TABLE auto_learn_notes ADD COLUMN, tolerating a column another
+    writer added a moment ago.
+
+    WHY THIS IS HERE. Two writers exist: the learner's pass (`after_pass` ->
+    `_note_card`) and any thread serving /api/memory/pending, whose
+    `jarvis_intake.annotate()` calls `card_notes()` and so `_init_notes()`
+    too. On an OLD memory.db both can read "no sensitive" and both then
+    ALTER. The loser gets
+    sqlite3.OperationalError("duplicate column name: sensitive"), which
+    escapes `_init_notes` -> `_note_card` -> `after_pass`; `note_failure`
+    records it as `after_pass: OperationalError` and the pass saves nothing -
+    `passes` 0, `failed` climbing, and no fact learned. `jarvis_memory._init()`
+    documents and handles the same race for `facts.retired_at` ("Measured
+    with eight processes released at the same instant: a failure in 2 trials
+    of 8, only on the ONE run that migrates an old database - which is the
+    owner's upgrade path").
+
+    NARROW ON PURPOSE: only "already there" is swallowed. `database is
+    locked`, `no such table` and everything else are real problems and still
+    raise, because a pass that quietly saved nothing would be the same
+    invisible failure in a different coat."""
+    try:
+        c.execute(f"ALTER TABLE auto_learn_notes ADD COLUMN {name} {decl}")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column name" not in str(exc).lower():
+            raise
+
+
 def _init_notes(c) -> None:
+    # Every column `_note_card` inserts is in the CREATE, so a FIRST install
+    # needs no ALTER at all. `topic_ask` used to be missing here and was added
+    # by an ALTER on the very first card - a migration every new install ran,
+    # and one a second writer could collide with (see _add_note_column).
     c.execute("CREATE TABLE IF NOT EXISTS auto_learn_notes ("
               " proposal_id INTEGER PRIMARY KEY, reason TEXT, provenance TEXT, at REAL,"
-              " sensitive TEXT, conversation_id TEXT)")
+              " sensitive TEXT, conversation_id TEXT, topic_ask INTEGER)")
     # `sensitive` (the memory review, B13): the topic a card was held back
     # for - a label ("health"), never words. A table from before it gets
     # the column.
     cols = [r[1] for r in c.execute("PRAGMA table_info(auto_learn_notes)")]
     if "sensitive" not in cols:
-        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN sensitive TEXT")
+        _add_note_column(c, "sensitive", "TEXT")
     # `conversation_id` (the second chat audit, 2026-09-28, finding 3): the
     # chat a card came from, so a card accepted BY HAND keeps the link to its
     # chat like an automatically saved fact does (jarvis_extract._fact_meta
     # copies it into the fact). Without it "Erase the words" said "no chat
     # was on record" for exactly the sensitive facts that wait for a card.
     if "conversation_id" not in cols:
-        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN conversation_id TEXT")
+        _add_note_column(c, "conversation_id", "TEXT")
     # `topic_ask` (topic controls, 2026-09-30): the id of the topic a card
     # asked about ("This might be about Work, which you set to not learn.").
     # Accepting that card files the fact under Unsorted, the owner's choice
     # (jarvis_topics.label_new_fact). An id, never words.
     if "topic_ask" not in cols:
-        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN topic_ask INTEGER")
+        _add_note_column(c, "topic_ask", "INTEGER")
 
 
 def _note_card(c, pid: int, reason: str, provenance: Optional[str] = None,
