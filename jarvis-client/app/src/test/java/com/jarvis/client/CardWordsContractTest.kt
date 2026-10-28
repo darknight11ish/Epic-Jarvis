@@ -4,6 +4,7 @@ import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.decodePendingRows
 import com.jarvis.client.voice.CardVoice
+import com.jarvis.client.widget.ApprovalWidgetRules
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -135,9 +136,24 @@ class CardWordsContractTest {
         // and the affirmative side still falls back to the shared word.
         assertTrue(card.indexOf("Refuse(CardWords.BUTTONS[0]") in 0 until card.indexOf("Affirm("))
         assertTrue(card.indexOf("CardWords.BUTTONS[1]") > card.indexOf("Refuse(CardWords.BUTTONS[0]"))
+        // The widget's order is no longer literals in the drawing code: it
+        // draws the list `ApprovalWidgetRules.buttons` returns (owner,
+        // 2026-10-28). Asking that function is stronger than reading the
+        // source, and it is still the same promise - Deny first, then the way
+        // to Approve (the widget's "Review").
+        assertEquals(
+            listOf(ApprovalWidgetRules.WidgetButton.DENY, ApprovalWidgetRules.WidgetButton.REVIEW),
+            ApprovalWidgetRules.buttons(hidden = false, denyOk = true).map { it.button },
+        )
+        // And the drawing code really uses that list, rather than rebuilding a
+        // button of its own - the shape this pin exists to prevent.
         val widget = source("widget/ApprovalWidget.kt")
-        val row = widget.substring(widget.indexOf("Row(modifier = GlanceModifier.fillMaxWidth())"))
-        assertTrue(row.indexOf("label = \"Deny\"") in 0 until row.indexOf("label = \"Review\""))
+        assertTrue(widget.contains("ApprovalWidgetRules.buttons("))
+        assertTrue(widget.contains("label = button.label"))
+        assertFalse(
+            "the widget must not hard-code a Deny button any more",
+            widget.contains("label = \"Deny\""),
+        )
     }
 
     @Test
