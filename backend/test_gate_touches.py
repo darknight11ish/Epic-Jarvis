@@ -815,6 +815,7 @@ def t_the_patch_is_registered_and_carries_the_change():
              # relay's postscript lines). It has no hunk in jarvis_gate.py, so it
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
+             "model-recommendations.patch",
              "cloud-honesty.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "

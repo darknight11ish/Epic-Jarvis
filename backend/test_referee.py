@@ -885,6 +885,7 @@ def t_the_patch_and_the_lists():
              # relay's postscript lines). It has no hunk in jarvis_gate.py, so it
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
+             "model-recommendations.patch",
              "cloud-honesty.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
