@@ -227,12 +227,9 @@ class AntislopTest {
         // desktop card's. This side must not offer a control whose body it
         // cannot send, and the three bodies above are the whole vocabulary.
         // A JVM unit test's working directory is the module on some runners and
-        // the repo on others, so both spellings are tried (the same shape
-        // AppControlSensitiveFindTest uses).
-        val rel = "src/main/java/com/jarvis/client/net/Antislop.kt"
-        val file = listOf(File(rel), File("app/$rel")).firstOrNull { it.isFile }
-        val source = file?.readText() ?: ""
-        assertTrue("Antislop.kt was not found to read", source.isNotEmpty())
+        // the repo on others, so this walks up to the repository rather than
+        // guessing (the same helper AutoLearnTest uses).
+        val source = repoFile(MODULE).readText()
         assertFalse("the phone holds a dial it cannot set", source.contains("energy"))
         assertFalse(
             "the phone holds the Delivery Gate switch it cannot set",
@@ -256,4 +253,87 @@ class AntislopTest {
         val wire = Json.parseToJsonElement("""{"enabled": true, "mode": "during"}""")
         assertTrue(Antislop.parse(wire as JsonObject)!!.enabled)
     }
+
+    // ------------------------------------------------- the event wiring ----
+    //
+    // The gap the 2026-10-28 audit found: the PC publishes one `antislop` frame
+    // on every change made anywhere else, the desktop card repaints from it,
+    // and the phone's event loop had no branch for it - so an open plate kept
+    // showing whatever it read when Settings was opened.
+
+    @Test
+    fun `the phone listens for the kind the PC really publishes`() {
+        // ONE spelling for the frame, pinned against the publisher's own line
+        // (`jarvis_antislop._publish`: one kind per feature, the whole state).
+        assertEquals("antislop", Antislop.EVENT)
+        val pc = repoFile(PC_MODULE).readText()
+        assertTrue(
+            "the PC no longer publishes the kind the phone listens for:\n$pc",
+            pc.contains("BUS.publish(\"antislop\", dict(state))"),
+        )
+        // The frame carries the whole state, the same shape GET answers, so an
+        // event's payload parses through the ONE Antislop.parse the plate draws
+        // from: a change lands as the state the plate shows, not as a guess.
+        val event = state(enabled = true, mode = "after", emDashes = true)
+        val v = Antislop.parse(event)!!
+        assertTrue(v.enabled)
+        assertEquals("after", v.mode)
+        assertTrue(v.allowEmDashes)
+    }
+
+    @Test
+    fun `an antislop event re-reads through the plate's own path`() {
+        val rt = repoFile(RUNTIME).readText()
+        // The event loop's branch: the one kind, and the tick that wakes the
+        // plate - no new route and no second parser.
+        val branch = "com.jarvis.client.net.Antislop.EVENT -> _antislopTick.update { it + 1 }"
+        assertTrue("the event loop has no antislop branch", rt.contains(branch))
+        // The tick is exposed as state, so the plate can observe it.
+        assertTrue(
+            "the tick is not exposed to the plate",
+            rt.contains("val antislopTick: StateFlow<Int> = _antislopTick.asStateFlow()"),
+        )
+        // The plate watches the tick and keys its EXISTING read on it: the same
+        // GET /api/antislop it makes on open, not a payload parser of its own.
+        val plate = repoFile(PLATE).readText()
+        assertTrue(
+            "the plate does not collect the tick",
+            plate.contains("val tick by JarvisRuntime.antislopTick.collectAsState()"),
+        )
+        assertTrue(
+            "the plate's read is not keyed on the tick",
+            plate.contains("LaunchedEffect(reads, tick)"),
+        )
+        assertTrue(
+            "the plate no longer reads the route it draws",
+            plate.contains("when (val r = JarvisRuntime.antislop())"),
+        )
+        assertFalse("the plate must not grow a route of its own", plate.contains("/api/"))
+        // And the route itself is unchanged: the event adds no second read path.
+        assertEquals("/api/antislop", Antislop.PATH)
+    }
+
+    // ------------------------------------------------------------ helpers ----
+
+    /**
+     * Walks up from Gradle's working folder (`jarvis-client/app`) to the
+     * repository, so a source pin runs wherever the test was started (the same
+     * helper AutoLearnTest uses).
+     */
+    private fun repoFile(rel: String): File {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            val f = File(dir, rel)
+            if (f.isFile) return f
+            dir = dir.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
+    }
+
+    private val MODULE = "jarvis-client/app/src/main/java/com/jarvis/client/net/Antislop.kt"
+    private val RUNTIME =
+        "jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt"
+    private val PLATE =
+        "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/AntislopPlate.kt"
+    private val PC_MODULE = "backend/jarvis_antislop.py"
 }

@@ -1681,6 +1681,12 @@ object JarvisRuntime {
                 // does not (a focus session's Quiet, then the owner's own).
                 if (event.kind == "power") refreshPowerWhy()
             }
+            // The Anti-Slop filter was changed somewhere else - chat, the
+            // desktop card, another phone. One `antislop` frame carrying the
+            // whole state, but a doorbell like the rest: the Settings plate
+            // reads the route again, and nothing is fetched while that plate
+            // is not open.
+            com.jarvis.client.net.Antislop.EVENT -> _antislopTick.update { it + 1 }
             // The brief covers these; the Watches plate on Mind reads its
             // lists again, as the desktop's Brain does.
             "finding" -> _watchTick.update { it + 1 }
@@ -3052,6 +3058,21 @@ object JarvisRuntime {
 
     /** `GET /api/antislop`. A read: never held. */
     suspend fun antislop(): ApiResult<JsonObject> = api.antislop()
+
+    /**
+     * Goes up by one on every `antislop` event, so the Settings plate reads
+     * itself again when the filter was changed somewhere else - chat, the
+     * desktop card, another phone. The frame carries the whole state
+     * (`jarvis_antislop._publish`), but the event is a doorbell like every
+     * other kind ([onEvent]'s own rule): the plate owns its read, so this
+     * re-runs the SAME [antislop] GET it opens with rather than growing a
+     * second way to fill one view. Only an open plate is composed to see it,
+     * so nothing is fetched while Settings is closed.
+     */
+    private val _antislopTick = MutableStateFlow(0)
+
+    /** Read by `AntislopPlate`'s `LaunchedEffect` beside its own re-reads. */
+    val antislopTick: StateFlow<Int> = _antislopTick.asStateFlow()
 
     /**
      * The master switch, on or off. Held on a stale link ([actionBlocker]).

@@ -26266,8 +26266,11 @@ cached at start-up), and is announced on the event stream as kind
 **`antislop`** carrying the whole state - one kind per feature, the shape
 `appearance`, `devices` and `big-coder` already use. The blueprint called it a
 "settings" event; no such kind exists in this backend and none was invented.
-The desktop Settings card re-reads on that frame; the phone re-reads when its
-plate opens and after every write of its own.
+The desktop Settings card re-reads on that frame, and so does the phone's
+plate (`JarvisRuntime.antislopTick`) - a change made by chat, by the desktop
+card or by another phone reaches an OPEN plate without reopening Settings. The
+phone's plate also re-reads after every write of its own, and while it is not
+open nothing is fetched for it.
 
 **`POST /api/antislop/audit`** - read-only; it changes no setting:
 

@@ -8,6 +8,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,13 +48,21 @@ import kotlinx.coroutines.launch
  * One tap is one change, held on a stale link ([JarvisRuntime.setAntislop],
  * [JarvisRuntime.setAntislopMode] and [JarvisRuntime.setAntislopEmDashes]) and
  * re-read after every write, so what is on screen is the PC's truth and never
- * the tap's. Neither direction raises an approval card: it changes only the
- * wording of an answer.
+ * the tap's. It reads again on the PC's own `antislop` event too
+ * ([JarvisRuntime.antislopTick]) - a change made by chat, by the desktop card
+ * or by another phone reaches an open plate without reopening Settings.
+ * Neither direction raises an approval card: it changes only the wording of an
+ * answer.
  */
 @Composable
 internal fun AntislopPlate(canAct: Boolean) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
+    // A change made anywhere else arrives as one "antislop" frame. It is a
+    // doorbell: the tick re-runs the SAME read below, so the plate repaints
+    // from the PC's truth rather than keeping the state it opened with. While
+    // the plate is not composed nothing is fetched for it.
+    val tick by JarvisRuntime.antislopTick.collectAsState()
     var reads by remember { mutableIntStateOf(0) }
     var view by remember { mutableStateOf<Antislop.View?>(null) }
     var missing by remember { mutableStateOf(false) }
@@ -61,7 +70,9 @@ internal fun AntislopPlate(canAct: Boolean) {
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(reads) {
+    // Reads when the plate opens, after every change of its own, and on each
+    // `antislop` event from the PC.
+    LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.antislop()) {
             is ApiResult.Ok -> {
                 val v = Antislop.parse(r.value)

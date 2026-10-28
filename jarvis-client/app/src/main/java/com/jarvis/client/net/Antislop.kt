@@ -34,6 +34,15 @@ object Antislop {
     const val PATH = "/api/antislop"
     const val TITLE = "Anti-Slop filter"
 
+    /**
+     * The frame the PC publishes when the filter changed anywhere else - chat,
+     * the desktop card, another phone (`jarvis_antislop._publish`: one kind per
+     * feature, carrying the whole state). The phone takes it as a doorbell like
+     * every other kind: the plate re-reads [PATH] rather than parsing a second
+     * shape, and only while that plate is open (JarvisRuntime.antislopTick).
+     */
+    const val EVENT = "antislop"
+
     val MODES = listOf("during", "after")
     const val DEFAULT_MODE = "during"
 

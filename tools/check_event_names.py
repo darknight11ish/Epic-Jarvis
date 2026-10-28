@@ -109,6 +109,7 @@ SENT_BY_THE_BACKEND = {
     "live": "Jarvis Live started or ended on the phone (main.js takes the phone's session from it).",
     "voices": "the voice list or a custom-voice card changed (voice-panel.js re-reads it).",
     "ring_phone": "the PC was asked to ring the phone (its producer is `EVENT` in the backend's own jarvis_find_phone.py, which this check does not read; the desktop ignores the event on purpose and the PHONE rings on its alarm channel - net/FindPhone.kt's EVENT is the other end, and tools/check_event_names.py now reads it, 2026-10-14).",
+    "antislop": "the Anti-Slop filter changed anywhere - chat, the desktop card or another phone (produced by backend/jarvis_antislop.py's `_publish`, JARVIS-API section 159; src/antislop-settings.js re-reads on it and net/Antislop.kt's EVENT is the phone's end, 2026-10-28).",
 }
 
 # ---------------------------------------------------------------------------
