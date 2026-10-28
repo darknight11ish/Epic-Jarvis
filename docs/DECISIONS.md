@@ -5,6 +5,14 @@ from `CLAUDE.md` on 2026-10-12, because that file had grown to about 150 KB and 
 harness loads only the first 64 KB of it - silently. The rules themselves stayed in
 `CLAUDE.md`; the dated reasoning behind them lives here.
 
+**From 2026-10-28 a new decision is written as one file under `decisions.d/`,**
+not as an edit to this file. Two pull requests that both appended here always
+conflicted, and a conflicted pull request gets **no CI at all**; the fragments end
+that race exactly the way `changelog.d/` ended it for `CHANGELOG.md` on
+2026-10-23. `decisions.d/README.md` says how to write one, and
+`tools/roll_decisions.py` folds them in here, at the end of this file, when a roll
+is run on a quiet `main`. Everything above that point is unchanged history.
+
 Nothing in this file was reworded while moving. The blocks are in their original order.
 Read `CLAUDE.md` to know a rule; read this to know **when** it was decided, what the
 owner's own words were, and what it replaced.
@@ -4549,3 +4557,11 @@ The 2026-10-27 AI-safety audit (`.dsh-scratch/AUDITS-2026-10-27/partner-ai-safet
 **The classifier's three holes** (audit H2, H3, H4) are closed in `jarvis_claims.py`: a second, subjectless pass catches "Reminder set for 7pm.", "Email sent to Alex.", "Your timer is running." and "All set."; "noted" no longer exempts a sentence that names a place a note is written; and `read_web_page`, `propose_plan`, `feature_guide` and `rea_investigate` no longer count as actions. `ACTING_TOOLS` names the other half, and `backend/test_smarter_answers.py` fails when `jarvis_agent.TOOLS` holds a name in neither set - the guard the audit asked for, so the next tool is classified by the person adding it.
 
 **Proven by.** `backend/test_cloud_honesty.py` (49 passed: the patch applies to the published base with `git apply`, compiles and reverses byte for byte; the cloud lines equal the local turn's; the tail lands before the finish event for a streamed and a whole reply; the crisis block, lifted out of the patched base and driven, rebinds the lane and says so), `backend/test_smarter_answers.py` (161 passed, including the passive-confirmation and "noted" cases and the classification guard), `backend/test_wellbeing.py` (the pasted/share/voice-unverified cases, the fast-path refusal, and the one-rule checks), `backend/test_reasoning_fallback.py` (45 passed - an ordinary cloud answer is still byte for byte what it was), and `backend/test_chatbot_api.py` (239 passed). **Not proven here:** the route end to end against a real cloud provider - that needs the owner's PC and a real key, and nothing in this change drives it.
+## Decisions written as `decisions.d/` fragments, folded in here in date order
+
+From 2026-10-28, a pull request records a new decision as ONE file under
+`decisions.d/` (`decisions.d/README.md` says how) and does not edit this file.
+`tools/roll_decisions.py` folds those fragments in below this heading, at the end
+of the file and in date order, and removes the fragment files. The roll is
+deliberate and is never run by a feature pull request. This heading is that
+tool's anchor: do not rename or remove it.

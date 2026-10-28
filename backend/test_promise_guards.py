@@ -66,6 +66,13 @@ sys.path.insert(0, str(HERE))
 # dev container, $JARVIS_BACKEND on a real install. REPO is this repository.
 from _where import BACKEND, REPO, explain  # noqa: E402
 
+# The decision record is TWO places since 2026-10-28 (docs/DECISIONS.md and the
+# fragments under decisions.d/ not yet rolled into it), and `record_text` is the
+# one reader for that. Importing the roll tool rather than re-implementing the
+# rule keeps a promise's own words findable wherever the record keeps them.
+sys.path.insert(0, str(REPO / "tools"))
+import roll_decisions  # noqa: E402
+
 FAILED, PASSED, SKIPPED = [], [], []
 
 
@@ -412,6 +419,22 @@ ALSO_IN = {
 #   The promises' own words
 # --------------------------------------------------------------------------
 
+def _doc_text(doc: str):
+    """The words of the file `doc` names, or None when they are not there.
+
+    `docs/DECISIONS.md` is TWO places since 2026-10-28: the rolled record and the
+    fragments under `decisions.d/` not yet folded into it. A promise recorded as
+    a fragment must still be findable - a guard that went red because the words
+    moved into the mechanism the record now uses would be a false alarm price on
+    every new decision - so both are read, the record first. Every other doc is
+    one file, read as it always was.
+    """
+    if doc == roll_decisions.RECORD:
+        return roll_decisions.record_text(REPO) or None
+    path = REPO / doc
+    return _text(path) if path.is_file() else None
+
+
 def t_the_promise_sentences_are_still_written():
     """The inventory is built from the project's own words, so the words are
     checked too. A promise quietly reworded is how one stops being a promise.
@@ -420,12 +443,12 @@ def t_the_promise_sentences_are_still_written():
     the sentence that matters, not where the line breaks fell.
     """
     for p in PROMISES:
-        path = REPO / p["doc"]
-        if not path.is_file():
-            skip(f"{p['id']}: {p['doc']} is readable", f"no {path}")
+        text = _doc_text(p["doc"])
+        if text is None:
+            skip(f"{p['id']}: {p['doc']} is readable", f"no {REPO / p['doc']}")
             continue
         check(f"{p['id']}: {p['doc']} still says it ({p['promise'][:52]}...)",
-              p["promise"] in _norm(_text(path)),
+              p["promise"] in _norm(text),
               f"the sentence is no longer in {p['doc']}: reworded, or moved")
 
 

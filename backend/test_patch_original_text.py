@@ -138,7 +138,7 @@ def t_the_late_patches_are_pinned_and_not_new():
           "pinned, so none of them is a new patch arriving unnoticed", not unpinned,
           f"unpinned late patch(es): {unpinned}")
     check("the seventeen exceptions the tool's docstring names are the seventeen the "
-          "walk finds", len(late) == 17, f"the walk found {len(late)}: {late}")
+          "walk finds", len(late) == 18, f"the walk found {len(late)}: {late}")
 
 
 def t_the_broken_patch_is_caught():
