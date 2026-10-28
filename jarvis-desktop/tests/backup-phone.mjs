@@ -391,22 +391,22 @@ await check("Preview names a database the backup left out, and a chat history it
     // Data-integrity audit F1/F4 (2026-10-28): the backend names a database
     // whose snapshot failed and a chat history with no key that opens it, and
     // a preview that listed only what went in would repeat the claim those
-    // fixes removed. Both sentences are read from the SAME two manifest
-    // fields the backup's own result sentence uses.
+    // fixes removed. The sentence is read from the SAME manifest field the
+    // backup's own result sentence uses, and each entry carries its reason.
     const { said, calls, errors } = await previewOf({
       databases: { "memory.db": { facts: 12, meta: 2 } },
       settings_files: 3, notes_files: 2,
-      databases_left_out: ["schedule.db"],
-      chat_history_locked: true,
+      excluded_dbs: ["schedule.db (could not be read)",
+        "chat-history.db (encryption key missing or mismatched in Windows Credential Manager)"],
     });
     assert.deepEqual(calls, [["preview_restore", { name: "jarvis-backup-20261024-031500.jbak", code: CODE }]],
       "the preview is asked for with the typed code and nothing else");
     assert.match(said, /Made /, said);
     assert.match(said, /memory\.db: 14 rows/, said);
     assert.match(said, /3 settings files, 2 notes/, said);
-    assert.match(said, /schedule\.db is NOT in this backup/, said);
-    assert.match(said, /LOCKED/, said);
-    assert.match(said, /will not bring those chats back/, said);
+    assert.match(said, /schedule\.db \(could not be read\)/, said);
+    assert.match(said, /chat-history\.db \(encryption key missing or mismatched/, said);
+    assert.match(said, /are NOT in this backup/, said);
     assert.deepEqual(errors, [], errors.join("\n"));
   });
 
@@ -414,11 +414,10 @@ await check("CONTROL: a preview of a complete backup says only what went in", as
   const { said, errors } = await previewOf({
     databases: { "memory.db": { facts: 12 } },
     settings_files: 3, notes_files: 2,
-    databases_left_out: [],
-    chat_history_locked: false,
+    excluded_dbs: [],
   });
   assert.match(said, /memory\.db: 12 rows/, said);
-  assert.ok(!/NOT in this backup|LOCKED/.test(said), `nothing to warn about: ${said}`);
+  assert.ok(!/NOT in this backup/.test(said), `nothing to warn about: ${said}`);
   assert.deepEqual(errors, [], errors.join("\n"));
 });
 

@@ -420,22 +420,18 @@ async function doPreview(name, code, out) {
         .map(([db, tables]) => `${db}: ${Object.values(tables).reduce((a, b) => a + b, 0)} rows`)
         .join(", ");
       // WHAT THE BACKUP DOES NOT HAVE IS SAID HERE TOO (data-integrity audit
-      // F1/F4, 2026-10-28). The backend names a database whose snapshot failed
-      // (`databases_left_out`) and a chat history it carries with no key that
-      // opens it (`chat_history_locked`); a preview that listed only what went
-      // in would repeat the claim those fixes removed. These are the same two
-      // fields the backup's own result sentence uses.
-      const leftOut = Array.isArray(counts.databases_left_out)
-        ? counts.databases_left_out.filter(Boolean)
+      // F1/F4, 2026-10-28). The backend names every database this PC has and
+      // the archive does not (`excluded_dbs`, each entry carrying its own
+      // reason); a preview that listed only what went in would repeat the claim
+      // those fixes removed. It is the same field the backup's own result
+      // sentence uses, so the panel and the backend cannot disagree.
+      const leftOut = Array.isArray(counts.excluded_dbs)
+        ? counts.excluded_dbs.filter(Boolean)
         : [];
       const warns = [];
       if (leftOut.length) {
         warns.push(`${leftOut.join(", ")} ${leftOut.length === 1 ? "is" : "are"} NOT in this ` +
-          "backup, because it could not be read when the backup was made.");
-      }
-      if (counts.chat_history_locked === true) {
-        warns.push("Its chat history is LOCKED: the key that opens it was not on the PC that " +
-          "made the backup, so restoring it will not bring those chats back.");
+          "backup.");
       }
       out.textContent = `Made ${when(resp.created_at)}. ${dbs ? dbs + ". " : ""}` +
         `${counts.settings_files || 0} settings files, ${counts.notes_files || 0} notes.` +

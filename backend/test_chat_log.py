@@ -215,6 +215,64 @@ def t_a_replaced_key_is_refused_not_mixed():
         w.done()
 
 
+
+def t_a_key_is_never_made_over_a_history_that_already_holds_something():
+    """F1's provider rule (data-integrity audit, 2026-10-28): `get_or_create_key`
+    mints ONLY for a brand-new, empty chat history. A history that already holds
+    rows whose key is gone fails closed in plain words and writes nothing -
+    because a fresh key cannot open it, and putting one in Credential Manager
+    would replace the only thing that could ever have opened it.
+
+    `get_existing_key` is the read-only half: it answers None and never writes."""
+    import tempfile
+
+    class Store:
+        def __init__(self, value=None):
+            self.value, self.writes = value, 0
+
+        def read(self):
+            return self.value
+
+        def write(self, text):
+            self.writes += 1
+            self.value = text
+
+    d = Path(tempfile.mkdtemp(prefix="jarvis-key-guard-"))
+    db = d / "chat-history.db"
+    made = Store()
+    # 1. Nothing kept yet: a key may be made, once, and is read back.
+    key = H.get_or_create_key(db, store_factory=lambda: made)
+    check("a brand-new history (no file): a 32-byte key is made and saved once",
+          len(key) == 32 and made.writes == 1 and base64.b64decode(made.value) == key)
+    check("... and asking again returns it without writing again",
+          H.get_existing_key(store_factory=lambda: made) == key and made.writes == 1)
+
+    # 2. A history that holds rows, with no key: REFUSED, and nothing written.
+    log = H.ChatLog(db, d / "chat-history.json", lambda: key)
+    out = log.record_turn({"conversation_id": "guard-conv-01", "device": "desktop",
+                           "messages": [{"role": "user", "content": "kept"}]},
+                          lane="test", turn={"answer": "ok", "finish_reason": "stop"})
+    check("the guard history really holds a turn", out.get("recorded") is True, out)
+    empty = Store()
+    try:
+        H.get_or_create_key(db, store_factory=lambda: empty)
+        check("an existing history with its key gone is refused", False)
+    except H.KeyUnavailable as exc:
+        check("an existing history with its key gone is refused, in plain words",
+              "no chat history key" in str(exc) and str(db) in str(exc), str(exc))
+    check("... and NOTHING was written to Credential Manager", empty.writes == 0
+          and empty.value is None, (empty.writes, empty.value))
+    check("get_existing_key on that empty store answers None and writes nothing",
+          H.get_existing_key(store_factory=lambda: empty) is None and empty.writes == 0)
+
+    # 3. A path that does not exist yet is a brand-new history: a key is allowed.
+    fresh2 = d / "fresh2.db"
+    fresh_store = Store()
+    fresh_key = H.get_or_create_key(fresh2, store_factory=lambda: fresh_store)
+    check("a path that does not exist yet is brand-new: a 32-byte key is allowed",
+          len(fresh_key) == 32 and fresh_store.writes == 1, fresh_store.writes)
+
+
 def t_credential_manager_key():
     class Store:
         def __init__(self, value=None, echo=True):
