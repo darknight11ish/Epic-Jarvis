@@ -672,6 +672,7 @@ DELTA_TABLE = {
                 "or manual_pick),",
                 'decision = _manual_decision(body.get("lane") or local_model,',
                 "def _manual_lane(decide, chosen, local_model: str, lanes=None):",
+                "# f01-manual-lane-gate.patch: a manual pick IS the owner's yes",
             ),
             "hunks": True,
         },

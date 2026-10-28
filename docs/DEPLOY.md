@@ -97,7 +97,7 @@ route insert + 152 stale `.pyc` files; "DRY RUN, nothing written"). A second dry
 run half an hour later planned 168 for the same two reasons (the running server
 keeps writing `.pyc`, so only the 1 HUD route insert is stable). Its own
 suite, `backend/test_reconcile_live_backend.py`, passes (144 checks on
-2026-10-20; **371 checks on 2026-10-28**, all on temporary folders). As an
+2026-10-20; **375 checks on 2026-10-28**, all on temporary folders). As an
 extra read-only check (Area 12), its `run_probes()`
 was called directly against `http://127.0.0.1:4719` - no `--apply`, nothing
 written - and all four probes PASS (setup 200, media-index 200, app-control 409
