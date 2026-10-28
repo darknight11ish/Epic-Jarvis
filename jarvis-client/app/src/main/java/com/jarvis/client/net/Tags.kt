@@ -344,21 +344,19 @@ object ChatTags {
     }.toString()
 
     // ---------------------------------------------------------- grouping ---
-
-    /**
-     * One section of the grouped list: a tag ([tag] null = Untagged), its
-     * loaded rows and the [count] its header shows.
-     */
-    data class Section(val tag: Tag?, val rows: List<ChatLog.Summary>, val count: Int) {
-        /** The key open/closed is remembered under: the tag id, or [UNTAGGED_KEY]. */
-        val key: Int get() = tag?.id ?: UNTAGGED_KEY
-    }
+    //
+    // There is ONE arranger for the History list, [com.jarvis.client.net.HistoryView.sections]
+    // (Pinned, one section per tag, Untagged last - and the Pinned group's
+    // own order). A second copy of the rule lived here (`group`), was called
+    // by nothing but its own tests, and was deleted on 2026-10-28 so the two
+    // rules cannot drift. The desktop's own `groupRows` is still checked by
+    // its suite through the shared `tag_group_cases` fixture.
 
     /** The filter chip's value for "Untagged" (`GET /api/history?tag=none`). */
     const val NONE_FILTER = "none"
 
     /**
-     * A filter chip's value as the key [group] narrows to: null for All (""),
+     * A filter chip's value as the key the list narrows to: null for All (""),
      * [UNTAGGED_KEY] for "none", else the tag id (null when it is not a number).
      */
     fun filterKey(filter: String): Int? = when {
@@ -379,49 +377,6 @@ object ChatTags {
 
     /** The open/closed flag key of the Untagged section (a tag id is never negative). */
     const val UNTAGGED_KEY = -1
-
-    /**
-     * [rows] in sections, the same as the desktop's `groupRows`: one per tag
-     * in the owner's order, newest chat first inside each, and Untagged LAST.
-     * A row whose tag is not in the list (deleted elsewhere) counts as
-     * untagged. With no tags at all there are no sections (the caller draws a
-     * flat list).
-     *
-     * A section's header count is the PC's own when nothing narrows the list
-     * ([exact]) and never less than the rows loaded; when a "Show" kind or the
-     * title words narrow it ([exact] false) it is the rows shown. A section
-     * with no rows shown and no count is left out - an empty header says
-     * nothing. [only] narrows to one tag id, or to [UNTAGGED_KEY].
-     */
-    fun group(
-        rows: List<ChatLog.Summary>,
-        tags: List<Tag>,
-        untagged: Int,
-        only: Int? = null,
-        exact: Boolean = true,
-    ): List<Section> {
-        if (tags.isEmpty()) return emptyList()
-        val known = tags.mapTo(HashSet()) { it.id }
-        fun newest(list: List<ChatLog.Summary>) = list.sortedByDescending { it.updated ?: 0L }
-        val out = ArrayList<Section>()
-        for (t in tags) {
-            if (only != null && only != t.id) continue
-            val mine = newest(rows.filter { it.tagId == t.id })
-            val count = if (exact) maxOf(t.count, mine.size) else mine.size
-            if (mine.isNotEmpty() || count > 0) out += Section(t, mine, count)
-        }
-        if (only == null || only == UNTAGGED_KEY) {
-            val loose = newest(
-                rows.filter { r ->
-                    val t = r.tagId
-                    t == null || t !in known
-                },
-            )
-            val count = if (exact) maxOf(untagged, loose.size) else loose.size
-            if (loose.isNotEmpty() || count > 0) out += Section(null, loose, count)
-        }
-        return out
-    }
 
     // ------------------------------------------------- "file it" flow ---
 

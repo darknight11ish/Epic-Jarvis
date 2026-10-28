@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import com.jarvis.client.net.ChatLog
 import com.jarvis.client.net.ChatTags
+import com.jarvis.client.net.HistoryView
 import com.jarvis.client.net.JarvisJson
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -142,7 +143,8 @@ class TagsTest {
         assertEquals(3, ChatTags.filterKey("3"))
         assertNull(ChatTags.filterKey("x"))
         val rows = listOf(row("a", 2L, null), row("b", 1L, 3))
-        val only = ChatTags.group(rows, ChatTags.STARTER, untagged = 1, only = ChatTags.filterKey("none"))
+        // The narrowing goes through the one live arranger (HistoryView.sections).
+        val only = HistoryView.sections(rows, ChatTags.STARTER, untagged = 1, only = ChatTags.filterKey("none"))
         assertEquals(listOf<Int?>(null), only.map { it.tag?.id })
         assertEquals(listOf("a"), only[0].rows.map { it.id })
     }
@@ -346,45 +348,9 @@ class TagsTest {
         assertNull(ChatLog.transcript(obj("""{"id":"a","title":"A","turns":[]}"""))?.tagId)
     }
 
-    // -------------------------------------------------------- grouping ---
-
-    @Test
-    fun `sections follow the owner's order, newest first inside, Untagged last`() {
-        val tags = listOf(
-            ChatTags.Tag(2, "Learning", 1, "book", 0, count = 2),
-            ChatTags.Tag(1, "Work", 0, "briefcase", 1, count = 5),
-        )
-        val rows = listOf(
-            row("w-old", 10, 1), row("l1", 50, 2), row("u1", 70, null), row("w-new", 90, 1), row("gone", 60, 99),
-        )
-        val sections = ChatTags.group(rows, tags, untagged = 2)
-        assertEquals(listOf("Learning", "Work", null), sections.map { it.tag?.name })
-        assertEquals(listOf("w-new", "w-old"), sections[1].rows.map { it.id })
-        // A row whose tag was deleted elsewhere counts as untagged.
-        assertEquals(listOf("u1", "gone"), sections[2].rows.map { it.id })
-        assertEquals(ChatTags.UNTAGGED_KEY, sections[2].key)
-        // The header shows the PC's count, or the loaded rows when that is more.
-        assertEquals(5, sections[1].count)
-        assertEquals(2, sections[2].count)
-        // A filter (Show, or title words) narrows what "N chats" would mean:
-        // the header then counts the rows shown, and an empty section goes.
-        val narrowed = ChatTags.group(rows, tags, untagged = 2, exact = false)
-        assertEquals(listOf(1, 2, 2), narrowed.map { it.count })
-        val none = ChatTags.group(listOf(row("w", 1, 1)), tags, untagged = 4, exact = false)
-        assertEquals(listOf(1), none.map { it.key })
-        assertEquals("nothing loaded, nothing counted: no Untagged section", 1, none.size)
-    }
-
-    @Test
-    fun `a tag with chats on older pages still shows its count, unless narrowed`() {
-        val tags = listOf(ChatTags.Tag(1, "Work", 0, "briefcase", 0, count = 4), ChatTags.Tag(2, "Empty", 1, "book", 1))
-        val rows = listOf(row("u", 5, null))
-        val all = ChatTags.group(rows, tags, untagged = 1)
-        assertEquals(listOf(1, ChatTags.UNTAGGED_KEY), all.map { it.key })
-        assertEquals(4, all[0].count)
-        assertTrue(all[0].rows.isEmpty())
-        assertEquals(listOf(ChatTags.UNTAGGED_KEY), ChatTags.group(rows, tags, untagged = 1, exact = false).map { it.key })
-    }
+    // The tag chips' own filter. The sections themselves are arranged by
+    // HistoryView.sections (HistoryViewTest) - the second copy of that rule,
+    // ChatTags.group, had no production caller and was deleted on 2026-10-28.
 
     @Test
     fun `a chat filed elsewhere leaves a list a tag chip is narrowing`() {
@@ -395,24 +361,6 @@ class TagsTest {
         assertFalse(ChatTags.matchesFilter("3", null))
         assertTrue(ChatTags.matchesFilter(ChatTags.NONE_FILTER, null))
         assertFalse(ChatTags.matchesFilter(ChatTags.NONE_FILTER, 3))
-    }
-
-    @Test
-    fun `with no tags at all there are no sections - the list is flat`() {
-        assertTrue(ChatTags.group(listOf(row("a", 1, null)), emptyList(), untagged = 1).isEmpty())
-    }
-
-    @Test
-    fun `Untagged shows only when there is something in it, and one tag can be chosen`() {
-        val tags = listOf(ChatTags.Tag(1, "Work", 0, "briefcase", 0))
-        val onlyTagged = listOf(row("a", 1, 1))
-        assertEquals(listOf(1), ChatTags.group(onlyTagged, tags, untagged = 0).map { it.key })
-        assertEquals(listOf(1, ChatTags.UNTAGGED_KEY), ChatTags.group(onlyTagged, tags, untagged = 3).map { it.key })
-        assertEquals(listOf(1), ChatTags.group(onlyTagged, tags, untagged = 3, only = 1).map { it.key })
-        assertEquals(
-            listOf(ChatTags.UNTAGGED_KEY),
-            ChatTags.group(listOf(row("z", 1, null)), tags, untagged = 1, only = ChatTags.UNTAGGED_KEY).map { it.key },
-        )
     }
 
     // ------------------------------------------------- "file it" flow ---
