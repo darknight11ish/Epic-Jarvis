@@ -68,6 +68,21 @@ runs an emulator smoke test on every push; a build is published to
 `client-latest` only once that smoke test has actually installed and
 started that exact file, and only from `main`.
 
+The release APK is also checked for the classes **R8 is asked for by name** -
+WorkManager's InputMerger and Worker, Room's generated database - because R8
+cannot see a class that is created by reflection and will strip its constructor
+without failing the build. That is the 2026-10-27 widget failure: every
+home-screen widget update died with "Could not create Input Merger" while the
+unit tests and the debug build were green. From the repository root:
+
+```bash
+python3 tools/check_apk_reflective_keeps.py   # add -v, or --list, or --self-test
+```
+
+It reads `classes*.dex` inside the release APK, needs no device, and exits 1
+naming the class. Its docstring says why it deliberately does not check the
+debug APK, and how to add a reflective entry point when a new one appears.
+
 ## Connecting to a backend
 
 The app pairs with one Jarvis backend at a time (QR code, with a short

@@ -30,6 +30,31 @@
      "Open the Jarvis bar" control. Nothing here holds the pairing key on
      disk: the PC's HttpOnly cookie is the session. -->
 <script src="hud-web-bridge.js"></script>
+<!-- three.js r128 (2026-10-27): the drawing library the Galaxy's eight 3D
+     looks are built with. It ships inside this app and is served from this
+     same address - never from the internet - so the app still works with no
+     connection. `defer` keeps it off the page's critical path, and the page's
+     inline-script count is unchanged because this is a separate file.
+     galaxy-cosmos.js waits for it and falls back to the flat picture when it
+     is missing, so no machine loses the Galaxy. -->
+<script src="/three.min.js" defer></script>
+<!-- The History sidebar (2026-10-27, the owner's ask: "a history tab with a
+     column icon that opens up a menu that looks like all the coversations in
+     the deepseek harness on desktop for the jarvis HUD ... both should have
+     pinnable chats, project organization by chat, and more").
+
+     ONE external MODULE script: no new inline block, so this page's inline
+     count and every CSP hash stay exactly as they were (tests/csp-inline.mjs).
+     It is a module because it imports `history-actions.js`, the row-action
+     table and the words it shares with the Brain's History tab (Gemini ruling,
+     2026-10-27). It adds its own rail button (#rail-history, beside Presets and
+     Live), its panel (#history-sidebar), its stylesheet and its row menu - the
+     page's own markup is not touched - and the page's half is the small
+     `window.hudHistoryHost` at the end of its last script, which opens a chat
+     with this page's own addMessage and starts a new one. In a plain browser
+     the same file works against the backend directly, like every other read on
+     this page. -->
+<script type="module" src="hud-history.js"></script>
 <!--
   Theme before first paint, the same synchronous read from localStorage every
   other window does (settings.html, onboarding.html): this page also opens as
@@ -93,6 +118,38 @@
  * look, and gets `theme.css`'s already-checked contrast for free.
  * ------------------------------------------------------------------ */
 :root{
+  --hh-panel-bg:#14161b;
+  --hh-panel-fg:#e6e8ec;
+  --hh-fg-soft:#aab0ba;
+  --hh-white:#fff;
+  --hh-accent:#7fe9ff;
+  --hh-fg-mute:#7c838e;
+  --hh-fg-mute-2:#9aa1ac;
+  --hh-line-2:#d3d8df;
+  --hh-fg-mute-3:#6f7681;
+  --hh-line-3:#cfd4dc;
+  --hh-accent-pale:#eafcff;
+  --hh-fg-mute-4:#8b929d;
+  --hh-fg-mute-5:#767d88;
+  --hh-fg-mute-6:#8a919c;
+  --hh-accent-soft:#bff6ff;
+  --hh-panel-bg-2:#1b1e24;
+  --hh-line-4:#dfe3e9;
+  --hh-danger:#ff9aa6;
+  --hh-backdrop:rgba(4,6,9,.44);
+  --hh-hair:rgba(255,255,255,.09);
+  --hh-shadow:rgba(0,0,0,.45);
+  --hh-hair-2:rgba(255,255,255,.08);
+  --hh-glow:rgba(56,240,255,.12);
+  --hh-hair-3:rgba(255,255,255,.055);
+  --hh-hair-4:rgba(255,255,255,.06);
+  --hh-hair-5:rgba(255,255,255,.07);
+  --hh-glow-2:rgba(56,240,255,.11);
+  --hh-hair-6:rgba(255,255,255,.12);
+  --hh-glow-3:rgba(56,240,255,.13);
+  --hh-hair-7:rgba(56,240,255,.2);
+  --hh-shadow-2:rgba(255,255,255,.1);
+  --hh-glow-4:rgba(0,0,0,.5);
   --void:var(--bg-window);
   --plate:var(--surface-1);
   --plate-2:var(--surface-2);
@@ -185,6 +242,25 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   border-color:rgb(var(--accent-rgb) / .2); border-left-color:var(--ice);
 }
 .mode .glyph{width:14px; height:14px; flex-shrink:0;}
+
+/* The left column's Galaxy options icon, for the shells whose left column is
+   this rail (the Studio shell hides it and shows #dock-galaxy-options in its
+   own icon column instead - one left-column door per shell). It wears the
+   navigation row's type but its own outlined box, because it opens a menu and
+   never changes the view: the same distinction the stage words make. */
+.rail-menu-mode{
+  display:flex; align-items:center; gap:10px; width:calc(100% - 20px);
+  margin:0 10px 4px; padding:9px 11px; border:1px solid var(--line);
+  border-radius:3px; background:var(--plate-2);
+  font-family:var(--f-hud); font-size:11.5px; font-weight:600;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--dim);
+  text-align:left; transition:background .15s, color .15s, border-color .15s;
+}
+.rail-menu-mode:hover{color:var(--text); border-color:var(--line-hot);}
+.rail-menu-mode:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.rail-menu-mode[aria-expanded="true"]{color:var(--ice); border-color:var(--line-hot);}
+.rail-menu-mode .glyph{width:14px; height:14px; flex-shrink:0;}
+html[data-hud-shell="split-stage"] .rail-menu-mode{display:none;}
 
 /* ---------- lane switcher ------------------------------------------ */
 .lanes{display:flex; flex-direction:column; gap:5px; margin-top:9px;}
@@ -491,6 +567,20 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 #galaxy{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab;}
 #galaxy.dragging{cursor:grabbing;}
 
+/* ---- the 3D cosmos canvas (2026-10-27) ----------------------------------- *
+ * One canvas UNDER #galaxy, never over it: the 3D engine draws the bodies and
+ * the guide shapes, #galaxy keeps drawing the labels and stays the pointer
+ * surface, and the button overlay sits above both. It is `hidden` until the
+ * engine has actually built a WebGL context, so a browser or a server without
+ * three.js sees exactly the picture it saw before this feature existed - the
+ * engine is an upgrade, never a dependency. `pointer-events:none` because the
+ * canvas above it owns every drag, wheel and tap. */
+#galaxy-cosmos{
+  position:absolute; inset:0; width:100%; height:100%; display:block;
+  pointer-events:none;
+}
+#galaxy-cosmos[hidden]{display:none;}
+
 /* ---- GALAXY v2: lenses + the button overlay (2026-10-21, G1) ------------- */
 .lens-group{
   display:flex; gap:2px; padding:2px; border:1px solid var(--line);
@@ -533,6 +623,25 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 .look-pick select:hover{color:var(--ice);}
 .look-pick select:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
 .look-pick option{background:var(--plate-2); color:var(--text);}
+/* ---- the look's two small controls (2026-10-27) ------------------------- *
+ * Gemini's page gives every look a pair of its own buttons. These are that
+ * pair, in this page's own button family and plain words, mounted beside the
+ * look switcher - the Galaxy Options menu workstream moves this whole row; the
+ * engine only needs somewhere to put them. Hidden until the 3D engine is
+ * ready, so no button here can ever do nothing. */
+.look-actions{display:flex; gap:2px; align-items:center;}
+.look-actions[hidden]{display:none;}
+.look-actions button{
+  padding:5px 7px; border:1px solid var(--line); border-radius:2px;
+  background:var(--plate-2); color:var(--dim);
+  font-family:var(--f-mono); font-size:10px; letter-spacing:.03em; white-space:nowrap;
+}
+.look-actions button:hover{color:var(--text); border-color:var(--line-hot);}
+.look-actions button[aria-pressed="true"]{
+  background:rgb(var(--ice-rgb) / .12); color:var(--ice);
+  border-color:rgb(var(--ice-rgb) / .34);
+}
+.look-actions button:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
 .galaxy-overlay{
   position:absolute; inset:0; z-index:2; pointer-events:none;
 }
@@ -551,17 +660,102 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
   border-color:var(--ice); background:rgb(var(--ice-rgb) / .12);
 }
 
-.brain-search{
-  position:absolute; top:14px; left:16px; z-index:3;
-  display:flex; gap:8px; align-items:center; flex-wrap:wrap; max-width:calc(100% - 32px);
+/* ---- GALAXY OPTIONS: every galaxy-only control, under one surface --------- *
+ *  The owner's request of 2026-10-27, verbatim: "i would to simplify all the
+ *  galaxy options in the screenshot im attaching to have it under Galaxy
+ *  options" and "have that as a new icon on the left column of the jarvis
+ *  hud".  The lens row, the Look switch, "Search the brain...", Reset view and
+ *  Pause spin used to float over the picture as one long bar (.brain-search).
+ *  They live in this ONE popover now, drawn by the page itself so a plain
+ *  browser gets it too; the doors are the Studio dock's new icon
+ *  (#dock-galaxy-options), the word beside Telemetry in the stage's own words
+ *  (#stage-galaxy-options) and, in the shells whose stage has no word row, the
+ *  word beside the Telemetry toggle (#stage-bar-galaxy-options).
+ *
+ *  It wears the same tokens and the same popover shape as the Presets menu
+ *  (.hud-presets-menu, further down this stylesheet): fixed, clamped inside
+ *  the window by the script, one panel look. Nothing here is a new colour,
+ *  font, image, framework or CDN. */
+#galaxy-options{
+  position:fixed; z-index:70; width:min(320px, calc(100vw - 16px));
+  max-height:min(76vh, 560px); overflow-y:auto;
+  display:flex; flex-direction:column; gap:8px;
+  background:var(--surface-sunken); border:1px solid var(--line-hot);
+  border-radius:6px; box-shadow:var(--shadow-pane);
+  padding:12px; font-family:var(--f-mono); color:var(--text);
 }
-#gsearch{
-  width:210px; max-width:46vw; background:var(--plate-2); border:1px solid var(--line);
-  border-radius:3px; padding:8px 11px; color:var(--text);
-  font-family:var(--f-mono); font-size:12px;
+#galaxy-options[hidden]{display:none !important;}
+#galaxy-options:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.go-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.go-head .hud-label{margin:0;}
+.go-close{
+  padding:2px 6px; border:1px solid transparent; border-radius:3px;
+  background:transparent; color:var(--dim); font:inherit; font-size:14px;
+  line-height:1;
 }
-#gsearch:focus{outline:none; border-color:var(--ice);}
-#gsearch::placeholder{color:var(--dimmer);}
+.go-close:hover{color:var(--text); border-color:var(--line);}
+.go-close:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.go-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.go-row .lens-group{flex:1 1 auto;}
+.go-label{
+  font-family:var(--f-mono); font-size:9.5px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--dimmer);
+}
+.go-actions{gap:6px;}
+.go-actions .ghost{padding:6px 10px;}
+#galaxy-options .lens-counts{
+  flex-basis:auto; padding-left:0; line-height:1.5; white-space:normal;
+}
+#galaxy-options #gsearch{
+  width:100%; max-width:none; background:var(--plate-2);
+  border:1px solid var(--line); border-radius:3px; padding:7px 9px;
+  color:var(--text); font-family:var(--f-mono); font-size:12px;
+}
+#galaxy-options #gsearch:focus{outline:none; border-color:var(--ice);}
+#galaxy-options #gsearch::placeholder{color:var(--dimmer);}
+.go-sep{border-top:1px solid var(--line); margin:2px 0;}
+.go-check{
+  display:flex; align-items:flex-start; gap:8px;
+  font-size:11px; color:var(--text); line-height:1.5; cursor:pointer;
+}
+.go-check input{margin:2px 0 0; accent-color:var(--ice);}
+.go-check input:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.go-note{margin:0; font-size:10px; color:var(--dim); line-height:1.5;}
+.go-show{
+  align-self:flex-start; padding:5px 10px; border:1px solid var(--line-hot);
+  border-radius:3px; background:transparent; color:var(--ice);
+  font:inherit; font-size:11px;
+}
+.go-show:hover{background:rgb(var(--ice-rgb) / .1);}
+.go-show:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.go-show[hidden]{display:none !important;}
+/* Hide the galaxy (the owner's ask, same day: "also, add an option to hide the
+   galaxy under the Galaxy Options menu"). The picture and everything that
+   belongs to it goes; the map's own place holder takes its place with the way
+   back, so the hide is always reversible from where the owner is looking. */
+html[data-galaxy-hidden] #brain > #galaxy,
+html[data-galaxy-hidden] #brain > #galaxy-overlay,
+html[data-galaxy-hidden] #brain > .legend,
+html[data-galaxy-hidden] #brain > .trace-bar,
+html[data-galaxy-hidden] #brain > .trace-list,
+html[data-galaxy-hidden] #brain > .trail,
+html[data-galaxy-hidden] #brain > .inspector{display:none !important;}
+.galaxy-off{
+  display:none; position:absolute; inset:0; z-index:2;
+  align-items:center; justify-content:center; flex-direction:column;
+  gap:10px; text-align:center; padding:24px;
+}
+html[data-galaxy-hidden] .galaxy-off{display:flex !important;}
+.galaxy-off p{
+  margin:0; max-width:38ch; font-family:var(--f-mono); font-size:12px;
+  color:var(--dim); line-height:1.6;
+}
+/* The Studio dock's own door: one more icon in the left column, in the same
+   box and glyph language as the five section icons above it. */
+#dock-galaxy-options[aria-expanded="true"]{
+  color:var(--ice); border-color:rgb(var(--accent-rgb) / .3);
+  background:rgb(var(--accent-rgb) / .12);
+}
 .ghost{
   padding:7px 11px; border:1px solid var(--line); border-radius:3px;
   background:var(--plate-2); font-family:var(--f-mono); font-size:11px;
@@ -722,6 +916,54 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 #model-warn[hidden]{display:none;}
 #model-warn b{color:var(--gold); font-weight:500;}
 #model-warn #model-warn-host{color:var(--dim); opacity:.85;}
+
+/* ---------- Jarvis Live's refusal popup ------------------------------ *
+ * The owner's field bug of 2026-10-27: clicking Live with no microphone
+ * "gives me a message but its in the left column and hard to read. it should
+ * be a pop up." The rail's own line (#rail-live-status, in the markup) is the
+ * screen-reader mirror of the same refusal; the READABLE surface is
+ * #live-refusal, in the stage. Its own plate, a width that never runs past
+ * the stage, words that wrap (never clipped), and a real Close button - a
+ * toast, not a modal: no dimming, no focus trap.
+ *
+ * It belongs to the stage, not the rail: the left column folds away in every
+ * narrow layout, and the refusal is exactly the moment a person needs to read
+ * the fix. 84px clears the composer in the Talk view. */
+.stage-toast{
+  position:absolute; left:50%; bottom:84px; transform:translateX(-50%);
+  z-index:60; width:min(520px, calc(100% - 32px));
+  padding:12px 14px; border:1px solid rgb(var(--warn-rgb) / .55);
+  border-left:3px solid var(--warn); border-radius:5px;
+  background:var(--plate); color:var(--text);
+  box-shadow:0 18px 44px rgb(var(--shade-rgb) / .55);
+  font-size:13px; line-height:1.45;
+}
+.stage-toast[hidden]{display:none;}
+.stage-toast:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+.stage-toast .lr-head{display:flex; align-items:baseline; gap:10px;}
+.stage-toast .lr-title{
+  flex:1; font-family:var(--f-hud); font-size:12px; font-weight:600;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--warn);
+}
+.stage-toast .lr-close{
+  flex-shrink:0; padding:3px 10px; border:1px solid var(--line-hot);
+  border-radius:3px; background:var(--plate-2); color:var(--text);
+  font-family:var(--f-mono); font-size:11px;
+}
+.stage-toast .lr-close:hover{border-color:var(--ice); color:var(--ice);}
+.stage-toast p{
+  margin:6px 0 0; color:var(--text);
+  white-space:normal; overflow-wrap:anywhere;
+}
+/* The rail's line is the screen-reader mirror of the refusal. It had NO
+   .sr-only rule on this page - only #hud-stop-status and the presets dialog
+   ever styled that class - so it drew as ordinary toolbar text: the "in the
+   left column" half of the owner's report. Hidden for the eye now; the
+   popup's role="alert" is what announces the same fact. */
+#rail-live-status{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
 
 /* ---------- responsive ---------------------------------------------- */
 .rail-toggle{display:none; position:relative; z-index:30;}
@@ -941,6 +1183,13 @@ html.hud-window-hidden *::after{
 .ambient-view:hover{color:var(--text); border-color:var(--line-hot);}
 .ambient-view[aria-pressed="true"]{border-color:var(--ice); color:var(--ice);}
 
+/* The Studio stage's words. #stage-tabs is the inspector's own tablist; the
+   two menu words beside it (#stage-words) are the owner's "an option next to
+   the word telemetry" and "add presets as a word in the right order next to
+   the galaxy, approvals, reminders and other menu options" (2026-10-27). They
+   are NOT tabs - each opens a menu, so they sit OUTSIDE the tablist, in the
+   same row and the same type, and `#stage-menu` is the one row both share. */
+#stage-menu{display:none;}
 #stage-tabs{display:none;}
 .stage-tab{
   padding:8px 13px; font-family:var(--f-mono); font-size:11px; letter-spacing:.07em;
@@ -948,6 +1197,15 @@ html.hud-window-hidden *::after{
 }
 .stage-tab:hover{color:var(--text);}
 .stage-tab[aria-selected="true"]{color:var(--ice); border-bottom-color:var(--ice);}
+#stage-words{
+  display:flex; align-items:center; gap:2px; margin-left:8px; padding-left:8px;
+  border-left:1px solid var(--line);
+}
+.stage-word[aria-expanded="true"]{color:var(--ice); border-bottom-color:var(--ice);}
+/* The stage bar's own door, next to the word Telemetry. It is hidden in the
+   Studio shell, where the same word lives in #stage-words instead - one door
+   beside Telemetry in every shell, never two in one. */
+#stage-bar-galaxy-options{display:inline-flex; flex-shrink:0;}
 
 .studio-dock{display:none;}
 
@@ -1187,10 +1445,11 @@ html[data-hud-shell="split-stage"] #stage > .stage-bar{
   position:relative; z-index:45;
 }
 html[data-hud-shell="split-stage"] #stage-title{display:none;}
-html[data-hud-shell="split-stage"] #stage-tabs{
-  display:flex; grid-column:1 / -1; grid-row:2;
-  gap:2px; padding:0 16px; border-bottom:1px solid var(--line);
+html[data-hud-shell="split-stage"] #stage-menu{
+  display:flex; align-items:center; grid-column:1 / -1; grid-row:2;
+  padding:0 16px; border-bottom:1px solid var(--line);
 }
+html[data-hud-shell="split-stage"] #stage-tabs{display:flex; gap:2px;}
 html[data-hud-shell="split-stage"] #approvals{
   grid-column:1 / -1; grid-row:3; margin:10px 16px 0;
 }
@@ -1215,6 +1474,8 @@ html[data-hud-shell="split-stage"] .reactor-state{
   position:static; transform:none; font-size:9px;
 }
 html[data-hud-shell="split-stage"] .rail-toggle{display:none;}
+/* The Studio word row carries the Galaxy options word instead (2026-10-27). */
+html[data-hud-shell="split-stage"] #stage-bar-galaxy-options{display:none;}
 html[data-hud-shell="split-stage"] .appr-badge:not([hidden]){display:inline-flex;}
 html[data-hud-shell="split-stage"] #rail-right{
   display:none; position:fixed; top:56px; right:0; bottom:0; width:45%; z-index:30;
@@ -1968,7 +2229,7 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
   html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > [data-hud-region="stage_top"]{
     grid-column:1 / -1; grid-row:3;
   }
-  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #stage-tabs{grid-row:4;}
+  html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #stage-menu{grid-row:4;}
   html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #approvals{grid-row:5;}
   html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #initiative{grid-row:6;}
   html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #banner{grid-row:7;}
@@ -2000,6 +2261,11 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
      monochrome text. VS15 asks the platform for text presentation so the
      alarm and lightning do not stand out as coloured emoji. */
   .dock-btn, .quickbar-pill .qp-glyph{font-variant-emoji:text;}
+
+/* History sidebar styles, moved out of hud-history.js on 2026-10-28:
+   the packaged CSP refuses a <style> element built at run time, and this
+   page's own <style> carries the nonce. Keep this text here, not in JS. */
+html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);outline:none;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);outline:none;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}.hh-sec[data-open="0"] .hh-head .glyph.hh-caret{transform:rotate(-90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);outline:none;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);outline:none;opacity:1;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);outline:none;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);outline:none;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);outline:none;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
 </style>
 
 <!-- ==================================================================== *
@@ -2064,6 +2330,27 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
       </button>
     </div>
 
+    <!-- The owner's "new icon on the left column of the jarvis hud" (2026-10-27),
+         for the shells whose left column is this rail. It opens the page's ONE
+         Galaxy options panel (#galaxy-options, after #shell) - every
+         galaxy-only control, under one surface. It is deliberately NOT a third
+         mode: no role="tab", no data-view, no aria-selected - it opens a menu,
+         so it sits outside #rail-nav, in the navigation row's own type but its
+         own outlined box. The Studio shell hides it and shows the dock's own
+         icon (#dock-galaxy-options) in the 60px column instead. -->
+    <button type="button" class="rail-menu-mode" id="rail-galaxy-options"
+            title="Galaxy options: lens, look, search, reset and hide"
+            aria-label="Galaxy options: lens, look, search, reset and hide"
+            aria-haspopup="dialog" aria-expanded="false">
+      <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="3.2"/>
+        <ellipse cx="12" cy="12" rx="9.2" ry="4.1"/>
+        <circle cx="5.6" cy="8.6" r="1.4"/>
+      </svg>
+      <span>Galaxy options</span>
+    </button>
+
     <!-- Studio layout's icon dock. The same five sections the stage's tab bar
          offers (the layout script keeps both in step: one set of tabs, two
          places to reach them), plus the Jarvis bar. Hidden in the other two
@@ -2092,6 +2379,21 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
       </button>
       <button type="button" class="dock-btn" data-hud-tab-choice="telemetry" title="Telemetry and systems" aria-pressed="false">
         <span aria-hidden="true">&#9637;</span>
+      </button>
+      <!-- The owner's NEW left-column icon (2026-10-27): "have that as a new
+           icon on the left column of the jarvis hud". It opens the page's ONE
+           Galaxy options panel (#galaxy-options, after #shell) - every
+           galaxy-only control, under one surface. It is NOT a section choice:
+           it carries no data-hud-tab-choice, so the dock/words order check
+           (tests/hud-galaxy-looks.mjs) keeps reading the same five sections,
+           and the row it joins is the words row's own "Galaxy options" word.
+           &#10023; is the page's own text-presentation star, the same glyph
+           family as the Galaxy section icon above it - no image, no CDN. -->
+      <button type="button" class="dock-btn" id="dock-galaxy-options"
+              title="Galaxy options: lens, look, search, reset and hide"
+              aria-label="Galaxy options: lens, look, search, reset and hide"
+              aria-haspopup="dialog" aria-expanded="false">
+        <span aria-hidden="true">&#10023;&#xFE0E;</span>
       </button>
       <button type="button" class="dock-btn" id="dock-quickbar" title="Jarvis bar" hidden>
         <span aria-hidden="true">&#9889;&#xFE0E;</span>
@@ -2161,11 +2463,14 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         </svg>
         <span class="rt-label">Live</span>
       </button>
-      <!-- Why Live did not start, in the PC's own sentence (live.rs), for a
-           screen reader. The button's title carries the on/off wording; this
-           carries the refusal, which is the part that would otherwise be
-           silent. The same shape #hud-stop-status uses. -->
-      <span class="sr-only" id="rail-live-status" role="status" aria-live="polite"></span>
+      <!-- Why Live did not start, for a screen reader. The button's title
+           carries the on/off wording; the READABLE refusal is the stage's
+           #live-refusal popup (the owner's field bug of 2026-10-27), and this
+           line is its hidden mirror, hidden by the #rail-live-status rule in
+           the style above. It carries no `sr-only` class on purpose: this page
+           never styled that class, which is why this line used to draw as
+           ordinary toolbar text in the rail. -->
+      <span id="rail-live-status" role="status" aria-live="polite"></span>
     </div>
 
     <div class="rail-section hide-sm rail-lanes" id="rail-lanes">
@@ -2323,6 +2628,16 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
       <button class="ghost left-toggle" id="left-toggle" type="button"
               aria-controls="rail-left" aria-expanded="false"
               aria-label="Open the Controls drawer" title="Controls">&#9776; Controls</button>
+      <!-- The owner's second door to the ONE Galaxy options panel: "and an
+           option next to the word telemetry" (2026-10-27). It sits immediately
+           before the Telemetry toggle in every shell whose stage bar shows
+           that word; the Studio shell hides it because its word row (#stage-
+           words) carries the same word beside the Telemetry tab instead, so
+           exactly one Galaxy options door is beside Telemetry in each shell.
+           It opens the same #galaxy-options panel as the dock icon. -->
+      <button class="ghost" id="stage-bar-galaxy-options" type="button"
+              title="Galaxy options: lens, look, search, reset and hide"
+              aria-haspopup="dialog" aria-expanded="false">Galaxy options</button>
       <button class="ghost rail-toggle" id="rail-toggle" type="button"
               aria-controls="rail-right" aria-expanded="false">Telemetry</button>
       <!-- Fixed, outside every card/region/layout document. Same command as
@@ -2340,12 +2655,32 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
          Galaxy map (#brain), the approval cards (#approvals + #initiative),
          the memory readouts (#r-facts/#r-docs/#r-ents), and the telemetry
          rail (#r-model/#r-latency/...). Nothing is duplicated. -->
-    <div id="stage-tabs" role="tablist" aria-label="Inspector stage">
-      <button type="button" class="stage-tab" data-hud-tab-choice="galaxy" role="tab" aria-selected="true">Galaxy</button>
-      <button type="button" class="stage-tab" data-hud-tab-choice="today" role="tab" aria-selected="false">Approvals</button>
-      <button type="button" class="stage-tab" data-hud-tab-choice="reminders" role="tab" aria-selected="false">Reminders</button>
-      <button type="button" class="stage-tab" data-hud-tab-choice="memory" role="tab" aria-selected="false">Memory</button>
-      <button type="button" class="stage-tab" data-hud-tab-choice="telemetry" role="tab" aria-selected="false">Telemetry</button>
+    <div id="stage-menu">
+      <div id="stage-tabs" role="tablist" aria-label="Inspector stage">
+        <button type="button" class="stage-tab" data-hud-tab-choice="galaxy" role="tab" aria-selected="true">Galaxy</button>
+        <button type="button" class="stage-tab" data-hud-tab-choice="today" role="tab" aria-selected="false">Approvals</button>
+        <button type="button" class="stage-tab" data-hud-tab-choice="reminders" role="tab" aria-selected="false">Reminders</button>
+        <button type="button" class="stage-tab" data-hud-tab-choice="memory" role="tab" aria-selected="false">Memory</button>
+        <button type="button" class="stage-tab" data-hud-tab-choice="telemetry" role="tab" aria-selected="false">Telemetry</button>
+      </div>
+      <!-- The owner's two MENU words (2026-10-27), in the stage's own order:
+           "and an option next to the word telemetry" and "also add presets as
+           a word in the right order next to the galaxy, approvals, reminders
+           and other menu options". They are not tabs and never select a
+           panel: they open the ONE Galaxy options panel and the ONE Presets
+           menu, so they sit outside #stage-tabs (a tablist holds only tabs)
+           and the five section tabs keep their order and their ids. Presets
+           comes after Galaxy options because the owner's one placement rule
+           for the first was "next to the word telemetry", and the panel's own
+           five sections keep the order the dock and the words already share. -->
+      <div id="stage-words" role="group" aria-label="More HUD menus">
+        <button type="button" class="stage-tab stage-word" id="stage-galaxy-options"
+                title="Galaxy options: lens, look, search, reset and hide"
+                aria-haspopup="dialog" aria-expanded="false">Galaxy options</button>
+        <button type="button" class="stage-tab stage-word" id="stage-presets"
+                title="Presets: model presets, personalities and HUD layouts"
+                aria-haspopup="menu" aria-expanded="false">Presets</button>
+      </div>
     </div>
 
     <!-- ---- TALK ---- -->
@@ -2404,47 +2739,25 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
 
     <!-- ---- BRAIN ---- -->
     <section class="view" id="brain">
+      <!-- The 3D cosmos (2026-10-27): galaxy-cosmos.js draws the eight looks
+           here with three.js, and #galaxy above it keeps the labels, the
+           search highlight and every pointer target. It starts hidden and is
+           only shown once a real WebGL context exists, so without WebGL - or
+           without /three.min.js beside the page - this element stays invisible
+           and the picture is the one that shipped before it. -->
+      <canvas id="galaxy-cosmos" aria-hidden="true" hidden></canvas>
       <canvas id="galaxy"></canvas>
 
-      <div class="brain-search">
-        <!-- GALAXY v2 (2026-10-21, Wave 3 slice G1): three lenses over the ONE
-             graph the HUD already reads. Memory and Neural are the same
-             /api/graph payload split by node group; the counts are computed
-             from the payload (never typed here), and the graph itself is the
-             PC's own computed data (jarvis_hud.py build_graph: collect_models,
-             collect_tools, facts, documents, knowledge, skills). No new route,
-             no new permission; the memory half arrives already redacted by
-             the PC's lock rules when the owner has hidden memory lists. -->
-        <span class="lens-group" role="group" aria-label="Galaxy lens">
-          <button type="button" class="lens-button" data-galaxy-lens="memory"
-                  aria-pressed="false"
-                  title="Your saved facts, notes and the people and things Jarvis knows - exactly what the PC lets this window see (memory lists can be hidden by the PC's lock rules)">Memory</button>
-          <button type="button" class="lens-button" data-galaxy-lens="neural"
-                  aria-pressed="true"
-                  title="The PC's brains, ability groups and the abilities they hold, from this PC's own config">Neural</button>
-          <button type="button" class="lens-button" data-galaxy-lens="unified"
-                  aria-pressed="false"
-                  title="Both lenses side by side, memory first - the counts line says which half is which">Unified</button>
-        </span>
-        <!-- The Galaxy's LOOK (2026-10-27, the owner: "id like an easy way to
-             change the appearance of the jarvis galaxy to the other models").
-             The options are NOT typed here: galaxy-presets.js is the page's ONE
-             list of looks, and the page's own script fills this select from it
-             (so a look can never be listed here and missing there). It starts
-             hidden and only appears once that module has loaded, so a page
-             served without it shows no dead control. Choosing one lays the
-             current lens out in that look, remembers it on this device under
-             the module's own storage key, and the choice comes back on the next
-             load. -->
-        <label class="look-pick" id="galaxy-look-pick" hidden>
-          <span class="look-pick-label">Look</span>
-          <select id="galaxy-look" aria-label="Galaxy look"></select>
-        </label>
-        <input id="gsearch" type="text" placeholder="Search the brain…" autocomplete="off">
-        <button class="ghost" id="g-reset">Reset view</button>
-        <button class="ghost" id="g-spin">Pause spin</button>
-        <span class="lens-counts" id="galaxy-counts" aria-live="polite">—</span>
-      </div>
+      <!-- GALAXY OPTIONS (the owner, 2026-10-27: "i would to simplify all the
+           galaxy options ... to have it under Galaxy options"). The lens row,
+           the Look switch, "Search the brain…", Reset view, Pause spin and the
+           counts line USED to float here as one long bar over the picture.
+           They are not drawn here any more: they are moved, ids and listeners
+           unchanged, into #galaxy-options (after #shell), so every galaxy-only
+           control has ONE home and the map is just the map. Nothing is
+           The 3D look's own buttons (#galaxy-look-actions) live there too,
+           in the Look row, because galaxy-cosmos.js fills that one host by
+           id and a host left here would be a control nothing ever fills. -->
 
       <!-- Every dot in every lens is also a real HTML button (the "nothing is
            drawn only on the canvas" rule). Positions come from the same
@@ -2452,6 +2765,16 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
            screen-reader surface, the canvas is the picture. -->
       <div class="galaxy-overlay" id="galaxy-overlay" role="group"
            aria-label="Galaxy nodes, as buttons"></div>
+
+      <!-- Hide the galaxy (same request, "also, add an option to hide the
+           galaxy under the Galaxy Options menu"): while it is hidden the
+           picture is gone and this is what stays, with the way back - the
+           toggle in #galaxy-options is the other way back. -->
+      <div class="galaxy-off" id="galaxy-hidden">
+        <p>The galaxy is hidden. Your brain map is still here - it is only
+           drawn away until you turn it back on.</p>
+        <button type="button" class="ghost" id="galaxy-show-placeholder">Show the galaxy</button>
+      </div>
 
       <div class="trace-bar off" id="trace-bar">
         <span class="q" id="trace-q">—</span>
@@ -2477,6 +2800,25 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
         </div>
       </div>
     </section>
+
+    <!-- Jarvis Live's refusal popup. The owner's field bug of 2026-10-27: "if
+         i click on the left column jarvis live icon, and since no mic is found
+         it gives me a message but its in the left column and hard to read. it
+         should be a pop up." It lives in the STAGE, not the rail, so the
+         refusal is readable in every layout (the left column folds away in
+         the narrow ones). Rust decides the refusal (`live.rs`: a stale link,
+         App lock, no microphone) and this page only repeats it - it never
+         says Live started when it did not, and Live raises no approval card.
+         role="alert" so it is announced once; tabindex="-1" so focus can be
+         moved into it. A toast, not a modal: no focus trap and no dimming,
+         and Close, Escape and a click outside all dismiss it. -->
+    <div id="live-refusal" class="stage-toast" role="alert" tabindex="-1" hidden>
+      <div class="lr-head">
+        <strong class="lr-title">Jarvis Live didn't start</strong>
+        <button class="lr-close" id="live-refusal-close" type="button">Close</button>
+      </div>
+      <p id="live-refusal-why"></p>
+    </div>
   </main>
 
   <!-- ============ RIGHT RAIL ============ -->
@@ -2673,6 +3015,91 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
     </div>
   </aside>
 </div>
+
+<!-- ============ GALAXY OPTIONS ============ -->
+<!-- The owner's ONE surface for every galaxy-only control (2026-10-27: "i
+     would to simplify all the galaxy options in the screenshot im attaching to
+     have it under Galaxy options"). It is a popover, like the Presets menu: the
+     page draws it, the doors open it, Escape / the close button / a click
+     outside close it, and it is clamped inside the window by the script.
+
+     THIS IS A MOVE, NOT A SECOND SET OF CONTROLS. #gsearch, #g-reset, #g-spin,
+     #galaxy-look-pick, #galaxy-look, #galaxy-counts and the three lens buttons
+     are the SAME nodes that used to float over the picture: their ids,
+     listeners and tests are unchanged, and the one place each id appears is
+     here. The page's own script owns every action; nothing new is sent
+     anywhere.
+
+     The hide toggle is the owner's "also, add an option to hide the galaxy
+     under the Galaxy Options menu": a VIEW preference kept on this device
+     (`jarvis.galaxy.hidden`, the same localStorage origin as the lens and look
+     preferences), no route, no approval card, no backend, and always
+     reversible from here and from the map's own place holder. -->
+<section id="galaxy-options" role="dialog" aria-modal="false"
+         aria-labelledby="galaxy-options-title" tabindex="-1" hidden>
+  <div class="go-head">
+    <span class="hud-label" id="galaxy-options-title">Galaxy options</span>
+    <button type="button" class="go-close" id="galaxy-options-close"
+            aria-label="Close Galaxy options" title="Close Galaxy options">&#10005;</button>
+  </div>
+  <!-- GALAXY v2 (2026-10-21, Wave 3 slice G1): three lenses over the ONE graph
+       the HUD already reads. Memory and Neural are the same /api/graph payload
+       split by node group; the counts are computed from the payload (never
+       typed here), and the graph itself is the PC's own computed data
+       (jarvis_hud.py build_graph: collect_models, collect_tools, facts,
+       documents, knowledge, skills). No new route, no new permission; the
+       memory half arrives already redacted by the PC's lock rules when the
+       owner has hidden memory lists. -->
+  <div class="go-row">
+    <span class="go-label" id="galaxy-lens-label">Lens</span>
+    <span class="lens-group" role="group" aria-labelledby="galaxy-lens-label">
+      <button type="button" class="lens-button" data-galaxy-lens="memory"
+              aria-pressed="false"
+              title="Your saved facts, notes and the people and things Jarvis knows - exactly what the PC lets this window see (memory lists can be hidden by the PC's lock rules)">Memory</button>
+      <button type="button" class="lens-button" data-galaxy-lens="neural"
+              aria-pressed="true"
+              title="The PC's brains, ability groups and the abilities they hold, from this PC's own config">Neural</button>
+      <button type="button" class="lens-button" data-galaxy-lens="unified"
+              aria-pressed="false"
+              title="Both lenses side by side, memory first - the counts line says which half is which">Unified</button>
+    </span>
+  </div>
+  <!-- The Galaxy's LOOK (2026-10-27, the owner: "id like an easy way to change
+       the appearance of the jarvis galaxy to the other models"). The options
+       are NOT typed here: galaxy-presets.js is the page's ONE list of looks,
+       and the page's own script fills this select from it (so a look can never
+       be listed here and missing there). It starts hidden and only appears
+       once that module has loaded, so a page served without it shows no dead
+       control. Choosing one lays the current lens out in that look, remembers
+       it on this device under the module's own storage key, and the choice
+       comes back on the next load. -->
+  <div class="go-row">
+    <label class="look-pick" id="galaxy-look-pick" hidden>
+      <span class="look-pick-label">Look</span>
+      <select id="galaxy-look" aria-label="Galaxy look"></select>
+    </label>
+    <!-- The look's own two controls (galaxy-cosmos.js's PRESET_ACTIONS).
+         Filled by the page once the 3D engine is ready; hidden before
+         that, so a button here always does something when it is shown. -->
+    <span class="look-actions" id="galaxy-look-actions" hidden></span>
+  </div>
+  <div class="go-row">
+    <label class="go-label" for="gsearch">Search</label>
+    <input id="gsearch" type="text" placeholder="Search the brain…" autocomplete="off">
+  </div>
+  <div class="go-row go-actions">
+    <button class="ghost" id="g-reset" type="button">Reset view</button>
+    <button class="ghost" id="g-spin" type="button">Pause spin</button>
+  </div>
+  <p class="lens-counts" id="galaxy-counts" aria-live="polite">—</p>
+  <div class="go-sep" role="presentation"></div>
+  <label class="go-check">
+    <input type="checkbox" id="galaxy-hide">
+    <span>Hide the galaxy</span>
+  </label>
+  <p class="go-note" id="galaxy-hide-note">Hides the map on this device only. The way back is here and on the map's own place holder.</p>
+  <button type="button" class="go-show" id="galaxy-show" hidden>Show the galaxy</button>
+</section>
 
 <script>
 /* ======================================================================= *
@@ -3310,6 +3737,10 @@ const galaxy = (() => {
   let dpr = 1, W = 0, H = 0, running = false;
 
   let fitted = false;
+  // Which engine drew the last frame (null = no frame yet), so the counts line
+  // can say "webgl" or "flat" the moment that changes rather than at the next
+  // lens switch.
+  let lastBody3d = null;
 
   // ---- G2 node budget (2026-10-21, Ruling 11.5) -------------------------
   // The inline HUD's Galaxy is capped at MAX_HUD_GALAXY_NODES; the full-size
@@ -3456,6 +3887,21 @@ const galaxy = (() => {
     // the id of the flat layout the owner chose. A test (and a reader of the
     // DOM) can tell the two apart without reading pixels.
     el.setAttribute("data-galaxy-look", lookOf());
+    // Which ENGINE is drawing the bodies: "webgl" when the 3D cosmos is on
+    // screen, "flat" while a look is being drawn without it (no WebGL, reduced
+    // motion, or a hidden map), "constellation" for the physics picture. The
+    // look id alone cannot say this - the same look can be drawn either way.
+    paintEngineMark();
+  }
+
+  /** The engine mark, on its own so the drawing loop can re-take it the moment
+   *  the 3D picture really starts (the engine is built asynchronously, and the
+   *  counts line is written before that on a cold page). */
+  function paintEngineMark(){
+    const el = document.getElementById("galaxy-counts");
+    if(!el) return;
+    el.setAttribute("data-galaxy-engine",
+      cosmosOn() ? "webgl" : (flatLook() ? "flat" : "constellation"));
   }
 
   /** The node buttons: one per visible node, sorted by id so tab order is
@@ -3535,6 +3981,24 @@ const galaxy = (() => {
   let lookId = null;             // the look on screen; null until it is known
   let lookLayout = null;         // that look's layout, guides included
 
+  // ---- the 3D cosmos (2026-10-27) --------------------------------------
+  // The owner: "none of the galaxy on the current jarvis hud look like the one
+  // that gemini made". He chose the exact 3D port, with Planetary Orrery as the
+  // default look. galaxy-cosmos.js is that engine, loaded the same way as the
+  // look list - a dynamic import() of a module beside the page, so the CSP is
+  // untouched and a page served without it keeps today's picture.
+  //
+  // TWO ENGINES, ONE LIST OF LOOKS. The ids are shared with galaxy-presets.js
+  // on purpose: when WebGL works the eight looks are drawn in 3D, and when it
+  // does not - or the owner asked for reduced motion - the flat layout with the
+  // SAME id draws instead. That is why a look can never be "missing" on a
+  // machine that cannot do 3D.
+  let cosmosModule = null;       // galaxy-cosmos.js, once it has loaded
+  let cosmosModuleLoading = null;
+  let cosmosEngine = null;       // the live three.js engine, once it exists
+  let cosmosLoading = null;      // the one in-flight engine build
+  let cosmosFailed = false;      // no WebGL / no three.js: stay flat, stop trying
+
   /** The look's id as the module spells it, or the constellation. */
   function lookOf(){
     return lookEngine ? (lookId || lookEngine.DEFAULT_PRESET) : "constellation";
@@ -3550,11 +4014,28 @@ const galaxy = (() => {
 
   /** What this device remembered, through the module's own safe reader, so an
    *  unknown, stale or corrupt value can only ever come back as the
-   *  constellation - never as a broken picture. */
+   *  constellation - never as a broken picture.
+   *
+   *  A device that has NEVER chosen a look gets the owner's default instead
+   *  (Planetary Orrery, 2026-10-27). The id comes from galaxy-cosmos.js itself,
+   *  never a copy of it here; until that module has loaded this answers the
+   *  constellation, and the module's arrival applies the default. */
   function lookStored(){
     if(!lookEngine) return null;
-    try{ return lookEngine.storedPreset(localStorage.getItem(lookEngine.PRESET_STORAGE_KEY)); }
-    catch(e){ return lookEngine.DEFAULT_PRESET; }
+    try{
+      const raw = localStorage.getItem(lookEngine.PRESET_STORAGE_KEY);
+      if(raw === null && cosmosModule) return cosmosModule.COSMOS_DEFAULT_LOOK;
+      return lookEngine.storedPreset(raw);
+    }catch(e){ return lookEngine.DEFAULT_PRESET; }
+  }
+
+  /** Has this device ever chosen a look? A private-mode window that cannot
+   *  read storage answers "yes", so it keeps the old default rather than
+   *  silently overriding whatever it had. */
+  function lookChosen(){
+    if(!lookEngine) return true;
+    try{ return localStorage.getItem(lookEngine.PRESET_STORAGE_KEY) !== null; }
+    catch(e){ return true; }
   }
 
   /** Remember the choice on this device only, under the module's own key. The
@@ -3639,9 +4120,191 @@ const galaxy = (() => {
       lookId = lookStored();
       paintLookChoices();
       if(nodes.length) applyLens();     // the graph arrived first: lay it out now
+      loadCosmosModule();               // the 3D half follows; no picture waits for it
       return mod;
     }).catch(() => null);   // no module beside the page: the constellation stays
     return lookLoading;
+  }
+
+  /** Load galaxy-cosmos.js: the 3D engine's pure half, then the engine itself
+   *  only when a look needs it. Failure here is the flat picture, not an error. */
+  function loadCosmosModule(){
+    if(cosmosModuleLoading) return cosmosModuleLoading;
+    cosmosModuleLoading = import("./galaxy-cosmos.js").then((mod) => {
+      cosmosModule = mod;
+      // A device that has never chosen a look now gets the owner's default
+      // (Planetary Orrery, 2026-10-27), written down like any other choice - so
+      // it is chosen once and remembered, and choosing the constellation after
+      // this still works.
+      if(lookEngine && !lookChosen()) setLook(mod.COSMOS_DEFAULT_LOOK);
+      paintLookActions();
+      if(cosmosLook()) syncCosmos();
+      return mod;
+    }).catch(() => null);
+    return cosmosModuleLoading;
+  }
+
+  /** True while the chosen look is one galaxy-cosmos.js draws (not the
+   *  constellation, and not an id it does not know). */
+  function cosmosLook(){
+    return Boolean(cosmosModule) && flatLook() && cosmosModule.isCosmosLook(lookId);
+  }
+
+  /** Is the 3D engine the thing on screen RIGHT NOW? A look is chosen AND the
+   *  engine exists AND the owner has not asked for reduced motion AND the map
+   *  is really visible - the same idle rule as the rest of this page, so a
+   *  hidden map never keeps a GPU busy. */
+  function cosmosOn(){
+    return Boolean(cosmosEngine) && cosmosLook() && !S.reduced && shouldRun();
+  }
+
+  function cosmosCanvas(){
+    return document.getElementById("galaxy-cosmos");
+  }
+
+  /** Adopt the engine once it has built: show its canvas, size it to the stage
+   *  the 2D canvas is already using, and hand it the picture. */
+  function adoptCosmos(engine){
+    cosmosEngine = engine;
+    const canvas = cosmosCanvas();
+    if(canvas) canvas.hidden = false;
+    try{
+      engine.resize(W, H, dpr);
+      syncCosmos();
+      renderCounts(nodes);
+    }catch(e){
+      cosmosFailed = true;
+      dropCosmos();
+    }
+  }
+
+  /** Build the engine the first time a 3D look is on screen. It resolves null
+   *  when this machine cannot draw (no WebGL, or three.js is not served beside
+   *  the page); the flat layout of the same look keeps drawing and the page
+   *  never asks again. */
+  function ensureCosmos(){
+    if(cosmosFailed || cosmosEngine || cosmosLoading) return cosmosLoading;
+    // LAZY, and it means it: nothing is built while the map is not on screen.
+    // The drawing loop's own switch builds it on the first frame the Galaxy is
+    // really shown (`resumeCosmos`), so a page that opens on the conversation
+    // never creates a WebGLRenderer at all.
+    if(!shouldRun()) return null;
+    const canvas = cosmosCanvas();
+    if(!cosmosModule || !canvas || S.reduced) return null;
+    cosmosLoading = cosmosModule.createEngine({
+      canvas,
+      // The page's own group colours, so the picture cannot drift from the
+      // legend: one palette, one source.
+      colorFor: (group) => colourFor(group),
+      // Lost GPU context: fall back to the flat picture rather than freeze.
+      onFail: () => { cosmosFailed = true; dropCosmos(); syncRunning(); },
+    }).then((engine) => {
+      cosmosLoading = null;
+      if(!engine){ cosmosFailed = true; return null; }
+      adoptCosmos(engine);
+      return engine;
+    }).catch(() => {
+      cosmosLoading = null;
+      cosmosFailed = true;
+      return null;
+    });
+    return cosmosLoading;
+  }
+
+  /** Hide the 3D picture and let go of the GPU context. The look stays chosen -
+   *  this only decides which engine draws it. */
+  function dropCosmos(){
+    const canvas = cosmosCanvas();
+    if(canvas) canvas.hidden = true;
+    if(cosmosEngine){
+      try{ cosmosEngine.dispose(); }catch(e){ /* already gone */ }
+      cosmosEngine = null;
+    }
+    paintLookActions();
+    if(nodes.length) renderCounts(nodes);
+  }
+
+  /** Let go of the 3D engine, and with it the GPU context, while the galaxy is
+   *  HIDDEN (the owner's Hide the galaxy, or a backgrounded window) - the
+   *  owner's guardrail for this wave (2026-10-28): a picture nobody can see must
+   *  not keep a WebGL context or its ~1,500 objects alive. The look stays
+   *  chosen; only the engine goes, and the flat 2D pass of the same look draws
+   *  until `resumeCosmos` builds one again. Deliberately NOT called for a mere
+   *  conversation/map view switch: the engine's draws already stop there, and
+   *  rebuilding a GL context on every toggle would cost more than it saves. */
+  function releaseCosmos(){
+    if(cosmosEngine) dropCosmos();
+  }
+
+  /** Build the 3D engine again when the map is on screen after being hidden.
+   *  A failure is remembered in `cosmosFailed`, so this can never become a
+   *  rebuild loop. */
+  function resumeCosmos(){
+    if(cosmosEngine || cosmosFailed || !cosmosLook() || S.reduced) return;
+    ensureCosmos();
+  }
+
+  /** Hand the engine the picture it should be drawing: the chosen look and the
+   *  names on screen, with the SAME node and link budget the 2D pass uses.
+   *  Called after every lens change, so the two engines always show one graph. */
+  function syncCosmos(){
+    const canvas = cosmosCanvas();
+    if(!cosmosModule || !canvas) return;
+    if(!cosmosLook() || cosmosFailed || S.reduced){
+      canvas.hidden = true;
+      paintLookActions();
+      return;
+    }
+    if(!cosmosEngine){ ensureCosmos(); return; }
+    canvas.hidden = false;
+    try{
+      cosmosEngine.resize(W, H, dpr);
+      cosmosEngine.setPreset(lookId);
+      cosmosEngine.setGraph(
+        nodes.map(n => ({ id: n.id, label: n.label, group: n.group, weight: n.weight })),
+        links.map(l => ({ source: l.s.id, target: l.t.id, kind: l.kind })));
+      cosmosEngine.setSpinning(spin && !S.reduced);
+    }catch(e){
+      cosmosFailed = true;
+      dropCosmos();
+      return;
+    }
+    paintLookActions();
+    if(nodes.length) renderCounts(nodes);
+  }
+
+  /** The look's own two controls (Gemini gives every look a pair). They are
+   *  shown only once the 3D engine exists, so every button here does something:
+   *  on a machine that cannot draw 3D there is no row, rather than two dead
+   *  buttons. The Galaxy Options menu workstream moves this row; the engine
+   *  only needs somewhere to put it. */
+  function paintLookActions(){
+    const host = document.getElementById("galaxy-look-actions");
+    if(!host) return;
+    const actions = (cosmosEngine && cosmosModule && cosmosModule.isCosmosLook(lookId))
+      ? cosmosModule.actionsFor(lookId) : [];
+    if(!actions.length){ host.hidden = true; host.textContent = ""; return; }
+    host.hidden = false;
+    host.textContent = "";
+    for(const what of actions){
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = what.label;
+      button.setAttribute("data-galaxy-action", what.key);
+      if(what.toggle){
+        button.setAttribute("aria-pressed",
+          cosmosEngine.actionState(what.key) ? "true" : "false");
+      }
+      button.addEventListener("click", () => {
+        if(!cosmosEngine) return;
+        const on = cosmosEngine.action(what.key);
+        if(what.toggle) button.setAttribute("aria-pressed", on ? "true" : "false");
+        // A one-shot may still change what the picture shows: re-take the
+        // counts line so `data-galaxy-engine` and the look never disagree.
+        if(nodes.length) renderCounts(nodes);
+      });
+      host.appendChild(button);
+    }
   }
 
   loadLookEngine();
@@ -3652,6 +4315,9 @@ const galaxy = (() => {
     W = r.width; H = r.height;
     cv.width = Math.max(1, W*dpr); cv.height = Math.max(1, H*dpr);
     ctx.setTransform(dpr,0,0,dpr,0,0);
+    // The 3D engine draws into its own canvas, so it has to be told the same
+    // size AND the same pixel ratio (the page's cap of 2, above).
+    if(cosmosEngine) cosmosEngine.resize(W, H, dpr);
     // The brain view is hidden at boot, so the first real measurement is the
     // first chance to frame the graph against actual pixels.
     if(nodes.length && W > 0 && !fitted){ fitted = true; fitCamera(); }
@@ -3719,6 +4385,9 @@ const galaxy = (() => {
     buildLegend(graph);
     if(!overlayEl) overlayEl = document.getElementById("galaxy-overlay");
     syncOverlay();
+    // The 3D engine (when this machine has one) is handed the same names, in
+    // the same budget, so the two engines can never show two different graphs.
+    syncCosmos();
   }
 
   // Pull the camera back far enough that the whole galaxy lands on screen,
@@ -3773,7 +4442,14 @@ const galaxy = (() => {
   }
 
   // -- projection ------------------------------------------------------
+  // While the 3D engine draws, the camera that matters is ITS camera: every
+  // label, every search highlight and every node button is placed from the same
+  // projection the bodies were drawn with, so a button is always on its name -
+  // at any orbit, any zoom, any look.
   function project(p){
+    if(cosmosOn() && cosmosEngine){
+      return cosmosEngine.project(p.id);
+    }
     const dx = p.x - camAt.x, dy = p.y - camAt.y, dz = p.z - camAt.z;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     let x = dx*cy - dz*sy, z = dx*sy + dz*cy;
@@ -3797,9 +4473,11 @@ const galaxy = (() => {
    *  therefore left the Studio Galaxy tab a visible, permanently empty canvas
    *  (found on the owner's PC, 2026-10-25). The tab is part of the visibility
    *  test now, so a hidden map still stops the loop and the Studio stage
-   *  starts it. */
+   *  starts it. The owner's Hide the galaxy option (2026-10-27) is a third
+   *  reason not to run: a picture that is not drawn is not stepped. */
   function shouldRun(){
-    return !document.hidden && (S.view === "brain"
+    return !document.documentElement.hasAttribute("data-galaxy-hidden")
+      && !document.hidden && (S.view === "brain"
       || (document.documentElement.dataset.hudShell === "split-stage"
           && document.documentElement.dataset.hudTab === "galaxy"));
   }
@@ -3810,7 +4488,13 @@ const galaxy = (() => {
     const want = !!on && shouldRun();
     if(want === running) return;
     running = want;
-    if(running) requestAnimationFrame(draw);
+    if(!running) return;
+    // The map is on screen again: build the 3D engine if it was let go while
+    // the galaxy was hidden (`releaseCosmos`). A machine that cannot draw, or
+    // one where the engine already failed, stays flat - `cosmosFailed` stops
+    // this from ever becoming a rebuild loop.
+    resumeCosmos();
+    requestAnimationFrame(draw);
   }
 
   /** The view or the window's visibility changed: keep the loop in step with
@@ -3896,18 +4580,36 @@ const galaxy = (() => {
 
   function draw(ts){
     if(!shouldRun()){ running = false; return; }
+    // Which engine draws the BODIES this frame. The 3D one, when a look it can
+    // draw is chosen and this machine can draw it; the canvas here otherwise,
+    // exactly as before. Labels, search highlights, recall rings and the button
+    // overlay are drawn here either way - one accessibility surface, both
+    // engines.
+    const body3d = cosmosOn();
+    if(body3d !== lastBody3d){
+      // The engine was built between two frames: keep the counts line's own
+      // `data-galaxy-engine` saying what is really on screen.
+      lastBody3d = body3d;
+      paintEngineMark();
+    }
     if(nodes.length){
-      // A flat look is a stationary diagram: the physics does not run, so the
-      // names stay exactly where the layout put them.
-      if(!flatLook()) step(0.32);
-      if(spin && !dragging && !S.reduced) yaw += 0.0016;
-      camAt.x += (camTarget.x - camAt.x)*0.08;
-      camAt.y += (camTarget.y - camAt.y)*0.08;
-      camAt.z += (camTarget.z - camAt.z)*0.08;
+      if(body3d){
+        // The engine owns the motion in 3D: the orrery's orbit, the nebula's
+        // rotation, the radar sweep. Physics never runs over a 3D layout.
+        cosmosEngine.frame(ts);
+      } else {
+        // A flat look is a stationary diagram: the physics does not run, so the
+        // names stay exactly where the layout put them.
+        if(!flatLook()) step(0.32);
+        if(spin && !dragging && !S.reduced) yaw += 0.0016;
+        camAt.x += (camTarget.x - camAt.x)*0.08;
+        camAt.y += (camTarget.y - camAt.y)*0.08;
+        camAt.z += (camTarget.z - camAt.z)*0.08;
+      }
     }
 
     ctx.clearRect(0,0,W,H);
-    paintGuides();
+    if(!body3d) paintGuides();
 
     const near = focusId ? (adj.get(focusId) || new Set()) : null;
     const q = query.trim().toLowerCase();
@@ -3923,8 +4625,9 @@ const galaxy = (() => {
 
     // links first, behind everything. A flat look draws none of them: they are
     // the constellation's fact-sharing web, and they would cross every ring,
-    // row and orbit (the same reason the Brain window hides them).
-    for(const l of (flatLook() ? [] : links)){
+    // row and orbit (the same reason the Brain window hides them). The 3D
+    // engine draws its own links, in the shape each look gives them.
+    for(const l of ((flatLook() || body3d) ? [] : links)){
       const a = proj.get(l.s.id), b = proj.get(l.t.id);
       if(!a || !b) continue;
       let alpha = 0.34;
@@ -3969,18 +4672,29 @@ const galaxy = (() => {
       if(focusId && !isFocus && !isNear) alpha = 0.1;
       if(q) alpha = hit ? 1 : 0.08;
 
-      let r = Math.max(1.2, n.r * s.k * 1.05);
+      // How big this name is on screen, in pixels. In 3D the engine's own body
+      // radius is the truth (it is `galaxy-cosmos.js`'s `nodeRadius`), so the
+      // label sits just clear of the body it belongs to instead of guessing.
+      let r = body3d
+        ? Math.max(3, Math.min(40, Math.max(3, Math.min(9,
+            3 + (typeof n.weight === "number" ? n.weight : 1) * 1.1)) * s.k))
+        : Math.max(1.2, n.r * s.k * 1.05);
       if(isHit) r *= 1.5;
 
       const decorative = isFocus || hit || n.group === "core" || isHit || isMiss;
-      if(decorative && (!budgetCapped || isFocus || isHit || isMiss || n.group === "core")){
+      // The glow halo is a 2D stand-in for a light: the 3D bodies have their own
+      // materials (and their own halo spheres), so drawing one here too would
+      // double the bright edge.
+      if(!body3d && decorative && (!budgetCapped || isFocus || isHit || isMiss || n.group === "core")){
         ctx.globalAlpha = alpha * (isHit ? 0.5 : isMiss ? 0.3 : 0.35);
         ctx.fillStyle = isHit ? tk("--accent", "#6fe3ff") : isMiss ? tk("--warn", "#ffb648") : colour;
         ctx.beginPath(); ctx.arc(s.x, s.y, r*(isHit?3.6:3.1), 0, Math.PI*2); ctx.fill();
       }
 
-      ctx.globalAlpha = alpha * Math.min(1, 0.35 + s.k*0.9);
-      drawNode(ctx, s.x, s.y, r, n.group, colour);
+      if(!body3d){
+        ctx.globalAlpha = alpha * Math.min(1, 0.35 + s.k*0.9);
+        drawNode(ctx, s.x, s.y, r, n.group, colour);
+      }
 
       // A recalled note wears a ring; a near-miss wears a dashed one. The
       // difference is the whole point of the view.
@@ -4058,9 +4772,15 @@ const galaxy = (() => {
   cv.addEventListener("pointermove", e => {
     const r = cv.getBoundingClientRect();
     if(dragging){
-      yaw   += (e.clientX - lastX) * 0.006;
-      pitch += (e.clientY - lastY) * 0.006;
-      pitch = Math.max(-1.4, Math.min(1.4, pitch));
+      if(cosmosOn() && cosmosEngine){
+        // The same drag, on the 3D camera: the orbit stays around the look's
+        // own target, so dragging never loses the picture.
+        cosmosEngine.orbit((e.clientX - lastX) * 0.006, (e.clientY - lastY) * 0.006);
+      } else {
+        yaw   += (e.clientX - lastX) * 0.006;
+        pitch += (e.clientY - lastY) * 0.006;
+        pitch = Math.max(-1.4, Math.min(1.4, pitch));
+      }
       lastX = e.clientX; lastY = e.clientY;
     } else {
       const n = pick(e.clientX - r.left, e.clientY - r.top);
@@ -4079,6 +4799,7 @@ const galaxy = (() => {
   });
   cv.addEventListener("wheel", e => {
     e.preventDefault();
+    if(cosmosOn() && cosmosEngine){ cosmosEngine.zoom(e.deltaY > 0 ? 0.9 : 1.1); return; }
     zoom = Math.max(0.28, Math.min(4.5, zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
   }, {passive:false});
 
@@ -4167,10 +4888,21 @@ const galaxy = (() => {
   }
 
   return {
-    load, resize, setTrace, flyTo, setRunning, syncRunning,
-    reset(){ clearFocus(); if(flatLook()){ yaw = 0; pitch = 0; } else { yaw=.5; pitch=-.25; } fitCamera(); },
+    load, resize, setTrace, flyTo, setRunning, syncRunning, releaseCosmos,
+    reset(){
+      clearFocus();
+      // A 3D look has a camera, not a yaw: its own reset puts the look back on
+      // Gemini's angle instead of forcing the constellation's tilt onto it.
+      if(cosmosEngine && cosmosLook()){ cosmosEngine.resetView(); return; }
+      if(flatLook()){ yaw = 0; pitch = 0; } else { yaw=.5; pitch=-.25; }
+      fitCamera();
+    },
     search(v){ query = v; },
-    toggleSpin(){ spin = !spin; return spin; },
+    toggleSpin(){
+      spin = !spin;
+      if(cosmosEngine) cosmosEngine.setSpinning(spin && !S.reduced);
+      return spin;
+    },
     lens(){ return lens; },
     /** Which look is on screen: the constellation, or a flat layout's id. */
     look(){ return lookOf(); },
@@ -4180,6 +4912,24 @@ const galaxy = (() => {
      *  code (the same spirit as budgetInfo below): the module's own object,
      *  guides and all, or null while the constellation is showing. */
     lookInfo(){ return { look: lookOf(), layout: lookLayout }; },
+    /** The 3D half, for the tests and for anyone reading this code: which engine
+     *  is drawing, whether the cosmos module and its GPU context are there, and
+     *  the engine's own report. Nothing here is a promise - `ready` false means
+     *  the flat picture is on screen. */
+    engineInfo(){
+      return {
+        engine: cosmosOn() ? "webgl" : (flatLook() ? "flat" : "constellation"),
+        ready: Boolean(cosmosEngine),
+        failed: cosmosFailed,
+        module: Boolean(cosmosModule),
+        reduced: Boolean(S.reduced),
+        look: lookOf(),
+        preset: cosmosEngine ? cosmosEngine.look() : null,
+        actions: (cosmosEngine && cosmosModule && cosmosModule.isCosmosLook(lookId))
+          ? cosmosModule.actionsFor(lookId).map(what => what.key) : [],
+        info: cosmosEngine ? cosmosEngine.info() : null,
+      };
+    },
     focused(){ return focusId ? nodes.find(n => n.id === focusId) : null; },
     /** G2: what the node budget did, for the tests and for anyone reading this
      *  code - the cap in force, how many nodes the lens really has, how many
@@ -4832,8 +5582,23 @@ function spaceIsThePages(){
   const active = document.activeElement;
   return !active || active === document.body || active === document.documentElement;
 }
+/* The History sidebar owns Space while it is up (Gemini ruling, 2026-10-27):
+ * a row, its "..." menu, a section header or the search box is a control whose
+ * Space must do that control's own job, and a click on the panel's background
+ * leaves focus on <body> - where the old check would have started the
+ * microphone with the panel still open. So: bail for anything inside the
+ * sidebar, for a form control, for a button and for a menu, and bail whenever
+ * the sidebar is open at all. */
+function spaceBelongsToTheSidebar(e){
+  const target = e.target;
+  if(target && target.closest && target.closest(
+    '#history-sidebar, input, textarea, button, [role="menu"]')){
+    return true;
+  }
+  return !!(window.hudHistory && window.hudHistory.isOpen && window.hudHistory.isOpen());
+}
 document.addEventListener("keydown", e => {
-  if(e.code === "Space" && !e.repeat && spaceIsThePages()){
+  if(e.code === "Space" && !e.repeat && spaceIsThePages() && !spaceBelongsToTheSidebar(e)){
     e.preventDefault(); spaceTalks = true; voice.start(false);
   }
 });
@@ -4846,6 +5611,179 @@ $("g-reset").addEventListener("click", () => { galaxy.reset(); $("gsearch").valu
 $("g-spin").addEventListener("click", e => {
   e.target.textContent = galaxy.toggleSpin() ? "Pause spin" : "Resume spin";
 });
+
+/* ==================================================================
+ * GALAXY OPTIONS (the owner's ask, 2026-10-27)
+ *
+ * "i would to simplify all the galaxy options in the screenshot im attaching
+ * to have it under Galaxy options", "have that as a new icon on the left
+ * column of the jarvis hud", "and an option next to the word telemetry".
+ *
+ * ONE panel (#galaxy-options, markup after #shell) and four doors to it:
+ *
+ *   * #rail-galaxy-options - the new icon in the left column, for the shells
+ *     whose left column is the rail;
+ *   * #dock-galaxy-options - the same new icon in the Studio dock's 60px
+ *     column (the Studio shell hides the rail button and shows this one);
+ *   * #stage-galaxy-options - the word beside Telemetry in the Studio words
+ *     row;
+ *   * #stage-bar-galaxy-options - the word beside the Telemetry toggle in
+ *     every shell whose stage bar shows that toggle (the Studio shell hides
+ *     this one, so exactly one word sits beside Telemetry in each shell).
+ *
+ * Nothing here sends anything: the controls inside the panel keep their own
+ * listeners (the lens buttons, the Look select, the search box, Reset and
+ * Pause spin), so this block only opens, closes and places the container.
+ *
+ * Hide the galaxy is the owner's "also, add an option to hide the galaxy under
+ * the Galaxy Options menu". It is a VIEW preference: localStorage
+ * ["jarvis.galaxy.hidden"] on this device, the same road as the lens
+ * (jarvis.galaxy.lens) and the look (jarvis.galaxy.preset); no route, no
+ * command, no approval card, no backend. Turning it off is a click here or on
+ * the map's own place holder, and the stored key is removed, so "shown" is the
+ * default a cleared browser comes back to.
+ * ================================================================== */
+(function galaxyOptions(){
+  const panel = $("galaxy-options");
+  if(!panel) return;
+  const HIDDEN_KEY = "jarvis.galaxy.hidden";
+  const doors = ["rail-galaxy-options", "dock-galaxy-options",
+    "stage-galaxy-options", "stage-bar-galaxy-options"]
+    .map(id => $(id)).filter(Boolean);
+  let door = null;
+
+  function hiddenNow(){
+    return document.documentElement.hasAttribute("data-galaxy-hidden");
+  }
+
+  /** Every door says whether the ONE panel is open, and never disagrees. */
+  function paintDoors(open){
+    doors.forEach(b => b.setAttribute("aria-expanded", open ? "true" : "false"));
+  }
+
+  /** The panel's own toggles and words, from the one stored state. */
+  function paintHidden(){
+    const hidden = hiddenNow();
+    const box = $("galaxy-hide");
+    if(box) box.checked = hidden;
+    const place = $("galaxy-hidden");
+    if(place) place.setAttribute("aria-hidden", hidden ? "false" : "true");
+    const note = $("galaxy-hide-note");
+    if(note) note.textContent = hidden
+      ? "The galaxy is hidden on this device. Turn it back on whenever you want."
+      : "Hides the map on this device only. The way back is here and on the map's own place holder.";
+    const show = $("galaxy-show");
+    if(show) show.hidden = !hidden;
+  }
+
+  /** Show or hide the galaxy, and remember it when `save` says this is the
+   *  owner's own click (the boot call only reads). */
+  function applyHidden(hidden, save){
+    document.documentElement.toggleAttribute("data-galaxy-hidden", hidden);
+    if(save){
+      try{
+        if(hidden) localStorage.setItem(HIDDEN_KEY, "1");
+        else localStorage.removeItem(HIDDEN_KEY);
+      }catch(e){ /* private mode: this session only, like the lens and the look */ }
+    }
+    paintHidden();
+    // A picture that is not drawn is not stepped: the one drawing loop follows
+    // the same fact the CSS does.
+    // A galaxy the owner has HIDDEN also lets go of its 3D engine and the GPU
+    // context behind it (2026-10-28). Showing it again builds one, through the
+    // drawing loop's own switch (`resumeCosmos`), and the flat picture of the
+    // same look draws until that first 3D frame - so the way back never shows
+    // an empty stage.
+    try{ if(hidden) galaxy.releaseCosmos(); }catch(e){}
+    try{ galaxy.syncRunning(); }catch(e){}
+  }
+
+  function storedHidden(){
+    try{ return localStorage.getItem(HIDDEN_KEY) === "1"; }catch(e){ return false; }
+  }
+
+  /** Place the open panel beside/under its door, INSIDE the window. The dock
+   *  icon is in the left column, so the panel opens to its right; the two word
+   *  doors are in the top rows, so it opens under them - the same shape the
+   *  Presets menu uses for its own two kinds of door. */
+  function place(){
+    if(!door || panel.hidden) return;
+    const r = door.getBoundingClientRect();
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    const w = panel.offsetWidth || 320;
+    const h = panel.offsetHeight || 0;
+    const gap = 8;
+    const inRail = Boolean(door.closest && door.closest("#rail-left"));
+    let left = inRail ? r.right + gap : r.left;
+    left = Math.max(gap, Math.min(vw - w - gap, left));
+    let top = inRail ? r.top : r.bottom + 6;
+    if(vh && h) top = Math.max(gap, Math.min(top, vh - h - gap));
+    panel.style.left = Math.round(left) + "px";
+    panel.style.top = Math.round(top) + "px";
+  }
+
+  function open(which){
+    door = which || door;
+    panel.hidden = false;
+    panel.setAttribute("aria-hidden", "false");
+    paintDoors(true);
+    // Visible first, then measured: an offsetHeight of 0 would put the close
+    // button off the bottom of the window.
+    place();
+    panel.focus({ preventScroll: true });
+  }
+
+  function close(returnFocus){
+    if(panel.hidden) return;
+    panel.hidden = true;
+    panel.setAttribute("aria-hidden", "true");
+    paintDoors(false);
+    if(returnFocus && door && door.isConnected) door.focus();
+    door = null;
+  }
+
+  doors.forEach(b => b.addEventListener("click", () => {
+    if(panel.hidden) open(b); else close(true);
+  }));
+  const closeBtn = $("galaxy-options-close");
+  if(closeBtn) closeBtn.addEventListener("click", () => close(true));
+  window.addEventListener("resize", place);
+  window.addEventListener("jarvis:hud-shell", place);
+  // A click anywhere outside closes it, but the doors are exempt: their own
+  // click is the toggle, and dismissing on pointerdown first would turn a
+  // second click on a door into close-then-reopen.
+  document.addEventListener("pointerdown", (event) => {
+    if(panel.hidden) return;
+    const t = event.target;
+    if(panel.contains(t)) return;
+    if(doors.some(b => b.contains(t))) return;
+    close(false);
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if(panel.hidden || event.key !== "Escape") return;
+    // A modal dialog on top owns its own Escape.
+    if(document.querySelector("dialog[open]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    close(true);
+  }, true);
+  // The Presets menu is the other popover in this page: opening it closes this
+  // one, so two menus are never open at once.
+  window.addEventListener("jarvis:hud-presets-open", () => close(false));
+
+  const hide = $("galaxy-hide");
+  if(hide) hide.addEventListener("change", () => applyHidden(hide.checked, true));
+  const show = $("galaxy-show");
+  if(show) show.addEventListener("click", () => applyHidden(false, true));
+  const showMap = $("galaxy-show-placeholder");
+  if(showMap) showMap.addEventListener("click", () => applyHidden(false, true));
+
+  // The stored preference applies before the map is first asked to run.
+  paintDoors(false);
+  applyHidden(storedHidden(), false);
+}());
+
 $("insp-close").addEventListener("click", () => { galaxy.reset(); });
 $("trace-clear").addEventListener("click", () => showTrace(null));
 $("insp-ask").addEventListener("click", () => {
@@ -5914,6 +6852,10 @@ galaxy.syncRunning();
 document.addEventListener("visibilitychange", () => {
   document.documentElement.classList.toggle("hud-window-hidden", document.hidden);
   galaxy.syncRunning();
+  // A minimised or backgrounded window is not drawing anything: let go of the
+  // 3D engine's GPU context instead of holding it behind a blank screen
+  // (2026-10-28). Coming back rebuilds it by the same path as the view switch.
+  if(document.hidden) galaxy.releaseCosmos();
   if(!document.hidden){ galaxy.resize(); apprTick(); apprPoll(); }
 });
 apprPoll();
@@ -7701,6 +8643,20 @@ mountCurrentModels();
  * link, under App lock, or with no microphone - and, like the bar's, it
  * raises no approval card.
  *
+ * A REFUSED START IS SAID IN THE STAGE (the owner's field bug of 2026-10-27:
+ * "it gives me a message but its in the left column and hard to read. it
+ * should be a pop up."). `#rail-live-status` stays the screen-reader mirror
+ * and is now actually hidden (`#rail-live-status` in the style above); the
+ * readable surface is `#live-refusal`, a toast in the stage with its own
+ * plate, a Close button, Escape, a click outside and a 20 s fallback. The
+ * words are mapped for a person by `liveRefusalWords`, never the raw Rust
+ * text alone: "no microphone" becomes the Windows fix, and every other
+ * refusal is the PC's own sentence, which live.rs already writes for a
+ * person (a stale link, App lock, a non-local server). It is shown only
+ * when a START is refused - the popup's words are about a start - and a
+ * later success takes it away, so it can never say "didn't start" over a
+ * Live that is running.
+ *
  * It lives in THIS module, and it spells BOTH rules the bar uses instead of
  * importing them - on purpose, and this is the reason:
  *
@@ -7721,6 +8677,9 @@ mountCurrentModels();
 (function hudRailLive() {
   const button = document.getElementById("rail-live");
   const status = document.getElementById("rail-live-status");
+  const toast = document.getElementById("live-refusal");
+  const toastWhy = document.getElementById("live-refusal-why");
+  const toastClose = document.getElementById("live-refusal-close");
   if (!button) return;
   const core = window.__TAURI__ && window.__TAURI__.core;
   // A plain browser gets NO Live button: there is no shell to ask, and this
@@ -7751,6 +8710,78 @@ mountCurrentModels();
     const s = answer && typeof answer === "object" ? answer : {};
     paint(liveOnHere(s.status));
   };
+
+  /** The refusal in plain words. A plain declaration, not a closure over page
+   *  state, so the browser-free test can drive this exact table
+   *  (tests/hud-live-read-aloud.mjs). */
+  function liveRefusalWords(raw) {
+    const why = String(raw || "").trim();
+    // The owner's own case: no microphone at all. voice.rs says "no
+    // microphone was found", aec.rs says "no microphone" - one fact, and the
+    // fix is in Windows, so say where it is.
+    if (/no microphone/i.test(why)) {
+      return "This PC couldn't find a microphone. Plug in or turn on a microphone in Windows, then try again.";
+    }
+    // Everything else is already a sentence written for a person (live.rs: a
+    // stale link, App lock, a non-local server). Repeat it, never soften it,
+    // and never claim it started.
+    return why || "This PC did not say why. Check that Jarvis is running, then try again.";
+  }
+
+  let refusalTimer = 0;
+  let refusalFocus = null;
+  /** Hide it and give focus back to the control that asked - but only while
+   *  the focus is still ours to give, so the 20 s fallback can never pull the
+   *  caret out of something the owner has moved on to. */
+  const dismissRefusal = (restoreFocus) => {
+    if (!toast || toast.hidden) return;
+    clearTimeout(refusalTimer);
+    toast.hidden = true;
+    if (toastWhy) toastWhy.textContent = "";
+    const active = document.activeElement;
+    const ours = !active || active === document.body || active === toast || toast.contains(active);
+    // Back to where the click came from. A platform whose click does not
+    // focus a button leaves activeElement on <body>, and then the rail's own
+    // button is the only honest answer.
+    const back = refusalFocus && refusalFocus !== document.body && refusalFocus.isConnected
+      ? refusalFocus : button;
+    if (restoreFocus !== false && ours) back.focus();
+  };
+  /** 20 s: long enough to read one sentence, short enough that a stale
+   *  refusal does not sit over the stage. Hovering or tabbing into it stops
+   *  the clock, and it is armed again on the way out. */
+  const armRefusal = () => {
+    clearTimeout(refusalTimer);
+    refusalTimer = setTimeout(() => dismissRefusal(true), 20000);
+  };
+  const showRefusal = (raw) => {
+    if (!toast) return;
+    // Fill the words BEFORE showing it: role="alert" announces what it holds
+    // when it appears, so an empty box would announce nothing.
+    if (toastWhy) toastWhy.textContent = liveRefusalWords(raw);
+    refusalFocus = document.activeElement;
+    toast.hidden = false;
+    toast.focus();
+    armRefusal();
+  };
+  if (toast) {
+    if (toastClose) toastClose.addEventListener("click", () => dismissRefusal(true));
+    toast.addEventListener("pointerenter", () => clearTimeout(refusalTimer));
+    toast.addEventListener("pointerleave", () => { if (!toast.hidden) armRefusal(); });
+    toast.addEventListener("focusin", () => clearTimeout(refusalTimer));
+    toast.addEventListener("focusout", (event) => {
+      if (!toast.hidden && !toast.contains(event.relatedTarget)) armRefusal();
+    });
+    // Escape, wherever the focus is in the window, and a click anywhere else.
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !toast.hidden) dismissRefusal(true);
+    });
+    // An outside click dismisses it but does NOT take focus back: the owner
+    // has moved on to whatever they clicked.
+    document.addEventListener("pointerdown", (event) => {
+      if (!toast.hidden && !toast.contains(event.target)) dismissRefusal(false);
+    });
+  }
   button.addEventListener("click", () => {
     // One click at a time, as the bar does (main.js `live.busy`).
     if (busy) return;
@@ -7762,11 +8793,25 @@ mountCurrentModels();
       : core.invoke("live_start", { by: "button", conversationId: newConversationId() });
     asked.then((answer) => {
       paintStatus(answer);
+      // A success takes a stale refusal away: the popup may never say it did
+      // not start over a Live that is now running.
+      dismissRefusal(false);
       // The PC's own sentence when it gave one (live.rs payload `say`).
       say(answer && typeof answer.say === "string" ? answer.say : "");
     }, (error) => {
-      // Refused: the PC's own words, and never a claim that Live started.
-      say("Jarvis Live could not start: " + String((error && error.message) || error));
+      const words = String((error && error.message) || error);
+      if (on) {
+        // A refused STOP keeps the rail's screen-reader line: the popup's
+        // words are about a start, and saying "didn't start" there would be
+        // a lie about what the owner asked for.
+        say("Jarvis Live could not stop: " + words);
+      } else {
+        // Refused START: the stage popup is the readable surface (the owner's
+        // 2026-10-27 field bug). The rail's line is cleared so the same
+        // sentence is not announced twice.
+        say("");
+        showRefusal(words);
+      }
       // Ask the truth back rather than guessing from the refusal.
       core.invoke("live_status").then(paintStatus, () => {});
     }).then(() => {
@@ -7785,5 +8830,72 @@ mountCurrentModels();
     }).catch(() => {});
   }
 }());
+
+/* ---------------------------------------------------------------------
+ * The History sidebar's page half (src/hud-history.js, loaded above).
+ *
+ * The sidebar is that module's: it lists, searches, sorts, pins, files and
+ * deletes on its own. These three functions are the only part this page
+ * knows how to do, because they need its own chat state:
+ *
+ *   current()   - the conversation this window is in (`S.conversationId`,
+ *                 the id every message is filed under, section 18)
+ *   open(conv)  - draw one kept chat here, with this page's own addMessage,
+ *                 and make it the chat new messages belong to
+ *   newChat()   - empty the log and start a fresh conversation
+ *
+ * A record of a chat with someone else (a support conversation, a chatbot
+ * run, a comparison - `continuable: false`) is drawn read-only and gets a
+ * NEW id: typing after reading one must never file the owner's words into
+ * that record. Its own line says so, in the words the Brain uses.
+ * ------------------------------------------------------------------- */
+window.hudHistoryHost = {
+  current: function () {
+    return S.conversationId;
+  },
+  open: function (conv) {
+    const c = conv && typeof conv === "object" ? conv : {};
+    const box = document.getElementById("log");
+    if (box) box.textContent = "";
+    S.messages = [];
+    S.dropped = 0;
+    const turns = Array.isArray(c.turns) ? c.turns : [];
+    // A chat that cannot be continued is READ here; the next message starts
+    // a chat of its own, which is what the Brain's History tab does too.
+    const record = c.continuable === false;
+    S.conversationId = record ? newConversationId() : String(c.id || newConversationId());
+    turns.forEach(function (t) {
+      const turn = t && typeof t === "object" ? t : {};
+      const words = typeof turn.text === "string" ? turn.text : "";
+      if (turn.role === "user") {
+        addMessage("user", words);
+        if (!record) {
+          S.messages.push({
+            role: "user",
+            content: words,
+            provenance: typeof turn.provenance === "string" ? turn.provenance : "typed",
+          });
+        }
+      } else if (turn.role === "assistant") {
+        addMessage("jarvis", words);
+        if (!record) S.messages.push({ role: "assistant", content: words });
+      }
+    });
+    if (record) {
+      addMessage(
+        "system",
+        "This is a record of a conversation with someone other than Jarvis, kept in History. " +
+          "It can be read here, and it cannot be carried on: what you type now starts a new chat."
+      );
+    }
+  },
+  newChat: function () {
+    const box = document.getElementById("log");
+    if (box) box.textContent = "";
+    S.messages = [];
+    S.dropped = 0;
+    S.conversationId = newConversationId();
+  },
+};
 </script>
 

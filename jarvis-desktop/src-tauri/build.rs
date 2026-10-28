@@ -1,4 +1,81 @@
+/// The source commit this binary is built from, for the honest "which source
+/// did each half come from" line (`backend_update::halves_line`).
+///
+/// Local only: `git rev-parse` reads this checkout and touches no network. It
+/// is written into the compile environment, so the number is the one the binary
+/// was really built from rather than whatever the checkout says at launch. A
+/// source copy with no `.git` (a zip, a vendored tree) gets no value at all, and
+/// the app then says the two halves cannot be compared rather than inventing
+/// one.
+fn build_commit() -> Option<String> {
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    // src-tauri -> jarvis-desktop -> checkout root.
+    let checkout = manifest.parent()?.parent()?;
+    // A normal clone has a `.git` DIRECTORY there; a `git worktree` (which this
+    // project works in constantly) has a `.git` FILE naming the real directory.
+    // Following it matters twice: the commit must be this checkout's, and the
+    // paths below have to be the ones that actually move when it does.
+    let dot_git = checkout.join(".git");
+    let git_dir = if dot_git.is_dir() {
+        dot_git
+    } else if dot_git.is_file() {
+        let text = std::fs::read_to_string(&dot_git).ok()?;
+        let named = text.trim().strip_prefix("gitdir:")?.trim();
+        let named = std::path::Path::new(named);
+        if named.is_absolute() {
+            named.to_path_buf()
+        } else {
+            checkout.join(named)
+        }
+    } else {
+        return None;
+    };
+    // The commit only changes when the checkout moves, and these are the paths
+    // that move it: HEAD when the branch changes, the ref (or the packed refs)
+    // when the branch does. A worktree's refs live in the shared `.git` its
+    // `commondir` names, not in its own directory.
+    let common = std::fs::read_to_string(git_dir.join("commondir"))
+        .ok()
+        .map(|text| {
+            let named = std::path::Path::new(text.trim());
+            if named.is_absolute() {
+                named.to_path_buf()
+            } else {
+                git_dir.join(named)
+            }
+        })
+        .unwrap_or_else(|| git_dir.clone());
+    for path in [
+        git_dir.join("HEAD"),
+        common.join("refs").join("heads"),
+        common.join("packed-refs"),
+    ] {
+        if path.exists() {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(manifest)
+        .args(["rev-parse", "--short=12", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let commit = text.trim();
+    if !(7..=40).contains(&commit.len()) || !commit.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(commit.to_ascii_lowercase())
+}
+
 fn main() {
+    if let Some(commit) = build_commit() {
+        println!("cargo:rustc-env=JARVIS_BUILD_COMMIT={commit}");
+    }
+
     // Declaring an app manifest is what turns the ACL on for this app's OWN
     // commands. Without it `has_app_manifest()` is false and Tauri's permission
     // check short-circuits: every `#[tauri::command]` is callable from every
@@ -44,6 +121,15 @@ fn main() {
             // Brain uses, held on a stale link, no card. HUD window only.
             "hud_schedule_add",
             "hud_schedule_act",
+            // The HUD History sidebar's ONE write (2026-10-27, the owner's
+            // request for "pinnable chats, project organization by chat"):
+            // pin/unpin ONE chat, file ONE chat under a tag, or delete ONE
+            // chat. Declared here as well as in lib.rs's generate_handler! -
+            // a command in one and not the other is refused by the ACL from
+            // every window, which is invisible at compile time
+            // (tools/check_command_acl.py is what catches it). Its reads are
+            // hud_get's three History paths, on hud-link's list. HUD only.
+            "hud_history_act",
             // A reminder's own action (2026-10-27, the owner's request): the
             // Open button on a reminder that has gone off. The job's ID only -
             // the PC reads the target back from its own answer and re-checks

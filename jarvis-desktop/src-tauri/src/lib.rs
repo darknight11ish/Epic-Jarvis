@@ -953,6 +953,15 @@ pub fn run() {
             // routes the Brain uses, held on a stale link. HUD window only.
             hud_schedule::hud_schedule_add,
             hud_schedule::hud_schedule_act,
+            // The HUD History sidebar's one write (2026-10-27, the owner's
+            // request: "pinnable chats, project organization by chat"):
+            // pin/unpin ONE chat, file ONE chat under a tag, or delete ONE
+            // chat - the three routes the Brain's History tab already uses.
+            // It lives with those commands (brain/history.rs) so the bodies,
+            // the id check and the two guards are the same ones; the page's
+            // own POST is still refused by hud_bootstrap.js, and nothing here
+            // raises a card or loosens a rule. HUD window only.
+            brain::history::hud_history_act,
             // A reminder's own action (2026-10-27, the owner's request): the
             // Open button on a reminder that went off. The id ONLY - never a
             // URL or a path from the page - so the PC reads the target back
@@ -1777,6 +1786,14 @@ pub fn run() {
             // nothing, so there is nothing to wait for.
             #[cfg(windows)]
             winrt_toast::stop_at_startup(&handle);
+
+            // What the LAST desktop update really did. The Windows installer
+            // ends this process (`std::process::exit(0)` inside
+            // tauri-plugin-updater), so that half cannot report its own ending:
+            // the record it left is reconciled here and said out loud. This is
+            // the only success path for the desktop half, and it is why
+            // `update_both`'s `updated_both` never carries it on Windows.
+            update::reconcile_pending_at_startup(&handle);
 
             // One outbound GET, if the owner left it on, and nothing is
             // installed by it. Spawned and forgotten: a slow endpoint must not
