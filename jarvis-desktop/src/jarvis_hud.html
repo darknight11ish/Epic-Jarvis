@@ -1,3 +1,12 @@
+<!doctype html>
+<!-- A11Y-2026-10-27 (finding 2): the doctype and the language were missing, so
+     this page was parsed in QUIRKS mode and had no language for a screen
+     reader. The bar, Settings, Brain, the Widget and both badges already open
+     with a doctype; this page and faces.html were the two that did not.
+     Keep the charset declaration below inside the first 1024 bytes: Tauri's
+     CSP hashes the inline scripts from the UTF-8 file, and if WebView2 guesses
+     windows-1252 for this page those scripts decode into different bytes. -->
+<html lang="en">
 <meta charset="utf-8">
 <!-- First, and not decoration. Without it WebView2 decodes this page as
      windows-1252, the non-ASCII characters in the main script change, and
@@ -190,6 +199,18 @@ body{
 }
 button{font:inherit; color:inherit; background:none; border:none; cursor:pointer;}
 :focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+/* A11Y-2026-10-27 (finding 4): a BARE `.sr-only`. The page had only compound
+   rules (`.hud-stop-status.sr-only`, `.hud-presets-status.sr-only`), so the
+   `class="sr-only"` on `#rail-live-status` matched nothing and a live region
+   that was meant to be silent on screen sat in the layout instead. The clip
+   pattern is the one those two rules already use; a future bare use of the
+   class now really hides. PR #912 removes that one use - it is moving the
+   class off `#rail-live-status` - and this rule is additive either way. */
+.sr-only{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); clip-path:inset(50%);
+  white-space:nowrap; border:0;
+}
 
 /* ---------- shell ------------------------------------------------- */
 #shell{
@@ -517,7 +538,14 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
   background:none; border:1px solid var(--line); color:var(--dim);
 }
 .msg.jarvis .speak-answer:hover{color:var(--text); border-color:var(--line-hot);}
-.msg.jarvis .speak-answer:focus-visible{outline:none; color:var(--ice); border-color:var(--line-hot);}
+/* A11Y-2026-10-27 (finding 5): this rule used `outline:none` and signalled
+   focus by colour alone. On a 1px line and an ice-blue glyph that is a 1.4.11
+   failure, and under Windows High Contrast the colour change does not survive
+   at all. The visible ring is the page's own (2px `--ice`), in the rule that
+   wins for these three controls: it is more specific than `theme.css`'s
+   forced-colours ring, which is why the ring is here and not only there. */
+.msg.jarvis .speak-answer:focus-visible{outline:2px solid var(--ice); outline-offset:2px;
+  color:var(--ice); border-color:var(--line-hot);}
 .msg.jarvis .speak-answer svg{width:14px; height:14px;}
 .msg.system .body{
   background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
@@ -1269,7 +1297,10 @@ html.hud-window-hidden *::after{
   transition:color .15s, border-color .15s, background .15s;
 }
 .rail-toolbar-btn:hover{color:var(--text); border-color:var(--line-hot);}
-.rail-toolbar-btn:focus-visible{outline:none; color:var(--ice); border-color:var(--line-hot);}
+/* A11Y-2026-10-27 (finding 5): the visible ring, not colour alone - see the
+   note on `.msg.jarvis .speak-answer:focus-visible` above. */
+.rail-toolbar-btn:focus-visible{outline:2px solid var(--ice); outline-offset:2px;
+  color:var(--ice); border-color:var(--line-hot);}
 .rail-toolbar-btn[aria-expanded="true"]{color:var(--ice); border-color:var(--line-hot);}
 .rail-toolbar-btn .glyph{width:14px; height:14px; flex:0 0 auto;}
 
@@ -2037,8 +2068,16 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
     border:1px solid transparent; border-radius:3px; background:transparent;
     color:var(--text); font-family:inherit; font-size:11.5px; cursor:pointer;
   }
-  .hud-presets-item:hover,.hud-presets-item:focus-visible{
-    border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice); outline:none;
+  .hud-presets-item:hover{
+    border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice);
+  }
+  /* A11Y-2026-10-27 (finding 5): was part of the hover rule above, with
+     `outline:none` on the shared selector list, so a keyboard reader of the
+     Layouts menu had colour alone. Split, so hover no longer suppresses a
+     ring it never needed to and focus gets the page's own visible one. */
+  .hud-presets-item:focus-visible{
+    border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice);
+    outline:2px solid var(--ice); outline-offset:2px;
   }
   .hud-presets-row{display:flex; align-items:center; gap:2px;}
   .hud-presets-row .hud-presets-item{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;}
@@ -9104,5 +9143,43 @@ window.hudHistoryHost = {
     S.conversationId = newConversationId();
   },
 };
+/* ── Text size (2026-10-27 accessibility audit, finding 3): this window never
+ *    called `followZoom`, so Settings' Text-size choice and Ctrl+= / Ctrl+- /
+ *    Ctrl+0 reached every other window and left the HUD at 14px. It is the
+ *    SAME function those windows use (`jarvis-link.js`), so there is one zoom
+ *    key, one set of steps and one Ctrl+0 - never a HUD-sized second idea.
+ *
+ *    A DYNAMIC import, guarded, for the same reason `./galaxy-presets.js` is
+ *    loaded that way: this page is also served on its own by the backend from
+ *    a CLOSED asset whitelist, and one module it cannot fetch must not take
+ *    the whole module graph (every mount above) down with it. A page with no
+ *    `./jarvis-link.js` beside it behaves exactly as it did before this line.
+ *    The capability is already held: `capabilities/hud.json` grants
+ *    `core:webview:allow-set-webview-zoom`, so no new grant is added here.
+ *    `tests/hud-text-size.mjs` proves the guard without a browser. */
+function followTextSize(load, canZoom){
+  // The SECOND half of "served alone": a plain browser has no webview to zoom,
+  // and its own Ctrl+= / Ctrl+- / Ctrl+0 already work. `followZoom` calls
+  // `preventDefault()` on those keys, so running it there would take the
+  // browser's zoom away and announce a size that never changed. Only the
+  // shell can apply a zoom, so only the shell follows one.
+  if (canZoom === undefined) {
+    const tauri = globalThis.window && globalThis.window.__TAURI__;
+    canZoom = Boolean(tauri && tauri.webview
+      && typeof tauri.webview.getCurrentWebview === "function");
+  }
+  // A microtask first, so a loader that throws SYNCHRONOUSLY is caught by the
+  // same `.catch` a refused import lands in - "the page never breaks" is the
+  // whole promise of this guard.
+  return Promise.resolve()
+    .then(load || function () { return import("./jarvis-link.js"); })
+    .then(function (mod) {
+      if (canZoom && mod && typeof mod.followZoom === "function") mod.followZoom();
+    })
+    .catch(function () {
+      /* no ./jarvis-link.js beside the page: the HUD keeps working as it did */
+    });
+}
+followTextSize();
 </script>
 

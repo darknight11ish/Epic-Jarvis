@@ -291,6 +291,53 @@ function buildCss() {
     "  }",
     "}",
     "",
+    // 2026-10-27, accessibility finding 6: every window carried a
+    // forced-colors answer except this file - and the HUD, the largest window,
+    // links nothing but this file and fonts.css, so under Windows High
+    // Contrast every state it carries by a tinted fill or border became
+    // invisible. The rules below are the ones that belong to no single window
+    // (the other four stylesheets keep theirs beside their own components).
+    // They emit no literal colour, so `scripts/check-tokens.py` and
+    // `tests/tokens.mjs` still hold this file to the token contract.
+    "/* ==========================================================================",
+    "   Windows high-contrast (forced-colors)",
+    "   --------------------------------------------------------------------------",
+    "   The system palette replaces ours, so a tinted fill, a tinted border and a",
+    "   gradient all vanish. A control whose SELECTED state is one of those would",
+    "   then draw identically to an unselected one - the chosen preset, lane, dock",
+    "   button or stage tab - and a focus ring drawn in `--focus-ring` can be",
+    "   repainted to the colour of the surface it sits on.",
+    "",
+    "   These two rules are here rather than in a window's stylesheet because they",
+    "   are about the tokens every surface shares, and because the HUD links this",
+    "   file alone. The system colours (`Highlight`) are not literals: they are the",
+    "   ones forced colours itself substitutes, so the token contract in the header",
+    "   of this file still holds.",
+    "   ========================================================================== */",
+    "",
+    "@media (forced-colors: active) {",
+    "  /* The second channel for a selected control: an outline costs no layout, and",
+    "     `aria-pressed` / `aria-selected` is the same fact a screen reader already",
+    "     reads, so the visual state comes back without a new class or a new rule",
+    "     in any window. Inset, because a dense row (the HUD's lanes and presets)",
+    "     would otherwise draw rings across its neighbours. */",
+    "  [aria-pressed=\"true\"],",
+    "  [aria-selected=\"true\"] {",
+    "    outline: 2px solid Highlight;",
+    "    outline-offset: -2px;",
+    "  }",
+    "",
+    "  /* One ring for every focusable control, in the system's own colour. Last,",
+    "     so a focused AND selected control shows the focus ring rather than only",
+    "     the selected one. A window that needs a different offset (the Brain's",
+    "     canvas ring goes inside) overrides it with a more specific selector in",
+    "     its own sheet. */",
+    "  :focus-visible {",
+    "    outline: 2px solid Highlight;",
+    "    outline-offset: 2px;",
+    "  }",
+    "}",
+    "",
   );
   return L.join("\n");
 }
