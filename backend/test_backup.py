@@ -1071,26 +1071,255 @@ def t_the_backend_source_never_lands_in_the_settings_folder():
           body[:300])
 
 
-def t_the_chat_history_key_is_carried_but_only_inside_the_lock():
+def make_chat_history(conf: Path, key: bytes) -> None:
+    """A REAL encrypted chat-history.db in `conf`, sealed with `key`.
+
+    The `meta` `k='check'` row `build_archive` proves a key against comes from
+    jarvis_chat_log.py itself - a hand-written version of it would prove the
+    test's copy of the format, not the module's."""
+    import jarvis_chat_log as CH
+    log = CH.ChatLog(conf / "chat-history.db", conf / "chat-history.json", lambda: key)
+    out = log.record_turn({"conversation_id": "conv-backup01", "device": "desktop",
+                           "messages": [{"role": "user", "content": "a private word"}]},
+                          lane="test", turn={"answer": "Noted.", "finish_reason": "stop"})
+    assert out.get("recorded"), out
+
+
+_K1 = b"\x21" * 32
+_K2 = b"\x42" * 32
+
+
+def t_the_chat_history_key_is_carried_only_when_it_opens_the_history():
+    """F1 (data-integrity audit, 2026-10-28): a backup carries the chat-history
+    key ONLY when that key is proved to open the database that rides with it -
+    and it never makes one. Key-works is this test; key-wrong and key-missing
+    are `t_a_chat_history_the_key_cannot_open_is_carried_locked` below."""
+    import base64
+    import jarvis_chat_log as CH
     conf, backups = fresh_conf()
     make_memory_db(conf)
-
-    class FakeKeyModule(types.SimpleNamespace):
-        pass
-
-    import jarvis_chat_log
-    real_ck = jarvis_chat_log.CredentialKey
-    jarvis_chat_log.CredentialKey = lambda: (lambda: b"\x01" * 32)
-    try:
+    make_chat_history(conf, _K1)
+    with _FakeCredentials() as cm:
+        cm.items["Jarvis Backend/chat history key"] = base64.b64encode(_K1).decode()
         zip_bytes, manifest = B.build_archive()
-    finally:
-        jarvis_chat_log.CredentialKey = real_ck
-    check("the manifest says the key was carried", manifest["chat_history_key"] is True)
+        wrote = list(cm.writes)
+    check("key-works: the manifest says the key was carried, and that it opens the database",
+          manifest["chat_history_key"] is True
+          and manifest["chat_history_key_opens_db"] is True
+          and manifest["chat_history_locked"] is False
+          and "chat-history.db" in manifest["databases"], manifest)
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        raw = zf.read("secrets/chat-history-key.b64")
+        names = zf.namelist()
+        raw = zf.read("secrets/chat-history-key.b64") if "secrets/chat-history-key.b64" in names else b""
+    check("key-works: the database and the key are both in the archive, the key decoding back",
+          "db/chat-history.db" in names and base64.b64decode(raw) == _K1, names)
+    check("key-works: the words in the archived history are still sealed",
+          b"a private word" not in zf_read(zip_bytes, "db/chat-history.db"))
+    check("a backup never writes a key to Credential Manager", wrote == [], wrote)
+    check("key-works: the result sentence is the plain one, with no warning in it",
+          B.backup_message(manifest) == f"Backed up. {B.LOST_CODE}", B.backup_message(manifest))
+    check("... and the key really does open the archived copy (jarvis_chat_log's own test)",
+          CH.key_opens_db(_K1, conf / "chat-history.db") is True)
+
+
+def t_a_chat_history_the_key_cannot_open_is_carried_locked():
+    """F1: the two failure halves - a key that does NOT open the database
+    (key-wrong) and no key at all (key-missing).
+
+    Both leave the sealed database in the archive (it is the owner's only copy
+    of every conversation) and both say LOCKED in the result. Neither writes a
+    key, which is the old bug: `CredentialKey()()` minted one when the entry
+    was absent, so `chat_history_key: true` described a key that opened
+    nothing."""
     import base64
-    check("it decodes back to the 32 bytes, base64 only inside the (soon encrypted) zip",
-          base64.b64decode(raw) == b"\x01" * 32)
+    import jarvis_chat_log as CH
+    for label, stored in (("key-wrong", base64.b64encode(_K2).decode()), ("key-missing", None)):
+        conf, backups = fresh_conf()
+        make_memory_db(conf)
+        make_chat_history(conf, _K1)
+        with _FakeCredentials() as cm:
+            if stored is not None:
+                cm.items["Jarvis Backend/chat history key"] = stored
+            zip_bytes, manifest = B.build_archive()
+            wrote = list(cm.writes)
+            still = dict(cm.items)
+        names = zipfile.ZipFile(io.BytesIO(zip_bytes)).namelist()
+        check(f"{label}: the sealed history IS still carried (the words are not lost)",
+              "db/chat-history.db" in names and "chat-history.db" in manifest["databases"],
+              names)
+        check(f"{label}: NO key member, and the manifest does not claim one",
+              "secrets/chat-history-key.b64" not in names
+              and manifest["chat_history_key"] is False
+              and manifest["chat_history_key_opens_db"] is False, manifest)
+        check(f"{label}: the manifest calls it LOCKED", manifest["chat_history_locked"] is True,
+              manifest)
+        words = B.backup_message(manifest)
+        check(f"{label}: the result says 'Backed up, but' and names the locked history",
+              words.startswith("Backed up, but ") and "LOCKED" in words
+              and "chat history" in words, words)
+        check(f"{label}: the LIVE readable key was not the one carried either way",
+              "secrets/chat-history-key.b64" not in names)
+        check(f"{label}: the backup wrote NOTHING to Credential Manager", wrote == [], wrote)
+        check(f"{label}: nothing was minted or replaced in the store either",
+              still == ({("Jarvis Backend/chat history key"): stored} if stored else {}),
+              still)
+        if label == "key-wrong":
+            check("key-wrong: the history on THIS PC still opens with its own real key",
+                  CH.key_opens_db(_K1, conf / "chat-history.db") is True)
+            check("key-wrong: and the wrong key proves itself wrong (the check row)",
+                  CH.key_opens_db(_K2, conf / "chat-history.db") is False)
+    # A key of the wrong length from the store is not a key: no claims, no write.
+    conf, _b = fresh_conf()
+    make_chat_history(conf, _K1)
+    with _FakeCredentials() as cm:
+        cm.items["Jarvis Backend/chat history key"] = base64.b64encode(b"\x07" * 16).decode()
+        zb, man = B.build_archive()
+        wrote = list(cm.writes)
+    check("a 16-byte entry is not carried and is not called a key",
+          "secrets/chat-history-key.b64" not in zipfile.ZipFile(io.BytesIO(zb)).namelist()
+          and man["chat_history_key"] is False and man["chat_history_locked"] is True
+          and wrote == [], (man, wrote))
+
+
+def t_a_database_left_out_of_the_backup_is_named_not_dropped_in_silence():
+    """F4 (data-integrity audit, 2026-10-28): a database whose snapshot fails
+    is named in the manifest and in the words the owner reads - both apps show
+    `message`, so it cannot read as a complete backup."""
+    conf, backups = fresh_conf()
+    make_memory_db(conf, rows=("a fact",))
+    # memory.db is there (is_file: True) and cannot be snapshotted: a damaged
+    # header makes sqlite3.DatabaseError on the backup API, which is the real
+    # case (a corrupt database is exactly when a backup matters most).
+    (conf / "memory.db").write_bytes(b"this is not a sqlite database" * 8)
+    with _FakeCredentials():
+        out = B.backup_now(str(backups))
+    counts = out["counts"]
+    check("F4: memory.db is named in the manifest as left out",
+          counts.get("databases_left_out") == ["memory.db"], counts)
+    check("F4: ... and it is not in the archive's database list",
+          "memory.db" not in counts.get("databases", {}), counts.get("databases"))
+    said = B.backup_message(counts)
+    check("F4: the result sentence names memory.db and says it is NOT in this backup",
+          "memory.db" in said and "NOT in this backup" in said, said)
+    check("F4: ... and it is not a bare 'Backed up.'", not said.startswith("Backed up. "), said)
+    B._save_settings({"folder": str(backups)})
+    with _FakeCredentials():
+        code, body = B.request_backup_now({}, here=True)
+    check("F4: the ROUTE that both apps call answers with that same sentence",
+          code == 200 and body["message"] == B.backup_message(body["counts"])
+          and "memory.db" in body["message"], body.get("message"))
+    # the positive control: nothing left out -> the plain sentence, unchanged
+    conf2, _b2 = fresh_conf()
+    make_memory_db(conf2)
+    with _FakeCredentials():
+        zb2, man2 = B.build_archive()
+    check("F4 control: a complete backup still says exactly 'Backed up.' plus the code warning",
+          man2["databases_left_out"] == []
+          and B.backup_message(man2) == f"Backed up. {B.LOST_CODE}", man2)
+    check("F4: two missing databases are named as a list",
+          B.backup_message({"databases_left_out": ["memory.db", "schedule.db"]})
+          == ("Backed up, but memory.db and schedule.db could not be read, so they are NOT in "
+              f"this backup. {B.LOST_CODE}"),
+          B.backup_message({"databases_left_out": ["memory.db", "schedule.db"]}))
+
+
+def t_the_restore_card_and_the_result_speak_a_locked_history():
+    """F1: a locked archive is named BEFORE the owner approves it (the card)
+    and once more after the restore (the message). Never silently."""
+    plate = B.restore_card("jarvis-backup-20261028-000000.jbak",
+                           {"created_at": time.time(), "databases": {},
+                            "chat_history_locked": True})
+    check("the restore card says the chat history in this backup is LOCKED",
+          "LOCKED" in plate and "chat history" in plate, plate)
+    plain = B.restore_card("jarvis-backup-20261028-000000.jbak",
+                           {"created_at": time.time(), "databases": {}})
+    check("... and a normal archive's card says nothing about a lock",
+          "LOCKED" not in plain, plain)
+    check("the restore warning says those chats cannot be opened again",
+          "LOCKED" in B.LOCKED_HISTORY_WARNING
+          and "cannot be opened again" in B.LOCKED_HISTORY_WARNING,
+          B.LOCKED_HISTORY_WARNING)
+    check("the refused-key warning says the key on this PC was left alone",
+          "left exactly as it was" in B.KEY_REFUSED_WARNING, B.KEY_REFUSED_WARNING)
+
+
+def _archive_with_history_and_key(conf: Path, key_b64, *, with_db=True) -> bytes:
+    """A hand-built archive: the real encrypted chat history plus `key_b64` -
+    the shape an OLDER version could produce (a key that opens nothing)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        if with_db:
+            zf.writestr("db/chat-history.db", (conf / "chat-history.db").read_bytes())
+        if key_b64 is not None:
+            zf.writestr("secrets/chat-history-key.b64", key_b64)
+        zf.writestr("manifest.json", json.dumps({"created_at": time.time(),
+                                                 "databases": {"chat-history.db": {}}}))
+    return buf.getvalue()
+
+
+def t_a_restore_never_writes_a_chat_key_that_opens_nothing():
+    """F1's disaster path: an archive whose key does not open its own chat
+    history must NOT put that key into Credential Manager - the live entry may
+    open the history already on this PC, and overwriting it breaks that."""
+    import base64
+    conf, _backups = fresh_conf()
+    make_chat_history(conf, _K1)
+    live = base64.b64encode(b"\x63" * 32).decode()
+    wrong = base64.b64encode(_K2).decode()
+    with _FakeCredentials() as cm:
+        cm.items["Jarvis Backend/chat history key"] = live
+        applied = B._apply_restore(_archive_with_history_and_key(conf, wrong))
+        after = dict(cm.items)
+        wrote = list(cm.writes)
+    check("restore-over-live: the key is REFUSED, not written",
+          applied["chat_history_key"] is False
+          and applied["chat_history_key_refused"] is True, applied)
+    check("restore-over-live: the live Credential Manager entry is exactly as it was",
+          after.get("Jarvis Backend/chat history key") == live and wrote == [], (after, wrote))
+    check("restore-over-live: the receipt does not claim a restored key",
+          "chat-history-key" not in applied["restored"].get("keys", []), applied["restored"])
+
+    # The positive control: a key that DOES open the archived history is written.
+    with _FakeCredentials() as cm:
+        cm.items["Jarvis Backend/chat history key"] = live
+        applied_ok = B._apply_restore(_archive_with_history_and_key(
+            conf, base64.b64encode(_K1).decode()))
+        after_ok = dict(cm.items)
+    check("restore-over-live control: a key that opens the archived history IS put back",
+          applied_ok["chat_history_key"] is True
+          and after_ok.get("Jarvis Backend/chat history key") == base64.b64encode(_K1).decode(),
+          (applied_ok, after_ok))
+    check("restore-over-live control: ... and no warning flag is set",
+          applied_ok["chat_history_key_refused"] is False, applied_ok)
+
+
+def t_a_restore_of_a_locked_archive_says_so_in_the_receipt():
+    """F1 end to end: an archive built with NO key that opens its chat history
+    restores (the sealed words and every other file really do come back), and
+    the owner's receipt says LOCKED - he is never left believing those chats
+    will open."""
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    make_chat_history(conf, _K1)
+    B._save_settings({"folder": str(backups)})
+    with _FakeCredentials():                      # empty store: key-missing
+        out = B.backup_now(str(backups))
+    check("the archive really is the locked shape",
+          out["counts"]["chat_history_locked"] is True, out["counts"])
+    with _FakeCredentials():
+        res, _events = _restore_once(conf, backups, out)
+    check("the restore itself succeeds: the sealed chat history is put back",
+          res.get("outcome") == "restored"
+          and "chat-history.db" in (res.get("restored") or {}).get("databases", []), res)
+    check("... and the receipt says the restored chat history is LOCKED",
+          "LOCKED" in (res.get("message") or "")
+          and "LOCKED" in (res.get("warning") or ""), res.get("message"))
+    check("... and it does not claim a chat-history key was restored",
+          "chat-history-key" not in (res.get("restored") or {}).get("keys", []),
+          res.get("restored"))
+    durable = json.loads(B.last_restore_path().read_text(encoding="utf-8"))
+    check("... and the PERSISTED receipt carries it too (a restart cannot lose it)",
+          "LOCKED" in (durable.get("message") or ""), durable.get("message"))
 
 
 # ======================================================== 4b. the review decks travel with the backup
@@ -1098,11 +1327,17 @@ def t_the_chat_history_key_is_carried_but_only_inside_the_lock():
 class _FakeCredentials:
     """Stands in for Windows Credential Manager: one dict of target -> text, for
     the read side (jarvis_chat_log.CredentialKey) and the write side
-    (jarvis_token_store.WindowsStore)."""
+    (jarvis_token_store.WindowsStore).
+
+    The read side has BOTH halves since the data-integrity audit (2026-10-28):
+    `__call__` is the provider that makes a key on first use, and `peek` is the
+    read-only one `jarvis_chat_log.existing_key()` asks for - and `writes`
+    records every write, so a test can prove a backup never minted a key."""
 
     def __init__(self):
         self.items = {}
         self.reads = []
+        self.writes = []
         self.fail_writes = False
 
     def __enter__(self):
@@ -1118,6 +1353,16 @@ class _FakeCredentials:
                 if target not in me.items:
                     raise RuntimeError("no such key")
                 return base64.b64decode(me.items[target])
+
+            def peek():
+                # The read-only half: None when there is no entry. It must never
+                # create one (a backup calling this is the whole F1 fix).
+                me.reads.append(target)
+                if target not in me.items:
+                    return None
+                return base64.b64decode(me.items[target])
+
+            read.peek = peek
             return read
 
         class Store:
@@ -1125,6 +1370,7 @@ class _FakeCredentials:
                 self.target = target
 
             def write(self, text):
+                me.writes.append(self.target)
                 if me.fail_writes:
                     raise RuntimeError("Credential Manager refused")
                 me.items[self.target] = text
@@ -1328,8 +1574,11 @@ def t_the_medical_record_travels_and_restores_on_a_pc_that_never_had_the_key():
             check("... and each key landed under its OWN Credential Manager target, never "
                   "crossed",
                   new_pc.items.get(MED.KEY_TARGET) == base64.b64encode(key).decode()
-                  and new_pc.items.get(jarvis_chat_log.KEY_TARGET)
-                  == base64.b64encode(b"\x01" * 32).decode(),
+                  # NO chat history was in this archive, so no chat key travels
+                  # with it (F1, 2026-10-28): an archive carries a key only when
+                  # that key is proved to open the history riding beside it, and
+                  # the restore writes nothing over a new PC's entry for it.
+                  and new_pc.items.get(jarvis_chat_log.KEY_TARGET) is None,
                   sorted(new_pc.items))
             rows = MED.list_records("labs")
         check("the record opens on the new PC through the restored key: the words are back",
@@ -1911,28 +2160,38 @@ def t_a_full_disk_leaves_nothing_half_written():
 
 
 def t_a_chat_history_key_that_cannot_be_put_back_is_said_not_swallowed():
+    """A key that IS in the archive and cannot be written back is said out loud.
+
+    The archive has a REAL chat history whose key travels with it - since the
+    F1 fix (2026-10-28) a key only travels when it is proved to open that
+    history - and Credential Manager then refuses the write."""
     conf, backups = fresh_conf()
     _plant(conf)
-    import jarvis_chat_log
+    import base64
     import jarvis_token_store as ts
-    real_ck, real_ws = jarvis_chat_log.CredentialKey, ts.WindowsStore
-    jarvis_chat_log.CredentialKey = lambda: (lambda: b"\x02" * 32)
+    make_chat_history(conf, _K1)
+    B._save_settings({"folder": str(backups)})
+    with _FakeCredentials() as cm:
+        cm.items["Jarvis Backend/chat history key"] = base64.b64encode(_K1).decode()
+        out = B.backup_now(str(backups))
+    check("the archive carries the key that opens its own history",
+          out["counts"]["chat_history_key"] is True, out["counts"])
+    _change(conf)
 
     class BrokenStore:
         def __init__(self, *a, **k):
             pass
 
+        def read(self):
+            return None
+
         def write(self, v):
             raise OSError("Credential Manager is not reachable")
-    try:
-        B._save_settings({"folder": str(backups)})
-        out = B.backup_now(str(backups))
-        _change(conf)
-        ts.WindowsStore = BrokenStore
+    with _FakeCredentials():
+        ts.WindowsStore = BrokenStore            # reads work, the WRITE is refused
         B.request_restore({"name": out["name"], "code": out["recovery_code"]}, here=True,
-                          gate=approve, tier_of=tier_ask, spawn=sync_spawn, armed=lambda: True)
-    finally:
-        jarvis_chat_log.CredentialKey, ts.WindowsStore = real_ck, real_ws
+                          gate=approve, tier_of=tier_ask, spawn=sync_spawn,
+                          armed=lambda: True)
     res = B.take_restore_result()
     check("the files are restored", read_facts(conf) == ["original fact"], res)
     check("... and the failure to put the chat key back is a plain WARNING, not silence",

@@ -1530,6 +1530,213 @@ def t_deleting_a_conversation_scrubs_its_words_from_receipts():
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def _receipt_row(db: Path, rid: str):
+    with closing(sqlite3.connect(str(db))) as con:
+        return con.execute("SELECT summary, before_snapshot_json, after_snapshot_json"
+                           " FROM action_receipts WHERE receipt_id=?", (rid,)).fetchone()
+
+
+def _with_scratch_receipts(fn):
+    """Run `fn(receipts_db_path)` with jarvis_receipts pointed at a scratch file.
+
+    The receipts store would otherwise use the config folder's real receipts.db
+    - and a scrub is a WRITE (data-integrity audit F2)."""
+    import jarvis_receipts as R2
+    scratch = Path(tempfile.mkdtemp(prefix="jarvis-history-receipts-"))
+    saved = os.environ.get("JARVIS_RECEIPTS_DB")
+    os.environ["JARVIS_RECEIPTS_DB"] = str(scratch / "receipts.db")
+    try:
+        return fn(scratch / "receipts.db", R2)
+    finally:
+        if saved is None:
+            os.environ.pop("JARVIS_RECEIPTS_DB", None)
+        else:
+            os.environ["JARVIS_RECEIPTS_DB"] = saved
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def t_retention_deleting_a_conversation_also_scrubs_its_receipts():
+    """F2 (data-integrity audit, 2026-10-28): a conversation the RETENTION
+    sweep expires is deleted exactly like a hand delete, so its words must
+    leave the receipts store too. `sweep()` went straight to `_drop()` and the
+    receipts purge never heard about it."""
+    def run(db, R2):
+        w = World()
+        try:
+            w.log.record_turn(req(SENTENCE, cid="conv-old0001"),
+                              lane="qwen3:8b", turn=local("Noted."))
+            rid = R2.record("note_write", "saved: " + SENTENCE,
+                            before={"text": SENTENCE}, after={"text": SENTENCE})
+            w.clock.t += 40 * 86400
+            code, out = H.request_settings({"keep_days": 30}, log=w.log)
+            row = _receipt_row(db, rid)
+            check("F2: the retention sweep really deleted the conversation",
+                  code == 200 and out["deleted"] == 1
+                  and w.log.get("conv-old0001") is None, out)
+            check("F2: the receipt no longer holds a word of the expired conversation",
+                  row is not None and SENTENCE not in (row[0] or "")
+                  and SENTENCE not in (row[1] or "") and SENTENCE not in (row[2] or ""), row)
+            check("F2: ... it holds the fixed marker instead",
+                  row is not None and R2.FORGOTTEN in "".join(str(v or "") for v in row), row)
+            # the sweep's own path (no setting change) does it too
+            w.log.record_turn(req(SENTENCE + " again", cid="conv-old0002"),
+                              lane="qwen3:8b", turn=local("Noted."))
+            rid2 = R2.record("note_write", "saved: " + SENTENCE + " again",
+                             before={"text": SENTENCE + " again"})
+            w.clock.t += 40 * 86400
+            check("F2: the daily sweep (no setting change) deletes it",
+                  w.log.sweep() == 1 and w.log.get("conv-old0002") is None)
+            row2 = _receipt_row(db, rid2)
+            check("F2: ... and scrubs its words too",
+                  row2 is not None and SENTENCE + " again" not in "".join(str(v or "") for v in row2),
+                  row2)
+        finally:
+            w.done()
+    _with_scratch_receipts(run)
+
+
+def t_more_than_two_hundred_turns_are_all_scrubbed():
+    """F2: the 200-turn cap is gone.
+
+    A long conversation's later user turns used to be skipped by the receipts
+    purge (`ORDER BY idx LIMIT 200`), so a receipt quoting something said at
+    turn 240 survived the delete that was supposed to forget it."""
+    def run(db, R2):
+        w = World()
+        try:
+            marker = "the two hundred and fortieth thing"
+            for i in range(240):
+                text = marker if i == 239 else f"filler turn {i}"
+                w.log.record_turn(req(text, cid="conv-long001"), turn=local("ok"))
+            rid = R2.record("note_write", "saved: " + marker, before={"text": marker})
+            check("the marker really is in the receipt before the delete",
+                  marker in (_receipt_row(db, rid)[0] or ""))
+            removed = w.log.delete("conv-long001")
+            row = _receipt_row(db, rid)
+            check("a 240-turn conversation is deleted as usual", removed is True)
+            check("F2: a word from AFTER turn 200 is scrubbed too - no cap on the purge",
+                  row is not None and marker not in (row[0] or "")
+                  and R2.FORGOTTEN in (row[0] or ""), row)
+        finally:
+            w.done()
+    _with_scratch_receipts(run)
+
+
+def t_a_forget_range_purges_receipts_when_the_undo_expires():
+    """F2: "Forget a time frame" holds the chats for the 10-minute Undo, so the
+    receipts scrub waits for the expiry - and then it must happen."""
+    def run(db, R2):
+        w = World()
+        try:
+            w.log.record_turn(req(SENTENCE, cid="conv-frame01"),
+                              lane="qwen3:8b", turn=local("Noted."))
+            rid = R2.record("note_write", "saved: " + SENTENCE, before={"text": SENTENCE})
+            held = w.log.take_out(["conv-frame01"])
+            check("the chat is taken out for the Undo", bool(held) and w.log.get("conv-frame01") is None)
+            check("... and its words are STILL in the receipt while the Undo is live "
+                  "(a purge cannot be undone)",
+                  SENTENCE in (_receipt_row(db, rid)[0] or ""))
+            n = w.log.purge_held_receipts(held)
+            row = _receipt_row(db, rid)
+            check("F2: when the Undo expires, the held chats' words are scrubbed",
+                  n == 1 and row is not None and SENTENCE not in (row[0] or "")
+                  and R2.FORGOTTEN in (row[0] or ""), (n, row))
+            # an Undo that is TAKEN puts the chat back with its receipts intact
+            w.log.record_turn(req(SENTENCE, cid="conv-frame02"),
+                              lane="qwen3:8b", turn=local("Noted."))
+            rid2 = R2.record("note_write", "saved: " + SENTENCE, before={"text": SENTENCE})
+            held2 = w.log.take_out(["conv-frame02"])
+            back = w.log.put_back(held2)
+            check("an Undo that is taken puts the conversation back",
+                  back["restored"] == ["conv-frame02"], back)
+            check("... and never touched the receipts (nothing had been scrubbed yet)",
+                  SENTENCE in (_receipt_row(db, rid2)[0] or ""), _receipt_row(db, rid2))
+        finally:
+            w.done()
+    _with_scratch_receipts(run)
+
+
+def t_keep_days_sweeps_before_it_saves_the_window():
+    """F5 (data-integrity audit, 2026-10-28): the sweep runs FIRST and the
+    window is saved after.
+
+    Before this, `set_keep_days` saved the window and then swept, so a sweep
+    that raised left the new window saved while the caller answered "could not
+    save the setting" - false, and it hid that the window had changed."""
+    w = World()
+    try:
+        t0 = w.clock.t
+        w.log.record_turn(req("very old", cid="conv-old0001"), turn=local("x"))
+        w.clock.t = t0 + 40 * 86400
+        w.log.record_turn(req("recent", cid="conv-new0001"), turn=local("x"))
+        calls = []
+        real_sweep, real_save = w.log.sweep, w.log._save_settings
+
+        def spy_sweep(keep_days=None):
+            calls.append(("sweep", keep_days))
+            return real_sweep(keep_days)
+
+        def spy_save(**kw):
+            calls.append(("save", kw.get("keep_days")))
+            return real_save(**kw)
+        w.log.sweep, w.log._save_settings = spy_sweep, spy_save
+        try:
+            code, out = H.request_settings({"keep_days": 30}, log=w.log)
+        finally:
+            w.log.sweep, w.log._save_settings = real_sweep, real_save
+        check("F5: the sweep for the NEW window runs before the window is saved",
+              calls == [("sweep", 30), ("save", 30)], calls)
+        check("F5: ... and the reply still says what was deleted",
+              code == 200 and out["deleted"] == 1 and out["keep_days"] == 30, out)
+        check("F5: ... the old conversation gone, the recent one kept",
+              w.log.get("conv-old0001") is None and w.log.get("conv-new0001") is not None)
+
+        # (2) A sweep that fails: NOTHING is saved, and the answer says the
+        # deletion failed rather than the setting.
+        w.log.record_turn(req("one more", cid="conv-mid0003"), turn=local("x"))
+
+        def broken_sweep(keep_days=None):
+            raise RuntimeError("the disk went away")
+        w.log.sweep = broken_sweep
+        try:
+            code, out = H.request_settings({"keep_days": 90}, log=w.log)
+        finally:
+            w.log.sweep = real_sweep
+        said = str(out.get("error") or "")
+        check("F5: a failed sweep is a 500 whose words are about the DELETION",
+              code == 500 and "could not be deleted" in said, out)
+        check("F5: ... it says the window was NOT saved (true: it was not)",
+              "NOT saved" in said and "could not save the setting" not in said, said)
+        check("F5: ... and the window really is unchanged",
+              w.log.settings()["keep_days"] == 30, w.log.settings())
+        check("F5: ... and the conversation that was not deleted is still there",
+              w.log.get("conv-mid0003") is not None)
+
+        # (3) A save that fails AFTER a successful sweep says exactly that.
+        w.clock.t = t0 + 80 * 86400           # conv-new0001 and conv-mid0003 are now 40 days old
+
+        def broken_save(**kw):
+            raise OSError("the settings file is read-only")
+        w.log._save_settings = broken_save
+        try:
+            code, out = H.request_settings({"keep_days": 30}, log=w.log)
+        finally:
+            w.log._save_settings = real_save
+        said = str(out.get("error") or "")
+        check("F5: a save that fails after the sweep does NOT claim nothing happened",
+              code == 500 and "could not be saved" in said
+              and "2 conversations were already deleted" in said, out)
+        check("F5: ... and it does not say 'could not save the setting'",
+              "could not save the setting" not in said, said)
+        check("F5: ... and the deletion it reports really happened",
+              out.get("deleted") == 2 and w.log.get("conv-new0001") is None
+              and w.log.get("conv-mid0003") is None, out)
+        check("... and the window still in force is the OLD one (the save failed)",
+              w.log.settings()["keep_days"] == 30, w.log.settings())
+    finally:
+        w.done()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

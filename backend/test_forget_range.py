@@ -560,6 +560,41 @@ def t_approved_then_undo():
     check("... and the status says it was put back", FR.status(NOW + 130)["last"]["outcome"] == "undone")
 
 
+def t_the_undo_expiring_scrubs_the_receipts_too():
+    """F2 (data-integrity audit, 2026-10-28): when the ten minutes are up the
+    held chats are dropped for good - and their words must leave the receipts
+    store with them.
+
+    `delete()` has always scrubbed receipts; this path never did, so "Forget a
+    time frame" left what was said in receipts.db. It cannot be done when the
+    chats are taken out (a scrub cannot be undone, and the Undo is real), so it
+    runs at the expiry, on the rows still sealed as they were on disk."""
+    import jarvis_receipts as R2
+    w = _world_with_things()
+    words = "Plan the trip to Rome"
+
+    def receipt_row(rid):
+        with closing(sqlite3.connect(str(R2.db_path()))) as c:
+            return c.execute("SELECT summary FROM action_receipts WHERE receipt_id=?",
+                             (rid,)).fetchone()
+
+    rid = R2.record("note_write", "saved: " + words, before={"text": words})
+    w.ask(_body(w, facts=[w.a, w.b]))
+    w.approve()
+    check("the chat is gone from the history", w.log.get("conv-trip-00001") is None)
+    check("... while the Undo is open its words are STILL in the receipt "
+          "(a scrub could not be undone)",
+          words in (receipt_row(rid)[0] or ""), receipt_row(rid))
+    st = FR.status(NOW + 601)                     # ten minutes and a second
+    row = receipt_row(rid)
+    check("when the ten minutes are up the held chats are dropped for good",
+          st["undo"] is None and st["last"]["outcome"] == "kept", st)
+    check("F2: ... and their words are scrubbed out of the receipts",
+          row is not None and words not in (row[0] or ""), row)
+    check("F2: ... replaced by the fixed marker, never a hash",
+          row is not None and R2.FORGOTTEN in (row[0] or ""), row)
+
+
 def t_the_undo_window_cannot_be_stretched_by_setting_the_clock_back():
     w = _world_with_things()
     w.ask(_body(w, facts=[w.a, w.b]))

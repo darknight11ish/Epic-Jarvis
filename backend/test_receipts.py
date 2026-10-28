@@ -883,6 +883,39 @@ def t_forgotten_words_are_scrubbed_out_of_receipts():
           row and (R.FORGOTTEN in (row[2] or "") or R.FORGOTTEN in (row[3] or "")), row)
 
 
+def t_purge_many_scrubs_many_words_in_one_pass():
+    """`purge_many` (data-integrity audit F2, 2026-10-28) is `purge_words` for
+    a whole conversation's - or a whole retention sweep's - worth of words, so
+    the chat store can scrub them without re-reading every receipt per word."""
+    _clear_receipts()
+    words = ["the private phrase about my sister", "a second forgotten thing",
+             "a third one entirely"]
+    ids = [R.record("note_write", "saved: " + w, before={"text": w}, after={"text": w})
+           for w in words]
+    # one receipt holding TWO of them, so the combined pass is exercised
+    both = R.record("note_write", f"{words[0]} and {words[1]}")
+    changed = R.purge_many(words)
+    rows = {r[0]: r for r in _receipt_rows()}
+    check("purge_many reports the receipts it changed", changed >= len(ids), changed)
+    left = [w for w in words
+            if any(w in (rows.get(rid, (None, None, None, None))[2] or "")
+                   for rid in ids + [both])]
+    check("NO copy of ANY of the forgotten words is left", left == [], left)
+    check("... every touched receipt holds the fixed marker instead",
+          all(R.FORGOTTEN in (rows[rid][2] or "") for rid in ids + [both]),
+          [rows[rid][2] for rid in ids + [both]])
+    check("an empty list changes nothing and never raises", R.purge_many([]) == 0)
+    check("... and a word that appears nowhere changes nothing",
+          R.purge_many(["nowhere at all in any receipt"]) == 0)
+    rid = R.record("note_write", "the complete phrase")
+    R.purge_many(["phrase", "the complete phrase"])
+    row = next(r for r in _receipt_rows() if r[0] == rid)
+    check("the longest phrase wins: the whole phrase is replaced once, never half "
+          "by the shorter word inside it",
+          (row[2] or "") == R.FORGOTTEN, row[2])
+    _clear_receipts()
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("t_") and callable(fn):
