@@ -134,6 +134,21 @@ async function openHud(browser, status, pageOptions = {}) {
   page.on("console", (m) => {
     if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) problems.push(m.text());
   });
+  // The theme a scenario wants in this page's localStorage BEFORE its own head
+  // script reads it (the pre-paint path), and two probes that prove the page -
+  // not this harness - painted it: `__themeAtInit` is read here, before any
+  // page code, and `__firstFrameTheme` at the first animation frame. The
+  // harness deliberately does NOT set `data-theme` itself: a check that read an
+  // attribute this script had written would prove nothing at all.
+  await page.addInitScript((theme) => {
+    if (theme) { try { localStorage.setItem("jarvis.theme", theme); } catch (e) {} }
+    window.__themeAtInit = document.documentElement
+      ? document.documentElement.getAttribute("data-theme") : null;
+    window.__firstFrameTheme = null;
+    requestAnimationFrame(() => {
+      window.__firstFrameTheme = document.documentElement.getAttribute("data-theme");
+    });
+  }, status.hudTheme || null);
   // The shell's IPC, as the HUD holds it (capabilities/hud.json): the mic's
   // summon_push_to_talk, and hud_proxy.rs's reads, chat and the mark, which
   // this stands in for the way Rust does them - the same request to the
@@ -3113,8 +3128,8 @@ async function openGalaxyOptions(page) {
   await page.waitForTimeout(120);
 }
 
-async function openGalaxy(browser, graph) {
-  const opened = await openHud(browser, { jarvis: true, ollama: true, proxy: false, graph });
+async function openGalaxy(browser, graph, extra = {}) {
+  const opened = await openHud(browser, { jarvis: true, ollama: true, proxy: false, graph, ...extra });
   await opened.page.click('[data-view="brain"]');
   await opened.page.waitForTimeout(500);
   await openGalaxyOptions(opened.page);
@@ -5678,6 +5693,122 @@ await check("P8 idle: a hidden window stops the Galaxy and pauses the infinite C
   await page.waitForTimeout(300);
   const backB = await page.evaluate(() => window.__rafFrames);
   assert.ok(backB > backA, "the Galaxy did not resume when the window came back");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+/* =========================================================================
+ * The theme reaches this window LIVE (2026-10-28 field test)
+ *
+ * Measured on the installed 0.2.351 app over WebView2 CDP
+ * (`.dsh-scratch/MAXOUT-2026-10-28/FIELDTEST-DESKTOP-2026-10-28/REPORT.md`,
+ * row "Theme picker (#theme-list) + fan-out"): picking Daylight in Settings
+ * repainted Settings, the bar, the widget and the Brain at once, and the HUD
+ * stayed on Reactor until the page was reloaded. Source agreed - this page had
+ * only the load-time read, and no `theme-changed` listener.
+ *
+ * Two checks hold both halves of the fix: the first painted frame still comes
+ * from the stored theme (the pre-paint read), and a live change arrives on the
+ * SAME event every other window follows - `theme-changed`, payload = the theme
+ * id - with no reload and no layout move.
+ * ========================================================================= */
+
+await check("Theme: the stored theme is on the root before the first frame (the pre-paint read)", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, hudTheme: "high-contrast" });
+  const seen = await page.evaluate(() => ({
+    atInit: window.__themeAtInit,
+    firstFrame: window.__firstFrameTheme,
+    worn: document.documentElement.getAttribute("data-theme"),
+    stored: localStorage.getItem("jarvis.theme"),
+  }));
+  assert.equal(seen.atInit, null,
+    `the harness itself put a theme on the root, so this would prove nothing: ${JSON.stringify(seen)}`);
+  assert.equal(seen.firstFrame, "high-contrast",
+    `the first painted frame did not wear the stored theme: ${JSON.stringify(seen)}`);
+  assert.equal(seen.worn, "high-contrast",
+    `the page did not keep the stored theme: ${JSON.stringify(seen)}`);
+  assert.equal(seen.stored, "high-contrast", "loading the page overwrote the stored theme");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("Theme: a change made in Settings is worn at once, without a reload, and the picture follows", async () => {
+  const { page, problems } = await openGalaxy(browser, GALAXY_GRAPH,
+    { tauriEvents: true, hudTheme: "deep-space" });
+  // The listener the other windows register (`jarvis-link.js` followTheme). An
+  // empty list would let this check pass while the page listened to nothing.
+  const listening = await page.evaluate(() =>
+    (window.__tauriEvents["theme-changed"] || []).length);
+  assert.equal(listening, 1,
+    "the HUD has no listener for the theme-changed event every other window follows");
+
+  const snap = () => page.evaluate(() => {
+    const swatch = document.querySelector("#legend .swatch");
+    const rects = ["#galaxy", "#rail-left", "#brain"].map((sel) => {
+      const r = document.querySelector(sel).getBoundingClientRect();
+      return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
+    });
+    return {
+      theme: document.documentElement.getAttribute("data-theme"),
+      stored: localStorage.getItem("jarvis.theme"),
+      surface: getComputedStyle(document.body).backgroundColor,
+      ink: tk("--text"),
+      inkNow: getComputedStyle(document.documentElement).getPropertyValue("--text").trim(),
+      swatch: swatch ? swatch.style.backgroundColor : null,
+      engine: galaxy.engineInfo(),
+      rects,
+    };
+  });
+  const before = await snap();
+  assert.equal(before.theme, "deep-space", "fixture: the page did not start on the stored theme");
+  assert.ok(before.swatch, "fixture: the legend has no swatch to re-colour");
+  assert.equal(before.ink, before.inkNow, "fixture: the ink cache already disagreed with the CSS");
+  await page.evaluate(() => { window.__themeDocMark = "the same document"; });
+
+  // Let the 3D engine finish coming up, or give up, BEFORE the change: which
+  // branch below runs must be decided by the machine, never by a race with the
+  // engine's own asynchronous build. A machine with no WebGL reports `failed`
+  // and the check says so out loud instead of counting it as a pass.
+  await page.waitForFunction(() => {
+    const info = galaxy.engineInfo();
+    return info.ready || info.failed;
+  }, null, { timeout: 20000 }).catch(() => {});
+  const hadEngine = (await page.evaluate(() => galaxy.engineInfo())).ready;
+
+  // The PC's own fan-out, exactly as Rust sends it: system_theme.rs
+  // `apply_now` -> `emit_all(THEME_CHANGED, theme)`, a plain id as the payload.
+  await page.evaluate(() => {
+    for (const fn of (window.__tauriEvents["theme-changed"] || [])) {
+      fn({ event: "theme-changed", id: 9, payload: "paper" });
+    }
+  });
+
+  const after = await snap();
+  const mark = await page.evaluate(() => window.__themeDocMark);
+  assert.equal(after.theme, "paper", "the HUD did not take the theme the PC broadcast");
+  assert.equal(after.stored, "paper", "the HUD did not store it, so the next load would paint the old theme");
+  assert.equal(mark, "the same document", "the page reloaded; the theme has to land without one");
+  assert.notEqual(after.surface, before.surface, "the window's surface did not repaint");
+  assert.notEqual(after.ink, before.ink, "the canvas ink cache kept the old palette");
+  assert.equal(after.ink, after.inkNow, "the canvas ink cache disagrees with the new palette");
+  assert.notEqual(after.swatch, before.swatch, "the legend's swatches kept the old theme's hex");
+  assert.deepEqual(after.rects, before.rects, "the theme change moved the layout");
+
+  // The 3D Galaxy bakes its vertex colours when it builds, so it is rebuilt
+  // from the new palette - and only when this machine was drawing one. Without
+  // an engine the rebuild is NOT exercised here and this says so, rather than
+  // counting a branch that never ran as proof.
+  if (hadEngine) {
+    await page.waitForFunction(() => {
+      const info = galaxy.engineInfo();
+      return info.ready && info.engine === "webgl" && info.info && info.info.draws > 0;
+    }, null, { timeout: 20000 });
+  } else {
+    const why = await page.evaluate(() => galaxy.engineInfo());
+    console.log(`      the 3D engine was not up in this run (failed=${why.failed}, module=${why.module}), `
+      + "so the rebuild is NOT exercised by this check - only the 2D ink and the legend were re-taken");
+  }
   await page.close();
   assert.deepEqual(problems, []);
 });

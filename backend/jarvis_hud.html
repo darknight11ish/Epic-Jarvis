@@ -71,11 +71,17 @@
   for the theme instead, so it cannot wait on anything more than this. If
   nothing is stored, or storage is unreadable (private mode, cleared site
   data), it paints deep-space - the same look this page always had.
+
+  This is the FIRST frame only. A theme changed in another window while this
+  one is open arrives as the same `theme-changed` event every other window
+  follows; `paintHudTheme` further down this file takes it, without a reload.
+  The list of ids lives here, once, and that function reads this same one.
 -->
 <script>
+  var jarvisHudThemes = ["deep-space", "paper", "high-contrast"];
   try {
     var jarvisHudTheme = localStorage.getItem("jarvis.theme");
-    if (["deep-space", "paper", "high-contrast"].indexOf(jarvisHudTheme) >= 0) {
+    if (jarvisHudThemes.indexOf(jarvisHudTheme) >= 0) {
       document.documentElement.setAttribute("data-theme", jarvisHudTheme);
     }
   } catch (e) {
@@ -3498,10 +3504,14 @@ const GROUP_STYLE = {
 function styleFor(group){ return GROUP_STYLE[group] || GROUP_STYLE.entity; }
 
 /** Resolved theme values, cached: reading a custom property is a forced
- * style recalc, and this runs per node per frame. This page sets its theme
- * once at load (see the bootstrap script at the top) and never changes it
- * without a reload, so unlike `brain.js`'s equivalent cache, nothing here
- * ever needs to be invalidated. */
+ * style recalc, and this runs per node per frame. This page used to set its
+ * theme once at load and never change it, so nothing here ever needed
+ * invalidating; it follows `theme-changed` live now (see `paintHudTheme`
+ * below the Galaxy), and a palette change has to throw this away or the
+ * picture keeps painting the previous theme - exactly the cache `brain.js`
+ * clears in its own `followTheme` callback (`_ink = null`). The one place
+ * that clears it is the Galaxy's `themeChanged()`, because it owns the other
+ * two things that bake colours: the legend's swatches and the 3D engine. */
 const tokenCache = new Map();
 function tk(name, fallback){
   let hit = tokenCache.get(name);
@@ -4390,6 +4400,41 @@ const galaxy = (() => {
     if(cosmosEngine) dropCosmos();
   }
 
+  /** Another window changed the theme, so the palette under this picture did
+   *  too - and three things here had baked the old one into pixels:
+   *
+   *  - the 2D ink cache (`tokenCache`), read per node per frame;
+   *  - the legend's swatches, whose hex was written into `style` when they
+   *    were built (`swatchStyle`), so a cached colour cannot follow a
+   *    variable;
+   *  - the 3D engine's vertex colours, handed over by `colorFor` when its
+   *    meshes were built (`galaxy-cosmos.js` converts them to ints at build
+   *    time), with no recolour call - one theme change does not warrant
+   *    adding one, and the engine already rebuilds on Hide/Show.
+   *
+   *  NOTHING OF THE LAYOUT MOVES. The legend is drawn from the nodes that are
+   *  on screen already (not `sourceGraph`, which is the whole graph: the
+   *  legend follows the lens), no node position changes, and the 2D camera and
+   *  the legend's own rows stay where they were. ONE THING DOES NOT SURVIVE,
+   *  and it is written here rather than left to be found: the 3D engine is
+   *  only rebuilt when this machine was drawing one, and a fresh engine
+   *  re-frames its own camera from the look's preset (`galaxy-cosmos.js`'s
+   *  `rebuildScene` -> `snapCamera`), so a 3D view the owner had dragged or
+   *  zoomed returns to the look's framing. A machine without 3D, or one whose
+   *  map is closed, builds from the new palette when it next opens
+   *  (`resumeCosmos`), so nothing is rebuilt for a picture nobody is showing. */
+  function themeChanged(){
+    tokenCache.clear();
+    if(nodes.length) buildLegend({ nodes });
+    if(!cosmosEngine) return;
+    dropCosmos();
+    // `setRunning(false)` first: setRunning(true) is what calls
+    // `resumeCosmos`, and it is a no-op while `running` is still true - so
+    // without this the engine would stay let go until the view changed.
+    setRunning(false);
+    syncRunning();
+  }
+
   /** Build the 3D engine again when the map is on screen after being hidden.
    *  A failure is remembered in `cosmosFailed`, so this can never become a
    *  rebuild loop. */
@@ -5087,6 +5132,9 @@ const galaxy = (() => {
 
   return {
     load, resize, setTrace, flyTo, setRunning, syncRunning, releaseCosmos,
+    /** The page's palette changed while this picture was on screen: re-take
+     *  every colour this module baked. See `themeChanged` above. */
+    themeChanged,
     /** P-1 (privacy audit 2026-10-27): drop every word this picture holds, and
      *  record the PC's own answer about whether the lists are hidden. */
     forget, setPrivateHidden,
@@ -5143,6 +5191,68 @@ const galaxy = (() => {
     }; }
   };
 })();
+
+/* =========================================================================
+ * The theme, while this window is open
+ * -------------------------------------------------------------------------
+ * Measured on the installed 0.2.351 app, 2026-10-28
+ * (`.dsh-scratch/MAXOUT-2026-10-28/FIELDTEST-DESKTOP-2026-10-28/REPORT.md`,
+ * row "Theme picker (#theme-list) + fan-out"): picking Daylight in Settings
+ * repainted Settings, the bar, the widget and the Brain at once, and the HUD
+ * stayed on Reactor - still dark, no error - until the page was reloaded.
+ *
+ * WHY IT COULD NOT FOLLOW. Every window is its own document, so one window
+ * changing `data-theme` cannot reach another. The fan-out that does reach them
+ * is one Tauri event: commands.rs `set_theme` -> system_theme.rs `apply_now`
+ * -> `emit_all(THEME_CHANGED, theme)`, with the theme id as the payload - and
+ * `jarvis-link.js`'s `followTheme` subscribes to it in the bar, the widget,
+ * the Brain and Settings (`TAURI.event.listen("theme-changed", ...)` then
+ * `applyTheme(event.payload)`). This page had only the load-time read at the
+ * top of the file, so it painted the stored theme once and then ignored the
+ * event for the life of the window.
+ *
+ * SAME EVENT, SAME PAYLOAD - deliberately not a new one and not an import.
+ * `followTheme` is not imported here: it drags `jarvis-link.js`'s state-colour
+ * pass into a page that has never had one, and a plain browser's copy of this
+ * page (jarvis_hud.py serves it too) has no `__TAURI__` at all. The part that
+ * matters is three lines of `applyTheme` - normalise the id, set `data-theme`,
+ * write the anti-flash cache - and this page's own list of ids.
+ *
+ * THE PAYLOAD IS THE EFFECTIVE THEME. "Match Windows light or dark mode" is
+ * decided in Rust (system_theme.rs reads the registry, because every window is
+ * built forced-dark and `prefers-color-scheme` would lie), and the id the PC
+ * broadcasts is whatever that decision came to. So there is nothing
+ * system-shaped to mirror here: taking the payload IS following the system.
+ *
+ * NO RELOAD, NO LAYOUT CHANGE. `data-theme` swaps theme.css's tokens; the only
+ * things that had the old palette baked into pixels are re-taken through
+ * `galaxy.themeChanged()`.
+ * ========================================================================= */
+
+/** Paints one theme on this window now, and remembers it for the next load.
+ *  Unknown or missing ids are Reactor, the fallback `jarvis-link.js`'s
+ *  `normaliseTheme` and the phone's `Themes.byId` also make. Returns the id
+ *  actually worn. */
+function paintHudTheme(name){
+  const theme = jarvisHudThemes.indexOf(name) >= 0 ? name : jarvisHudThemes[0];
+  if(document.documentElement.getAttribute("data-theme") === theme) return theme;
+  document.documentElement.setAttribute("data-theme", theme);
+  try{ localStorage.setItem("jarvis.theme", theme); }
+  catch(e){ /* storage unreadable: this window still follows, the next load cannot */ }
+  galaxy.themeChanged();
+  return theme;
+}
+
+// The shell is the only place the event exists: capabilities/hud.json holds
+// `core:event:allow-listen` (and always has - the face's voice and moments
+// listeners use it), so the send path below is the one every other window
+// takes. A browser-served page has no `__TAURI__` and keeps the pre-paint read.
+const hudThemeEvent = window.__TAURI__ && window.__TAURI__.event;
+if (hudThemeEvent && typeof hudThemeEvent.listen === "function") {
+  Promise.resolve(hudThemeEvent.listen("theme-changed", (event) => {
+    paintHudTheme(event && event.payload);
+  })).catch(() => { /* an older shell without the event: the pre-paint read stands */ });
+}
 
 /* The bar's private-answer rule, applied here too.
  *
