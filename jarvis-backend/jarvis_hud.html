@@ -1253,9 +1253,11 @@ html[data-hud-shell="split-stage"] .bento-waiting{display:flex; flex-direction:c
  *  the Cockpit's Bento card and the Ambient layout's slide-in rail all show
  *  this one panel, so nothing here is a second list. The words are the PC's
  *  own and are already blanked in Rust while App lock / the private lists
- *  are hidden (kinds, times and counts stay). Phase 1 is view + add + the
- *  existing one-job actions; editing an item and reordering need backend
- *  changes and a later deploy, and are NOT faked here.
+ *  are hidden (kinds, times and counts stay) - and because a page is only as
+ *  private as its LAST read, this panel is re-read when the PC says the lists
+ *  hid again (`private-hidden`, `forgetPrivateGraph` below). Phase 1 is
+ *  view + add + the existing one-job actions; editing an item and reordering
+ *  need backend changes and a later deploy, and are NOT faked here.
  * --------------------------------------------------------------------- */
 .reminders-body{display:flex; flex-direction:column; gap:10px;}
 .rem-note{margin:0; padding:7px 9px; border:1px solid var(--line); border-radius:4px;
@@ -2507,7 +2509,9 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
          from the SAME GET /api/schedule read the Brain's Coming up uses; the
          Studio stage tab / dock icon, the Cockpit Bento card and the Ambient
          rail all show this one panel. Its words are blanked in Rust while App
-         lock or the private lists are hidden. Phase 1: view, add and the six
+         lock or the private lists are hidden - and, because a page is only as
+         private as its last read, the panel is re-read when the PC says the
+         lists hid again (`private-hidden`). Phase 1: view, add and the six
          existing one-job actions. Phase 2 (2026-10-22, after backend #730):
          Edit/Up/Down on an editable row, drawn ONLY when the PC's own
          GET /api/schedule says phase2:true - an older backend shows exactly
@@ -3330,6 +3334,11 @@ const galaxy = (() => {
   let budgetCapped = false;
   let budgetTotal = 0;
   let lastBudgetKey = "";
+  // P-1 of the 2026-10-27 privacy audit: true while the PC is hiding the
+  // memory lists. It is the PC's own answer, read off the reply
+  // (`redact_graph` sets `hidden: true` only when it actually took memory
+  // out), never this page's guess - see `setPrivateHidden` and `forget`.
+  let privateHidden = false;
 
   /** True when the Galaxy fills a large window (the full Brain view); false
    *  for the inline stage/bento. SIZE is what the frame budget follows - the
@@ -3413,6 +3422,18 @@ const galaxy = (() => {
 
   function plural(n, one, many){ return `${n} ${n === 1 ? one : many}`; }
 
+  /** `hud-safety.js`'s hidden-lists sentence, or "".
+   *
+   *  THE SENTENCE IS NOT SPELLED HERE. `hud-safety.js` owns it (`HIDDEN_WORDS`)
+   *  and hands it over on the window object the page already uses for the
+   *  HUD's other cross-script facts (`__hudPhase2Words`, `__hudSafetyPending`),
+   *  so this page cannot drift into a second spelling of the same promise. If
+   *  that module is not there (an older shell/page pairing) the line stays
+   *  empty: it never invents wording of its own. */
+  function hiddenWords(){
+    return typeof window.__hudHiddenWords === "string" ? window.__hudHiddenWords : "";
+  }
+
   /** Which node groups this lens shows, as the legend row names. */
   function countLine(nodesIn){
     const byGroup = {};
@@ -3440,12 +3461,30 @@ const galaxy = (() => {
   }
 
   /** Tell assistive tech what is on screen now (the counts are computed).
-   *  When the node budget cut the lens, the same line says so in words. */
+   *  When the node budget cut the lens, the same line says so in words.
+   *
+   *  P-1 of the 2026-10-27 privacy audit: while the PC is hiding the memory
+   *  lists, the Memory and Unified lines cannot be counted. "no saved facts on
+   *  this PC yet" would be a lie - the facts are there and the PC is holding
+   *  them back - so the line says what is actually true instead, in
+   *  `hud-safety.js`'s own hidden-lists sentence (the strip beside it says the
+   *  same words). The Neural lens is the PC's own capabilities, which the
+   *  redaction never touches, so it still reports them - see the comment
+   *  inside, and `forget` for why an empty picture is not that. */
   function renderCounts(nodesIn){
     const el = document.getElementById("galaxy-counts");
     if(!el) return;
-    const line = countLine(nodesIn) + (budgetCapped
-      ? ` · showing ${nodesIn.length} of ${budgetTotal} nodes` : "");
+    // The Neural lens is the PC's own capabilities, which the redaction never
+    // touches - so it reports itself whenever the PC actually gave it
+    // something to count. An EMPTY picture is not that: it is what a forget
+    // leaves behind for the moment before the answer lands (or after a read
+    // that failed), and "no capability data from this PC yet" would be a
+    // claim about the PC that nothing here has measured.
+    const countable = lens === "neural" && nodesIn.length > 0;
+    const line = privateHidden && !countable
+      ? hiddenWords()
+      : countLine(nodesIn) + (budgetCapped
+        ? ` · showing ${nodesIn.length} of ${budgetTotal} nodes` : "");
     el.textContent = line;
     el.setAttribute("data-galaxy-counts", lens);
     el.setAttribute("data-galaxy-budget", budgetCapped ? "capped" : "all");
@@ -4132,6 +4171,50 @@ const galaxy = (() => {
     $("inspector").classList.remove("on");
   }
 
+  /** Drop every word this picture holds about the owner's memory.
+   *
+   *  P-1 of the 2026-10-27 privacy audit, and the whole repair. This window is
+   *  hidden only by App lock, so with App lock off it stays on screen; the
+   *  graph it read while a Show was in force carries the owner's saved fact
+   *  sentences and the names of the people in them. Rust redacts the NEXT read
+   *  (`hud_proxy.rs` / `redact_graph`), but it cannot reach a word this page
+   *  already has, and no poll of the settings can tell the page the show ended
+   *  (`get_lock_flags` answers with the two SETTINGS). So the page forgets.
+   *
+   *  Every reach point is cleared, not just the dots: the node list and its
+   *  links, the inspector's three lines (`focus` wrote a label, a connection
+   *  count and a detail sentence), the search box's query, the pointer's
+   *  hover, the recall trace (a fact sentence per hit) and the camera's
+   *  target. `applyLens` with an empty source then repaints an empty picture,
+   *  which also removes every node button from the overlay.
+   *
+   *  `privateHidden` is NOT touched here: the caller reads it off the PC's
+   *  reply (`setPrivateHidden`), so this stays one mechanical "forget". */
+  function forget(){
+    sourceGraph = { nodes: [], links: [] };
+    nodes = []; links = []; adj = new Map();
+    hoverId = null; query = "";
+    traceHits = traceNear = null;
+    clearFocus();
+    // The inspector's words are still in the DOM behind a removed class: a
+    // screen reader, a devtools look or an old screenshot must find nothing.
+    $("insp-kind").textContent = "node";
+    $("insp-title").textContent = "—";
+    $("insp-meta").textContent = "";
+    $("insp-detail").textContent = "";
+    applyLens();
+  }
+
+  /** The PC's own answer about this picture, from the read itself.
+   *
+   *  `redact_graph` sets `hidden: true` only when it actually took memory out,
+   *  so this is a fact about the reply, never a guess. It decides the counts
+   *  line (see `renderCounts`) and nothing else: turning it OFF paints nothing
+   *  by itself - the `load` that follows every read does that. */
+  function setPrivateHidden(on){
+    privateHidden = !!on;
+  }
+
   /** The swatch draws the group's actual shape, not just its colour - the
    * whole point of the fix (Q6) is that two groups on the same hue are
    * still told apart without colour, and a legend that only showed a
@@ -4168,6 +4251,9 @@ const galaxy = (() => {
 
   return {
     load, resize, setTrace, flyTo, setRunning, syncRunning,
+    /** P-1 (privacy audit 2026-10-27): drop every word this picture holds, and
+     *  record the PC's own answer about whether the lists are hidden. */
+    forget, setPrivateHidden,
     reset(){ clearFocus(); if(flatLook()){ yaw = 0; pitch = 0; } else { yaw=.5; pitch=-.25; } fitCamera(); },
     search(v){ query = v; },
     toggleSpin(){ spin = !spin; return spin; },
@@ -4426,6 +4512,12 @@ function showTrace(trace){
   const bar = $("trace-bar"), list = $("trace-list");
   if(!trace){
     bar.classList.add("off"); list.classList.add("off");
+    // P-1 of the 2026-10-27 privacy audit: the rows are recalled fact
+    // sentences, and "off" only hides them. Closing the trace - which is what
+    // the private-hidden handler does - must take the words out of the DOM
+    // too, not leave them one devtools click away. textContent, not
+    // innerHTML: this is a clear, not a parse.
+    list.textContent = "";
     renderTrail();
     return;
   }
@@ -5321,10 +5413,45 @@ async function boot(){
     }
   }
 
-  // Brain map
+  // Brain map. ONE read, shared with the private-hidden handler below, so
+  // there is a single place that decides what this picture may hold.
+  await readGraph({ atBoot: true });
+}
+
+/* The one /api/graph read this page makes: at boot, and again whenever the PC
+ * says the memory lists hid (or the security settings changed). P-1 of the
+ * 2026-10-27 privacy audit.
+ *
+ * Why a second read is the repair, and why it is not enough on its own:
+ * `hud_proxy.rs` redacts `/api/graph` in Rust while the lists are hidden, but
+ * Rust cannot reach a word the page already holds, and nothing polls the
+ * STATE (see `forgetPrivateGraph`). So the page forgets first and then asks
+ * again; the reply is redacted, and it alone decides what is painted.
+ *
+ * `atBoot` is boot's own case and only boot's: with no server at all the page
+ * falls back to the sample graph, which the banner above already declares
+ * ("Everything below is sample data"). A read after a hide never draws sample
+ * facts - a picture just cleared for privacy must not fill up with invented
+ * ones - and it stays quiet about an empty memory, because "your brain map is
+ * empty so far" would be false while the lists are hidden.
+ *
+ * One read at a time wins: a reply that lands after a newer read started is
+ * dropped, so an in-flight boot read cannot repaint an unredacted graph over
+ * a hide that happened while it was on the wire.
+ *
+ * Returns the graph it painted, or null when nothing was painted. */
+let graphRead = 0;
+async function readGraph({ atBoot = false } = {}){
+  const mine = ++graphRead;
   let graph = null;
   try{
     const r = await jfetch("/api/graph", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    // A re-read after a hide insists on a real answer: an HTTP 404/500 with a
+    // JSON body would otherwise be painted as "a graph with nothing in it",
+    // which is a claim about the owner's memory that nothing measured. Boot
+    // keeps its own older tolerance (the 404 there has always meant "an older
+    // PC that does not build graphs", and the page drew an empty map for it).
+    if(!atBoot && !r.ok) throw new Error(`the PC answered HTTP ${r.status}`);
     graph = await r.json();
     // A real graph that is still small is SHOWN as it is, not swapped for the
     // made-up one: that used to happen online too, with no banner, so a new
@@ -5334,13 +5461,22 @@ async function boot(){
     graph = graph && typeof graph === "object" ? graph : {};
     if(!Array.isArray(graph.nodes)) graph.nodes = [];
     if(!Array.isArray(graph.links)) graph.links = [];
-    if(graph.nodes.length < 3){
+    if(atBoot && graph.nodes.length < 3){
       addMessage("system", graph.nodes.length
         ? "Your brain map is small so far. It fills in as you keep facts Jarvis learns."
         : "Your brain map is empty so far. It fills in as you keep facts Jarvis learns.");
     }
-  }catch(e){ graph = demoGraph(); }
-
+  }catch(e){
+    graph = atBoot ? demoGraph() : null;
+  }
+  if(mine !== graphRead) return null;   // a newer read decides
+  if(!graph) return null;              // the PC did not answer: keep what is there
+  const hidden = graph.hidden === true;
+  galaxy.setPrivateHidden(hidden);
+  // An answer that came back redacted means the lists are hidden NOW: nothing
+  // from the previous read may survive it (the inspector's lines, the search
+  // box, the trace). This is the only place the reply itself clears.
+  if(hidden) clearMemoryWords();
   S.graph = graph;
   const c = graph.counts || {};
   $("r-facts").textContent = c.facts ?? "—";
@@ -5349,6 +5485,69 @@ async function boot(){
 
   galaxy.resize();
   galaxy.load(graph);
+  return graph;
+}
+
+/* P-1 of the 2026-10-27 privacy audit (High): the galaxy outlived the hide.
+ *
+ * The owner passes Windows Hello on the Brain's Show and opens - or reloads -
+ * this window while that reveal is in force, so its one /api/graph read comes
+ * back whole, as designed for a revealed window. The reveal then ends (the
+ * owner steps away, or the setting is switched off) and Rust redacts the NEXT
+ * read - but the fact sentences and the names of the people in them are
+ * already here, in `S.graph`, in the galaxy's nodes and their labels, in the
+ * inspector, in the search box and in the recall trace. This window is hidden
+ * by App lock only, so with App lock off it stays on screen, and one hover,
+ * one search or one click reads them back.
+ *
+ * `get_lock_flags` cannot tell this page: it answers with the two SETTINGS,
+ * not with "the reveal has ended", and the reveal is a transient state
+ * (`lock::private_hidden` clears it itself once the owner is no longer fresh).
+ * So the event is the only signal, and `emit_private_hidden` broadcasts it to
+ * every window now. */
+function clearMemoryWords(){
+  // The words go FIRST. If the read that follows fails, the picture stays
+  // empty and says why - it never falls back to what was on screen.
+  galaxy.setPrivateHidden(true);
+  galaxy.forget();
+  S.graph = { nodes: [], links: [], hidden: true };
+  $("gsearch").value = "";
+  // The trail is the owner's own earlier questions (up to 8, each with the
+  // fact sentences its answer recalled). "Turn this window" clears it too.
+  S.traces = [];
+  showTrace(null);
+}
+
+/** The reveal ended: forget now, then ask the PC what this window may show. */
+function forgetPrivateGraph(){
+  clearMemoryWords();
+  readGraph();
+  // The Reminders panel has the same shape (its words are blanked by Rust on
+  // every read, so it is only as private as its last one): re-read it now
+  // instead of waiting for the panel to be opened again.
+  if (typeof window.__hudRemindersRefresh === "function") window.__hudRemindersRefresh();
+}
+
+/** The security settings changed. The picture may now be hidden or shown
+ *  again, so ask - but do not empty it first: a change that hides nothing
+ *  (turning App lock on, say) must not flash the galaxy away and back. The
+ *  reply itself clears whatever the hiding made stale. The safety strip's two
+ *  answers come from the same settings, so it re-reads them now instead of on
+ *  its next 20-second beat. */
+function securityChanged(){
+  if(window.__hudSafety) window.__hudSafety.readLock();
+  readGraph();
+}
+
+/* Both events mean the same thing to this picture. `private-hidden` is the
+ * transient case (the reveal ended on its own), `security-changed` the setting
+ * being switched. Registered BEFORE boot's read, so a hide that lands while
+ * that read is still on the wire is not missed - and the read counter above
+ * makes whichever answer is newer the one that paints. */
+const privacyEvents = window.__TAURI__ && window.__TAURI__.event;
+if (privacyEvents && typeof privacyEvents.listen === "function") {
+  privacyEvents.listen("private-hidden", () => forgetPrivateGraph()).catch(() => {});
+  privacyEvents.listen("security-changed", () => securityChanged()).catch(() => {});
 }
 
 boot();
@@ -6635,7 +6834,9 @@ subscribe();
   //  Drawn from the SAME GET /api/schedule read the Brain's Coming up uses;
   //  the Studio stage tab / dock icon, the Cockpit Bento card and the Ambient
   //  rail all show this one panel. Its words are blanked in Rust while App
-  //  lock or the private lists are hidden. Phase 1: view, add, and the
+  //  lock or the private lists are hidden - and, because a page is only as
+  //  private as its last read, `forgetPrivateGraph` re-reads it the moment the
+  //  PC says the lists hid again. Phase 1: view, add, and the
   //  existing one-job actions - edit/move/reorder need backend changes and a
   //  later deploy, and are not faked here. It lives INSIDE the page's own
   //  layout script on purpose: another inline script block would be a fifth
@@ -7647,7 +7848,13 @@ if (typeof window.__hudRemindersRefresh === "function") window.__hudRemindersRef
  * untouched. It shows App lock / hidden lists, the queue-scoped rush
  * evidence and the catching-up state, and it keeps Deny enabled while the
  * link is stale (the command already holds only Approve). */
-import { mountSafetyRail } from "./hud-safety.js";
+import { mountSafetyRail, HIDDEN_WORDS } from "./hud-safety.js";
+/* P-1 of the 2026-10-27 privacy audit: the ONE hidden-lists sentence, handed to
+ * the page's own script so its counts line cannot spell a second version of it
+ * (`galaxy.renderCounts` reads this; the module owns the words, as it does for
+ * the strip). The page already passes its cross-script facts this way
+ * (`__hudPhase2Words`, `__hudSafetyPending`). */
+window.__hudHiddenWords = HIDDEN_WORDS;
 mountSafetyRail().then((rail) => {
   window.__hudSafety = rail;
   // H4-4: paint the queue once now, so a card that was already waiting at
