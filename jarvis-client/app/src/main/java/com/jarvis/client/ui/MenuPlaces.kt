@@ -91,6 +91,13 @@ object MenuPlaces {
         // phone could not hide it and its row would be an undecided item key -
         // MenuVisibilityTest checks both halves.
         "sandbox" to "settings.sandbox",
+        // "Learning" (2026-10-28, the settings audit's G1): the two learning
+        // switches, which had no Settings row on either app before this. Its
+        // own row (SettingsScreen.kt, item "learning") and its own hideable
+        // menu (`settings.learning`, backend/jarvis_menus.py); MenuVisibilityTest
+        // checks both halves, and Find anything lists every phone menu with a
+        // place.
+        "learning" to "settings.learning",
         // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
         // fourteen questions and its read-only plan. Its own Settings row on the
         // phone (SettingsScreen.kt, item "setup-questionnaire") and a menu that

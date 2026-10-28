@@ -243,7 +243,7 @@
       "name": "Jarvis reads its answers aloud",
       "group": "Talking",
       "surface": "both",
-      "where": "Settings, Voice, \"Read aloud\". Speaking starts at the first comma once the phrase is long enough.",
+      "where": "On by default: a question asked by voice gets a spoken answer, and no switch turns that off. Settings, Voice, \"Answers that use what Jarvis remembers\" and \"Answers that use sensitive saved facts\" choose whether those answers are read aloud or kept on screen. Settings, HUD, \"Read-aloud buttons on answers\" adds the speaker to each finished answer - it does not turn read-aloud on or off.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1618,11 +1618,12 @@
       "name": "Facts Jarvis saved by itself",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Saved automatically.",
+      "where": "Brain, Memory, Saved automatically. The switch that governs it is also in Settings, Learning.",
       "control": {
         "type": "section_switch",
         "setting_keys": [
-          "background_learning"
+          "background_learning",
+          "learn_sensitive_topics"
         ],
         "turn_on": "turn on background learning",
         "turn_off": "turn off background learning",
@@ -1630,28 +1631,28 @@
         "intent": "settings_bool"
       },
       "desktop": {
-        "section": null,
-        "location": "Brain, Memory, Saved automatically.",
+        "section": "learning",
+        "location": "Brain, Memory, Saved automatically. The switch that governs it is also in Settings, Learning.",
         "search": [
           "Facts Jarvis saved by itself"
         ],
         "found": true
       },
       "phone": {
-        "section": null,
-        "location": "Brain, Memory, Saved automatically.",
+        "section": "learning",
+        "location": "Brain, Memory, Saved automatically. The switch that governs it is also in Settings, Learning.",
         "search": [
           "facts jarvis saved by itself"
         ],
-        "found": false
+        "found": true
       },
-      "status": "planned",
+      "status": "enforced",
       "owner": "Session B",
-      "reason": "typed control works; no phone Settings location",
+      "reason": "Both learning switches have the Learning card on both apps since 2026-10-28; the Brain's Memory tab keeps the fuller panel and every saved fact.",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on background learning",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: learning; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
@@ -1662,11 +1663,12 @@
         "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
       "own_keys": [
-        "background_learning"
+        "background_learning",
+        "learn_sensitive_topics"
       ],
       "own_intents": [],
       "own_actions": {},
-      "label_note": "typed control works; no phone Settings location"
+      "label_note": "Both learning switches have the Learning card on both apps since 2026-10-28; the Brain's Memory tab keeps the fuller panel and every saved fact."
     },
     {
       "id": "memory-waiting",
@@ -2042,7 +2044,7 @@
       "name": "The learning switches",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Memory, Learning.",
+      "where": "Brain, Memory, Learning. The two switches are also in Settings, Learning.",
       "control": {
         "type": "section_switch",
         "setting_keys": [
@@ -2055,43 +2057,35 @@
         "intent": "settings_bool"
       },
       "desktop": {
-        "section": null,
-        "location": "Brain, Memory, Learning.",
+        "section": "learning",
+        "location": "Brain, Memory, Learning. The two switches are also in Settings, Learning.",
         "search": [
           "The learning switches"
         ],
-        "found": false
+        "found": true
       },
       "phone": {
-        "section": null,
-        "location": "Brain, Memory, Learning.",
+        "section": "learning",
+        "location": "Brain, Memory, Learning. The two switches are also in Settings, Learning.",
         "search": [
           "the learning switches"
         ],
-        "found": false
+        "found": true
       },
-      "status": "planned",
+      "status": "enforced",
       "owner": "setup-ui",
-      "reason": "Both learning switches live only in Brain -> Memory -> Learning; no Settings row exists on either app. A desktop-only card would also need a phone OpenPlace decision, so it is recorded rather than faked.",
+      "reason": "Both learning switches have the Learning card on both apps since 2026-10-28; the Brain's Memory tab keeps the fuller panel and every saved fact.",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on background learning",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: learning; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
         "reason_code": "command",
         "owner": "voiceprint-wiring",
         "reason": "",
-        "settings_gap": {
-          "controls": [
-            "background_learning",
-            "learn_sensitive_topics"
-          ],
-          "desktop": "setup-ui",
-          "phone": "Session B",
-          "reason": "Both learning switches live only in Brain -> Memory -> Learning; no Settings row exists on either app. A desktop-only card would also need a phone OpenPlace decision, so it is recorded rather than faked."
-        },
+        "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
       "own_keys": [
@@ -2100,7 +2094,7 @@
       ],
       "own_intents": [],
       "own_actions": {},
-      "label_note": "Both learning switches live only in Brain -> Memory -> Learning; no Settings row exists on either app. A desktop-only card would also need a phone OpenPlace decision, so it is recorded rather than faked."
+      "label_note": "Both learning switches have the Learning card on both apps since 2026-10-28; the Brain's Memory tab keeps the fuller panel and every saved fact."
     },
     {
       "id": "wiki",
@@ -2323,12 +2317,12 @@
         "intent": "settings_bool"
       },
       "desktop": {
-        "section": null,
-        "location": "Brain, History.",
+        "section": "security",
+        "location": "Brain, History. On the phone, the History row in the Brain.",
         "search": [
           "Your past chats"
         ],
-        "found": false
+        "found": true
       },
       "phone": {
         "section": null,
@@ -2340,25 +2334,18 @@
       },
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
+      "reason": "Real switch; its control is drawn by hand in the Security card (chat-history-settings.js, so it has no generated toggle row), and the phone changes it in its own History screen, not in Settings. The retention choice is not typed (2026-10-22 decision: no spoken path to immediate deletion)",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on chat history",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: security; phone: All features and abilities"
       },
       "command": {
         "status": "switch",
         "reason_code": "command",
         "owner": "voiceprint-wiring",
         "reason": "",
-        "settings_gap": {
-          "controls": [
-            "chat_history"
-          ],
-          "desktop": "setup-ui",
-          "phone": "Session B",
-          "reason": "The chat-history switch and its retention choice live only in Brain -> History; the desktop Settings page has no control for either (just a jump note), and the phone has no Settings row for them. The retention choice is NOT typed for now (2026-10-22 decision: no spoken path to immediate deletion)."
-        },
+        "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
       "own_keys": [
@@ -2366,7 +2353,7 @@
       ],
       "own_intents": [],
       "own_actions": {},
-      "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
+      "label_note": "Real switch; its control is drawn by hand in the Security card (chat-history-settings.js, so it has no generated toggle row), and the phone changes it in its own History screen, not in Settings. The retention choice is not typed (2026-10-22 decision: no spoken path to immediate deletion)"
     },
     {
       "id": "chat-tags",
@@ -7861,14 +7848,14 @@
         "learn automatically",
         "learning automatically"
       ],
-      "section": null,
-      "desktop_row": null,
+      "section": "learning",
+      "desktop_row": "learning-background",
       "turn_on": "turn on background learning",
       "turn_off": "turn off background learning",
       "resolved": true,
-      "status": "planned",
-      "owner": "setup-ui",
-      "reason": "typed switch works but no SETTINGS_ROWS row puts it on the desktop page"
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "switch present on the desktop Settings page"
     },
     {
       "key": "better_voice",
@@ -8032,14 +8019,14 @@
         "sensitive topics automatically",
         "auto-remembering sensitive topics"
       ],
-      "section": null,
-      "desktop_row": null,
+      "section": "learning",
+      "desktop_row": "learning-sensitive",
       "turn_on": "turn on remembering sensitive topics automatically",
       "turn_off": "turn off remembering sensitive topics automatically",
       "resolved": true,
-      "status": "planned",
-      "owner": "setup-ui",
-      "reason": "typed switch works but no SETTINGS_ROWS row puts it on the desktop page"
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "switch present on the desktop Settings page"
     },
     {
       "key": "lights_without_card",
@@ -8573,6 +8560,26 @@
       "in_phone_catalog": false
     },
     {
+      "id": "learning-background",
+      "label": "Background learning",
+      "section": "learning",
+      "owner": "desktop",
+      "phone_key": null,
+      "in_settings_html": true,
+      "in_desktop_catalog": true,
+      "in_phone_catalog": false
+    },
+    {
+      "id": "learning-sensitive",
+      "label": "Also remember sensitive topics automatically",
+      "section": "learning",
+      "owner": "desktop",
+      "phone_key": null,
+      "in_settings_html": true,
+      "in_desktop_catalog": true,
+      "in_phone_catalog": false
+    },
+    {
       "id": "cv-face-switch",
       "label": "Voice follows the face",
       "section": "voices",
@@ -8879,6 +8886,21 @@
         "security",
         "app lock",
         "windows hello"
+      ],
+      "app": "both",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": true
+    },
+    {
+      "id": "learning",
+      "names": [
+        "learning",
+        "the learning switches",
+        "background learning",
+        "automatic learning",
+        "learn automatically",
+        "what jarvis learns"
       ],
       "app": "both",
       "where": "settings",
@@ -9613,13 +9635,6 @@
     },
     {
       "kind": "feature",
-      "id": "memory-learning",
-      "status": "planned",
-      "owner": "setup-ui",
-      "reason": "Both learning switches live only in Brain -> Memory -> Learning; no Settings row exists on either app. A desktop-only card would also need a phone OpenPlace decision, so it is recorded rather than faked."
-    },
-    {
-      "kind": "feature",
       "id": "wiki",
       "status": "not-a-setting",
       "owner": "none-needed",
@@ -9645,13 +9660,6 @@
       "status": "not-a-setting",
       "owner": "none-needed",
       "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row."
-    },
-    {
-      "kind": "feature",
-      "id": "history",
-      "status": "planned",
-      "owner": "voiceprint-wiring",
-      "reason": "Real switch/choice; multi-field typed path is planned and its setter proof is pending"
     },
     {
       "kind": "feature",
@@ -11747,8 +11755,8 @@
       "not-a-setting": 70
     },
     "Switchable / Adjustable (Typed & Settings)": {
-      "planned": 30,
-      "enforced": 12
+      "planned": 28,
+      "enforced": 14
     },
     "PC-Only Setting (Honest Refusal on Phone)": {
       "pc-only": 15

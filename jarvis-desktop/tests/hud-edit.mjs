@@ -14,7 +14,11 @@
  *   6. the card/DOM map covers the registry honestly: each card is either
  *      movable with a selector that exists in the page, or fixed with a reason;
  *   7. the pointer-drag half of hud-edit.js stays inside the ruling's 180-line
- *      budget (measured from the source, not estimated).
+ *      budget (measured from the source, not estimated);
+ *   8. Hide is a REAL TOGGLE and a hidden card stays reachable in Edit HUD - the
+ *      defect the owner's field test found on 2026-10-28. The reducer is pinned
+ *      here and the page path is pinned in the source; scenario B's (d2)/(e2) in
+ *      tests/hud-edit-fieldtest.mjs drive the real buttons.
  */
 
 import assert from "node:assert/strict";
@@ -127,6 +131,15 @@ function sample() {
   check("setVisible hides an optional card", hidden.changed && cardOf(hidden.layout, "tools").visible === false);
   const shown = applyAction(hidden.layout, { type: "setVisible", id: "tools", visible: true });
   check("...and shows it again", cardOf(shown.layout, "tools").visible === true);
+  // 2026-10-28 (the owner's field test): the Hide control is a real toggle, and
+  // this is the call it makes - no `visible` value, so the card's own state is
+  // flipped. A hidden card's saved document must be able to come back.
+  const toggledOff = applyAction(start, { type: "setVisible", id: "tools" });
+  check("a bare setVisible toggles a shown card to hidden",
+    toggledOff.changed && cardOf(toggledOff.layout, "tools").visible === false, toggledOff.note);
+  const toggledOn = applyAction(toggledOff.layout, { type: "setVisible", id: "tools" });
+  check("...and toggles it back, so a hidden card in a saved layout can be shown",
+    toggledOn.changed && cardOf(toggledOn.layout, "tools").visible === true, toggledOn.note);
 
   const reset = applyAction(start, { type: "resetToPreset", id: "ambient" });
   check("resetToPreset gives back that preset exactly",
@@ -297,6 +310,33 @@ function allCards() {
   const lines = EDIT.slice(start, end).split("\n").length;
   check(`the pointer-drag half stays inside the ruling's 180 lines (measured ${lines})`, lines <= 180, lines);
   ok("Ruling 24's drag-size budget, measured from the source");
+}
+
+/* ------- 10. Hide is a real toggle, and a hidden card stays reachable ---- */
+{
+  // The owner's field test (2026-10-28) found that the Hide control always sent
+  // a fixed "hidden", while being painted as a toggle, and that a hidden card's
+  // shell was `display: none`, so its toggle could never be clicked again. Both
+  // halves are pinned here at the source; the REAL page path is
+  // tests/hud-edit-fieldtest.mjs's (d2)/(e2), which drives the button.
+  const toggleCall = EDIT.includes('doAction({ type: "setVisible", id })');
+  check("the Hide control toggles through the ONE reducer - it sends no fixed value",
+    toggleCall && !/visible:\s*false/.test(EDIT),
+    "hud-edit.js still sends a hard-coded visibility on the Hide path");
+  check("a hidden card's shell stays painted while editing and is hidden outside it",
+    /shell\.hidden = !card\.visible && !editing;/.test(EDIT)
+    && /shell\.classList\.toggle\("hud-card-hidden", !card\.visible\);/.test(EDIT));
+  check("...its body is folded away, so the card itself is still hidden",
+    /body\[data-hud-edit="on"\] \.hud-card-hidden \.hud-card-body\{display:none;\}/.test(PAGE),
+    "jarvis_hud.html has no ghost rule for a hidden card's body");
+  check("...`.hud-card[hidden]` still hides the whole shell outside edit mode",
+    /\.hud-card\[hidden\]\{display:none;\}/.test(PAGE));
+  check("...and the ghost says which state the card is in",
+    /hud-card-hidden-word/.test(EDIT) && /hud-card-hidden-word/.test(PAGE));
+  check("...so the control can be pressed a second time to show the card again",
+    /hideBtn\.title = `\$\{hidden \? "Show" : "Hide"\} \$\{labelOf\(card\.id\)\}`;/.test(EDIT),
+    "the Hide control never offers Show");
+  ok("Hide toggles, and a hidden card can be reached again in Edit HUD");
 }
 
 console.log(`\n${passed} passed, ${fails.length} failed`);

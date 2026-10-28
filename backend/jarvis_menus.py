@@ -261,6 +261,16 @@ MENUS: tuple = (
        hide=False, collapse=False, kind="card",
        why="Safety: the lock and fingerprint settings must always be reachable.",
        names=("security", "security settings", "app lock", "windows hello")),
+    # "Learning" (2026-10-28, the settings audit's G1): the two learning
+    # switches. A real card on BOTH apps - desktop settings.html
+    # `<section id="learning">` (learning-settings.js), phone SettingsScreen.kt
+    # `item(key = "learning")` - where before this they lived only in the
+    # Brain's Memory tab with no Settings row on either app. An ordinary card,
+    # so it is hideable like the rest of the Settings list.
+    _m("settings.learning", "Learning",
+       "The two learning switches: what Jarvis learns by itself.",
+       names=("learning", "the learning switches", "background learning",
+              "automatic learning", "learn automatically")),
     # "Jarvis's voice" (the parity audit of 2026-10-10). ONE id for ONE
     # feature: it was `(DESKTOP,)` here while the phone had the SAME feature
     # under a second id, `entry.voices` ("Jarvis's voice row", further down),

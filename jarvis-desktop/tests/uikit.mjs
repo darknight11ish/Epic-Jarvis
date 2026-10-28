@@ -1944,7 +1944,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               ...(sc.phase2 ? { phase2: true } : {}),
               // The Today board (GTD-2): what brain/schedule.rs adds under
               // `cockpit` from GET /api/today/cockpit.
-              ...(sc.cockpit ? { cockpit: sc.cockpit } : {}) }));
+              ...(sc.cockpit ? { cockpit: sc.cockpit } : {}),
+              // A read that FAILED (silent-failure audit 2026-10-27, row 5):
+              // Rust's own `cockpit_error` marker, carried through as the real
+              // brain_schedule does. Without this line a scenario that asks for
+              // an unread board answers a quiet day instead, and today.mjs's
+              // "a read that FAILED is said" check can never pass.
+              ...(sc.cockpit_error ? { cockpit_error: true } : {}) }));
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
               // As Rust's redact_list: words out, list names replaced.

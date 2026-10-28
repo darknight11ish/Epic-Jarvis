@@ -142,6 +142,39 @@ export const TREE_MAX_WIDTH = 2200;
 export const TREE_LANE_PITCH = 30;
 export const TREE_COL_GAP = 26;
 
+/** How much of the display's pixel ratio the 3D canvas may use.
+ *
+ *  The 2D canvas draws the LABELS, and it always renders at the full device
+ *  pixel ratio - that is the text, and text must stay crisp. The 3D canvas
+ *  draws glow, fog and wireframe bodies, where a softer edge is nearly
+ *  invisible, so it is the one that gives way when a machine cannot present
+ *  six million pixels a frame. `nextRenderScale` is the rule, and it is pure so
+ *  a test can drive it without a GPU.
+ *
+ *  It matters most where it was measured: a software renderer (headless CI, a
+ *  machine with no usable GPU) presents a 2880x2206 canvas at about seven
+ *  frames a second, and the picture has to stay usable there instead of
+ *  crawling. */
+export const RENDER_SCALE_MIN = 0.25;
+export const SLOW_FRAME_MS = 34;   // slower than about 30 frames a second
+export const VERY_SLOW_FRAME_MS = 60;
+export const FAST_FRAME_MS = 19;   // comfortably faster than 60 frames a second
+
+/** One step of the adaptive resolution rule.
+ *
+ *  `medianMs` is the median interval between the last few frames. Slow frames
+ *  give the 3D canvas fewer pixels; a picture that is already cheap gets them
+ *  back, up to the display's own ratio. Nothing here touches the CSS size, the
+ *  projection or the labels - only how many pixels the bodies are drawn with. */
+export function nextRenderScale(scale, medianMs) {
+  const now = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  if (!Number.isFinite(medianMs) || medianMs <= 0) return now;
+  if (medianMs > VERY_SLOW_FRAME_MS) return RENDER_SCALE_MIN;
+  if (medianMs > SLOW_FRAME_MS) return Math.max(RENDER_SCALE_MIN, now * 0.75);
+  if (medianMs < FAST_FRAME_MS && now < 1) return Math.min(1, now / 0.75);
+  return now;
+}
+
 /** One look's palette, camera and Gemini name.
  *
  *  `bg` is the page's own `bgHex` (it sets `document.body.style.
@@ -1648,6 +1681,11 @@ export async function createEngine(options = {}) {
     width: 2,
     height: 2,
     aspect: 1.6,
+    dprWanted: 1,
+    renderScale: 1,
+    frameGaps: [],
+    halfRate: false,
+    tick: false,
     frameDistance: 0,
     spinning: true,
     warp: 1,
@@ -2562,20 +2600,29 @@ export async function createEngine(options = {}) {
 
   /* ---- frames, resize, dispose --------------------------------------- */
 
+  function applyRenderScale() {
+    const ratio = Math.min(2, Math.max(RENDER_SCALE_MIN,
+      state.dprWanted * state.renderScale));
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(state.width, state.height, false);
+    return ratio;
+  }
+
   function resize(width, height, dpr = 1) {
     const wasAspect = state.aspect;
     state.width = Math.max(1, Math.round(width || 0));
     state.height = Math.max(1, Math.round(height || 0));
     state.aspect = state.width / state.height;
-    renderer.setPixelRatio(Math.min(Math.max(1, dpr || 1), 2));
-    renderer.setSize(state.width, state.height, false);
+    state.dprWanted = Math.min(Math.max(1, dpr || 1), 2);
+    applyRenderScale();
     camera.aspect = state.aspect;
     camera.updateProjectionMatrix();
     // A NARROWER stage is a smaller frame: the same camera would crop the
     // picture, which is exactly what Gemini's page does. Re-frame when the
     // stage's shape really changed, so a window resize can never strand a name.
     if (positions.length && Math.abs(state.aspect - wasAspect) > 0.005) setCamera();
-    return { width: state.width, height: state.height, aspect: state.aspect };
+    return { width: state.width, height: state.height, aspect: state.aspect,
+      ratio: state.dprWanted * state.renderScale };
   }
 
   function frame(now) {
@@ -2583,7 +2630,37 @@ export async function createEngine(options = {}) {
     if (state.width < 2 || state.height < 2) return false;
     const stamp = Number.isFinite(now) ? now : state.lastTime;
     const dt = state.lastTime ? Math.min((stamp - state.lastTime) / 1000, 0.1) : 0;
+    // The adaptive resolution rule: every few frames, look at how fast frames
+    // are really arriving and give the 3D canvas more or fewer pixels. Slow
+    // frames never touch the picture's size on screen, the camera or a label -
+    // only how much of the display the glow is drawn with.
+    if (state.lastTime) state.frameGaps.push(stamp - state.lastTime);
+    if (state.frameGaps.length >= 6) {
+      const gaps = state.frameGaps.slice().sort((a, b) => a - b);
+      const median = gaps[Math.floor(gaps.length / 2)];
+      const want = nextRenderScale(state.renderScale, median);
+      state.frameGaps.length = 0;
+      if (Math.abs(want - state.renderScale) > 0.001) {
+        state.renderScale = want;
+        applyRenderScale();
+      }
+      // Second half of the same rule: a machine that is still slow after the
+      // resolution has given all it can draws the picture every OTHER frame.
+      // The motion steps instead of the page stuttering, and (measured) a
+      // software renderer goes from about 13 to about 30 frames a second of
+      // page time because half the frames are cheap. A GPU never reaches this.
+      state.halfRate = median > SLOW_FRAME_MS;
+    }
     state.lastTime = stamp;
+    if (state.halfRate) {
+      state.tick = !state.tick;
+      if (state.tick) {
+        // Still advance the clock and the animation: the picture that appears
+        // on the next frame is the one this frame computed.
+        animate(dt, stamp);
+        return true;
+      }
+    }
     animate(dt, stamp);
     renderer.render(scene, camera);
     state.draws += 1;
@@ -2694,6 +2771,13 @@ export async function createEngine(options = {}) {
         spinning: state.spinning,
         width: state.width,
         height: state.height,
+        // The frame budget, so a test can read it: `scale` is the adaptive
+        // resolution's own step and `ratio` is what the 3D canvas is really
+        // drawn at (the 2D label canvas stays at the display's ratio).
+        scale: state.renderScale,
+        ratio: Math.min(2, Math.max(RENDER_SCALE_MIN,
+          state.dprWanted * state.renderScale)),
+        halfRate: state.halfRate,
         aspect: state.aspect,
         distance: camera.position.distanceTo(target),
         frameDistance: state.frameDistance,

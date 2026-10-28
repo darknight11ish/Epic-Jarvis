@@ -220,12 +220,16 @@ class FindAnythingTest {
             // here. The catalogue is one larger because a real place was
             // added.
             //
+            // 124 -> 125 (2026-10-28, settings audit G1): `settings.learning` is a
+            // real phone menu (SettingsScreen.kt item "learning") and the desktop
+            // Learning card opens the same section, so a real place was added.
+            //
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 124 menus has all of its names searched for.
+            // of the 125 menus has all of its names searched for.
             "the catalogue must still carry the names at all",
-            124,
+            125,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

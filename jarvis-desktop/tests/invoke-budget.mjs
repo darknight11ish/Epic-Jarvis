@@ -103,14 +103,32 @@ await check("each sentence is declared ONCE in the whole desktop - one home, no 
   }
 });
 
+await check("the preset apply's own budget is the 1,250 s one, and the page can reach it", async () => {
+  assert.equal(B.budgetFor("apply_focus_preset", "action"), B.APPLY_BUDGET_MS);
+  assert.ok(B.APPLY_BUDGET_MS > 1_200_000,
+    "Rust's own `apply_focus_preset` allows 1,200 s; the page must outlast it, "
+    + "or it would claim the result is unknown while a real card can still be answered");
+  // The HUD's Presets menu used to call `core.invoke` itself (audit 2026-10-27,
+  // row 4), so this budget was unreachable from the one surface that applies a
+  // preset. It goes through the shared `call` now, with the window its own
+  // fake-window road needs, and the module is served to the browser HUD (so
+  // backend/test_hud_static.py holds its bytes and the whitelist key).
+  const presets = readFileSync(join(SRC, "hud-presets.js"), "utf8");
+  assert.doesNotMatch(presets, /core\.invoke\(/, "hud-presets.js is back on the raw bridge");
+  assert.match(presets, /from "\.\/invoke-budget\.js"/,
+    "hud-presets.js does not import the shared budget");
+  assert.match(presets, /return call\("apply_focus_preset", body, "action", win\);/,
+    "the HUD apply no longer goes through the shared budget");
+});
+
 /* ── the one shared door: no card reaches the bridge on its own ────────── */
 
-await check("no converted card calls TAURI.core.invoke itself any more", async () => {
+await check("no converted card calls core.invoke itself any more", async () => {
   // A source pin, so reverting one file fails fast and names it.
-  const converted = ["devices.js"];
+  const converted = ["devices.js", "hud-presets.js"];
   for (const f of converted) {
     const text = readFileSync(join(SRC, f), "utf8");
-    const hits = [...text.matchAll(/TAURI\.core\.invoke\(/g)];
+    const hits = [...text.matchAll(/core\.invoke\(/g)];
     assert.equal(hits.length, 0, `${f} still reaches the bridge directly ${hits.length} time(s)`);
     assert.match(text, /from "\.\/invoke-budget\.js"/, `${f} does not import the shared budget`);
   }
@@ -118,12 +136,18 @@ await check("no converted card calls TAURI.core.invoke itself any more", async (
 
 await check("the shared module is the ONLY place that reaches the bridge", async () => {
   const files = readdirSync(SRC).filter((f) => f.endsWith(".js"));
+  // `core.invoke(` and not only `TAURI.core.invoke(`: a module that holds its
+  // own `core` (as hud-presets.js did) reaches the bridge just as directly.
   const offenders = files.filter((f) => f !== "invoke-budget.js"
-    && /TAURI\.core\.invoke\(/.test(readFileSync(join(SRC, f), "utf8")));
+    && /core\.invoke\(/.test(readFileSync(join(SRC, f), "utf8")));
   // Not a rule yet - the sweep is a first slice. This prints the remaining
   // inventory so the next PR has an exact list instead of a grep.
-  console.log(`      ${offenders.length} file(s) still to convert: ${offenders.length > 12 ? offenders.length + " files" : offenders.join(", ")}`);
+  const count = offenders.reduce((n, f) => n
+    + [...readFileSync(join(SRC, f), "utf8").matchAll(/core\.invoke\(/g)].length, 0);
+  console.log(`      ${offenders.length} file(s) / ${count} direct invoke(s) still to convert: `
+    + `${offenders.length > 12 ? offenders.length + " files" : offenders.join(", ")}`);
   assert.ok(!offenders.includes("devices.js"), "devices.js is back on the raw bridge");
+  assert.ok(!offenders.includes("hud-presets.js"), "hud-presets.js is back on the raw bridge");
 });
 
 /* ── the real page: a pairing request that never answers ───────────────── */

@@ -111,14 +111,28 @@ export function withBudget(work, { ms = READ_BUDGET_MS, late = LATE_READ } = {})
   let bell = 0;
   const gone = new Promise((_, fail) => {
     bell = setTimeout(() => fail(new Error(late)), ms);
+    // A pending budget must not be the reason a node test process stays alive:
+    // `calendar` here is a real 1,250 s timer for a preset apply. In a browser
+    // `setTimeout` answers a number and there is nothing to unref, so this is
+    // a no-op there.
+    if (bell && typeof bell.unref === "function") bell.unref();
   });
   return Promise.race([work, gone]).finally(() => clearTimeout(bell));
 }
 
-/** The bridge, read at call time - the harness installs it before the page. */
-function bridge() {
-  const tauri = globalThis.__TAURI__;
-  if (!tauri || !tauri.core || !tauri.core.invoke) throw new Error("no desktop backend");
+/**
+ * The bridge, read at call time - the harness installs it before the page.
+ *
+ * `win` is the page object whose bridge to use. It is only given by a caller
+ * that HOLDS a window object rather than running inside it (the HUD's preset
+ * menu, whose roads are tested with a fake window). Left out, this realm's own
+ * `__TAURI__` is used, exactly as before.
+ */
+function bridge(win) {
+  const tauri = win ? win.__TAURI__ : globalThis.__TAURI__;
+  if (!tauri || !tauri.core || typeof tauri.core.invoke !== "function") {
+    throw new Error("no desktop backend");
+  }
   return tauri.core.invoke;
 }
 
@@ -126,16 +140,20 @@ function bridge() {
  * Send one command with a budget. `kind` is "read" (the default) or "action";
  * it chooses the sentence, never the size - `budgetFor` owns the size.
  *
- * `budgetMs` is the exception, and it exists for ONE command: the model advisor
- * (`model-advisor.js`) is a single command doing four different jobs behind four
- * different waits - a Hugging Face lookup, a local benchmark of minutes, and two
- * questions about preset changes (plain code answers both; no model is asked
- * what the owner meant). `budgetFor` sees a command name and
- * cannot tell those apart, so the caller passes the size it knows and the
- * sentence still comes from `kind`. Omitted (the ordinary case), nothing changes.
+ * The optional fourth argument serves the two callers that know more than a
+ * command name:
+ *   - a NUMBER is the size for ONE command whose jobs have different waits -
+ *     the model advisor (`model-advisor.js`) is a single command doing four
+ *     different jobs (a Hugging Face lookup, a benchmark of minutes, two plain
+ *     questions); omitted, the ordinary per-command budget applies;
+ *   - a WINDOW OBJECT is the caller's own window, for the HUD panels that take
+ *     it as a local (see `bridge`), so their calls keep going through here.
+ * Anything else in that place is ignored, exactly as before.
  */
-export function call(command, args = {}, kind = "read", budgetMs = 0) {
-  const invoke = bridge();
+export function call(command, args = {}, kind = "read", winOrBudgetMs) {
+  const win = winOrBudgetMs && typeof winOrBudgetMs === "object" ? winOrBudgetMs : undefined;
+  const budgetMs = typeof winOrBudgetMs === "number" ? winOrBudgetMs : 0;
+  const invoke = bridge(win);
   return withBudget(invoke(command, args), {
     ms: budgetMs > 0 ? budgetMs : budgetFor(command, kind),
     late: lateWords(kind),

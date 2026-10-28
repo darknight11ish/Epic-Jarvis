@@ -51,6 +51,10 @@ export const BROWSER = Object.freeze({
     "A card is waiting for your yes in the Jarvis bar. The windowless browser stays off until you say yes.",
   off: "The windowless browser is off. Jarvis uses the visible browser only.",
   modeSaved: "Saved.",
+  // Said instead of "Saved." while a fresh read has not shown the new mode
+  // (silent-failure audit 2026-10-27, row 9). "Saved." is a claim about the
+  // PC's state; the page may only make it after reading the state back.
+  modeAsked: "Asked your PC. Reopen this page in a moment to see which browser it uses.",
 });
 
 export const MODE_IDS = Object.freeze(["auto", "visible", "headless"]);

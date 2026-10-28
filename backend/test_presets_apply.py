@@ -21,9 +21,19 @@ def check(name, cond, detail=""):
 
 
 class Deps:
-    def __init__(self, start_ok=True, switch_ok=True, set_ok=True):
+    def __init__(self, start_ok=True, switch_ok=True, set_ok=True, *,
+                 set_fail_first_only=False, set_raises_after_first=False,
+                 choice_ok=True, rollback_ok=True):
         self.calls = []
         self.start_ok, self.switch_ok, self.set_ok = start_ok, switch_ok, set_ok
+        # The rollback's own stubs (silent-failure audit 2026-10-27, row 2):
+        # a restore that fails, raises, or reports not-ok must never be
+        # reported as done.
+        self.set_fail_first_only = set_fail_first_only
+        self.set_raises_after_first = set_raises_after_first
+        self.choice_ok = choice_ok
+        self.rollback_ok = rollback_ok
+        self.set_calls = 0
         self.lane = "http://127.0.0.1:11436"
         self.choice = None
 
@@ -41,6 +51,11 @@ class Deps:
 
     def set_url(self, url):
         self.calls.append(("set_url", url))
+        self.set_calls += 1
+        if self.set_raises_after_first and self.set_calls > 1:
+            raise OSError("the settings folder refuses the write")
+        if self.set_fail_first_only and self.set_calls == 1:
+            return False
         if self.set_ok:
             self.lane = url
         return self.set_ok
@@ -50,15 +65,22 @@ class Deps:
 
     def write_choice(self, preset):
         self.calls.append(("choice", preset))
+        if not self.choice_ok:
+            return False
         self.choice = preset
         return True
+
+    def rollback_model(self):
+        self.calls.append(("rollback",))
+        return {"ok": True} if self.rollback_ok else {"ok": False, "reason": "no previous model"}
 
 
 def apply(body, d):
     return P.apply_from_body(body) if d is None else P.apply_preset(
         body.get("preset"), start_lane=d.start, switch_model=d.switch,
         active_url=d.get_url, set_active_url=d.set_url,
-        read_choice=d.read_choice, write_choice=d.write_choice)
+        read_choice=d.read_choice, write_choice=d.write_choice,
+        rollback_model=d.rollback_model)
 
 
 def t_default_unchanged_without_a_call():
@@ -122,7 +144,107 @@ def t_switch_failure_rolls_back_lane_and_choice():
     check("a failed switch rolls the chat lane back to where it was",
           code == 409 and d.lane == "http://127.0.0.1:11436", (code, out, d.calls))
     check("... and the chosen preset is unchanged", d.choice == "general")
-    check("... and one plain reason is returned", "roiled back" in out["error"] or "rolled back" in out["error"], out)
+    check("... and the sentence names the TWO restores it made, never the model - "
+          "nothing was switched, so nothing rolled a model back",
+          out["error"].endswith("the chat lane and the chosen preset were rolled back"),
+          out)
+    check("... with the machine facts beside the sentence",
+          out["restored"] == ["the chat lane", "the chosen preset"]
+          and out["not_restored"] == [], out)
+
+
+def t_nothing_to_restore_is_not_a_restore():
+    # The choice file was never written, so the restore is its REMOVAL. A file
+    # that is already gone is the state we asked for: success, and the secret
+    # is that `_choice_path().unlink()` raising FileNotFoundError used to be
+    # swallowed by the same `except Exception: pass` that hid real failures.
+    d = Deps(switch_ok=False)
+    code, out = apply({"preset": "fast"}, d)
+    check("no remembered preset: its removal is the restore, and it counts",
+          code == 409 and out["restored"] == ["the chat lane", "the chosen preset"]
+          and out["not_restored"] == [], (code, out))
+
+
+def t_a_later_failure_rolls_the_model_back_too():
+    # The lane write fails ONCE (a transient refusal), so the restore after it
+    # can succeed - the realistic shape of "a later step failed".
+    d = Deps(set_fail_first_only=True)
+    d.choice = "general"
+    code, out = P.apply_preset("fast", start_lane=d.start, switch_model=d.switch,
+                               active_url=d.get_url, set_active_url=d.set_url,
+                               read_choice=d.read_choice, write_choice=d.write_choice,
+                               rollback_model=d.rollback_model)
+    check("a failure AFTER the switch rolls the switched model back (auto tier)",
+          code == 409 and ("rollback",) in d.calls, (code, d.calls, out))
+    check("... and all three restores are named, because all three were seen",
+          out["restored"] == ["the model", "the chat lane", "the chosen preset"]
+          and out["not_restored"] == []
+          and "the model, the chat lane and the chosen preset were rolled back" in out["error"],
+          out)
+    check("... and the lane pointer and the choice are back where they were",
+          d.lane == "http://127.0.0.1:11436" and d.choice == "general", (d.lane, d.choice))
+
+
+def t_a_rollback_never_claims_what_it_could_not_restore():
+    """The defect this suite was written for (silent-failure audit, row 2).
+
+    `set_active_url` raised on the restore and `write_choice` answered False,
+    and the old code said "chat lane, chosen preset and model were rolled
+    back" anyway. The sentence must name only the model, which is the one
+    restore that was observed, and list the other two as not restored.
+    """
+    d = Deps(choice_ok=False, set_raises_after_first=True)
+    d.choice = "general"
+    code, out = apply({"preset": "fast"}, d)
+    check("a restore that raises is NOT reported as done: no blanket 'were rolled back'",
+          code == 409 and "were rolled back" not in out["error"], out)
+    check("... the sentence says exactly what could not be restored",
+          "could not be restored" in out["error"]
+          and "the chat lane" in out["error"] and "the chosen preset" in out["error"], out)
+    check("... and the machine facts agree with the sentence",
+          out["restored"] == ["the model"]
+          and out["not_restored"] == ["the chat lane", "the chosen preset"], out)
+    check("... and it tells the owner to check the PC rather than trust it",
+          "Check that on the PC" in out["error"], out)
+
+    # The same shape with the choice write RAISING instead of returning False.
+    class Raising(Deps):
+        def write_choice(self, preset):
+            raise OSError("the settings folder refuses the write")
+
+    r = Raising(set_raises_after_first=True)
+    r.choice = "general"
+    code, out = apply({"preset": "fast"}, r)
+    check("a choice write that raises is a third failed restore, said as one",
+          code == 409 and out["not_restored"] == ["the chat lane", "the chosen preset"]
+          and "were rolled back" not in out["error"], out)
+
+    # The choice file's own REMOVAL failing (previous_preset is None).
+    real_path = P._choice_path
+
+    class NoUnlink:
+        def unlink(self):
+            raise OSError("the file is locked")
+
+    P._choice_path = lambda: NoUnlink()
+    try:
+        d = Deps(switch_ok=False)
+        code, out = apply({"preset": "fast"}, d)
+    finally:
+        P._choice_path = real_path
+    check("a choice file that could not be removed is named, not skipped",
+          code == 409 and out["not_restored"] == ["the chosen preset"]
+          and "the chosen preset could not be restored" in out["error"], out)
+
+    # A model rollback that reports ok:false, with the other two fine.
+    d = Deps(rollback_ok=False, set_fail_first_only=True)
+    code, out = P.apply_preset("fast", start_lane=d.start, switch_model=d.switch,
+                               active_url=d.get_url, set_active_url=d.set_url,
+                               read_choice=d.read_choice, write_choice=d.write_choice,
+                               rollback_model=d.rollback_model)
+    check("a model rollback that says ok:false is 'could not be restored', not a claim",
+          code == 409 and out["not_restored"] == ["the model"]
+          and "the model could not be restored" in out["error"], out)
 
 
 def t_install_wires_only_the_apply_route():
@@ -204,24 +326,14 @@ def t_get_work_serves_the_new_contract():
     check("... and the token check", h.do_GET() == 401, seen)
 
 
-def t_a_later_failure_rolls_the_model_back_too():
-    d = Deps(set_ok=False)      # switch succeeds, pointing the lane fails
-    rolled = []
-    code, out = P.apply_preset("fast", start_lane=d.start, switch_model=d.switch,
-                               active_url=d.get_url, set_active_url=d.set_url,
-                               read_choice=d.read_choice, write_choice=d.write_choice,
-                               rollback_model=lambda: (rolled.append(True), {"ok": True})[1])
-    check("a failure AFTER the switch rolls the switched model back (auto tier)",
-          code == 409 and rolled == [True] and "model were rolled back" in out["error"],
-          (code, rolled, out))
-    check("... and the lane pointer is back where it was", d.lane == "http://127.0.0.1:11436")
-
 def main() -> int:
     for fn in (t_default_unchanged_without_a_call, t_general_success_one_card_and_order,
                t_fast_starts_the_coding_lane_on_demand, t_refusals_change_nothing,
                t_lane_start_failure_stops_before_the_switch,
                t_switch_failure_rolls_back_lane_and_choice, t_install_wires_only_the_apply_route,
+               t_nothing_to_restore_is_not_a_restore,
                t_a_later_failure_rolls_the_model_back_too,
+               t_a_rollback_never_claims_what_it_could_not_restore,
                t_get_work_serves_the_new_contract):
         fn()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

@@ -1025,15 +1025,17 @@ def t_always_on_rules_own_no_switch_and_point_to_their_exception():
 
 def t_settings_gaps_are_real_named_and_owned():
     """A command-controllable feature whose control is NOT on the Settings page
-    must say so, with an owner - setup-ui's audit of 2026-10-22 (chat history
-    switch + retention, and the two learning switches, live only in Brain).
-    A page-less typed path that looked "covered" would be the exact lie this
-    project keeps fixing."""
+    must say so, with an owner - setup-ui's audit of 2026-10-22. The list is
+    shrinking as each gap is closed, and it is pinned so a gap cannot quietly
+    disappear and cannot quietly come back: `history` left it on 2026-10-28
+    when the settings audit (G5) proved the switch had been drawn in Security
+    all along. A page-less typed path that looked "covered" would be the exact
+    lie this project keeps fixing."""
     bool_keys = {b.key for b in R.BOOL_SETTINGS}
     choice_keys = {c.key for c in R.CHOICE_SETTINGS}
     by_id = {r["id"]: r for r in FG.control_matrix()}
-    check("both known Settings gaps are recorded", set(FG.SETTINGS_GAPS) ==
-          {"history", "memory-learning"}, sorted(FG.SETTINGS_GAPS))
+    check("no Settings gap is left recorded", set(FG.SETTINGS_GAPS) == set(),
+          sorted(FG.SETTINGS_GAPS))
     for fid, gap in FG.SETTINGS_GAPS.items():
         row = by_id.get(fid)
         check(f"{fid} is a real feature", row is not None, fid)
@@ -1890,7 +1892,12 @@ def t_the_card_sentence_is_only_where_a_card_really_is():
     single = [r for r in SOURCE
               if FG.label_for(r) == FG.LABEL_SWITCH_ADJUST
               and len(FG.feature_switches(r)) == 1]
-    check("there are single-switch Switchable rows to check", len(single) == 15,
+    # 14 after both 2026-10-28 batches: `anti-slop` joins the single-switch rows
+    # (its registry switch is one key), while `memory-saved` LEFT it when the
+    # settings audit's G1 gave its learning switches the `learning` card and its
+    # covers now name TWO switches - so the counts are not the same side's 15 or
+    # 13, they are the merged tree's 14.
+    check("there are single-switch Switchable rows to check", len(single) == 14,
           len(single))
     R = FG._registry()
     real_keys = {b.key for b in getattr(R, "BOOL_SETTINGS", ())}

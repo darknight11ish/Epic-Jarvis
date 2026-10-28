@@ -74,7 +74,8 @@ await check("the Rust side's own copies are the contract's words", async () => {
     assert.ok(m, name);
     return m[1].replace(/\\\n\s*/g, "").replace(/\\"/g, "\"");
   };
-  const pairs = { NOT_RUNNING: "jarvis_not_running", TIMEOUT: "timeout", DROPPED: "connection_dropped",
+  const pairs = { NOT_RUNNING: "jarvis_not_running", PC_UNREACHABLE: "pc_unreachable",
+                  TIMEOUT: "timeout", DROPPED: "connection_dropped",
                   KEY_STORE: "key_store_refused" };
   for (const [name, kind] of Object.entries(pairs)) {
     assert.equal(konst(`${name}_SAYS`), CASES.kinds[kind].says, name);
@@ -87,6 +88,25 @@ await check("each failure picks the kind the contract says (the phone runs the s
   for (const c of CASES.classify) {
     assert.equal(classify(c.input), c.kind, c.name);
   }
+});
+
+await check("a refused connection and a connect timeout are two answers, not one", async () => {
+  // The audit finding of 2026-10-27 (row 3): Rust sent both to "Jarvis isn't
+  // running on your PC", so a sleeping PC or a down private network told the
+  // owner to press Start on a service that may never have stopped. The page's
+  // own table has the honest pair; this pins it, and the Rust pair.
+  const refused = shown(classify({ network: "refused" }));
+  const timedOut = shown(classify({ network: "connect_timeout" }));
+  assert.equal(refused.kind, "jarvis_not_running");
+  assert.equal(timedOut.kind, "pc_unreachable");
+  assert.equal(timedOut.says, CASES.kinds.pc_unreachable.says);
+  assert.equal(timedOut.fix, CASES.kinds.pc_unreachable.fix);
+  assert.notEqual(refused.says, timedOut.says);
+  assert.notEqual(refused.fix, timedOut.fix);
+  // The words for a PC that never answered must not send the owner to Start.
+  assert.doesNotMatch(timedOut.says + timedOut.fix, /press Start|isn't running/i);
+  assert.match(timedOut.fix, /asleep|switched off/i);
+  assert.match(timedOut.fix, /Tailscale|Meshnet/i);
 });
 
 await check("the PC's own sentence is shown as it is, first letter raised", async () => {

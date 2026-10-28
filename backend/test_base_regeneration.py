@@ -98,9 +98,10 @@ def t_the_rule_is_the_readme_s_rule():
                      # engine that draws them (the same day's cosmos port), and
                      # the History sidebar the same page loads with a plain
                      # <script src>, with the row-action table it shares with the
-                     # Brain's History tab
+                     # Brain's History tab - and, from 2026-10-28, the shared
+                     # invoke budget that hud-presets.js imports
                      "hud-edit.js", "hud-presets.js", "hud-history.js",
-                     "history-actions.js", "galaxy-presets.js",
+                     "history-actions.js", "invoke-budget.js", "galaxy-presets.js",
                      "galaxy-cosmos.js",
                      "private-speech.js",
                      "face-voice.js", "face-moments.js", "face-tuning.js",

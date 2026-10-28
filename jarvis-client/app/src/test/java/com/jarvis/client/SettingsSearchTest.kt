@@ -332,12 +332,12 @@ class SettingsSearchTest {
         }
         assertEquals(
             "this test walked no row that names switch titles, so it checks nothing",
-            2,
+            3,
             rowsWalked,
         )
         assertTrue(
             "the SwitchRow reader found too few switches to be reading the screens: it " +
-                "found $switchesFound, and the two rows it walks draw nine between them",
+                "found $switchesFound, and the three rows it walks draw ten between them",
             switchesFound >= 9,
         )
     }

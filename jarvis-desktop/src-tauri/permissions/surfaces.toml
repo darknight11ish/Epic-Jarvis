@@ -1690,6 +1690,29 @@ permissions = [
 ]
 
 # ---------------------------------------------------------------------------
+# The two learning switches for Settings (2026-10-28, the settings audit's G1;
+# `brain/auto_learn.rs` and `brain.rs`, the routes the Brain already uses -
+# GET /api/memory/learning, POST /api/memory/learning and
+# POST /api/memory/learning/sensitive). The owner's requirement of 2026-10-22:
+# every switch must be findable AND adjustable in Settings. These are the
+# Brain's OWN three narrow commands, granted so a change here is the same write
+# path as the Brain and the typed sentence, not a second idea of learning.
+# Deliberately NOT the fact list, the "saved unseen" ids, Forget or export:
+# only the switch's state and the two switch writes are reachable here, so
+# this window still cannot read a saved fact. ON raises the PC's ONE
+# `learning_enable`/`learning_sensitive_enable` card; OFF is at once; both
+# writes are held on a stale link in Rust (rule 4). Settings only.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "learning-settings"
+description = "Read the two learning switches and their waiting cards, turn background learning on (one approval card on this PC) or off at once, and turn automatic remembering of sensitive topics on (one card) or off. Settings only; it never reads a saved fact, never forgets one and never exports anything."
+permissions = [
+  "allow-brain-memory-learning",
+  "allow-brain-memory-learning-status",
+  "allow-brain-memory-learning-sensitive",
+]
+
+# ---------------------------------------------------------------------------
 # The big coding model's switch (2026-10-22; `big_coder.rs`; backend
 # `jarvis_big_coder.py`, route added by `big-coder.patch`, JARVIS-API §126).
 # Read the switch and ask for it ON (the PC raises ONE approval card) or OFF at
@@ -2092,6 +2115,31 @@ description = "Read the ten personalities and the owner's own - the PC's answer 
 permissions = [
   "allow-hud-personalities",
   "allow-hud-switch-personality",
+]
+
+# The HUD's face models icon (2026-10-28, the owner's ask: "add a jarvis model
+# icon to the left column of the jarvis desktop that has all of the jarvis
+# models (face models)"). ONE command, ONE face id. Two narrow guarantees, and
+# both are the point:
+#
+#   * the id is PROVED against the spec before anything is stored
+#     (`spec.rs::has_face`, parsed from the same jarvis-visual-spec.json the
+#     Faces window draws), so no invented face can enter the appearance
+#     document - `faces.html` would silently draw its first face for one;
+#   * the save is the SAME `set_appearance` the Faces window's "Use this face"
+#     uses (this PC's store, then POST /api/appearance), so the phone sees it
+#     and a reload keeps it - this window stores nothing of its own.
+#
+# A face is cosmetic, so no card is raised (backend/README.md says why the
+# appearance route needs none), and the command carries no binding, colour,
+# pattern or animal field: this window can change WHICH face is worn and
+# nothing about how anything looks. It cannot read the appearance document
+# through this set either - the shell pushes that into the page in any case.
+[[set]]
+identifier = "hud-faces"
+description = "Switch WHICH face model Jarvis wears: one face id, proved against the spec and saved through the Faces window's own appearance save. Cosmetic - no card, no colours, no bindings and no animal switch are reachable here."
+permissions = [
+  "allow-hud-set-face",
 ]
 
 # The HUD Presets menu's Cloud escalation switch (2026-10-27). The owner asked

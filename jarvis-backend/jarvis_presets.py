@@ -943,7 +943,10 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     through LANE_START_KEYS. `pending` presets and heavy mode refuse before
     anything happens. Once the model HAS switched, any later failure rolls the
     model back with the auto-tier jarvis_models.rollback() as well as restoring
-    the chat lane and the remembered preset.
+    the chat lane and the remembered preset. **Each of those three restores is
+    checked** and the answer names only the ones that were seen to work; the
+    ones that were not are listed under `not_restored` and said in the error
+    (silent-failure audit 2026-10-27, row 2).
     """
     if str(preset_id or "") == CLOUD_PRESET_ID:
         return apply_cloud(provider=provider, gate_check=cloud_gate)
@@ -988,38 +991,88 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
         # nothing was switched - said in the docstring and docs. Once the model
         # HAS switched, every later failure undoes it with the auto-tier
         # rollback, not only the lane pointer and the remembered choice.
-        model_note = ""
+        #
+        # EVERY restore is checked, and the sentence names only what was
+        # OBSERVED to happen (silent-failure audit 2026-10-27, row 2). It used
+        # to be `except Exception: pass` on the lane pointer, the choice
+        # write's return value never read, and then one sentence asserting all
+        # three had been rolled back - so `changed: false` could stand beside a
+        # model, a lane or a choice that had really moved. Now: a restore that
+        # raised, returned a falsey result or reported `ok: false` is named as
+        # NOT restored, and nothing is claimed that was not seen.
+        restored: list = []
+        failed: list = []
+
+        def outcome(name: str, done: bool) -> None:
+            (restored if done else failed).append(name)
+
         if switched_ok:
             try:
                 rb = rollback_model()
-                if not (isinstance(rb, dict) and rb.get("ok")):
-                    model_note = " (the model rollback did not report ok)"
-            except Exception as exc:
-                model_note = f" (the model rollback failed: {type(exc).__name__})"
+                outcome("the model", isinstance(rb, dict) and rb.get("ok") is True)
+            except Exception:
+                outcome("the model", False)
+        # The chat lane pointer. `_set_active_url` answers a bool, so a falsey
+        # answer is a real failure, not a "probably fine".
         try:
-            set_active_url(previous_lane)
+            outcome("the chat lane", bool(set_active_url(previous_lane)))
         except Exception:
-            pass
+            outcome("the chat lane", False)
+        # The remembered preset: a file write, or its removal when nothing was
+        # remembered before this apply (a file that is already gone is the
+        # state we wanted, so that is success).
         try:
             if previous_preset is None:
                 try:
                     _choice_path().unlink()
-                except Exception:
+                except FileNotFoundError:
                     pass
+                outcome("the chosen preset", True)
             else:
-                write_choice(previous_preset)
+                outcome("the chosen preset", bool(write_choice(previous_preset)))
         except Exception:
-            pass
+            outcome("the chosen preset", False)
+
+        def spoken(names) -> str:
+            if len(names) == 1:
+                return names[0]
+            return ", ".join(names[:-1]) + " and " + names[-1]
+
+        if failed:
+            if restored:
+                note = (f"{spoken(restored)} "
+                        f"{'was' if len(restored) == 1 else 'were'} rolled back, but "
+                        f"{spoken(failed)} could not be restored")
+            else:
+                note = f"{spoken(failed)} could not be restored"
+            note += ". Check that on the PC before relying on the preset."
+        else:
+            note = (f"{spoken(restored)} "
+                    f"{'was' if len(restored) == 1 else 'were'} rolled back")
+        # `changed: false` means the preset is NOT the chosen one. It says
+        # nothing about the model, the lane or the choice file - `restored` and
+        # `not_restored` are the facts about those, and both are always sent.
         return code, {"ok": False, "changed": False,
-                      "error": f"{reason}; chat lane, chosen preset and model were "
-                               f"rolled back{model_note}"}
+                      "error": f"{reason}; {note}",
+                      "restored": restored, "not_restored": failed}
     if not isinstance(switched, dict) or not switched.get("ok"):
         return rollback(f"the model switch did not happen: "
                         f"{(switched or {}).get('reason', 'refused')}")
     switched_ok = True
-    if not set_active_url(target_lane):
+    # Both forward writes are checked AND held: an exception here used to
+    # escape `apply_preset` (a 500 the caller could only show as an opaque
+    # failure) instead of rolling back and saying what happened.
+    try:
+        lane_ok = bool(set_active_url(target_lane))
+    except Exception:
+        lane_ok = False
+    if not lane_ok:
         return rollback("the chat lane could not be pointed at the new lane")
-    if not write_choice(p.id):
+    try:
+        choice_ok = bool(write_choice(p.id))
+    except Exception:
+        choice_ok = False
+    if not choice_ok:
         return rollback("the chosen preset could not be saved")
     return 200, {"ok": True, "changed": True, "preset": p.view(),
                  "lane": dict(p.lane_info), "base_url": target_lane,

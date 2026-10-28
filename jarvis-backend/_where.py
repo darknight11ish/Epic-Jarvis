@@ -812,6 +812,9 @@ SHIPPED = (
     # same reason.
     "static/hud-history.js",
     "static/history-actions.js",
+    # The shared invoke budget (2026-10-28): hud-presets.js imports it, so
+    # the page's closed whitelist has to serve it beside the server.
+    "static/invoke-budget.js",
     # The Galaxy's looks (2026-10-27): the HUD's look switcher loads this module
     # with a dynamic import(), so the page's closed whitelist has to serve it
     # from beside the server like the modules above.

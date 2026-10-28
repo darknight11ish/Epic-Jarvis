@@ -48,6 +48,16 @@
  *     above it on the canvas, and the picture still fills the frame. The fog is
  *     proved in the same place: it thins with the camera, so a 240-name picture
  *     is not fogged to black.
+ *  9. THE FRAME BUDGET IS TWO RULES, NOT ONE. A slow renderer first loses
+ *     PIXELS: the 3D canvas steps down to `RENDER_SCALE_MIN` while the label
+ *     canvas and the picture's size on screen never move. A renderer still slow
+ *     after that draws every OTHER frame, so the motion steps instead of the
+ *     page freezing. Both halves are pinned here as pure maths - that a fast
+ *     machine never rises above the display's own ratio, that a slow one only
+ *     ever steps down and stops at the floor, and that a picture which got cheap
+ *     earns its pixels back one step at a time. The thresholds themselves are
+ *     pinned too, so the half-rate switch cannot drift away from the resolution
+ *     rule that is supposed to have gone first.
  *
  * The render layer (three.js, the GPU, the canvas) is proved by the HUD suites
  * and by CI's browser run, not here.
@@ -59,6 +69,7 @@ import {
   COSMOS_DEFAULT_LOOK,
   COSMOS_PRESET_ORDER,
   COSMOS_PRESETS,
+  FAST_FRAME_MS,
   FOG_DENSITY,
   FRAME_FILL,
   HELIX_PER_COLUMN,
@@ -68,10 +79,13 @@ import {
   NEBULA_POINTS,
   NEBULA_WELLS,
   PRESET_ACTIONS,
+  RENDER_SCALE_MIN,
   ROLE_OF_GROUP,
   SENTINEL_RINGS,
+  SLOW_FRAME_MS,
   STAR_COUNT,
   TONE_EXPOSURE,
+  VERY_SLOW_FRAME_MS,
   ZEN_HALO_GAP,
   actionsFor,
   boundsOf,
@@ -87,6 +101,7 @@ import {
   isCosmosLook,
   mulberry32,
   nebulaCloud,
+  nextRenderScale,
   parentOf,
   presetGuides,
   presetLinks,
@@ -961,6 +976,107 @@ check("every look has its two plain-word controls, and no look is missing one", 
   }
   assert.deepEqual(actionsFor(DEFAULT_PRESET), []);
   assert.deepEqual(actionsFor("not-a-look"), []);
+});
+
+/* -------------------------------------------------------------------------
+ * 11. The frame budget
+ *
+ * The owner's ask that produced this: the Galaxy must stay usable on a machine
+ * with no usable GPU instead of crawling. Two halves, in this order - fewer
+ * pixels, then fewer frames - and the second only turns on once the first has
+ * given all it can.
+ * ---------------------------------------------------------------------- */
+
+check("the frame budget's thresholds are ordered, and the floor is a fraction", () => {
+  assert.ok(FAST_FRAME_MS < SLOW_FRAME_MS, "the fast threshold is not below the slow one");
+  assert.ok(SLOW_FRAME_MS < VERY_SLOW_FRAME_MS, "the slow threshold is not below the very-slow one");
+  assert.ok(RENDER_SCALE_MIN > 0 && RENDER_SCALE_MIN < 1,
+    `RENDER_SCALE_MIN is ${RENDER_SCALE_MIN}, which is not a fraction of the display ratio`);
+  // The half-rate switch and the resolution rule name the SAME number, which is
+  // what "still slow after the resolution has given all it can" means. If these
+  // ever drift apart the picture either steps frames while pixels were still
+  // available, or never steps at all.
+  assert.equal(SLOW_FRAME_MS, 34);
+});
+
+check("a fast renderer never draws more pixels than the display has", () => {
+  // At the display's own ratio and faster than FAST_FRAME_MS, there is nothing
+  // to win: the 3D canvas may not be upscaled past 1.
+  assert.equal(nextRenderScale(1, 8), 1);
+  assert.equal(nextRenderScale(1, FAST_FRAME_MS - 1), 1);
+  // Below full scale it climbs, but never past the display's ratio.
+  let scale = RENDER_SCALE_MIN;
+  for (let i = 0; i < 40; i += 1) scale = nextRenderScale(scale, 8);
+  assert.equal(scale, 1, "a cheap picture never earned all its pixels back");
+  // And a value that is already 1 stays 1.
+  assert.equal(nextRenderScale(1, 1), 1);
+});
+
+check("a slow renderer loses pixels one step at a time, and stops at the floor", () => {
+  const slow = SLOW_FRAME_MS + 5;
+  assert.equal(nextRenderScale(1, slow), 0.75);
+  assert.equal(nextRenderScale(0.75, slow), 0.5625);
+  assert.equal(nextRenderScale(0.5625, slow), 0.421875);
+  // The floor is a floor: further slow frames cannot take it below.
+  assert.equal(nextRenderScale(RENDER_SCALE_MIN, slow), RENDER_SCALE_MIN);
+  assert.equal(nextRenderScale(0.3, slow), RENDER_SCALE_MIN,
+    "0.3 * 0.75 is below the floor, so it must clamp rather than go under it");
+  // Never below the floor on any slow input, stepping down from full.
+  let scale = 1;
+  for (let i = 0; i < 50; i += 1) {
+    scale = nextRenderScale(scale, SLOW_FRAME_MS + 1);
+    assert.ok(scale >= RENDER_SCALE_MIN, `scale fell to ${scale}, under the floor`);
+  }
+  assert.equal(scale, RENDER_SCALE_MIN);
+});
+
+check("a very slow renderer goes straight to the floor, not one step at a time", () => {
+  // 60ms+ is under 17 frames a second: there is no point rationing 25% at a
+  // time, so the rule jumps to the floor in ONE frame.
+  assert.equal(nextRenderScale(1, VERY_SLOW_FRAME_MS + 1), RENDER_SCALE_MIN);
+  assert.equal(nextRenderScale(1, 1000), RENDER_SCALE_MIN);
+});
+
+check("a picture that got cheap earns its pixels back one step at a time", () => {
+  const fast = FAST_FRAME_MS - 5;
+  assert.equal(nextRenderScale(0.5, fast), 0.5 / 0.75);
+  assert.equal(nextRenderScale(0.9, fast), 1, "90% climbs to the display ratio, not past it");
+  // It takes more than one fast frame to get from the floor to full - that is
+  // what stops a machine on the edge from flapping between 25% and 100%.
+  assert.equal(nextRenderScale(RENDER_SCALE_MIN, fast), RENDER_SCALE_MIN / 0.75);
+  assert.ok(nextRenderScale(RENDER_SCALE_MIN, fast) < 1);
+});
+
+check("a steady frame changes nothing, and nonsense input is never a broken picture", () => {
+  // Between FAST and SLOW - the ordinary 30-60 fps band - the scale is held.
+  assert.equal(nextRenderScale(1, 30), 1);
+  assert.equal(nextRenderScale(0.5, 30), 0.5);
+  // A scale that is not a positive number falls back to the display ratio
+  // rather than to NaN or zero pixels.
+  assert.equal(nextRenderScale(Number.NaN, 8), 1);
+  assert.equal(nextRenderScale(0, 8), 1);
+  assert.equal(nextRenderScale(-3, 8), 1);
+  assert.equal(nextRenderScale(undefined, 8), 1);
+  // A gap that is not a usable number is the identity: no sample, no change.
+  assert.equal(nextRenderScale(0.5, Number.NaN), 0.5);
+  assert.equal(nextRenderScale(0.5, 0), 0.5);
+  assert.equal(nextRenderScale(0.5, -12), 0.5);
+});
+
+check("the rule is monotone: worse frames never give a picture more pixels", () => {
+  const medians = [1, FAST_FRAME_MS - 1, FAST_FRAME_MS, 30, SLOW_FRAME_MS,
+    SLOW_FRAME_MS + 1, 50, VERY_SLOW_FRAME_MS, VERY_SLOW_FRAME_MS + 1, 200];
+  for (const start of [1, 0.75, 0.5, RENDER_SCALE_MIN]) {
+    let previous = Infinity;
+    for (const median of medians) {
+      const scale = nextRenderScale(start, median);
+      assert.ok(scale <= previous + 1e-12,
+        `a worse frame (${median}ms) raised the scale from ${previous} to ${scale}`);
+      previous = scale;
+    }
+    assert.ok(previous >= RENDER_SCALE_MIN && previous <= 1,
+      `the slowest frame left the scale at ${previous}`);
+  }
 });
 
 /* -------------------------------------------------------------------------

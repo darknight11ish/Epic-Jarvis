@@ -374,6 +374,13 @@ export function mountHudEditor(options = {}) {
     title.className = "hud-card-title";
     title.textContent = labelOf(id);
     head.appendChild(title);
+    // Shown only while the card is hidden and Edit HUD is on: the ghost needs
+    // to say what state the card is in, not just look dimmer.
+    const word = doc.createElement("span");
+    word.className = "hud-card-hidden-word";
+    word.textContent = "hidden";
+    word.hidden = true;
+    head.appendChild(word);
     head.appendChild(buildToolbar(id));
     const body = doc.createElement("div");
     body.className = "hud-card-body";
@@ -483,7 +490,14 @@ export function mountHudEditor(options = {}) {
       if (!shell) continue;
       const regionName = EDIT_REGIONS.includes(card.region) ? card.region : "right_rail";
       byRegion.get(regionName).push(card);
-      shell.hidden = !card.visible;
+      // 2026-10-28 (the owner's Edit HUD field test): a hidden card must stay
+      // reachable WHILE EDITING, or its own Show control can never be clicked
+      // again. So in edit mode a hidden card is painted as a dimmed ghost (its
+      // header and toolbar; the page CSS folds its body away, so the card
+      // itself stays hidden). Outside edit mode the shell is hidden exactly as
+      // the card is, as before.
+      shell.hidden = !card.visible && !editing;
+      shell.classList.toggle("hud-card-hidden", !card.visible);
       shell.classList.toggle("hud-card-collapsed", effectiveCollapsed(card, pending));
       shell.setAttribute("data-hud-movable", "yes");
       shell.style.setProperty("--hud-span", String(card.col_span));
@@ -492,6 +506,8 @@ export function mountHudEditor(options = {}) {
         "data-hud-span",
         `${card.col_span}x${card.row_span}`,
       );
+      const hiddenWord = shell.querySelector(".hud-card-hidden-word");
+      if (hiddenWord) hiddenWord.hidden = card.visible;
       const collapseBtn = shell.querySelector('[data-hud-edit-command="collapse"]');
       if (collapseBtn) {
         const folded = effectiveCollapsed(card, pending);
@@ -501,8 +517,14 @@ export function mountHudEditor(options = {}) {
       }
       const hideBtn = shell.querySelector('[data-hud-edit-command="hide"]');
       if (hideBtn) {
-        hideBtn.setAttribute("aria-pressed", card.visible ? "false" : "true");
-        hideBtn.textContent = card.visible ? "\u2715" : "\u25cb";
+        // The same pattern as Fold above: the words name the action the press
+        // takes, and aria-pressed says what the card is now. One control, both
+        // directions - the field test found the old one could only hide.
+        const hidden = !card.visible;
+        hideBtn.setAttribute("aria-pressed", hidden ? "true" : "false");
+        hideBtn.textContent = hidden ? "\u25cb" : "\u2715";
+        hideBtn.title = `${hidden ? "Show" : "Hide"} ${labelOf(card.id)}`;
+        hideBtn.setAttribute("aria-label", hideBtn.title);
       }
     }
     for (const [region, cards] of byRegion) {
@@ -673,7 +695,13 @@ export function mountHudEditor(options = {}) {
     else if (command === "size") {
       doAction({ type: "resizeCard", id, size: button.getAttribute("data-hud-edit-size") });
     } else if (command === "collapse") doAction({ type: "toggleCollapsed", id });
-    else if (command === "hide") doAction({ type: "setVisible", id, visible: false });
+    else if (command === "hide") {
+      // A real toggle (2026-10-28, the owner's field test). The setVisible
+      // action already flips the card's own state when no value is given, so
+      // this is the SAME door as the `h` key below - never a second mutation
+      // path, and never a hard-coded hide.
+      doAction({ type: "setVisible", id });
+    }
   }
 
   function onRegionChange(event) {
@@ -706,7 +734,7 @@ export function mountHudEditor(options = {}) {
       const step = event.key === "ArrowUp" ? -1 : 1;
       doAction({ type: "resizeCard", id, col_span: card.col_span, row_span: card.row_span + step });
     } else if (event.key === "Enter" || event.key === " ") doAction({ type: "toggleCollapsed", id });
-    else if (event.key === "h" || event.key === "H") doAction({ type: "setVisible", id, visible: !card.visible });
+    else if (event.key === "h" || event.key === "H") doAction({ type: "setVisible", id });
     else handled = false;
     if (handled) event.preventDefault();
   }

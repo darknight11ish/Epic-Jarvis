@@ -3,7 +3,7 @@
 The owner's feature list, as data: 142 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 d9bb52708f01bb82cffcde88b0826b2a6dc8865ed420b0de59870913c28c9d26); the apps' Features pages read their own
+`features/features.json` (sha256 2b640df02d7f6e44f1e698db4a11ac4ae3b53d705f15644e80118094302d64a3); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "d9bb52708f01bb82cffcde88b0826b2a6dc8865ed420b0de59870913c28c9d26"
+SOURCE_SHA256 = "2b640df02d7f6e44f1e698db4a11ac4ae3b53d705f15644e80118094302d64a3"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -69,8 +69,8 @@ FEATURES = (
         "id": "read-aloud",
         "group": "Talking",
         "title": "Jarvis reads its answers aloud",
-        "what": "The answer is spoken as well as shown.",
-        "where": "Settings, Voice, \"Read aloud\". Speaking starts at the first comma once the phrase is long enough.",
+        "what": "The answer is spoken as well as shown. A finished answer can be read out again from its own speaker button.",
+        "where": "On by default: a question asked by voice gets a spoken answer, and no switch turns that off. Settings, Voice, \"Answers that use what Jarvis remembers\" and \"Answers that use sensitive saved facts\" choose whether those answers are read aloud or kept on screen. Settings, HUD, \"Read-aloud buttons on answers\" adds the speaker to each finished answer - it does not turn read-aloud on or off.",
         "asks": "No card.",
         "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
         "surface": "both",
@@ -357,11 +357,11 @@ FEATURES = (
         "group": "Memory",
         "title": "Facts Jarvis saved by itself",
         "what": "Everyday things about you and your projects, saved without asking each time.",
-        "where": "Brain, Memory, Saved automatically.",
+        "where": "Brain, Memory, Saved automatically. The switch that governs it is also in Settings, Learning.",
         "asks": "Everyday facts save with no card. Health, money, passwords and account numbers wait for your yes.",
         "limit": "Only your own words count - never a web page, an email, a document or tool output.",
         "surface": "both",
-        "covers": ["brain.memory.auto", "memory"],
+        "covers": ["brain.memory.auto", "memory", "settings.learning"],
     },
     {
         "id": "memory-waiting",
@@ -447,11 +447,11 @@ FEATURES = (
         "group": "Memory",
         "title": "The learning switches",
         "what": "Whether Jarvis learns by itself, and how much it remembers.",
-        "where": "Brain, Memory, Learning.",
+        "where": "Brain, Memory, Learning. The two switches are also in Settings, Learning.",
         "asks": "Turning automatic learning on raises a card; turning it off is instant. \"Also remember sensitive topics automatically\" is off by default.",
         "limit": "Everyday facts are learned automatically by default.",
         "surface": "both",
-        "covers": ["brain.memory.learning", "memory", "money-and-health"],
+        "covers": ["brain.memory.learning", "memory", "money-and-health", "settings.learning"],
     },
     {
         "id": "wiki",
@@ -507,7 +507,7 @@ FEATURES = (
         "asks": "Turning keeping back on raises a card; deleting one chat is instant; forgetting what a chat taught asks first.",
         "limit": "Kept on the PC, encrypted, by default. This phone keeps none of it.",
         "surface": "both",
-        "covers": ["brain.tab.history", "brain.history.conversations", "entry.history", "records"],
+        "covers": ["brain.tab.history", "brain.history.conversations", "entry.history", "records", "settings.security"],
     },
     {
         "id": "chat-tags",

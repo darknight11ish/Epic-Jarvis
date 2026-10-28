@@ -194,13 +194,18 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // offered the small read-only Python tool. A row added at the end moves no
     // other number; it sits under Idle new on the screen and in the jump list.
     "sandbox" to 29,
+    // "Learning" (2026-10-28, the settings audit's G1): the two learning
+    // switches, which had no Settings row on either app before this. It sits
+    // after the sandbox and before First-time setup; every index below it
+    // moved down by one.
+    "learning" to 30,
     // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
     // fourteen questions and its READ-ONLY plan, drawn by
     // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
-    "setup-questionnaire" to 30,
+    "setup-questionnaire" to 31,
     // "All features and abilities" (2026-10-22): the searchable directory of
     // all 140 features. A row added at the end moves no other number.
-    "all-features" to 31,
+    "all-features" to 32,
 )
 
 /**
@@ -786,6 +791,17 @@ fun SettingsScreen(
                 MenuFrame(menus, "settings.sandbox") { SandboxSection(canAct = canAct) }
             }
 
+            // "Learning" (2026-10-28, the settings audit's G1): the two
+            // learning switches, which had no Settings row on either app before
+            // this. The same switches the Brain's Memory tab draws, through the
+            // same runtime calls (LearningSettingsPlate.kt): ON raises one
+            // approval card on the PC and OFF is instant. Behind its own
+            // `menus.shows(...)` and MenuFrame like every hideable row
+            // (MenuVisibilityTest).
+            if (drawn("learning")) if (menus.shows("settings.learning")) item(key = "learning") {
+                MenuFrame(menus, "settings.learning") { LearningSection(canAct = canAct) }
+            }
+
             // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the
             // PC's fourteen questions and its READ-ONLY plan, drawn by
             // SetupQuestionnairePlate.kt. It is NOT a hideable menu: no menu id
@@ -916,7 +932,7 @@ private fun SettingsJumpList(onJump: (String) -> Unit) {
             }
         }
         Text(
-            "Chat history, saved facts and background learning are in Brain, not here.",
+            "Chat history and saved facts are in Brain, not here. The learning switches are in Learning, above.",
             style = MaterialTheme.typography.labelSmall,
             color = chrome.textLo,
         )
