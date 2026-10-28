@@ -662,11 +662,13 @@ await check("CONTROL: Rust asks the PC nothing while hidden, checks the id, hold
   }
 });
 
-await check("CONTROL: the Settings card has a stable id, a jump link under Rare, and the bar a place for the table", () => {
+await check("CONTROL: the Settings card has a stable id, a jump link, and the bar a place for the table", () => {
   assert.match(HTML, /<section class="card" id="spending">/);
   const nav = HTML.slice(HTML.indexOf('id="settings-jump"'), HTML.indexOf("</nav>"));
-  const rare = nav.slice(nav.indexOf(">Rare<"), nav.indexOf("What Jarvis does"));
-  assert.ok(rare.includes('<a href="#spending">Spending</a>'), "the jump link is in the Rare group");
+  // The Everyday/Rare bands went on 2026-10-27; Spending sits with the other
+  // editable cards, before the read-only "What Jarvis does" group.
+  const settings = nav.slice(0, nav.indexOf("What Jarvis does"));
+  assert.ok(settings.includes('<a href="#spending">Spending</a>'), "the jump link is in the settings group");
   assert.match(HTML, /src="spending-settings\.js"/);
   assert.match(INDEX, /<section class="spending-host" id="spending-table" hidden><\/section>/);
   assert.ok(MAIN.includes("tableIdFromLine(line)") && MAIN.includes("tableIdFromBody(chunk)"));

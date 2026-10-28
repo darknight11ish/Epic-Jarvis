@@ -2649,7 +2649,11 @@ export async function createEngine(options = {}) {
       // The motion steps instead of the page stuttering, and (measured) a
       // software renderer goes from about 13 to about 30 frames a second of
       // page time because half the frames are cheap. A GPU never reaches this.
-      state.halfRate = median > SLOW_FRAME_MS;
+      // The `renderScale` guard is not cosmetic: this sample is the one that
+      // only STEPS the resolution, so without it a 40 ms machine halves the
+      // rate while still at full resolution - the order the comment above and
+      // `galaxy-cosmos.mjs` both say it must not do.
+      state.halfRate = median > SLOW_FRAME_MS && state.renderScale <= RENDER_SCALE_MIN + 1e-9;
     }
     state.lastTime = stamp;
     if (state.halfRate) {

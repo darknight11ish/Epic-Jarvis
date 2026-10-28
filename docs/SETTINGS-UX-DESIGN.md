@@ -22,10 +22,13 @@ owner can choose, so those are questions at the end, not decisions taken here.
 - **It matches the label and the detail text** of every switch and every
   row - the words on the switch, and the paragraph under it that says what
   it does.
-- **The band headings (Everyday / Rare / What Jarvis does) stay visible**
-  whenever anything under them survives a search, exactly so the page still
-  says *where* the thing you found lives. A band with nothing left in it is
-  hidden with its cards.
+- **The group headings stay out of the results while a search is on.** This
+  used to say the three frequency bands kept their headings so the page still
+  said *where* a thing lived; the bands were removed on 2026-10-27 (see the
+  amendment below), the page's one remaining heading is "What Jarvis does", and
+  a ranked list with a category heading partway down it is two orders at once.
+  So a search puts that heading away with the "Jump to:" list and brings both
+  back when the box is empty.
 - **The "Jump to:" list hides itself while a search is on** and comes back,
   unchanged, the moment the box is empty. While searching, the search *is*
   the map.
@@ -92,7 +95,10 @@ may be changed to match the other without changing what that app really does.
   and are now stored separately (`data-menu-hidden` vs the `hidden`
   attribute); the search cannot un-hide a menu the owner hid, and clearing
   the search cannot un-hide one either.
-- **The three bands stay.** Whether they *should* is question 1 below.
+- **The classification bands are gone** (2026-10-27; the owner answered
+  question 1 below by removing them). Every card, id, anchor and jump link is
+  unchanged, and "What Jarvis does" stays as the one heading because it is a
+  fact about those cards, not a guess about how often they are needed.
 - **The desktop's four other windows, the HUD, the widget and the Jarvis bar
   are untouched.**
 
@@ -134,7 +140,7 @@ may be changed to match the other without changing what that app really does.
 | --- | --- | --- |
 | One box, filters as you type | Android's Universal search indexes every setting's title, summary and keywords, so a query reaches any screen from one field ([AOSP](https://source.android.com/docs/core/settings/universal-search)); macOS System Settings has had a search field in the toolbar for years ([macmost](https://macmost.com/search-inside-system-preferences.html)) | Same: one box at the top, filtering live |
 | Match the summary, not just the title | AOSP's index explicitly carries title + summary + keywords | Same: label and detail text both searched |
-| Keep the grouping visible | macOS and GNOME both keep their category list and reveal matched panes rather than flattening results into one list | Same: bands act as headings over what survived |
+| Keep the grouping visible | macOS and GNOME both keep their category list and reveal matched panes rather than flattening results into one list | The list is ranked by the words that matched (2026-10-27), so a flat result list is the point; one category heading was left, and it is put away during a search |
 | Show *why* it matched | VS Code's settings editor shades the matched substring and has `@modified`-style scopes ([Steve Kinney](https://stevekinney.com/courses/visual-studio-code/editing-settings-through-the-vs-code-ui)) | Same: matched text is marked |
 | Keyboard-first | macOS Settings, GNOME and KDE all let you reach the box and leave it without the mouse | Desktop: Ctrl+F / Alt+F to focus, Escape to clear |
 | A real empty state | Empty states are a named pattern with their own guidance, not a blank panel ([Octopus Design System](https://www.octopus.design/latest/patterns/ui-patterns/layouts/empty-state-YMQIoJ84)) | A written no-match line plus a way back |
@@ -150,9 +156,11 @@ consistent enough to build against.
 
 ## Questions only the owner can answer
 
-**1. The "Rare" band.** Today the page has three headings - Everyday, Rare,
-What Jarvis does - and Rare is where the machine-level cards live (security,
-voices, hardware, the second graphics card, backups, updates).
+**1. The "Rare" band.** *Answered 2026-10-27: both frequency bands were removed
+- see the amendment above.* The question was asked when the page had three
+headings - Everyday, Rare, What Jarvis does - and Rare was where the
+machine-level cards lived (security, voices, hardware, the second graphics
+card, backups, updates).
 
 - **Leave the three bands as they are** (recommended). Search is what makes
   things findable; the bands cost one line of screen and still tell you what
@@ -182,6 +190,39 @@ top of Settings.
   are still the fastest way to a section you already know.
 - **Replace it with the search box**, so the phone's Settings opens with one
   text field and nothing else.
+
+## Amendment, 2026-10-27: no Everyday/Rare bands, and the search ranks what it finds
+
+The owner, after using the page: *"when i search update in the settings page on
+the jarvis desktop, updates is not the first thing that comes up, its considered
+rare in the settings, get rid of the general clasification of everyday settings
+with things like everyday or rare in settings, search bar should search for
+matching terms"*.
+
+Three things changed, and one deliberately did not:
+
+- **The Everyday and Rare bands are gone** from `settings.html` and from its
+  jump list, with their two headings and two labels. Every card, section id,
+  anchor and jump link is unchanged; the jump list is one unlabelled group of
+  the editable cards, then the one labelled "What Jarvis does" group. The
+  heading that is left says what those cards do (report, not change), which is
+  a fact on the page rather than a claim about how often the owner needs them.
+  Question 1 below is therefore answered: the bands are removed, not folded.
+- **Results are ranked by where the words matched.** Card title or a name the
+  menus catalogue already answers to for it first (exact, prefix, typo), then
+  its labelled rows, then its detail text; ties go to the shorter title, then
+  the title itself. Nothing reads the section, the old band, or document order.
+  This is the desktop's own ordering rule; the phone's `SettingsSearch` matching
+  contract (the tiers, budgets and prefix guard) is untouched.
+- **The page's one heading and the jump list are put away while a search is
+  on**, because a ranked list with a category heading in the middle of it is
+  two orders at once. They come back, with the page in its original order, when
+  the box is cleared.
+- **What did not change** is the rest of this document: search is still a view
+  that writes nothing, changes no setting, clears back to the same page, and a
+  card hidden through "Show or hide menus" stays hidden. The "update" alias for
+  the Updates card lives in `backend/jarvis_menus.py` - the catalogue the rest
+  of the app already matches cards by - not in a second list kept here.
 
 ## Claims
 

@@ -102,7 +102,12 @@ import {
   saveFaceTuning,
   SPEEDS,
 } from "./face-tuning.js";
-import { PLACE_FRESH_MS, SETTINGS_PLACE_KEY, START_PLACE } from "./plain-errors.js";
+import { SETTINGS_PLACE_KEY, START_PLACE } from "./plain-errors.js";
+import {
+  placeFromHash,
+  placeFromStored,
+  SETTINGS_PLACE_EVENT,
+} from "./settings-place.js";
 import { withBudget } from "./invoke-budget.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -977,19 +982,56 @@ $("open-faces").addEventListener("click", async () => {
  * fresh; a closed <details> ancestor (only "More options" folds a card
  * away) is opened first, then the place is scrolled to. Nothing is
  * changed - the owner still makes the change, or presses Start, themselves.
+ *
+ * The tray's "Update available — v…" row uses the same road (2026-10-27),
+ * through one of two doors: a NEW window is built at `settings.html#updates`,
+ * and an OPEN one hears SETTINGS_PLACE_EVENT. `settings-place.js` is the pure
+ * half that reads both; `applyPlace` is the half that moves the page.
  */
-function goToPlace() {
-  let left = null;
-  try {
-    left = JSON.parse(localStorage.getItem(SETTINGS_PLACE_KEY) || "null");
-    if (left) localStorage.removeItem(SETTINGS_PLACE_KEY);
-  } catch {
+
+/** The controls a place lands the keyboard on, in the order they are drawn. */
+const FOCUSABLE =
+  "button:not([disabled]), input:not([disabled]), select:not([disabled]), " +
+  "textarea:not([disabled]), summary, a[href]";
+
+/**
+ * Put the keyboard on the place's own first usable control, so Tab continues
+ * from there - falling back to the place itself (given a tabindex, as it
+ * always was) when it holds no control this page can use.
+ */
+function focusPlace(target) {
+  const first = target.matches(FOCUSABLE) ? target : target.querySelector(FOCUSABLE);
+  const on = first && typeof first.focus === "function" ? first : target;
+  if (on !== target) {
+    on.focus({ preventScroll: true });
     return;
   }
-  if (!left || !left.place) return;
-  if (!(Date.now() - Number(left.at) < PLACE_FRESH_MS)) return;
-  const target = $(left.place);
-  if (!target) return;
+  if (typeof target.focus === "function") {
+    if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+  }
+}
+
+/**
+ * Apply one place: reveal its menu if the owner hid it, unfold its card,
+ * scroll it to the top and put the keyboard on its first control.
+ *
+ * Returns true when the page really has that id; false - and nothing happens -
+ * when it does not, so a stale place can never break the page.
+ */
+function applyPlace(place) {
+  const target = $(place);
+  if (!target) return false;
+  // A search filters the page, and a place names ONE card. Let the filter go
+  // first: otherwise the card is hidden and the scroll and the focus land on
+  // nothing the owner can see (the tray's update row can be clicked while a
+  // search is still in the box). This is the page's own box and the page's own
+  // listener - nothing is clicked and no setting is touched, only cleared.
+  const searchBox = $("settings-search-input");
+  if (searchBox && searchBox.value) {
+    searchBox.value = "";
+    searchBox.dispatchEvent(new Event("input", { bubbles: true }));
+  }
   const card = target.closest("section.card");
   const menuId = card?.dataset?.menuId || (card ? `settings.${card.id}` : null);
   if (menuId && menuManager.isHidden(menuId)) {
@@ -1001,24 +1043,61 @@ function goToPlace() {
   // by the browser putting the page back where it was.
   const go = () => requestAnimationFrame(() => {
     target.scrollIntoView({ block: "start" });
-    if (left.place === START_PLACE) {
+    if (place === START_PLACE) {
       // "Starting Jarvis for you": land on its own first useful control,
       // as before "open <a section>" existed for anywhere else.
       const first = dom.startBackend && !dom.startBackend.disabled ? dom.startBackend : dom.supervise;
       if (first) first.focus({ preventScroll: true });
-    } else if (typeof target.focus === "function") {
-      if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
-      target.focus({ preventScroll: true });
+    } else {
+      focusPlace(target);
     }
   });
   if (document.readyState === "complete") go();
   else window.addEventListener("load", go, { once: true });
+  return true;
 }
+
+/** A place the quickbar/voice left behind, taken once and only while fresh. */
+function goToPlace() {
+  let left = null;
+  try {
+    left = localStorage.getItem(SETTINGS_PLACE_KEY);
+    if (left) localStorage.removeItem(SETTINGS_PLACE_KEY);
+  } catch {
+    return;
+  }
+  const place = placeFromStored(left);
+  if (place) applyPlace(place);
+}
+
+/** A place Rust named in the URL of a NEW window - taken once, then cleared. */
+function goToHashPlace() {
+  const place = placeFromHash(location.hash);
+  if (!place) return;
+  // Clear it before applying: otherwise the fragment stays on the address and
+  // every later `focus` would yank the page back to it. A jump-link click sets
+  // its own fragment, and nothing here reads the address after this.
+  try {
+    history.replaceState(null, "", location.pathname + location.search);
+  } catch {
+    // A fragment this page cannot clear is not a reason to open nowhere.
+  }
+  applyPlace(place);
+}
+
 goToPlace();
+goToHashPlace();
 window.addEventListener("storage", (e) => {
   if (e.key === SETTINGS_PLACE_KEY && e.newValue) goToPlace();
 });
 window.addEventListener("focus", goToPlace);
+if (IS_TAURI && TAURI.event) {
+  // An OPEN window: Rust showed, unminimised and focused it, then said where.
+  // The payload is the place alone - never markup, never a URL.
+  TAURI.event.listen(SETTINGS_PLACE_EVENT, (event) => {
+    if (typeof event.payload === "string") applyPlace(event.payload);
+  });
+}
 
 startLink();
 // "Open the card": one line while an approval card waits (card-link.js).

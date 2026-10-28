@@ -45,6 +45,7 @@ import {
   onLink,
   onQueue,
 } from "./jarvis-link.js";
+import { call } from "./invoke-budget.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -92,7 +93,8 @@ const BACKGROUND_ACTION = "learning_enable";
 
 let view = null;
 let busy = false;
-let asked = false;      // our own ON is waiting on a card
+let asked = false;          // false | "background" | "sensitive"
+let sawSensitive = false;      // our own ON is waiting on a card
 let sawCard = false;    // ...and the queue has shown that card since we asked
 let poll = null;
 
@@ -126,8 +128,9 @@ function paint() {
   // The card appeared at least once, so its disappearance later means it was
   // answered (or expired) - not that it has not been raised yet.
   if (queued) sawCard = true;
-  const backgroundWaiting = asked || queued;
-  const sensitiveWaiting = view.sensitive_waiting === true;
+  const backgroundWaiting = asked === "background" || queued;
+  if (view.sensitive_waiting === true) sawSensitive = true;
+  const sensitiveWaiting = view.sensitive_waiting === true || asked === "sensitive";
   // A waiting card is drawn ON so it can be taken back; the line under it says
   // it is only waiting, never that the switch is on.
   const backgroundOn = view.enabled === true || backgroundWaiting;
@@ -167,7 +170,7 @@ function paint() {
 /** Read the PC's answer and paint it. True when the card can be drawn. */
 async function read() {
   try {
-    const raw = await TAURI.core.invoke("brain_memory_learning_status");
+    const raw = await call("brain_memory_learning_status", {}, "read");
     if (!raw || raw.available === false) {
       view = null;
       el.body.hidden = true;
@@ -184,9 +187,15 @@ async function read() {
     // Our own ON: stop saying "waiting" once the switch is on, or once the
     // card we saw in the queue has left it (approved, denied or expired). The
     // read that follows says which of those really happened.
-    if (asked && (view.enabled || (sawCard && !backgroundCardWaiting()))) {
+    if (asked === "background" &&
+        (view.enabled || (sawCard && !backgroundCardWaiting()))) {
       asked = false;
       sawCard = false;
+    }
+    if (asked === "sensitive" &&
+        (view.sensitive === true || (sawSensitive && !view.sensitive_waiting))) {
+      asked = false;
+      sawSensitive = false;
     }
     paint();
     // A damaged settings file is the PC's own sentence, shown as a warning.
@@ -239,13 +248,13 @@ async function setSwitch(which, on) {
   if (busy) return;
   busy = true;
   say(ASKING);
-  asked = on;
+  asked = on ? which : false;
   paint();
   try {
     const command = which === "background"
       ? "brain_memory_learning"
       : "brain_memory_learning_sensitive";
-    const out = await TAURI.core.invoke(command, { enabled: on });
+    const out = await call(command, { enabled: on }, "action");
     if (out && out.waiting) {
       say((out && out.message) || WAITING_CARD, "warn");
     } else {

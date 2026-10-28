@@ -1470,6 +1470,20 @@ pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
     repaint(app, link);
 }
 
+/// The Settings place a tray row opens, if it names one. Pure: the tray's
+/// destination is this small mapping, and a mapping this small is the part
+/// that can be tested without a running app.
+///
+/// "Update available — v…" is the one row that carries a destination (the
+/// owner, 2026-10-27). Everything else that opens Settings - "Settings and
+/// help…" included - opens it plainly.
+fn settings_place_for(id: &str) -> Option<&'static str> {
+    match id {
+        ID_UPDATE => Some("updates"),
+        _ => None,
+    }
+}
+
 /// Routes a context-menu click to the matching action.
 fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     match event.id().as_ref() {
@@ -1666,8 +1680,17 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         // Opens the window. It does NOT install: the tray cannot, by design —
         // an update replaces the executable and that decision belongs on a
         // surface with the version and the release notes in front of you.
+        //
+        // "Update available — v…" opens the Updates CARD, not the top of
+        // Settings (the owner, 2026-10-27: it "only opens the settings page",
+        // leaving him to scroll and hunt for the version, the notes and
+        // Install). "Settings and help…" stays plain Settings.
         ID_UPDATE | ID_SETTINGS => {
-            if let Err(err) = windows::show_settings(app) {
+            let opened = match settings_place_for(event.id().as_ref()) {
+                Some(place) => windows::show_settings_at(app, place),
+                None => windows::show_settings(app),
+            };
+            if let Err(err) = opened {
                 eprintln!("[jarvis] tray: settings unavailable: {err}");
                 commands::notify_failed(
                     app,
@@ -2431,5 +2454,18 @@ mod tests {
             ) > 1.6,
             "the notch is indistinguishable from the outline beside it"
         );
+    }
+
+    /// The owner, 2026-10-27: right-clicking the tray icon and choosing
+    /// "Update available — v…" "only opens the settings page". That row names
+    /// the Updates card; "Settings and help…" and every other row name no
+    /// place and keep opening Settings plainly. Pure, so no window is built.
+    #[test]
+    fn the_update_row_opens_the_updates_card_and_settings_stays_plain() {
+        assert_eq!(settings_place_for(ID_UPDATE), Some("updates"));
+        assert_eq!(settings_place_for(ID_SETTINGS), None);
+        for id in ["", "not-a-row", ID_QUIT, ID_SHOW_BRAIN, ID_CHAT_HISTORY] {
+            assert_eq!(settings_place_for(id), None, "`{id}` opened a place");
+        }
     }
 }

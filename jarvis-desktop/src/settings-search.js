@@ -8,10 +8,11 @@
  * The jump list is kept - it is still the fastest way to a section you
  * already know - and this is the way to a setting whose card you do NOT know.
  *
- * WHAT SEARCH IS ALLOWED TO DO. Show and hide what is already on the page.
- * That is the whole of it:
+ * WHAT SEARCH IS ALLOWED TO DO. Show and hide what is already on the page, and
+ * put the matches in a better order while the box has words in it. That is the
+ * whole of it:
  *
- *   - no setting is added, removed, renamed, moved or hidden for good;
+ *   - no setting is added, removed, renamed, moved for good or hidden for good;
  *   - nothing is written anywhere - this module contains no `invoke(`, no
  *     `fetch(`, and touches no storage (the rule tests/palette.mjs holds
  *     palette.js and palette-ui.js to, applied here too);
@@ -56,8 +57,54 @@
  * misspelt is allowed to be. What did NOT change: search still only shows
  * and hides what is already on the page, and `data-menu-hidden` still wins.
  *
+ * RESULTS ARE RANKED, NOT LEFT WHERE THEY SIT (the owner, 2026-10-27). He
+ * searched "update" in Settings and the Updates card was not the first thing
+ * that came up: matches were shown in the order the cards are drawn, and the
+ * page's own `Everyday`/`Rare` split put Updates far down it. The split is
+ * gone from `settings.html`, and this module now orders what it shows by WHERE
+ * the words matched:
+ *
+ *   1. the card's own title, or a name the menus catalogue already answers to
+ *      for that card (`menu-catalog.js`, generated from the backend's list) -
+ *      exact, then prefix, then a typo;
+ *   2. a labelled row inside the card, by the same tiers;
+ *   3. the card's detail text.
+ *
+ * Ties go to the shorter title, because the words typed then cover more of it
+ * ("update" is more of "Updates" than of "Check for tool updates"), then to
+ * the title itself. Nothing reads the section a card sits in, the band it used
+ * to be in, or the page's document order: a result's place is a fact about the
+ * words on the card and the words typed. `cardRank` and `compareMatches` are
+ * the pure half, so they can be tested in plain node.
+ *
+ * While a search is on, the one remaining page heading ("What Jarvis does") is
+ * put away with the jump list: a ranked list with a category heading partway
+ * down it is two orders at once. Everything comes back, in its original order,
+ * when the box is cleared.
+ *
  * @module settings-search
  */
+
+import { MENUS } from "./menu-catalog.js";
+
+/**
+ * The names the menus catalogue answers to, per settings card - the same
+ * aliases "open <that card>" already uses (menu-catalog.js, generated from
+ * `backend/jarvis_menus.py`). They extend a card's TITLE for ranking, so
+ * "app updates" or "update" finds the Updates card even though those exact
+ * words are not all printed on it. Normalised once, at load.
+ */
+const CATALOGUE_WORDS = (() => {
+  const words = new Map();
+  for (const menu of MENUS) {
+    if (!menu || typeof menu.id !== "string" || !menu.id.startsWith("settings.")) continue;
+    const names = Array.isArray(menu.names)
+      ? menu.names.filter((name) => typeof name === "string" && name.trim())
+      : [];
+    if (names.length) words.set(menu.id.slice("settings.".length), normalise(names.join(" ")));
+  }
+  return words;
+})();
 
 /** The box's words, the same on the phone (`SettingsSearchWords`). */
 export const SEARCH_LABEL = "Search settings";
@@ -143,6 +190,42 @@ const GUARD = 2;
  */
 export function rank(label, text, query) {
   return rankWords(normalise(label), normalise(text), normalise(query));
+}
+
+/**
+ * How well one card matches the query: the best of its own words (title plus
+ * the catalogue's names for it, where an exact or prefix hit outranks the
+ * body), its labelled rows, and its detail text. Pure - no DOM, no order - so
+ * it runs in plain node.
+ *
+ * `parts` is the shape `partsOf` returns: `{ label, text, rows }` with `label`
+ * and `text` already through `normalise`, and `rows` a list of normalised row
+ * texts. 0 means no match.
+ */
+export function cardRank(parts, query) {
+  const q = normalise(query);
+  if (!q) return 0;
+  let best = rankWords(parts.label, parts.text, q);
+  for (const row of parts.rows || []) {
+    const rank = rankWords(row, row, q);
+    if (rank > best) best = rank;
+  }
+  return best;
+}
+
+/**
+ * The order two matches are shown in: the stronger match first; equal matches
+ * by the SHORTER title, because the words typed then cover more of it
+ * ("update" is more of "Updates" than of "Check for tool updates"); then by
+ * the title itself, so the order never depends on where the card happens to
+ * sit. `a` and `b` are `{ rank, title }` with `title` already normalised.
+ *
+ * Deliberately reads nothing else: no section, no old band, no document order.
+ */
+export function compareMatches(a, b) {
+  if (a.rank !== b.rank) return b.rank - a.rank;
+  if (a.title.length !== b.title.length) return a.title.length - b.title.length;
+  return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
 }
 
 /**
@@ -278,29 +361,61 @@ function readableText(node) {
 }
 
 /**
- * Split a card into parts: the labelled rows it directly holds (each keeping
- * its own child rows, so a row's words are never also the card's), plus
- * everything else as one run.
+ * The card's OWN heading: an `h2` inside it whose nearest `.card` is the card
+ * itself. A nested card's title is not this card's title, and a subhead
+ * (`h3`) is not either.
+ */
+function ownTitle(card) {
+  for (const heading of card.querySelectorAll("h2")) {
+    if (heading.closest(".card") === card) return heading.textContent;
+  }
+  return "";
+}
+
+/**
+ * The words a card is searched by:
+ *
+ *   - `label`: its own title plus the names the menus catalogue answers to for
+ *     it. This is the part where an exact or prefix hit outranks a body hit -
+ *     the words at the top of the card, plus the aliases the rest of the app
+ *     already matches it by;
+ *   - `text`: everything readable inside the card except its rows and its own
+ *     title, so a word buried in a paragraph is still found (the floor);
+ *   - `rows`: the labelled rows the card directly holds, each keeping its own
+ *     child rows, so a row's own words are never also the card's text.
+ *
+ * `title` is kept normalised for the ordering rule (`compareMatches`).
  */
 function partsOf(card) {
-  const parts = [];
+  const alias = CATALOGUE_WORDS.get(card.id) || "";
+  const title = ownTitle(card);
   const outside = card.cloneNode(true);
   // A selector cannot say "everything that is not one of these", so the rows
   // are dropped from the clone by identity, then it is read as one run.
   const rows = [...outside.querySelectorAll(ROW)].filter((r) => r.closest(ROW) === r);
   for (const row of rows) row.remove();
-  const rest = readableText(outside);
-  if (normalise(rest)) parts.push({ node: card, words: rest, named: false });
-  for (const row of [...card.querySelectorAll(ROW)].filter((r) => r.closest(ROW) === r)) {
-    parts.push({ node: row, words: readableText(row), named: true });
+  // The title is read as the label, not twice: leaving it in the text would
+  // make every title word a body word too, and no card could rank by title.
+  for (const heading of outside.querySelectorAll("h2")) {
+    if (heading.closest(".card") === outside) heading.remove();
   }
-  return parts;
+  return {
+    label: normalise(`${title} ${alias}`),
+    text: normalise(readableText(outside)),
+    rows: [...card.querySelectorAll(ROW)]
+      .filter((row) => row.closest(ROW) === row)
+      .map((row) => normalise(readableText(row))),
+    title: normalise(title),
+  };
 }
 
 /** Has this card been repainted under us since the parts were read? */
 const sameParts = (parts, now) =>
-  parts.length === now.length &&
-  parts.every((p, i) => p.node === now[i].node && p.words === now[i].words);
+  parts.label === now.label &&
+  parts.text === now.text &&
+  parts.title === now.title &&
+  parts.rows.length === now.rows.length &&
+  parts.rows.every((row, i) => row === now.rows[i]);
 
 /**
  * Wire the search box up, once. Returns a small handle so a caller - or a
@@ -319,41 +434,71 @@ export function mountSettingsSearch(doc = document) {
   /** Every card, in page order. */
   const cards = () => [...doc.querySelectorAll("main .card")];
 
-  /** Bands and their cards, in page order: headings sit between cards. */
-  function bands() {
-    const out = [];
-    let current = null;
-    for (const node of doc.querySelectorAll(`main .card, main ${BAND}`)) {
-      if (node.matches(BAND)) {
-        current = { heading: node, cards: [] };
-        out.push(current);
-      } else if (current) {
-        current.cards.push(node);
-      } else {
-        // A card above the first band - there is none today - belongs to none.
-        out.push({ heading: null, cards: [node] });
-      }
+  /**
+   * The top-level blocks that carry cards, in page order: a card, or the
+   * folded "More options" `<details>` holding three of them. A search moves
+   * these whole blocks into rank order - never a card out of its own block -
+   * and puts them back the moment the box is cleared.
+   */
+  function units() {
+    return [...doc.querySelectorAll("main > .card, main > details")]
+      .map((node) => ({
+        node,
+        cards: node.matches(".card")
+          ? [node, ...node.querySelectorAll(".card")]
+          : [...node.querySelectorAll(".card")],
+      }))
+      .filter((unit) => unit.cards.length > 0);
+  }
+
+  /**
+   * Where every block sat when the page loaded, and what it sat after, so
+   * clearing the box can put the page back exactly. `prev` is the anchor a
+   * restore inserts after: blocks are restored in page order, so a `prev` that
+   * is itself a block has already been put back when it is used.
+   */
+  const originalOrder = units().map((unit) => ({
+    node: unit.node,
+    prev: unit.node.previousElementSibling,
+  }));
+  let moved = false;
+
+  function restoreOrder() {
+    if (!moved) return;
+    const main = doc.querySelector("main");
+    for (const { node, prev } of originalOrder) {
+      if (prev && prev.parentNode === main) main.insertBefore(node, prev.nextSibling);
+      else if (main) main.insertBefore(node, main.firstChild);
     }
-    return out;
+    moved = false;
+  }
+
+  /** Put the matched blocks, already in rank order, at the top of the page. */
+  function orderMatches(ranked) {
+    const main = doc.querySelector("main");
+    if (!main) return;
+    const bar = doc.getElementById("menus-hidden-bar");
+    // Results begin where the cards begin: after the search box, jump list,
+    // note and hidden-menus bar, and above every card that is not a match.
+    const anchor = bar ? bar.nextSibling : originalOrder[0]?.node || main.firstChild;
+    for (const unit of ranked) main.insertBefore(unit.node, anchor);
+    moved = true;
   }
 
   /**
    * A card's parts, read once and re-read when the page repaints that card
-   * underneath us. `rest` is the text OUTSIDE every row, and `#af-groups`,
-   * `#crash-notes-list` and the other JS-filled boxes are inside it - their
-   * words arrive after load, so a cache that never noticed would search a
-   * page that no longer exists. Comparing the words is what notices. The
-   * normalised forms are kept beside them, because a search compares those
-   * and never re-folds the text.
+   * underneath us. The detail text is everything OUTSIDE every row, and
+   * `#af-groups`, `#crash-notes-list` and the other JS-filled boxes are inside
+   * it - their words arrive after load, so a cache that never noticed would
+   * search a page that no longer exists. Comparing the words is what notices;
+   * the words are kept normalised because a search compares those and never
+   * re-folds the text.
    */
   const cache = new Map();
   function partsFor(card) {
     const fresh = partsOf(card);
     const parts = cache.get(card);
     if (parts && sameParts(parts, fresh)) return parts;
-    for (const part of fresh) {
-      part.words = { raw: part.words, norm: normalise(part.words) };
-    }
     cache.set(card, fresh);
     return fresh;
   }
@@ -382,32 +527,49 @@ export function mountSettingsSearch(doc = document) {
     if (searching) foldBackOpenedCards();
 
     let showing = 0;
-    for (const card of cards()) {
-      const hidden = hiddenByMenu(card);
-      if (searching) {
+    const ranked = [];
+    for (const unit of units()) {
+      let best = null;
+      for (const card of unit.cards) {
+        const hidden = hiddenByMenu(card);
         let hit = false;
-        for (const part of partsFor(card)) {
-          const rank = part.named
-            ? rankWords(part.words.norm, part.words.norm, query)
-            : rankWords("", part.words.norm, query);
-          if (rank > 0) { hit = true; break; }
+        if (searching) {
+          const parts = partsFor(card);
+          const rank = cardRank(parts, query);
+          hit = rank > 0 && !hidden;
+          if (
+            hit
+            && (!best
+              || rank > best.rank
+              || (rank === best.rank && parts.title.length < best.title.length))
+          ) {
+            best = { rank, title: parts.title };
+          }
+          if (hit && card.classList.contains("card-collapsed")) {
+            card.classList.remove("card-collapsed");
+            card.dataset.searchWasCollapsed = "true";
+          }
         }
-        card.hidden = !(hit && !hidden);
-        if (hit && !hidden && card.classList.contains("card-collapsed")) {
-          card.classList.remove("card-collapsed");
-          card.dataset.searchWasCollapsed = "true";
-        }
-      } else {
-        card.hidden = hidden;
+        card.hidden = searching ? !hit : hidden;
+        if (!card.hidden) showing += 1;
       }
-      if (!card.hidden) showing += 1;
+      if (best) ranked.push({ node: unit.node, rank: best.rank, title: best.title });
     }
 
     if (!searching) foldBackOpenedCards();
 
-    for (const band of bands()) {
-      if (!band.heading) continue;
-      band.heading.hidden = searching && !band.cards.some((c) => !c.hidden);
+    if (searching) {
+      ranked.sort(compareMatches);
+      orderMatches(ranked);
+    } else {
+      restoreOrder();
+    }
+
+    // One heading is left ("What Jarvis does"). A ranked list with a category
+    // heading partway down it is two orders at once, so it is put away while
+    // searching and comes back with the rest of the page.
+    for (const heading of doc.querySelectorAll(`main ${BAND}`)) {
+      heading.hidden = searching;
     }
 
     // The jump list is a map of the WHOLE page, so while the page is filtered
