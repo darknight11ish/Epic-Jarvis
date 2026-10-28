@@ -31,9 +31,10 @@
  *
  *   - The geometry, guides, palette, camera and motion are ported faithfully:
  *     the same radii, the same wave amplitudes, the same guide bodies, the same
- *     `FogExp2` density 0.0016, the same ACES exposure 1.25, the same 1,800
- *     background stars and 3,200-point nebula cloud, the same five animation
- *     branches.
+ *     `FogExp2` density 0.0016 (scaled with the camera only when the frame has
+ *     to pull back, so a 240-name picture is not fogged to black), the same ACES
+ *     exposure 1.25, the same 1,800 background stars and 3,200-point nebula
+ *     cloud, the same five animation branches.
  *
  * WHAT IS DELIBERATELY DIFFERENT FROM THE GEMINI PAGE
  *
@@ -51,6 +52,14 @@
  *     readable spacing grows OUTWARD instead of crowding (Gemini's fixed radii
  *     are kept whenever the list fits them - i.e. for every graph up to about
  *     30 names, which is Gemini's own size).
+ *   - Framing is the one place the page's own numbers are deliberately not
+ *     copied. Gemini's cameras crop its own picture (6 of 32 names off-frame in
+ *     its nebula at 1440x900) and its labels sit about 30 px tall under a
+ *     banner across a third of the screen. Here every name is kept inside
+ *     `FRAME_FILL` of the half-frame - Gemini's exact camera when the picture
+ *     already fits it, the same angle from further back when it does not - so
+ *     120 and 240 real names stay on screen; labels are the page's own 10-14 px
+ *     pass, and there is no banner over the picture.
  *   - It is offline: three.js is loaded from this origin (`/three.min.js`),
  *     never from a CDN. If it is not there, `createEngine` resolves `null` and
  *     the page keeps drawing its 2D picture - the fallback, not a blank canvas.
@@ -278,24 +287,52 @@ export function cameraFor(id) {
 }
 
 /**
- * The camera for a look, pulled back when the graph does not fit Gemini's frame.
+ * How much of the half-frame a name's own centre may use: every name is kept
+ * within 82% of the way to an edge, so the outer 9% of the width and the height
+ * is left for the rest of the picture - a round body's own radius, the label
+ * above it, and air. Measured, not guessed: on a 900 px stage the margin is
+ * 81 px, and the widest body at the 240-name budget is about 13 px across with
+ * a 24 px label above it.
+ *
+ * This is the one rule that keeps the port readable where the reference page is
+ * not: Gemini's page crops itself - its nebula puts 6 of 32 names off-frame at
+ * 1440x900, its tree and ring crop too - because its cameras were tuned for one
+ * picture size and nothing pulls them back. The look is Gemini's; the framing
+ * is this repository's.
+ */
+export const FRAME_FILL = 0.82;
+
+/**
+ * The camera for a look: Gemini's own, unless the real picture does not fit it.
  *
  * Gemini tunes one camera per look for a 32-name picture on a wide window. The
- * HUD can show 240 names, and its Galaxy is sometimes a narrow column, so the
- * rule here has two halves:
+ * HUD can show 240 names, on a stage that is sometimes a narrow column, so the
+ * rule has two halves:
  *
- *   - the page's own camera is kept whenever the content fits the frame it was
- *     tuned for (`fitRadius`) AT THIS ASPECT - a wide window is his picture and
- *     gets his exact camera; a narrow one gets the same ANGLE from further back
- *     rather than a cropped picture;
- *   - a bigger picture is not cropped either: the camera backs straight away
- *     from the same `lookAt` along the same direction, so only the distance
- *     ever changes and the look is still the look.
+ *   - the page's own camera is kept whenever EVERY name it is about to draw
+ *     already sits inside `FRAME_FILL` of the half-frame at this aspect. A
+ *     Gemini-sized picture therefore gets his exact position and angle;
+ *   - otherwise the camera backs straight away from the same `lookAt` along
+ *     the same direction - only the distance changes, so the look is still the
+ *     look - and stops at the first distance where the outermost name is
+ *     exactly on the `FRAME_FILL` line. `positions` is the actual set of
+ *     points, so a flat ring and a tall helix are each fitted for their own
+ *     shape; `radius` is a fallback for callers that only have a bounding
+ *     sphere (a sphere of that radius about the lookAt is fitted whole, which
+ *     is the conservative answer).
  *
- * `radius` is the content's bounding radius about the lookAt point. Pure, so a
- * test can pin every half of the rule without a camera.
+ * The maths is exact and per-point, not a bounding-sphere guess: for a camera
+ * at distance `d` along the look direction, a point has depth `d - s` and
+ * horizontal offset `xc`, so it is inside the frame when
+ * `d >= s + |xc| / (FILL * tan(halfFov) * aspect)` (and the same for the
+ * vertical). The largest such bound is the distance that frames every name.
+ *
+ * Pure, so `tests/galaxy-cosmos.mjs` pins the framing without a camera at
+ * 1440x900 at the 120- and 240-name budgets.
  */
-export function cameraFrame(id, { radius = 0, aspect = 1.6, fov = CAMERA_FOV } = {}) {
+export function cameraFrame(id, {
+  positions = null, radius = 0, aspect = 1.6, fov = CAMERA_FOV,
+} = {}) {
   const meta = presetMeta(id) || COSMOS_PRESETS[COSMOS_DEFAULT_LOOK];
   const lookAt = meta.lookAt.slice();
   const base = meta.camera.slice();
@@ -303,21 +340,62 @@ export function cameraFrame(id, { radius = 0, aspect = 1.6, fov = CAMERA_FOV } =
   const dy = base[1] - lookAt[1];
   const dz = base[2] - lookAt[2];
   const baseDistance = Math.hypot(dx, dy, dz) || 1;
-  // The frame his camera was tuned for, narrowed on a narrow window: 45 degrees
-  // of vertical field is all the height it ever had, and the width is where a
-  // tall column runs out of room.
-  const room = (meta.fitRadius || 140) * Math.min(1, Math.max(0.4, aspect) / 1.6);
-  const want = fitDistance(Math.max(0, radius), aspect, fov) * 1.05;
-  if (radius <= room || !(want > baseDistance)) {
-    return { position: base, lookAt, distance: baseDistance, fitted: false };
+  const half = (fov * Math.PI) / 180 / 2;
+  const tanV = Math.tan(half);
+  const tanH = tanV * Math.max(0.05, aspect);
+  const need = frameDistanceFor(presetMeta(id) ? positions : null, radius, {
+    lookAt, position: base, baseDistance, tanV, tanH,
+  });
+  if (!(need > baseDistance + 1e-6)) {
+    return { position: base, lookAt, distance: baseDistance, fitted: false, fill: FRAME_FILL };
   }
-  const k = want / baseDistance;
+  const k = need / baseDistance;
   return {
     position: [lookAt[0] + dx * k, lookAt[1] + dy * k, lookAt[2] + dz * k],
     lookAt,
-    distance: want,
+    distance: need,
     fitted: true,
+    fill: FRAME_FILL,
   };
+}
+
+/** The smallest camera distance that keeps every point inside `FRAME_FILL`.
+ *  Shared by `cameraFrame` and the framing test, so both use one rule. */
+function frameDistanceFor(positions, radius, { lookAt, position, baseDistance, tanV, tanH }) {
+  let need = 0;
+  if (Array.isArray(positions) && positions.length) {
+    // The camera's own basis: it looks from `position` toward `lookAt`.
+    const fx = (lookAt[0] - position[0]) / baseDistance;
+    const fy = (lookAt[1] - position[1]) / baseDistance;
+    const fz = (lookAt[2] - position[2]) / baseDistance;
+    // right = normalize(cross(forward, worldUp)); forward is never vertical here.
+    const rl = Math.hypot(fz, 0, fx) || 1;
+    const rx = -fz / rl;
+    const rz = fx / rl;
+    const ux = -rz * fy;          // cross(right, forward)
+    const uy = rz * fx - rx * fz;
+    const uz = rx * fy;
+    // The camera sits at lookAt - forward * distance, so a point's depth is
+    // `distance + dot(point - lookAt, forward)`; call that component s and the
+    // bound reads d >= s + |offset| / (FILL * tan).
+    for (const point of positions) {
+      const ox = point.x - lookAt[0];
+      const oy = point.y - lookAt[1];
+      const oz = point.z - lookAt[2];
+      const s = -(ox * fx + oy * fy + oz * fz);
+      const xc = ox * rx + oz * rz;
+      const yc = ox * ux + oy * uy + oz * uz;
+      need = Math.max(need,
+        s + Math.abs(xc) / (FRAME_FILL * tanH),
+        s + Math.abs(yc) / (FRAME_FILL * tanV));
+    }
+  } else {
+    // A whole sphere about the lookAt: it is inside the view cone when
+    // sin(halfAngle) >= radius / distance.
+    const halfMin = Math.min(Math.atan(tanV), Math.atan(tanH));
+    need = Math.max(0, radius) / (FRAME_FILL * Math.sin(halfMin));
+  }
+  return need;
 }
 
 /** The distance at which a sphere of `radius` fills the smaller of the two
@@ -328,6 +406,65 @@ export function fitDistance(radius, aspect = 1.6, fov = CAMERA_FOV) {
   const horizontal = vertical * Math.max(0.2, aspect);
   const r = Math.max(1, radius);
   return Math.max(r / vertical, r / horizontal);
+}
+
+/** Where one point lands in one camera, in the engine's own terms.
+ *
+ *  Used by the page for its node buttons (via the live three.js camera) and by
+ *  the framing test (via `cameraFrame`'s pure result), so both sides project
+ *  the same way. `ndcX`/`ndcY` are -1..1 inside the frame, `x`/`y` are pixels
+ *  when `width`/`height` are given, `k` is pixels per scene unit at that depth
+ *  (so a body's drawn radius is `nodeRadius * k`), and `inFront` is false for a
+ *  point behind the camera. */
+export function projectPoint(point, camera, options = {}) {
+  const { fov = CAMERA_FOV, aspect = 1.6, width = 0, height = 0 } = options;
+  const position = (camera && camera.position) || [0, 0, 1];
+  const lookAt = (camera && camera.lookAt) || [0, 0, 0];
+  let fx = lookAt[0] - position[0];
+  let fy = lookAt[1] - position[1];
+  let fz = lookAt[2] - position[2];
+  const fl = Math.hypot(fx, fy, fz) || 1;
+  fx /= fl; fy /= fl; fz /= fl;
+  const rl = Math.hypot(fz, 0, fx) || 1;
+  const rx = -fz / rl;
+  const rz = fx / rl;
+  const ux = -rz * fy;
+  const uy = rz * fx - rx * fz;
+  const uz = rx * fy;
+  const ox = point.x - position[0];
+  const oy = point.y - position[1];
+  const oz = point.z - position[2];
+  const depth = ox * fx + oy * fy + oz * fz;
+  const half = Math.tan((fov * Math.PI) / 180 / 2);
+  const safeDepth = Math.max(1e-6, depth);
+  const xc = ox * rx + oz * rz;
+  const yc = ox * ux + oy * uy + oz * uz;
+  const ndcX = xc / (safeDepth * half * Math.max(0.05, aspect));
+  const ndcY = yc / (safeDepth * half);
+  return {
+    ndcX: depth > 0 ? ndcX : NaN,
+    ndcY: depth > 0 ? ndcY : NaN,
+    x: (ndcX * 0.5 + 0.5) * width,
+    y: (-ndcY * 0.5 + 0.5) * height,
+    k: (height / 2) / Math.max(1e-6, half * safeDepth),
+    depth,
+    inFront: depth > 0,
+  };
+}
+
+/** The fog density a pulled-back camera uses.
+ *
+ *  Gemini's `FogExp2` density is 0.0016 because its cameras sit about 250 units
+ *  out; at the 240-name budget this engine legitimately sits at 900 or 2,700
+ *  units, where that density would fog the whole picture to the background
+ *  colour (a 2,700-unit camera keeps about 3% of the light). Scaling the
+ *  density with the framed distance keeps the DEPTH CUE - near names clear,
+ *  far names fading - while keeping the far edge of the content about as
+ *  visible as Gemini's own far edge. Gemini's 0.0016 is used unchanged for
+ *  every picture his camera already frames (distance <= 250). */
+export function fogDensityAt(distance, reference = 250) {
+  const d = Number.isFinite(distance) ? Math.max(1, distance) : reference;
+  return FOG_DENSITY * Math.min(1, reference / d);
 }
 
 /* ==========================================================================
@@ -1408,7 +1545,11 @@ export function webglSupported() {
 
 /** Fetch three.js from this origin once, and resolve the global it publishes.
  *  Resolves `null` (never rejects) when it is missing: the caller's fallback is
- *  the shipped 2D picture, so a 404 here is a quiet downgrade, not an error. */
+ *  the shipped 2D picture, so a 404 here is a quiet downgrade, not an error.
+ *
+ *  The page itself also carries a `<script src="/three.min.js" defer>` tag, so
+ *  the closed whitelist can see what it loads. When that tag is still in
+ *  flight, this waits for it instead of appending a second copy of 600 KB. */
 export function loadThree(timeoutMs = 8000) {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return Promise.resolve(null);
@@ -1417,6 +1558,22 @@ export function loadThree(timeoutMs = 8000) {
   const already = ready();
   if (already) return Promise.resolve(already);
   if (loadingThree) return loadingThree;
+  const pending = document.querySelector('script[src$="/three.min.js"]');
+  if (pending) {
+    loadingThree = new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        if (!value) loadingThree = null;
+        resolve(value || null);
+      };
+      pending.addEventListener("load", () => finish(ready()));
+      pending.addEventListener("error", () => finish(null));
+      setTimeout(() => finish(ready()), Math.max(1000, timeoutMs));
+    });
+    return loadingThree;
+  }
   loadingThree = new Promise((resolve) => {
     let settled = false;
     const finish = (value) => {
@@ -1529,6 +1686,7 @@ export async function createEngine(options = {}) {
     dprWanted: 1,
     renderScale: 1,
     frameGaps: [],
+    frameDistance: 0,
     spinning: true,
     warp: 1,
     followId: null,
@@ -2095,20 +2253,39 @@ export async function createEngine(options = {}) {
     renderer.setClearColor(hexToInt(meta.bg), 1);
   }
 
-  function setCamera(presetId = state.preset) {
+  /** Put the camera where the picture needs it. `positions` is the whole
+   *  picture, so the frame is fitted to the names that are really there; the
+   *  fog is pulled with the camera so a 240-name picture is still visible. */
+  function framedCamera(presetId = state.preset) {
+    const radius = boundsOf(positions).radius;
     const framed = cameraFrame(presetId, {
-      radius: boundsOf(positions).radius,
+      positions,
+      radius,
       aspect: state.aspect,
     });
+    state.frameDistance = framed.distance;
+    scene.fog.density = fogDensityAt(framed.distance);
+    // The page's far plane is 2,000 because its cameras sit about 250 out. A
+    // 240-name picture is framed thousands of units out, and with a fixed far
+    // plane the picture would be CLIPPED OUT - the tree drew nothing at all
+    // until this followed the frame. Only ever grown, never shrunk below the
+    // page's own number.
+    const far = Math.max(CAMERA_FAR, framed.distance + radius * 1.6 + 100);
+    if (Math.abs(camera.far - far) > 0.5) {
+      camera.far = far;
+      camera.updateProjectionMatrix();
+    }
+    return framed;
+  }
+
+  function setCamera(presetId = state.preset) {
+    const framed = framedCamera(presetId);
     state.camTo = new THREE.Vector3(...framed.position);
     state.targetTo = new THREE.Vector3(...framed.lookAt);
   }
 
   function snapCamera(presetId = state.preset) {
-    const framed = cameraFrame(presetId, {
-      radius: boundsOf(positions).radius,
-      aspect: state.aspect,
-    });
+    const framed = framedCamera(presetId);
     camera.position.set(...framed.position);
     target.set(...framed.lookAt);
     camera.lookAt(target);
@@ -2185,7 +2362,7 @@ export async function createEngine(options = {}) {
         firePulses(1);
       }
     } else if (state.preset === "nebula" && state.spinning) {
-      scene.rotation.y += 0.001;
+      spinView(0.001);
       for (const node of state.nodes) {
         if (roleOf(node.group) !== "memory") continue;
         const mesh = state.meshes.get(node.id);
@@ -2198,7 +2375,7 @@ export async function createEngine(options = {}) {
         }
       }
     } else if (state.preset === "dna-helix" && state.spinning) {
-      scene.rotation.y += 0.0025;
+      spinView(0.0025);
       if (state.disk) state.disk.group.rotation.y -= 0.01;
     } else if (state.preset === "radar-dome" && state.spinning && state.sweep) {
       state.sweep.rotation.z += dt * 1.4;
@@ -2254,14 +2431,19 @@ export async function createEngine(options = {}) {
   /* ---- projection: the page's node buttons ride on this ---------------- */
 
   const projected = new THREE.Vector3();
+  const worldPoint = new THREE.Vector3();
 
   function project(id) {
     const group = state.groups.get(id);
     if (!group || !state.width || !state.height) return null;
-    projected.set(group.position.x, group.position.y, group.position.z);
-    projected.project(camera);
+    // The WORLD position, not the local one: three looks turn the whole scene
+    // (the nebula and the helix), and a label or a button that used the local
+    // position would slowly drift off its body as the scene turned.
+    group.updateWorldMatrix(true, false);
+    worldPoint.setFromMatrixPosition(group.matrixWorld);
+    projected.copy(worldPoint).project(camera);
     if (projected.z < -1 || projected.z > 1) return null;
-    const depth = camera.position.distanceTo(group.position);
+    const depth = camera.position.distanceTo(worldPoint);
     const half = Math.tan((CAMERA_FOV * Math.PI / 180) / 2);
     const k = (state.height / 2) / Math.max(1, half * depth);
     return {
@@ -2270,6 +2452,24 @@ export async function createEngine(options = {}) {
       k,
       depth,
     };
+  }
+
+  /** Turn the picture by moving the CAMERA around its target instead of
+   *  rotating the scene. For unlit materials the image is identical - the
+   *  relative motion of camera and content is the same - but every label and
+   *  every node button is projected from this camera, so they stay on their
+   *  bodies, and a name can never rotate out of the frame the camera fitted.
+   *  (The page's own reference scene turns the scene and crops itself.) */
+  function spinView(step) {
+    if (!step) return;
+    const offset = camera.position.clone().sub(target);
+    const cos = Math.cos(step);
+    const sin = Math.sin(step);
+    camera.position.set(
+      target.x + offset.x * cos - offset.z * sin,
+      camera.position.y,
+      target.z + offset.x * sin + offset.z * cos);
+    camera.lookAt(target);
   }
 
   /* ---- the small controls --------------------------------------------- */
@@ -2383,6 +2583,7 @@ export async function createEngine(options = {}) {
   }
 
   function resize(width, height, dpr = 1) {
+    const wasAspect = state.aspect;
     state.width = Math.max(1, Math.round(width || 0));
     state.height = Math.max(1, Math.round(height || 0));
     state.aspect = state.width / state.height;
@@ -2390,6 +2591,10 @@ export async function createEngine(options = {}) {
     applyRenderScale();
     camera.aspect = state.aspect;
     camera.updateProjectionMatrix();
+    // A NARROWER stage is a smaller frame: the same camera would crop the
+    // picture, which is exactly what Gemini's page does. Re-frame when the
+    // stage's shape really changed, so a window resize can never strand a name.
+    if (positions.length && Math.abs(state.aspect - wasAspect) > 0.005) setCamera();
     return { width: state.width, height: state.height, aspect: state.aspect,
       ratio: state.dprWanted * state.renderScale };
   }
@@ -2476,7 +2681,12 @@ export async function createEngine(options = {}) {
     },
     zoom(factor) {
       const offset = camera.position.clone().sub(target);
-      const radius = Math.min(MAX_CAMERA_DISTANCE,
+      // The floor is Gemini's own closeness; the ceiling follows the FRAME, not
+      // a constant: a 240-name picture legitimately sits thousands of units out,
+      // and a fixed 620 cap would snap the camera into the middle of it on the
+      // first wheel notch.
+      const ceiling = Math.max(MAX_CAMERA_DISTANCE, (state.frameDistance || 0) * 2.5);
+      const radius = Math.min(ceiling,
         Math.max(MIN_CAMERA_DISTANCE, offset.length() * (factor || 1)));
       offset.setLength(radius);
       camera.position.copy(target).add(offset);
@@ -2508,6 +2718,11 @@ export async function createEngine(options = {}) {
         scale: state.renderScale,
         ratio: Math.min(2, Math.max(RENDER_SCALE_MIN,
           state.dprWanted * state.renderScale)),
+        aspect: state.aspect,
+        distance: camera.position.distanceTo(target),
+        frameDistance: state.frameDistance,
+        fill: FRAME_FILL,
+        fog: scene.fog ? scene.fog.density : 0,
       };
     },
     dispose,

@@ -81,21 +81,16 @@ PS1 = REPO / "scripts" / "apply-patches.ps1"
 FACE_PAGE = "/faces.html"
 
 #: Files the page's own code asks for AT RUN TIME, so no markup reference or
-#: module `import "..."` exists to discover. Each is named here with the reason
-#: it cannot be found by reading the page:
+#: module `import "..."` exists to discover. The page assembles its `#reactor`
+#: iframe URL in JS, so the face page is named here with the reason.
 #:
-#:   /faces.html    the page assembles its `#reactor` iframe URL in JS;
-#:   /three.min.js  `galaxy-cosmos.js` creates a `<script src>` for the vendored
-#:                  three.js r128 (2026-10-27, its own PR) when a 3D look is
-#:                  first drawn. It is deliberately NOT a `<link rel=preload>` in
-#:                  the page: that would download 600 KB on every HUD load,
-#:                  including the ones that never draw a 3D look.
-#:
-#: Both are real whitelist keys, and both must be, or the browser HUD asks for a
-#: file the closed world refuses.
+#: `/three.min.js` used to be named here too, for the day between the vendoring
+#: change and the page's own `<script src="/three.min.js" defer>` landing: the
+#: engine created that tag in JS, so the closed-world check could not see it.
+#: The page names it in markup now, so it is discovered like any other file and
+#: must not be seeded - a seed would hide a page that stopped loading it.
 LOADED_BY_CODE = {
     FACE_PAGE: "the page builds its #reactor iframe URL in JS",
-    "/three.min.js": "galaxy-cosmos.js creates a <script src> for it when a 3D look is drawn",
 }
 
 #: The exact Content-Type each extension must get (the ruling names exact MIME
