@@ -99,6 +99,7 @@ BUDGET_CALL = re.compile(r"(?<![\w$.])call\s*\(")
 DYNAMIC_BELOW = {
     ("brain.js", "command"): "brain.js's own invoke(command, args) wrapper; every caller passes a literal.",
     ("brain.js", "cmd"): "the second layer above it - topicsCall, chatbotAct, supportAct, quizCall, decksCall, memoryWrite, widgetAct - each forwards a name its callers pass as a literal.",
+    ("brain.js", "Advisor.ADVISOR_COMMAND"): "the model advisor's one command name is the imported constant ADVISOR_COMMAND from model-advisor.js (the literal "brain_model_recommend" lives there); brain.js only forwards it.",
     ("brain.js", "sw.command"): "AUTO_SWITCHES[which].command, from auto-learn.js's own two-entry table (brain_memory_learning_auto and brain_memory_learning_sensitive, both in the brain-memory set granted to this window).",
     ("main.js", "command"): "the Jarvis bar's invoke(command, args) and invokeStrict(command, args); every caller passes a literal.",
     ("widget.js", "command"): "the widget's invoke(command, args) and invokeStrict(command, args); every caller passes a literal.",
