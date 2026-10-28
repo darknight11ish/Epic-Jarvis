@@ -72,8 +72,8 @@
 +            if is_cloud:
 +                # The payload was built cloud-shaped (user turns only, no
 +                # memory). Rebuild it as a local turn would have been - the
-+                # same rebuild the degrade loop makes when it lands back here.
-+                messages = _chat_client_fields_off(body.get("messages") or [])
++                # same rebuild the degrade loop makes (body's own transcript).
++                messages = body.get("messages") or []
 +                is_cloud = False
 +            payload = _build_payload(lane)
 +            use_tools = True

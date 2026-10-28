@@ -281,7 +281,15 @@ def t_the_patch_is_registered_last():
              # so a lane the owner picks by hand runs the router's gates. It has no
              # hunk in jarvis_gate.py, so it rewrites none of the stale rows this
              # patch removes.
-             "f01-manual-lane-gate.patch"}
+             "f01-manual-lane-gate.patch",
+             # cloud-honesty.patch (2026-10-28, AI-safety audit H1/M1) is the
+             # last patch ADDED after it, immediately before cloud-escalate.patch:
+             # three hunks, every one in jarvis_hud.py (the route header's crisis
+             # flag, the crisis-turn rebound to this PC's model, and the cloud
+             # relay's postscript lines). It has no hunk in jarvis_gate.py, so it
+             # rewrites nothing this patch wrote, and the later_rewriting() half
+             # below proves it.
+             "cloud-honesty.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)
