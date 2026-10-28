@@ -22,7 +22,11 @@
 //! More… ▸ Start Watch with me · Show or hide the widget · Show or hide the
 //!         floating face · Chat history… · Faces… · Everything Jarvis can do…
 //!         Backend: not supervised · Reconnect the event stream · Run a status
-//!         check · Jarvis Desktop 0.1.0 (or "Update available")
+//!         check · Jarvis Desktop <version> - a version LABEL, not a check:
+//!         when an update is known it reads "Update available — <version>…"
+//!         and becomes clickable, otherwise it stays disabled, and a click
+//!         either way opens Settings, which is where checking and installing
+//!         happen (`on_update_status`, `ID_UPDATE`). It installs nothing.
 //! ─────────────────────────────
 //! Quit Jarvis
 //! ```

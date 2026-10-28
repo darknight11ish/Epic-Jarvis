@@ -486,6 +486,9 @@ await check("every switch really calls its own card's command, and nothing else"
   // a write to a store, an endpoint, a third command - shows up here.
   const stub = fakeDom({ stored: null });
   const calls = [];
+  // What the PC answers about supervision. Mutable so the phone row can be
+  // driven in the state that used to lie: switch ON, no program set.
+  let supervisor = { supervise: false, configured: false, owned: false, backend: { program: "", args: [] } };
   globalThis.__TAURI__ = {
     core: {
       invoke: async (command, args) => {
@@ -494,9 +497,7 @@ await check("every switch really calls its own card's command, and nothing else"
         if (command === "get_second_card") {
           return { chat_card: { cards: [], chosen: "", where: { words: "On this PC." } } };
         }
-        if (command === "supervisor_status") {
-          return { supervise: false, configured: false, owned: false, backend: { program: "", args: [] } };
-        }
+        if (command === "supervisor_status") return supervisor;
         if (command === "get_api_settings") return { base: "", bindAddress: "", hasToken: true };
         if (command === "get_voice_status") {
           return { gate: { settings: { memory: "memory_on_screen" }, training: {} } };
@@ -552,6 +553,24 @@ await check("every switch really calls its own card's command, and nothing else"
     assert.equal(api[1].bindAddress, "100.64.0.7");
     assert.equal(api[1].token, null, "the card wrote a token - it must never touch one");
     assert.equal("base" in api[1], true, "the phone row stopped sending the fields set_api_settings needs");
+    // With supervision off, the address alone starts nothing, and the row has
+    // always said so. What it must NOT do is promise the phone can reach this
+    // PC while the switch it depends on is ON with no program set - the hole
+    // this read closed (`paintSupervise` says the same two rows up).
+    assert.match(phone._status.textContent, /only while .*start and stop Jarvis.* is on/i,
+      "with supervision off, the phone row stopped saying the address depends on it");
+    supervisor = { supervise: true, configured: false, owned: false, backend: { program: "", args: [] } };
+    const phoneAgain = stub.els.get("fr-rows").querySelector("#fr-phone");
+    const boxAgain = phoneAgain.querySelectorAll("input")[0];
+    boxAgain.value = "100.64.0.7";
+    calls.length = 0;
+    for (const fn of phoneAgain.querySelectorAll("button")[0].listeners.click) await fn();
+    assert.match(phoneAgain._status.textContent, /nothing will answer yet/i,
+      "supervision on with no program set, the phone row still promised the phone can reach the PC");
+    assert.match(phoneAgain._status.textContent, /Find it for me/i,
+      "the phone row does not say how to fill in the missing program");
+    assert.equal(phoneAgain._status.dataset.tone, "bad",
+      "the phone row says 'nothing will answer yet' in the success tone");
 
     // 4. Read aloud, the one that raises a card, through the voice command.
     const aloud = stub.els.get("fr-rows").querySelector("#fr-read-aloud");
