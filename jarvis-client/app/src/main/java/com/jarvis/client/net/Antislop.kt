@@ -138,7 +138,7 @@ object Antislop {
             // JSON string ("true") is not a yes - a stray string must not tick
             // a box the owner never ticked.
             allowEmDashes = (body["allow_em_dashes"] as? JsonPrimitive)
-                ?.takeIf { it.isBoolean }
+                ?.takeIf { !it.isString }
                 ?.booleanOrNull == true,
             detail = body.text("detail") ?: DETAIL,
             offNote = body.text("off_note") ?: OFF_NOTE,
