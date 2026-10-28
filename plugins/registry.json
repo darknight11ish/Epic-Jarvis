@@ -78,7 +78,7 @@
       "name": "vault-organizer",
       "module": "jarvis_vault_organizer",
       "install": "handler",
-      "stack_order": 155,
+      "stack_order": 156,
       "summary": "plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -86,7 +86,7 @@
       "name": "sandbox",
       "module": "jarvis_sandbox_exec",
       "install": "handler",
-      "stack_order": 156,
+      "stack_order": 157,
       "summary": "the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once).",
       "why": "born as a folder: it replaces no patch"
     },
@@ -94,7 +94,7 @@
       "name": "antislop",
       "module": "jarvis_antislop",
       "install": "handler",
-      "stack_order": 157,
+      "stack_order": 158,
       "summary": "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings.",
       "why": "born as a folder: it replaces no patch"
     }
