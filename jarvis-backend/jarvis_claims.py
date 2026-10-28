@@ -51,6 +51,36 @@ missed one. So any action tool that succeeded in this answer backs any
 claim. Plug-in tools (jarvis_mcp.py) count as action tools for the same
 reason: they are unknown here.
 
+THE 2026-10-27 AI-HONESTY AUDIT (`.dsh-scratch/AUDITS-2026-10-27/
+partner-ai-safety.md`, findings H2, H3 and H4). Three holes, each a claim
+that stood with no correction:
+
+  - H2, passive and telegraphic confirmations. The pattern above needs a
+    first-person head ("I've ...", "Done."), so the commonest short
+    confirmations had no subject to match: "Reminder set for 7pm.",
+    "Email sent to Alex.", "Note created in your journal.", "Your timer is
+    running.", "All set." PASSIVE_CLAIM below is a second, subjectless pass
+    with three narrow shapes, and it is only consulted when the sentence is
+    short, is not a question, is not conditional, and does not say
+    "earlier". A false line after a true sentence is worse than a missed
+    one, so every shape names a real object of a real action verb.
+  - H3, one word exempting a sentence. `_MEMORY` exists because automatic
+    learning saves facts after the answer, outside the tool loop, so "I've
+    noted that" is honest with no tool behind it. But "noted" also rides a
+    note WRITE - "Noted - I've added it to your Obsidian daily note." - and
+    a note write is the one action that most often does NOT happen (a
+    declined card). The exemption now applies to learning only: a sentence
+    that says "noted" AND names a place a note is written (note, journal,
+    vault, obsidian, logseq, joplin, daily) is a claim, not a memory.
+  - H4, reads counting as actions. READ_ONLY_TOOLS was four tools behind
+    the tool table: read_web_page, propose_plan, feature_guide and
+    rea_investigate can run and change nothing, yet any of them returning
+    ok silenced the "nothing was done" line. All four are listed now,
+    ACTING_TOOLS names the other half explicitly, and
+    backend/test_smarter_answers.py fails when jarvis_agent.TOOLS holds a
+    name in neither set - so the next tool has to be classified by the
+    person adding it instead of silently backing every claim.
+
 Standard library only; nothing is sent anywhere, nothing is stored.
 """
 import re
@@ -60,7 +90,8 @@ import re
 CLAIMS_DONE = re.compile(
     r"\b(i'?ve|i have|i just|i went ahead and|done[,.!]? i|i('ve)? (now )?)\s*"
     r"(turned|switched|set|sent|added|saved|created|scheduled|started|locked|emailed|"
-    r"written|wrote|called|contacted|notified|booked|deleted|cancelled|paid|ordered)\b"
+    r"written|wrote|called|contacted|notified|booked|deleted|cancelled|paid|ordered|"
+    r"noted)\b"
     r"|^\s*done\b", re.I | re.M)
 
 #: The SAME claim with no "I" in front, or with the job first - the shape an
@@ -85,15 +116,39 @@ CLAIMS_SCHEDULE_DONE = re.compile(
 #: these never backs "I've done it". Everything else - a note write, a home
 #: change, a reminder, an email, a plug-in tool - counts as an action.
 #:
-#: `feature_guide` (2026-10-27): it explains a feature from the list on this
-#: PC and changes nothing, but it was missing here - and it IS offered by the
-#: shipped `[tools].enabled`. A turn where the model explained a feature and
-#: then said it had set a reminder therefore silenced the "nothing was done"
-#: line (the field bug's second honesty gap).
+#: `more_tools` is not a Tool at all: it opens a group of plug-in (MCP) tools,
+#: and the call that really ran is the one inside the group, so opening it
+#: proves nothing on its own. The last four were added on 2026-10-27 (audit H4)
+#: after being checked one by one against their own declarations: read_web_page
+#: fetches one page and hands back its words, propose_plan builds and describes
+#: a plan ("nothing has happened yet", jarvis_gate.py's own words for it),
+#: feature_guide reads Jarvis's own feature list, and rea_investigate only
+#: gathers and reports. None of them changes anything.
+#:
+#: browser_control is deliberately NOT here. Half of it reads (a page's text, a
+#: window's controls) and half of it acts (click, type, submit), and the record
+#: this module sees says only "browser_control ok" - so it stays an action tool,
+#: the direction that cannot silence a real correction wrongly.
 READ_ONLY_TOOLS = frozenset({
     "calculator", "memory_search", "file_read", "github_search", "web_search",
     "calendar_read", "email_check", "notes_search", "my_files", "my_spending", "retirement_whatif", "home_read",
-    "coming_up", "more_tools", "feature_guide",
+    "coming_up", "more_tools",
+    "read_web_page", "propose_plan", "feature_guide", "rea_investigate",
+})
+
+#: The other half of the same classification (audit H4): every tool that can
+#: change something on this PC or somewhere else - a note, a list, a reminder,
+#: a setting, a message, a shell command, a browser, a phone. A tool in NEITHER
+#: set fails backend/test_smarter_answers.py on purpose: the next tool added to
+#: jarvis_agent.TOOLS has to be classified by the person adding it, because the
+#: alternative (an unclassified tool counting as an action) is exactly how a
+#: read-only tool came to silence every correction for a year.
+ACTING_TOOLS = frozenset({
+    "append_logseq_journal", "append_obsidian_daily", "browser_control",
+    "change_setting", "control_computer", "control_phone", "create_joplin_note",
+    "draft_email", "home_control", "run_data_script", "send_email",
+    "set_reminder", "set_timer", "shell_exec", "tidy_inbox", "todo_add",
+    "todo_done",
 })
 
 #: The line added to a typed answer that claimed an action nobody took.
@@ -130,8 +185,25 @@ _SENTENCE = re.compile(r"[^.!?\n]+[.!?]*", re.M)
 #: "if you like/want/..." is the offer that the verb-first scheduler pattern
 #: would otherwise read as done ("Set a reminder for 6pm if you like.").
 _NOT_A_CLAIM = re.compile(
-    r"\?\s*$|^\s*(if|should|shall|would|could|can|do you want|want me)\b|\b(if|once|when) i\b"
-    r"|\bif\s+you(?:'d|\s+(?:like|want|wish|prefer))\b",
+    r"\?\s*$|^\s*(if|should|shall|would|could|can|do you want|want me|once|when|"
+    r"whenever|unless|until|whether|after|before|in case)\b"
+    r"|\b(if|once|when) i\b"
+    # Gemini review 2026-10-28 (i): the SAME sentence-level exclusion reaches
+    # every matcher. A condition or an offer can sit mid-sentence, after the
+    # claim grammar has already matched: "Set a reminder for 6pm when you're
+    # home.", "Added a reminder for 6pm whenever you like.", "You can have a
+    # reminder set for 5 PM." None of those says an action was taken.
+    r"|\b(?:if|once|when|whenever|unless|until|in case|whether)\s+you\b"
+    r"|\b(?:would\s+you|want\s+me\s+to|can\s+have\s+a)\b"
+    # Gemini review 2026-10-28 (i), the NEGATION half: the sentence itself
+    # says the action was not taken ("The reminder is set for 7pm and the
+    # email is sent, but I have not done it."), so no matcher's match in that
+    # sentence may be read as a claim.
+    r"|\b(?:have|has|had|did|do|does|was|were|is|are)\s+not\s+"
+    r"(?:actually\s+|really\s+|ever\s+)?(?:been\s+)?(?:done|set|sent|added|"
+    r"saved|created|scheduled|started|emailed|called|notified|booked|deleted|"
+    r"cancelled|paid|ordered|written|noted|turned|switched|locked|moved|"
+    r"opened|closed|finished|completed)\b",
     re.I)
 #: Something done before this answer ("I already set it this morning").
 _EARLIER = re.compile(
@@ -139,17 +211,108 @@ _EARLIER = re.compile(
     r"previously)\b", re.I)
 #: About remembering - automatic learning saves facts after the answer.
 _MEMORY = re.compile(r"\b(remember\w*|memor(y|ies)|in mind|noted)\b|(?<!in )\bfacts?\b", re.I)
+#: H3: the word "noted" itself, and the places a note is WRITTEN. A sentence
+#: that says "noted" and names one of these is a note write, not learning.
+_NOTED = re.compile(r"\bnoted\b", re.I)
+_NOTE_PLACE = re.compile(
+    r"\b(notes?|journals?|diary|vault|obsidian|logseq|joplin|one ?note|notebook|"
+    r"daily|apple notes|lists?|to-?dos?|todo(?:\s+list)?|reminders?|timers?|"
+    r"alarms?|tasks?|entries|entry|items?|files?|folders?|calendar|events?|"
+    r"appointments?|meetings?|inbox)\b", re.I)
+#: A sentence that OPENS with "Noted" and then a separator is a conversational
+#: opener ("Noted - I've emailed Alex."), not a statement about remembering.
+_BARE_NOTED = re.compile(r"^\s*noted\s*[,.;:\-\u2014\u2013]", re.I)
+
+#: H2: the object of an action, in the words a short confirmation uses for one.
+#: Deliberately a named list and not "any noun": "the backup is running" must
+#: not become a correction, and every word here names something a tool of ours
+#: really changes.
+_CLAIM_OBJECT = (
+    r"reminders?|timers?|alarms?|e-?mails?|messages?|notes?|journals?|entries|"
+    r"entry|events?|appointments?|meetings?|tasks?|to-?dos?|lists?|items?|"
+    r"files?|folders?|downloads?|uploads?|payments?|orders?|bookings?|"
+    r"reservations?|invites?|invitations?|posts?|drafts?|scripts?|reports?|"
+    r"lights?|plugs?|locks?|thermostats?|screens?|subscriptions?"
+)
+#: The past participle (or state word) of an action, and the third-person form
+#: the pattern above already lists. Kept as one string so the two cannot drift.
+_CLAIM_VERB = (
+    r"turned|switched|set|sent|added|saved|created|scheduled|started|locked|"
+    r"emailed|written|wrote|called|contacted|notified|booked|deleted|cancelled|"
+    r"canceled|paid|ordered|updated|removed|opened|closed|moved|renamed|shared|"
+    r"downloaded|uploaded|installed|drafted|posted|fixed|cleaned|tidied|"
+    r"archived|pinned|starred|completed|marked|synced|printed|recorded|logged|"
+    r"noted|running|armed|paused|stopped|unlocked|active|live|done"
+)
+#: H2, a 2026-09-28 shape with no subject: "Reminder set for 7pm.",
+#: "Email sent to Alex.", "Note created in your journal.", "Your timer is
+#: running." Three narrow shapes, all sentence-initial:
+#:
+#:   <object> <verb> ...            "Reminder set for 7pm."
+#:   <object> is/was/has been <verb> "Your timer is running."
+#:   all set                        "All set." (nothing else in the sentence)
+#:
+#: What it refuses, because a wrong correction is worse than a missed one:
+#: anything over the short-sentence limit, a question (the `?` filter above),
+#: a conditional sentence, and anything that says "earlier" - all three are
+#: checked by `claims_done` before this pattern is consulted.
+_PASSIVE_CLAIM = re.compile(
+    r"^\s*(?:(?:noted|done|okay|ok|sure|all right|got it)\s*[,.\-]\s*)?"
+    r"(?:the|your|my|a|an|that|this)?\s*(?P<obj>" + _CLAIM_OBJECT + r")"
+    r"\s+(?:is|are|was|were|has\s+been|have\s+been|got|gets)?\s*"
+    r"(?P<verb>" + _CLAIM_VERB + r")\b"
+    r"|^\s*all\s+set\s*[.!]*\s*$",
+    re.I)
+#: How many words a subjectless confirmation may have. Longer than this is a
+#: sentence, not a confirmation, and the risk of reading a description as a
+#: claim goes up with every word.
+_PASSIVE_MAX_WORDS = 12
+
+
+def _memory_sentence(sentence: str) -> bool:
+    """Is this sentence about REMEMBERING (and so honest with no tool behind it)?
+
+    H3: automatic learning saves a fact after the answer, outside the tool
+    loop, so "I've noted that you prefer tea" needs no tool - hence the
+    exemption. But "noted" also opens a note write ("Noted - I've added it to
+    your Obsidian daily note."), and a note write is the action that most often
+    does NOT happen because a card was refused. So the exemption holds only
+    while the sentence names no place a note is written.
+    """
+    if not _MEMORY.search(sentence):
+        return False
+    if _NOTED.search(sentence):
+        # H3: "noted" + a place the note is STORED is a note write, not
+        # learning - the memory exemption must not swallow that claim.
+        if _NOTE_PLACE.search(sentence):
+            return False
+        # Gemini review 2026-10-28 (ii): a bare conversational "Noted - ..."
+        # opener is not a statement about remembering either. Only the
+        # "I've noted that ..." shape earns the exemption.
+        return not _BARE_NOTED.search(sentence)
+    return True
+
+
+def _passive_claim(sentence: str) -> bool:
+    """True when a SHORT sentence with no subject claims an action (H2)."""
+    words = sentence.split()
+    if len(words) > _PASSIVE_MAX_WORDS:
+        return False
+    return bool(_PASSIVE_CLAIM.search(sentence))
 
 
 def claims_done(text: str) -> bool:
     """True when `text` says, in some sentence, that an action was taken."""
     for m in _SENTENCE.finditer(text or ""):
         sentence = m.group(0).strip()
-        if not sentence or not (CLAIMS_DONE.search(sentence)
-                                or CLAIMS_SCHEDULE_DONE.search(sentence)):
+        if not sentence:
+            continue
+        if not (CLAIMS_DONE.search(sentence)
+                or CLAIMS_SCHEDULE_DONE.search(sentence)
+                or _passive_claim(sentence)):
             continue
         if _NOT_A_CLAIM.search(sentence) or _EARLIER.search(sentence) \
-                or _MEMORY.search(sentence):
+                or _memory_sentence(sentence):
             continue
         return True
     return False

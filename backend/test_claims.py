@@ -68,6 +68,18 @@ And on the real register, four things the checker cannot say about itself:
   * every row's `source` names a file that exists and a line inside it, so a
     doc edit that moves the anchor is caught here rather than by a reader.
 
+And the decision record became TWO places on 2026-10-28. A new owner decision is
+one file under `decisions.d/`, rolled into `docs/DECISIONS.md` later
+(`decisions.d/README.md`; `tools/roll_decisions.py`), so this suite also proves:
+
+  * a `source` may name either place - a fragment is a real file with real lines
+    until the roll removes it - and a pointer that names a fragment which is no
+    longer there says to cite the record instead of blaming the reader;
+  * a `grep:`/`absent:` that names the record is answered by BOTH places, end to
+    end, in a throwaway `--repo`: text that lives only in a fragment makes a
+    `grep:` row hold, and makes an `absent:` row fail (the direction that must
+    never go quiet).
+
 Needs nothing from the owner's PC, no network and no third-party package: the
 checker itself is standard library only, and so is this.
 """
@@ -87,6 +99,13 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 CHECKER = REPO / "tools" / "check_claims.py"
 REGISTER = REPO / "docs" / "CLAIMS.tsv"
+
+#: The decision record, and the folder a decision is written in before the roll
+#: folds it in. Both are spelled as a `source` cell spells them; this reader
+#: keeps its own copy on purpose, rather than importing the checker's, so a
+#: source is judged by something that does not share that parser.
+DECISION_RECORD = "docs/DECISIONS.md"
+DECISION_FRAGMENTS = "decisions.d"
 
 sys.path.insert(0, str(HERE))
 
@@ -180,15 +199,28 @@ def t_the_vocabulary_is_actually_used():
         check(f"the register uses a `{kind}:` row", kind in kinds, sorted(kinds))
 
 
-def t_every_source_points_at_a_real_line():
-    """A register whose sources drift off their anchor is a register nobody
-    can trace back to the sentence a claim came from."""
+def source_problems(rows, repo: Path = REPO) -> list:
+    """Every row whose `source` is not a file with a line inside it.
+
+    Since 2026-10-28 a decision may be recorded as ONE file under
+    `decisions.d/` and rolled into `docs/DECISIONS.md` later, so a source may
+    name EITHER place - both are files with lines, and neither is treated
+    specially here. What is special is the failure: the roll removes a fragment
+    after folding it in, so a pointer that names one that is no longer there is
+    told to cite the record, rather than reported as a typo. The roll rewrites
+    those cells itself (`tools/roll_decisions.py`), which is what keeps this
+    check from ever having to guess where the entry went.
+    """
     bad = []
-    for row in data_rows(REGISTER.read_text(encoding="utf-8")):
+    for row in rows:
         path, _, line = row["source"].rpartition(":")
-        target = REPO / path
+        target = repo / path
         if not target.is_file():
-            bad.append(f"{row['id']}: {path} is not a file")
+            hint = ""
+            if path.replace("\\", "/").startswith(DECISION_FRAGMENTS + "/"):
+                hint = (f" - a fragment is removed when it is rolled into "
+                        f"{DECISION_RECORD}; cite the record instead")
+            bad.append(f"{row['id']}: {path} is not a file{hint}")
             continue
         if not line.isdigit():
             bad.append(f"{row['id']}: {row['source']} does not end in a line number")
@@ -197,7 +229,72 @@ def t_every_source_points_at_a_real_line():
         if int(line) > total:
             bad.append(f"{row['id']}: {row['source']} is past the end of {path} "
                        f"({total} lines)")
+    return bad
+
+
+def t_every_source_points_at_a_real_line():
+    """A register whose sources drift off their anchor is a register nobody
+    can trace back to the sentence a claim came from."""
+    bad = source_problems(data_rows(REGISTER.read_text(encoding="utf-8")))
     check("every source is a file and a line inside it", not bad, bad)
+
+
+def t_a_source_may_name_a_decisions_fragment():
+    """The record is two places now (2026-10-28), and a source may point at
+    either: a fragment is a real file with real lines until it is rolled."""
+    root = Path(tempfile.mkdtemp(prefix="claims-fragment-source-"))
+    (root / DECISION_FRAGMENTS).mkdir()
+    (root / DECISION_FRAGMENTS / "2026-10-28-only-a-fragment.md").write_text(
+        "- **2026-10-28 \u2014 Only a fragment:** one.\n\nmore prose on a "
+        "second paragraph.\n", encoding="utf-8")
+    good = {"id": "S1", "source": "decisions.d/2026-10-28-only-a-fragment.md:1"}
+    late = {"id": "S2", "source": "decisions.d/2026-10-28-only-a-fragment.md:9"}
+    gone = {"id": "S3", "source": "decisions.d/2026-10-27-rolled-away.md:1"}
+    check("a source that names a fragment in the tree is accepted",
+          source_problems([good], root) == [], source_problems([good], root))
+    past = source_problems([late], root)
+    check("a source past the end of its fragment is reported",
+          len(past) == 1 and "past the end" in past[0], past)
+    rolled = source_problems([gone], root)
+    check("a source that names a rolled-away fragment says to cite the record",
+          len(rolled) == 1 and "cite the record instead" in rolled[0]
+          and DECISION_RECORD in rolled[0], rolled)
+
+
+def t_the_record_grep_is_answered_by_both_places():
+    """End to end, in a throwaway `--repo`: the decision record is
+    `docs/DECISIONS.md` plus the fragments not yet rolled into it, so a row that
+    greps the record sees a decision the day it is written - and an `absent:`
+    row notices when the sentence comes back as a fragment."""
+    root = Path(tempfile.mkdtemp(prefix="claims-record-"))
+    (root / "docs").mkdir()
+    (root / DECISION_FRAGMENTS).mkdir()
+    (root / "docs" / "DECISIONS.md").write_text(
+        "# The record\n\nonly the rolled text is here.\n", encoding="utf-8")
+    (root / DECISION_FRAGMENTS / "2026-10-28-only-a-fragment.md").write_text(
+        "- **2026-10-28 \u2014 Only a fragment:** this sentence is nowhere "
+        "else.\n", encoding="utf-8")
+    register = root / "docs" / "CLAIMS.tsv"
+    register.write_text(
+        HEADER
+        + "R1\ta decision written as a fragment is evidence the day it is "
+          "written\tgrep:docs/DECISIONS.md:this sentence is nowhere else\t"
+          "built\tdecisions.d/2026-10-28-only-a-fragment.md:1\n",
+        encoding="utf-8")
+    code, out = run("--repo", str(root), str(register), "--list")
+    check("a `grep:` on the record finds a sentence that lives only in a fragment",
+          code == 0 and "is at decisions.d/" in out, out)
+    register.write_text(
+        HEADER
+        + "R2\tthe sentence is supposed to be gone from the record\t"
+          "absent:docs/DECISIONS.md:this sentence is nowhere else\t"
+          "built\tdecisions.d/2026-10-28-only-a-fragment.md:1\n",
+        encoding="utf-8")
+    code, out = run("--repo", str(root), str(register), "--list")
+    check("an `absent:` on the record FAILS when the sentence comes back in a "
+          "fragment", code == 1, out)
+    check("... and names the fragment it came back in",
+          "decisions.d/2026-10-28-only-a-fragment.md" in out, out)
 
 
 # ---------------------------------------------------------------------------
@@ -682,6 +779,8 @@ if __name__ == "__main__":
                t_list_prints_every_row_it_checked,
                t_the_vocabulary_is_actually_used,
                t_every_source_points_at_a_real_line,
+               t_a_source_may_name_a_decisions_fragment,
+               t_the_record_grep_is_answered_by_both_places,
                t_the_about_page_quotes_the_register_it_describes,
                t_a_built_row_that_stopped_holding_fails,
                t_an_open_row_whose_gap_closed_fails,

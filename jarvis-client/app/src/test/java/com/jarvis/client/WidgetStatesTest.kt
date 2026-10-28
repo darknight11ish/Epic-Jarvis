@@ -3,6 +3,7 @@ package com.jarvis.client
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.decodePendingRows
 import com.jarvis.client.widget.ApprovalWidgetRules
+import com.jarvis.client.widget.ApprovalWidgetRules.WidgetButton
 import com.jarvis.client.widget.WidgetStates
 import com.jarvis.client.widget.WidgetStates.Approval
 import com.jarvis.client.widget.WidgetStates.Board
@@ -232,6 +233,14 @@ class WidgetStatesTest {
         // its words are not.
         assertTrue(ApprovalWidgetRules.hidden(settingsKnown = false, appLock = false, privateLists = false))
         assertEquals(Approval.CARD, WidgetStates.approval(true, true, true, false, 1))
+        // And a locked card still offers a Deny that really denies (owner,
+        // 2026-10-28). This is the field bug on v0.2.2979: locked, the card
+        // showed Deny, and tapping it only opened the app.
+        assertEquals(
+            listOf(WidgetButton.DENY, WidgetButton.REVIEW),
+            ApprovalWidgetRules.buttons(hidden = true, denyOk = true).map { it.button },
+        )
+        assertTrue(ApprovalWidgetRules.denyActsDirectly(denyOk = true))
     }
 
     // ------------------------------------------------- the real payload ----

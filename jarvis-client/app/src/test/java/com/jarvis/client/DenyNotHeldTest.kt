@@ -67,12 +67,14 @@ class DenyNotHeldTest {
         assertFalse(ApprovalWidgetRules.denyReachable(ready = false, connected = true))
     }
 
-    /** App lock is untouched: Deny there still opens the app, never a one-tap
-     *  decision. (Unchanged behaviour, pinned so the stale fix cannot drift into
-     *  it.) */
+    /** App lock is not a reason to hold a denial either (owner, 2026-10-28:
+     *  "tapping deny on the widget should deny it"). This used to pin the
+     *  opposite - Deny under App lock opened the app - and that is exactly the
+     *  bug the owner hit on v0.2.2979. The link rule above is now the only
+     *  thing that can refuse a deny, and only when it cannot deliver. */
     @Test
-    fun app_lock_still_routes_deny_through_the_app() {
-        assertFalse(ApprovalWidgetRules.denyActsDirectly(hidden = true, denyOk = true))
-        assertTrue(ApprovalWidgetRules.denyActsDirectly(hidden = false, denyOk = true))
+    fun app_lock_is_no_reason_to_hold_a_deny() {
+        assertTrue(ApprovalWidgetRules.denyActsDirectly(denyOk = true))
+        assertFalse(ApprovalWidgetRules.denyActsDirectly(denyOk = false))
     }
 }

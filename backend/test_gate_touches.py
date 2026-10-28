@@ -802,7 +802,20 @@ def t_the_patch_is_registered_and_carries_the_change():
              # so a lane the owner picks by hand runs the router's gates. It touches
              # jarvis_gate.py not at all - no gate list entry, no tier row, no _RISK
              # row, no _TOOL_ACTIONS line - so it rewrites nothing this patch wrote.
-             "f01-manual-lane-gate.patch"}
+             "f01-manual-lane-gate.patch",
+             # learning-extract-reason.patch (2026-10-28, DEF-017) is appended after
+             # it, immediately before plugin-loader.patch: ONE file, jarvis_extract.py
+             # (its `_local_llm` block), so it touches no gate list, no tier row, no
+             # _RISK row, no _TOOL_ACTIONS line and rewrites nothing this patch wrote.
+             "learning-extract-reason.patch",
+             # cloud-honesty.patch (2026-10-28, AI-safety audit H1/M1) is the
+             # last patch ADDED after it, immediately before cloud-escalate.patch:
+             # three hunks, every one in jarvis_hud.py (the route header's crisis
+             # flag, the crisis-turn rebound to this PC's model, and the cloud
+             # relay's postscript lines). It has no hunk in jarvis_gate.py, so it
+             # rewrites nothing this patch wrote, and the later_rewriting() half
+             # below proves it.
+             "cloud-honesty.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

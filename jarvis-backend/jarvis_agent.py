@@ -112,6 +112,7 @@ import re
 import socket
 import threading
 import time
+import types
 import urllib.error
 import urllib.request
 from typing import Callable, Optional
@@ -5708,20 +5709,26 @@ class _TurnWatch:
         # takes when the answer starts. None - a watch made outside a turn -
         # is never stopped.
         self.stop_mark = None
-        # The crisis help line (jarvis_wellbeing.py; CLAUDE.md, 2026-09-27):
-        # checked on the owner's own newest words only - never a picture
-        # caption, a paste, a share, or anything read from outside - the
-        # same field note_needs_a_person and LIGHTS_WITHOUT_CARD already use
-        # for "is this really what the owner just said". A missing module or
-        # anything odd about the text answers False, never raises: this
-        # check must never be the reason an ordinary turn fails.
+        # The crisis help line (jarvis_wellbeing.py; CLAUDE.md, 2026-09-27).
+        #
+        # 2026-10-28 (the AI-safety audit's finding M1): ONE rule, shared with
+        # the HUD's route header - jarvis_wellbeing.crisis_in_turn, which reads
+        # the LAST message when it is the owner's (a user message), whatever its
+        # provenance. This used to read `newest_own_words`, which is set only
+        # for provenance typed/voice, so a distress message pasted, shared, sent
+        # as a picture caption or SAID WITH A FAILED VOICE PRINT got no help
+        # line - while the header, which read the raw newest message, told both
+        # apps to draw the calm panel. Panel and answer now agree, by
+        # construction. The trade-off (a pasted article that quotes a crisis
+        # phrase also gets the line) is written up in jarvis_wellbeing.py's
+        # docstring. A missing module or anything odd answers False, never
+        # raises: this check must never be the reason an ordinary turn fails.
         self.crisis = False
-        if self.newest_own_words:
-            try:
-                import jarvis_wellbeing
-                self.crisis = bool(jarvis_wellbeing.crisis(self.newest_own_words))
-            except Exception:
-                self.crisis = False
+        try:
+            import jarvis_wellbeing
+            self.crisis = bool(jarvis_wellbeing.crisis_in_turn(raw or messages))
+        except Exception:
+            self.crisis = False
 
     # -- Stop everything -----------------------------------------------------
     def stopped(self) -> bool:
@@ -9921,31 +9928,23 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # returned ok in it (jarvis_claims.py). One plain line at the end, in
         # the stream like any other - so both apps show it and a voice turn
         # says it - and before the crisis help, which stays last.
-        line = _nothing_done_line("".join(model_words), steps, spoken=watch.spoken)
-        if line:
-            claimed_undone = True
-            tell_owner(line)
-        # The opposite lie (2026-10-18): a reminder/timer tool in this answer
-        # returned ok, yet the model said it could not set reminders or timers.
-        # The phone heard exactly that after the quick grammar missed its
-        # wording. The tool's own confirmation is said as a correction; a
-        # refused or failed tool leaves the model's honest limitation alone
-        # (jarvis_claims.schedule_correction).
-        correction = _schedule_refusal_line("".join(model_words), steps)
-        if correction:
-            tell_owner(correction)
-        # Four more claims an answer cannot back (D1c, D2, D5, D7; the live
-        # campaign of 2026-10-25): a search, the feature guide's contents, a
-        # calculation, or a setting the owner named being "not available". Same
-        # shape as the two lines above - the model's own words stand, and the
-        # truth is said after them. See `_claim_corrections` for what each one
-        # answers and why it is a correction rather than a rewrite.
-        for claim_line in _claim_corrections("".join(model_words), steps, watch):
-            tell_owner(claim_line)
-        if watch.crisis:
-            # W1 (or the short repeat line), after the model's own answer -
-            # never counted as a tool call, never asked for, always said.
-            tell_owner(crisis_reply(repeat=crisis_repeat, spoken=watch.spoken))
+        #
+        # EVERY one of these corrections now comes from `postscript_lines`
+        # (2026-10-27 audit, H1), which is also what jarvis_hud.py's cloud
+        # relay asks for - so a cloud answer and a local one are corrected by
+        # the same code instead of the cloud lane having none. It was five
+        # blocks here: the nothing-done line, the reminder/timer refusal
+        # correction (2026-10-18), four more claims an answer cannot back (the
+        # live campaign of 2026-10-25: a search, the feature guide's contents,
+        # a calculation, or a setting the owner named being "not available"),
+        # and the crisis help line last of all.
+        for _kind, _line in postscript_lines(
+                "".join(model_words), steps, watch=watch,
+                crisis=watch.crisis, crisis_repeat=crisis_repeat,
+                spoken=watch.spoken):
+            if _kind == "claimed_undone":
+                claimed_undone = True
+            tell_owner(_line)
         finish = (last.finish if last else None) or ("stop" if last and last.ended else None)
         if finish == "tool_calls":
             # The last round asked for a tool anyway, after tools were taken
@@ -10420,6 +10419,112 @@ def _claim_corrections(text: str, steps: list, watch) -> list:
     if line:
         out.append(line)
     return out
+
+
+# --------------------------------------------------------------------------
+#   EVERY lie-an-answer-tells correction, in ONE function, for BOTH lanes
+#   (the 2026-10-27 AI-safety audit, finding H1)
+# --------------------------------------------------------------------------
+#
+#   WHY THIS EXISTS AS A FUNCTION AND NOT AS SIX BLOCKS IN run_local_turn.
+#   The four corrections and the crisis help line were written inline in
+#   `run_local_turn`, which only a LOCAL turn reaches. Every cloud turn - the
+#   `_open(lane)` relay in jarvis_hud.py, which makes no tool calls possible at
+#   all - showed the model's words exactly as they arrived. "I've emailed Alex
+#   the plan and set a reminder for 6 pm" on a lane with no tools, and on the
+#   one lane where nothing can be verified, with no correction at all.
+#
+#   So the list is built here, once, and the HUD's cloud relay asks for it with
+#   the same call the local answer uses (`steps` empty on a cloud turn, and
+#   `owner_words` passed straight in because that lane has no _TurnWatch). The
+#   two paths cannot drift: they are the same code.
+#
+#   Each entry is (kind, line). `kind` is "claimed_undone" for the one line the
+#   caller has to report as a fact about the turn (`run_local_turn` returns it
+#   as `claimed_undone`), and "schedule" / "claim" / "crisis" for the rest.
+#
+#   THE CRISIS LINE IS PART OF THIS LIST ON PURPOSE. A crisis turn is never
+#   answered by a cloud lane at all (jarvis_hud.py's cloud-honesty hunk forces
+#   it local, see that patch's own comment), so the cloud relay passes
+#   `crisis=False`; having the parameter here is what lets a caller that CAN
+#   reach a crisis turn on a cloud-shaped path still say the one thing that
+#   must never be left out.
+def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
+                     crisis: bool = False, crisis_repeat: bool = False,
+                     spoken: bool = False) -> list:
+    """[(kind, line)] for every correction `text` needs, in the order they are
+    said. The ONE list both the local answer and the cloud relay append.
+
+    `text` is the model's own words as the owner saw them. `steps` are
+    run_local_turn's {"tool", "ran", "ok", ...} records - empty on a cloud turn,
+    where no tool can run at all, which is exactly why the claim line matters
+    there. `watch` may be None (a caller with no _TurnWatch); `owner_words` is
+    the newest user message, lower case, which the setting-denial check needs.
+    `spoken` picks the version with no brackets, for an answer read aloud.
+    Never raises: each half is off its own `try`, and a missing module or a
+    broken pattern costs that one line and nothing else.
+    """
+    kinds: list = []
+    try:
+        line = _nothing_done_line(text, list(steps or ()), spoken=spoken)
+    except Exception:
+        line = ""
+    if line:
+        kinds.append(("claimed_undone", line))
+    try:
+        line = _schedule_refusal_line(text, list(steps or ()))
+    except Exception:
+        line = ""
+    if line:
+        kinds.append(("schedule", line))
+    words = str(owner_words or getattr(watch, "newest_own_words", "") or "")
+    try:
+        holder = types.SimpleNamespace(newest_own_words=words)
+        for line in _claim_corrections(text, list(steps or ()), holder):
+            kinds.append(("claim", line))
+    except Exception:
+        pass
+    if crisis:
+        line = ""
+        try:
+            line = crisis_reply(repeat=crisis_repeat, spoken=spoken)
+        except Exception:
+            line = ""
+        if line:
+            kinds.append(("crisis", line))
+    return kinds
+
+
+def cloud_postscript(answer_text: str, messages=None) -> list:
+    """[(kind, line)] for a CLOUD answer - the one call jarvis_hud.py's relay
+    makes, so a cloud turn is corrected by the same code a local one is.
+
+    `answer_text` is the answer as the owner saw it (`CloudAnswer.answer_text`),
+    and `messages` is the request's own message list, read only for the newest
+    USER message: its words are what the setting-denial check compares against,
+    and its provenance is how the spoken version of a line is chosen. No step
+    list is passed and none can be: a cloud lane offers no tools at all, so
+    nothing in such an answer can be backed and `claims_done` alone decides.
+
+    Never raises, and returns [] rather than nothing when anything is odd - a
+    cloud answer with no correction is the behaviour this replaces, and it must
+    never be worse than that.
+    """
+    newest = {}
+    try:
+        for m in messages or ():
+            if isinstance(m, dict) and m.get("role") == "user":
+                newest = m
+    except TypeError:
+        newest = {}
+    content = newest.get("content")
+    words = (content if isinstance(content, str) else _text_of(content)).lower()
+    try:
+        return postscript_lines(str(answer_text or ""), (),
+                                owner_words=words,
+                                spoken=(newest.get("provenance") == "voice"))
+    except Exception:
+        return []
 
 
 def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
