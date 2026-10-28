@@ -2112,19 +2112,28 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // its own answer and re-checks it at the tap, so the worst this page can
       // do is open the one thing a reminder it can already read says to open.
       // It opens nothing by itself: the click IS the approval.
-      "reminder-open"]);
+      "reminder-open",
+      // The face models icon in the left column (2026-10-28, the OWNER ASKED:
+      // "add a jarvis model icon to the left column of the jarvis desktop that
+      // has all of the jarvis models (face models)"). ONE command,
+      // `hud_set_face`, ONE face id, proved against the spec and saved through
+      // the Faces window's own `set_appearance` - so the phone wears it and a
+      // reload keeps it. Cosmetic: no card, and no binding, colour or animal
+      // field can ride along. Appended at the end because that is where the
+      // capability file's own list gained it.
+      "hud-faces"]);
   assert.equal(cap.permissions.includes("hud-layout-write"), true,
     "the HUD page's own Edit mode cannot save without the layout write grant");
   assert.equal(cap.permissions.includes("hud-layout-read"), true,
     "the H2 change must not take the H1 read grant away");
   const writeish = cap.permissions.filter((name) => [
     "hud-layout-write", "hud-approvals", "focus-presets", "hud-voice", "hud-schedule",
-    "hud-history", "hud-personalities", "hud-cloud-escalate",
+    "hud-history", "hud-personalities", "hud-cloud-escalate", "hud-faces",
   ].includes(name));
   assert.deepEqual(writeish.sort(),
-    ["focus-presets", "hud-approvals", "hud-cloud-escalate", "hud-history", "hud-layout-write",
-      "hud-personalities", "hud-schedule", "hud-voice"],
-    "the HUD window gained a write command beyond its own layout, Reminders, ONE chat's pin/file/delete, the wording-only personality switch and the cloud escalate switch");
+    ["focus-presets", "hud-approvals", "hud-cloud-escalate", "hud-faces", "hud-history",
+      "hud-layout-write", "hud-personalities", "hud-schedule", "hud-voice"],
+    "the HUD window gained a write command beyond its own layout, Reminders, ONE chat's pin/file/delete, the wording-only personality switch, the cloud escalate switch and the face models picker");
   assert.match(cap.description, /hud-layout-write/);
   assert.match(cap.description, /owner-approved/);
   assert.match(cap.description, /holds NO pairing token/);

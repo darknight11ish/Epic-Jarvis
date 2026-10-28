@@ -102,6 +102,13 @@ struct Spec {
     patterns: Vec<Pattern>,
     /// State id → its default binding.
     states: HashMap<String, Binding>,
+    /// Every face id the spec defines, in the spec's own order. Not a list of
+    /// its own: parsed from the same `jarvis-visual-spec.json` the Faces
+    /// window draws (`faces-spec.js` is generated from it), so the face ids a
+    /// writer may store are exactly the ones the renderer can draw. The HUD's
+    /// face picker is the caller - `appearance::hud_set_face` proves an id
+    /// here before anything is saved.
+    faces: Vec<String>,
     /// `limits.flash.flicker_rate_hz_max` - the one number `resolve()` itself
     /// enforces. The spec's own note calls this a hard limit, not advice, and
     /// says it is "enforced in three places: the randomiser will not generate
@@ -204,6 +211,15 @@ fn spec() -> &'static Spec {
             }
         }
 
+        let mut faces = Vec::new();
+        if let Some(list) = root["faces"].as_array() {
+            for entry in list {
+                if let Some(id) = entry["id"].as_str() {
+                    faces.push(id.to_string());
+                }
+            }
+        }
+
         let flicker_rate_hz_max = root["limits"]["flash"]["flicker_rate_hz_max"]
             .as_f64()
             .unwrap_or(1.3);
@@ -222,6 +238,7 @@ fn spec() -> &'static Spec {
             families,
             patterns,
             states,
+            faces,
             flicker_rate_hz_max,
             max_transitions_per_s,
             min_luma_delta,
@@ -240,6 +257,19 @@ pub fn state_binding(state_id: &str) -> Option<Binding> {
 /// own mapping still lands on something real.
 pub fn has_state(state_id: &str) -> bool {
     spec().states.contains_key(state_id)
+}
+
+/// Every face id the spec defines, in the spec's own order.
+pub fn face_ids() -> Vec<String> {
+    spec().faces.clone()
+}
+
+/// Is this one of the spec's faces? The one guard a face write needs: an id
+/// the renderer cannot draw must be refused before it is stored, or the choice
+/// would silently fall back to the first face and read as "ignored"
+/// (`faces.html`: `if (!faceId || !FACE[faceId]) faceId = SPEC.faces[0].id`).
+pub fn has_face(face_id: &str) -> bool {
+    spec().faces.iter().any(|id| id == face_id)
 }
 
 /// `#rrggbb`, lower case.
@@ -1291,5 +1321,43 @@ mod tests {
                 "solid has no transition to hold against at t={t}"
             );
         }
+    }
+
+    /// The face ids the renderer can draw, from the spec itself.
+    ///
+    /// `has_face` is the guard the HUD's face picker leans on
+    /// (`appearance::hud_set_face`): an id that is not here must be refused,
+    /// because `faces.html` silently draws the first face for an unknown one
+    /// and the owner would see his choice ignored rather than rejected.
+    ///
+    /// The count is NOT pinned: a face added to the spec would make a pinned
+    /// number fail for no reason, and the picker lists whatever the spec says.
+    /// What IS pinned is that the list is real and has no duplicates - a
+    /// duplicate would draw the same face twice in a menu that is supposed to
+    /// hold one row per model.
+    #[test]
+    fn the_specs_face_ids_are_real_unique_and_include_the_characters() {
+        let ids = face_ids();
+        assert!(
+            ids.len() >= 20,
+            "the spec lists only {} faces - the spec file is not the one bundled",
+            ids.len()
+        );
+        let mut sorted = ids.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), ids.len(), "the spec repeats a face id");
+        for id in ["arc", "redpanda", "pygmyowl", "seaotter", "monkey", "robot"] {
+            assert!(has_face(id), "the spec has no face {id}");
+        }
+        assert!(has_face(
+            ids.first().expect("a non-empty face list").as_str()
+        ));
+        assert!(!has_face(""), "an empty id must never be a face");
+        assert!(!has_face("not-a-face"), "an invented face must be refused");
+        assert!(
+            !has_face("Arc"),
+            "a face id is matched exactly, not by name"
+        );
     }
 }

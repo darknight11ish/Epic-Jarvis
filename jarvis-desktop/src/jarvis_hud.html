@@ -1287,6 +1287,12 @@ html.hud-window-hidden *::after{
  * --------------------------------------------------------------------- */
 .rail-toolbar{
   display:flex; align-items:center; gap:6px; flex-shrink:0;
+  /* 2026-10-28: the face models button made this three. The rail is 212px
+     (188px in the two-column shell) and two labelled buttons already fill it,
+     so a third would squeeze all three - it WRAPS instead, which changes
+     nothing while two fit and keeps every label readable at three. In the
+     Studio shell this bar is a column, where wrapping has no effect. */
+  flex-wrap:wrap;
   padding:10px 10px 8px; border-bottom:1px solid var(--line);
 }
 .rail-toolbar-btn{
@@ -1303,6 +1309,11 @@ html.hud-window-hidden *::after{
   color:var(--ice); border-color:var(--line-hot);}
 .rail-toolbar-btn[aria-expanded="true"]{color:var(--ice); border-color:var(--line-hot);}
 .rail-toolbar-btn .glyph{width:14px; height:14px; flex:0 0 auto;}
+/* The face models button keeps its own width on the toolbar's second row, so
+   the two labelled buttons keep their share of the rail (2026-10-28). It is
+   the one rule this icon adds: size, colour, hover and the Studio shrink are
+   the shared `.rail-toolbar-btn` rules above. */
+.rail-toolbar #rail-faces{flex:0 1 auto;}
 
 .bento-empty{
   display:none; margin:2px 0 4px; font-family:var(--f-mono); font-size:11px;
@@ -2127,6 +2138,24 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
     background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
   }
   .hud-models-route[aria-pressed="true"] .tag{color:var(--ice);}
+  /* The face models panel (the owner's ask of 2026-10-28: "add a jarvis model
+     icon to the left column of the jarvis desktop that has all of the jarvis
+     models (face models)"). It wears the Presets menu's popover classes above
+     - one panel look, one set of tokens - so only its row and its id tag are
+     its own. The current face takes the SAME ice-pressed look the Current
+     Models panel's chosen lane wears, because it is the same idea: the PC's
+     own answer, drawn as chosen. */
+  .hud-faces-panel{width:min(308px, calc(100vw - 16px));}
+  .hud-faces-item{display:flex; align-items:center; justify-content:space-between;
+    gap:10px;}
+  .hud-faces-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .hud-faces-id{flex:0 0 auto; font-size:9px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--dimmer);}
+  .hud-faces-item[aria-pressed="true"]{
+    border-color:var(--ice); color:var(--ice);
+    background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
+  }
+  .hud-faces-item[aria-pressed="true"] .hud-faces-id{color:var(--ice);}
   .hud-presets-dialog{
     width:min(560px, calc(100vw - 32px)); max-height:82vh; overflow:auto;
     border:1px solid var(--line-hot); border-radius:6px; padding:14px;
@@ -2503,6 +2532,39 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
           <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/>
         </svg>
         <span class="rt-label">Live</span>
+      </button>
+      <!-- The Jarvis model / face models icon (the owner's ask of 2026-10-28:
+           "add a jarvis model icon to the left column of the jarvis desktop
+           that has all of the jarvis models (face models)").
+
+           It lists EVERY face in `faces-spec.js` - the one list the Faces
+           window draws and the Rust tray reads - and it switches through the
+           SAME save the Faces window's own "Use this face" uses, via this
+           window's narrow `hud_set_face` command (`hud-faces` in
+           capabilities/hud.json): the PC's settings store first, then
+           POST /api/appearance, so the phone wears it too and a reload keeps
+           it. No new store, no second list, no approval card.
+
+           Labelled "Faces", NOT "Models": the Current Models panel and the
+           model chip in the stage bar already own the word "model" for the AI
+           model answering, and two different things called Models in one HUD
+           is how the owner loses track of which one he is clicking.
+
+           Hidden until the shell is there, like Live above: a plain browser
+           has no command to send (the page holds no token), so the door would
+           open a menu whose every row failed. `mountFacePicker` reveals it. -->
+      <button type="button" class="rail-toolbar-btn" id="rail-faces"
+              title="Jarvis faces: all the face models, and the one it wears"
+              aria-label="Jarvis faces: all the face models, and the one it wears"
+              aria-haspopup="dialog" aria-expanded="false" hidden>
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="8"/>
+          <circle cx="9.2" cy="10.3" r="1.1"/>
+          <circle cx="14.8" cy="10.3" r="1.1"/>
+          <path d="M8.7 14.3c1.9 1.6 4.7 1.6 6.6 0"/>
+        </svg>
+        <span class="rt-label">Faces</span>
       </button>
       <!-- Why Live did not start, for a screen reader. The button's title
            carries the on/off wording; the READABLE refusal is the stage's
@@ -8851,6 +8913,11 @@ mountSafetyRail().then((rail) => {
  * hides itself: there is no shell to save a layout through. */
 import { mountHudEditor } from "./hud-edit.js";
 import { mountHudPresets, mountCurrentModels } from "./hud-presets.js";
+/* The face models picker (2026-10-28) lives in the SAME module and is
+ * imported on its own line: the line above is pinned verbatim by
+ * tests/hud-current-models.mjs, and there is no reason to disturb a pin that
+ * is still true. */
+import { mountFacePicker } from "./hud-presets.js";
 /* PWA slice 2: a plain browser keeps per-DEVICE layouts (localStorage, via
  * hud-layout-store.js) instead of the host PC's store, so the editor and the
  * Layouts menu are offered there too. The store still uses Tauri IPC when
@@ -8876,6 +8943,14 @@ mountHudPresets({
  * from the page's own #lanes buttons. The three reads are hud_proxy.rs's fixed
  * list, and there is no write, no command and no approval card here. */
 mountCurrentModels();
+/* The face models icon in the left column (the owner's ask of 2026-10-28:
+ * "add a jarvis model icon to the left column of the jarvis desktop that has
+ * all of the jarvis models (face models)"). ONE list - `faces-spec.js`, loaded
+ * by the mount and never copied here - and ONE save: the Faces window's own
+ * `set_appearance`, reached through this window's narrow `hud_set_face`.
+ * In a plain browser the mount hides its door: there is no shell command to
+ * send, and a menu whose every row would fail is worse than no icon. */
+mountFacePicker();
 
 /* ── Jarvis Live, from the left rail (the owner's ask of 2026-10-27:
  *    "a live mode button in the left column of the Jarvis HUD") ────────────

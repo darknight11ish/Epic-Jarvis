@@ -2247,3 +2247,350 @@ export function mountCurrentModels(options = {}) {
 }
 
 export { MENU_ID, PANEL_ID, STATUS_ID };
+
+/* ── 6. The face models panel (the owner's ask, 2026-10-28) ───────────────── */
+
+/**
+ * The face model picker, from the owner's own words:
+ *
+ *   "add a jarvis model icon to the left column of the jarvis desktop that has
+ *    all of the jarvis models (face models)"
+ *
+ * ONE LIST, THE ONE THAT ALREADY EXISTS. The rows are `faces-spec.js`'s own
+ * `faces` array - the file the Faces window draws (`faces.html` loads it as a
+ * script tag), generated from `jarvis-visual-spec.json` by
+ * `scripts/build-faces-spec.py`, and the same JSON `spec.rs` compiles in for
+ * the tray. This module copies no name and no id: the page loads that file and
+ * the rows are rendered from it, so a face added to the spec shows up here
+ * with no code change at all.
+ *
+ * ONE MECHANISM, THE ONE THAT ALREADY EXISTS. A click calls the HUD's narrow
+ * `hud_set_face` command (`appearance.rs`, the `hud-faces` capability set),
+ * which sets `appearance.face` and saves through the SAME `set_appearance` the
+ * Faces window's own save uses: this PC's settings store first, then
+ * `POST /api/appearance`. So `appearance.json` on the PC is the record, the
+ * phone wears the same face, and a HUD reload keeps it - the shell pushes the
+ * saved document into every page load (`appearance::adopt` -> `push_to_hud`).
+ * There is no new store, no second state and no localStorage: a face lives in
+ * ONE place.
+ *
+ * THE MARK COMES FROM THE SHELL, NOT FROM THE CLICK. The current face is
+ * `appearance.face` - or the spec's own first face when nothing was ever
+ * chosen, the same fallback `faces.html` uses (`if (!faceId || !FACE[faceId])
+ * faceId = SPEC.faces[0].id`). The save's own answer and the
+ * `jarvis-appearance` push are what move the mark; a refused or failed save
+ * marks nothing.
+ *
+ * WHAT IT IS NOT: no card (a face is cosmetic - `appearance.rs` says why it
+ * needs none), no colour, binding or animal change (the command carries one
+ * face id), no route added, and no second Faces window. Colours, patterns and
+ * the animal stay that window's.
+ */
+
+const FACE_PANEL_ID = "hud-faces-menu";
+const FACE_DOOR_ID = "rail-faces";
+const FACE_NO_SHELL = "Switching the face needs the Jarvis desktop window.";
+
+/** The face the owner's document names, or the spec's own first face. */
+export function currentFaceId(spec, appearance) {
+  const faces = Array.isArray(spec && spec.faces) ? spec.faces : [];
+  const ids = faces
+    .map((face) => (face && typeof face.id === "string" ? face.id : ""))
+    .filter(Boolean);
+  const chosen = appearance && typeof appearance.face === "string" ? appearance.face : "";
+  if (chosen && ids.includes(chosen)) return chosen;
+  return ids[0] || "";
+}
+
+/** EVERY face the spec holds, in its own order, exactly one marked current. */
+export function faceRows(spec, appearance) {
+  const faces = Array.isArray(spec && spec.faces) ? spec.faces : [];
+  const current = currentFaceId(spec, appearance);
+  const rows = [];
+  for (const face of faces) {
+    if (!face || typeof face.id !== "string" || !face.id) continue;
+    rows.push({
+      id: face.id,
+      name: typeof face.name === "string" && face.name ? face.name : face.id,
+      geometry: typeof face.geometry === "string" ? face.geometry : "",
+      current: face.id === current,
+    });
+  }
+  return rows;
+}
+
+/** What the panel says after a save. The shell's own `shared`/`note` decide:
+ *  a save that stayed on this machine says so instead of claiming the phone
+ *  already has it (`appearance.rs` `Loaded`). */
+export function faceSwitchWords(row, loaded) {
+  const name = row && row.name ? row.name : "that face";
+  const shared = Boolean(loaded && loaded.shared === true);
+  const note = loaded && typeof loaded.note === "string" ? loaded.note.trim() : "";
+  if (shared) return `Now wearing ${name}.`;
+  return `Now wearing ${name}. ${note || "Saved on this machine only."}`;
+}
+
+/** The ONE write: the HUD's own `hud_set_face`, one face id. In a plain
+ *  browser there is no road at all - the page holds no token and the
+ *  bootstrap refuses a write - which is why the door stays hidden without a
+ *  shell instead of opening a menu whose every row would fail. */
+export async function setFaceOnPc(win, id) {
+  const core = shellCoreOf(win);
+  if (!core) throw new Error(FACE_NO_SHELL);
+  return core.invoke("hud_set_face", { face: id });
+}
+
+/**
+ * Mount the face models panel behind `#rail-faces` in the HUD's left column.
+ *
+ * The panel wears the Presets menu's own popover classes (`hud-presets-*`), so
+ * it is the page's one panel look and there is nothing new to keep in step;
+ * placement, Escape-from-the-document, the outside click and the focus return
+ * are the Current Models panel's rules (`mountCurrentModels`), copied because
+ * they are the things that were wrong there first (HUD audit P2-5/P3-1).
+ *
+ * The options exist for the node test, not for the page: `spec`, `appearance`,
+ * `document`, `window`, `shellPresent`, `setFace`, `doorId`.
+ */
+export function mountFacePicker(options = {}) {
+  const doc = options.document || globalThis.document;
+  const win = options.window || globalThis.window || globalThis;
+  if (!doc || !doc.body) return null;
+  const door = doc.getElementById(options.doorId || FACE_DOOR_ID);
+  if (!door) return null;   // an older page: no door, so nothing to wire
+  const shellPresent = typeof options.shellPresent === "boolean"
+    ? options.shellPresent
+    : Boolean(shellCoreOf(win));
+  // No shell, no command: leave the door hidden (the page draws it `hidden`)
+  // rather than offer a menu that could only apologise.
+  if (!shellPresent) {
+    door.hidden = true;
+    return null;
+  }
+  if (door.dataset.facePicker === "1") return globalThis.__jarvisFacePicker || null;
+  door.dataset.facePicker = "1";
+  door.hidden = false;
+
+  let panel = null;
+  let spec = options.spec || null;
+  let appearance = options.appearance
+    || (win && win.__jarvisAppearance)
+    || null;
+  let specState = spec ? "ready" : "reading";   // reading | reading-call | ready | failed
+  let busy = "";                                // the face id being saved
+  let note = "";                                // the last sentence, kept across renders
+  const setFace = options.setFace || setFaceOnPc;
+
+  /** The canonical list, from the spec's own file. `faces-spec.js` is a
+   *  classic script whose whole effect is `window.JARVIS_SPEC = Object.freeze(
+   *  ...)`, so importing it as a module does exactly the same thing - no
+   *  fetch, no copied list and no parser of our own. */
+  async function loadSpec() {
+    if (spec) return spec;
+    if (win && win.JARVIS_SPEC) return win.JARVIS_SPEC;
+    const mod = await import("./faces-spec.js");
+    return (win && win.JARVIS_SPEC) || (mod && (mod.JARVIS_SPEC || mod.default)) || null;
+  }
+
+  function readSpec() {
+    if (spec || specState === "reading-call") return;
+    specState = "reading-call";
+    loadSpec().then((read) => {
+      spec = read || null;
+      specState = spec ? "ready" : "failed";
+    }).catch(() => {
+      spec = null;
+      specState = "failed";
+    }).then(() => {
+      if (panel && !panel.hidden) render();
+    });
+  }
+
+  function ensurePanel() {
+    if (panel && panel.isConnected) return panel;
+    panel = nodeOf(doc, "div", "hud-presets-menu hud-faces-panel");
+    panel.id = FACE_PANEL_ID;
+    panel.hidden = true;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Jarvis faces");
+    panel.appendChild(nodeOf(doc, "p", "hud-presets-title", "Jarvis faces"));
+    panel.appendChild(nodeOf(doc, "div", "hud-presets-scroll"));
+    const line = nodeOf(doc, "p", "hud-presets-line");
+    line.setAttribute("role", "status");
+    line.setAttribute("aria-live", "polite");
+    panel.appendChild(line);
+    const actions = nodeOf(doc, "div", "hud-models-actions");
+    const closeButton = nodeOf(doc, "button", "hud-presets-close", "Close");
+    closeButton.type = "button";
+    closeButton.setAttribute("aria-label", "Close the Jarvis faces panel");
+    closeButton.addEventListener("click", () => close(true));
+    actions.appendChild(closeButton);
+    panel.appendChild(actions);
+    doc.body.appendChild(panel);
+    // Escape is heard from the DOCUMENT: the panel's own keydown only fires
+    // while something inside it holds focus, and a render can drop focus to
+    // <body> - the exact failure the Current Models panel fixed (P2-5).
+    doc.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !panel || panel.hidden) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    }, true);
+    doc.addEventListener("pointerdown", (event) => {
+      if (!panel || panel.hidden) return;
+      if (panel.contains(event.target)) return;
+      // The door is exempt: a second click on it is the toggle.
+      if (door.contains(event.target)) return;
+      close(false);
+    }, true);
+    return panel;
+  }
+
+  function render() {
+    if (!panel) return;
+    const scroll = panel.querySelector(".hud-presets-scroll");
+    if (!scroll) return;
+    // Opening and saving both render, so remember the row the keyboard was on
+    // and put it back (the bug the Current Models panel fixed, P2-5).
+    const active = doc.activeElement;
+    const keep = active && scroll.contains(active) && active.dataset
+      ? active.dataset.face || "" : "";
+    scroll.textContent = "";
+    const rows = faceRows(spec, appearance);
+    if (!rows.length) {
+      const words = specState === "failed"
+        ? "The face list could not be read, so there is nothing to pick here."
+        : "Reading the face list...";
+      scroll.appendChild(nodeOf(doc, "p", "hud-presets-empty", words));
+    } else {
+      scroll.appendChild(nodeOf(doc, "p", "hud-presets-head",
+        `${rows.length} face models - the same list the Faces window draws`));
+      for (const row of rows) {
+        const button = nodeOf(doc, "button", "hud-presets-item hud-faces-item");
+        button.type = "button";
+        button.dataset.face = row.id;
+        button.setAttribute("aria-pressed", row.current ? "true" : "false");
+        button.title = row.geometry ? `${row.name}: ${row.geometry}` : row.name;
+        button.appendChild(nodeOf(doc, "span", "hud-faces-name", row.name));
+        button.appendChild(nodeOf(doc, "span", "hud-faces-id", row.current ? "current" : row.id));
+        if (busy === row.id) {
+          button.disabled = true;
+          button.setAttribute("aria-busy", "true");
+        }
+        button.addEventListener("click", () => pick(row));
+        scroll.appendChild(button);
+      }
+    }
+    const line = panel.querySelector(".hud-presets-line");
+    if (line) line.textContent = note;
+    if (keep) {
+      const again = [...scroll.querySelectorAll(".hud-faces-item")]
+        .find((item) => item.dataset.face === keep);
+      if (again && typeof again.focus === "function") again.focus({ preventScroll: true });
+    }
+  }
+
+  /** ONE face click. The mark is NOT set from this click: the save's own
+   *  answer (the document the shell saved) and the shell's push are what say
+   *  which face is worn. */
+  async function pick(row) {
+    if (!row || busy) return;
+    if (row.current) {
+      note = `${row.name} is already the face Jarvis wears.`;
+      render();
+      return;
+    }
+    busy = row.id;
+    note = `Switching to ${row.name}...`;
+    render();
+    try {
+      const loaded = await setFace(win, row.id);
+      if (loaded && typeof loaded === "object") appearance = loaded;
+      note = faceSwitchWords(row, loaded);
+    } catch (error) {
+      note = `The face did not change: ${errorTextOf(error)}`;
+    } finally {
+      busy = "";
+      render();
+    }
+  }
+
+  /** Under the door, kept inside the window - the Current Models rule. */
+  function place() {
+    const rect = door && typeof door.getBoundingClientRect === "function"
+      ? door.getBoundingClientRect()
+      : { left: 16, bottom: 40 };
+    const viewportWidth = Number(win.innerWidth) || 360;
+    const viewportHeight = Number(win.innerHeight) || 0;
+    const width = Math.min(352, Math.max(240, viewportWidth - 16));
+    const left = Math.max(8, Math.min(viewportWidth - width - 8, rect.left));
+    const height = (panel && panel.offsetHeight) || 0;
+    const below = Math.round(rect.bottom + 6);
+    const top = viewportHeight
+      ? Math.max(8, Math.min(below, viewportHeight - height - 8))
+      : Math.max(8, below);
+    panel.style.left = `${Math.round(left)}px`;
+    panel.style.top = `${Math.round(top)}px`;
+  }
+
+  function sayDoor(open) {
+    door.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function open() {
+    ensurePanel();
+    readSpec();
+    render();
+    panel.hidden = false;
+    panel.setAttribute("aria-hidden", "false");
+    sayDoor(true);
+    place();
+    const first = panel.querySelector('.hud-faces-item[aria-pressed="true"]')
+      || panel.querySelector(".hud-faces-item")
+      || panel.querySelector("button");
+    if (first && typeof first.focus === "function") first.focus();
+  }
+
+  function close(returnFocus) {
+    if (!panel || panel.hidden) return;
+    panel.hidden = true;
+    panel.setAttribute("aria-hidden", "true");
+    sayDoor(false);
+    if (returnFocus && typeof door.focus === "function") door.focus();
+  }
+
+  door.addEventListener("click", () => {
+    if (panel && !panel.hidden) close(true);
+    else open();
+  });
+  sayDoor(false);
+
+  // The shell pushes every saved document into this page (`jarvis-appearance`,
+  // hud_bootstrap.js `appearanceChanged`), and that push is what repaints the
+  // mark - a save made in the Faces window moves it too.
+  if (win && typeof win.addEventListener === "function") {
+    win.addEventListener("jarvis-appearance", (event) => {
+      const next = event && event.detail;
+      if (!next || typeof next !== "object") return;
+      appearance = next;
+      if (panel && !panel.hidden) render();
+    });
+  }
+
+  const controller = {
+    open,
+    close: () => close(false),
+    panel: () => panel,
+    door,
+    rows: () => faceRows(spec, appearance),
+    get specState() { return specState; },
+    get appearance() { return appearance; },
+  };
+  try { globalThis.__jarvisFacePicker = controller; } catch { /* a frozen global in a test */ }
+  return controller;
+}
+
+/* The face panel's own two ids, exported HERE rather than added to the line
+ * above: `tests/hud-current-models.mjs` slices the Current Models section up to
+ * that exact line, so the face panel lives after it and keeps that pin true. */
+export { FACE_PANEL_ID, FACE_DOOR_ID };
