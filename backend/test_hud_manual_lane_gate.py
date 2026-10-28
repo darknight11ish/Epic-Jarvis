@@ -141,10 +141,22 @@ def t_the_patch_and_the_base():
     names = [str(p).replace("\\", "/").split("/")[-1] for p in _stack.order()]
     check("f01-manual-lane-gate.patch is in apply-patches.ps1's order",
           "f01-manual-lane-gate.patch" in names, names[-3:])
-    check("... and it is the last code patch, immediately before the loader",
+    # "Last code patch" means last but for the patches written after it - the
+    # same rule test_gate_touches.py, test_gate_risk_rows.py, test_referee.py,
+    # test_screen_attach.py and test_devices.py use: every new patch is
+    # appended, so the next one pushes this one up the list, and that is not a
+    # defect in either of them. ONE is there now:
+    # learning-extract-reason.patch (2026-10-28, DEF-017) touches
+    # jarvis_extract.py only - ONE file, no install block, no route, no gate
+    # row - so it rewrites nothing this patch wrote and the loader's anchor
+    # ("Before the main socket") is untouched by both.
+    later = {"learning-extract-reason.patch"}
+    check("... and it is the last code patch, bar the ones written after it, "
+          "immediately before the loader",
           "f01-manual-lane-gate.patch" in names
+          and later <= set(names)
           and names.index("f01-manual-lane-gate.patch")
-          == names.index("plugin-loader.patch") - 1, names[-4:])
+          == names.index("plugin-loader.patch") - 1 - len(later), names[-4:])
     check("... stacked directly after cloud-escalate.patch, whose hunks are now "
           "part of this patch's own context",
           "cloud-escalate.patch" in names

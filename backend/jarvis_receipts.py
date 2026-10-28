@@ -585,37 +585,70 @@ def purge_words(text) -> int:
     never a hash, because a hash of a guessable name is a way back. Best effort
     by design: no scrubber, no key, no database, or a word that spans a JSON
     escape leaves the row as it was rather than raising into the caller."""
-    needle = " ".join(str(text or "").split())
-    if not needle:
+    return purge_many([text])
+
+
+#: How many forgotten things one pass over the receipts table handles at once.
+#: A retention sweep can hand over thousands of words (every user turn of every
+#: conversation it expired); one pass per chunk keeps each compiled pattern
+#: list small while still reading the table a bounded number of times rather
+#: than once per word (2026-10-28).
+PURGE_CHUNK = 200
+
+
+def purge_many(words) -> int:
+    """Scrub MANY forgotten things' words out of every receipt, in as few
+    passes as the chunk size allows. Returns how many receipts changed (a row
+    touched in two chunks is counted once).
+
+    `purge_words` without the per-word re-read (data-integrity audit F2,
+    2026-10-28): a retention sweep now purges the words of every conversation
+    it deleted, which is hundreds of words at once, and the old loop read the
+    whole table once per word. The replacement is the same fixed `[forgotten]`
+    marker, case-insensitive, longest phrase first so a longer word is not
+    half-replaced by a shorter one inside it.
+
+    Best effort, exactly like `purge_words`: never raises, and returns 0 when
+    nothing could be read or nothing matched."""
+    cleaned, seen = [], set()
+    for text in (words or []):
+        needle = " ".join(str(text or "").split())
+        if needle and needle.casefold() not in seen:
+            seen.add(needle.casefold())
+            cleaned.append(needle)
+    if not cleaned:
         return 0
-    pat = re.compile(re.escape(needle), re.I)
-    changed = 0
+    touched: set = set()
     try:
         with closing(_connect()) as c:
-            rows = c.execute(
-                "SELECT receipt_id, summary, before_snapshot_json, after_snapshot_json"
-                " FROM action_receipts").fetchall()
-            for row in rows:
-                summary = str(row["summary"] or "")
-                before = row["before_snapshot_json"]
-                after = row["after_snapshot_json"]
-                new_summary = pat.sub(FORGOTTEN, summary)
-                new_before = pat.sub(FORGOTTEN, str(before)) if before else before
-                new_after = pat.sub(FORGOTTEN, str(after)) if after else after
-                if new_summary == summary and new_before == before and new_after == after:
-                    continue
-                c.execute("UPDATE action_receipts SET summary=?, before_snapshot_json=?,"
-                          " after_snapshot_json=? WHERE receipt_id=?",
-                          (new_summary, new_before, new_after, row["receipt_id"]))
-                changed += 1
-            if changed:
+            for start in range(0, len(cleaned), PURGE_CHUNK):
+                chunk = sorted(cleaned[start:start + PURGE_CHUNK], key=len, reverse=True)
+                pat = re.compile("|".join(re.escape(w) for w in chunk), re.I)
+                rows = c.execute(
+                    "SELECT receipt_id, summary, before_snapshot_json, after_snapshot_json"
+                    " FROM action_receipts").fetchall()
+                for row in rows:
+                    summary = str(row["summary"] or "")
+                    before = row["before_snapshot_json"]
+                    after = row["after_snapshot_json"]
+                    new_summary = pat.sub(FORGOTTEN, summary)
+                    new_before = pat.sub(FORGOTTEN, str(before)) if before else before
+                    new_after = pat.sub(FORGOTTEN, str(after)) if after else after
+                    if new_summary == summary and new_before == before and new_after == after:
+                        continue
+                    c.execute("UPDATE action_receipts SET summary=?, before_snapshot_json=?,"
+                              " after_snapshot_json=? WHERE receipt_id=?",
+                              (new_summary, new_before, new_after, row["receipt_id"]))
+                    touched.add(row["receipt_id"])
+            if touched:
                 try:
                     c.execute("VACUUM")     # no transaction is pending here
                 except sqlite3.Error:
                     pass
     except Exception:
         return 0
-    return changed
+    return len(touched)
+
 
 
 # --------------------------------------------------------------------------

@@ -570,16 +570,32 @@ def _finish(token: str, outcome: str, why: str = "", message: str = "") -> None:
 
 
 def _purge(token: str) -> None:
-    """The ten minutes are up: the held chats are dropped, for good."""
+    """The ten minutes are up: the held chats are dropped, for good.
+
+    Dropping them is also the moment their words must leave the receipts store
+    (data-integrity audit F2, 2026-10-28): `delete()` has always scrubbed them
+    and this path never did, so a forget-a-time-frame left what was said in
+    receipts.db. It cannot run at take_out() time - a receipts scrub cannot be
+    undone, and these ten minutes are a real Undo - so it runs here, on the
+    held rows still sealed exactly as they were on disk. Best effort: the chats
+    are gone either way, and a purge that cannot read them must not raise out
+    of a timer thread."""
     with _SWITCH:
         with _LOCK:
             u = _STATE["undo"]
             if not u or u.get("token") != token:
                 return
             _STATE["undo"] = None
+            chats = u.get("chats") or {}
+            log = u.get("chats_log")
             u["chats"] = {}
             _STATE["last"] = {"outcome": "kept", "why": "", "at": _now(),
                               "message": LAST_WORDS["kept"]}
+    if chats:
+        try:
+            (log if log is not None else _chats()).purge_held_receipts(chats)
+        except Exception:
+            pass
     _audit("memory.forget_range.kept", {})
 
 

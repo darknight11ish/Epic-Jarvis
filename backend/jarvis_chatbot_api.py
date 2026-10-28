@@ -1699,6 +1699,15 @@ class CloudAnswer:
     this program has finalizes on that event and would drop anything written
     after it. `used_reasoning` says whether the working-out is what was shown.
 
+    `answer_text()` and `close(tail=...)` were added 2026-10-28 for the cloud
+    lane's honesty corrections (the AI-safety audit's finding H1): the caller
+    needs the answer as the owner saw it, in order to ask
+    `jarvis_agent.postscript_lines` what the answer cannot back, and somewhere
+    to put the lines it gets back - after the model's words and before the
+    events that end the stream. Holding the ending events for EVERY streamed
+    reply (not only a blank one) is what makes that possible; the bytes a
+    client receives are the same, in the same order.
+
     `auto=True` for a turn the PC escalated WITH NO CLICK (the standing switch
     or a phrase in the message): then a reply with no usable answer shows the
     LOCAL answer from `fallback()` under one honest line, never the
@@ -1729,6 +1738,7 @@ class CloudAnswer:
         self._withheld: list = []  # events that carry ONLY the working-out
         self._visible = False    # has anything that counts as an answer been seen?
         self._ended = False      # has the stream said it is finished?
+        self._shown: list = []   # the answer text, in the order it arrived
 
     # ---- the wire --------------------------------------------------------
     def feed(self, chunk: bytes) -> bytes:
@@ -1753,17 +1763,59 @@ class CloudAnswer:
                 # clicked for, nothing is dropped at all, and what this drops is
                 # exactly the text the added line would otherwise print.
                 self._withheld.append(event)
-            elif self._ended and not self._visible:
-                self._held.append(event)     # written after the added text
+            elif self._ended:
+                # 2026-10-28: held for EVERY reply, not only a blank one, so
+                # `close(tail=...)` can put the caller's own lines after the
+                # answer and before the client is told it is over (see the
+                # class docstring). `close()` writes them, in this order.
+                self._held.append(event)
             else:
                 out.append(event)
         return b"".join(out)
 
-    def close(self) -> bytes:
-        """Whatever is still to be written once the service has finished."""
-        raw, self._raw = self._raw, b""
+    def answer_text(self) -> str:
+        """The answer as the owner will see it, so the caller can check what it
+        says before the stream ends (2026-10-28: the cloud lane's honesty
+        corrections, `jarvis_agent.postscript_lines`).
+
+        Read after `feed()` has consumed the reply and before `close()`: for a
+        streamed reply that is the visible text in the order it arrived (never
+        the withheld working-out), and for a whole JSON reply it is read out of
+        the body, because nothing is parsed until `close()`.
+        """
         if not self.streamed:
-            return self._whole_body(raw)
+            try:
+                got = json.loads(self._raw.decode("utf-8", "replace"))
+            except ValueError:
+                return ""
+            if not _is_reply(got):
+                return ""
+            text, reasoning = visible_and_reasoning(got)
+            if text.strip():
+                return text
+            if reasoning.strip():
+                return REASONING_NOT_ANSWER + "\n\n" + reasoning
+            return ""
+        shown = "".join(self._shown)
+        if not shown.strip() and self.said:
+            return self.said          # the working-out fallback IS the answer
+        return shown
+
+    def close(self, tail=()) -> bytes:
+        """Whatever is still to be written once the service has finished.
+
+        `tail` is extra plain lines the CALLER wants written after the answer
+        and before the events that end the stream - the honesty corrections
+        (`jarvis_agent.postscript_lines`; 2026-10-28, audit finding H1). Each
+        line is preceded by a blank line, the same shape a local answer's own
+        corrections have, and they come BEFORE the `finish_reason`/`[DONE]`
+        events a reader finalizes on. Empty (the default) means the output is
+        byte for byte what it was before this parameter existed.
+        """
+        raw, self._raw = self._raw, b""
+        lines = [str(t).strip() for t in (tail or ()) if str(t).strip()]
+        if not self.streamed:
+            return self._whole_body(raw, lines)
         out = []
         if not raw and not self._visible and self._ended:
             # The reply ended, said so, and carried no answer: the one case
@@ -1771,11 +1823,18 @@ class CloudAnswer:
             # boundary; a stream that stopped mid-event is a fragment, and the
             # client's own "interrupted" handling is the honest answer for it.
             out.append(self._added())
+        out.extend(self._tail_chunk(lines))
         out.extend(self._held)
         self._held = []
         if raw:
             out.append(raw)                  # never drop a byte
         return b"".join(out)
+
+    def _tail_chunk(self, lines) -> list:
+        """The caller's own lines as ONE chunk in the service's own shape."""
+        if not lines:
+            return []
+        return [_added_chunk("".join("\n\n" + line for line in lines))]
 
     # ---- reading it ------------------------------------------------------
     def _read_event(self, event: bytes) -> None:
@@ -1794,10 +1853,13 @@ class CloudAnswer:
                 got = json.loads(body.decode("utf-8", "replace"))
             except ValueError:
                 self._visible = True
+                self._shown.append(body.decode("utf-8", "replace"))
                 continue
             if not isinstance(got, dict):
                 continue
             text, reasoning = visible_and_reasoning(got)
+            if text:
+                self._shown.append(text)
             if text.strip() or tool_calls(got):
                 # A tool call is an answer of its own kind: nothing is added
                 # to a reply that already said something.
@@ -1841,12 +1903,17 @@ class CloudAnswer:
         self.said = NO_ANSWER_AT_ALL
         return NO_ANSWER_AT_ALL
 
-    def _whole_body(self, raw: bytes) -> bytes:
-        """One whole JSON reply, rewritten only when it has no answer in it.
+    def _whole_body(self, raw: bytes, lines=()) -> bytes:
+        """One whole JSON reply, rewritten only when it has no answer in it -
+        or when the caller has `lines` of its own to add (2026-10-28).
 
         A reply with any visible text is returned as the very bytes that came
-        in - not re-serialised, not re-ordered. A body that is an error, an
-        unfamiliar shape or not JSON at all is returned the same way."""
+        in - not re-serialised, not re-ordered - UNLESS the caller has
+        corrections to append, in which case its `content` is extended and the
+        body is written back. A body that is an error, an unfamiliar shape or
+        not JSON at all is returned the same way (and never gets the lines:
+        there is no answer text in it to be honest about).
+        """
         if not raw:
             return raw
         try:
@@ -1856,8 +1923,20 @@ class CloudAnswer:
         if not _is_reply(got):
             return raw
         text, reasoning = visible_and_reasoning(got)
+        extra = "".join("\n\n" + line for line in (lines or ()))
         if text.strip() or tool_calls(got):
-            return raw
+            if not extra or tool_calls(got):
+                return raw
+            # The answer stands, word for word, and the correction follows it.
+            try:
+                choice = got["choices"][0]
+                part = choice.get("message")
+                if not isinstance(part, dict):
+                    part = choice["delta"]
+                part["content"] = text + extra
+                return json.dumps(got, ensure_ascii=False).encode("utf-8")
+            except Exception:                # pragma: no cover - never lose a body
+                return raw
         # `_read_event` has not run for a whole body, so the working-out is
         # put where `_stand_in` reads it - otherwise a one-shot reply with
         # only reasoning in it would lose the reasoning fallback entirely.
@@ -1868,7 +1947,7 @@ class CloudAnswer:
             part = choice.get("message")
             if not isinstance(part, dict):
                 part = choice["delta"]
-            part["content"] = shown
+            part["content"] = shown + extra
             return json.dumps(got, ensure_ascii=False).encode("utf-8")
         except Exception:                    # pragma: no cover - never lose a body
             return raw

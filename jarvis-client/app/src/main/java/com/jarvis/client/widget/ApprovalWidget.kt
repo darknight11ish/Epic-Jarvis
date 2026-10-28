@@ -41,6 +41,7 @@ import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
 import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.widget.ApprovalWidgetRules.WidgetButton
 
 /**
  * The oldest unresolved approval, on the home screen.
@@ -116,7 +117,9 @@ class ApprovalWidget : GlanceAppWidget() {
         )
         val extra = (pending.size - 1).coerceAtLeast(0)
         // The home screen is public: under App lock (or hidden lists) only a
-        // short title shows and the buttons open the locked app.
+        // short title shows. That is a rule about WORDS, not about buttons any
+        // more - the card's own `denyOk` decides whether a denial acts here or
+        // opens the app (owner, 2026-10-28, ApprovalWidgetRules).
         val security = if (ready) JarvisRuntime.settings.security.value else null
         val hidden = ApprovalWidgetRules.hidden(
             settingsKnown = security != null,
@@ -245,43 +248,49 @@ class ApprovalWidget : GlanceAppWidget() {
 
             // Deny on the left, the way to Approve on the right: the same order
             // as every card on the phone and the desktop (CardWords.BUTTONS).
+            //
+            // THE OWNER'S RULE (2026-10-28): "deny is safe; only a card that
+            // says deny needs the app opens the app." So the rule is NOT
+            // "hidden means open the app" - it is the CARD's own permission.
+            // Refusing is the safe direction, and hiding the card's words is a
+            // display rule (ApprovalWidgetRules.cardTitle), never a reason to
+            // refuse a refusal. On v0.2.2979, with the phone locked, a tapped
+            // Deny only opened the app; that is the bug this fixes.
+            //
+            // The one card that still opens the app is the one the SERVER
+            // marked `deny_ok: false` - a denial that needs a confirmation (a
+            // fingerprint, a PC-only check, another step). It gets ONE
+            // app-opening action instead, never a bare "Deny" that only opens
+            // the app. PC-only cards are not that case by themselves: deny
+            // works from the phone for them (see the rules' class doc).
+            val denyOk = item.notice?.denyOk != false
+            val buttons = ApprovalWidgetRules.buttons(hidden = hidden, denyOk = denyOk)
             Row(modifier = GlanceModifier.fillMaxWidth()) {
-                // Deny alone is a direct widget action - refusing is always
-                // the safe direction, the same rule the lock-screen
-                // notification's own Deny action already runs on.
-                //
-                // And on the same CONDITION as that notification, which this
-                // widget was ignoring: `ApprovalNotifier` offers its Deny
-                // action only `if (item.notice?.denyOk != false)`, so an item
-                // the desktop marked `deny_ok: false` had no one-tap Deny in
-                // the drawer and a one-tap Deny on the home screen. Two
-                // surfaces disagreeing about whether an item is safe to
-                // refuse unread is the disagreement mattering most.
-                val denyOk = item.notice?.denyOk != false
-                if (ApprovalWidgetRules.showsDeny(hidden, denyOk)) {
+                buttons.forEachIndexed { index, button ->
+                    if (index > 0) Spacer(GlanceModifier.width(8.dp))
                     PillButton(
-                        label = "Deny",
-                        tint = Palette.StatusBad,
-                        // Under App lock Deny opens the locked app instead of acting.
-                        onClick = if (ApprovalWidgetRules.denyActsDirectly(hidden, denyOk)) {
-                            actionRunCallback<DenyActionCallback>(
+                        label = button.label,
+                        tint = when (button.button) {
+                            WidgetButton.DENY -> Palette.StatusBad
+                            WidgetButton.REVIEW -> Palette.StatusOk
+                        },
+                        onClick = when (button.button) {
+                            // The only decision this widget makes itself, and
+                            // it is a refusal. `DenyActionCallback` hands the id
+                            // to the same EventService action the lock-screen
+                            // notification's Deny already uses, so it works with
+                            // the app locked exactly as that one does.
+                            WidgetButton.DENY -> actionRunCallback<DenyActionCallback>(
                                 actionParametersOf(DenyActionCallback.PARAM_ID to item.id),
                             )
-                        } else {
-                            actionStartActivity<MainActivity>()
+                            // Approve opens the app - never a one-tap widget
+                            // action. See the class doc for why this is not the
+                            // retired app's shape.
+                            WidgetButton.REVIEW -> actionStartActivity<MainActivity>()
                         },
                         modifier = GlanceModifier.defaultWeight(),
                     )
-                    Spacer(GlanceModifier.width(8.dp))
                 }
-                // Approve opens the app - never a one-tap widget action. See
-                // the class doc for why this is not the retired app's shape.
-                PillButton(
-                    label = "Review",
-                    tint = Palette.StatusOk,
-                    onClick = actionStartActivity<MainActivity>(),
-                    modifier = GlanceModifier.defaultWeight(),
-                )
             }
         }
     }

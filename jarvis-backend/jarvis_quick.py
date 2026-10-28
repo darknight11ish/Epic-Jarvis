@@ -8244,6 +8244,28 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     real address; a caller that omits it (an older test, a script) gets
     that function's own default, not a stricter or looser one made up
     here."""
+    # 2026-10-28, the AI-safety audit's finding M1: a crisis turn is NEVER
+    # answered by the fast path, and it is decided HERE rather than in one
+    # caller. jarvis_hud.py used to run this function BEFORE it asked whether
+    # the message was a crisis, so a distress sentence that also fitted this
+    # grammar was answered here and the route returned - no 988/911 line, no
+    # calm panel, because the header had already gone. Every caller of the
+    # fast path inherits this refusal now, including Live and the phone's own
+    # chat, and the check is jarvis_wellbeing.crisis_in_turn: the newest user
+    # message, whatever its provenance - the same rule the answering turn and
+    # the HUD's route header use, so the three cannot disagree.
+    #
+    # Returning None is what "the fast path has no answer for this turn"
+    # already means everywhere (answer_turn's own docstring), so the turn
+    # falls through to the local model, which offers no tools on a crisis turn
+    # and appends the help text. Nothing is written, touched or counted here.
+    try:
+        import jarvis_wellbeing
+        if jarvis_wellbeing.crisis_in_turn(
+                body.get("messages") if isinstance(body, dict) else None):
+            return None
+    except Exception:
+        pass
     # private-chat.patch: a private turn must not even write the "owner was
     # here" touch (jarvis_briefing) or drop this conversation's undo record,
     # so both are skipped below. `private` is derived from the body when the

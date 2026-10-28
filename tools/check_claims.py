@@ -121,6 +121,21 @@ went red at a desk while CI stayed green - an untracked file with the name a
 a git repository there is nothing to ask but the folder, so that fallback
 exists, and it is the only one.
 
+THE DECISION RECORD IS TWO PLACES SINCE 2026-10-28. A new owner decision is
+written as ONE file under `decisions.d/` and rolled into `docs/DECISIONS.md`
+later by `tools/roll_decisions.py` (`decisions.d/README.md` says how), so a row
+that names the record reads BOTH: the rolled file and the fragments not yet
+rolled. Without that, a claim added beside its own decision could not be checked
+until somebody ran a roll - and an `absent:` row would stop seeing a sentence
+the moment it came back as a fragment, which is the direction that must never go
+quiet. The fragments are read through the same tracked-tree rule as everything
+else: a scratch copy under `decisions.d/` is not evidence about the repository.
+
+`--repo PATH` points this check at a copy of the repository, the same reason the
+register path is an argument: `backend/test_claims.py` uses both to prove what a
+`grep:` row does when the sentence lives only in a fragment, without writing a
+fragment into the real tree.
+
 `--list` prints every row it checked, so "nothing is wrong" can be told apart
 from "nothing was looked at" (the lesson `check-tokens.py` writes down about
 its own missing files). The summary line prints the counts either way.
@@ -142,6 +157,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 REGISTER = REPO / "docs" / "CLAIMS.tsv"
+
+#: The decision record, repo-relative, as a row spells it - and the folder the
+#: fragments not yet rolled into it live in. A `grep:`/`absent:` naming the
+#: record reads both (see THE DECISION RECORD IS TWO PLACES in the docstring).
+DECISION_RECORD = "docs/DECISIONS.md"
+DECISION_FRAGMENTS = "decisions.d"
 
 #: Columns, in order. A row with any other number is refused rather than
 #: guessed at, because a register whose shape is uncertain cannot be checked.
@@ -318,19 +339,30 @@ def in_the_tree(where: str) -> bool:
 
 
 def tracked_files_under(path: Path) -> list[Path] | None:
-    """The tracked files under `path`, or None when `path` is outside REPO.
+    """The tracked files under `path`, or None when the folder must be walked.
 
     Same filters as the folder walk below - SKIP, MAX_BYTES, and files that are
     not on disk here - so the two answer alike; what differs is which files
     they are asked about.
+
+    None means "there is no tracked tree to ask": no repository here at all
+    (`--repo` on a plain copy, or this checker run outside git), or a path that
+    is not inside this repository. The old version answered `[]` in the first
+    case, which made a directory `grep:` in a plain copy report "nothing
+    readable under ..." instead of walking the folder - a silent no rather than
+    the documented fallback. Fixed 2026-10-28, the day `--repo` made it
+    reachable.
     """
+    paths = tracked_paths()
+    if paths is None:
+        return None
     try:
         rel = path.relative_to(REPO).as_posix()
     except ValueError:
         return None
     prefix = "" if rel in ("", ".") else rel.rstrip("/") + "/"
     out = []
-    for name in sorted(tracked_paths() or ()):
+    for name in sorted(paths):
         if not name.startswith(prefix):
             continue
         if any(part in SKIP for part in name.split("/")[:-1]):
@@ -388,6 +420,11 @@ def read_text(path: Path):
         return None, f"could not be read ({err})"
 
 
+def is_decision_record(where: str) -> bool:
+    """Does `where` name the decision record, in any spelling (separators, slashes)?"""
+    return where.replace("\\", "/").strip("/") == DECISION_RECORD
+
+
 def search(pattern: str, where: str):
     """(found at "path:line", why-not) for `pattern` under `where`.
 
@@ -395,12 +432,20 @@ def search(pattern: str, where: str):
     hand from the sentence the claim came from, and a stray `.` or `(` in one
     silently matching something else is exactly the class of quiet wrongness
     this register exists to remove.
+
+    `where` naming the decision record reads TWO places, because the record is
+    two places since 2026-10-28: `docs/DECISIONS.md` and the fragments under
+    `decisions.d/` not yet rolled into it. Both go through the tracked-tree
+    rule, so neither a scratch copy nor an untracked one is evidence.
     """
     path = REPO / where
     if not in_the_tree(where):
         return None, f"no such path: {where}"
+    candidates = list(text_files_under(path))
+    if is_decision_record(where):
+        candidates.extend(text_files_under(REPO / DECISION_FRAGMENTS))
     read_any = False
-    for candidate in text_files_under(path):
+    for candidate in candidates:
         text, why = read_text(candidate)
         if why:
             return None, f"{relative(candidate)} {why}"
@@ -458,7 +503,9 @@ def check_grep(where: str, pattern: str, want: bool):
     if want:
         if found:
             return True, f"{pattern!r} is at {found}"
-        return False, f"{pattern!r} is not in {where}"
+        searched = (f"{where} or {DECISION_FRAGMENTS}/"
+                    if is_decision_record(where) else where)
+        return False, f"{pattern!r} is not in {searched}"
     if found:
         return False, f"{pattern!r} is still at {found}"
     return True, f"{pattern!r} is gone from {where}"
@@ -799,14 +846,27 @@ def _parser() -> argparse.ArgumentParser:
     # register - that would be a green run that checked something else.
     parser.add_argument("register", nargs="?", default=None,
                         help="the register to check (default: docs/CLAIMS.tsv)")
+    # A copy of the repository to judge paths against, defaulting to this
+    # checkout. Added 2026-10-28 for one thing only: a temp repository where
+    # `docs/DECISIONS.md` and a `decisions.d/` fragment disagree, so the rule
+    # that the decision record is read in BOTH places is proved end to end
+    # instead of asserted. Pointing this at the wrong folder cannot pass, only
+    # fail differently - every row is then answered about that folder.
+    parser.add_argument("--repo", default=None,
+                        help="the repository to judge paths against (default: "
+                             "this checkout)")
     return parser
 
 
 def main() -> int:
+    global REPO
     args = _parser().parse_args()
     listing = args.listing
     verbose = listing or args.verbose
-    register = Path(args.register) if args.register else REGISTER
+    if args.repo:
+        REPO = Path(args.repo).resolve()
+    register = (Path(args.register) if args.register
+                else REPO / "docs" / "CLAIMS.tsv")
     if not register.is_absolute():
         register = (Path.cwd() / register).resolve()
 

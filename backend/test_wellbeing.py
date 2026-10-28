@@ -910,6 +910,134 @@ def t_barge_in_knows_the_plain_voice_while_it_lasts():
     _serious_reset()
 
 
+# --------------------------------------------------------------------------
+#   10. M1 (2026-10-27 AI-safety audit): the line is decided from ONE rule,
+#       and the fast path never answers a crisis turn
+# --------------------------------------------------------------------------
+#
+# The audit found two ways a crisis message could be missed: a distress
+# sentence that also fitted the FAST path's grammar was answered there and the
+# route returned before any crisis check ran; and the answering turn read
+# `newest_own_words`, which is set only for provenance typed/voice, while the
+# HUD's own header read the raw newest message - so a distress message pasted,
+# shared, captioning a picture or said with a FAILED voice print drew the calm
+# panel in both apps and never got a 988/911 line.
+#
+# The fix is one rule (jarvis_wellbeing.crisis_in_turn: the newest USER
+# message, whatever its provenance) used by the header, by the answering turn,
+# and by the fast path's own guard.
+
+def t_crisis_in_turn_reads_the_newest_user_message():
+    def turn_with(content, *, provenance=None, role="user"):
+        m = {"role": role, "content": content}
+        if provenance:
+            m["provenance"] = provenance
+        return [{"role": "user", "content": "hello", "provenance": "typed"}, m]
+    check("a typed crisis message is one",
+          WB.crisis_in_turn(turn_with("I want to kill myself", provenance="typed")))
+    for provenance in ("voice", "voice_unverified", "paste", "share", "clipboard",
+                       "picture_caption", None):
+        check(f"... and so is the same words with provenance {provenance!r}",
+              WB.crisis_in_turn(turn_with("I want to kill myself", provenance=provenance)))
+    check("the NEWEST user message is the one read, not the first",
+          not WB.crisis_in_turn([{"role": "user", "content": "I want to die",
+                                  "provenance": "paste"},
+                                 {"role": "user", "content": "what's the weather",
+                                  "provenance": "typed"}]))
+    check("an earlier crisis turn is never inherited by a later question",
+          not WB.crisis_in_turn([{"role": "user", "content": "I want to die",
+                                  "provenance": "paste"},
+                                 {"role": "assistant", "content": "please call 988"},
+                                 {"role": "user", "content": "what plant is this",
+                                  "provenance": "typed"}]))
+    check("a trailing assistant turn is not read as the owner speaking",
+          not WB.crisis_in_turn(turn_with("I want to die") + [
+              {"role": "assistant", "content": "I'm here."}]))
+    check("CONTROL: an ordinary message is not a crisis",
+          not WB.crisis_in_turn(turn_with("what's the weather like")))
+    check("CONTROL: no messages, a non-list and a broken message are all False",
+          not WB.crisis_in_turn(None) and not WB.crisis_in_turn("nope")
+          and not WB.crisis_in_turn([{"role": "user", "content": ["a", "b"]}]))
+    check("a list-of-parts content is read as text",
+          WB.crisis_in_turn([{"role": "user", "content": [
+              {"type": "text", "text": "I want to end my life"}]}]))
+
+
+def t_a_pasted_or_unverified_distress_message_gets_the_help_line():
+    for provenance in ("paste", "share", "voice_unverified", "picture_caption"):
+        messages = [{"role": "user", "content": "I want to kill myself",
+                     "provenance": provenance}]
+        opener, _ = scripted_stream("I'm really glad you told me.")
+        streamed, _sent, result = turn(messages, opener=opener)
+        text = answer_text(streamed)
+        check(f"a {provenance} distress message gets the 988/911 line",
+              WB.SHOWN_MARKER in text and "911" in text, text)
+        check(f"... and the turn itself is reported as a crisis ({provenance})",
+              result.get("crisis") is True, result.get("crisis"))
+        check(f"... and no tool is offered on it ({provenance})",
+              not _sent.get("tools"), _sent.get("tools"))
+
+
+def t_an_ordinary_pasted_message_is_still_ordinary():
+    # The control for the test above, and the cost of widening the rule: the
+    # check is on the words, and ordinary pasted words are not a crisis.
+    messages = [{"role": "user", "content": "Here is the article I told you about.",
+                 "provenance": "paste"}]
+    opener, _ = scripted_stream("Thanks.")
+    streamed, _sent, result = turn(messages, opener=opener)
+    check("CONTROL: a pasted ordinary message gets no help line",
+          WB.SHOWN_MARKER not in answer_text(streamed), answer_text(streamed))
+    check("CONTROL: ... and is not reported as a crisis turn",
+          result.get("crisis") is False, result.get("crisis"))
+
+
+def t_the_fast_path_never_answers_a_crisis_turn():
+    """M1's other half: jarvis_hud.py used to call the fast path BEFORE it
+    asked whether the message was a crisis, and the fast path returned a reply
+    of its own - so the turn never reached the model or the help line.
+
+    A SCRATCH SCHEDULER, on purpose: the fast path really sets a reminder for
+    the control below, and this suite must never write into the owner's own
+    schedule. Nothing here reaches the real `schedule.db`.
+    """
+    import tempfile as _tempfile
+    import jarvis_quick as Q
+    import jarvis_schedule as S
+    scratch = Path(_tempfile.mkdtemp(prefix="jarvis-wellbeing-quick-"))
+    sched = S.Scheduler(scratch / "schedule.db", spawn=lambda fn: None,
+                        publish=lambda *a, **k: None)
+
+    def ask(content):
+        body = {"messages": [{"role": "user", "provenance": "typed", "content": content}]}
+        with NoRealIO():
+            return Q.answer_turn(body, sched=sched)
+
+    # A sentence that really does fit the fast grammar (the control below),
+    # with a distress sentence after it: the grammar still matches, and the
+    # answer must still be refused.
+    ordinary = ask("remind me to take my pills at 7pm")
+    check("CONTROL: the fast path answers that sentence when nobody is in distress",
+          # The fast path words its confirmation in the owner's manner, and the
+          # suite runs on whatever personality THIS machine has: warm says
+          # "Got it - reminder set for 19:00 today.", plain says "Reminder set
+          # for 19:00 today." (jarvis_quick.in_manner; backend/test_manner.py
+          # pins both wordings). CI's empty profile is warm; the owner's own PC
+          # is plain, and an assertion naming either wording fails on the other
+          # machine - measured both ways on 2026-10-28. So the CONTROL checks
+          # the fact it is for - the grammar matched and answered with a
+          # reminder - on the phrase both wordings carry and on the result's
+          # own intent, not on one capital letter.
+          ordinary is not None
+          and getattr(ordinary, "intent", "") == "reminder_set"
+          and "reminder set for" in getattr(ordinary, "reply", "").lower(),
+          ordinary)
+    crisis = ask("remind me to take my pills at 7pm, I want to die")
+    check("... and refuses it when the same words carry a crisis", crisis is None, crisis)
+    # Not a crisis: unchanged.
+    check("CONTROL: an ordinary reminder is still answered by the fast path",
+          ask("remind me to call mum tomorrow at 9am") is not None)
+
+
 if __name__ == "__main__":
     for fn in (t_crisis_phrases_match,
                t_false_alarms_do_not_fire,
@@ -944,7 +1072,11 @@ if __name__ == "__main__":
                t_the_moment_holds_even_when_the_model_fails,
                t_say_speaks_a_crisis_answer_in_the_plain_voice,
                t_plain_voice_now_never_breaks_speech,
-               t_barge_in_knows_the_plain_voice_while_it_lasts):
+               t_barge_in_knows_the_plain_voice_while_it_lasts,
+               t_crisis_in_turn_reads_the_newest_user_message,
+               t_a_pasted_or_unverified_distress_message_gets_the_help_line,
+               t_an_ordinary_pasted_message_is_still_ordinary,
+               t_the_fast_path_never_answers_a_crisis_turn):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
