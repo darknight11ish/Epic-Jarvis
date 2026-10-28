@@ -2052,6 +2052,14 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // ONE job - held on a stale link, no card, never a list form and never
       // a delete-all (Ruling 15: clear-list stays the Brain's).
       "hud-schedule",
+      // The History sidebar (2026-10-27, the OWNER ASKED for "a history tab
+      // with a column icon ... pinnable chats, project organization by chat"):
+      // ONE command, hud_history_act - pin ONE chat, file ONE chat under an
+      // existing tag, or delete ONE chat, through the same routes and the same
+      // bodies as the Brain's History tab. No card, no delete-all, nothing
+      // loosened; refused while the private lists are hidden and held on a
+      // stale link. Its reads are hud-link's three History paths.
+      "hud-history",
       // The Presets menu's personalities (2026-10-27, the owner asked the menu
       // to list "the different personalities of jarvis that i can select"):
       // read the nine and the owner's own, and switch ONE - wording only, no
