@@ -57,7 +57,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
 
 use crate::commands::SETTINGS_STORE;
 
@@ -252,6 +252,10 @@ fn covered_focused(app: &AppHandle) -> bool {
 // lock and "Windows Hello for memory lists and chat history", exactly as the
 // phone's rule follows App lock and its own hide-lists setting.
 //
+// Which of the two settings can turn it on was a second decision, made on
+// 2026-10-28: "Hide memory lists and chat history" ALONE blocks a capture, as
+// the phone's rule does (privacy audit P-2; [`capture_blocked_from`]).
+//
 // Being honest about what this is worth, because it is easy to overstate:
 //
 // * It DOES keep Jarvis's own windows out of a screen capture made through
@@ -337,14 +341,16 @@ pub fn set_pairing_code_shown(on: bool) {
 
 /// True when a screen capture of Jarvis's windows must not show their content.
 ///
-/// The rule, in one place: a pairing code is on screen, or App lock is on and
-/// the lock would ask for Windows Hello now, or the Brain's private lists are
-/// hidden and that show has ended. The settings decide whether the block is
-/// allowed at all; the state decides whether it is on. Unlocked, the owner is
-/// looking at those windows, so there is nothing to keep from a capture they
-/// asked for themselves - the pairing code, which is a secret meant for
-/// someone else's screen, is the one exception, and it is in
-/// [`capture_blocked_from`] below.
+/// The rule, in one place: a pairing code is on screen, or the Brain's private
+/// lists are hidden (the owner's decision of 2026-10-28: "Hide memory lists and
+/// chat history" alone blocks a capture, exactly as the phone's rule does), or
+/// App lock is on and the lock would ask for Windows Hello now. The settings
+/// decide whether the block is allowed at all; the state decides whether it is
+/// on. Unlocked, the owner is looking at those windows, so there is nothing to
+/// keep from a capture they asked for themselves - the two states that do NOT
+/// yield to that are the pairing code, which is a secret meant for someone
+/// else's screen, and the hidden lists, whose whole promise is that their words
+/// stay off other screens. Both are in [`capture_blocked_from`] below.
 ///
 /// Deliberately not `current(app).app_lock` alone, which is the phone's shape:
 /// the phone must set `FLAG_SECURE` from the setting because Android gives it
@@ -370,7 +376,20 @@ pub fn capture_blocked(app: &AppHandle) -> bool {
 /// The pairing code is checked BEFORE the owner-is-here answer, and that is
 /// the whole point: a code is shown so a phone can type it, so a screenshot of
 /// it is the attack, and the owner standing in front of the screen does not
-/// make it safe to capture. Every other reason to block still yields to the
+/// make it safe to capture.
+///
+/// The hidden lists are checked there too, and that is the owner's decision of
+/// 2026-10-28 (privacy audit P-2): "Hide memory lists and chat history" is a
+/// promise that those words stay off other screens, so with it on a capture is
+/// blocked even while the owner is at the PC - the phone's rule needs no
+/// "owner is here" exception either, and this is the same setting. The cost is
+/// real and was chosen with it in view: while that setting is on, the state is
+/// hidden unless a Show was passed and a covered window still has focus, so
+/// desktop captures are blocked nearly all of the time. The alternative - the
+/// old rule - made the setting unable to block a capture at all, because
+/// `app_locked` is false whenever App lock is off (`app_locked` returns early
+/// on `!security.app_lock`), so `owner_here` was always true and the answer
+/// was always "not blocked". Every other reason to block still yields to the
 /// owner being there.
 fn capture_blocked_from(
     app_locked: bool,
@@ -381,12 +400,17 @@ fn capture_blocked_from(
     if pairing_shown {
         return true;
     }
+    // Above the owner-is-here return on purpose: the show has ended, so the
+    // lists are hidden even though the owner may be sitting right here.
+    if private_hidden {
+        return true;
+    }
     let owner_here = !app_locked;
     if owner_here {
         // The owner is looking at their own screen. Nothing to keep from them.
         return false;
     }
-    security.blocks_capture(owner_here) || private_hidden
+    security.blocks_capture(owner_here)
 }
 
 /// Hides `window` from screen capture (`excluded`), or puts it back.
@@ -1007,21 +1031,35 @@ pub fn spawn_watch(app: AppHandle) {
     });
 }
 
+/// Tells every window that the private lists are hidden again.
+///
+/// ONE broadcast, not a list of labels. It used to be two `emit_to` calls
+/// (the Brain and the Jarvis bar), and that is what let privacy audit P-1
+/// happen: the HUD's memory graph holds the owner's saved fact sentences and
+/// the names of the people in them, the reveal that let it read them
+/// unredacted ends, and this event is the only thing that can say so - but the
+/// HUD was never taught to listen, and nothing in the file it would have to
+/// edit said that it needed to. The state cannot be read back either:
+/// `get_lock_flags` answers with the two SETTINGS, not with "the reveal has
+/// ended", so no poll can substitute.
+///
+/// The old two-label list is not what caused P-1 on its own: in Tauri 2 a
+/// page's global `listen()` registers with the target `Any`, and
+/// `match_any_or_filter` lets an `Any` listener through every filter, so
+/// `emit_to` one window reaches a global listener in any other (see
+/// [`crate::emit_all`]'s own comment, which records that). But a rule that
+/// puts the one event which makes a window forget the owner's names behind
+/// that subtlety is a rule nobody can read off the call - and a window added
+/// tomorrow is covered by construction only if the call is a broadcast. So it
+/// is one.
+///
+/// The event carries no payload, so a window that holds no
+/// `core:event:allow-listen` (the Faces and first-run windows) loses nothing by
+/// not hearing it.
 fn emit_private_hidden(app: &AppHandle) {
     // A tag-suggestion card already on screen loses its chat title now.
     crate::stream::rebroadcast_pending(app);
-    if let Err(err) = app.emit_to(
-        crate::windows::BRAIN_LABEL,
-        crate::events::PRIVATE_HIDDEN,
-        (),
-    ) {
-        eprintln!("[jarvis] unable to tell the Brain to hide its lists: {err}");
-    }
-    // The Jarvis bar hides its thread of earlier answers the same moment
-    // (the second chat audit, 2026-09-28).
-    if let Err(err) = app.emit_to(crate::QUICKBAR_LABEL, crate::events::PRIVATE_HIDDEN, ()) {
-        eprintln!("[jarvis] unable to tell the Jarvis bar to hide its thread: {err}");
-    }
+    crate::emit_all(app, crate::events::PRIVATE_HIDDEN, ());
 }
 
 // ---------------------------------------------------------------------------
@@ -1180,6 +1218,12 @@ mod capture_tests {
     /// The four facts `capture_blocked` hands the shipped rule, with the
     /// pairing code made explicit. `block` above cannot reach that case: the
     /// pairing code is the one reason to block with no setting behind it.
+    ///
+    /// `hidden` is the fourth fact, and the one `block` cannot reach either:
+    /// `private_hidden` is a state, not a setting, so it is false in `block`
+    /// by construction. That is exactly the join privacy audit P-2 found
+    /// untested - two pure halves, each correct, and the shipped rule never
+    /// asked both.
     fn rule(
         app_lock: bool,
         hide_lists: bool,
@@ -1243,12 +1287,64 @@ mod capture_tests {
                 }
             }
         }
-        // Including the Brain's "Show" having ended (`private_hidden`), the
-        // one input no case above reaches through the settings: it blocks only
-        // while the owner is away, exactly as it did before this change.
-        let settings = Security::default();
+        // Including the Brain's "Show" having ended (`private_hidden`), now a
+        // reason in its own right: the owner's decision of 2026-10-28 is that
+        // hiding the lists alone blocks a capture (privacy audit P-2), so the
+        // owner being at the PC no longer overrides it. This assertion used to
+        // say the opposite - it pinned the bug. The setting is ON in both
+        // cases because `private_hidden` is false whenever it is off, so a
+        // "setting off, lists hidden" case is one the app cannot produce.
+        let settings = Security {
+            private_answers: true,
+            ..Security::default()
+        };
         assert!(capture_blocked_from(true, &settings, true, false));
-        assert!(!capture_blocked_from(false, &settings, true, false));
+        assert!(
+            capture_blocked_from(false, &settings, true, false),
+            "hide-lists alone did not block a capture"
+        );
+    }
+
+    #[test]
+    fn hidden_memory_lists_alone_block_a_desktop_capture() {
+        // THE DECISION (privacy audit P-2, the owner's call of 2026-10-28).
+        // "Hide memory lists and chat history" promises that those words stay
+        // off other screens, so while it is on and a Show has ended, a capture
+        // is blocked even with App lock off and the owner sitting at the PC -
+        // the phone's rule needs no "owner is here" exception for the same
+        // setting, and `docs/ARCHITECTURE.md` always said the desktop did this.
+        //
+        // App lock OFF, hide-lists ON, and the show over. This is the case the
+        // old rule answered "no" to, because `app_locked` returns false
+        // whenever App lock is off, so the owner-is-here return always fired
+        // before `private_hidden` was read: the setting could never block a
+        // capture at all.
+        let settings = Security {
+            app_lock: false,
+            private_answers: true,
+            ..Security::default()
+        };
+        assert!(
+            capture_blocked_from(false, &settings, true, false),
+            "hide-lists alone did not block a desktop capture"
+        );
+        // The same while App lock is on and the owner is away: unchanged.
+        let locked = Security {
+            app_lock: true,
+            private_answers: true,
+            ..Security::default()
+        };
+        assert!(capture_blocked_from(true, &locked, true, false));
+        assert!(capture_blocked_from(true, &locked, false, false));
+        // CONTROL. With the lists showing (a Show passed) and App lock off and
+        // the owner here, nothing blocks: a capture they asked for is theirs.
+        assert!(!capture_blocked_from(false, &settings, false, false));
+        assert!(!capture_blocked_from(
+            false,
+            &Security::default(),
+            false,
+            false
+        ));
     }
 
     #[test]
@@ -1297,18 +1393,42 @@ mod capture_tests {
         );
         // And the pairing code's answer must come BEFORE the owner-is-here one
         // inside the helper: with the owner present the rule would otherwise
-        // answer "no" for a code that must never be captured.
+        // answer "no" for a code that must never be captured. The hidden lists
+        // are pinned the same way, and for the same reason (P-2: below that
+        // return they could never block anything, because `app_locked` is
+        // false whenever App lock is off).
         let helper = &src[src.find("fn capture_blocked_from(").expect("the helper")..];
         let helper = &helper[..helper.find("\n}\n").expect("its end")];
         let shown = helper
             .find("if pairing_shown")
             .expect("the pairing code's case");
+        let hidden = helper
+            .find("if private_hidden")
+            .expect("the hidden lists' case");
         let owner = helper
             .find("let owner_here")
             .expect("the owner-is-here case");
         assert!(
             shown < owner,
             "the pairing code is checked after the owner-is-here answer:\n{helper}"
+        );
+        assert!(
+            hidden < owner,
+            "the hidden lists are checked after the owner-is-here answer, so \
+             \"Hide memory lists and chat history\" can never block a capture:\n{helper}"
+        );
+        // The state that reads it: `private_hidden` is false whenever the
+        // setting is off, which is why the case above needs `private_answers`
+        // on to be a case at all.
+        let state = &src[src.find("pub fn private_hidden").expect("the state")..];
+        let state = &state[..state.find("\n}\n").expect("its end")];
+        let off = state
+            .find("if !security.private_answers")
+            .expect("the setting's own early return");
+        let revealed = state.find("if !state.revealed").expect("the revealed half");
+        assert!(
+            off < revealed,
+            "private_hidden no longer asks the setting first:\n{state}"
         );
     }
 

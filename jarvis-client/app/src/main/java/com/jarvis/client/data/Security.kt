@@ -368,14 +368,23 @@ object SecurityRules {
      * [formPictureShown]: an approval card shows the picture of a web form
      * Jarvis filled in (the owner's decision of 2026-09-30, FormReview; never
      * saved, not cleaned), so same rule while it shows.
+     *
+     * [codeShown]: a backup's ONE-TIME RECOVERY CODE is on screen
+     * ([Backup.codeShown], raised by BackupPlate's RecoveryCodeDialog). The
+     * code is the only thing that opens a backup holding memory, chat history
+     * and settings, Jarvis keeps no copy of it, and it is shown once - so a
+     * screenshot, a screen recording, a cast, or the recent-apps picture taken
+     * with the dialog up is the whole key (privacy audit P-3, 2026-10-27). The
+     * same shape as [keyShown], which already covers the pairing code.
      */
     fun blockScreenCapture(
         s: Security,
         keyShown: Boolean = false,
         handoffShown: Boolean = false,
         formPictureShown: Boolean = false,
+        codeShown: Boolean = false,
     ): Boolean =
-        s.appLock || s.privateLists || keyShown || handoffShown || formPictureShown
+        s.appLock || s.privateLists || keyShown || handoffShown || formPictureShown || codeShown
 
     /**
      * True when going from [from] to [to] weakens anything. Any one field is
