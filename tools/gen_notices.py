@@ -326,9 +326,11 @@ Worth knowing:
     them is distributed with Jarvis.
   * The WebView2 Runtime is Microsoft's and is not redistributed: the
     installer uses Microsoft's own bootstrapper.
-  * The desktop's JavaScript has no third-party libraries; its only
-    third-party files are the fonts below. A few small pieces of code or
-    word lists copied from other projects are named in section 1.
+  * The desktop's JavaScript has ONE third-party library: three.js r128,
+    vendored so the HUD can draw its 3D picture with no CDN and no network
+    (see "THE HUD'S 3D LIBRARY" in section 1). Its only other third-party
+    files are the fonts below. A few small pieces of code or word lists
+    copied from other projects are named in section 1.
 
 """
 
