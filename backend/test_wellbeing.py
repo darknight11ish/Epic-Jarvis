@@ -1017,13 +1017,19 @@ def t_the_fast_path_never_answers_a_crisis_turn():
     # answer must still be refused.
     ordinary = ask("remind me to take my pills at 7pm")
     check("CONTROL: the fast path answers that sentence when nobody is in distress",
-          # The fast path's own wording for a scheduled reminder is
-          # `Got it - {what} set for {when}.` (jarvis_quick.py's schedule reply
-          # table) - measured, 2026-10-28; the old "Reminder set" was a guess
-          # and had never run in CI before the guard above made this suite
-          # exercise the fast path.
+          # The fast path words its confirmation in the owner's manner, and the
+          # suite runs on whatever personality THIS machine has: warm says
+          # "Got it - reminder set for 19:00 today.", plain says "Reminder set
+          # for 19:00 today." (jarvis_quick.in_manner; backend/test_manner.py
+          # pins both wordings). CI's empty profile is warm; the owner's own PC
+          # is plain, and an assertion naming either wording fails on the other
+          # machine - measured both ways on 2026-10-28. So the CONTROL checks
+          # the fact it is for - the grammar matched and answered with a
+          # reminder - on the phrase both wordings carry and on the result's
+          # own intent, not on one capital letter.
           ordinary is not None
-          and "Got it - reminder set" in getattr(ordinary, "reply", ""),
+          and getattr(ordinary, "intent", "") == "reminder_set"
+          and "reminder set for" in getattr(ordinary, "reply", "").lower(),
           ordinary)
     crisis = ask("remind me to take my pills at 7pm, I want to die")
     check("... and refuses it when the same words carry a crisis", crisis is None, crisis)
