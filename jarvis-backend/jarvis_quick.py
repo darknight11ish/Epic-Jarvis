@@ -341,11 +341,6 @@ _EXTRA_LEADS = (
     "do you think you can ",
     "i would like you to ",
     "i would love you to ",
-    "i want you to ",
-    "i need you to ",
-    "i would like to ",
-    "i want to ",
-    "i need to ",
     "any chance you could ",
     "any chance you can ",
     "could you possibly ",
@@ -358,9 +353,6 @@ _EXTRA_LEADS = (
     "could you ",
     "would you ",
     "will you ",
-    "i would like ",
-    "i want ",
-    "i need ",
     "please ",
     "kindly ",
     "just ",
@@ -1971,11 +1963,20 @@ def _run_focus(intent: Intent) -> Result:
 #: "can you add a reminder ..." the plain command. Every phrasing this covers
 #: is pinned in test_schedule.py, including the near-misses that must still go
 #: to the model ("reminder set for 6pm" is a CLAIM, not a command).
-_REMIND_ASK = (r"(?:remind(?:\s+me)?"
-               r"|(?:add|set|make|create|schedule|put)\s+(?:a|an)?\s*"
-               r"(?:new\s+)?reminder"
-               r"|(?:a|an)\s+(?:new\s+)?reminder"
-               r"|new\s+reminder|reminder)")
+#: A request lead-in the reminder grammar itself accepts. It is HERE and not in
+#: `_EXTRA_LEADS` on purpose: the global normaliser must not strip "i need ...",
+#: because a focus session says "I need a minute" - stripping that lead turned a
+#: passing focus phrase into no match (caught by CI's test_focus on Windows).
+#: "can you"/"please"/"would you" are still stripped globally; they are accepted
+#: here too so the grammar reads the same whichever way it was reached.
+_REMIND_LEAD = (r"(?:(?:can|could|would|will)\s+you\s+|please\s+|"
+                r"i\s+(?:need|want|would\s+like)\s+(?:you\s+)?(?:to\s+)?)?")
+_REMIND_ASK = (_REMIND_LEAD
+               + r"(?:remind(?:\s+me)?"
+                 r"|(?:add|set|make|create|schedule|put)\s+(?:a|an)?\s*"
+                 r"(?:new\s+)?reminder"
+                 r"|(?:a|an)\s+(?:new\s+)?reminder"
+                 r"|new\s+reminder|reminder)")
 _REMIND = re.compile(_REMIND_ASK)
 
 
