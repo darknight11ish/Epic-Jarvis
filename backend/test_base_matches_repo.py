@@ -113,6 +113,11 @@ BESIDE = (
     "manifest.webmanifest",                                     # /manifest.webmanifest
     "sw.js",                                                    # /sw.js
     "jarvis-180.png", "jarvis-192.png", "jarvis-512.png",       # /icons/*
+    # The HUD's offline 3D library (2026-10-27): three.js r128, carried in the
+    # base like the files above. It is not a whitelist key yet and no page
+    # loads it, so no Python reads it today - the port PR adds both together;
+    # backend/test_vendored_three.py pins this copy's bytes.
+    "three.min.js",
 )
 
 #: What must never be in the base: (pattern on the name, why).

@@ -7353,25 +7353,30 @@ reads the file, changes only the key(s) sent, and writes it back).
 
 ### 27.7 Personality presets and tuning dials (added 2026-10-23)
 
-The owner's decision of 2026-10-22: Jarvis can slip into one of **nine
+The owner's decision of 2026-10-22: Jarvis can slip into one of **ten
 personalities** - `warm_peer` (Warm Collaborator, the default), `classic_butler`,
 `tactical_ops`, `dry_wit`, `friday_partner`, `socratic_mentor`,
-`devils_advocate`, `calm_stoic`, and `advocate` (Patient Advocate, added
+`devils_advocate`, `calm_stoic`, `advocate` (Patient Advocate, added
 2026-10-24: plain-English medical and billing words, three questions for the
-care team, and never a diagnosis) - with **four tuning dials** (`humor` 0-3,
+care team, and never a diagnosis) and `reflect` (Reflective Coach, added
+2026-10-27: reflects first, asks one gentle question at a time, never
+diagnoses, never claims to be a therapist and keeps no therapy record) - with
+**four tuning dials** (`humor` 0-3,
 `brevity` concise/balanced/thorough, `formality` casual/warm_peer/formal_butler/
 tactical, `address` first_name/sir/ma'am/boss/captain/none), plus up to **20
 "My Personalities"** presets. It is wording and voice only, exactly like manner:
 it changes no rule, no card, no tier, no memory and nothing that is sent
 anywhere, and the legacy words `warm` and `plain` still work (they map to
-`warm_peer` and `tactical_ops`).
+`warm_peer` and `tactical_ops`). The Reflective Coach's block carries no crisis
+number and no crisis script: the code-owned 988/911 message and the crisis
+block that replaces every personality are unchanged (§38).
 
 **GET** extends the §27.1 payload with:
 
 | Field | Shape |
 |---|---|
 | `personality` | the active preset id (`"classic_butler"`) |
-| `personalities` | the nine built-ins + saved ones: `{"id", "title", "description", "switch_ack", "greeting_subtitle", "quote", "voice_blend", "voice_speed", "voice": {"blend", "fallback", "speed"}, "dials": {"humor", "brevity", "formality", "address"}, "builtin"}` |
+| `personalities` | the ten built-ins + saved ones: `{"id", "title", "description", "switch_ack", "greeting_subtitle", "quote", "voice_blend", "voice_speed", "voice": {"blend", "fallback", "speed"}, "dials": {"humor", "brevity", "formality", "address"}, "builtin"}` |
 | `dials` | the active preset's four dials with any saved overrides applied |
 | `voice_sync` | bool - whether switching a personality also switches the spoken voice (default true) |
 | `custom_personalities` | saved presets, in the full shape a Duplicate needs: `{"id", "name", "line", "example", "example_user", "example_jarvis", "dials", "based_on", "voice_spec", "voice_speed"}`. The `id` is whatever the panel/caller chose (`mine-...`) or a generated `custom-...`; use and delete accept it as-is. |
@@ -7406,12 +7411,12 @@ Classic Butler personality do", "what is TARS like", "describe the butler
 personality" and "tell me about TARS" answer with that preset's own
 `description` from this payload (no new copy) and `Say "switch to the <title>
 personality" to use it.` - the sentence that really switches, measured for all
-nine titles. Titles, aliases and saved "My Personalities" names all resolve
+ten titles. Titles, aliases and saved "My Personalities" names all resolve
 through `jarvis_manner.normalize_personality_id()`. "Describe your
 personalities", "describe my personalities", "explain your personalities",
 "tell me about your personalities", "what does each personality do" and "what
 are your personalities like" answer with one `- <title> - <description>` line
-for each of the nine in contract order, then the four dials and how to make
+for each of the ten in contract order, then the four dials and how to make
 your own. Both are quick-intent reads - `personality_describe` is in
 `READ_ONLY_INTENTS` - so no card and no model; as for every quick answer, the
 sentence's usual command digest is still recorded, and nothing the owner can
@@ -7421,8 +7426,9 @@ its answer, except that its switch example is now the sentence that works
 ("switch to the Classic Butler personality").
 
 What it changes in a turn, and only this: the local model's request gets the
-active preset's compact `<jarvis_persona>` block (measured at <= 721 characters
-worst case, under the 750-character ~180-token cap) plus a one-line recency
+active preset's compact `<jarvis_persona>` block (measured at most 722 characters
+with each preset's own dials - 730 with the longest word on every dial - under the
+750-character ~180-token cap) plus a one-line recency
 hint just before the newest question; the block's spoken-live variant keeps
 `Jarvis Live` answers to 1-3 sentences with no Markdown; a **crisis turn
 replaces the whole persona block with the calm support text**, so no preset can
@@ -7473,7 +7479,7 @@ draft is finished before the fast path's ordinary grammar sees the sentence:
 |---|---|
 | "make it ...", "change the ...", "shorter", "more formal" | the draft is revised by the local model, in place |
 | "call it ...", "name it ..." | renamed, with no model call |
-| "base it on ..." | the base preset changes to one of the nine built-ins, with no model call |
+| "base it on ..." | the base preset changes to one of the ten built-ins, with no model call |
 | "show it again" | the draft is shown again, with no model call |
 | "save it", "keep it" | saved as a "My personalities" preset, and the draft is removed |
 | "forget it", "discard it", "cancel it", "scrap it" | dropped; nothing is saved |
@@ -7483,7 +7489,7 @@ already had.
 
 **The draft, in the conversation.** Jarvis replies with a name, one line of how
 it should sound, one example exchange (the owner's line and Jarvis's) and which
-of the nine built-in presets it starts from, then: say "save it" to keep it, or
+of the ten built-in presets it starts from, then: say "save it" to keep it, or
 tell me what to change.
 
 **Saving** goes through `jarvis_manner.save_user_personality()` - the same
@@ -7499,7 +7505,7 @@ talks -> My personalities.
 | Name | 60 characters |
 | One line of how it sounds | 240 characters |
 | Each half of the example exchange | 240 characters |
-| Base preset | one of the nine built-ins (§27.7) |
+| Base preset | one of the ten built-ins (§27.7) |
 | The persona block it feeds | 750 characters, unchanged |
 
 The draft is asked for shorter than these caps on purpose: the persona block's

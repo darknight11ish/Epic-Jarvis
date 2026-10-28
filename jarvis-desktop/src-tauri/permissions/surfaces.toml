@@ -2066,7 +2066,7 @@ permissions = [
 # every other write; the read decides nothing.
 [[set]]
 identifier = "hud-personalities"
-description = "Read the nine personalities and the owner's own - the PC's answer narrowed to the personality half - and switch ONE of them. Wording only, no card, held on a stale link; nothing else about how Jarvis talks is reachable here."
+description = "Read the ten personalities and the owner's own - the PC's answer narrowed to the personality half - and switch ONE of them. Wording only, no card, held on a stale link; nothing else about how Jarvis talks is reachable here."
 permissions = [
   "allow-hud-personalities",
   "allow-hud-switch-personality",

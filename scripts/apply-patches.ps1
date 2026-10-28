@@ -2144,6 +2144,14 @@ $SHIPPED = @(
     'static/jarvis-link.js'
     'static/card-words.js'
     'static/replace-confirm.js'
+    # The HUD's offline 3D library (2026-10-27): three.js r128, the official
+    # MIT build the owner-approved "exact Gemini cosmos" port draws with, so
+    # the HUD never loads a CDN. Vendored NOW and served LATER: it is not a
+    # STATIC_ASSETS key yet and no page loads it - the port PR adds the page's
+    # <script> and the key together, because backend/test_hud_static.py
+    # refuses a whitelist entry nothing loads. Shipping it now is the asset
+    # plumbing only; backend/test_vendored_three.py pins its bytes.
+    'static/three.min.js'
     # --- The five the base carried but this list did not (2026-10-07) ---
     # All five were already in jarvis-backend/ and a SHIPPED module imports each,
     # but none was listed here and no patch delivered any of them - so a backend

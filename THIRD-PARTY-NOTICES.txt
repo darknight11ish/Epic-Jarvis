@@ -33,9 +33,11 @@ Worth knowing:
     them is distributed with Jarvis.
   * The WebView2 Runtime is Microsoft's and is not redistributed: the
     installer uses Microsoft's own bootstrapper.
-  * The desktop's JavaScript has no third-party libraries; its only
-    third-party files are the fonts below. A few small pieces of code or
-    word lists copied from other projects are named in section 1.
+  * The desktop's JavaScript has ONE third-party library: three.js r128,
+    vendored so the HUD can draw its 3D picture with no CDN and no network
+    (see "THE HUD'S 3D LIBRARY" in section 1). Its only other third-party
+    files are the fonts below. A few small pieces of code or word lists
+    copied from other projects are named in section 1.
 
 1. PARTS NAMED BY HAND
 ======================
@@ -1151,6 +1153,56 @@ Version 6.7.0, MIT Licence, Copyright (c) 2026 morluto.
 Its full MIT text is in the MIT section of the generated licence texts below.
 The package bundles its own third-party notices (THIRD_PARTY_NOTICES.md and licenses/ inside
 the package); those apply to that program, not to Jarvis.
+
+THE HUD'S 3D LIBRARY (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+three.js r128 (Three.js Authors), MIT - https://github.com/mrdoob/three.js
+  three.min.js, the official minified build of the r128 release, unmodified.
+  Vendored on 2026-10-27 for the owner-approved "exact Gemini cosmos" HUD
+  port, so the picture draws with no CDN and no network: the HUD serves only
+  files named in `jarvis_hud.py`'s closed `STATIC_ASSETS` whitelist.
+  Provenance, measured on 2026-10-27: fetched from
+  https://unpkg.com/three@0.128.0/build/three.min.js; 603,445 bytes; SHA-256
+  9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2. The
+  cdnjs r128 URL (https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/
+  three.min.js) and the GitHub tag's own build
+  (https://raw.githubusercontent.com/mrdoob/three.js/r128/build/three.min.js)
+  returned the same size and hash that day, so the bytes are the official
+  release and not a mirror's edit.
+  The file is the real library, not a stub: its first lines carry the notice
+  below, its revision constant is "128" (`const e="128"`, exported as
+  `REVISION`), and it exports `WebGLRenderer`, `Scene`, `PerspectiveCamera`
+  and the rest. It is shipped BYTE-IDENTICALLY in three places -
+  backend/static/three.min.js, jarvis-desktop/src/three.min.js and
+  jarvis-backend/three.min.js - is in both `$SHIPPED` lists and in the
+  base's `BESIDE` table, and `backend/test_vendored_three.py` pins its bytes
+  in every copy.
+  It is NOT in `STATIC_ASSETS` yet and no page loads it: this change is the
+  vendoring and the asset plumbing only. The port PR adds the page's
+  `<script>` and the whitelist key together, because `backend/test_hud_static.py`
+  rightly fails a key nothing loads.
+
+MIT License
+
+Copyright (c) 2010-2021 Three.js Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 2. RUST LIBRARIES IN THE DESKTOP PROGRAM (generated)
 ====================================================
