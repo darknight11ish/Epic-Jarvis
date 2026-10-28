@@ -1672,6 +1672,10 @@ export async function createEngine(options = {}) {
     disposed: false,
     lost: false,
     draws: 0,
+    // How many times the link plan has been rebuilt (2026-10-28). Reported by
+    // `info()` so a test can prove the cache really is a cache: a steady frame
+    // must not move this number, and a changed graph or look must move it once.
+    plans: 0,
   };
 
   /* ---- scene furniture ------------------------------------------------- */
@@ -2022,87 +2026,162 @@ export async function createEngine(options = {}) {
 
   /* ---- positions and links -------------------------------------------- */
 
+  // THE PICTURE'S OWN CACHE (2026-10-28, the owner's guardrail on this wave).
+  //
+  // `applyPositions` runs on EVERY frame of the Planetary Orrery - that look
+  // really orbits - and it used to rebuild the whole picture's bookkeeping on
+  // the way: a new array of position objects, two new Maps, and (through
+  // `presetLinks`) a new 360-entry link array with a control object each. About
+  // 1,500 objects a frame, every one of them the same shape as the one the last
+  // frame had just thrown away, all of it handed to the garbage collector while
+  // the GPU was already busy.
+  //
+  // So the SHAPE is cached and only the NUMBERS in it change:
+  //   - `positions` and `positionById` are reused, and a moved planet writes
+  //     three numbers into an object that already exists;
+  //   - `linkPlan` holds the link set BY ID (never by object reference, which
+  //     would go stale the moment a position object is replaced);
+  //   - every link keeps its own Float32Array and its own BufferAttribute, and
+  //     a frame writes into that array and sets `posAttr.needsUpdate = true`,
+  //     so the GPU re-uploads the vertices instead of the page building a new
+  //     geometry, material and Line.
+  // `shapeDirty` is raised only when the SET changes: a new graph, another
+  // look, or a control that changes which links exist. A frame that merely
+  // moved leaves it down.
   let positions = [];
+  let positionById = new Map();
+  let linkPlan = [];
+  let shapeDirty = true;
 
   function positionOf(id) {
-    for (const point of positions) if (point.id === id) return point;
-    return null;
+    return positionById.get(id) || null;
   }
 
-  function applyPositions() {
-    positions = presetPositions(state.preset, state.nodes, {
+  /** Lay the names out again. `moved` means time advanced and nothing else did,
+   *  so the cached shape still describes this frame and only the numbers move. */
+  function applyPositions(moved) {
+    const fresh = presetPositions(state.preset, state.nodes, {
       links: state.links,
       orbitTime: state.orbitClock,
       wide: state.wide,
       sortByRing: state.ringSort,
     });
-    const byId = new Map(positions.map((p) => [p.id, p]));
+    if (!moved) shapeDirty = true;
+    let reuse = !shapeDirty && positions.length === fresh.length;
+    if (reuse) {
+      // The ids must still line up: a graph that changed under a look would
+      // otherwise write one name's numbers into another name's object.
+      for (let i = 0; i < fresh.length; i++) {
+        if (positions[i].id !== fresh[i].id) { reuse = false; break; }
+      }
+    }
+    if (reuse) {
+      for (let i = 0; i < fresh.length; i++) {
+        const point = positions[i];
+        point.x = fresh[i].x;
+        point.y = fresh[i].y;
+        point.z = fresh[i].z;
+      }
+    } else {
+      positions = fresh.map((p) => ({ id: p.id, x: p.x, y: p.y, z: p.z }));
+      positionById = new Map(positions.map((p) => [p.id, p]));
+      shapeDirty = true;
+    }
     for (const [id, group] of state.groups) {
-      const point = byId.get(id);
+      const point = positionById.get(id);
       if (!point) continue;
       group.position.set(point.x, point.y, point.z);
     }
     updateLinks();
   }
 
-  function updateLinks() {
-    const byId = new Map(positions.map((p) => [p.id, p]));
+  /** Rebuild the link set, its Line objects and their buffers. Runs only when
+   *  the shape changed; a frame that only moved calls `updateLinks`, which
+   *  finds this plan already in place. */
+  function rebuildLinkPlan() {
+    state.plans += 1;
     const wanted = presetLinks(state.preset, state.nodes, state.links, {
       positions, chords: state.chords,
     });
-    // Rebuild the link objects when the set changes; otherwise reuse them and
-    // only rewrite the vertex buffers (the page rebuilds every link's geometry
-    // every frame in its orrery look; at 360 links that is the one thing not
-    // worth copying).
-    if (state.linkObjects.length !== wanted.length) {
+    linkPlan = wanted.map((link) => ({
+      a: link.a.id,
+      b: link.b.id,
+      control: link.control,
+      samples: link.samples,
+      color: link.color,
+      opacity: link.opacity,
+    }));
+    const sameShape = state.linkObjects.length === linkPlan.length
+      && state.linkObjects.every((line, index) =>
+        line.userData.samples === linkPlan[index].samples);
+    if (!sameShape) {
       for (const line of state.linkObjects) {
         linkRoot.remove(line);
         disposeObject(line);
       }
       state.linkObjects = [];
-      for (const link of wanted) {
-        const samples = link.control ? link.samples : 2;
+      for (const plan of linkPlan) {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position",
-          new THREE.BufferAttribute(new Float32Array(samples * 3), 3));
+          new THREE.BufferAttribute(new Float32Array(plan.samples * 3), 3));
         const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
-          color: hexToInt(link.color), transparent: true, opacity: link.opacity,
+          color: hexToInt(plan.color), transparent: true, opacity: plan.opacity,
           depthWrite: false,
         }));
-        line.userData.samples = samples;
-        line.userData.link = link;
+        line.userData.samples = plan.samples;
+        line.userData.link = plan;
+        // Kept, not looked up again every frame: this is the attribute a frame
+        // marks dirty so the GPU re-uploads what was written into its array.
+        line.userData.posAttr = geometry.getAttribute("position");
         linkRoot.add(line);
         state.linkObjects.push(line);
       }
+    } else {
+      state.linkObjects.forEach((line, index) => { line.userData.link = linkPlan[index]; });
     }
+    // A look's line colour and its "chords hidden" rule are decided here, once,
+    // rather than thirty times a second.
+    const hidden = state.preset === "zen-ring" && !state.chords;
     state.linkObjects.forEach((line, index) => {
-      const link = wanted[index];
-      if (!link) return;
-      const source = byId.get(link.a.id);
-      const sink = byId.get(link.b.id);
-      if (!source || !sink) return;
-      const attribute = line.geometry.getAttribute("position");
-      const array = attribute.array;
-      const samples = line.userData.samples;
-      if (samples <= 2) {
+      const plan = linkPlan[index];
+      if (!plan) return;
+      line.material.color.setHex(hexToInt(plan.color));
+      line.material.opacity = hidden ? 0 : plan.opacity;
+      line.visible = !hidden;
+    });
+  }
+
+  function updateLinks() {
+    if (shapeDirty) {
+      rebuildLinkPlan();
+      shapeDirty = false;
+    }
+    for (let index = 0; index < linkPlan.length; index++) {
+      const plan = linkPlan[index];
+      const line = state.linkObjects[index];
+      if (!plan || !line) continue;
+      const source = positionById.get(plan.a);
+      const sink = positionById.get(plan.b);
+      if (!source || !sink) continue;
+      const posAttr = line.userData.posAttr;
+      const array = posAttr.array;
+      if (plan.samples <= 2) {
         array[0] = source.x; array[1] = source.y; array[2] = source.z;
         array[3] = sink.x; array[4] = sink.y; array[5] = sink.z;
       } else {
         const ax = source.x; const ay = source.y; const az = source.z;
         const bx = sink.x; const by = sink.y; const bz = sink.z;
-        const control = link.control || { x: (ax + bx) / 2, y: (ay + by) / 2, z: (az + bz) / 2 };
-        for (let i = 0; i < samples; i++) {
-          const t = i / (samples - 1);
+        const control = plan.control || { x: (ax + bx) / 2, y: (ay + by) / 2, z: (az + bz) / 2 };
+        for (let i = 0; i < plan.samples; i++) {
+          const t = i / (plan.samples - 1);
           const u = 1 - t;
           array[i * 3] = u * u * ax + 2 * u * t * control.x + t * t * bx;
           array[i * 3 + 1] = u * u * ay + 2 * u * t * control.y + t * t * by;
           array[i * 3 + 2] = u * u * az + 2 * u * t * control.z + t * t * bz;
         }
       }
-      attribute.needsUpdate = true;
-      line.material.opacity = state.preset === "zen-ring" && !state.chords ? 0 : link.opacity;
-      line.visible = !(state.preset === "zen-ring" && !state.chords);
-    });
+      posAttr.needsUpdate = true;
+    }
   }
 
   /* ---- morphology, camera and colour ---------------------------------- */
@@ -2252,10 +2331,15 @@ export async function createEngine(options = {}) {
     }
     if (state.preset === "planetary-orbit" && state.spinning) {
       state.orbitClock += dt * 0.45 * state.warp;
-      applyPositions();
+      // `true` = time advanced and nothing else did: the cached link plan is
+      // still this frame's shape, so only its numbers are rewritten.
+      applyPositions(true);
       if (state.followId) {
         const point = positionOf(state.followId);
-        if (point) target.lerp(new THREE.Vector3(point.x, point.y, point.z), 0.08);
+        if (point) {
+          focusPoint.set(point.x, point.y, point.z);
+          target.lerp(focusPoint, 0.08);
+        }
       }
     } else if (state.preset === "neural-arbor" && state.spinning) {
       if (now - state.lastPulse > 1400) {
@@ -2333,6 +2417,9 @@ export async function createEngine(options = {}) {
 
   const projected = new THREE.Vector3();
   const worldPoint = new THREE.Vector3();
+  // The follow camera's scratch point: reused every frame, because a look at a
+  // moving planet must not allocate a Vector3 thirty times a second.
+  const focusPoint = new THREE.Vector3();
 
   function project(id) {
     const group = state.groups.get(id);
@@ -2461,11 +2548,11 @@ export async function createEngine(options = {}) {
         return true;
       case "sort":
         state.ringSort = !state.ringSort;
-        applyPositions();
-        updateLinks();
+        applyPositions();          // raises the dirty flag: the layout moved
         return state.ringSort;
       case "chords":
         state.chords = !state.chords;
+        shapeDirty = true;         // which links exist changed: rebuild them
         updateLinks();
         return state.chords;
       default:
@@ -2510,6 +2597,12 @@ export async function createEngine(options = {}) {
     state.meshes.clear();
     for (const line of state.linkObjects) disposeObject(line);
     state.linkObjects = [];
+    // The cached picture goes with the engine: a later write must not reach
+    // into a disposed Line's buffer.
+    linkPlan = [];
+    positions = [];
+    positionById = new Map();
+    shapeDirty = true;
     for (const child of state.guides) disposeObject(child);
     state.guides = [];
     if (state.stars) disposeObject(state.stars);
@@ -2517,16 +2610,24 @@ export async function createEngine(options = {}) {
     if (state.cloud) disposeObject(state.cloud);
     for (const pulse of state.pulses) if (pulse.bead) disposeObject(pulse.bead);
     state.pulses = [];
+    try { canvas.removeEventListener("webglcontextlost", onContextLost, false); }
+    catch (error) { /* no canvas left */ }
     try { renderer.dispose(); } catch (error) { /* already gone */ }
   }
 
-  canvas.addEventListener("webglcontextlost", (event) => {
+  function onContextLost(event) {
     event.preventDefault();
     state.lost = true;
     if (typeof options.onFail === "function") {
       try { options.onFail(); } catch (error) { /* the page's business */ }
     }
-  }, false);
+  }
+
+  // Built once per engine and removed in `dispose`, because the page builds a
+  // NEW engine on the same canvas every time a hidden galaxy is shown again
+  // (2026-10-28). A listener left behind would call the disposed engine's
+  // `onFail` on a later context loss and turn 3D off for good.
+  canvas.addEventListener("webglcontextlost", onContextLost, false);
 
   // Build the first look with whatever graph the caller has (usually nothing
   // yet: `setGraph` follows within the same frame in the page's own flow).
@@ -2586,6 +2687,8 @@ export async function createEngine(options = {}) {
         links: state.linkObjects.length,
         guides: state.guides.length,
         draws: state.draws,
+        // The cached topology's own rebuild count: unchanged on a steady frame.
+        plans: state.plans,
         lost: state.lost,
         disposed: state.disposed,
         spinning: state.spinning,
