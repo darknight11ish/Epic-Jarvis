@@ -5671,11 +5671,12 @@ _NOTION_MOVE = (r"(?:process|import|convert|move|transfer|copy|migrate|bring|pul
 
 #: A question lead and the polite lead-ins `normalise` does not take off.
 #: "can you ..." is already gone by the time this runs; allowed again here so
-#: the grammar does not depend on that.
+#: the grammar does not depend on that. "i'd like to" keeps its own apostrophe
+#: form: `normalise` leaves it alone, so there is no space after the "i".
 _NOTION_LEAD = (r"(?:(?:how\s+(?:do|can|could|would)\s+i"
                 r"|what(?:'s|\s+is)\s+the\s+best\s+way\s+to"
                 r"|what\s+(?:do\s+i\s+need|would\s+it\s+take)\s+to"
-                r"|i\s+(?:want|need|'d\s+like)\s+to)\s+)?"
+                r"|i(?:'d\s+(?:like|love)|\s+want|\s+need)\s+to)\s+)?"
                 r"(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:help\s+me\s+)?")
 
 #: "... notion notes (over) to obsidian", and the other order,
