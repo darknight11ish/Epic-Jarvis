@@ -425,6 +425,37 @@ def t_the_real_catalogue_is_sound():
           f'{len({e["patch"] for e in data["entries"]})} vs {data["patch_count"]}')
     check("catalogue: every patch is in exactly one bucket",
           all(e["bucket"] in ("plug-in", "core", "missing") for e in data["entries"]))
+    # The 2026-10-28 gap: ten no-patch drop-ins were in neither this registry
+    # nor plugins/README.md. Every folder must be one of the two lists now, and
+    # a folder the generator cannot read is in `unaccounted` - never skipped.
+    folders = data.get("folders", [])
+    ready_dirs = {p.name for p in (repo / "plugins" / "ready").iterdir()
+                  if p.is_dir()}
+    accounted = {e["name"] for e in ready} | {f["name"] for f in folders}
+    check("catalogue: every folder under plugins/ready is accounted for",
+          ready_dirs == accounted and not data.get("unaccounted"),
+          f"on disk but not listed: {sorted(ready_dirs - accounted)}\n"
+          f"listed but not on disk: {sorted(accounted - ready_dirs)}\n"
+          f"unaccounted: {data.get('unaccounted')}")
+    bad_folders = []
+    for entry in folders:
+        manifest = repo / "plugins" / "ready" / entry["name"] / "plugin.json"
+        if not manifest.is_file():
+            bad_folders.append(f"{entry['name']}: plugin.json is missing")
+            continue
+        m = json.loads(manifest.read_text(encoding="utf-8"))
+        if (m.get("module") != entry["module"]
+                or m.get("install") != entry["install"]
+                or m.get("stack_order") != entry["stack_order"]
+                or "replaces_patch" in m):
+            bad_folders.append(f"{entry['name']}: plugin.json disagrees with the catalogue")
+    check("catalogue: every no-patch row matches its own plugin.json",
+          not bad_folders, "\n        ".join(bad_folders))
+    check("catalogue: the counts are the folders on disk",
+          data.get("ready_count") == len(ready_dirs)
+          and data.get("folder_count") == len(folders),
+          f"ready_count={data.get('ready_count')} on_disk={len(ready_dirs)} "
+          f"folder_count={data.get('folder_count')} listed={len(folders)}")
 
 
 def t_no_core_change_beyond_the_one_call():

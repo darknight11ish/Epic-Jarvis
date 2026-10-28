@@ -5,6 +5,14 @@ Written 2026-10-06. Nothing in this document was guessed: the numbers come
 from the repository's own patch list, measured by
 `tools/gen_plugin_catalogue.py`.
 
+**Updated 2026-10-28.** The catalogue now also lists the drop-in folders that
+replace no patch at all: ten of them had been left out of `plugins/registry.json`
+and `plugins/README.md` because the generator read only `$PATCHES`. The
+generated README now says **37 drop-in modules: 27 that replace a patch + 10
+that were born as folders**, and every `plugins/ready/` folder is accounted for
+by one of those two lists. The counts below are the 2026-10-06 measurement and
+are kept as the record, not as the current total.
+
 ## The problem this solves
 
 Jarvis's backend lives on your PC, not in this repository. This repository
@@ -112,17 +120,21 @@ So the folders matter for:
 
 **Proven, in this repository, without your PC:**
 
-- `backend/test_jarvis_plugins.py` - 36 checks. A folder becomes a live
+- `backend/test_jarvis_plugins.py` - 43 checks. A folder becomes a live
   route through a stand-in core; loading follows `stack_order`; a broken
   module is isolated and named; a disabled folder is skipped; an absent
   folder changes nothing; the loader imports only the standard library and
   defines no network, child-process or file-writing call.
-- `tools/check_plugins.py` - 20 checks, including all of the above. Every
+- `backend/test_plugin_catalogue.py` - 13 checks. Every `plugins/ready/`
+  folder is in one of the catalogue's two lists; the ten no-patch folders are
+  named, so losing one is a failure; a synthetic folder with no manifest, or
+  one that will not parse, is reported and refused rather than skipped.
+- `tools/check_plugins.py` - 26 checks, including all of the above. Every
   patch is in exactly one bucket; every drop-in module exists with an
-  `install()`; the hook patch is well formed, anchors on the last install
-  block the stack leaves in the core, and adds exactly one import and one
-  call; it is last in `$PATCHES`; the loader is in both shipped-modules
-  lists.
+  `install()`; every folder under `plugins/ready/` is accounted for; the hook
+  patch is well formed, anchors on the last install block the stack leaves in
+  the core, and adds exactly one import and one call; it is last in
+  `$PATCHES`; the loader is in both shipped-modules lists.
 - The hook patch applies, for real, with `git apply` - checked against a
   file built from `tutorials.patch`'s own output (hunk succeeded at offset
   -6491 lines, i.e. found by context, not by line number).
@@ -181,12 +193,13 @@ skips, rather than adding a folder that cannot load.
 |---|---|
 | `backend/jarvis_plugins.py` | The loader. Copied to your PC by `apply-patches.ps1`. |
 | `backend/plugin-loader.patch` | The one startup call, applied once. |
-| `backend/test_jarvis_plugins.py` | The loader's 36 checks, runnable anywhere. |
-| `plugins/registry.json` | Every patch, its bucket, and why - generated. |
-| `plugins/ready/<name>/` | One folder per drop-in module - generated. |
-| `plugins/README.md` | The generated index. |
+| `backend/test_jarvis_plugins.py` | The loader's 43 checks, runnable anywhere. |
+| `backend/test_plugin_catalogue.py` | The catalogue's 13 checks: every ready folder accounted for, and the refusal path. |
+| `plugins/registry.json` | Every patch, its bucket and why; plus every no-patch drop-in folder under `folders` - generated. |
+| `plugins/ready/<name>/` | One folder per drop-in module: 27 generated from a patch, 10 with their own hand-written `plugin.json`. |
+| `plugins/README.md` | The generated index: 37 drop-in modules, 27 + 10. |
 | `plugins/loader/README.md` | How the loader works and how to install the hook. |
-| `tools/gen_plugin_catalogue.py` | Writes the catalogue from the patch stack. |
-| `tools/check_plugins.py` | One command: all 20 checks. |
+| `tools/gen_plugin_catalogue.py` | Writes the catalogue from the patch stack and the no-patch folders; refuses a folder it cannot account for. |
+| `tools/check_plugins.py` | One command: all 26 checks. |
 | `scripts/add-plugin.ps1` | Add, switch off, take out. |
 | `scripts/list-plugins.ps1` | What is available and what is installed. |

@@ -49,8 +49,28 @@ checks it" error. A fifth tree wires the route up again in BOTH apps (a real
 literal in the desktop's JS and the phone's Kotlin): the same `RETIRED` entry
 must then be a FAILURE in both directions - a retired route is not allowed to be
 called again - with the "remove RETIRED, reclassify" message, never a warning.
+
+THE DOCUMENTED ROUTE UNIVERSE (added 2026-10-28; the wiring audit's blind spot).
+The checker used to build its route sets only from the two apps' source, so a
+route neither app called was in neither set and failed nothing. It now also
+reads `docs/JARVIS-API.md` and requires every route documented there to be
+called, classified, or in `BACKEND_ONLY` with a written reason. This suite
+proves that half without touching the repository: the fixture checkout carries a
+small `docs/JARVIS-API.md` that documents every `BACKEND_ONLY` route (so the
+register's own reverse check is satisfied) plus one classified route and a fake
+section-8 table naming a route that does not exist. It then proves:
+
+  6. the base tree passes the new check - a documented route in BACKEND_ONLY,
+     and a documented route in CLASSIFICATION, are both accounted for;
+  7. a documented route that is in neither fails, names the route, and says
+     both ways out (add it to BACKEND_ONLY with a reason, or wire a caller);
+  8. a BACKEND_ONLY route the desktop starts calling fails, so the reason
+     cannot go stale and hide a route that is no longer backend-only;
+  9. a BACKEND_ONLY route the doc stops documenting fails, so the register
+     cannot carry routes the contract does not name.
 """
 import os
+import runpy
 import shutil
 import subprocess
 import sys
@@ -134,6 +154,39 @@ pub fn nothing_else() {}
 """
 
 
+def _backend_only_routes():
+    """The checker's own BACKEND_ONLY keys.
+
+    Read by executing check_parity.py as a module (its `main()` is under the
+    usual `if __name__` guard), so this suite cannot drift from the register:
+    the fixture doc always documents exactly the routes the register claims.
+    """
+    return sorted(runpy.run_path(str(TOOL))["BACKEND_ONLY"])
+
+
+def _doc_stub(extra=(), omit=()):
+    """A small JARVIS-API.md the checker will parse.
+
+    It documents every BACKEND_ONLY route (so the register's reverse check is
+    satisfied), one classified route, any `extra` routes, and a section 8 table
+    naming a route that does not exist - proving the draft section is skipped
+    rather than demanded.
+    """
+    routes = [r for r in _backend_only_routes() if r not in omit]
+    routes += list(extra)
+    routes.append("/api/work/recommend")  # classified in CLASSIFICATION
+    body = "\n".join(f"GET  {r}" for r in routes)
+    return (
+        "# JARVIS-API (fixture, for backend/test_parity_callgraph.py)\n\n"
+        "## 1. The routes this fixture documents\n\n"
+        "```\n" + body + "\n```\n\n"
+        "## 8. Draft, proposed, or not actually wired\n\n"
+        "| Route | Status |\n|---|---|\n"
+        "| `/api/not-a-real-route` | **Does not exist.** |\n\n"
+        "## 9. Rules that constrain this API\n"
+    )
+
+
 def _put(root, rel, text):
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,6 +237,13 @@ RETIRED_SAID = "/api/work/recommend is 'planned' and RETIRED"
 #: A retired route called again by an app is a FAILURE, not a warning.
 RETIRED_DESK_ERROR = "/api/work/recommend is RETIRED but the desktop calls it again"
 RETIRED_PHONE_ERROR = "/api/work/recommend is RETIRED but the phone calls it again"
+#: The new documented-route check (2026-10-28). A documented route in no app
+#: and in no table used to be invisible; it must now FAIL and say both ways out.
+DOC_UNCLASSIFIED = "is documented in docs/JARVIS-API.md (line"
+DOC_WAYS_OUT = "Add it to BACKEND_ONLY with a written reason"
+#: The register's own two stale directions.
+BACKEND_ONLY_WIRED = "is in BACKEND_ONLY but the desktop calls it now"
+BACKEND_ONLY_UNDOCUMENTED = "is in BACKEND_ONLY in tools/check_parity.py but"
 
 
 def main():
@@ -204,6 +264,7 @@ def main():
              RUNTIME)
         _put(root, "jarvis-desktop/src-tauri/src/brain/routes.rs", stub)
         _put(root, "jarvis-desktop/src/empty.js", "// a desktop window file, in name only\n")
+        _put(root, "docs/JARVIS-API.md", _doc_stub())
 
         first = _run(root)
         check("the real checker runs against the stand-in", bool(first), first[-400:])
@@ -219,6 +280,44 @@ def main():
               "\n  /api/work/recommend " not in first,
               "the route is in `phone` only because a literal names it; a literal "
               "is not a call, so it must not appear in the phone's own list")
+        # A documented route in BACKEND_ONLY, and a documented route that is
+        # classified, are both accounted for: the new check must stay silent
+        # about them (the fixture doc documents every register entry).
+        check("a documented route in BACKEND_ONLY is accounted for",
+              DOC_UNCLASSIFIED not in first, first[-800:])
+
+        # ... but a documented route in NO app and NO table is the blind spot
+        # this check exists for, and it must FAIL with both ways out.
+        _put(root, "docs/JARVIS-API.md",
+             _doc_stub(extra=["/api/zzz-not-classified"]))
+        sixth = _run(root)
+        check("a documented route no app calls and no table names FAILS",
+              DOC_UNCLASSIFIED in sixth,
+              "the checker stayed silent over a documented route in no app:\n"
+              + sixth[-800:])
+        check("... naming the route", "/api/zzz-not-classified" in sixth,
+              sixth[-800:])
+        check("... and both ways out: BACKEND_ONLY with a reason, or a caller",
+              DOC_WAYS_OUT in sixth and "wire a caller" in sixth, sixth[-800:])
+        _put(root, "docs/JARVIS-API.md", _doc_stub())
+        check("... and the same tree passes again once the route is accounted for",
+              DOC_UNCLASSIFIED not in _run(root))
+
+        # The register's own honesty: it must not carry a route the doc does not
+        # document, and it must not carry a route an app has started calling.
+        _put(root, "docs/JARVIS-API.md", _doc_stub(omit=["/api/receipts"]))
+        seventh = _run(root)
+        check("a BACKEND_ONLY route the doc stops documenting FAILS",
+              BACKEND_ONLY_UNDOCUMENTED in seventh, seventh[-800:])
+        _put(root, "docs/JARVIS-API.md", _doc_stub())
+        _put(root, "jarvis-desktop/src/receipts.js",
+             "fetch('/api/receipts');\n")
+        eighth = _run(root)
+        check("a BACKEND_ONLY route the desktop starts calling FAILS",
+              BACKEND_ONLY_WIRED in eighth,
+              "a backend-only reason that has stopped being true must not pass:\n"
+              + eighth[-800:])
+        (root / "jarvis-desktop/src/receipts.js").unlink()
 
         _put(root, "jarvis-client/app/src/main/java/com/jarvis/client/ui/Wired.kt", WIRED)
         second = _run(root)
