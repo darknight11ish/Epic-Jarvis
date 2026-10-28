@@ -411,4 +411,47 @@ object GalaxyPicture {
         }
         return best?.id
     }
+
+    /**
+     * The largest square accessibility box that can be centred on each dot
+     * WITHOUT overlapping any other dot's box, capped at [cap] pixels.
+     *
+     * Two axis-aligned boxes whose centres are `d` apart cannot overlap when
+     * their sides `s1 + s2 <= sqrt(2) * d`: an overlap needs BOTH
+     * `|dx| < (s1+s2)/2` and `|dy| < (s1+s2)/2`, and together those need
+     * `d < (s1+s2)/sqrt(2)`. So `d / sqrt(2)` per box is always safe, and two
+     * boxes that each clear their own nearest neighbour pairwise never cover
+     * one another.
+     *
+     * WHY (2026-10-27 accessibility audit, finding 7). The plate used one fixed
+     * 48dp box per dot on a picture whose names are about 18dp apart, so each
+     * box was covered two or three deep by the boxes drawn after it - and only
+     * the topmost box under a finger is ever reached. A box sized to its own
+     * dot's neighbourhood leaves every dot some area in which it is the topmost
+     * node, so touch exploration can reach every name.
+     *
+     * These boxes are not pointer targets. The finger belongs to the Canvas,
+     * which uses [hit] with its `slack` forgiveness; what a box carries is the
+     * announcement and the accessibility action. That is why a box may be
+     * smaller than Android's 48dp touch-target floor: a 48dp box here would be
+     * the *smaller* accessibility, because a third of the names under it could
+     * never be reached at all.
+     */
+    fun semanticSides(dots: List<ScreenDot>, cap: Float): List<Float> {
+        if (dots.isEmpty()) return emptyList()
+        val limit = max(0f, cap).toDouble()
+        val sqrt2 = sqrt(2.0)
+        return dots.mapIndexed { i, dot ->
+            var nearest = Double.MAX_VALUE
+            for (j in dots.indices) {
+                if (j == i) continue
+                val dx = dots[j].x - dot.x
+                val dy = dots[j].y - dot.y
+                val d2 = dx.toDouble() * dx + dy.toDouble() * dy
+                if (d2 < nearest) nearest = d2
+            }
+            val room = if (nearest == Double.MAX_VALUE) Double.MAX_VALUE else sqrt(nearest) / sqrt2
+            min(limit, room).toFloat()
+        }
+    }
 }

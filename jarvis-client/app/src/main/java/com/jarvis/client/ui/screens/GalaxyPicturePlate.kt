@@ -20,8 +20,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.Entities
@@ -44,9 +46,13 @@ private val PICTURE_PADDING = 14.dp
  *  wins, so two neighbouring names never need pixel-precise aim. */
 private val TOUCH_SLACK = 14.dp
 
-/** The touch target laid over each dot for TalkBack. It carries no touch of its
- *  own - a finger on the picture is the Canvas's tap - so it can overlap its
- *  neighbours without stealing anything from them. */
+/** The MOST a dot's accessibility box may be: 48dp, Android's own touch-target
+ *  floor. It is a cap, not the size the plate uses - a 48dp box on this picture
+ *  would be covered two or three deep by its neighbours' boxes (names are about
+ *  18dp apart), and only the topmost box under a finger is ever reached.
+ *  [GalaxyPictureData.semanticSides] shrinks each box until it cannot cover a
+ *  neighbour's, so every dot keeps an area where it is the topmost node. The
+ *  finger itself is the Canvas's tap, which uses [TOUCH_SLACK]. */
 private val DOT_TARGET = 48.dp
 
 /**
@@ -73,10 +79,13 @@ private val DOT_TARGET = 48.dp
  * halo is about 21 layout units apart (roughly 18dp after the fit on the
  * 264dp-tall picture as it is sized here), where labels would collide into an
  * unreadable smear. Instead every dot has a real semantics node over it that
- * announces the same line the band uses ([Entities.galaxyNameLine]) and opens
- * the name when double-tapped, so the picture is not a surface only a sighted
- * finger can use. The whole picture also carries one sentence saying what it is
- * ([Entities.pictureSaid]).
+ * announces the same line the band uses ([Entities.galaxyNameLine]), says it is
+ * a button ([Role.Button]) and opens the name when double-tapped, so the picture
+ * is not a surface only a sighted finger can use. Each node is only as big as
+ * the room its dot has ([GalaxyPictureData.semanticSides]), so no node's box
+ * covers its neighbour's - a finger exploring the picture reaches every name,
+ * not only the last-drawn dot of a cluster. The whole picture also carries one
+ * sentence saying what it is ([Entities.pictureSaid]).
  *
  * It reads nothing and keeps nothing: [entities] are the list the plate has
  * already fetched, and the picture is dropped with the plate.
@@ -154,15 +163,26 @@ internal fun GalaxyPicture(entities: List<Entities.Entity>, onOpen: (String) -> 
 
             // The accessible controls: one per dot, invisible, over the drawing.
             // They add no touch handling (the Canvas above owns the finger), only
-            // the announcement and the accessibility action.
-            for (dot in dots) {
-                val x = with(density) { dot.x.toDp() } - DOT_TARGET / 2
-                val y = with(density) { dot.y.toDp() } - DOT_TARGET / 2
+            // the announcement and the accessibility action. The box is sized to
+            // the room this dot has, never to a fixed 48dp: a fixed box on a
+            // picture whose names are ~18dp apart covered its neighbours, and a
+            // finger exploring could only ever reach the last-drawn dot of a
+            // cluster (2026-10-27 accessibility audit, finding 7). `role` makes
+            // TalkBack say "button" rather than a name with a stray action.
+            val targetPx = with(density) { DOT_TARGET.toPx() }
+            val sides = remember(dots, targetPx) {
+                GalaxyPictureData.semanticSides(dots, targetPx)
+            }
+            dots.forEachIndexed { index, dot ->
+                val side = sides[index]
+                val x = with(density) { (dot.x - side / 2f).toDp() }
+                val y = with(density) { (dot.y - side / 2f).toDp() }
                 Box(
                     Modifier
                         .offset(x = x, y = y)
-                        .size(DOT_TARGET)
+                        .size(with(density) { side.toDp() })
                         .semantics {
+                            role = Role.Button
                             contentDescription =
                                 Entities.galaxyNameLine(dot.name, dot.facts, dot.shared)
                             onClick(label = Entities.openName(dot.name)) {
