@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- initialLayout is required - see widget_approval_info.xml's own comment
      on why: without it the launcher shows "Problem loading widget" before
-     the first Glance update lands. -->
+     the first Glance update lands. It is res/layout/widget_initial, not
+     Glance's spinner, for the reason that same comment now carries: in the
+     release APK before 2026-10-27 no Glance update could run at all, so the
+     spinner was permanent. previewLayout added at the same time, so the widget
+     picker shows the same sentence rather than the launcher's fallback. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:initialLayout="@layout/glance_default_loading_layout"
+    android:initialLayout="@layout/widget_initial"
+    android:previewLayout="@layout/widget_initial"
     android:description="@string/widget_quicklink_desc"
     android:minWidth="180dp"
     android:minHeight="60dp"
