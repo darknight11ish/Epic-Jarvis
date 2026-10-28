@@ -181,6 +181,14 @@ bottom, were the ones most at risk of never being read.
 someone outside this project - the sea otter's voice is not a matter of taste, and the
 record says why. **Not finding a rule here does not mean there is no decision.**
 
+**From 2026-10-28 a NEW decision is written as one file under `decisions.d/`**, not
+as an edit to `docs/DECISIONS.md` - two pull requests that both appended at the end
+of that file always conflicted, and a conflicted pull request gets no CI. The record
+itself is unchanged: the old entries stay exactly where they are, and the roll folds
+the fragments in. The rule, its commands and its limits are in the append-race
+section below and in `decisions.d/README.md`. Searching for a decision still means
+searching `docs/DECISIONS.md`; the fragments are part of the same record.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
@@ -673,7 +681,11 @@ over; this is the one PR #386 hit, and #386 is where to look for how it reads:
 **The files this covers, and the ones it does not.** The same shape - a new entry
 appended at the end by whoever has one, so two such PRs always meet - is in:
 
-- `docs/DECISIONS.md`, the dated record of the owner's decisions;
+- `docs/DECISIONS.md`, the dated record of the owner's decisions. **Since
+  2026-10-28 a new decision is written as a `decisions.d/` fragment instead** (the
+  paragraph below); the file itself is now written only by that roll, and its old
+  entries stay exactly where they are. The append-and-keep-both rule still applies
+  to any hand edit that does reach it.
 - `docs/CLAIMS.tsv`, one row per claim, appended by every PR that adds one;
 - `docs/defect-register.tsv` with `docs/DEFECT-REGISTER.md`, the register agents
   claim defects in. Its rows are **claimed rather than appended** - the `owner`
@@ -720,5 +732,30 @@ now, and it is the one to follow:
 - **Do not hand-edit `CHANGELOG.md` in a feature PR** - a hand edit reintroduces
   exactly the race this replaced.
 
-The four files above (DECISIONS, CLAIMS, the defect register's two) keep the
+`docs/DECISIONS.md` followed `CHANGELOG.md` into the fragment pattern on
+**2026-10-28** (Gemini's ruling Q8), so the record is no longer hand-appended
+either. Same shape, with the one difference that matters:
+
+- **A pull request records ONE decision as ONE file under `decisions.d/`** -
+  named `YYYY-MM-DD-<slug>.md`, its whole content ONE dated bullet
+  (`- **YYYY-MM-DD — Title:** prose ...`, the prose that used to be appended) -
+  and **never edits `docs/DECISIONS.md`**. The date in the name must agree with
+  the date in the bullet; the file's own README says this in full.
+- **The roll is deliberate, never automatic.** On a quiet `main`, run
+  `py -3 tools/roll_decisions.py` (or `--dry-run` first). It appends the bullets
+  at the **end** of the record and in **date order** - that file is chronological
+  oldest-first, so it is not `CHANGELOG.md`'s newest-first - keeps every existing
+  entry, re-anchors any `docs/CLAIMS.tsv` source that cited a fragment, and
+  removes the fragment files. Open ONE pull request with the roll and nothing
+  else in it. No workflow runs it, and a feature PR must not.
+- **`py -3 tools/roll_decisions.py --check`** validates every fragment's name, its
+  bullet shape, that the date in the name matches the date in the bullet, and
+  that the anchor heading is still at the end of the record; it deliberately does
+  not require the fragments to have been rolled yet.
+  `backend/test_roll_decisions.py` proves the roll, and that two PRs adding
+  different fragments change no file in common.
+- **The record itself is untouched.** No old entry is reworded, moved or removed;
+  a decision already written in `docs/DECISIONS.md` stays exactly where it is.
+
+The three files above (`docs/CLAIMS.tsv` and the defect register's two) keep the
 append-and-keep-both rule; they are now the only ones written by hand in a PR.

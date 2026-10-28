@@ -419,8 +419,23 @@ async function doPreview(name, code, out) {
       const dbs = Object.entries(counts.databases || {})
         .map(([db, tables]) => `${db}: ${Object.values(tables).reduce((a, b) => a + b, 0)} rows`)
         .join(", ");
-      out.textContent = `Made ${when(resp.created_at)}. ${dbs}. ` +
-        `${counts.settings_files || 0} settings files, ${counts.notes_files || 0} notes.`;
+      // WHAT THE BACKUP DOES NOT HAVE IS SAID HERE TOO (data-integrity audit
+      // F1/F4, 2026-10-28). The backend names every database this PC has and
+      // the archive does not (`excluded_dbs`, each entry carrying its own
+      // reason); a preview that listed only what went in would repeat the claim
+      // those fixes removed. It is the same field the backup's own result
+      // sentence uses, so the panel and the backend cannot disagree.
+      const leftOut = Array.isArray(counts.excluded_dbs)
+        ? counts.excluded_dbs.filter(Boolean)
+        : [];
+      const warns = [];
+      if (leftOut.length) {
+        warns.push(`${leftOut.join(", ")} ${leftOut.length === 1 ? "is" : "are"} NOT in this ` +
+          "backup.");
+      }
+      out.textContent = `Made ${when(resp.created_at)}. ${dbs ? dbs + ". " : ""}` +
+        `${counts.settings_files || 0} settings files, ${counts.notes_files || 0} notes.` +
+        (warns.length ? ` ${warns.join(" ")}` : "");
     } else {
       out.textContent = problemWords(resp && resp.error);
     }

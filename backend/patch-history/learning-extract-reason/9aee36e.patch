@@ -1,0 +1,96 @@
+diff --git a/jarvis_extract.py b/jarvis_extract.py
+index 42a9d5c90..a72aa058f 100644
+--- a/jarvis_extract.py
++++ b/jarvis_extract.py
+@@ -63,6 +63,46 @@ Conversation:
+ """
+ 
+ 
++#: The last local-model call that failed, in closed-world words: the exception
++#: class or an empty answer, the HTTP status, the wall duration and Ollama's
++#: own `done_reason`. Never the prompt and never the answer - `done_reason` is
++#: one of Ollama's fixed words and a duration is a number.
++#:
++#: WHY (2026-10-28, DEF-017). `_local_llm` swallowed every exception into None,
++#: so the learner could only say "reached no model ... Is it pulled?" for a
++#: timeout, an HTTP error, an {"error"} body and an empty answer alike. On the
++#: owner's own PC the model was loaded the whole time, so that message pointed
++#: away from the real cause.
++LAST_LLM_FAILURE: Optional[dict] = None
++
++
++def local_llm_failure() -> Optional[dict]:
++    """Why the last local-model call failed, or None when it did not."""
++    return dict(LAST_LLM_FAILURE) if LAST_LLM_FAILURE else None
++
++
++def _note_llm_failure(kind: str, started: float, *, status=None,
++                      done_reason=None) -> None:
++    """Record one closed-world reason and hand it to the learner's counters.
++
++    Called from `_local_llm` only. The reason is also written through
++    `jarvis_auto_learn.note_model_failure`, which `/api/memory/learning`
++    already reads back - so the HUD and both apps can say WHY the model did not
++    answer without any of them holding a prompt or an answer.
++    """
++    global LAST_LLM_FAILURE
++    reason = {"kind": str(kind), "status": status,
++              "seconds": round(time.monotonic() - started, 3), "at": time.time()}
++    if done_reason:
++        reason["done_reason"] = str(done_reason)
++    LAST_LLM_FAILURE = reason
++    try:
++        import jarvis_auto_learn as _learner
++        _learner.note_model_failure(reason)
++    except Exception:
++        pass                 # bookkeeping must never break the call it counts
++
++
+ def _init(c):
+     c.execute("""
+         CREATE TABLE IF NOT EXISTS proposals (
+@@ -104,11 +144,42 @@ def _local_llm(prompt: str, model: Optional[str] = None, timeout: float = 60) ->
+     req = urllib.request.Request(f"{OLLAMA}/api/generate",
+                                  data=json.dumps(body).encode(),
+                                  headers={"Content-Type": "application/json"})
++    started = time.monotonic()
++    global LAST_LLM_FAILURE
++    LAST_LLM_FAILURE = None      # a call that works clears the previous reason
+     try:
+         with urllib.request.urlopen(req, timeout=timeout) as r:
+-            return json.loads(r.read().decode())["response"]
+-    except Exception:
++            status = getattr(r, "status", None)
++            answer = json.loads(r.read().decode())
++    except Exception as exc:
++        # This used to be `except Exception: return None`, which threw away the
++        # ONE thing that says what went wrong. On 2026-10-28 the learner's only
++        # message was "reached no model ... Is it pulled?" while Ollama had
++        # qwen3.5:9b loaded and answered a one-token request in 1.969 s - so
++        # the message pointed away from the real cause. The reason is recorded
++        # in closed-world words (class, status, duration - never the prompt and
++        # never the answer) and returned to the caller unchanged: None.
++        _note_llm_failure(type(exc).__name__, started,
++                          status=getattr(exc, "code", None))
++        return None
++    if not isinstance(answer, dict):
++        _note_llm_failure("unexpected_body", started, status=status)
++        return None
++    if "error" in answer:
++        # Ollama answers 200 with {"error": "..."} for some failures. The
++        # message is deliberately NOT recorded: it can quote the request.
++        _note_llm_failure("error_body", started, status=status)
++        return None
++    reply = answer.get("response")
++    if not reply:
++        # A 200 with no answer: a thinking model can spend the whole budget in
++        # `thinking` and return an empty `response` with done_reason "length"
++        # (measured here on 2026-10-28). That used to be indistinguishable from
++        # "the model said nothing durable", and nothing was recorded at all.
++        _note_llm_failure("empty_response", started, status=status,
++                          done_reason=answer.get("done_reason"))
+         return None
++    return reply
+ 
+ 
+ def propose(messages: list[dict], *, llm: Optional[Callable[[str], Optional[str]]] = None,

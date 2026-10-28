@@ -87,6 +87,7 @@ import json
 import math
 import os
 import re
+import sqlite3
 import sys
 import threading
 import time
@@ -500,7 +501,13 @@ def stats_path() -> Path:
 def _stats_read() -> dict:
     out = {"passes": 0, "saved": 0, "carded": 0, "failed": 0,
            "last_pass_at": None, "last_error": None, "last_error_at": None,
-           "last_saved_at": None}
+           "last_saved_at": None,
+           # 2026-10-28 (DEF-017): the model call itself failing is a DIFFERENT
+           # thing from a pass that raised, and it used to be counted nowhere -
+           # the learner printed "reached no model" and `failed` never moved.
+           "model_failures": 0, "last_model_error": None,
+           "last_model_error_at": None}
+
     try:
         raw = json.loads(stats_path().read_text(encoding="utf-8"))
     except Exception:
@@ -555,6 +562,55 @@ def note_failure(where: str, exc: BaseException, *, at: Optional[float] = None) 
     return d
 
 
+def _model_error_words(reason) -> str:
+    """One closed-world sentence for a model call that failed.
+
+    CLOSED WORLD IS THE POINT (2026-10-28, DEF-017): a class name, an HTTP
+    status, Ollama's own `done_reason` and a number of seconds. A prompt and an
+    answer never appear here, so nothing a person typed can reach this file,
+    the audit log or a screen through it.
+    """
+    if not isinstance(reason, dict):
+        return "the local model did not answer"
+    bits = [str(reason.get("kind") or "unknown")]
+    status = reason.get("status")
+    if status:
+        bits.append(f"HTTP {status}")
+    if reason.get("done_reason"):
+        bits.append(f"done_reason {reason['done_reason']}")
+    seconds = reason.get("seconds")
+    if isinstance(seconds, (int, float)):
+        bits.append(f"{float(seconds):.1f}s")
+    return "local model: " + ", ".join(bits)
+
+
+def note_model_failure(reason, *, at: Optional[float] = None) -> dict:
+    """The LOCAL model call itself failed; keep the closed-world reason.
+
+    A separate counter from `failed` on purpose. A pass that RAISED and a model
+    that never answered are two different things, and lumping them together is
+    how eight 2026-10-10 events could sit under a "reached no model" line for
+    two weeks: `failed` never moved, so nothing looked wrong.
+
+    `reason` is `jarvis_extract`'s own dict - kind/status/seconds/done_reason.
+    Nothing here reads the prompt or the answer, and nothing it writes can.
+    """
+    d = _stats_read()
+    d["model_failures"] = int(d.get("model_failures") or 0) + 1
+    now = time.time() if at is None else at
+    d["last_model_error"] = _model_error_words(reason)
+    d["last_model_error_at"] = now
+    _stats_write(d)
+    try:
+        _audit("learning.model_unreachable",
+               {"why": d["last_model_error"],
+                "kind": str((reason or {}).get("kind") or "")[:60]
+                if isinstance(reason, dict) else ""})
+    except Exception:
+        pass
+    return d
+
+
 def note_saved(n: int, *, at: Optional[float] = None) -> dict:
     """`n` facts were saved outside a full pass (a "Remember: ..."). Counted,
     so the total is the truth about how much Jarvis has learned."""
@@ -580,6 +636,9 @@ def stats() -> dict:
         out["note"] = f"{d['saved']} fact(s) saved so far, over {d['passes']} pass(es)."
     if d.get("last_error"):
         out["note"] += f" The last pass failed ({d['last_error']})."
+    if d.get("last_model_error"):
+        out["note"] += (f" The local model did not answer on the last try "
+                        f"({d['last_model_error']}).")
     return out
 
 
@@ -1768,29 +1827,62 @@ def _store():
     return M.store()
 
 
+def _add_note_column(c, name: str, decl: str) -> None:
+    """ALTER TABLE auto_learn_notes ADD COLUMN, tolerating a column another
+    writer added a moment ago.
+
+    WHY THIS IS HERE. Two writers exist: the learner's pass (`after_pass` ->
+    `_note_card`) and any thread serving /api/memory/pending, whose
+    `jarvis_intake.annotate()` calls `card_notes()` and so `_init_notes()`
+    too. On an OLD memory.db both can read "no sensitive" and both then
+    ALTER. The loser gets
+    sqlite3.OperationalError("duplicate column name: sensitive"), which
+    escapes `_init_notes` -> `_note_card` -> `after_pass`; `note_failure`
+    records it as `after_pass: OperationalError` and the pass saves nothing -
+    `passes` 0, `failed` climbing, and no fact learned. `jarvis_memory._init()`
+    documents and handles the same race for `facts.retired_at` ("Measured
+    with eight processes released at the same instant: a failure in 2 trials
+    of 8, only on the ONE run that migrates an old database - which is the
+    owner's upgrade path").
+
+    NARROW ON PURPOSE: only "already there" is swallowed. `database is
+    locked`, `no such table` and everything else are real problems and still
+    raise, because a pass that quietly saved nothing would be the same
+    invisible failure in a different coat."""
+    try:
+        c.execute(f"ALTER TABLE auto_learn_notes ADD COLUMN {name} {decl}")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column name" not in str(exc).lower():
+            raise
+
+
 def _init_notes(c) -> None:
+    # Every column `_note_card` inserts is in the CREATE, so a FIRST install
+    # needs no ALTER at all. `topic_ask` used to be missing here and was added
+    # by an ALTER on the very first card - a migration every new install ran,
+    # and one a second writer could collide with (see _add_note_column).
     c.execute("CREATE TABLE IF NOT EXISTS auto_learn_notes ("
               " proposal_id INTEGER PRIMARY KEY, reason TEXT, provenance TEXT, at REAL,"
-              " sensitive TEXT, conversation_id TEXT)")
+              " sensitive TEXT, conversation_id TEXT, topic_ask INTEGER)")
     # `sensitive` (the memory review, B13): the topic a card was held back
     # for - a label ("health"), never words. A table from before it gets
     # the column.
     cols = [r[1] for r in c.execute("PRAGMA table_info(auto_learn_notes)")]
     if "sensitive" not in cols:
-        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN sensitive TEXT")
+        _add_note_column(c, "sensitive", "TEXT")
     # `conversation_id` (the second chat audit, 2026-09-28, finding 3): the
     # chat a card came from, so a card accepted BY HAND keeps the link to its
     # chat like an automatically saved fact does (jarvis_extract._fact_meta
     # copies it into the fact). Without it "Erase the words" said "no chat
     # was on record" for exactly the sensitive facts that wait for a card.
     if "conversation_id" not in cols:
-        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN conversation_id TEXT")
+        _add_note_column(c, "conversation_id", "TEXT")
     # `topic_ask` (topic controls, 2026-09-30): the id of the topic a card
     # asked about ("This might be about Work, which you set to not learn.").
     # Accepting that card files the fact under Unsorted, the owner's choice
     # (jarvis_topics.label_new_fact). An id, never words.
     if "topic_ask" not in cols:
-        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN topic_ask INTEGER")
+        _add_note_column(c, "topic_ask", "INTEGER")
 
 
 def _note_card(c, pid: int, reason: str, provenance: Optional[str] = None,

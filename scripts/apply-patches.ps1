@@ -1723,6 +1723,40 @@ $PATCHES = @(
     # must stay LAST OF ALL) and changes nothing that patch anchors on.
     'reminder-actions.patch'
 
+    # cloud-honesty.patch (2026-10-28, the owner's fix for the AI-safety
+    # audit's H1 and M1): the honesty lines every LOCAL answer already carries
+    # now reach the CLOUD lane too - and a crisis turn is never answered by a
+    # cloud lane at all. Three hunks in jarvis_hud.py, NO install block and no
+    # route:
+    #
+    #   1. the route header's crisis flag comes from
+    #      `jarvis_wellbeing.crisis_in_turn`, the SAME rule the answering turn
+    #      uses, so the calm panel both apps draw and the help line the answer
+    #      carries cannot be decided from different words. It used to test
+    #      `messages[-1]` here while the turn tested the owner's own words only
+    #      (typed/voice), so a distress message pasted, shared, captioning a
+    #      picture or said with a failed voice print showed the panel and no
+    #      help line. Its context is wellbeing.patch's own block, in the
+    #      published base and on the owner's PC.
+    #   2. a crisis turn on a cloud lane is answered on THIS PC: the lane is
+    #      rebound to the local model, the payload rebuilt as a local turn's,
+    #      and `X-Jarvis-Route` says so (`cloud_refused: "crisis"`, `lane`,
+    #      `where: "local"`). Its context is the `use_tools` assignment
+    #      chat-stream.patch writes.
+    #   3. the cloud relay asks `jarvis_agent.cloud_postscript` for the lines
+    #      the answer cannot back - `postscript_lines` with an empty step list,
+    #      the same function the local answer uses - and writes them through
+    #      `CloudAnswer.close(tail=...)`, after the model's words and BEFORE
+    #      the events that end the stream. Its context is the reasoning
+    #      fallback that arrived by a re-take (PR #424), in the published base
+    #      and on the owner's PC.
+    # It sits here, before cloud-escalate.patch, because that one rewrites the
+    # `_says = _api.CloudAnswer(...)` line whose continuation this patch's
+    # third hunk is, and because f01-manual-lane-gate.patch must stay the LAST
+    # code patch directly after cloud-escalate (test_hud_manual_lane_gate
+    # asserts both).
+    'cloud-honesty.patch'
+
     # cloud-escalate.patch (2026-10-27, the owner's decision): ONE cloud lane,
     # and a standing "escalate when the work is too complex" switch that no
     # client can fake. Three hunks, NO install block and no route of its own -
@@ -1769,6 +1803,24 @@ $PATCHES = @(
     # before plugin-loader.patch, whose anchor ("Before the main socket") is
     # untouched by it.
     'f01-manual-lane-gate.patch'
+
+    # learning-extract-reason.patch (2026-10-28, DEF-017): `jarvis_extract.py`'s
+    # `_local_llm()` swallowed EVERY failure into `None` - the exception class,
+    # the HTTP status and the body all thrown away - so the learner could only
+    # print "reached no model at ... Is it pulled?" while Ollama had
+    # qwen3.5:9b loaded and answered a one-token POST in 1.969 s (measured on
+    # the owner's PC, 2026-10-28). It now records a CLOSED-WORLD reason - the
+    # class or an empty answer, the HTTP status, the wall duration and
+    # Ollama's own done_reason, never a prompt word and never an answer word -
+    # keeps returning None as before, and hands the reason to
+    # jarvis_auto_learn.note_model_failure, which /api/memory/learning already
+    # reads back; that is why there is NO jarvis_hud.py hunk here.
+    # ONE file, one hunk pair: no install block, no route, no gate row, no tier
+    # row, and it does not touch jarvis_hud.py at all - so it is appended
+    # immediately before plugin-loader.patch (which must stay LAST of all),
+    # after f01-manual-lane-gate.patch, and its context is the `_local_llm`
+    # block of the owner's own file, which no patch before it writes.
+    'learning-extract-reason.patch'
     'plugin-loader.patch'
 )
 

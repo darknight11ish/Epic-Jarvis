@@ -1738,6 +1738,17 @@ jobs:
       - name: CHANGELOG fragments are well formed
         run: python3 ../../tools/roll_changelog.py --check
 
+      # The same rule, one file over (2026-10-28, Gemini's ruling Q8): a pull
+      # request records a new owner decision as ONE file under decisions.d/ and
+      # does not edit docs/DECISIONS.md, whose old entries stay untouched.
+      # Every PR used to append at the same end of a 3.2 MB file, so two PRs
+      # always conflicted and a conflicted PR gets no CI. This validates any
+      # fragment that IS present, and the anchor heading the roll needs; it
+      # never requires a roll to have happened yet - and it never rolls one
+      # (the roll is deliberate, run by hand on a quiet main).
+      - name: DECISIONS fragments are well formed
+        run: python3 ../../tools/roll_decisions.py --check
+
       # Section 7's pre-build guards for the P-Doc, P-GH and P-Pub waves: the
       # zip/XML bomb reader, the phone-upload name sanitiser, the GitHub
       # base_tree payload guard, the junction-refusing project walk and the

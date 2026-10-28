@@ -88,19 +88,26 @@ const browser = await K.launch();
  * commands before), so this wraps `core.invoke` for the three commands this
  * slice uses and leaves every other command to the harness.
  */
-async function open({ prepared, answers = [] }) {
+async function open({ prepared, answers = [], backups = [], preview = null }) {
   const page = await K.open(browser, base, "settings.html", {}, { width: 900, height: 1800 });
   const read1 = view({ prepared });
-  await page.addInitScript(({ read1, answers }) => {
+  await page.addInitScript(({ read1, answers, backups, preview }) => {
     const wrap = () => {
       const core = window.__TAURI__ && window.__TAURI__.core;
       if (!core) return false;
       const real = core.invoke.bind(core);
       window.__phoneCalls = [];
+      window.__previewCalls = [];
       window.__phoneAnswers = answers.slice();
       core.invoke = (cmd, args) => {
         if (cmd === "get_backup") return Promise.resolve(JSON.parse(JSON.stringify(read1)));
-        if (cmd === "list_backups") return Promise.resolve({ backups: [] });
+        if (cmd === "list_backups") {
+          return Promise.resolve({ backups: JSON.parse(JSON.stringify(backups)) });
+        }
+        if (cmd === "preview_restore") {
+          window.__previewCalls.push([cmd, args]);
+          return Promise.resolve(preview || { ok: false, error: "no scripted preview" });
+        }
         if (cmd === "finish_phone_backup") {
           window.__phoneCalls.push([cmd, args]);
           const a = window.__phoneAnswers.shift();
@@ -114,7 +121,7 @@ async function open({ prepared, answers = [] }) {
     if (!wrap()) {
       const iv = setInterval(() => { if (wrap()) clearInterval(iv); }, 1);
     }
-  }, { read1, answers });
+  }, { read1, answers, backups, preview });
   await page.reload();
   await page.waitForTimeout(900);
   return page;
@@ -358,6 +365,60 @@ await check("CONTROL: the phone says the write happens on the press, and never b
     "Landed needs a parsed written backup (ok + name), never a refusal");
   assert.match(plate, /Backup\.PREPARED_ELSEWHERE/,
     "a run left waiting is still said plainly");
+});
+
+/* ── Preview: what the backup does NOT have is said here too ────────────── */
+
+async function previewOf(counts) {
+  const page = await open({
+    prepared: null,
+    backups: [{ name: "jarvis-backup-20261024-031500.jbak", at: AT, size: 4096 }],
+    preview: { ok: true, created_at: AT, counts },
+  });
+  const row = page.locator("#bk-list li").first();
+  await row.locator("input").fill(CODE);
+  await row.locator("button", { hasText: "Preview…" }).click();
+  await page.waitForTimeout(500);
+  const said = (await row.locator("p.note").innerText()).trim();
+  const calls = await page.evaluate(() => window.__previewCalls);
+  const errors = page.__errors;
+  await page.close();
+  return { said, calls, errors };
+}
+
+await check("Preview names a database the backup left out, and a chat history it leaves out by name",
+  async () => {
+    // Data-integrity audit F1/F4 (2026-10-28): the backend names a database
+    // whose snapshot failed and a chat history with no key that opens it, and
+    // a preview that listed only what went in would repeat the claim those
+    // fixes removed. The sentence is read from the SAME manifest field the
+    // backup's own result sentence uses, and each entry carries its reason.
+    const { said, calls, errors } = await previewOf({
+      databases: { "memory.db": { facts: 12, meta: 2 } },
+      settings_files: 3, notes_files: 2,
+      excluded_dbs: ["schedule.db (could not be read)",
+        "chat-history.db (encryption key missing or mismatched in Windows Credential Manager)"],
+    });
+    assert.deepEqual(calls, [["preview_restore", { name: "jarvis-backup-20261024-031500.jbak", code: CODE }]],
+      "the preview is asked for with the typed code and nothing else");
+    assert.match(said, /Made /, said);
+    assert.match(said, /memory\.db: 14 rows/, said);
+    assert.match(said, /3 settings files, 2 notes/, said);
+    assert.match(said, /schedule\.db \(could not be read\)/, said);
+    assert.match(said, /chat-history\.db \(encryption key missing or mismatched/, said);
+    assert.match(said, /are NOT in this backup/, said);
+    assert.deepEqual(errors, [], errors.join("\n"));
+  });
+
+await check("CONTROL: a preview of a complete backup says only what went in", async () => {
+  const { said, errors } = await previewOf({
+    databases: { "memory.db": { facts: 12 } },
+    settings_files: 3, notes_files: 2,
+    excluded_dbs: [],
+  });
+  assert.match(said, /memory\.db: 12 rows/, said);
+  assert.ok(!/NOT in this backup/.test(said), `nothing to warn about: ${said}`);
+  assert.deepEqual(errors, [], errors.join("\n"));
 });
 
 await browser.close(); close();

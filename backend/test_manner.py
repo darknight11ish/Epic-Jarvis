@@ -1621,6 +1621,117 @@ def t_personality_reaches_the_real_turn_path():
                        if m.get("role") == "system" and m.get("content") == M.note("plain")]) == 1)
 
 
+_FULL_MANNER = {
+    "manner": "warm", "personality": "warm_peer", "personality_explicit": True,
+    "humor": True, "sync_voice_with_personality": False,
+    "dials": {"humor": 2, "brevity": "thorough", "formality": "formal_butler",
+              "address": "sir"},
+    "user_personalities": [
+        {"id": f"custom-{n}", "name": f"Mind {n}", "base_preset": "warm_peer",
+         "custom_trait": f"stance {n}"} for n in ("one", "two", "three")],
+}
+
+
+def _write_manner(path: Path, doc: dict) -> None:
+    path.write_text(json.dumps(doc), encoding="utf-8")
+
+
+def t_a_damaged_manner_file_refuses_every_write_instead_of_wiping_it():
+    """F3 (data-integrity audit, 2026-10-28): a `manner.json` that EXISTS but
+    does not parse must fail closed.
+
+    It used to read as `{}`, so the next read-merge-write replaced the whole
+    file from that `{}`: every saved personality, the dials, humour and the
+    voice-lock switch were gone in a silent 200 OK. Now the write is refused,
+    a copy of the damaged bytes is kept beside it, and the owner is told - and
+    the READ path still answers with the safe defaults, as it always did."""
+    with Folder() as d:
+        p = Path(M.settings_path())
+        _write_manner(p, _FULL_MANNER)
+        check("the valid file really is what the reads see first",
+              len(M.user_personalities()) == 3 and M.humor_enabled() is True
+              and M.dials()["brevity"] == "thorough", M.dials())
+        damaged = "{damaged"                       # a truncated write, the live shape
+        p.write_text(damaged, encoding="utf-8")
+        check("the READ path still answers with the defaults (it must never raise)",
+              M.current() in ("warm", "plain") and M.humor_enabled() is False)
+
+        code, v = M.handle_set({"manner": "plain"})
+        said = str(v.get("error") or "")
+        check("a write to a damaged file is REFUSED, not merged onto {}",
+              code == 500 and v.get("ok") is False, v)
+        check("... the refusal says it did not change anything, and that the file is damaged",
+              "did not change anything" in said and "damaged" in said, said)
+        check("... it names manner.json and the copy it kept, so the owner can act",
+              "manner.json" in said and ".corrupt-" in said, said)
+        check("... the damaged file is left exactly as it was (nothing overwritten)",
+              p.read_text(encoding="utf-8") == damaged, p.read_text(encoding="utf-8"))
+        copies = sorted(x.name for x in p.parent.glob("manner.json.corrupt-*"))
+        check("... and a copy of the damaged bytes is kept beside it",
+              len(copies) == 1 and (p.parent / copies[0]).read_text(encoding="utf-8") == damaged,
+              copies)
+
+        ok, msg = M.save_user_personality({"name": "Fourth", "base_preset": "warm_peer",
+                                           "custom_trait": "stance four"})
+        check("saving a personality is refused too - the three saved ones are never replaced",
+              ok is False and "did not change anything" in str(msg)
+              and p.read_text(encoding="utf-8") == damaged, msg)
+        ok, msg = M.set_dial("brevity", "concise")
+        check("changing a dial is refused", ok is False and "damaged" in str(msg), msg)
+        ok, msg = M.set_sync_voice(True)
+        check("the voice-lock switch is refused", ok is False and "damaged" in str(msg), msg)
+        ok, msg = M.set_personality("friday_partner")
+        check("switching personality is refused", ok is False and "damaged" in str(msg), msg)
+        ok, msg = M.delete_user_personality("custom-one", confirm=True)
+        check("deleting a personality is refused with the damage, NOT with 'there is no "
+              "such personality' (the saved ones cannot be read, they are not gone)",
+              ok is False and "damaged" in str(msg) and "no saved personality" not in str(msg),
+              msg)
+        check("... a second refused write does not pile up another copy",
+              len(sorted(p.parent.glob("manner.json.corrupt-*"))) == 1,
+              sorted(x.name for x in p.parent.glob("manner.json.corrupt-*")))
+
+        # THE WAY OUT: the owner deletes (or repairs) the damaged file, and the
+        # next write goes through. Nothing here deletes it for them.
+        p.unlink()
+        code, v = M.handle_set({"manner": "plain"})
+        check("once the damaged file is removed, a write works again",
+              code == 200 and v["manner"] == "plain" and M.current() == "plain", v)
+
+
+def t_a_valid_manner_file_is_merged_never_erased_and_keeps_a_last_good_copy():
+    """The other half of F3: on a HEALTHY file the write still merges (the #881
+    shape - a key that is absent keeps its stored value) and the file that was
+    valid is kept as `manner.json.bak` before every replace."""
+    with Folder():
+        p = Path(M.settings_path())
+        _write_manner(p, _FULL_MANNER)
+        code, v = M.handle_set({"manner": "plain"})
+        after = json.loads(p.read_text(encoding="utf-8"))
+        check("a partial save changes only its own keys: manner, the preset, its dials",
+              code == 200 and after.get("manner") == "plain"
+              and after.get("dials") == M.preset(M._LEGACY["plain"])["dials"], after)
+        check("... every saved personality is still there",
+              [u["id"] for u in after.get("user_personalities", [])]
+              == ["custom-one", "custom-two", "custom-three"], after.get("user_personalities"))
+        check("... humour and the voice-lock switch are untouched",
+              after.get("humor") is True
+              and after.get("sync_voice_with_personality") is False, after)
+        bak = p.with_name(p.name + ".bak")
+        check("a last-good copy of the PREVIOUS file is kept before the replace",
+              bak.is_file() and json.loads(bak.read_text(encoding="utf-8")) == _FULL_MANNER,
+              bak.read_text(encoding="utf-8") if bak.is_file() else "no .bak")
+        M.handle_set({"humor": False})
+        check("the next save moves the .bak on, and the live file keeps everything else",
+              json.loads(bak.read_text(encoding="utf-8")).get("manner") == "plain"
+              and len(M.user_personalities()) == 3 and M.humor_enabled() is False,
+              M.user_personalities())
+        check("... and no .tmp or .corrupt file is left behind on the healthy path",
+              not [x.name for x in p.parent.iterdir()
+                   if x.name.endswith(".tmp") or ".corrupt-" in x.name],
+              sorted(x.name for x in p.parent.iterdir()))
+
+
 def main():
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
