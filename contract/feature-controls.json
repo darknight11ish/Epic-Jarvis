@@ -11738,7 +11738,7 @@
       "phone_found": true,
       "handler": "jarvis_settings_registry.set_antislop_mode",
       "status": "enforced",
-      "proof": "backend/test_antislop.py: 'set anti-slop mode to after' resolves through jarvis_quick.match() to the antislop_mode key and the filter's own state really reads mode 'after' afterwards (t_every_named_sentence_resolves_with_zero_cards); the POST body is driven through jarvis_antislop.handle_post in t_the_routes_answer_through_the_core_handler"
+      "proof": "backend/test_antislop.py: 'set anti-slop mode to after' resolves through jarvis_quick.match() to the settings_choice intent with the antislop_mode value and the filter's own state really reads mode 'after' afterwards (t_every_named_sentence_resolves_with_zero_cards); the POST body is driven through jarvis_antislop.handle_post in t_the_routes_answer_through_the_core_handler"
     }
   ],
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",

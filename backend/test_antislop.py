@@ -239,7 +239,7 @@ def t_the_switch_is_zero_tokens_and_zero_work_when_off():
 
 
 def t_off_reads_no_voiceprint_at_all():
-    """"0 work when off" covers the DISK too, not just the prompt.
+    """"0 work when off" covers the voiceprint store too, not just the prompt.
 
     `_antislop_dash_exemption()` runs on every turn, and it used to read the
     owner's voiceprint samples BEFORE asking the switch - so OFF added no token
