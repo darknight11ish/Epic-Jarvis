@@ -22452,8 +22452,8 @@ change is worse than not offering the button.
 `docs/ARCHITECTURE.md` §8 carries the row: the machine-readable half is built
 and both routes are live, and the UI is not built on either app. When it is,
 it goes on BOTH, on this same store and this same card. `tools/check_parity.py`
-cannot see it: it scans the two apps' own source, so a backend route no app
-calls is outside what it decides.
+now carries both routes in its `BACKEND_ONLY` register (2026-10-28), with that
+follow-up written in the reason, so the gap is named rather than invisible.
 ## 133. "Write Like Me": drafting in the owner's own voice (added 2026-10-15)
 
 **Drafting-turn wiring (Q4 follow-up, 2026-10-20).** `jarvis_agent.run_local_turn`
@@ -22637,9 +22637,9 @@ a sentence is not replaced.
 ### 133.8 Neither app has a screen for it yet
 
 `docs/ARCHITECTURE.md` §8 carries the row. The store and the four routes are
-built; neither app has a list or a Forget. When they are built they go on BOTH,
-on this same store and this same confirm. `tools/check_parity.py` cannot see
-it for the same reason as §132.7.
+built; the Write Like Me card calls `/api/voiceprint`, `sample` and `forget`
+from BOTH apps (PR #665), and `learn_edit` has no app surface yet - when it is
+built BOTH apps get it, and the `BACKEND_ONLY` register (2026-10-28) names it.
 ## 134. The blind credential vault: a NAME everywhere, the value at the point of use (added 2026-10-14)
 
 **The idea, in one line.** The model, the prompt, the approval card, the audit
@@ -22905,9 +22905,9 @@ reference is marker-stripped and a symlink cannot escape").
 app calls any of them: no screen reads a reference manual, offers `/skill`
 completion, lists a project's skills, or offers `/learn`. When they are built
 they go on BOTH, on these same routes and this same `modify_own_code` card.
-`tools/check_parity.py` cannot see any of it - it scans the two apps' own
-source, so a backend route no app calls is outside what it decides - which is
-said here rather than read as a clean pass it did not earn.
+`tools/check_parity.py` carries all four in `BACKEND_ONLY` (2026-10-28), with
+this follow-up in each reason, so the gap is named rather than read as a clean
+pass it did not earn.
 
 ---
 
@@ -23560,8 +23560,8 @@ the gate's own table already tiers `skill_list`, `skill_load` and `skill_scan` a
 
 `docs/ARCHITECTURE.md` §8 carries the row for the app surfaces: the lock, the
 conventions and the suggestions are readable by either app and **no app calls
-them yet**. `tools/check_parity.py` cannot see them - it scans the two apps' own
-source, so a backend route no app calls is outside what it decides.
+them yet**. `tools/check_parity.py` carries the lock read and the suggestions in
+`BACKEND_ONLY` (2026-10-28), with that reason in each entry, so the gap is named.
 
 **Related, and NOT a route:** `backend/jarvis_tool_schema.py` was added in the
 same work item and serves no route at all. It decides whether a JSON Schema may
@@ -23701,9 +23701,9 @@ its own redaction/placement design first. **Both routes are this PC's own**: a r
 (a phone on the same private network, say) is refused `403` with one plain
 sentence by `jarvis_owner_check.from_this_pc`, BEFORE any file is read - the
 same rule the guardian and selection routes use, so a paired phone's token
-cannot use them either. `tools/check_parity.py` scans the two apps' own
-source for routes they call, so a backend route no app calls is outside what
-it decides, and it stays clean. No app menu, no Brain read section, and no
+cannot use them either. `tools/check_parity.py` carries both in `BACKEND_ONLY`
+(2026-10-28), with this PC-only decision in each reason, so the gap is named
+rather than left to read as a clean pass. No app menu, no Brain read section, and no
 `features/features.json` entry are added.
 
 `docs/CLAIMS.tsv` gets no row for this: it is a read-only exposure of two
