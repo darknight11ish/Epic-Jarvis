@@ -1507,6 +1507,20 @@ def _match(text, now: float) -> Optional[Intent]:
                      r"(?:\s+list)?", s)
     if m:
         return Intent("todo_remove", {"text": m.group(1).strip()})
+    # --- "connect my google calendar", "set up a calendar bridge for me"
+    # (2026-10-28, the owner's HUD screenshot) --------------------------------
+    # The reader is real (jarvis_calendar.py) and nothing about it is a bridge,
+    # a sign-in or a permission grant - but no sentence here owned the words the
+    # owner used, so the model answered and invented that limitation. LAST among
+    # the real matchers, beside _notion and for the same reason: a reminder or a
+    # watch that merely mentions a calendar keeps its own answer, and "open my
+    # calendar" still opens the app (jarvis_open.py). A plain "what's on my
+    # calendar today" is deliberately NOT matched - it still goes to the model,
+    # which can read it through the calendar_read tool once the tool is offered.
+    got = _calendar_setup(s)
+    if got is not None:
+        return got
+
     # --- "process all my Notion notes into Obsidian" (2026-10-28) ---------------
     # The owner's screenshot of 2026-10-27 205732. This sentence used to reach
     # the model, which has no Notion tool and answered "I cannot directly
@@ -5760,6 +5774,182 @@ def _run_update_start(desktop, *, fetch=None, tier_of=None, spawn=None) -> Resul
 
 
 # --------------------------------------------------------------------------
+#   Connecting a calendar (2026-10-28, the owner's HUD screenshot)
+# --------------------------------------------------------------------------
+#
+# WHY THIS IS HERE. The owner asked, in the HUD chat on 2026-10-28:
+#
+#     "can you connect directly to external calendars like google or outlook?"
+#
+# and Jarvis answered that it "cannot connect ... without you manually granting
+# permissions and setting up a bridge", then offered to explain exporting the
+# calendar to an ICS file. That is false about this PC, and it is false in the
+# direction that costs the owner a feature: `jarvis_calendar.py` already reads
+# Google Calendar through its **private iCal link** and any CalDAV calendar,
+# read-only, with **no OAuth and no bridge** (its own docstring, `:1-34`), the
+# link is typed in Settings, Accounts and kept in Windows Credential Manager
+# (`:81-93`), and the model is offered a `calendar_read` tool
+# (`jarvis_agent.py:2315-2323`). Measured with this module's own `match()`: 16
+# of 16 owner-style sentences - including "connect my calendar", "set up my
+# calendar", "add my google calendar", "link my outlook calendar" and
+# "set up a calendar bridge for me" - returned None, so the 8B model answered,
+# and its system prompt (`jarvis_agent.py:7263-7281`) says nothing about a
+# calendar at all. The fix is this answer, not a new capability.
+#
+# THE WORDS ARE HELD TO THE REAL ONES. `test_calendar_answer.py` checks every
+# step below against the Accounts card's own label and help line
+# (`jarvis-desktop/src/account-secrets.js`), the `account-secrets` section id in
+# `jarvis_settings_registry.SECTIONS`, the Credential Manager target
+# (`jarvis_calendar.ICS_URL_TARGET`), the reading-tool switch's own grammar
+# (`_TOOL_ON`, below) and the shipped `[tools].enabled` list - so a moved box, a
+# renamed label or a loosened tier fails a suite instead of leaving a wrong
+# answer on screen.
+#
+# NOTHING IS CONNECTED BY SAYING THIS: the private link is a secret, typed on the
+# PC only (rule 3), so the answer can only say where - it never claims a
+# connection was made, and no card is raised here.
+
+#: A question lead and the polite lead-ins `normalise` does not take off. "can
+#: you ..." is already gone by the time this runs; allowed again here so the
+#: grammar does not depend on that.
+_CAL_LEAD = (r"(?:(?:how\s+(?:do|can|could|would)\s+i"
+             r"|what\s+(?:do\s+i\s+need|would\s+it\s+take)\s+to"
+             r"|i(?:'d\s+(?:like|love)|\s+want|\s+need)\s+to"
+             r"|help\s+me)\s+)?")
+
+#: The verbs that mean "set it up". Deliberately NOT "open" (`jarvis_open.py`
+#: owns "open my calendar") and not "read"/"show": a plain "what's on my
+#: calendar today" still goes to the model, exactly as before.
+_CAL_VERB = (r"(?:set\s+up|connect(?:\s+(?:up\s+)?to|\s+with)?|link(?:\s+up)?|add|"
+             r"hook\s+up|sync|integrate|attach|enable|configure|import|"
+             r"give\s+(?:jarvis|you)\s+access\s+to)")
+
+#: What the owner calls the thing. "a calendar bridge" is his own phrase and is
+#: answered, not echoed: there is no bridge (see the words below).
+_CAL_THING = (r"(?:(?:(?:a|an|my|the|our|your)\s+)?"
+              r"(?:(?:google|outlook|apple|icloud|office\s*365|work|external)\s+)?"
+              r"calendars?"
+              r"|(?:an?\s+|my\s+|the\s+)?(?:ics|ical)(?:\s+file)?"
+              r"|(?:(?:a|an|my|the|our|your)\s+)?calendar\s+"
+              r"(?:bridge|connection|integration|link|setup))")
+
+#: "like google or outlook" - the owner's own examples, so the sentence he
+#: actually typed is answered instead of reaching the model.
+_CAL_LIKE = (r"(?:\s*,?\s*like\s+(?:google|outlook)(?:\s+or\s+(?:google|outlook))?)?")
+
+#: "... for me", "... in Jarvis", "... on this PC" - the polite end that does not
+#: change what is being asked. The dangling prepositions are here because
+#: `normalise` strips a trailing "jarvis" (`_TAIL`): "hook up my calendar to
+#: jarvis" arrives as "hook up my calendar to", and it is still his sentence.
+_CAL_TAIL = (r"(?:\s+(?:for\s+me|please|to\s+jarvis|with\s+jarvis|in\s+jarvis|"
+             r"into\s+jarvis|to\s+(?:my\s+|the\s+)?jarvis|on\s+this\s+pc|up|"
+             r"to|with|into|in|for))*")
+
+#: Whole sentences only: a sentence with one more condition ("... tomorrow at
+#: 5", "... on my phone") keeps its own answer or goes to the model untouched.
+_CALENDAR_CONNECT = re.compile(
+    _CAL_LEAD + _CAL_VERB + r"(?:\s+(?:directly|already|now))?\s+"
+    r"(?:(?:to|with)\s+)?" + _CAL_THING + _CAL_LIKE + _CAL_TAIL)
+
+#: "calendar setup" / "calendar connection" on its own, with no verb.
+_CALENDAR_NOUN = re.compile(r"(?:the\s+|my\s+)?calendar\s+"
+                            r"(?:setup|connection|bridge|integration)")
+
+#: "is my calendar connected?" - the state question, with no verb to set it up.
+_CALENDAR_STATE = re.compile(
+    r"(?:is|has)\s+(?:my\s+|the\s+|your\s+)?calendar\s+"
+    r"(?:connected|set\s+up|linked|configured|working|readable)")
+
+#: The answer for a calendar that is NOT set up - every step a real one: the
+#: Google path is the Accounts card's own help line, the box's label is that
+#: card's label, and the reading-tool sentence is this module's own `_TOOL_ON`
+#: grammar. `{tool}` is the reading-tool sentence, or "" when the tool is
+#: already offered (so the answer never asks for a switch that is already on).
+CALENDAR_SETUP_WORDS = (
+    "There is no bridge to set up, and no Google sign-in or permission grant: "
+    "Jarvis reads a calendar itself, read-only, on this PC. "
+    "1. In Google Calendar on a computer: the gear, Settings, your calendar, "
+    "Integrate calendar, then copy the Secret address in iCal format. "
+    "2. Paste it into Jarvis: Settings, Accounts, the Calendar iCal link box. "
+    "I cannot take that link here - it is handled like a password, so it is "
+    "typed on the PC only. Any calendar that gives you a private .ics address "
+    "works the same way.{tool} Then ask me what is on this week, or say "
+    "\"brief me every weekday at 7\".")
+
+#: The reading-tool half, said only when the tool really is not offered to the
+#: model (the shipped `[tools].enabled` list does not include it).
+CALENDAR_TOOL_STEP = (" If you also want me to read it when you ask, say \"let the "
+                      "AI model read my calendar\" - that raises one card.")
+
+#: The answer for a calendar that IS set up. `{named}` is the reader's own name
+#: for it ("your Google Calendar (private link)") and never the link itself.
+#: The `{tool}` sentence comes BEFORE the "ask" sentence: while the reading tool
+#: is not offered, asking would reach a model that cannot read it.
+CALENDAR_READY_WORDS = (
+    "This PC is already set up to read {named}.{tool} Then ask \"what's on my "
+    "calendar this week?\" - one request, read-only, nothing else sent. To "
+    "change it, Settings, Accounts on this PC.")
+
+CALENDAR_TOOL_OFF = (
+    " One thing is still off: the AI model is not offered the calendar tool, so "
+    "say \"let the AI model read my calendar\" (one card) first. The morning "
+    "briefing reads it without that.")
+
+#: A CalDAV address is saved but no CalDAV username is - most servers refuse.
+CALENDAR_CALDAV_NO_USER = (
+    " The CalDAV address is saved but no CalDAV username is set, so most "
+    "servers will refuse the read; the private iCal link needs no username.")
+
+CALENDAR_MISSING = ("Your PC's Jarvis does not have the calendar module yet - run "
+                    "apply-patches.ps1 on the PC, then ask again.")
+
+
+def _calendar_tool_words() -> str:
+    """The reading-tool sentence, or "" when it is already offered (or cannot be
+    read - an unreadable settings file must not become a claim either way)."""
+    try:
+        import jarvis_asks_first as AF
+        offered = AF.real_tool("calendar_read") in AF.tools_enabled_set()
+    except Exception:
+        return ""
+    return "" if offered else CALENDAR_TOOL_OFF
+
+
+def _calendar_setup(s: str) -> Optional[Intent]:
+    """"connect my google calendar", "set up a calendar bridge for me" (the
+    owner's screenshot, 2026-10-28). A read-only answer built from this PC's own
+    state - no card, no connection, no login."""
+    if (_CALENDAR_CONNECT.fullmatch(s) or _CALENDAR_NOUN.fullmatch(s)
+            or _CALENDAR_STATE.fullmatch(s)):
+        return Intent("calendar_setup")
+    return None
+
+
+def _run_calendar_setup(intent: Intent) -> Result:
+    """"Can you connect to my calendar?", "set up a calendar bridge for me"
+    (2026-10-28). Reads the reader's own state and answers with the real steps;
+    when the calendar is not set up it also carries `open_settings`, so the
+    desktop's Settings window jumps to the Accounts card itself - the same
+    cardless jump "open accounts" makes, and like that one it changes nothing."""
+    n = intent.name
+    try:
+        import jarvis_calendar as CAL
+    except Exception:
+        return Result(CALENDAR_MISSING, n)
+    source = CAL.source()
+    if source:
+        named = (CAL.source_words() if source == "ics"
+                 else "your calendar over CalDAV")
+        words = CALENDAR_READY_WORDS.format(named=named, tool=_calendar_tool_words())
+        if source == "caldav" and not CAL.authenticated():
+            words += CALENDAR_CALDAV_NO_USER
+        return Result(words, n)
+    tool = CALENDAR_TOOL_STEP if _calendar_tool_words() else ""
+    return Result(CALENDAR_SETUP_WORDS.format(tool=tool), n,
+                  open_settings="account-secrets")
+
+
+# --------------------------------------------------------------------------
 #   A Notion export into Obsidian (2026-10-28)
 # --------------------------------------------------------------------------
 #
@@ -7449,6 +7639,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n == "calendar_setup":
+        # "connect my calendar", "set up a calendar bridge for me" (2026-10-28):
+        # a read-only answer from the reader's own state - it names the real
+        # steps, and when nothing is set up it carries `open_settings` so the
+        # desktop's Settings window jumps to the Accounts card. Nothing is
+        # read from a calendar and nothing is connected.
+        return _run_calendar_setup(intent)
     if n == "notion_export":
         # "can you process all of my notion notes into obsidian?" (2026-10-28):
         # a fixed answer, like reach/sayable - it names the export steps, the
@@ -7838,6 +8035,10 @@ UNDO_NOTHING_SAID = "Nothing of mine to cancel."
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
+    # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
+    # fixed answer that reads this PC's own settings and connects nothing, so it
+    # must not take away what "cancel that" would undo.
+    "calendar_setup",
     "face_ask", "feature_change", "feature_change_ask", "feature_change_refused",
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",
