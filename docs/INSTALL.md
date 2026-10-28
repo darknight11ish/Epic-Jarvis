@@ -4,6 +4,12 @@ From a Windows 11 PC with nothing on it to a working, fully patched Jarvis,
 in order. Nothing here is aspirational: where something does not work yet,
 it says so and tells you what to do instead.
 
+**The desktop app is a download now, not a build.** A signed installer is
+published on the [`desktop-latest`
+release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest),
+and step 5 installs it by double-clicking it. Building the app from source is
+an appendix at the end of this page, for anyone changing the app itself.
+
 **How to use this page.** Every command is ONE line. Copy the whole line,
 paste it into **PowerShell** (Start menu → type `PowerShell` → Enter), press
 Enter, and wait for it to finish before the next one. Where a step says
@@ -70,29 +76,45 @@ so keep it there where you see it.
    powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "<your backend folder>"
    ```
 
-4. **Get the model** (section 1.8). About 5 GB, downloaded into Ollama's
-   own models folder (`C:\Users\<you>\.ollama\models`). Then quit Ollama from
-   its tray icon and start it again from the Start menu:
+4. **Get the models** (section 1.8). The everyday model - the one most of the
+   nine focus presets use - is about 6.5 GB, downloaded into Ollama's own
+   models folder (`C:\Users\<you>\.ollama\models`). Then quit Ollama from its
+   tray icon and start it again from the Start menu:
 
    ```powershell
-   [Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); ollama pull qwen3:8b; ollama create jarvis-primary -f backend\jarvis-primary.Modelfile
+   [Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); ollama pull qwen3.5:9b
    ```
 
-5. **Build the desktop app** (section 2.1). First the build programs (one
-   line, slow), then open a NEW PowerShell window and build it (one line).
-   The installer lands in
-   `C:\Users\<you>\Epic-Jarvis\jarvis-desktop\src-tauri\target\release\bundle\nsis\`:
+   The Fast preset, for the quickest short answers, uses the smaller
+   `qwen3.5:4b` - run `ollama pull qwen3.5:4b` too if you want it. **Settings
+   → Focus presets** describes each of the nine.
+
+   **And the older fallback, once.** Typed chat still names the older tuned
+   copy `jarvis-primary` by default, and Live names plain `qwen3:8b`; neither
+   has moved off that family yet, and the setup script mentioned in step 3
+   waits for `jarvis-primary` before it starts Jarvis. It is legacy, not the
+   everyday model, but a fresh install still needs it. About 5 GB:
 
    ```powershell
-   winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"; winget install --id Rustlang.Rustup -e; winget install --id OpenJS.NodeJS.LTS -e
+   ollama pull qwen3:8b; ollama create jarvis-primary -f backend\jarvis-primary.Modelfile
    ```
+
+5. **Install the desktop app** (section 2.1). It is a **download**, about 5 MB,
+   signed, and it updates itself from the same release after this. This one
+   line opens the release page:
 
    ```powershell
-   cd "$env:USERPROFILE\Epic-Jarvis\jarvis-desktop"; npm install; npm run tauri build
+   Start-Process "https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest"
    ```
 
-   Double-click the `-setup.exe` in that folder. Windows says it "protected
-   your PC": click **More info**, then **Run anyway** (section 2.2).
+   Download `jarvis-desktop_0.2.<n>_x64-setup.exe` from it (the `.msi` beside
+   it does the same job) and double-click it. Windows says it "protected your
+   PC": click **More info**, then **Run anyway** (section 2.2). Nothing is
+   built and nothing needs Visual Studio, Rust or Node.
+
+   Building the app yourself is still possible and is in the
+   [Appendix A](#appendix-a-building-the-desktop-app-from-source) at the end of
+   this page - that is for changing the app, not for installing it.
 
 6. **Let the desktop app start Jarvis for you** - no PowerShell window to
    keep open (section 2.5). In Jarvis Desktop: tray icon → **Settings and
@@ -482,14 +504,15 @@ providers that need no key and no account; Jarvis has five, and
 default one (the one setting SearXNG needs, how to check it answers, how to
 stop it).
 
-### 1.8 The model
+### 1.8 The models
 
-One time. The first two lines are settings Ollama reads at start-up (a
-Modelfile cannot hold them); the rest downloads the base model (about 5 GB)
-and builds Jarvis's tuned copy of it from `backend\jarvis-primary.Modelfile`:
+One time. The first two commands are settings Ollama reads at start-up (a
+Modelfile cannot hold them); the rest downloads the everyday model - the one
+most of the nine focus presets use - about 6.5 GB, into Ollama's own models
+folder:
 
 ```powershell
-[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); ollama pull qwen3:8b; ollama create jarvis-primary -f backend\jarvis-primary.Modelfile
+[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); ollama pull qwen3.5:9b
 ```
 
 Then quit Ollama from its tray icon and start it again, so it reads the two
@@ -497,6 +520,32 @@ settings. [`MODEL-TOPOLOGY.md`](MODEL-TOPOLOGY.md) says why this model and
 these numbers, and how to check it is really running on the graphics card
 and not spilling into system memory (which makes everything about five times
 slower with no warning).
+
+**Fast.** The Fast preset, for the quickest short answers, names the smaller
+`qwen3.5:4b`; pull it too if you want that preset:
+
+```powershell
+ollama pull qwen3.5:4b
+```
+
+The presets in the chat bar (Settings → **Focus presets** describes each one,
+and `backend\jarvis_presets.py` is the list they come from) name `qwen3.5:9b`
+on most lanes and `qwen3.5:4b` for Fast; Coding and General Uncensored name
+their own models, which this page does not download. A preset switches the
+model the app uses; it does not change your chats, your memory or the settings
+above.
+
+**The older fallback (legacy).** Typed chat still names the older tuned copy
+`jarvis-primary` as its built-in default (`backend\jarvis_chatbot.py`'s
+`MAIN_MODEL_DEFAULT`), and Live names its plain base model, `qwen3:8b`
+(`[live] model` in the shipped settings). `scripts\setup-jarvis.ps1` refuses
+to start Jarvis until `jarvis-primary` is built. The presets above are the
+everyday models; this one stays only because those code paths still need it.
+About 5 GB:
+
+```powershell
+ollama pull qwen3:8b; ollama create jarvis-primary -f backend\jarvis-primary.Modelfile
+```
 
 **Another graphics card, or a different one?** Once the desktop app is
 running (Part 2), open Settings, **Hardware and models**. It lists your
@@ -509,6 +558,15 @@ all on the graphics card.
 **Voice (optional).** Talking to Jarvis needs model files downloaded onto the
 PC as well. `backend\README.md`, section **"Voice that works"**, has the
 steps.
+
+**And it has to know it is you before it acts on anything you say.** The
+shipped settings have `[voice]` `enabled = true`, `mode = "owner"`, which
+**fails closed**: with no voice of yours learned, a spoken command is refused
+rather than obeyed (`backend\rebuilt\jarvis-framework.toml`, section 14 -
+"no model, no profile, or a processing error all mean 'not the owner'").
+Teach it your voice first in **Settings → Voice** (*"You can teach it your
+voice here, through this PC's microphone"*), or type instead of speaking
+until you have. The phone can do the training too, for this PC's microphone.
 
 ### 1.9 Start it
 
@@ -594,30 +652,39 @@ folder.
 
 ## Part 2 — The desktop app
 
-### 2.1 Build it
+### 2.1 Install it
 
-It is built on your PC; there is no download yet. That needs three more
-programs - Microsoft's C++ build tools, Rust and Node.js. One line (the build
-tools are large, and the line takes a while):
+There is nothing to build and nothing to install first. Every push to `main`
+that changes the desktop app publishes a new signed installer to the rolling
+[`desktop-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest),
+and the app you install updates itself from that same release afterwards.
 
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"; winget install --id Rustlang.Rustup -e; winget install --id OpenJS.NodeJS.LTS -e
-```
+1. **Open the release page** (one line; the link works in a browser too):
 
-Open a NEW PowerShell window, then (one line):
+   ```powershell
+   Start-Process "https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest"
+   ```
 
-```powershell
-cd "$env:USERPROFILE\Epic-Jarvis\jarvis-desktop"; npm install; npm run tauri build
-```
+2. **Download `jarvis-desktop_0.2.<n>_x64-setup.exe`** - the newest one, about
+   5 MB. The `.msi` beside it does the same job if you prefer that kind of
+   installer. Every installer there has a `.sig` file next to it; that is the
+   signature the app checks before it will install an update, and a release
+   with an installer but no `.sig` is one to leave alone.
 
-The installers land in `jarvis-desktop\src-tauri\target\release\bundle\` —
-`nsis\*-setup.exe` and `msi\*.msi`. Use the NSIS one.
+3. **Double-click it.** Windows says it "protected your PC" - that is the next
+   section (2.2), and it is expected: signing here means the *update* is
+   verified by the app, not that Windows trusts the publisher.
 
-**You only build by hand until the update signing key exists.** After that,
-GitHub builds the installer and it appears on the Releases page - see "The
-desktop installer, and the update signing key", later in this page (about ten
-minutes of setup). Nothing above stops working; there is just no longer a
-reason to do it.
+**Nothing installs on its own.** A person presses the button - in **Settings →
+Updates**, or by running `scripts\update-jarvis.ps1`, which checks the same
+signature before it runs a download. That is a rule here, not a setting you
+have not found yet.
+
+**Building it yourself** - Visual Studio build tools, Rust and Node.js, then
+20-40 minutes of compiling - stays possible and is what you want if you are
+changing the app. Those commands are in
+[Appendix A](#appendix-a-building-the-desktop-app-from-source) at the end of
+this page, and section 1.3's setup script does it for you with `-FromSource`.
 
 ### 2.2 Get past SmartScreen
 
@@ -641,10 +708,12 @@ The README used to say the app has no window at startup. **It does.** Expect:
 - a small **320×44 glass pill** at the top-left — the widget, always on top;
 - a **tray icon**, which on Windows 11 starts hidden in the `^` overflow.
   Drag it onto the taskbar now. You will need it.
-- the first time only, a small **Welcome** window: three short screens (the
-  tray icon, approval cards, and what Jarvis remembers). Press **Next** to
-  go through them, or Esc to close it. It comes back once whenever a later
-  version of the app changes what it says.
+- the first time only, a small **Welcome** window: **five** short screens (the
+  tray icon, approval cards, what Jarvis remembers, how to talk to it, and
+  where the settings are). Press **Next** to go through them, or Esc to close
+  it. It comes back once whenever a later version of the app changes what it
+  says, and **Settings → Set up Jarvis → Show the intro again** replays it any
+  time.
 
 If the HUD window says **"demo · not connected"** with a banner telling you to
 run `py -3 jarvis_hud.py`, the desktop app could not reach Jarvis: the HUD's
@@ -1304,11 +1373,10 @@ as you set them.
    ```
 
    Then start Jarvis again (step 1.9).
-2. **The desktop app.** If the update signing key is set up ("The desktop
-   installer, and the update signing key", above), it is now the app's own
-   button: Settings → Updates → **Check now**, then **Install**. Until that
-   key exists, build it again (step 2.1's second line) and run the new
-   installer over the old one. Your settings stay either way.
+2. **The desktop app.** It is the app's own button: **Settings → Updates →
+   Check now**, then **Install**. `scripts\update-jarvis.ps1` (above) does the
+   same job from one command line, and checks the installer's signature before
+   it runs it. Your settings and your pairing stay either way.
 3. **The phone app.** Download the newest `.apk` from the `client-latest`
    release and install it over the old one (step 3.3, 1-2). It stays
    paired: an update signed with the same key keeps the app's data.
@@ -1324,19 +1392,20 @@ so leave those alone unless you know why you want one.
 
 ---
 
-## The desktop installer, and the update signing key
+## The update signing key (whoever publishes the installer)
 
-Right now the only way to get the desktop app is to build it yourself (step
-2.1). Nothing is wrong with that, but it is not something a second person
-could do - and it is also the reason **Settings → Updates says "Not set up
-yet"**.
+**You do not need this section to install Jarvis.** The key exists, the
+installer is published, and step 2.1 installs it. This section is for the
+person who has to make a key, or replace one that was lost - and for anyone
+who wants to know why a downloaded installer can be trusted.
 
-This section is the one thing that changes both, and it is about **ten
-minutes of your time**. When you have finished it, GitHub builds the
-installer for you, you download it like any other program, and each new
-version after that appears in Settings → Updates. `scripts\update-jarvis.ps1`
-uses that same published installer for the desktop half from then on (before it
-exists, that script builds the app from this folder instead).
+Every push to `main` that changes the desktop app publishes a signed installer
+to the rolling `desktop-latest` release, and the app in this repository carries
+the matching
+public key (`jarvis-desktop\src-tauri\tauri.conf.json`, `plugins.updater` →
+`pubkey`), so **Settings → Updates** works out of the box. Until 2026-10-27
+this section was the ten-minute job that made that true; it is now a record of
+how, plus the steps for replacing the key.
 
 **What it checks before running it.** `scripts\update-jarvis.ps1` downloads the
 installer over HTTPS from this project's own release page and then verifies its
@@ -1360,8 +1429,10 @@ repository**.
 a public key but a build nobody signed cannot check anything, and a release
 page with an installer but no signature is a download the app must refuse.
 So the order below is the order that works, and nothing publishes until both
-halves exist. Until then the committed settings file stays switched off, and
-the app tells the truth about it rather than offering a button that fails.
+halves exist. **The repository has both halves today** - the public key is in
+`tauri.conf.json` and the release is signed - so the order below is what to
+follow only when you are replacing a key, and it starts from the key you no
+longer have.
 
 ### 1. Make the key
 
@@ -1401,32 +1472,25 @@ This copies the public key to your clipboard:
 (Get-Content "$env:USERPROFILE\.tauri\jarvis-desktop.key.pub" -Raw).Trim() | Set-Clipboard; Write-Host "The PUBLIC key is on your clipboard."
 ```
 
-Open `jarvis-desktop\src-tauri\tauri.conf.json` and find this near the
-bottom:
+Open `jarvis-desktop\src-tauri\tauri.conf.json` and find `"pubkey"` under
+`plugins.updater`. **It is already filled in**, with one very long string
+starting `dW50cnVzdGVkIGNvbW1lbnQ6` - that is the key the published installer
+is signed with today. Paste yours between those two quotes **only** if you
+made a new key in step 1: an app carrying one public key refuses every
+installer signed with another, so the two halves must always be replaced
+together.
 
-```json
-"pubkey": "",
-```
-
-Paste between the two quotes, so the value is the whole long line the file
-holds - the public key is one very long string starting
-`dW50cnVzdGVkIGNvbW1lbnQ6`.
-
-**That empty string is the entire reason updates are off**: as long as the
-value is empty, the app is built without an update key, and `update.rs`
+**What an empty value means, and why it is not the state of this repository.**
+With no key, the app is built unable to verify an update and `update.rs`
 deliberately reports "this build cannot update itself" instead of offering a
-Check button that could only fail. Filling it in is what switches the app's
-half on.
-
-**It is filled in by you, and never by a script.** In this repository the
-value is empty **on purpose** and must stay empty until you have a key of
-your own - an empty value is a working, honest "no", not a placeholder
-somebody forgot. If you are reading this without having made a key in step 1,
-leave it exactly as it is.
+Check button that could only fail. That is the honest "no" a fork with no key
+of its own starts from - a working answer, not a placeholder somebody forgot -
+and it is never filled in by a script.
 
 **`createUpdaterArtifacts` stays `false` in this file. Do not change it.** It
 is off so that a build on your own PC works with no key at all, exactly as
-step 2.1 describes. The build that runs on GitHub turns it on **by itself,
+building it yourself needs (Appendix A). The build that runs on GitHub turns
+it on **by itself,
 only in the run where a key is present**, using a small extra settings file
 it writes for that one build. That is the same "off unless it can really
 sign" rule as above, done where it cannot be forgotten. (A test in
@@ -1505,9 +1569,9 @@ from it.
 
 ### 5. Install that build once, by hand
 
-The copy on your PC now was built **before** the public key existed, so it
-cannot check or accept anything - it is the honest "no" from step 2. This is
-the one step that cannot be done through the app.
+The copy on your PC carries the **old** public key, so it will refuse
+anything signed with the new one - and the new build is the one that can
+accept it. This is the one step that cannot be done through the app.
 
 Open the repository's **Releases** (right-hand column on the main page) →
 **Jarvis Desktop - latest** → download
@@ -1681,13 +1745,12 @@ rather than your fault.
   terminal. Both are plain text; `backend.log` has passwords, keys and the
   pairing key taken out, `jarvis-desktop.log` does not, and neither catches
   everything - so read one before sending it anywhere.
-- **The updater is off until you make a signing key.** No key exists in this
-  repository and none can - a private key kept in a repository is not a key -
-  so the committed app is built unable to verify a download, and says so
-  rather than offering a button that fails. You can change that: "The desktop
-  installer, and the update signing key" (above, about ten minutes) makes
-  GitHub build and publish a signed installer, after which Settings →
-  Updates stops saying "Not set up yet".
+- ~~The updater is off until you make a signing key.~~ **Fixed 2026-10-27.**
+  The app carries a real public key, a push to `main` that changes the desktop
+  app publishes a signed installer to `desktop-latest`, and **Settings →
+  Updates** checks and installs from it. A **private** key still cannot live in
+  a repository and never will; the steps to replace one are in "The update
+  signing key" above.
 - ~~There is no download link for the backend, and there will not be one.~~
   **Fixed 2026-10-06.** Until then the Python program Jarvis is made of existed
   on the author's PC only, so a second person could not install Jarvis at all.
@@ -1716,3 +1779,36 @@ rather than your fault.
     file. What changes is that neither sits on disk as readable text - in a
     backup, a copied or synced folder, or a file search.
 - **Do not run the OpenJarvis copy you downloaded.** It writes into the same `%USERPROFILE%\.openjarvis\` folder as Jarvis, including a `documents` table in `memory.db`; with `documents-owned.patch` applied Jarvis ignores that table, but nothing stops OpenJarvis changing the folder.
+
+---
+
+## Appendix A: building the desktop app from source
+
+**You do not need this to install Jarvis.** Section 2.1 installs the signed
+download in a few clicks. This is for changing the app itself, or for a PC
+that must not run a downloaded installer (`scripts\setup-jarvis.ps1
+-FromSource` does the same thing for you, and `scripts\update-jarvis.ps1
+-FromSource` does it when updating).
+
+It needs three more programs - Microsoft's C++ build tools, Rust and Node.js.
+One line (the build tools are large, and the line takes a while):
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"; winget install --id Rustlang.Rustup -e; winget install --id OpenJS.NodeJS.LTS -e
+```
+
+Open a **NEW** PowerShell window - a program you just installed is only found
+by windows opened after it - then build it, one line:
+
+```powershell
+cd "$env:USERPROFILE\Epic-Jarvis\jarvis-desktop"; npm install; npm run tauri build
+```
+
+The installers land in `jarvis-desktop\src-tauri\target\release\bundle\` -
+`nsis\*-setup.exe` and `msi\*.msi`. Use the NSIS one. Windows says it
+"protected your PC": that is section 2.2.
+
+**A local build is not a published one.** Nothing is signed, so it is not what
+other people download - publishing is the workflow in "The update signing key"
+above, and `createUpdaterArtifacts` stays `false` here so that a build on your
+own PC never asks for a key that is not in the repository.
