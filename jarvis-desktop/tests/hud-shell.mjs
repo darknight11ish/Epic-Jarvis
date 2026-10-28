@@ -30,6 +30,7 @@ import { fileURLToPath } from "node:url";
 import * as L from "../src/hud-layout.js";
 import * as store from "../src/hud-layout-store.js";
 import * as P from "../src/hud-presets.js";
+import * as B from "../src/invoke-budget.js";
 import { CARD_DOM, FIXED_IDS } from "../src/hud-edit.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -547,6 +548,8 @@ await check("H3 added no WRITE capability of its own - and the HUD's writes stay
   // write-capable sets and exactly these three: the layout store (H2/H3), the
   // personalities set (wording only, no card, held on a stale link) and the
   // escalate switch (one boolean; ON raises the PC's card, OFF is instant).
+  // 2026-10-28: the face models icon adds a FOURTH - `hud-faces`, one face id,
+  // cosmetic, no card, saved through the Faces window's own appearance save.
   // Nothing else may be added without this list changing.
   const writes = capability.permissions.filter((name) => /write/.test(name));
   assert.deepEqual(writes, ["hud-layout-write"],
@@ -555,6 +558,8 @@ await check("H3 added no WRITE capability of its own - and the HUD's writes stay
     "the HUD's personality commands are granted by no set, or by more than one");
   assert.equal(capability.permissions.filter((name) => name === "hud-cloud-escalate").length, 1,
     "the HUD's cloud escalate command is granted by no set, or by more than one");
+  assert.equal(capability.permissions.filter((name) => name === "hud-faces").length, 1,
+    "the HUD's face models command is granted by no set, or by more than one");
   // Same commands as H2: H3 added none.
   const lib = read("src-tauri/src/lib.rs");
   assert.match(lib, /hud_layout::get_hud_layout/);
@@ -638,8 +643,10 @@ await check("the shell road calls the five commands, and the browser road sends 
   await P.switchPersonalityOnPc(win, "classic_butler");
   await P.setCloudEscalateOnPc(win, true);
   assert.deepEqual(calls, [
-    ["get_focus_presets"],
-    ["hud_personalities"],
+    // `{}` and not nothing: every road here goes through the shared budget
+    // (`invoke-budget.js`'s `call`), which always passes an args object.
+    ["get_focus_presets", {}],
+    ["hud_personalities", {}],
     ["apply_focus_preset", { preset: "coding" }],
     ["apply_focus_preset", { preset: "cloud", provider: "deepseek_api" }],
     ["hud_switch_personality", { personality: "classic_butler" }],
@@ -680,6 +687,51 @@ await check("the shell road calls the five commands, and the browser road sends 
     P.switchPersonalityOnPc({ fetch: () => Promise.resolve({ ok: false, status: 409,
       json: () => Promise.resolve({ error: "I do not know that personality." }) }) }, "nope"),
     /I do not know that personality\./);
+});
+
+await check("the HUD's preset apply goes through the ONE shared budget, at its own size", async () => {
+  // Silent-failure audit 2026-10-27, row 4: this menu called `core.invoke`
+  // itself, so `invoke-budget.js`'s budget for `apply_focus_preset` was
+  // unreachable from the one surface that applies presets. A wedged command
+  // then left the menu waiting with nothing said.
+  assert.equal(B.budgetFor("apply_focus_preset", "action"), B.APPLY_BUDGET_MS);
+  assert.equal(B.APPLY_BUDGET_MS, 1_250_000);
+  assert.ok(B.APPLY_BUDGET_MS > 1_200_000,
+    "the page's budget must outlast Rust's own 1,200 s command timeout");
+
+  // The window's OWN bridge is reached (a bare global lookup would throw
+  // "no desktop backend" against this fake window), and a command that never
+  // settles leaves the page waiting rather than throwing: it is the budget's
+  // job to end that wait, not the fake's.
+  const hung = { __TAURI__: { core: { invoke: () => new Promise(() => {}) } } };
+  const pending = P.applyFocusPresetOnPc(hung, "general");
+  const outcome = await Promise.race([
+    pending.then(() => "answered", () => "rejected"),
+    new Promise((r) => setTimeout(() => r("waiting"), 300)),
+  ]);
+  assert.equal(outcome, "waiting", "the apply did not reach the window's own bridge");
+
+  // ... and a refusal is the PC's own words, passed straight through.
+  const no = { __TAURI__: { core: { invoke: () => Promise.reject("the PC said no") } } };
+  let said = "";
+  try { await P.applyFocusPresetOnPc(no, "general"); } catch (error) {
+    said = typeof error === "string" ? error : String((error && error.message) || "");
+  }
+  assert.match(said, /the PC said no/, `the refusal was swallowed or rewritten: ${said}`);
+
+  // Source pins: the module reaches the bridge only through the shared budget,
+  // and the apply's own call carries the window its fake-window road needs.
+  assert.doesNotMatch(presetsSrc, /core\.invoke\(/,
+    "hud-presets.js reaches the bridge directly again");
+  assert.match(presetsSrc, /from "\.\/invoke-budget\.js"/);
+  assert.match(presetsSrc, /return call\("apply_focus_preset", body, "action", win\);/);
+  // The module is served to the browser HUD, and it imports the budget now, so
+  // the whitelist has to carry that module and the served bytes have to be the
+  // page's own bytes (backend/test_hud_static.py proves the whitelist half).
+  assert.equal(readFileSync(join(ROOT, "backend/static/hud-presets.js"), "utf8"), presetsSrc,
+    "the served copy of hud-presets.js is not the page's copy");
+  assert.equal(readFileSync(join(ROOT, "backend/static/invoke-budget.js"), "utf8"),
+    read("src/invoke-budget.js"), "the served copy of invoke-budget.js is not the page's copy");
 });
 
 if (fails) {

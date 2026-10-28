@@ -109,6 +109,7 @@ DYNAMIC_BELOW = {
     ("first-run-settings.js", "command"): "the first-run card's invoke(command, args); every caller passes a literal.",
     ("hardware-panel.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("manner-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
+    ("learning-settings.js", "command"): "the Learning card's own two-branch table: brain_memory_learning (the background switch) or brain_memory_learning_sensitive (the sensitive-topics switch), both on the brain-memory set granted to this window; the status read is a literal call above.",
     ("notifications-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("sky-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("spending-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",

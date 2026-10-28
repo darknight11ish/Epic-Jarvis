@@ -152,6 +152,8 @@ speed-record.patch	speed-record/0d1c469.patch	0d1c469e95d24e06fdf6221a06bc032bc0
 spending.patch	spending/86a889d.patch	86a889dfe8a64d2e796e0d53058dc4cfcd8aff2a	2026-09-30T06:07:36Z	Chat tags: audit fixes (focus, error sentences, names, counts, docs) and tagging while history is off
 support-chat.patch	support-chat/d85b573.patch	d85b573f18b1bf34b3b4d966e8e9f8d9dd02db60	2026-09-28T17:46:12Z	Customer-support chats, backend: the details card, the support last check, offers, the window
 tag-suggest.patch	tag-suggest/041fe41.patch	041fe41726dd559e344c8c03efaea431a992374b	2026-09-30T09:10:52Z	WIP: Money-Off, sayable topics, model_free; overnight tags backend in progress
+tasks.patch	tasks/72fb862.patch	72fb86244f8be479f898bba97a6665a33175afbe	2026-10-27T20:30:31-07:00	records(tasks): regenerate the tasks patch for the silent-failure changes
+tasks.patch	tasks/7d86fca.patch	7d86fca803b4458aecf39ea80ac09a571ddd0dbc	2026-10-27T18:14:31-07:00	Merge #914: a History column icon opens a DeepSeek-style conversation panel, with pinnable chats and tag sections
 tasks.patch	tasks/faa6eca.patch	faa6eca196d9e0eeb247cfac94b9542921719029	2026-10-27T17:26:30-07:00	fix(hud): tasks.patch is what its generator builds - the two STATIC_ASSETS lines moved its hunk offsets
 tasks.patch	tasks/568c99c.patch	568c99ce24474182f2dcec18cfffa2d1a3caea91	2026-10-27T16:54:34-07:00	feat(hud): the Galaxy's eight looks are drawn in 3D, opening on the Planetary Orrery
 tasks.patch	tasks/258ef5a.patch	258ef5a42ad5e78d2cfab3662ef3f10b6dc29128	2026-10-27T13:30:45Z	feat(hud): the Galaxy looks and their switch, the dock order, the Live button and opt-in read-aloud speakers (#891)

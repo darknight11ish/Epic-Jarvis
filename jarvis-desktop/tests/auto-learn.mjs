@@ -719,17 +719,34 @@ await check("a PC without automatic learning at all says so, in the phone's word
   assert.doesNotMatch(text + list, /[{}]|undefined|null/);
 });
 
-await check("CONTROL: only the Brain holds the commands; ON and Forget are held on a stale link, OFF never", async () => {
+await check("CONTROL: the learning switches' commands are the Brain's, plus ONE narrow Settings grant; ON is held on a stale link, OFF never", async () => {
   const toml = read("src-tauri/permissions/surfaces.toml");
   const sets = toml.split("[[set]]").slice(1);
   const holders = (perm) => sets.filter((s) => s.includes(`"${perm}"`))
     .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
   const cmds = ["brain_memory_learning_status", "brain_memory_auto_list", "brain_memory_learning_auto",
     "brain_memory_learning_sensitive", "brain_memory_saved_unseen"];
+  // The three the Settings window also holds since 2026-10-28 (see below).
+  const shared = new Set(["brain_memory_learning_status", "brain_memory_learning_sensitive"]);
   for (const cmd of cmds) {
     const perm = `allow-${cmd.replace(/_/g, "-")}`;
-    assert.deepEqual(holders(perm), ["brain-memory"], `${perm} is held by ${holders(perm)}`);
+    const want = shared.has(cmd) ? ["brain-memory", "learning-settings"] : ["brain-memory"];
+    assert.deepEqual(holders(perm), want, `${perm} is held by ${holders(perm)}`);
   }
+  // The 2026-10-28 settings audit (G1) gave the two learning switches a
+  // Settings card, so the settings window holds their THREE commands too - and
+  // only those three. The grant is deliberately narrow: the state read and the
+  // two switch writes, never the fact list, the saved ids or Forget.
+  const learning = sets.find((s) => /identifier = "learning-settings"/.test(s));
+  assert.ok(learning, "the settings window's learning-settings set is missing");
+  const granted = [...learning.matchAll(/"allow-([a-z-]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(granted, ["brain-memory-learning", "brain-memory-learning-sensitive",
+    "brain-memory-learning-status"], `the Settings grant is ${granted}`);
+  for (const perm of ["allow-brain-memory-learning", "allow-brain-memory-learning-status",
+    "allow-brain-memory-learning-sensitive"]) {
+    assert.deepEqual(holders(perm), ["brain-memory", "learning-settings"], `${perm} is held by ${holders(perm)}`);
+  }
+  assert.match(read("src-tauri/capabilities/settings.json"), /"learning-settings"/);
   for (const c of ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "settings", "widget"]) {
     const json = read(`src-tauri/capabilities/${c}.json`);
     assert.equal(json.includes("\"brain-memory\""), c === "brain", `${c} and brain-memory`);

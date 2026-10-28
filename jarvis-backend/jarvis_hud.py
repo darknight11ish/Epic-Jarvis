@@ -2238,6 +2238,9 @@ STATIC_ASSETS = {
     # ... and the one module it imports (2026-10-27): the labels, the delete
     # confirmation and the write shapes the Brain's History tab uses too.
     "/history-actions.js": ("history-actions.js", "text/javascript; charset=utf-8"),
+    # The shared invoke budget (2026-10-28): hud-presets.js imports it, so a
+    # browser HUD that cannot fetch it would break the whole menu.
+    "/invoke-budget.js": ("invoke-budget.js", "text/javascript; charset=utf-8"),
     # The Galaxy's looks (2026-10-27): the page's look switcher loads this one
     # with a dynamic import(), so a browser HUD that cannot fetch it shows no
     # switcher (the page catches the failure) instead of a broken picture. It is

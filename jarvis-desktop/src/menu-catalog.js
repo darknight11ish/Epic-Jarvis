@@ -484,6 +484,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.learning",
+    "title": "Learning",
+    "about": "The two learning switches: what Jarvis learns by itself.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "learning",
+      "the learning switches",
+      "background learning",
+      "automatic learning",
+      "learn automatically"
+    ]
+  },
+  {
     "id": "settings.voices",
     "title": "Jarvis's voice",
     "about": "Custom voices and the voice pack.",
@@ -2800,8 +2824,10 @@ export const ALIASES = {
   "asks first": "settings.asks-first",
   "attention budget": "brain.now.budget",
   "audit chain": "brain.trust.ledger",
+  "automatic learning": "settings.learning",
   "backend capabilities": "settings.backend-supports",
   "background jobs": "brain.work.jobs",
+  "background learning": "settings.learning",
   "background work": "brain.work.jobs",
   "backup settings": "settings.backup",
   "backups": "settings.backup",
@@ -2906,7 +2932,9 @@ export const ALIASES = {
   "jarvis's voice": "settings.voices",
   "jarvis's voices": "settings.voices",
   "keyboard shortcuts": "settings.shortcuts",
-  "learning": "brain.memory.learning",
+  "learn automatically": "settings.learning",
+  "learning": "settings.learning",
+  "learning switches": "settings.learning",
   "leave it to ollama": "settings.second-card.chat-card",
   "leave it where it is": "settings.handoff-front",
   "limits": "settings.limits",

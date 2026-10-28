@@ -59,6 +59,15 @@ pub(crate) const NOT_RUNNING_FIX: &str = "The PC is on, but Jarvis is not starte
      open Jarvis Desktop's Settings, then More options, and press Start under \"Starting Jarvis \
      for you\" (it needs \"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in \
      PowerShell, the way you set it up. Then try again.";
+/// `pc_unreachable`: no answer while CONNECTING. The destination never
+/// answered, so this says nothing about whether Jarvis is running - the PC may
+/// be asleep or off, or Tailscale/Meshnet may be down at one end (the audit
+/// finding of 2026-10-27, row 3). Telling the owner to "press Start" here sent
+/// them to start a service that might be running perfectly.
+pub(crate) const PC_UNREACHABLE_SAYS: &str = "Your PC isn't answering.";
+pub(crate) const PC_UNREACHABLE_FIX: &str = "It may be asleep or switched off, or Tailscale or \
+     NordVPN Meshnet may be off at one end. Wake the PC, check the private network on both, \
+     then try again.";
 /// `timeout`: connected, then no answer in time.
 pub(crate) const TIMEOUT_SAYS: &str = "Jarvis took too long to answer.";
 pub(crate) const TIMEOUT_FIX: &str =
@@ -98,9 +107,18 @@ pub(crate) fn network_kind(is_connect: bool, is_timeout: bool) -> &'static str {
 }
 
 /// The sentence for a request that never got an answer from Jarvis.
+///
+/// Each kind keeps its OWN words. `refused` and `connect_timeout` are not the
+/// same failure: a refused connection means something answered with a reset
+/// (so nothing listens - Jarvis is not running), while a connect timeout means
+/// nothing answered at all (the PC, or the private network to it, is the
+/// problem). The page's table (`plain-errors.js`, the contract fixture) has a
+/// separate `pc_unreachable` entry for the second, and this function used to
+/// send both to the first (audit 2026-10-27, row 3).
 pub(crate) fn unreachable_words(is_connect: bool, is_timeout: bool) -> String {
     let (says, fix) = match network_kind(is_connect, is_timeout) {
-        "refused" | "connect_timeout" => (NOT_RUNNING_SAYS, NOT_RUNNING_FIX),
+        "refused" => (NOT_RUNNING_SAYS, NOT_RUNNING_FIX),
+        "connect_timeout" => (PC_UNREACHABLE_SAYS, PC_UNREACHABLE_FIX),
         "read_timeout" => (TIMEOUT_SAYS, TIMEOUT_FIX),
         _ => (DROPPED_SAYS, DROPPED_FIX),
     };
@@ -647,6 +665,10 @@ mod tests {
             words("jarvis_not_running"),
             (NOT_RUNNING_SAYS.into(), NOT_RUNNING_FIX.into())
         );
+        assert_eq!(
+            words("pc_unreachable"),
+            (PC_UNREACHABLE_SAYS.into(), PC_UNREACHABLE_FIX.into())
+        );
         assert_eq!(words("timeout"), (TIMEOUT_SAYS.into(), TIMEOUT_FIX.into()));
         assert_eq!(
             words("connection_dropped"),
@@ -656,6 +678,62 @@ mod tests {
             words("key_store_refused"),
             (KEY_STORE_SAYS.into(), KEY_STORE_FIX.into())
         );
+    }
+
+    /// Audit 2026-10-27, row 3: a connect TIMEOUT used to be reported with the
+    /// "Jarvis isn't running" words, and the page holds the honest ones for it
+    /// (`pc_unreachable`). Every network kind keeps its own kind's words.
+    #[test]
+    fn every_network_kind_keeps_its_own_words() {
+        let cases = [
+            ((true, false), "refused"),
+            ((true, true), "connect_timeout"),
+            ((false, true), "read_timeout"),
+            ((false, false), "dropped"),
+        ];
+        let mut seen: Vec<(String, String)> = Vec::new();
+        for ((is_connect, is_timeout), network) in cases {
+            // The words the contract's own `classify` row gives this network
+            // failure - not the words of a neighbouring kind.
+            let kind = contract_kind(network);
+            let (says, fix) = words(&kind);
+            assert_eq!(
+                unreachable_words(is_connect, is_timeout),
+                format!("{says} {fix}"),
+                "{network} must say {kind}'s words (network_kind said {})",
+                network_kind(is_connect, is_timeout)
+            );
+            assert_eq!(network_kind(is_connect, is_timeout), network);
+            seen.push((says, fix));
+        }
+        // ... and no two kinds share a sentence. A pair that reads the same is
+        // one kind's words standing in for another's.
+        for i in 0..seen.len() {
+            for j in (i + 1)..seen.len() {
+                assert_ne!(seen[i], seen[j], "two network kinds show one sentence");
+            }
+        }
+        // The words that must never be used for a timeout: the PC not running.
+        assert!(
+            !unreachable_words(true, true).contains(NOT_RUNNING_SAYS),
+            "a connect timeout claims Jarvis is not running - the exact finding"
+        );
+        assert!(
+            unreachable_words(true, true).contains("asleep"),
+            "a connect timeout must say the PC may be asleep or the private network down"
+        );
+    }
+
+    /// The contract's `classify` table, as a helper: the kind it names for one
+    /// `{"network": ...}` input.
+    fn contract_kind(network: &str) -> String {
+        let doc = cases();
+        for case in doc["classify"].as_array().expect("classify") {
+            if case["input"]["network"].as_str() == Some(network) {
+                return case["kind"].as_str().expect("kind").to_string();
+            }
+        }
+        panic!("the contract has no classify row for {network}");
     }
 
     #[test]

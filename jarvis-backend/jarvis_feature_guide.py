@@ -568,9 +568,20 @@ def switches_for(row: dict) -> list:
 
     The link is the feature list's own `covers` (`settings.<section id>`) and
     BoolSetting.section - the same section ids `jarvis_quick` opens by name.
-    """
+
+    An Always-On SAFETY RULE owns no switch (ALWAYS_ON_IDS, Lead's 2026-10-22
+    ruling), and the section link alone cannot know that: two features can
+    share a section. "Lock Jarvis" (app-lock) and the chat-history switch both
+    live in Settings, Security, so without this an Always-On title would find
+    one switch in its section and "turn on Lock Jarvis" would have turned chat
+    history on (2026-10-28, caught by tools/check_feature_controls.py guard 2
+    when chat_history.section became "security", the settings audit's G5).
+    `_build_matrix` clears them again for the same reason; this keeps every
+    other caller - including jarvis_quick.switch_target - on the same rule."""
     R = _registry()
     if R is None or not row:
+        return []
+    if str(row.get("id") or "") in ALWAYS_ON_IDS:
         return []
     covers = set(row.get("covers") or [])
     out = []
@@ -1427,10 +1438,6 @@ NO_COMMAND_REASON = {
 #: links the catalogue's own row to the real switch keys that exist for it; the
 #: keys are BoolSetting keys from jarvis_settings_registry, checked by the suite.
 EXTRA_CONTROLS = {
-    "memory-saved": ("background_learning",),
-    # The two learning switches are explained by the feature row that names the
-    # Brain's Memory tab; their Settings card is `memory-learning` (2026-10-22).
-    "memory-learning": ("background_learning", "learn_sensitive_topics"),
     # "Write like me" is enabled by its own voices control (POST
     # /api/voiceprint/enabled), not by a Settings toggle row.
     "write-like-me": ("write_like_me",),
@@ -1452,32 +1459,25 @@ EXTRA_CONTROLS = {
 }
 
 #: Features that ARE command-controllable but have NO desktop Settings control
-#: today (setup-ui's audit of 2026-10-22, checked against the page). Recorded
-#: here so a page-less typed path never LOOKS covered in the matrix: the typed
-#: side is real and tested, the Settings half is another owner's work, and the
-#: matrix must say both. `controls` names the setting keys that are typed but
-#: not drawn in Settings; `desktop`/`phone` are the owners of those halves.
-SETTINGS_GAPS = {
-    "history": {
-        "controls": ("chat_history",),
-        "desktop": "setup-ui",
-        "phone": "Session B",
-        "reason": ("The chat-history switch and its retention choice live only in "
-                   "Brain -> History; the desktop Settings page has no control "
-                   "for either (just a jump note), and the phone has no Settings "
-                   "row for them. The retention choice is NOT typed for now "
-                   "(2026-10-22 decision: no spoken path to immediate deletion)."),
-    },
-    "memory-learning": {
-        "controls": ("background_learning", "learn_sensitive_topics"),
-        "desktop": "setup-ui",
-        "phone": "Session B",
-        "reason": ("Both learning switches live only in Brain -> Memory -> "
-                   "Learning; no Settings row exists on either app. A desktop-only "
-                   "card would also need a phone OpenPlace decision, so it is "
-                   "recorded rather than faked."),
-    },
-}
+#: today. Recorded here so a page-less typed path never LOOKS covered in the
+#: matrix: the typed side is real and tested, the Settings half is another
+#: owner's work, and the matrix must say both. `controls` names the setting
+#: keys that are typed but not drawn in Settings; `desktop`/`phone` are the
+#: owners of those halves.
+#:
+#: EMPTY since 2026-10-28. The two entries this carried were the settings
+#: audit's G1 and G5, and both controls now exist:
+#:   * `memory-learning` - the two learning switches have the `learning` card
+#:     on both apps (settings.html#learning + learning-settings.js, and the
+#:     phone's Learning row), so `background_learning` and
+#:     `learn_sensitive_topics` have a real desktop row.
+#:   * `history` - the chat-history switch and its retention have been drawn in
+#:     Settings, Security since 2026-10-22 (chat-history-settings.js); the gap
+#:     record was stale, not the page.
+#: The dict is kept (and still checked by tools/check_feature_controls.py and
+#: backend/test_feature_guide.py) so the next real gap is recorded in the one
+#: place the matrix reads, rather than being noticed by nobody.
+SETTINGS_GAPS = {}
 
 #: Feature ids whose ADJUST phrase does not sit behind a `settings.<id>` cover
 #: (the catalogue names a Brain page), with the Settings place that proves it.

@@ -434,6 +434,20 @@ object SettingsSearch {
             source = JUMP + listOf("net/SandboxExec.kt"),
         ),
         Row(
+            // "Learning" (2026-10-28, the settings audit's G1): the two
+            // learning switches, which had no Settings row before this. The
+            // section's heading and its one note are LearningSettingsPlate's
+            // own constants, so they are looked for there; the two automatic
+            // switches under it reuse AutoLearn's rows, whose names are in the
+            // label below.
+            key = "learning", title = "Learning",
+            label = "Learning; background learning; learn automatically; learn by itself; " +
+                "remember; saved facts; sensitive topics; automatic learning",
+            titles = listOf("Background learning"),
+            quotes = listOf("never from web pages, emails, documents or notes. These are the same "),
+            source = listOf("ui/screens/LearningSettingsPlate.kt"),
+        ),
+        Row(
             // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the
             // PC's fourteen questions and its READ-ONLY plan. The heading, the
             // kicker and the "changes are made on the PC" line are

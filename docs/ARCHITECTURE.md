@@ -3389,6 +3389,25 @@ settings row is NOT in the registry the phone mirrors
 `jarvis-client`'s generated catalogue), on purpose: this change may not write
 into `jarvis-client`. That is also why `features/features.json` - three
 byte-identical copies, one inside `jarvis-client` - was not extended.
+
+**The face models icon is the desktop HUD's, and the choice itself is both
+apps'** (2026-10-28, the owner's ask: *"add a jarvis model icon to the left
+column of the jarvis desktop that has all of the jarvis models (face models)"*).
+The picker is a second DOOR to a choice both apps already make: the face lives
+in `GET`/`POST /api/appearance` (`appearance.rs`), the phone switches it in its
+own Appearance screen (`AppearanceStore.kt`, `Faces.kt`), and the HUD's new
+`#rail-faces` button writes the same field through the HUD window's narrow
+`hud_set_face` command (the `hud-faces` set in `permissions/surfaces.toml`),
+which saves through the SAME `set_appearance` the Faces window's own "Use this
+face" uses. What is desktop-only is the door: the phone has no HUD left column,
+so an icon there would have no meaning; nothing was taken from the phone, no
+route was added, and `tools/check_parity.py` classifies nothing new. The list is
+not a second copy either - the panel renders `faces-spec.js`, the file
+`faces.html` already loads (already a `STATIC_ASSETS` key, so the browser HUD
+reads it too), and Rust proves the id against the same
+`jarvis-visual-spec.json` (`spec.rs::has_face`) before anything is stored. A face
+is cosmetic, so the write raises no card, and the command carries no colour,
+binding or animal field: those stay the Faces window's.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
@@ -3468,6 +3487,21 @@ served file is in those lists; the HUD-side code itself is a base-HUD change
 carried live by two literal deltas in `tools/reconcile_live_backend.py`'s
 `DELTA_TABLE` (`tools/hud-deltas/hud-static-*.txt`), because the live
 `jarvis_hud.py` is never replaced.
+
+**The shared invoke budget is a served file, because a page module imports it
+(2026-10-28).** `hud-presets.js` (the HUD's Presets menu) now applies a preset
+through `src/invoke-budget.js`'s `call` instead of reaching
+`TAURI.core.invoke` itself, so `apply_focus_preset`'s 1,250 s budget is
+reachable from the one surface that applies presets (silent-failure audit
+2026-10-27, row 4). That module is therefore part of the page's import
+closure: it ships byte-identically in `backend/static/invoke-budget.js`,
+`jarvis-desktop/src/invoke-budget.js` and the published base, it is in both
+`$SHIPPED` lists and the `BESIDE` table, and it is a `STATIC_ASSETS` key
+(`/invoke-budget.js`) in the base `jarvis_hud.py` and in the live delta
+(`tools/hud-deltas/hud-static-assets.txt`). Without the key the browser HUD
+would 404 the import and the whole Presets menu would fail to load; that is
+the closed-world rule above working as intended, and it is why the module is
+list-checked rather than merely imported.
 
 **The HUD's 3D library is vendored before the page that draws with it
 (2026-10-27).** The owner approved the "exact Gemini cosmos" port, and the HUD

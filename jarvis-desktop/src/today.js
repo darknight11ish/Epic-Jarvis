@@ -226,6 +226,18 @@ export function cockpitOf(view) {
   return c && typeof c === "object" ? c : null;
 }
 
+/** The board could not be READ (Rust's `cockpit_error`, silent-failure audit
+ *  2026-10-27, row 5). A page that draws nothing here draws a clear day, which
+ *  is a claim it cannot make: the question was never answered. */
+export const BOARD_UNREADABLE =
+  "Jarvis could not read today's board from your PC. That does not mean nothing is due - " +
+  "it means this page could not ask. Try again in a moment.";
+
+/** Did the board's own read fail (as opposed to a PC that has no board)? */
+export function cockpitUnreadable(view) {
+  return Boolean(view && view.cockpitError === true);
+}
+
 /** Is the said-I'd-do switch on, as the PC said? OFF unless it says true. */
 export function unspokenEnabled(cockpit) {
   return Boolean(cockpit && cockpit.unspoken_commitments_enabled === true);
