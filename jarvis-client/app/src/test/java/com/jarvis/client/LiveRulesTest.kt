@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveRules
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -245,5 +246,42 @@ class LiveRulesTest {
         assertFalse(LiveRules.cameraShown(null))
         assertFalse(LiveRules.cameraShown(JsonObject(mapOf("on" to JsonNull))))
         assertTrue(table["camera"] is JsonArray)
+    }
+
+    @Test
+    fun `the lock screen gets the fixed line, never the session's own state`() {
+        // P-7 (privacy audit 2026-10-27). Live's foreground notice and "Live
+        // ended - Resume" were the only two Jarvis notices still PUBLIC while
+        // the lock was on. Their words are not the owner's own words, but they
+        // ARE state (minutes left, Mic off/Mic on, the PC's why), and every
+        // other notifier replaces state with a fixed line when the lock is on.
+        val app = "Jarvis"
+        val title = LiveRules.TITLE
+        val state = "12 minutes left · Mic off"
+        // Unlocked: exactly what the session built.
+        assertEquals(listOf(title, state), LiveRules.noticeWords(false, app, title, state))
+        assertEquals(
+            listOf(LiveExtras.RESUME_TITLE, LiveRules.SEEN.getValue("end_hint")),
+            LiveRules.noticeWords(
+                false, app, LiveExtras.RESUME_TITLE, LiveRules.SEEN.getValue("end_hint"),
+            ),
+        )
+        // Locked: the app's own name and ONE fixed sentence, for both notices.
+        assertEquals(listOf(app, LiveRules.LOCKED_LINE), LiveRules.noticeWords(true, app, title, state))
+        assertEquals(
+            listOf(app, LiveRules.LOCKED_LINE),
+            LiveRules.noticeWords(true, app, LiveExtras.RESUME_TITLE, "Ended - you said goodbye."),
+        )
+        // The fixed line says the one unavoidable fact and nothing else: no
+        // minutes, no microphone state.
+        assertTrue(LiveRules.LOCKED_LINE.isNotBlank())
+        assertFalse(
+            "the fixed line leaks the state it replaces",
+            "minute" in LiveRules.LOCKED_LINE.lowercase(),
+        )
+        assertFalse(
+            "the fixed line leaks the state it replaces",
+            "mic" in LiveRules.LOCKED_LINE.lowercase(),
+        )
     }
 }

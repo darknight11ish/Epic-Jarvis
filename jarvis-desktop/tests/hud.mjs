@@ -142,7 +142,7 @@ async function openHud(browser, status, pageOptions = {}) {
   // does, with no __TAURI__ at all; `tauriInvoke: "fail"` makes the mic's
   // command refused.
   if (!status.noShell) {
-    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout, preview, lockFlags }) => {
+    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout, preview, lockFlags, tauriEvents }) => {
       // Captured before the bootstrap replaces window.fetch.
       const origFetch = window.fetch.bind(window);
       const shellHeaders = { "X-Jarvis-Client": "hud", "X-Jarvis-Token": "test-token" };
@@ -325,10 +325,26 @@ async function openHud(browser, status, pageOptions = {}) {
             throw new Error(`Command ${cmd} not allowed by ACL`);
         }
       } } };
+      // P-1 (privacy audit 2026-10-27): a scenario can opt into a shell that
+      // really DELIVERS events, so the page's own `private-hidden` and
+      // `security-changed` listeners can be driven the way Rust drives them.
+      // The real listener registers with the target `Any` and resolves to an
+      // unlisten function, so `listen` is async here too and the handlers are
+      // kept on window for a check to fire.
+      if (tauriEvents) {
+        window.__tauriEvents = {};
+        window.__TAURI__.event = {
+          listen: async (name, fn) => {
+            (window.__tauriEvents[name] = window.__tauriEvents[name] || []).push(fn);
+            return () => {};
+          },
+        };
+      }
     }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs),
       hudLayout: status.hudLayout || null,
       preview: status.preview || null,
          decideFails: status.decideFails || "",
+         tauriEvents: Boolean(status.tauriEvents),
          lockFlags: status.lockFlags || { appLock: false, privateAnswers: false } });
   }
   // A browser's voice list, with one online voice and one local one, and
@@ -4811,6 +4827,190 @@ await check("H4: App lock and hidden memory lists show, from the already-granted
     /Memory lists are hidden until you unlock\./);
   await hidden.page.close();
   assert.deepEqual(hidden.problems, []);
+});
+
+/* P-1 of the 2026-10-27 privacy audit (High): the HUD's memory graph outlived
+ * the hide. The owner passes Windows Hello on the Brain's Show and opens this
+ * window while that reveal is in force, so its one /api/graph read comes back
+ * WHOLE - the fact sentences and the names of the people in them, as designed
+ * for a revealed window. The reveal then ends; Rust redacts the NEXT read, but
+ * it cannot reach a word the page already holds, this window is hidden only by
+ * App lock, and `get_lock_flags` carries the SETTINGS, not "the show ended" -
+ * so the page has to be told.
+ *
+ * This drives the two halves the fix added: `private-hidden` reaches this
+ * window (and every other), and the page forgets first, then re-reads. The
+ * whole reach list from the report is checked, not just the dots: the node
+ * buttons' labels, the inspector's sentence, the search box, the recall trace
+ * and the trail of the owner's own questions. */
+await check("P-1: private-hidden empties the galaxy, and it re-reads what the PC still allows", async () => {
+  const FACT_SENTENCE = "Owner's sister is called Priya";
+  // What the page read while the reveal was in force.
+  const whole = {
+    nodes: [
+      { id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 },
+      { id: "model:local", label: "qwen3.5:9b", group: "model" },
+      { id: "fact:1", label: FACT_SENTENCE, group: "fact" },
+      { id: "entity:1", label: "Priya", group: "entity" },
+    ],
+    links: [{ source: "core", target: "fact:1", kind: "recalls" }],
+    counts: { facts: 41, documents: 3, knowledge: 12 },
+  };
+  // The same PC with the lists hidden: the shape `redact_graph` leaves (its
+  // own Rust test pins it - fact and entity gone, the counts kept, `hidden`).
+  const redacted = {
+    nodes: [
+      { id: "core", label: "J.A.R.V.I.S.", group: "core", weight: 6 },
+      { id: "model:local", label: "qwen3.5:9b", group: "model" },
+    ],
+    links: [],
+    counts: { facts: 41, documents: 3, knowledge: 12 },
+    hidden: true,
+    hidden_count: 2,
+  };
+  // The scenario object is read at request time by the route above, so the
+  // second read answers with what the PC would answer once hidden.
+  const status = { jarvis: true, ollama: true, proxy: false, tauriEvents: true, graph: whole };
+  const { page, problems } = await openHud(browser, status);
+  await page.click('[data-view="brain"]');
+  await page.click('button[data-galaxy-lens="unified"]');
+  await page.waitForTimeout(500);
+
+  // The words really are on screen before the event: one of them is a fact
+  // sentence, and one is a person's name, in the picture's own buttons.
+  const before = await page.evaluate((sentence) => ({
+    labels: [...document.querySelectorAll(".galaxy-node-btn")]
+      .map((b) => b.getAttribute("aria-label") || ""),
+    graphNodes: S.graph ? S.graph.nodes.length : -1,
+    hiddenFlag: Boolean(S.graph && S.graph.hidden),
+  }), FACT_SENTENCE);
+  assert.ok(before.labels.some((label) => label.includes(sentence)),
+    "fixture: the fact sentence never reached the picture, so this check proves nothing");
+  assert.ok(before.labels.some((label) => label.includes("Priya")),
+    "fixture: the person's name never reached the picture");
+  assert.equal(before.hiddenFlag, false, "fixture: the first read was already redacted");
+
+  // Open the inspector on the fact (the click-to-ask path reads the same node
+  // and pre-fills a question about it), type in the search box, and put a
+  // recall trace on screen - so every reach point the report names holds words
+  // when the hide lands. Keyboard, not a mouse click: the dots move with the
+  // camera, which is exactly why the page makes each one a real button.
+  await page.focus('.galaxy-node-btn[data-galaxy-node="fact:1"]');
+  await page.keyboard.press("Enter");
+  await page.fill("#gsearch", "Priya");
+  await page.evaluate((sentence) => {
+    // The page's own trace path (what an answer with recalled facts draws).
+    showTrace({ q: "who is my sister", at: Date.now(),
+      hits: [{ id: "fact:1", text: sentence, score: 0.9 }],
+      near: [{ id: "entity:1", text: "Priya", score: 0.4 }] });
+  }, FACT_SENTENCE);
+  await page.waitForTimeout(200);
+  const held = await page.evaluate(() => ({
+    title: document.getElementById("insp-title").textContent,
+    search: document.getElementById("gsearch").value,
+    inspectorOn: document.getElementById("inspector").classList.contains("on"),
+    trace: document.getElementById("trace-list").textContent,
+    trail: document.getElementById("trail").textContent,
+  }));
+  assert.equal(held.title, FACT_SENTENCE, "fixture: the inspector's sentence is not on screen");
+  assert.equal(held.inspectorOn, true, "fixture: the inspector is not open");
+  assert.equal(held.search, "Priya");
+  assert.ok(held.trace.includes(FACT_SENTENCE), "fixture: the trace list has no recalled sentence");
+  assert.ok(held.trail.includes("who is my sister"), "fixture: no trail chip");
+
+  // The reveal ends: Rust emits this to EVERY window now.
+  status.graph = redacted;
+  await page.evaluate(() => {
+    for (const fn of (window.__tauriEvents["private-hidden"] || [])) {
+      fn({ event: "private-hidden", id: 1, payload: null });
+    }
+  });
+  await page.waitForFunction(() => {
+    const el = document.getElementById("galaxy-counts");
+    return el && /Memory lists are hidden/.test(el.textContent);
+  }, null, { timeout: 8000 });
+
+  const after = await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll(".galaxy-node-btn")];
+    return {
+      labels: buttons.map((b) => b.getAttribute("aria-label") || ""),
+      shown: buttons.filter((b) => !b.hidden).length,
+      graphNodes: S.graph ? S.graph.nodes.length : -1,
+      hiddenFlag: Boolean(S.graph && S.graph.hidden),
+      inspectorOn: document.getElementById("inspector").classList.contains("on"),
+      title: document.getElementById("insp-title").textContent,
+      detail: document.getElementById("insp-detail").textContent,
+      search: document.getElementById("gsearch").value,
+      trace: document.getElementById("trace-list").textContent.trim(),
+      trail: document.getElementById("trail").textContent.trim(),
+      counts: document.getElementById("galaxy-counts").textContent,
+      readouts: ["r-facts", "r-docs", "r-ents"]
+        .map((id) => document.getElementById(id).textContent),
+    };
+  });
+  const reachable = JSON.stringify(after);
+  assert.ok(!reachable.includes(FACT_SENTENCE),
+    `the fact sentence survived the hide: ${reachable}`);
+  assert.ok(!reachable.includes("Priya"), `a person's name survived the hide: ${reachable}`);
+  assert.ok(!reachable.includes("who is my sister"), `the owner's own question survived: ${reachable}`);
+  // It re-read: the redacted reply has exactly two nodes, so two buttons. A
+  // page that only cleared would show none; one that did nothing, four.
+  assert.equal(after.shown, 2, `the picture was not repainted from the redacted reply: ${reachable}`);
+  assert.equal(after.graphNodes, 2, "the page's own graph was not replaced");
+  assert.equal(after.hiddenFlag, true, "the redacted flag did not reach the page's state");
+  assert.equal(after.inspectorOn, false, "the inspector stayed open on a hidden node");
+  assert.equal(after.title, "—", "the inspector kept its words");
+  assert.equal(after.detail, "", "the inspector kept its detail sentence");
+  assert.equal(after.search, "", "the search box kept its query");
+  assert.equal(after.trace, "", "the recall trace kept its rows");
+  assert.equal(after.trail, "", "the trail kept the owner's questions");
+  // The counts are numbers and survive by design; the line that would have
+  // said "no saved facts on this PC yet" says the truth instead.
+  assert.deepEqual(after.readouts, ["41", "3", "12"], "the counts were not repainted from the reply");
+  assert.match(after.counts, /Memory lists are hidden until you unlock\./,
+    `the counts line claimed something about a memory it cannot see: ${after.counts}`);
+
+  // The other direction, through the second event: the settings change and the
+  // lists are shown again, so the same read repopulates the picture and the
+  // line goes back to counting.
+  status.graph = whole;
+  await page.evaluate(() => {
+    for (const fn of (window.__tauriEvents["security-changed"] || [])) {
+      fn({ event: "security-changed", id: 2, payload: null });
+    }
+  });
+  await page.waitForFunction(() => {
+    const el = document.getElementById("galaxy-counts");
+    return el && /Unified:/.test(el.textContent);
+  }, null, { timeout: 8000 });
+  const shownAgain = await page.evaluate(() => ({
+    shown: [...document.querySelectorAll(".galaxy-node-btn")].filter((b) => !b.hidden).length,
+    hiddenFlag: Boolean(S.graph && S.graph.hidden),
+    counts: document.getElementById("galaxy-counts").textContent,
+  }));
+  assert.equal(shownAgain.shown, 4, "a shown reply did not come back to the picture");
+  assert.equal(shownAgain.hiddenFlag, false, "the page stayed stuck on hidden");
+  assert.match(shownAgain.counts, /Unified: 2 memory/);
+
+  // And a hide whose read does not land leaves the picture EMPTY and hidden:
+  // it never falls back to what was on screen, not even to sample data.
+  status.graph = null;   // the route's own 404 path: not a graph at all
+  await page.evaluate(() => {
+    for (const fn of (window.__tauriEvents["private-hidden"] || [])) {
+      fn({ event: "private-hidden", id: 3, payload: null });
+    }
+  });
+  await page.waitForTimeout(800);
+  const failed = await page.evaluate(() => ({
+    shown: [...document.querySelectorAll(".galaxy-node-btn")].filter((b) => !b.hidden).length,
+    hiddenFlag: Boolean(S.graph && S.graph.hidden),
+    counts: document.getElementById("galaxy-counts").textContent,
+  }));
+  await page.close();
+  assert.equal(failed.shown, 0, "a read that did not land repainted the old picture");
+  assert.equal(failed.hiddenFlag, true, "a read that did not land lost the hidden state");
+  assert.match(failed.counts, /Memory lists are hidden until you unlock\./);
+  assert.deepEqual(problems, []);
 });
 
 await check("H4: the rush banner is the waiting card's evidence, escaped, never run", async () => {

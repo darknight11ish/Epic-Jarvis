@@ -600,17 +600,35 @@ class LiveService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val title = sign.title.ifEmpty { LiveRules.TITLE }
+        // P-7 (privacy audit 2026-10-27): every other notifier on this phone
+        // redacts while notification content must be hidden; this one did not.
+        // The session's own state line (minutes left, Mic off/Mic on, the PC's
+        // `muted_words`) is what a stranger would read on a lock screen, so the
+        // shared rule decides it - `SecurityRules.notificationsLocked`, the same
+        // one ApprovalNotifier and the schedule notifier use.
+        val locked = liveNoticeLocked(this)
+        val words = LiveRules.noticeWords(
+            locked = locked,
+            appName = getString(R.string.app_name),
+            title = sign.title.ifEmpty { LiveRules.TITLE },
+            text = sign.detail.ifEmpty { LiveRules.SEEN.getValue("end_hint") },
+        )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setLocalOnly(true)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
-            .setContentText(sign.detail.ifEmpty { LiveRules.SEEN.getValue("end_hint") })
+            .setContentTitle(words[0])
+            .setContentText(words[1])
             .setOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            // PUBLIC is kept, and it is safe BECAUSE of the words above: while
+            // the lock is on there is nothing in this notice but the app's own
+            // name and one fixed line, which is exactly what
+            // `ScheduleNotifier.locked` draws. The buttons stay too - a
+            // foreground service must offer its own stop, and "End Live" is a
+            // control, not a fact about the owner.
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(open)
@@ -650,6 +668,24 @@ class LiveService : Service() {
         const val ACTION_MUTE = "com.jarvis.client.LIVE_MUTE"
         const val ACTION_UNMUTE = "com.jarvis.client.LIVE_UNMUTE"
         const val ACTION_STOP_TALKING = "com.jarvis.client.LIVE_STOP_TALKING"
+
+        /**
+         * Whether this phone's notification CONTENT must be redacted right now
+         * - App lock, "Hide memory lists and chat history", or a phone whose own
+         * lock screen is not secure (M12). THE SHARED RULE, not a second one:
+         * `SecurityRules.notificationsLocked`, the same call ApprovalNotifier,
+         * the schedule notifier, the chat notifier and the handoff notifier
+         * make. Read here rather than passed in because both Live notices are
+         * rebuilt from the service's own state.
+         *
+         * P-7 of the 2026-10-27 privacy audit: these two notices were the only
+         * ones left PUBLIC while the lock was on.
+         */
+        private fun liveNoticeLocked(context: Context): Boolean =
+            com.jarvis.client.data.SecurityRules.notificationsLocked(
+                JarvisRuntime.settings.security.value,
+                com.jarvis.client.platform.DeviceSecure.isSecure(context),
+            )
 
         /** The "Live is on your PC - move it here?" heads-up channel. */
         const val OFFER_CHANNEL_ID = "jarvis_live_offer"
@@ -797,11 +833,22 @@ class LiveService : Service() {
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
+                // P-7 (privacy audit 2026-10-27): the same rule as the
+                // foreground notice. "Live ended - Resume" says a session ran
+                // on this phone and names the words it ended on; with the lock
+                // on it says the fixed line only, which is what every other
+                // Jarvis notifier does.
+                val words = LiveRules.noticeWords(
+                    locked = liveNoticeLocked(context),
+                    appName = context.getString(R.string.app_name),
+                    title = LiveExtras.RESUME_TITLE,
+                    text = endedWords.ifEmpty { LiveExtras.RESUME_BUTTON },
+                )
                 val n = NotificationCompat.Builder(context, RESUME_CHANNEL_ID)
                     .setLocalOnly(true)
                     .setSmallIcon(R.drawable.ic_notification)
-                    .setContentTitle(LiveExtras.RESUME_TITLE)
-                    .setContentText(endedWords.ifEmpty { LiveExtras.RESUME_BUTTON })
+                    .setContentTitle(words[0])
+                    .setContentText(words[1])
                     .setAutoCancel(true)
                     .setSilent(true)
                     .setTimeoutAfter(forMs.coerceAtLeast(1_000L))
