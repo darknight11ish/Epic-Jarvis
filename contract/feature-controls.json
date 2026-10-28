@@ -2240,7 +2240,7 @@
       "name": "Your past chats",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, History. On the phone, the History row in the Brain.",
+      "where": "Brain, History. In the HUD, the History button in the left column. On the phone, the History row in the Brain.",
       "control": {
         "type": "section_switch",
         "setting_keys": [

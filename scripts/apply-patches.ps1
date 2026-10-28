@@ -2086,6 +2086,17 @@ $SHIPPED = @(
     'static/hud-safety.js'
     'static/hud-edit.js'
     'static/hud-presets.js'
+    # The History sidebar (2026-10-27): the page loads it with a plain
+    # `<script src="hud-history.js" defer>`, so it has to sit beside the
+    # server too (served at /hud-history.js) or a browser HUD loses the
+    # button silently. backend/test_hud_static.py fails if this copy drifts
+    # from jarvis-desktop/src/hud-history.js.
+    'static/hud-history.js'
+    # ... and the one module it imports (2026-10-27): the row-action table it
+    # shares with the Brain's History tab. A browser HUD fetches it from beside
+    # the server too, so a deploy that left it out would load the sidebar's
+    # script and then fail to load the module it needs - no panel at all.
+    'static/history-actions.js'
     # The shared invoke budget (2026-10-28): hud-presets.js imports it, so it
     # has to sit beside the server (served at /invoke-budget.js).
     'static/invoke-budget.js'
@@ -2094,6 +2105,11 @@ $SHIPPED = @(
     # /galaxy-presets.js) like the modules above. backend/test_hud_static.py
     # fails if this copy drifts from jarvis-desktop/src/galaxy-presets.js.
     'static/galaxy-presets.js'
+    # The Galaxy's 3D cosmos (2026-10-27): the engine the page imports when it
+    # draws a look in 3D, served at /galaxy-cosmos.js beside the server like the
+    # modules above. backend/test_hud_static.py fails if this copy drifts from
+    # jarvis-desktop/src/galaxy-cosmos.js.
+    'static/galaxy-cosmos.js'
     'static/private-speech.js'
     'static/face-voice.js'
     'static/face-moments.js'

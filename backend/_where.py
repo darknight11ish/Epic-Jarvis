@@ -795,6 +795,14 @@ SHIPPED = (
     "static/hud-safety.js",
     "static/hud-edit.js",
     "static/hud-presets.js",
+    # The History sidebar (2026-10-27): the page loads it with a plain
+    # `<script src="hud-history.js" defer>`, so a browser HUD needs it beside
+    # the server like the other files the page asks for. It imports
+    # history-actions.js (the row-action table it shares with the Brain's
+    # History tab), which that browser fetches too, so that file ships for the
+    # same reason.
+    "static/hud-history.js",
+    "static/history-actions.js",
     # The shared invoke budget (2026-10-28): hud-presets.js imports it, so
     # the page's closed whitelist has to serve it beside the server.
     "static/invoke-budget.js",
@@ -802,6 +810,9 @@ SHIPPED = (
     # with a dynamic import(), so the page's closed whitelist has to serve it
     # from beside the server like the modules above.
     "static/galaxy-presets.js",
+    # The Galaxy's 3D cosmos (2026-10-27): the engine the page imports when it
+    # draws a look in 3D, served beside the server like the modules above.
+    "static/galaxy-cosmos.js",
     "static/private-speech.js",
     "static/face-voice.js",
     "static/face-moments.js",

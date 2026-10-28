@@ -117,6 +117,7 @@ DYNAMIC_BELOW = {
     ("web-search-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("sky-feed.js", "c"): "the feed's own (c, a) => TAURI.core.invoke(c, a); the caller passes a literal.",
     ("jarvis_hud.html", "c"): "the HUD relays the face modules' calls through this arrow; the page holds hud-link.",
+    ("hud-history.js", "command"): "the History sidebar's invoke(command, args) wrapper; its only caller passes the literal hud_history_act.",
 }
 
 
