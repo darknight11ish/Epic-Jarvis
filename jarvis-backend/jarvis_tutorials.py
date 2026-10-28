@@ -1133,7 +1133,7 @@ CATALOGUE = (
     },
     {
         "id": "how-it-talks",
-        "version": 2,
+        "version": 3,
         "section": "both",
         "title": "How Jarvis talks, and how to change it",
         "why": "Shorter answers, a different voice, and how to stop it talking.",
@@ -1147,7 +1147,7 @@ CATALOGUE = (
              "where": "Settings \u2192 How Jarvis talks"},
             {"title": "Pick a personality, and hear it",
              "body": "A personality changes how Jarvis sounds - warm, brisk, "
-                     "dry, or a patient advocate - and there are nine built "
+                     "dry, or a patient advocate - and there are ten built "
                      "in. Pick one in Settings, How Jarvis talks; Hear Sample "
                      "plays its voice, and Use This Personality makes it the "
                      "one Jarvis uses. My personalities saves your own mix of "
