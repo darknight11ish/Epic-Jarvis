@@ -15032,6 +15032,56 @@ zone from the PC can differ from the PC's day near midnight.
 ---
 
 
+### 82.7 The Today board (`/api/today/cockpit`, GTD-2, added 2026-10-18)
+
+The Today page's board is ONE new route on an install that already exists:
+`jarvis_today.py` builds the answer and `jarvis_brain_reads.py` serves it (the
+server already wraps that module, so the route needs no patch and no
+registration). The scheduler's older reads (`status()`, `listed()`, `job()`) are
+unchanged; the board only adds sections, and never edits an older reply.
+
+| Route | Body / query | Answers |
+|---|---|---|
+| `GET /api/today/cockpit` | `?hidden=1` from an app whose "Hide memory lists and chat history" or App lock is on | 200 `{"available": true, "unspoken_commitments_enabled": <bool>, "rollover_cards": []}` plus `due_reminders`, `active_next_steps`, `proposals` and `pulse`, each present ONLY when it has something. `hidden=1` answers `{"available": true, "hidden": true}` and no words at all. 503 `{"available": false, "why": <sentence>}` when this PC's `jarvis_today.py` is missing (an older install). A read: pairing token and origin like every private list, and never held on a stale link |
+| `POST /api/today/cockpit` | `{"enabled": true\|false}` | The board's own said-I'd-do switch. `false` is 200 at once (`{"ok": true, "enabled": false, "waiting": false, "message": ...}`) and withdraws a card still waiting. `true` is 202 (`{"ok": true, "waiting": true, "enabled": false, "message": ...}`) with **ONE approval card** - `change_own_config`, tier `ask`, and nothing turns on until a person approves it; the card may be decided on the PC or the phone (that action is not in `jarvis_owner_check.PC_ONLY_ACTIONS`). Already on: 200. A card already waiting: 202 with its own message. 400 not a true/false; 503 the action's tier is not `ask` or the card could not be raised; 413 over 16 KiB; 501 when an older install cannot read a body; 400 when the body is not JSON |
+
+What each section carries:
+
+- `due_reminders` - at most 8 (`MAX_DUE_REMINDERS`), the most useful first:
+  what went off in the last hour, then anything still active whose time has
+  passed. Each row is `{"id", "kind", "text", "due", "when", "went_off",
+  "overdue"}`, plus `fired_at` and the optional GTD-1 fields (`context_bundle`,
+  `suggested_prompt`, `snooze_count`, `stuck_hint`) only when the scheduler
+  really has them. Kinds: reminder, alarm, timer. Read-only - nothing is
+  changed, fired or snoozed here.
+- `active_next_steps` - at most 6 (`MAX_NEXT_STEPS`): the first open step of
+  each active goal and of each project whose work list still has open items.
+  Each row is `{"kind": "goal"|"project", "id", "name", "step", "by"}`. No
+  step is ticked, no goal accepted, no list changed.
+- `proposals` - at most 5 (`MAX_PROPOSALS`), "You said you would" commitments
+  found ONLY in the owner's own words (`role == "user"`) in recent kept chats:
+  never an incognito or crisis chat, never Jarvis's or a tool's words, and none
+  that an open reminder or Today card already covers. Each row is `{"text",
+  "suggested_due", "source_conv_id"}`; one said more than 3 days ago fades.
+  Strictly proposals: nothing is created from one, no model is called and no
+  socket is opened. A tap in an app only copies a "Remind me to ..." prompt for
+  the owner to send through the ordinary chat flow.
+- `pulse` - the latest briefing's Daily Pulse (`lines`, `where_to_look`,
+  `not_checked`), read from the briefing already made in this process, so it
+  adds no new read. Absent when no briefing exists.
+- `rollover_cards` - always `[]`, and honestly so: a Today card is a repeating
+  rule with no per-day "done" state to roll over. Building it needs a new
+  per-day record, which is a schema change, not a read.
+
+**Who draws it.** Desktop: Brain → Work → Today (`brain/schedule.rs`
+`COCKPIT_PATH` and `brain_schedule`; `brain_schedule_set_unspoken` for the
+switch; the board's words are blanked in Rust by `redact_list` while the
+private lists are hidden). The phone has no Today board yet - its Today is
+unchanged in this slice, and a phone board is the named follow-up. So
+`tools/check_parity.py` records the route as `todo` (still to port), not
+`deliberate`, and `ARCHITECTURE.md` section 8 records the gap rather than
+claiming a parity pass.
+
 **The Daily Pulse on the Today board (Wave D-1, 2026-10-22).** The board's
 answer grows one more optional key: when a briefing has been made in this
 process, `pulse` carries that briefing's `lines`, `where_to_look` (top 1-3) and
@@ -16484,6 +16534,45 @@ in `capabilities/settings.json`); the phone's Settings, the same row
 (`net/HandoffFront.kt`, `ui/screens/HandoffFrontPlate.kt`,
 `JarvisRuntime.setHandoffFront`). Both read the same words from the PC, and
 `tools/gen_handoff_cases.py` carries them into both apps' contract file so
+neither can drift.
+
+### 87.8.2 When nobody answers: "Stop early" or "Keep offering it" (`jarvis_handoff_mode.py`, 2026-10-08)
+
+The owner's own decision of 2026-10-08: **"make this a setting for both
+options with 1 as the default"** (`docs/CAPTCHA-HANDOFF-DESIGN.md` section 5).
+It chooses how long "Solve it here" stays on offer. It is its own module and
+its own route, and it never touches the hand-off's picture or input path.
+
+| The choice | What happens | Gated? |
+|---|---|---|
+| **"Stop early"** (THE DEFAULT, and the narrower one) | About a minute (60 s) with nobody looking ends the hand-off (`idle`), and the PC says plainly which window Jarvis is stuck on, leaving it for the owner to solve there | **No** - it is the default, it does less, and going back to it is immediate from either app, never held on a stale link |
+| **"Keep offering it"** | The live picture stays on offer for the full 15-minute ceiling, so the owner can pick their phone up late | **ONE approval card** (`handoff_keep_offering`, tier `ask`), **and on `jarvis_owner_check.PC_ONLY_ACTIONS`**: decided on the PC with Windows Hello, and refused from any other device |
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/chatbot/handoff_mode` | | 200 `{"mode", "default", "modes", "mode_name", "words", "patient", "idle_s", "ceiling_s", "waiting", "last", "pc_only": true}`, plus `why` when the settings file is damaged. A read: never held on a stale link, no card |
+| `POST /api/chatbot/handoff_mode` | `{"mode": "stop_early"}` | 200 at once (and it withdraws a card still waiting); never a card, never held on a stale link |
+| | `{"mode": "keep_offering"}` | 202 with `{"ok": true, "waiting": true, "mode": "stop_early", "message": ...}` while ONE card waits - nothing changes until a person says yes on the PC. Already on: 200. Any other name: 400 with the two names in plain words. 503 when the action's tier is not `ask`, or the card could not be raised. Held on a stale link |
+
+**The spelling matters.** The route is `/api/chatbot/handoff_mode` - an
+underscore. It is a SIBLING of the hand-off's own
+`/api/chatbot/handoff/{start,frame,input,end}` (87.8) and of
+`/api/chatbot/handoff_front` (87.8.1), and a client that guesses
+`handoff-mode` gets a 404. It carries one word and fixed sentences: no picture,
+no page, no window title and no tap.
+
+**Fail closed.** No file at all, an unreadable one, one that is not JSON, or
+one holding anything but the two names reads as "Stop early" with a plain
+`why` - a damaged file must never quietly leave the window on offer for fifteen
+minutes. Only one word and the time it changed are kept, in
+`handoff-mode.json` (deliberately not 87.8.1's `handoff-front.json`).
+
+**Where both apps show it:** desktop Settings, "When the phone does not
+answer" (`handoff-mode.js`, `handoff-mode-rules.js`, `src-tauri/src/handoff.rs`
+`handoff_mode`, the `handoff-mode` set in `permissions/surfaces.toml`); the
+phone's Settings, the same row (`net/HandoffMode.kt`,
+`ui/screens/HandoffModePlate.kt`, `JarvisRuntime.setHandoffMode`).
+`tools/gen_handoff_cases.py` carries the words into both apps' contract file so
 neither can drift.
 
 ## 88. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
@@ -21869,7 +21958,7 @@ fixed phrases, but no chat path could EXPLAIN a feature: "how do I turn on the p
 coach?" was answered thinly by the model (never saying what the coach does or where it
 lives), and "is the prompt coach on right now?" was answered "I don't know its current
 state directly". The exact answers were already written down - `features/features.json`,
-the 140 rows both apps' Features pages draw - and nothing read them.
+the 141 rows both apps' Features pages draw - and nothing read them.
 
 **One read-only tool, `feature_guide`** (`jarvis_feature_guide.py`; the tool in
 `jarvis_agent.py`). Its one argument is `feature`, in the owner's words (or a group
@@ -21928,7 +22017,7 @@ grammar learned the rest of the questions a person actually asks:
 Every explain answer is assembled by one renderer (`jarvis_feature_guide.explain_words`), so a
 model turn and a fixed phrase cannot say different things. "Can I change it?" is read-only:
 it is in `jarvis_quick.READ_ONLY_INTENTS`, so "cancel that" never takes back something it
-did not do, and the test suite proves no `BoolSetting.set` runs for any of the 140 rows.
+did not do, and the test suite proves no `BoolSetting.set` runs for any of the 141 rows.
 
 **And a setting can now be CHANGED by asking, not only explained (2026-10-27).** The
 plainest sentences - "make the prompt coach off", "set web search to off", "I want the
@@ -21999,12 +22088,12 @@ owner's decision of 2026-10-19/20); on an existing install the model tool is off
 inherited `config.toml`, if the settings file names no `[tools]` section) - the fixed
 phrases need no config at all.
 
-**Tests.** `backend/test_feature_guide.py` (1707 checks, measured 2026-10-26): all 140 rows
+**Tests.** `backend/test_feature_guide.py` (1707 checks, measured 2026-10-26): all 141 rows
 found with facts equal to the JSON; every switch has a state reader and the answers never
 claim a state they did not read; unknown/ambiguous honesty; the fixed phrases and their near
 misses; switching through the real setter with its real words; the tool's 300-token text,
 `auto`-tier no-card turn, and exact facts fed to the model. The 2026-10-26 section asks every
-one of the 140 rows all nine questions through its title, id AND aliases, and requires the
+one of the 141 rows all nine questions through its title, id AND aliases, and requires the
 answer that question needs (the full facts for explain/use/where, where + card + exact phrase
 for how-to, status + how for change, the real state for state); "can I change" is proved to
 run no setter for any row; every alias is proved to name only its own row; every one-sided
