@@ -14,6 +14,9 @@ on:
       # The shared debug key this module is now signed with.
       - "keystore/**"
       - ".github/workflows/jarvis-client.yml"
+      # The release-dex check this workflow runs. A change to the check itself
+      # must run the job that runs it, or the next edit to it is untested.
+      - "tools/check_apk_reflective_keeps.py"
       # The phone's unit tests also read these (the backend's modules and
       # patches, the desktop's pages and Rust, and the shared test cases in
       # jarvis-desktop/tests/fixtures), so a change there can break them.
@@ -34,6 +37,7 @@ on:
       - "jarvis-client/**"
       - "keystore/**"
       - ".github/workflows/jarvis-client.yml"
+      - "tools/check_apk_reflective_keeps.py"
       - "backend/**"
       - "jarvis-desktop/src/**"
       - "jarvis-desktop/src-tauri/src/**"
@@ -292,6 +296,33 @@ jobs:
             [ -n "$f" ] && [ -e "$f" ] && printf '%10s  %s\n' "$(du -h "$f" | cut -f1)" "$f"
           done
           echo "::endgroup::"
+
+      # The classes this app creates by NAME at runtime, checked in the dex that
+      # actually ships.
+      #
+      # R8 (the shrinker) cannot see a class that is created from a string - a
+      # class name in a WorkManager request, Room's generated database, a Worker
+      # WorkManager rebuilds - so it is free to strip that class's constructor,
+      # and on 2026-10-27 it did: `androidx.work.OverwritingInputMerger` lost
+      # its no-arg constructor, EVERY WorkManager job failed with "Could not
+      # create Input Merger", and all five home-screen widgets sat on the
+      # launcher spinner for ever - while every unit test and the debug build
+      # were green. The earlier instance was Room's WorkDatabase_Impl, which
+      # crashed the app at launch (proguard-rules.pro:76).
+      #
+      # No broken keep rule fails the GRADLE build, so this reads the release
+      # APK's own classes.dex and asserts the classes and constructors the app
+      # needs by name are still there. Read-only, no SDK, no device, under a
+      # second. On a failure it names the class and says "reflective
+      # instantiation hole - see proguard-rules.pro".
+      - name: Check R8 kept the classes the app creates by name
+        run: |
+          set -uo pipefail
+          if ! python3 ../tools/check_apk_reflective_keeps.py \
+                 app/build/outputs/apk/release/app-release.apk; then
+            echo "::error::The release dex is missing a class or constructor that Jarvis creates by name at runtime. See the FAIL lines above and jarvis-client/app/proguard-rules.pro. This is the shape of the 2026-10-27 widget failure: R8 strips what only reflection calls, the build stays green, and a feature is silently dead on the phone."
+            exit 1
+          fi
 
       # Every native library in the APK, against Android 15's 16 KB page size.
       #
