@@ -623,7 +623,12 @@ def t_hygiene():
              # jarvis_hud.py - the chat turn's lane-picking block and `_manual_decision`,
              # none of them near the POST /api/screen wrapper this patch installs, so
              # the request body is still read once, and still by this wrapper.
-             "f01-manual-lane-gate.patch"}
+             "f01-manual-lane-gate.patch",
+             # learning-extract-reason.patch (2026-10-28, DEF-017) is appended after
+             # it, immediately before plugin-loader.patch: ONE file, jarvis_extract.py
+             # (its `_local_llm` block), so it touches no gate list, no tier row, no
+             # _RISK row, no _TOOL_ACTIONS line and rewrites nothing this patch wrote.
+             "learning-extract-reason.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

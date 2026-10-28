@@ -88,12 +88,16 @@ one of them is `cloud-say-yes.patch`:
     position 154  f01-manual-lane-gate.patch (2026-10-27 F-01: the manual lane path and _manual_decision(), which
                                              exist only in the owner's file - and whose missing gates WERE the bug)
 
+    position 157  learning-extract-reason.patch (2026-10-28 DEF-017: `_local_llm()`'s swallow, the
+                                             `body` dict it posts and the record written beside them,
+                                             in the owner's `jarvis_extract.py`)
+
 A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 `main` with eight findings - the false positives the audit's own next sentence
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all SIXTEEN - those thirteen, plus `private-chat.patch` at position 152, added
+all SEVENTEEN - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -103,8 +107,13 @@ had ever touched, and the cloud reply's reader, which reached the owner's PC
 by a re-take rather than a patch) and `f01-manual-lane-gate.patch` at position
 155 (the manual lane-picking path and `_manual_decision()`, which no patch in
 this walk writes - and whose missing gates WERE the F-01 defect) - with their
-positions, instead of pretending they are not there. The position-29 rule is
-kept as a REPORTED fact, not a gate.
+positions, instead of pretending they are not there, plus ONE added on
+2026-10-28: `learning-extract-reason.patch` at position 157 (all three of its
+hunks: `_local_llm()`'s `except Exception: return None`, the `body` dict it
+posts - `think: False`, so a hybrid reasoning model answers instead of spending
+a small budget in `thinking` (Gemini Edition-3 review F1) - and the module-level
+record near `_PROMPT`, in the owner's `jarvis_extract.py`, which no earlier
+patch touches). The position-29 rule is kept as a REPORTED fact, not a gate.
 
 THE PIN
 
@@ -265,6 +274,29 @@ PIN = {
     # `jarvis-backend/jarvis_hud.py` with `git apply` and reverses it out byte
     # for byte, which is the check this walk cannot make.
     "f01-manual-lane-gate.patch":              (3, 37),    # position 154
+
+    # 2026-10-28, learning-extract-reason.patch (DEF-017: a failed local-model
+    # call said nothing about why). ALL THREE of its hunks read the owner's
+    # original `jarvis_extract.py`, and all are honest rather than drift - no
+    # patch in this walk writes any of them:
+    #   * the `except Exception: return None` at the end of `_local_llm()`, and
+    #     the function above it, which the earlier extractor patches
+    #     (memory-safety, memory-noise, decide-once, memory-intake) never touch
+    #     - they anchor inside `propose()` and `_init`, hundreds of lines away;
+    #   * the `body` dict `_local_llm()` posts, where the fix sends
+    #     `think: False` (Gemini Edition-3 review F1, 2026-10-28: `qwen3.5:9b`
+    #     is a hybrid reasoning model and can spend a small budget in
+    #     `thinking`, answering nothing). RAISED 2/17 -> 3/25 for it: the dict
+    #     sits ABOVE the old second hunk's first line, so git emits a small
+    #     third hunk whose context is eight lines of the owner's own comments
+    #     and literal. Honest, not drift;
+    #   * the module-level record and its two helpers, written beside the
+    #     import block and `_PROMPT`, which no patch touches either.
+    # The check that they are honest rather than broken is
+    # backend/test_learning_local_llm_reason.py, which applies the patch to
+    # `jarvis-backend/jarvis_extract.py` with `git apply` (no fuzz), reverses
+    # it out byte for byte, and drives BOTH texts.
+    "learning-extract-reason.patch":           (3, 25),     # position 157
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

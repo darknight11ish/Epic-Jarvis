@@ -802,7 +802,12 @@ def t_the_patch_is_registered_and_carries_the_change():
              # so a lane the owner picks by hand runs the router's gates. It touches
              # jarvis_gate.py not at all - no gate list entry, no tier row, no _RISK
              # row, no _TOOL_ACTIONS line - so it rewrites nothing this patch wrote.
-             "f01-manual-lane-gate.patch"}
+             "f01-manual-lane-gate.patch",
+             # learning-extract-reason.patch (2026-10-28, DEF-017) is appended after
+             # it, immediately before plugin-loader.patch: ONE file, jarvis_extract.py
+             # (its `_local_llm` block), so it touches no gate list, no tier row, no
+             # _RISK row, no _TOOL_ACTIONS line and rewrites nothing this patch wrote.
+             "learning-extract-reason.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

@@ -1769,6 +1769,24 @@ $PATCHES = @(
     # before plugin-loader.patch, whose anchor ("Before the main socket") is
     # untouched by it.
     'f01-manual-lane-gate.patch'
+
+    # learning-extract-reason.patch (2026-10-28, DEF-017): `jarvis_extract.py`'s
+    # `_local_llm()` swallowed EVERY failure into `None` - the exception class,
+    # the HTTP status and the body all thrown away - so the learner could only
+    # print "reached no model at ... Is it pulled?" while Ollama had
+    # qwen3.5:9b loaded and answered a one-token POST in 1.969 s (measured on
+    # the owner's PC, 2026-10-28). It now records a CLOSED-WORLD reason - the
+    # class or an empty answer, the HTTP status, the wall duration and
+    # Ollama's own done_reason, never a prompt word and never an answer word -
+    # keeps returning None as before, and hands the reason to
+    # jarvis_auto_learn.note_model_failure, which /api/memory/learning already
+    # reads back; that is why there is NO jarvis_hud.py hunk here.
+    # ONE file, one hunk pair: no install block, no route, no gate row, no tier
+    # row, and it does not touch jarvis_hud.py at all - so it is appended
+    # immediately before plugin-loader.patch (which must stay LAST of all),
+    # after f01-manual-lane-gate.patch, and its context is the `_local_llm`
+    # block of the owner's own file, which no patch before it writes.
+    'learning-extract-reason.patch'
     'plugin-loader.patch'
 )
 
