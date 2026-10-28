@@ -4956,6 +4956,10 @@ await check("P-1: private-hidden empties the galaxy, and it re-reads what the PC
   const status = { jarvis: true, ollama: true, proxy: false, tauriEvents: true, graph: whole };
   const { page, problems } = await openHud(browser, status);
   await page.click('[data-view="brain"]');
+  // The Galaxy's lenses moved into the options panel in the #924 batch; open
+  // it before choosing a lens (the old HUD drew the lenses inline, so this
+  // test used to click them directly).
+  await openGalaxyOptions(page);
   await page.click('button[data-galaxy-lens="unified"]');
   await page.waitForTimeout(500);
 
