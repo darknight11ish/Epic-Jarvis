@@ -17,6 +17,19 @@ The direct cases drive run_suites.suite_result() with a stand-in whose stdout
 and stderr are None, so no real process has to be made to print nothing. The
 last case runs the real runner once, with a `sys.executable` that cannot
 start, to check the stand-in matches what a real dead child produces.
+
+TWO MORE CASES, FROM THE PARTNER TEST-HEALTH AUDIT (2026-10-27):
+
+  * F-01/F-03 - `t_a_skip_is_never_counted_as_a_pass_by_the_suite_that_makes_it`
+    runs the two real suites whose `skip()` used to append the check to PASSED
+    (test_public_tunnel_refusal_order.py, test_origin_hud_header.py) and pins
+    that their own summary now counts the skips, that the runner's zero-check
+    rule would fail them, and that the required job skips them by name with the
+    file each is waiting for. Both printed `2 passed, 0 failed` while reading
+    nothing, in the job whose green was read as proof of two safety rules.
+  * F-05 - `t_a_whole_suite_skipped_by_name_says_so_where_the_totals_are`
+    pins the one `SKIPPED BY NAME` line the run now ends with, so fifteen
+    suites that did not run are named beside the totals a reader believes.
 """
 import os
 import shutil
@@ -213,13 +226,17 @@ def t_a_summary_after_a_traceback_is_still_read():
 
 
 def t_a_suite_that_ran_no_check_is_not_a_pass():
-    """A whole-suite skip is NO-CHECKS, and (unless allowlisted) it fails.
+    """A suite that PASSED nothing is FAILED - whatever it skipped.
 
     The shape the 2026-10-27 test audit found: `run_suites.py` said "ok" for a
     suite whose every check had been skipped, and the exit code depended only on
     `failed` - so one guard phrase that stopped matching turned a whole suite
     green, silently, forever. A skip is never a pass, so the line has to be
-    unmistakeable and the sweep has to go red."""
+    unmistakeable and the sweep has to go red. Widened the same evening by the
+    partner corrections (item 3): the test is `passed == 0`, not
+    `passed == 0 and skipped > 0`, so a suite that reports a FAILED count and
+    still exits 0 is caught here as well - that shape used to fall through to
+    `if code == 0: ... ok`."""
     out = ("skip  needs the owner's jarvis_hud.py\n"
            "skip  needs the owner's jarvis_gate.py\n"
            "0 passed, 2 skipped, 0 failed\n")
@@ -228,13 +245,15 @@ def t_a_suite_that_ran_no_check_is_not_a_pass():
     check("a suite whose checks were all skipped is NOT ok", status != "ok", (status, line))
     check("it is FAILED, which is what makes the run exit non-zero",
           status == "FAIL", (status, line))
-    check("the line cannot be read as a pass: it says no check ran",
-          "no check ran" in line, line)
+    check("the line cannot be read as a pass: it says no check PASSED",
+          "no check PASSED" in line, line)
     check("and it keeps the suite's own counts", "0 passed, 2 skipped, 0 failed" in line, line)
     check("the explanation says a skip is never a pass",
           any("skip is never a pass" in l for l in echo), echo)
-    check("and points at the allowlist an exemption would need",
-          any("ZERO_CHECK_ALLOWED" in l for l in echo), echo)
+    check("and says what to do about a legitimate one (install the package)",
+          any("OPTIONAL package" in l for l in echo), echo)
+    check("there is no allowlist to point at any more",
+          not hasattr(R, "ZERO_CHECK_ALLOWED"), dir(R))
     check("the suite's own skip lines are echoed, so the reason is visible",
           sum(1 for l in echo if "jarvis_hud.py" in l) == 1, echo)
 
@@ -247,51 +266,63 @@ def t_a_suite_that_ran_no_check_is_not_a_pass():
           status == "ok", (status, line))
     status, n, line, echo = R.suite_result(
         "test_quiet.py", " 0.1s", 0, "skip  nothing here\n", None)
-    check("CONTROL: a suite that printed one skip line and no summary is FAILED, "
-          "not NO-CHECKS (the older silent-suite rule still wins)",
+    check("CONTROL: a suite that printed one skip line and no summary is FAILED",
           status == "FAIL", (status, line))
+    # THE HOLE THE WIDENED RULE CLOSES (measured 2026-10-27): 0 passed with a
+    # nonzero failed count and exit 0 used to be reported `ok`, because the old
+    # rule also required `failed == 0` before it looked at `passed`.
+    status, n, line, echo = R.suite_result(
+        "test_zero_passed_one_failed.py", " 0.4s", 0,
+        "ok    a check that passed nothing\n"
+        "0 passed, 2 skipped, 1 failed\n", None)
+    check("a suite with 0 passed but a nonzero failed count and exit 0 is FAILED, "
+          "not ok", status == "FAIL", (status, line))
 
 
-def t_an_allowlisted_zero_check_suite_is_exempt_but_not_a_pass():
-    """The three optional-package suites prove nothing on a bare machine; they
-    are named in ZERO_CHECK_ALLOWED with the reason, and they are reported as
-    NO-CHECKS - neither "ok" nor "skip"."""
-    for name, reason in R.ZERO_CHECK_ALLOWED.items():
-        check(f"the allowlist names {name}, and it is a real suite file",
-              (HERE / name).is_file(), name)
-        check(f"... with a one-line reason ({name})", bool(reason.strip()), reason)
+def t_a_zero_check_suite_fails_even_when_its_skip_is_legitimate():
+    """The optional-package suites used to be exempt by name. They are not.
+
+    `ZERO_CHECK_ALLOWED` named three suites (playwright, cryptography, Pillow)
+    and reported them as NO-CHECKS - "neither ok nor skip", counted in no list,
+    and NOT failing the run. In the required `backend` job that made
+    test_browser_control_live.py a green line under a suite that had run
+    nothing, every push, because that job never installed Playwright. The three
+    exemptions are gone (2026-10-27, partner corrections item 3): the rule is
+    `passed == 0` is a FAILURE, and the fix for a missing package is to install
+    it - which the required job now does for all three."""
+    check("the allowlist is gone, not merely emptied",
+          not hasattr(R, "ZERO_CHECK_ALLOWED"), dir(R))
     name = "test_pillow_pictures.py"
+    check(f"{name} is still a real suite file", (HERE / name).is_file(), name)
     status, n, line, echo = R.suite_result(
         name, " 0.3s", 0,
         "skip  the whole suite (Pillow is not installed on this machine)\n"
         "0 passed, 0 failed, 1 skipped - SKIPPED IS NOT A PASS\n", None)
-    check("an allowlisted all-skip suite is reported as `zero`, not `ok` or `skip`",
-          status == "zero", (status, line))
-    check("its line says NO-CHECKS, so a reader cannot mistake it for a pass",
-          "NO-CHECKS" in line and not line.startswith("ok"), line)
-    check("and it gives the allowlist's reason", "Pillow" in line and "optional" in line, line)
-    check("nothing is echoed under it as a failure", echo == [], echo)
-
-    # The sweep counts it as neither a pass nor a failure nor a by-name skip.
-    ran, passed, failed, skipped, zero = (
-        {"passed": 0, "skipped": 0, "failed": 0}, [], [], [], [])
-    R._print_job({"name": name, "status": "zero",
+    check("a suite whose every check was skipped is FAILED, whatever its name",
+          status == "FAIL", (status, line))
+    check("its line is neither an ok line nor a NO-CHECKS verdict",
+          line.startswith("FAIL") and "NO-CHECKS" not in line, line)
+    check("it says a skip is never a pass", "no check PASSED" in line, line)
+    # The sweep counts it as a failure - the one list that makes the run red.
+    ran, passed, failed, skipped = (
+        {"passed": 0, "skipped": 0, "failed": 0}, [], [], [])
+    R._print_job({"name": name, "status": status,
                   "counts": {"passed": 0, "skipped": 1, "failed": 0},
                   "line": line, "echo": [], "tail": []},
-                 ran, passed, failed, skipped, zero)
-    check("the sweep does not count it as passed", passed == [], passed)
-    check("nor as failed", failed == [], failed)
-    check("nor as a suite skipped by name", skipped == [], skipped)
-    check("it is collected in its own `zero` list", zero == [name], zero)
-    check("its skipped check still counts in the run's totals",
-          ran == {"passed": 0, "skipped": 1, "failed": 0}, ran)
+                 ran, passed, failed, skipped)
+    check("the sweep counts it as failed", failed == [name], failed)
+    check("...and not as passed", passed == [], passed)
+    check("...and not as a suite skipped by name", skipped == [], skipped)
 
 
-def t_the_real_sweep_fails_a_zero_check_suite_unless_allowlisted():
-    """CONTROL, end to end, with real suite files: no git means test_apps.py
-    skips everything and exits 0; shadowing playwright makes
-    test_browser_control_live.py do the same. The first must fail the sweep
-    (it is not allowlisted), the second must not (it is)."""
+def t_the_real_sweep_fails_a_zero_check_suite_whatever_its_name():
+    """CONTROL, end to end with REAL suite files: both zero-check shapes fail.
+
+    No git means test_apps.py skips everything and exits 0. Shadowing playwright
+    makes test_browser_control_live.py do the same - and that one USED to be
+    exempt by name, so this is the case that changed: it now fails the sweep
+    too. Both are run through the real `run_suites.py`, not through a helper,
+    because the exit code is what CI reads."""
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
                PATH="")
     for key in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
@@ -303,8 +334,8 @@ def t_the_real_sweep_fails_a_zero_check_suite_unless_allowlisted():
     out = (r.stdout or "") + (r.stderr or "")
     check("a suite that skipped every check makes the sweep exit non-zero",
           r.returncode != 0, (r.returncode, out[-1200:]))
-    check("its line is a FAIL that says no check ran, never an ok line",
-          "FAIL  test_apps.py" in out and "no check ran" in out
+    check("its line is a FAIL that says no check PASSED, never an ok line",
+          "FAIL  test_apps.py" in out and "no check PASSED" in out
           and "ok    test_apps.py" not in out, out[-1200:])
     check("and the run's own failed list names it",
           "failed: test_apps.py" in out, out[-1200:])
@@ -321,14 +352,14 @@ def t_the_real_sweep_fails_a_zero_check_suite_unless_allowlisted():
             cwd=HERE, env=shadowed, capture_output=True, text=True, timeout=900,
             encoding="utf-8", errors="replace")
         out = (r.stdout or "") + (r.stderr or "")
-        check("an allowlisted zero-check suite does not fail the sweep",
-              r.returncode == 0, (r.returncode, out[-1200:]))
-        check("its line is NO-CHECKS, not an ok line",
-              "NO-CHECKS  test_browser_control_live.py" in out
+        check("a suite whose Playwright is missing ALSO fails the sweep now "
+              "(it used to be exempt by name)",
+              r.returncode != 0, (r.returncode, out[-1200:]))
+        check("its line is a FAIL, not an ok line and not NO-CHECKS",
+              "FAIL  test_browser_control_live.py" in out
+              and "NO-CHECKS" not in out
               and "ok    test_browser_control_live.py" not in out, out[-1200:])
-        check("the run's summary says a suite ran NO checks and that none is a pass",
-              "ran NO checks" in out and "none is a pass" in out, out[-1200:])
-        check("and it is not in a failed list", "failed:" not in out, out[-800:])
+        check("and the run's failed list names it", "failed:" in out, out[-1200:])
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -350,6 +381,115 @@ def t_a_named_suite_that_does_not_exist_is_a_failure():
     check("and it is reported as a FAIL, in the sweep's own summary",
           "FAIL  no suite here is named" in out
           and "failed: test_no_suite_is_named_this.py" in out, out[-800:])
+
+
+#: The two suites the partner test-health audit (2026-10-27, F-01/F-03) found
+#: printing "2 passed, 0 failed" while running no check at all. Each lifts its
+#: real functions out of the owner's jarvis_hud.py, which a checkout does not
+#: hold - so until the same evening both skipped on every clone and every CI
+#: runner. They now read the PUBLISHED BASE (backend/_base.py), so they run for
+#: real; this suite pins that, end to end.
+BASE_READING_SUITES = ("test_public_tunnel_refusal_order.py",
+                       "test_origin_hud_header.py")
+
+
+def _run_suite_directly(name: str) -> tuple:
+    """(exit code, output) for one suite run the way CI runs it: the ambient
+    `JARVIS_BACKEND` (set for the owner's Windows account) cleared."""
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+    for key in ("JARVIS_BACKEND", "OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR",
+                "JARVIS_FRAMEWORK_TOML", "JARVIS_LOG_DIR", "PYTHONPATH"):
+        env.pop(key, None)
+    done = subprocess.run([sys.executable, str(HERE / name)], cwd=HERE, env=env,
+                          capture_output=True, text=True, timeout=300,
+                          encoding="utf-8", errors="replace")
+    return done.returncode, (done.stdout or "") + (done.stderr or "")
+
+
+def t_the_two_audit_suites_run_for_real_against_the_published_base():
+    """F-01/F-03, end to end, in the audit's own configuration.
+
+    The audit ran both suites with `JARVIS_BACKEND` CLEARED and got
+    `2 passed, 0 failed`, exit 0, with two SKIP lines - because `skip()`
+    appended to PASSED. The correction demanded they then either PASS real
+    checks or exit non-zero, never "N passed, 0 failed" while skipping. They
+    pass real checks: 11 and 14 of them, read out of
+    `jarvis-backend/jarvis_hud.py`, the base this repository publishes.
+
+    What this pins:
+
+      * exit 0, a real check count, and NOT `0 passed` / `2 passed` - the two
+        lies of the old shape;
+      * the suite SAYS which folder answered, so nobody can read a green line
+        as "the owner's live file was checked";
+      * the runner reports it `ok` with those counts and no longer skips it by
+        name (the twelve suites that came off NEEDS_OWNER on 2026-10-27);
+      * the old line cannot come back unnoticed: `skip()` appends to SKIPPED,
+        and `tools/check_vacuous_checks.py`'s rule 4 catches the other shape -
+        `backend/test_vacuous_checks.py` proves that rule against these very
+        files."""
+    check("CONTROL: this repository does not carry the owner's jarvis_hud.py",
+          not (HERE / "jarvis_hud.py").is_file(),
+          "the suites would read it and never exercise the base fallback")
+    check("CONTROL: the published base does carry one",
+          (HERE.parent / "jarvis-backend" / "jarvis_hud.py").is_file(),
+          "without it these suites can only skip, which is what they used to do")
+    for name in BASE_READING_SUITES:
+        check(f"{name} is a real suite file", (HERE / name).is_file(), name)
+        code, out = _run_suite_directly(name)
+        check(f"{name}: exits 0", code == 0, (code, out[-1200:]))
+        counts = R.counts(out)
+        check(f"{name}: it really ran checks - none passed is the old lie",
+              counts["passed"] > 5, (counts, out[-1200:]))
+        check(f"{name}: and it skipped NOTHING", counts["skipped"] == 0,
+              (counts, out[-1200:]))
+        check(f"{name}: its summary cannot be read as a skip",
+              "0 passed" not in out and "2 passed, 0 failed" not in out, out[-800:])
+        check(f"{name}: it says which folder answered (the published base)",
+              "the published base (jarvis-backend/)" in out, out[-1500:])
+        check(f"{name}: the runner is no longer told to skip it by name",
+              name not in R.NEEDS_OWNER, R.NEEDS_OWNER)
+        status, n, line, echo = R.suite_result(name, " 0.2s", code, out, "")
+        check(f"{name}: the runner reports it ok, with real counts",
+              status == "ok" and n == counts, (status, n, counts))
+        # The SKIP-vs-PASS question is asked by BEHAVIOUR above (a real count, no
+        # skip, and no "0 passed" in what the suite printed) and, one level
+        # down, by `tools/check_vacuous_checks.py`'s rule 4 - an AST rule over
+        # every suite, proved against these two files in
+        # backend/test_vacuous_checks.py. It is deliberately NOT asked here by
+        # reading the file's text: a source pin goes red when the line is
+        # reworded and stays green when the behaviour is wrong, which is the
+        # thing `tools/check_no_source_pins.py` exists to stop.
+
+
+def t_a_whole_suite_skipped_by_name_says_so_where_the_totals_are():
+    """F-05: a run's green must say which suites it did NOT run.
+
+    A few suites are still skipped by name because the file each tests lives
+    only on the owner's PC (three on 2026-10-27, twelve fewer than that
+    morning). Each prints its own `skip ...` line, hundreds of suites before
+    the end, and the run ended `N passed` with no mention of them - so the
+    required `backend` job's green could be read as covering them. The totals
+    now end with one `SKIPPED BY NAME` line naming every one."""
+    check("a run that skipped nothing by name adds no line",
+          R.skipped_by_name_line([], 1) == "", R.skipped_by_name_line([], 1))
+    got = R.skipped_by_name_line(["test_b.py", "test_a.py"], 1)
+    check("the line names every suite that did not run",
+          "test_a.py" in got and "test_b.py" in got, got)
+    check("it counts them and says none is a pass",
+          "2 suite(s)" in got and "none is a pass" in got, got)
+    check("it starts with SKIPPED, the word ci.yml copies into the job Summary",
+          got.startswith("SKIPPED BY NAME"), got)
+    check("under --jobs it is sorted, so two workers print the same line",
+          R.skipped_by_name_line(["test_b.py", "test_a.py"], 2) ==
+          R.skipped_by_name_line(["test_a.py", "test_b.py"], 2),
+          (R.skipped_by_name_line(["test_b.py", "test_a.py"], 2),
+           R.skipped_by_name_line(["test_a.py", "test_b.py"], 2)))
+    line = R.skipped_by_name_line(sorted(R.NEEDS_OWNER), 1)
+    check("every suite skipped by name today is named in it",
+          all(name in line for name in R.NEEDS_OWNER), line)
+    check("...and there are three of them, not fifteen",
+          len(R.NEEDS_OWNER) == 3, sorted(R.NEEDS_OWNER))
 
 
 if __name__ == "__main__":
