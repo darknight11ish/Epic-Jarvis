@@ -96,11 +96,13 @@ core changes.
 py -3 tools\check_plugins.py
 ```
 
-Twenty checks: the catalogue matches the stack, every patch is in exactly
-one bucket, every drop-in module exists with an `install()`, the hook patch
-is well formed and anchors where it says, it is last in `$PATCHES`, the
-module is in both shipped-modules lists - and the loader's own 36 checks run
-in the same command.
+26 checks: the catalogue matches the stack, every patch is in exactly one
+bucket, every drop-in module exists with an `install()`, every folder under
+`plugins/ready/` is accounted for (a patch's mirror, or its own `plugin.json`
+for one that replaces no patch), the hook patch is well formed and anchors
+where it says, it is last in `$PATCHES`, the module is in both shipped-modules
+lists - and the loader's own 43 checks and the catalogue's 13 run in the same
+command.
 
 ## The tests
 
@@ -109,3 +111,7 @@ core hands a module's `install()` - a `Handler` class and the three
 callbacks - and proves, without the owner's PC: a folder becomes a live
 route, the order is the stack's order, one broken module does not stop the
 others, a disabled folder is skipped, and an absent folder changes nothing.
+`backend/test_plugin_catalogue.py` pins the other half: every folder in
+`plugins/ready/` is in the registry and the README, the ten no-patch drop-ins
+are named, and a folder the generator cannot read is refused rather than
+silently left out.

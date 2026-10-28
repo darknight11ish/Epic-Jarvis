@@ -25,10 +25,17 @@ Everything else - a patch that edits real code, or adds routes and gate
 tables inline - is left in the CORE bucket, untouched and still applied by
 `scripts/apply-patches.ps1` exactly as before.
 
-A folder that replaces NO patch is neither written nor removed here: the
-catalogue is built from `$PATCHES`, so a feature that was born as a folder
-(`plugins/ready/receipts`) has no row in it, and `prune_ready` leaves it
-alone. `tools/check_plugins.py` checks those folders instead.
+A folder that replaces NO patch is still a drop-in, so it is listed too: its
+own `plugin.json` is the manifest (a feature born as a folder - the first was
+`plugins/ready/receipts`, 2026-10-14), and `build()` reads it into `folders`.
+This tool does not write such a folder, because the folder IS the feature's
+wiring; but the registry and `plugins/README.md` count it, so the catalogue and
+`plugins/ready/` agree. A folder that is neither a patch's mirror nor a
+complete no-patch manifest goes into `unaccounted`, and the catalogue refuses
+rather than skipping it. That silence is exactly how ten real drop-ins -
+receipts, skill-hub, vault, voiceprint, notion-obsidian, media-index, sandbox,
+self-improve, auto-router and vault-organizer - appeared in no catalogue at
+all until 2026-10-28.
 
 Run:  py -3 tools/gen_plugin_catalogue.py [--check]
       --check fails instead of writing, the way the other gen_* tools do.
@@ -70,6 +77,10 @@ ALWAYS_CORE = {
                            "other drop-in folder possible. It is what replaces the "
                            "patches, so it can never be replaced by a folder.",
 }
+
+#: What a `plugin.json` may say its `install()` takes: the core's Handler, or
+#: nothing (a module with its own scheduler or registry hook).
+INSTALL_KINDS = ("handler", "none")
 
 INSTALL_CALL = re.compile(r"^(jarvis_[a-z_0-9]+)\.install\(")
 IMPORT_MOD = re.compile(r"^import (jarvis_[a-z_0-9]+)$")
@@ -199,6 +210,83 @@ def summary_of(module: str) -> str:
     return text[:200]
 
 
+def folder_manifest(folder: Path) -> tuple[dict | None, str]:
+    """Read one `plugins/ready/<name>/plugin.json`.
+
+    `(data, why)` - `data` is the object, or None with a plain-words reason
+    this folder cannot be a drop-in the catalogue lists. It only reads; the
+    caller decides whether that is a refusal.
+    """
+    manifest = folder / "plugin.json"
+    if not manifest.is_file():
+        return None, "there is no plugin.json, so nothing says what it would load"
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - the reason is the point
+        return None, f"plugin.json will not parse ({type(exc).__name__})"
+    if not isinstance(data, dict):
+        return None, "plugin.json is not a JSON object"
+    return data, ""
+
+
+def folder_only_entries(plug_in_names: set[str]) -> tuple[list[dict], list[dict]]:
+    """Every `ready/<name>/` folder that replaces NO patch, and every folder
+    that is neither one of those nor a generated plug-in.
+
+    A folder is a drop-in in its own right when its manifest has `name`,
+    `module`, `install`, `stack_order` and `summary`, and no `replaces_patch`:
+    the feature was born as a folder, so there is no patch for `build()` to
+    mirror it from. Anything else is returned in `unaccounted` instead of being
+    skipped - that is the pin against the failure this function exists to end:
+    ten real drop-in folders appeared in no catalogue at all until 2026-10-28.
+    """
+    ready = PLUGINS / "ready"
+    folders: list[dict] = []
+    unaccounted: list[dict] = []
+    if not ready.is_dir():
+        return folders, unaccounted
+    for child in sorted(ready.iterdir()):
+        if not child.is_dir() or child.name in plug_in_names:
+            continue
+        data, why = folder_manifest(child)
+        if data is None:
+            unaccounted.append({"folder": child.name, "why": why})
+            continue
+        if data.get("replaces_patch"):
+            unaccounted.append({
+                "folder": child.name,
+                "why": (f"its plugin.json names replaces_patch "
+                        f"{data['replaces_patch']!r}, which is not a drop-in in "
+                        f"the patch stack any more; run the generator WITHOUT "
+                        f"--check to prune a stale mirror"),
+            })
+            continue
+        problems = []
+        if data.get("name") != child.name:
+            problems.append("`name` does not match the folder")
+        if not isinstance(data.get("module"), str) or not data["module"]:
+            problems.append("`module` is missing or not text")
+        if data.get("install") not in INSTALL_KINDS:
+            problems.append('`install` must be "handler" or "none"')
+        if not isinstance(data.get("stack_order"), int):
+            problems.append("`stack_order` must be a whole number")
+        if not isinstance(data.get("summary"), str) or not data["summary"].strip():
+            problems.append("`summary` is missing or empty")
+        if problems:
+            unaccounted.append({"folder": child.name, "why": "; ".join(problems)})
+            continue
+        folders.append({
+            "name": child.name,
+            "module": data["module"],
+            "install": data["install"],
+            "stack_order": data["stack_order"],
+            "summary": data["summary"].strip(),
+            "why": "born as a folder: it replaces no patch",
+        })
+    folders.sort(key=lambda f: (f["stack_order"], f["name"]))
+    return folders, unaccounted
+
+
 def build() -> dict:
     order = _stack.order()
     registry: list[dict] = []
@@ -250,10 +338,13 @@ def build() -> dict:
         })
 
     plug_ins = [r for r in registry if r["bucket"] == "plug-in"]
+    folders, unaccounted = folder_only_entries({r["name"] for r in plug_ins})
     return {
         "about": (
             "Generated by tools/gen_plugin_catalogue.py from $PATCHES in "
-            "scripts/apply-patches.ps1. Do not edit by hand; re-run the tool."
+            "scripts/apply-patches.ps1 (the `entries`) and from the plugin.json "
+            "of every plugins/ready folder that replaces no patch (the `folders`). "
+            "Do not edit by hand; re-run the tool."
         ),
         "stack": "scripts/apply-patches.ps1",
         "patch_count": len(order),
@@ -262,6 +353,10 @@ def build() -> dict:
             "core": len([r for r in registry if r["bucket"] == "core"]),
             "missing": len([r for r in registry if r["bucket"] == "missing"]),
         },
+        "folder_count": len(folders),
+        "ready_count": len(plug_ins) + len(folders),
+        "folders": folders,
+        "unaccounted": unaccounted,
         "entries": registry,
     }
 
@@ -303,13 +398,22 @@ def plugin_readme_text(entry: dict, patch_count: int) -> str:
     return "\n".join(doc)
 
 
+def cell(text: str) -> str:
+    """One markdown table cell: a pipe in the text must not split the row."""
+    return " ".join(str(text).split()).replace("|", "\\|")
+
+
 def index_text(data: dict) -> str:
     """The exact body of `plugins/README.md`."""
     rows = ["| # | Drop-in module | What it does | Replaces |", "|---|---|---|---|"]
     for entry in data["entries"]:
         if entry["bucket"] == "plug-in":
-            rows.append(f"| {entry['order']} | `{entry['name']}` | {entry['summary']} "
+            rows.append(f"| {entry['order']} | `{entry['name']}` | {cell(entry['summary'])} "
                         f"| `{entry['patch']}` |")
+    folder_rows = ["| Loader order | Drop-in module | What it does |", "|---|---|---|"]
+    for entry in data["folders"]:
+        folder_rows.append(f"| {entry['stack_order']} | `{entry['name']}` | "
+                           f"{cell(entry['summary'])} |")
     core = [e for e in data["entries"] if e["bucket"] in ("core", "missing")]
     core_rows = ["| Patch | Why it stays in the core |", "|---|---|"]
     for entry in core:
@@ -318,21 +422,40 @@ def index_text(data: dict) -> str:
     return f"""# Plug-and-play modules
 
 Generated by `tools/gen_plugin_catalogue.py` from the patch stack in
-`scripts/apply-patches.ps1`. Do not edit by hand.
+`scripts/apply-patches.ps1` and from every `ready/<name>/plugin.json` that
+replaces no patch. Do not edit by hand.
 
 Jarvis's optional features used to arrive as a module **plus** a patch that
 adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **{data['counts']['plug-in']} drop-in modules**, in [`ready/`](ready/) -
-  one folder each, no core change.
+- **{data['ready_count']} drop-in modules**, in [`ready/`](ready/) -
+  one folder each, no core change:
+  - **{data['counts']['plug-in']}** replace a patch, and are generated from it;
+  - **{data['folder_count']}** replace no patch: they were born as folders, and
+    their own `plugin.json` is the whole of their wiring.
 - **{data['counts']['core']} core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
-## The drop-in modules
+There is no third kind. Every folder under [`ready/`](ready/) is in one of the
+two tables below, and `tools/check_plugins.py` fails if one is not - a folder
+the catalogue cannot account for is refused, never silently left out.
+
+## The drop-in modules that replace a patch
 
 {chr(10).join(rows)}
+
+## Drop-in modules with no patch of their own
+
+These {data['folder_count']} were never patches. There is nothing in the core
+to take out: the folder **is** that feature's wiring, and the module it names
+is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
+here so the count above has one home; `tools/check_plugins.py` checks each one
+too - its module is in `backend/`, it has the `install()` the loader calls, and
+it is one `apply-patches.ps1` copies in.
+
+{chr(10).join(folder_rows)}
 
 ## What stays in the core
 
@@ -361,43 +484,33 @@ the module file itself, so adding it again needs no re-install.
 """
 
 
-def replaces_no_patch(folder: Path) -> bool:
-    """True for a folder that is a drop-in WITHOUT being a patch's mirror.
-
-    `plugins/ready/receipts` is the first one (2026-10-14, action receipts and
-    one-click undo): a feature whose whole wiring is a folder, so there is no
-    patch anywhere for this generator to read it out of, and `plugin.json`
-    carries no `replaces_patch`. The catalogue cannot list it - it is built
-    from `$PATCHES` - so the one thing this generator must do is leave it
-    where it is. `tools/check_plugins.py` is what keeps such a folder honest
-    (its module is in `backend/`, it has an `install()`, and `apply-patches.ps1`
-    copies it in): this function only decides whether it may be deleted.
-    """
-    manifest = folder / "plugin.json"
-    if not manifest.is_file():
-        return False
-    try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-    except Exception:
-        return False
-    return isinstance(data, dict) and not data.get("replaces_patch")
-
-
 def prune_ready(data: dict) -> list[str]:
-    """Delete `ready/<name>/` folders whose feature is no longer a drop-in.
+    """Delete a `ready/<name>/` folder that is a STALE MIRROR of a patch.
 
-    A folder stays while its patch is still one of these: when a patch stops
-    being a drop-in, its folder must go, or the tree keeps a manifest for
-    something that is no longer true. A folder that replaces NO patch is not
-    this generator's to delete at all (replaces_no_patch, above): it is not a
-    stale mirror of anything, and it is the whole of that feature's wiring.
+    A folder stays while its patch is still a drop-in (`keep`). A folder that
+    replaces NO patch is not this generator's to delete: it is the whole of
+    that feature's wiring. Anything else - no manifest, a manifest that will
+    not parse, a manifest without `replaces_patch` - is left exactly where it
+    is and named in `unaccounted` instead (see `folder_only_entries`), so the
+    generator refuses rather than deleting something a person may be working on.
     """
     ready = PLUGINS / "ready"
     keep = {e["name"] for e in data["entries"] if e["bucket"] == "plug-in"}
+    folder_only = {f["name"] for f in data["folders"]}
     removed: list[str] = []
     if ready.is_dir():
         for child in sorted(ready.iterdir()):
-            if child.is_dir() and child.name not in keep and not replaces_no_patch(child):
+            if (not child.is_dir() or child.name in keep
+                    or child.name in folder_only):
+                continue
+            manifest = child / "plugin.json"
+            if not manifest.is_file():
+                continue
+            try:
+                manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(manifest_data, dict) and manifest_data.get("replaces_patch"):
                 shutil.rmtree(child, ignore_errors=True)
                 removed.append(child.name)
     return removed
@@ -428,6 +541,16 @@ def owned_files(data: dict) -> list[tuple[Path, str]]:
     return out
 
 
+def print_unaccounted(unaccounted: list[dict], why: str) -> None:
+    """Say, in plain words, which `ready/` folder the catalogue cannot list."""
+    print(why)
+    for item in unaccounted:
+        print(f"  plugins/ready/{item['folder']}/: {item['why']}")
+    print("  A folder under plugins/ready/ is either a drop-in named by a patch in")
+    print("  $PATCHES, or a complete no-patch manifest: name, module, install")
+    print("  (handler|none), stack_order, summary, and no replaces_patch.")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
@@ -435,28 +558,45 @@ def main() -> int:
     args = ap.parse_args()
 
     data = build()
-    owned = owned_files(data)
 
     if args.check:
+        owned = owned_files(data)
         stale = [str(path.relative_to(ROOT)) for path, text in owned
                  if not path.is_file() or path.read_text(encoding="utf-8") != text]
         if stale:
             print("plug-in catalogue is stale; run: py -3 tools/gen_plugin_catalogue.py")
             for s in stale[:10]:
                 print("  ", s)
+        if data["unaccounted"]:
+            print_unaccounted(
+                data["unaccounted"],
+                "the plug-in catalogue cannot account for every folder under plugins/ready/:")
+        if stale or data["unaccounted"]:
             return 1
         print(f"plug-in catalogue is up to date "
-              f"({data['counts']['plug-in']} drop-in, {data['counts']['core']} core)")
+              f"({data['ready_count']} drop-in folders: "
+              f"{data['counts']['plug-in']} patch-backed + "
+              f"{data['folder_count']} with no patch; "
+              f"{data['counts']['core']} core)")
         print(f"  ({len(owned)} file(s) compared - registry.json, README.md and "
-              f"every ready/<name>/plugin.json AND README.md)")
+              f"every generated ready/<name>/plugin.json AND README.md)")
         return 0
 
     PLUGINS.mkdir(exist_ok=True)
     for name in prune_ready(data):
-        print(f"  pruned ready/{name} (no longer a drop-in module)")
-    for child in sorted((PLUGINS / "ready").iterdir()) if (PLUGINS / "ready").is_dir() else []:
-        if child.is_dir() and replaces_no_patch(child):
-            print(f"  kept   ready/{child.name} (a drop-in with no patch of its own)")
+        print(f"  pruned ready/{name} (its patch is no longer a drop-in)")
+    if data["unaccounted"]:
+        # A stale mirror just pruned may have been the only unaccounted folder.
+        data = build()
+    if data["unaccounted"]:
+        print_unaccounted(
+            data["unaccounted"],
+            "refusing to write: the catalogue cannot account for every folder "
+            "under plugins/ready/:")
+        return 1
+    for entry in data["folders"]:
+        print(f"  kept   ready/{entry['name']} (a drop-in with no patch of its own)")
+    owned = owned_files(data)
     for path, text in owned:
         path.parent.mkdir(parents=True, exist_ok=True)
         # newline="\n" is not decoration: this repository is LF everywhere
@@ -479,6 +619,9 @@ def main() -> int:
     for entry in data["entries"]:
         if entry["bucket"] == "plug-in":
             print(f"  ready/{entry['name']:<22} {entry['module']}.install()")
+    print(f"       and {data['ready_count']} drop-in folders: "
+          f"{data['counts']['plug-in']} generated + "
+          f"{data['folder_count']} that replace no patch")
     print(f"wrote {len(owned)} file(s) under {PLUGINS.relative_to(ROOT)}/ - the "
           f"{data['counts']['plug-in']} ready/<name>/ folders with their own README.md")
     return 0

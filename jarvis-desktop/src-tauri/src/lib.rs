@@ -1222,7 +1222,6 @@ pub fn run() {
             // token, so it calls this instead of posting; the PC raises its ONE
             // card for ON and decides, and OFF is instant.
             focus_presets::hud_cloud_escalate,
-            selection::read_selection,
             tutorials::get_tutorials,
             tutorials::mark_tutorial,
             tutorials::get_faq,
