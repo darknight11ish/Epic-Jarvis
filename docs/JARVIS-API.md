@@ -118,12 +118,29 @@ carry the SameSite=Strict `jarvis_token` cookie), and an `Origin`, when one is
 present, must pass the origin check. There is no directory serving: an
 unlisted path, `..`, an encoded traversal, a trailing slash, a case variant or
 an absolute URL is a 404, never a file lookup. The served set today is
-`/theme.css`, `/fonts/fonts.css`, the seven self-hosted `.woff2` faces and the
-page's twelve `.js` modules. `/hud-web-bridge.js`, `/manifest.webmanifest`,
-`/sw.js` and `/icons/jarvis-180|192|512.png` are listed ahead of the slices
-that write them, so each answers 404 until its file exists beside the server.
-`backend/test_hud_static.py` keeps the page and the whitelist in step in both
-directions.
+`/theme.css`, `/fonts/fonts.css`, the seven self-hosted `.woff2` faces, the
+page's thirteen `.js` modules and `/three.min.js`. `/hud-web-bridge.js`,
+`/manifest.webmanifest`, `/sw.js` and `/icons/jarvis-180|192|512.png` are listed
+ahead of the slices that write them, so each answers 404 until its file exists
+beside the server. `backend/test_hud_static.py` keeps the page and the whitelist
+in step in both directions.
+
+The page's thirteenth module is `/galaxy-cosmos.js` (2026-10-27), the Galaxy's
+3D engine. It is fetched the same way as `/galaxy-presets.js` - a dynamic
+`import()` from the page's own script, so a browser HUD that cannot fetch it
+keeps the flat picture. It draws with three.js r128, which the page loads with
+its own `<script src="/three.min.js" defer>` and this server serves as
+`/three.min.js`; the library is copied into this repository (the separate
+vendoring change, with its own checksum test and notices entry) and is never
+fetched from a CDN. The page edit and the whitelist key arrive together, which
+is the only state where the closed whitelist and the page agree in both
+directions; if the file is missing, the engine stays on the flat picture and
+asks for nothing else. The engine frames every real name inside 82% of the
+half-frame at the 120- and 240-name budgets (Gemini's own camera whenever the
+picture fits it, the same angle from further back when it does not), scales the
+fog with that distance and grows the camera's far plane with it, so a 240-name
+picture is neither cropped nor fogged out; `jarvis-desktop/tests/galaxy-cosmos.mjs`
+proves the framing without a browser.
 
 ---
 
@@ -4182,7 +4199,8 @@ is compacted with `VACUUM` after a delete, at most once an hour.
  "keep_days": 0, "encrypted": true, "kind": null,
  "conversations": [{"id": "...", "title": "...", "started": 1790000000,
    "updated": 1790000300, "turns": 6, "device": "phone",
-   "has_voice": true, "tainted": false, "kind": "chat", "project": null}]}
+   "has_voice": true, "tainted": false, "kind": "chat", "project": null,
+   "tag_id": null, "pinned": false}]}
 ```
 
 Newest first. `limit` 1-100, default 30; `before` pages to older ones
@@ -4196,11 +4214,30 @@ Since 2026-09-30 every row also carries `"tag_id": int | null` (the chat's
 one tag, section 99) and `&tag=<id>` or `&tag=none` filters to one tag or to
 the untagged chats; a nonsense value is ignored, like `kind`.
 
+Since 2026-10-27 every row also carries `"pinned": true|false` and
+`"pinned_at": <unix seconds>|null` - BOTH always present, and false/null for
+a chat that was never pinned, so an app that has never heard of pinning reads
+exactly the rows it always did. The list itself is still newest-first by
+`updated`: a pin is not a sort the PC applies to this route, it is one flag
+`pinned` plus the moment it was set `pinned_at`, and the apps draw the Pinned
+group from them in ONE order - **`pinned_at DESC, updated_at DESC`** (the
+newest pin first; two pins in the same second newest-chat first). The route
+that changes it is `POST /api/history/pin`, below.
+
+**While App lock or "Hide memory lists and chat history" is on, this route
+withholds EVERY row - a pinned one included.** The answer keeps the switch,
+the counts and `"hidden": true` with `"hidden_count": n`, and its
+`conversations` is empty, so no caller can read a title (or learn that a chat
+exists) from a locked PC. `POST /api/history/pin` refuses too, with `423`
+(see below), for every id - a locked PC must not answer "found" versus "not
+found".
+
 `GET /api/history/conversation?id=<id>`
 
 ```json
 {"id": "...", "title": "...", "tainted": false,
  "kind": "chat", "project": null, "started": 1790000000, "updated": 1790000300,
+ "tag_id": null, "pinned": false,
  "continuable": true, "continue_why": "",
  "forkable": true, "fork_why": "",
  "turns": [{"idx": 0, "role": "user", "text": "...", "at": 1790000000,
@@ -4244,6 +4281,53 @@ and the owner unticks any to keep; ONE approval card (action
 by a tap, never by voice; and for 10 minutes afterwards one tap on Undo puts
 everything back. Nothing else deletes in bulk.
 
+`POST /api/history/pin {"id": "<conversation id>", "pinned": true|false}`
+
+Pins one chat to the top of History, or (`false`) takes the pin off. Added
+2026-10-27 for the owner's "pinnable chats" in the desktop HUD's History
+sidebar and the phone's chat list; §18.3 is the whole contract, and the
+phone lane implements the same route.
+
+- **The body is exactly these two keys.** `id` is a conversation id the
+  list just sent. `pinned` must be a JSON boolean: `"yes"`, `1` and `null`
+  are all refused, because an app that sent the wrong type would otherwise
+  silently do the opposite of what it meant.
+- `200 {"ok": true, "id": "<id>", "pinned": true|false, "pinned_at":
+  <unix seconds>|null}` - the state the chat now has, not the state that was
+  asked for. Pinning twice is pinning once, and answers 200 both times;
+  `pinned_at` keeps the FIRST moment it was pinned, so a second pin cannot
+  move a chat above one that was pinned after it.
+- `400 {"ok": false, "error": "bad_request", "message": "<one plain
+  sentence>"}` - the body is not exactly `{"id", "pinned"}`, `pinned` is not
+  a boolean, or `id` is not a string, is empty, or is longer than 128
+  characters.
+- `404 {"ok": false, "error": "not_found", "message": "<one plain
+  sentence>"}` - no such conversation (it may have been deleted). **Nothing
+  is written, and no row is created**: a pin can never invent a chat.
+- `423 {"ok": false, "error": "locked", "message": "<App lock, or Hide
+  memory lists and chat history, is on>"}` - the private view is hidden, and
+  this is the answer for EVERY id, whether the chat exists or not: while it
+  is locked there is no 200-versus-404 oracle. Nothing is written.
+- `503` when the history cannot be opened at all, the same answer the other
+  History routes give.
+- **Metadata only, and no approval card.** A pin stores no text, opens no
+  chat, changes no `updated` (a pin is not an edit), and takes nothing
+  away. It is the owner's own tidying, the same class of change as filing a
+  chat under a tag (§99) - so it raises no card, and the one audit line it
+  writes says which way the flag went and nothing else.
+- The flag lives in the SAME history file every other History fact lives
+  in, as a plain `pinned` column (1 or empty), so it survives a restart on
+  the PC and both apps read it back from `GET /api/history`. Neither app
+  keeps a pin list of its own, which is what keeps the phone and the PC
+  agreeing: a chat pinned on the phone is pinned on the PC, and the other
+  way round.
+- `GET /api/history` rows carry it, `GET /api/history/conversation` carries
+  it, and `GET /api/history/search` rows carry it. A fork keeps its
+  source's pin, the same way it keeps its tag and project.
+- A PC without this route answers 404 and nothing was written, so an app
+  that gets one shows Pin as unavailable rather than retrying: the same
+  way both apps already read a missing newer History feature.
+
 `POST /api/history/settings` - one setting per request:
 
 - `{"enabled": false}` - 200 at once, "Chat history is off. Nothing new is
@@ -4276,7 +4360,18 @@ so no chats are kept", "reason"}` - and chat keeps working, keeping nothing.
 Both apps (parity rule): a **History** view - desktop, a History section in
 the Brain window next to Memory; phone, a History screen next to the Brain's
 other sections. (The HUD page sends `conversation_id`, `device: "hud"` and
-`provenance` too, but has no History view of its own.)
+`provenance` too. **Since 2026-10-27 it also has a History view of its own:**
+a History button in its left column opens a sidebar shaped like the DeepSeek
+Harness's chat list - Pinned, one section per tag, then Untagged, with a
+search box, a sort, and Open / Pin / Move to project / Delete on each row.
+It reads the SAME three routes below through `hud_get` (no pairing token
+reaches that page: apps security audit M2), writes through ONE Rust command
+`hud_history_act` that shares the Brain's own bodies - pin, file and delete
+ONE chat, and nothing else - and its rows are withheld under App lock and
+"Hide memory lists and chat history" exactly as the Brain's are. Its row
+words, its delete confirmation and its write shapes live in ONE module both
+windows read (`jarvis-desktop/src/history-actions.js`), so the two cannot
+come to say or send two different things.)
 
 - The list: title, when, device, a small mic mark for `has_voice`, a small
   "read outside text" mark for `tainted`. Newest first, "Load older".
@@ -5435,7 +5530,7 @@ What it understands:
 |---|---|
 | Timers | "set a timer for 10 minutes", "10 minute timer", "timer for 1h30", "set a pasta timer for 12 minutes", "cancel the timer", "cancel the pasta timer", "pause / resume the timer", "add 5 minutes to the timer", "5 more minutes" (only while a timer runs), "take 2 minutes off the timer", "how long is left" (only while a timer **or** a focus session is running) |
 | Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
-| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat). **Time-first works too** (2026-10-18): "remind me in 2 minutes to drink water", "remind in 2 minutes to drink water" (the phone's own shorthand, no "me"), and "in 10 minutes remind me to drink water" |
+| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat). **Time-first works too** (2026-10-18): "remind me in 2 minutes to drink water", "remind in 2 minutes to drink water" (the phone's own shorthand, no "me"), and "in 10 minutes remind me to drink water". **Since 2026-10-27 the owner's own HUD wording is here too** (see below): "add a reminder to take my pills at 6pm", "add a reminder for tomorrow at 6pm to call Mum", "i need a reminder to call the dentist tomorrow", "reminder to call Mum at 6", "new reminder to pay rent on Friday at 5pm", and any of these after a polite lead-in ("please", "can you", "i want to") |
 | To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
 | Named lists (21.9) | "add milk to the shopping list", "add milk, eggs and bread to the shopping list", "what's on my shopping list", "cross milk off the shopping list", "remove eggs from the shopping list", "what lists do I have", "clear the shopping list" (changes nothing: it points to the app) |
 | Snooze (21.9) | "snooze", "snooze 5 minutes", "snooze the alarm", "remind me again in 10 minutes" |
@@ -5443,6 +5538,25 @@ What it understands:
 | Morning briefing | "brief me now", "brief me every weekday at 7" (**a card**), "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
 | Features (§130) | "what is the prompt coach", "what does the prompt coach do", "is the prompt coach on", "is the prompt coach on right now", "how do I turn on the prompt coach", "how do I turn off the prompt coach", "what features do you have", "list the memory features", "turn on <a feature that names one switch>" - added 2026-10-20 |
+
+**A reminder the grammar missed can no longer become a model's prose success
+(2026-10-27, the owner's HUD bug).** The owner typed "add a reminder ..." into
+the HUD, Jarvis's answer said it had set one, nothing was written and the
+Reminders tab stayed empty. Two causes, both fixed. First, the grammar above
+did not know "add a reminder", "i need a reminder" / "i want a reminder",
+"reminder to ..." or a polite lead-in before any of them ("can you add a
+reminder ..."), so the sentence went to the model. Second, the model's own
+`[tools].enabled` list does not name `set_reminder` (the fast path is the
+intended route; see `jarvis_agent.SCHEDULE_TOOLS`), so it had no tool to call
+and answered in prose. The phrasings above are answered here now, and a model
+answer that claims a reminder, timer or to-do item with the verb first or the
+job first ("Added a reminder ...", "Reminder set for 6pm.") is corrected with
+"(Nothing was actually done - no action ran in this answer.)" exactly like
+"I've set a reminder..." - `jarvis_claims.CLAIMS_SCHEDULE_DONE`, which also
+counts a read-only `feature_guide` result as no action. Questions, offers and
+instructions are not claims: "Reminder set for 6pm" typed as a command is
+still not a command (it goes to the model), and neither is "Set a reminder
+for 6pm if you like.".
 
 **Feature questions are answered from the feature list, not the model.** The
 three "Features" wordings above read `features/features.json` itself (through
@@ -23974,7 +24088,17 @@ active lane (what the bar and the phone send). The single **Cloud** button is
 NOT this contract: it sets the next message's lane to the general cloud lane
 (`jarvis-escalate` when the PC lists it) through the HUD's existing lane
 mechanism, raises no card, and when `/api/status` says `proxy: false` it says
-plainly that the cloud lane is down and marks nothing. Tests:
+plainly that the cloud lane is down and marks nothing. **Since 2026-10-27 the
+Studio stage's own words row carries a third door to the same one menu:**
+`#stage-presets`, after Telemetry and beside the new "Galaxy options" word,
+dispatches the same `jarvis:hud-presets-open` event with itself as the anchor -
+so the menu is reachable from the words beside Galaxy, Approvals, Reminders and
+the rest, and no second menu or route is added. The same row's **Galaxy
+options** word opens the page's own `#galaxy-options` panel, which holds the
+lenses, the Look switch, the search box, Reset view, Pause spin and Hide the
+galaxy; that panel is the HUD's existing `galaxy` view and its existing
+device-local preferences only - it reads `/api/graph` exactly as before and
+adds no route, command or permission. Tests:
 `jarvis-desktop/tests/hud-presets.mjs`.
 
 **The Studio dock's "Current Models" panel** (2026-10-26) is a second reader of
