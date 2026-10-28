@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "77f2732ef8188c6e3d3136bf1472971271e80f4a0862721dc266309b27a0787a",
-  "feature_count": 141,
+  "source_sha256": "79d0b89b54e3fa66a7dc712bfa3b97e8a93f53f12002b0d25183c2761e61f65e",
+  "feature_count": 142,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
     "Settings-Only (By Design — Security Boundary)",
@@ -191,6 +191,22 @@
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
+      "note": "",
+      "not_a_control": true
+    },
+    {
+      "id": "anti-slop",
+      "title": "Anti-Slop filter",
+      "group": "Talking",
+      "surface": "both",
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "status": "enforced",
+      "label_note": "",
+      "example": "turn on anti-slop",
+      "example_ok": true,
+      "where": "desktop Settings: How Jarvis talks, Anti-Slop filter; phone: Settings, How Jarvis talks (the switch, the em-dash exemption and the mode)",
+      "where_desktop": "How Jarvis talks, Anti-Slop filter",
+      "where_phone": "Settings, How Jarvis talks (the switch, the em-dash exemption and the mode)",
       "note": "",
       "not_a_control": true
     },

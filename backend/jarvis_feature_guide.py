@@ -2052,7 +2052,7 @@ CARD_ON_LOOSENING = frozenset({
     "lights_without_card",   # request_lights(...) registry:605-611
     "sandbox_exec",          # "ON is ONE normal approval card" registry:700-705
 })
-#: ...and the four whose setter says it never asks. `humour` is the row the
+#: ...and the five whose setter says it never asks. `humour` is the row the
 #: semantic read caught: `set_humor` - "At once either way - it changes wording
 #: only." (registry:910-912).
 CARD_FREE_SWITCHES = frozenset({
@@ -2060,6 +2060,8 @@ CARD_FREE_SWITCHES = frozenset({
     "humor",          # "At once either way" registry:910-912
     "write_like_me",  # "No card either way" registry:976-979
     "pictures",       # "BOTH directions ... neither asks" registry:736-738
+    "antislop",       # "No card either way - it changes only how an answer is
+                      # worded" (the Anti-Slop filter's own setter, 2026-10-28)
 })
 
 #: The Settings place the owner is sent to for an ability with no switch. The
