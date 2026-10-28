@@ -76,7 +76,12 @@ await check("CONTROL: Rust keeps checking and installing as separate commands", 
                              rust.indexOf("pub fn set_update_check_on_start"));
   assert.ok(!/download_and_install/.test(checkFn),
     "the check path can install");
-  const startup = rust.slice(rust.indexOf("pub fn spawn_startup_check"));
+  // Up to the unit tests, which are not part of the startup check: the tests
+  // below name `download_and_install` on purpose (they pin the hand-off that
+  // writes the update record before the installer can end the process).
+  const startup = rust.slice(rust.indexOf("pub fn spawn_startup_check"),
+                             rust.indexOf("#[cfg(test)]"));
+  assert.ok(startup.length > 0, "there is no startup check");
   assert.ok(!/download_and_install/.test(startup),
     "the startup check can install");
 });
