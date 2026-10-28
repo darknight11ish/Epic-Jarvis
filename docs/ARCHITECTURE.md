@@ -2237,7 +2237,10 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   and the phone locked, ask for the phone's own unlock first. No tile can
   approve or deny. The "tap to turn \"Hey Jarvis\" back on" notice after a
   restart (§81.1) opens the app, and listening starts only after App lock. The home-screen widget only ever shows the
-  `notice` text and offers Deny only, lock or not. **The floating avatar**
+  `notice` text and offers no Approve: of the two decisions it draws Deny
+  only while nothing is hidden, and under App lock or "Hide memory lists" it
+  draws ONE button, "Unlock to review", which opens the app (the owner kept
+  the rule and fixed the label, 2026-10-28). **The floating avatar**
   ("Floating Jarvis", §56) is not covered either, for the same reason as the
   desktop's floating face: App lock does not change what it shows
   (`floatingAvatarShowsContent`, `data/FloatingAvatar.kt` - matched to the

@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.decodePendingRows
 import com.jarvis.client.widget.ApprovalWidgetRules
 import com.jarvis.client.widget.WidgetStates
@@ -234,27 +235,93 @@ class WidgetStatesTest {
         assertEquals(Approval.CARD, WidgetStates.approval(true, true, true, false, 1))
     }
 
+    // --------------------------------- the buttons on the card itself ----
+
+    /** The owner's 2026-10-28 field bug: on a locked phone the card offered a
+     *  button labelled "Deny", and the tap only opened the app - the label
+     *  promised a refusal the tap could not perform. The safety rule stays (a
+     *  locked phone never denies an unseen card), so the fix is the label: a
+     *  locked card draws one button that says what it does. */
+    @Test
+    fun `a locked card draws no Deny and exactly one app-opening button`() {
+        // The same real `/api/pending` row the decode test uses, so the shape
+        // is checked against a row the PC actually sent - and `deny_ok` must
+        // change nothing while locked.
+        val first = pendingRows().first()
+        for (denyOk in listOf(first.notice?.denyOk != false, true, false)) {
+            val buttons = ApprovalWidgetRules.cardButtons(hidden = true, denyOk = denyOk)
+            val labels = buttons.map { it.label }
+            assertFalse("locked, denyOk=$denyOk: $labels", labels.contains("Deny"))
+            assertEquals("locked, denyOk=$denyOk: $labels", 1, buttons.size)
+            assertEquals(
+                "the one locked button opens the app; it never decides",
+                listOf(ApprovalWidgetRules.Tap.OPEN_APP),
+                buttons.map { it.tap },
+            )
+            assertEquals(ApprovalWidgetRules.UNLOCK_LABEL, buttons.single().label)
+        }
+    }
+
+    @Test
+    fun `an unlocked card is Deny acting directly, then Review opening the app`() {
+        // Deny is the widget's one direct decision, and it comes first; Review
+        // is the way to Approve and opens the app (it is never a one-tap yes).
+        val open = ApprovalWidgetRules.cardButtons(hidden = false, denyOk = true)
+        assertEquals(listOf("Deny", "Review"), open.map { it.label })
+        assertEquals(
+            listOf(ApprovalWidgetRules.Tap.DENY_NOW, ApprovalWidgetRules.Tap.OPEN_APP),
+            open.map { it.tap },
+        )
+        // An item the PC marked unsafe to refuse unread has no Deny at all:
+        // the same condition the lock-screen notification already runs on.
+        assertEquals(listOf("Review"), ApprovalWidgetRules.cardButtons(false, denyOk = false).map { it.label })
+    }
+
+    /** A JVM test cannot draw Glance, so this is the half that is checkable
+     *  about the composition itself: the words come from the rule above, and
+     *  the tap comes from the button's own [ApprovalWidgetRules.Tap]. A label
+     *  literal in the drawing code is exactly how the 2026-10-28 bug happened. */
+    @Test
+    fun `the card's buttons are the rule's, not literals in the drawing code`() {
+        val widget = moduleFile("src/main/java/com/jarvis/client/widget/ApprovalWidget.kt").readText()
+        assertTrue(widget.contains("ApprovalWidgetRules.cardButtons("))
+        // Code lines only: the comments explain the old bug and may name it.
+        val code = widget.lines().filterNot {
+            val line = it.trim()
+            line.startsWith("//") || line.startsWith("*") || line.startsWith("/*")
+        }.joinToString("\n")
+        assertFalse("a label literal is how the label and the tap drifted apart", code.contains("label = \"Deny\""))
+        assertFalse("a label literal is how the label and the tap drifted apart", code.contains("label = \"Review\""))
+        assertTrue(code.contains("button.tap == ApprovalWidgetRules.Tap.DENY_NOW"))
+    }
+
     // ------------------------------------------------- the real payload ----
 
     @Test
     fun `a real pending row still decodes, and still reaches the card`() {
-        // The same fixture PendingRowsContractTest uses, generated from the
-        // real backend `notice_for` - not typed to suit the client.
-        val text = requireNotNull(javaClass.classLoader?.getResource("contract/pending-rows.json")) {
-            "contract/pending-rows.json is missing - run backend/test_approval_contract.py --write"
-        }.readText()
-        val fixture = JarvisJson.parseToJsonElement(text) as JsonObject
-        val nowMs = (fixture["now"]!!.jsonPrimitive.content.toDouble() * 1000).toLong()
-        val read = decodePendingRows((fixture["rows"] as JsonArray).toList(), nowMs)
-
-        assertNotNull(read.items.firstOrNull())
-        val first = read.items.first()
-        assertEquals(Approval.CARD, WidgetStates.approval(true, true, true, false, read.items.size))
+        val items = pendingRows()
+        assertNotNull(items.firstOrNull())
+        val first = items.first()
+        assertEquals(Approval.CARD, WidgetStates.approval(true, true, true, false, items.size))
         // What the widget's headline is built from, under App lock and without.
         assertEquals(ApprovalWidgetRules.HIDDEN_TITLE, ApprovalWidgetRules.cardTitle(true, first.notice?.title, first.title))
         assertTrue(ApprovalWidgetRules.cardTitle(false, first.notice?.title, first.title).isNotBlank())
         // And with no queue at all, the same live link says "Nothing waiting".
         assertEquals(Approval.EMPTY, WidgetStates.approval(true, true, true, false, 0))
+    }
+
+    /**
+     * The real `/api/pending` rows, from the same fixture
+     * `PendingRowsContractTest` uses - generated from the real backend
+     * `notice_for`, not typed to suit the client.
+     */
+    private fun pendingRows(): List<PendingItem> {
+        val text = requireNotNull(javaClass.classLoader?.getResource("contract/pending-rows.json")) {
+            "contract/pending-rows.json is missing - run backend/test_approval_contract.py --write"
+        }.readText()
+        val fixture = JarvisJson.parseToJsonElement(text) as JsonObject
+        val nowMs = (fixture["now"]!!.jsonPrimitive.content.toDouble() * 1000).toLong()
+        return decodePendingRows((fixture["rows"] as JsonArray).toList(), nowMs).items
     }
 
     // ------------------------------------------------- the layout itself ----

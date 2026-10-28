@@ -59,6 +59,18 @@ import com.jarvis.client.net.PendingItem
  * where the real card and its biometric gate (`BiometricGate.kt`) decide
  * whether the tap actually counts.
  *
+ * **Which buttons exist is not decided here.** [ApprovalWidgetRules.cardButtons]
+ * holds that shape as pure code the JVM tests can execute, because a button's
+ * words are a promise about what the tap does and this file can only draw them.
+ * Unlocked, it is Deny - the one decision this widget may make directly - and
+ * Review. While App lock or "Hide memory lists" is on, it is ONE button,
+ * "Unlock to review": that is the only thing a tap can do there, with the
+ * card's own words hidden and the decision needing the unlock. It used to draw
+ * a button saying "Deny" wired to the app instead, and the owner field-tested
+ * exactly that on 2026-10-28 - a label promising a refusal the tap could not
+ * perform. The locked phone still never denies an unseen card (the owner kept
+ * that rule the same day); the card just stops claiming otherwise.
+ *
  * Holds no state of its own, on purpose - the same reasoning
  * `WidgetDataRepository`'s own doc comment gives in the retired app: a
  * second source of truth drifts from [JarvisRuntime] the moment an approval
@@ -245,25 +257,36 @@ class ApprovalWidget : GlanceAppWidget() {
 
             // Deny on the left, the way to Approve on the right: the same order
             // as every card on the phone and the desktop (CardWords.BUTTONS).
+            //
+            // Which buttons exist - and so whether there is a Deny at all - is
+            // ApprovalWidgetRules.cardButtons' decision, not this Row's. Under
+            // App lock it is ONE button that says what its tap really does
+            // (2026-10-28: the owner tapped a "Deny" that only opened the app).
             Row(modifier = GlanceModifier.fillMaxWidth()) {
-                // Deny alone is a direct widget action - refusing is always
-                // the safe direction, the same rule the lock-screen
-                // notification's own Deny action already runs on.
-                //
-                // And on the same CONDITION as that notification, which this
-                // widget was ignoring: `ApprovalNotifier` offers its Deny
-                // action only `if (item.notice?.denyOk != false)`, so an item
-                // the desktop marked `deny_ok: false` had no one-tap Deny in
-                // the drawer and a one-tap Deny on the home screen. Two
-                // surfaces disagreeing about whether an item is safe to
-                // refuse unread is the disagreement mattering most.
+                // Deny is a direct widget action only when the rule says so.
+                // On the same CONDITION as the lock-screen notification, which
+                // this widget used to ignore: `ApprovalNotifier` offers its
+                // Deny action only `if (item.notice?.denyOk != false)`, so an
+                // item the desktop marked `deny_ok: false` had no one-tap Deny
+                // in the drawer and a one-tap Deny on the home screen. Two
+                // surfaces disagreeing about whether an item is safe to refuse
+                // unread is the disagreement mattering most.
                 val denyOk = item.notice?.denyOk != false
-                if (ApprovalWidgetRules.showsDeny(hidden, denyOk)) {
+                ApprovalWidgetRules.cardButtons(hidden, denyOk).forEachIndexed { index, button ->
+                    if (index > 0) Spacer(GlanceModifier.width(8.dp))
                     PillButton(
-                        label = "Deny",
-                        tint = Palette.StatusBad,
-                        // Under App lock Deny opens the locked app instead of acting.
-                        onClick = if (ApprovalWidgetRules.denyActsDirectly(hidden, denyOk)) {
+                        label = button.label,
+                        // Refusing is always the safe direction, so it stays red;
+                        // every other button goes the way forward, into the app.
+                        tint = if (button.tap == ApprovalWidgetRules.Tap.DENY_NOW) {
+                            Palette.StatusBad
+                        } else {
+                            Palette.StatusOk
+                        },
+                        // The one callback this widget owns, carried the item's
+                        // id. Everything else opens the app, where the real card
+                        // and its biometric gate (BiometricGate.kt) decide.
+                        onClick = if (button.tap == ApprovalWidgetRules.Tap.DENY_NOW) {
                             actionRunCallback<DenyActionCallback>(
                                 actionParametersOf(DenyActionCallback.PARAM_ID to item.id),
                             )
@@ -272,16 +295,7 @@ class ApprovalWidget : GlanceAppWidget() {
                         },
                         modifier = GlanceModifier.defaultWeight(),
                     )
-                    Spacer(GlanceModifier.width(8.dp))
                 }
-                // Approve opens the app - never a one-tap widget action. See
-                // the class doc for why this is not the retired app's shape.
-                PillButton(
-                    label = "Review",
-                    tint = Palette.StatusOk,
-                    onClick = actionStartActivity<MainActivity>(),
-                    modifier = GlanceModifier.defaultWeight(),
-                )
             }
         }
     }

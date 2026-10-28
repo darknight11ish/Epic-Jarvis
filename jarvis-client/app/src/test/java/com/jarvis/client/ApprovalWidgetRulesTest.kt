@@ -24,10 +24,31 @@ class ApprovalWidgetRulesTest {
         assertTrue(ApprovalWidgetRules.denyActsDirectly(hidden = false, denyOk = true))
         assertFalse(ApprovalWidgetRules.denyActsDirectly(hidden = true, denyOk = true))
         assertFalse(ApprovalWidgetRules.denyActsDirectly(hidden = false, denyOk = false))
-        // Hidden: Deny is still offered, but it only opens the locked app.
-        assertTrue(ApprovalWidgetRules.showsDeny(hidden = true, denyOk = false))
-        assertTrue(ApprovalWidgetRules.showsDeny(hidden = false, denyOk = true))
-        assertFalse(ApprovalWidgetRules.showsDeny(hidden = false, denyOk = false))
+    }
+
+    /** The owner, 2026-10-28: a button labelled "Deny" that could only open the
+     *  app. The label must not promise a decision the tap cannot make, so a
+     *  hidden card draws no Deny at all - one button that says what it does. */
+    @Test
+    fun `a hidden card draws no Deny, only the button that opens the app`() {
+        for (denyOk in listOf(false, true)) {
+            val buttons = ApprovalWidgetRules.cardButtons(hidden = true, denyOk = denyOk)
+            assertEquals("hidden, denyOk=$denyOk: $buttons", 1, buttons.size)
+            assertEquals(ApprovalWidgetRules.UNLOCK_LABEL, buttons.single().label)
+            assertEquals(ApprovalWidgetRules.Tap.OPEN_APP, buttons.single().tap)
+            assertFalse(buttons.any { it.label == "Deny" })
+        }
+        // Unhidden, the pair is exactly the one every other card draws.
+        assertEquals(
+            listOf("Deny", "Review"),
+            ApprovalWidgetRules.cardButtons(hidden = false, denyOk = true).map { it.label },
+        )
+        // And an item the PC marked unsafe to refuse unread has no Deny either -
+        // the same condition the lock-screen notification already runs on.
+        assertEquals(
+            listOf("Review"),
+            ApprovalWidgetRules.cardButtons(hidden = false, denyOk = false).map { it.label },
+        )
     }
 
     @Test

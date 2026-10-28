@@ -136,8 +136,18 @@ class CardWordsContractTest {
         assertTrue(card.indexOf("Refuse(CardWords.BUTTONS[0]") in 0 until card.indexOf("Affirm("))
         assertTrue(card.indexOf("CardWords.BUTTONS[1]") > card.indexOf("Refuse(CardWords.BUTTONS[0]"))
         val widget = source("widget/ApprovalWidget.kt")
+        // Since 2026-10-28 the widget's words come from
+        // ApprovalWidgetRules.cardButtons, not from literals in the Row - that
+        // is the fix for the owner's locked-phone "Deny" that only opened the
+        // app. What is still checkable here is the drawing: the Row renders
+        // that list in order, so the list's order IS the left-to-right order.
+        // The order itself is executed in WidgetStatesTest.
         val row = widget.substring(widget.indexOf("Row(modifier = GlanceModifier.fillMaxWidth())"))
-        assertTrue(row.indexOf("label = \"Deny\"") in 0 until row.indexOf("label = \"Review\""))
+        assertTrue(
+            "the card's Row must draw ApprovalWidgetRules.cardButtons in order",
+            row.contains("ApprovalWidgetRules.cardButtons(hidden, denyOk).forEachIndexed"),
+        )
+        assertTrue(row.indexOf("PillButton(") < row.indexOf("label = button.label"))
     }
 
     @Test
