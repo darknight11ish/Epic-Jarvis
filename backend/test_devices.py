@@ -888,7 +888,23 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # no gate list entry, no tier row, no _RISK row, no
                                 # _TOOL_ACTIONS line, and no line devices.patch wrote. The
                                 # later_rewriting() half below proves the other half.
-                                "f01-manual-lane-gate.patch"}
+                                "f01-manual-lane-gate.patch",
+                                # learning-extract-reason.patch (2026-10-28, DEF-017) is appended after
+                                # it, immediately before plugin-loader.patch: ONE file, jarvis_extract.py
+                                # (its `_local_llm` block), so it touches no gate list, no tier row, no
+                                # _RISK row, no _TOOL_ACTIONS line and rewrites nothing this patch wrote.
+                                "learning-extract-reason.patch",
+                                # cloud-honesty.patch (2026-10-28, AI-safety
+                                # audit H1/M1) is the last patch ADDED after it,
+                                # immediately before cloud-escalate.patch: three
+                                # hunks, every one in jarvis_hud.py (the route
+                                # header's crisis flag, the crisis-turn rebound to
+                                # this PC's model, and the cloud relay's postscript
+                                # lines). It has no hunk in jarvis_gate.py or
+                                # jarvis_devices.py, so it rewrites nothing this
+                                # patch wrote, and the later_rewriting() half below
+                                # proves it.
+                                "cloud-honesty.patch"}
           and not _stack.later_rewriting("devices.patch", DEVICES_TIER_LINE)
           and not _stack.later_rewriting("devices.patch", DEVICES_RISK_LINE), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

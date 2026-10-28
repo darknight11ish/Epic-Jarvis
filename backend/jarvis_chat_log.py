@@ -83,7 +83,10 @@ first used after the backend starts, and then at most once a day. Deleting
 removes the rows; SQLite would otherwise leave the deleted bytes in the
 file's free pages until they are reused, so `secure_delete` is on (freed
 content is overwritten with zeros) and VACUUM runs after a delete, at most
-once an hour.
+once an hour. A conversation's own words are also scrubbed out of the
+receipts store, whichever way it went: a delete by hand, a retention sweep,
+or a Forget-a-time-frame whose ten-minute Undo expired (data-integrity audit
+F2, 2026-10-28 - the sweep and the expired Undo used to skip that scrub).
 
 WHAT KIND OF CONVERSATION (the chat audit, 2026-09-28; JARVIS-API section
 18.2): each conversation has a plain `kind` - chat, live (Jarvis Live),
@@ -199,20 +202,36 @@ CRISIS_TITLE = "A difficult moment"
 DEVICES = ("desktop", "hud", "phone")
 KEEP_DAYS = (0, 30, 90, 365)
 
-#: How many of a conversation's own user turns are handed to the receipts
-#: store's purge on delete (audit DATA D5): enough for the ordinary case, and
-#: bounded so a very long history cannot make one delete slow.
-RECEIPTS_WORDS = 200
+#: Every one of a conversation's own user turns is handed to the receipts
+#: store's purge, on a delete, on a retention sweep and when a Forget-a-time-
+#: frame Undo expires (audit DATA D5, 2026-10-18; the old 200-turn cap was
+#: removed by the data-integrity audit F2, 2026-10-28 - a 500-turn chat's later
+#: words were never scrubbed, even by a plain delete). The cost is bounded on
+#: the receipts side instead: one pass over the table per 200 words
+#: (`jarvis_receipts.purge_many`).
 
 
 def _purge_receipts(words) -> None:
-    """Scrub conversation words out of receipts, best effort, never raises."""
+    """Scrub conversation words out of receipts, best effort, never raises.
+
+    ONE pass for the whole list when the receipts module has `purge_many`
+    (2026-10-28): a retention sweep can hand this hundreds of words, and the
+    old per-word loop re-read every receipt for each one. The per-word loop
+    stays as the fallback for a receipts module older than that function."""
+    words = [str(w) for w in (words or []) if str(w or "").strip()]
     if not words:
         return
     try:
         import jarvis_receipts
     except Exception:
         return
+    many = getattr(jarvis_receipts, "purge_many", None)
+    if callable(many):
+        try:
+            many(words)
+            return
+        except Exception:
+            pass
     for word in words:
         try:
             jarvis_receipts.purge_words(word)
@@ -240,6 +259,10 @@ _CID = re.compile(r"[A-Za-z0-9_-]{8,64}")   # used with fullmatch: no trailing n
 _SWEEP_EVERY = 86400
 _VACUUM_EVERY = 3600
 _CHECK = b"jarvis chat history"
+#: The associated data of the `meta` row `k='check'` - the proof that a key
+#: opens this history. One statement of it, so `_cipher_locked` and
+#: `verify_key_opens_db` cannot drift.
+_CHECK_AAD = b"check"
 
 CARD_TEXT = "\n".join([
     "Turn chat history back on?",
@@ -257,6 +280,22 @@ OFF_TEXT = ("Chat history is off. Nothing new is kept. What is already kept "
 class KeyUnavailable(Exception):
     """The key could not be had. The message is plain words for the owner and
     never holds the key."""
+
+
+class KeepDaysFailed(Exception):
+    """A change of the retention window that did not fully happen.
+
+    `deleted` is how many conversations the sweep removed before it failed (0
+    when the sweep itself failed - its deletes are one transaction, so a
+    failure rolls them back), and `saved` says whether the new window reached
+    the settings file. The message is plain words for the owner, and it never
+    says "could not save the setting" about a window that WAS saved (data-
+    integrity audit F5, 2026-10-28)."""
+
+    def __init__(self, message: str, *, deleted: int = 0, saved: bool = False):
+        super().__init__(message)
+        self.deleted = int(deleted)
+        self.saved = bool(saved)
 
 
 # ------------------------------------------------------------------ the key
@@ -292,6 +331,14 @@ class CredentialKey:
                                  f"({type(exc).__name__})") from None
 
     def __call__(self) -> bytes:
+        """The key, MADE when Credential Manager holds no entry.
+
+        This is the raw store-level mint, kept because a provider is "any
+        callable that returns the key". Production code does not call it
+        directly: `get_or_create_key()` is the guarded API, and it refuses to
+        make one unless the chat history at that path is brand-new and empty
+        (data-integrity audit F1, 2026-10-28). A caller that must only report
+        what exists asks `get_existing_key()`."""
         store = self._store()
         try:
             text = store.read()
@@ -315,6 +362,169 @@ class CredentialKey:
             raise KeyUnavailable("the chat history key in Credential Manager is not "
                                  "a 32-byte key")
         return key
+
+    def get_existing(self) -> Optional[bytes]:
+        """The key ALREADY on this PC, or None when there is none - and this
+        NEVER makes one.
+
+        `__call__` above mints a fresh key when Credential Manager holds no
+        entry, which is right for a brand-new history and wrong for anything
+        that only reports what exists. `jarvis_backup.py` used to call it, so a
+        backup taken on a PC whose key was gone made a NEW key, embedded it, and
+        said the archive carried the chat history: an archive nothing could
+        open. The data-integrity audit (F1, 2026-10-28) is why this exists; a
+        backup must never be the thing that makes a key.
+
+        None for "no entry". Raises KeyUnavailable for "Credential Manager
+        could not be used", so the caller can tell the two apart."""
+        store = self._store()
+        try:
+            text = store.read()
+            if text is None:
+                return None
+            key = base64.b64decode(text, validate=True)
+        except Exception as exc:
+            # Same rule as __call__: StoreError's Windows number is kept, and
+            # anything else is named by type, never by message, so no key text
+            # can reach a log.
+            why = str(exc) if type(exc).__name__ == "StoreError" else type(exc).__name__
+            raise KeyUnavailable(f"Credential Manager could not be used for the "
+                                 f"chat history key ({why})") from None
+        if len(key) != 32:
+            raise KeyUnavailable("the chat history key in Credential Manager is not "
+                                 "a 32-byte key")
+        return key
+
+
+def _history_is_new_or_empty(db_path) -> bool:
+    """True only for a chat history that holds nothing yet.
+
+    "Brand-new" means the file is not there, and "empty" means it has no row in
+    any of its three tables - no `check` row (never sealed), no conversation and
+    no turn. Anything this PC cannot read is NOT new: the answer is False, so
+    the caller refuses rather than making a key over data it could not see.
+
+    This is what `get_or_create_key()` guards the mint with (data-integrity
+    audit F1, 2026-10-28). It opens the file read-only and closes it at once."""
+    path = Path(db_path)
+    if not path.is_file():
+        return True
+    try:
+        if path.stat().st_size == 0:
+            return True
+        conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            for table in ("meta", "conversations", "turns"):
+                try:
+                    row = conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
+                except sqlite3.Error:
+                    continue        # no such table: nothing kept in it
+                if row is not None:
+                    return False
+        finally:
+            conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def get_existing_key(target: str = KEY_TARGET, store_factory: Optional[Callable] = None
+                     ) -> Optional[bytes]:
+    """The chat-history key already on this PC (32 bytes), or None.
+
+    READ-ONLY: it never makes a key, and never raises - a missing entry, no
+    Credential Manager and a damaged entry all answer None. This is the half a
+    backup and a restore ask for, because neither may ever be the thing that
+    creates a key for history it did not make (data-integrity audit F1,
+    2026-10-28). The other half is `verify_key_opens_db` below, which PROVES a
+    key opens a particular history."""
+    try:
+        return CredentialKey(target, store_factory).get_existing()
+    except Exception:
+        return None
+
+
+def get_or_create_key(db_path, target: str = KEY_TARGET,
+                      store_factory: Optional[Callable] = None) -> bytes:
+    """The chat-history key, MAKING one only when `db_path` holds no history.
+
+    The rule the data-integrity audit's F1 asks for, in one place: a key may be
+    minted while a history is being started, and never over a history that
+    already exists. An existing history whose key is gone is a history that
+    cannot be read; making a fresh key would silently replace the only thing
+    that could ever open it, so this raises `KeyUnavailable` and writes
+    nothing.
+
+    `db_path` is required on purpose: there is no call that mints without
+    naming the history it is for."""
+    if not _history_is_new_or_empty(db_path):
+        raise KeyUnavailable(
+            "there is no chat history key on this PC, and the chat history already "
+            "kept here cannot be opened without it - so nothing was made and nothing "
+            "is written. Keep the chat-history key from the PC that made this history, "
+            f"or delete {db_path} to start an empty one.")
+    return CredentialKey(target, store_factory)()
+
+
+def verify_key_opens_db(db_path, key_bytes) -> bool:
+    """True only when `key` really opens the chat history at `db_path`.
+
+    The proof is the one this module already keeps: the `meta` row `k='check'`,
+    sealed with the key under the AAD `b"check"`. It is read and nothing is
+    created: False for a missing file, a missing row, a damaged file, a key of
+    the wrong length or one that does not decrypt. Never raises.
+
+    READ-ONLY FIRST: `mode=ro` with the path as a URI (percent-encoded, which is
+    what SQLite's URI form wants - the folder can have a space in it), so not
+    even a `-wal` file is made beside a database nobody is using. A LIVE
+    database another connection has open in WAL mode cannot always be opened
+    that way (SQLite needs the `-shm` file), so that one failure falls back to a
+    normal connection with `PRAGMA query_only = 1` - still a SELECT of one row,
+    and a connection the caller closes at once."""
+    if not isinstance(key_bytes, (bytes, bytearray)) or len(key_bytes) != 32:
+        return False
+    path = Path(db_path)
+    if not path.is_file() or AESGCM is None:
+        return False
+    row = None
+    for open_it in (lambda: sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True),
+                    lambda: sqlite3.connect(str(path), timeout=5.0)):
+        conn = None
+        try:
+            conn = open_it()
+            conn.execute("PRAGMA query_only = 1")
+            row = conn.execute("SELECT v FROM meta WHERE k='check'").fetchone()
+            break
+        except Exception:
+            row = None
+            continue
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+    if row is None or row[0] is None:
+        return False
+    try:
+        return ChatLog._open(AESGCM(bytes(key_bytes)), row[0], _CHECK_AAD) == _CHECK
+    except Exception:
+        return False
+
+
+def _history_key_provider(db_path) -> Callable[[], bytes]:
+    """The production key provider for one chat history: never mints over data.
+
+    `get_existing_key()` first; a key is made only when the history at
+    `db_path` is brand-new and empty (`get_or_create_key`). A history whose key
+    is gone therefore fails closed with plain words instead of being given a
+    key that opens nothing (data-integrity audit F1, 2026-10-28)."""
+    def provide() -> bytes:
+        existing = get_existing_key()
+        if existing is not None:
+            return existing
+        return get_or_create_key(db_path)
+    return provide
 
 
 def _config_dir() -> Path:
@@ -1100,10 +1310,10 @@ class ChatLog:
             if row is None:
                 with c:
                     c.execute("INSERT INTO meta (k, v) VALUES ('check', ?)",
-                              (self._seal(aead, _CHECK, b"check"),))
+                              (self._seal(aead, _CHECK, _CHECK_AAD),))
             else:
                 try:
-                    ok = self._open(aead, row[0], b"check") == _CHECK
+                    ok = self._open(aead, row[0], _CHECK_AAD) == _CHECK
                 except Exception:
                     ok = False
                 if not ok:
@@ -1179,7 +1389,7 @@ class ChatLog:
             self._hush_floor.pop(cid, None)
             self._money.pop(cid, None)
 
-    def sweep(self) -> int:
+    def sweep(self, keep_days=None) -> int:
         """Delete conversations whose last turn is older than keep_days.
         Returns how many.
 
@@ -1187,19 +1397,33 @@ class ChatLog:
         2026-09-28: "auto-delete ... asks before removing a support chat"):
         it is the owner's own record of what a company agreed to, so it goes
         only when the owner deletes it in History, which asks first. How many
-        were kept back is support_past_keep()."""
-        keep = self.settings()["keep_days"]
+        were kept back is support_past_keep().
+
+        `keep_days` runs the sweep for a window that is not saved yet.
+        `set_keep_days` uses it to sweep BEFORE the new window is written (the
+        data-integrity audit F5, 2026-10-28).
+
+        The words of every conversation it deletes are scrubbed out of the
+        receipts store, exactly as `delete()` does (the same audit, F2): a
+        retention expiry is a delete the owner never sees happen, so it must
+        not leave what was said behind in another store. The rows go in one
+        transaction and the purge runs after it commits."""
+        keep = self.settings()["keep_days"] if keep_days is None else int(keep_days)
         if not keep or not self.db_path.exists():
             return 0
         cutoff = self._clock() - keep * 86400
+        words = []
         with self._lock, closing(self._connect()) as c:
             with c:
                 ids = [r[0] for r in c.execute(
                     "SELECT id FROM conversations WHERE updated < ?"
                     " AND COALESCE(kind, 'chat') != 'support'", (cutoff,))]
+                for cid in ids:
+                    words.extend(self._words_for_receipts(c, cid))
                 self._drop(c, ids)
         if ids:
             self._deleted()
+            _purge_receipts(words)
         return len(ids)
 
     def support_past_keep(self) -> int:
@@ -2872,20 +3096,25 @@ class ChatLog:
         return found
 
     def _words_for_receipts(self, c, cid) -> list:
-        """The user's own words of `cid`, for the receipts purge. At most
-        RECEIPTS_WORDS turns; [] when the key is unavailable (nothing can be
-        read, and the erase still happens)."""
+        """EVERY one of the user's own words in `cid`, for the receipts purge.
+        [] when the key is unavailable (nothing can be read, and the delete
+        still happens).
+
+        The 200-turn limit that used to be here is gone (data-integrity audit
+        F2, 2026-10-28): a 500-turn conversation's later words were never
+        scrubbed, so a receipt could keep what a delete was supposed to forget.
+        The key is asked for with `_cipher()`, not `_recording()`, so a delete
+        made while the chat-history SWITCH is off still scrubs its receipts -
+        the rows are there either way."""
         try:
-            aead, _why = self._recording()
+            aead = self._cipher()
         except Exception:
-            return []
-        if aead is None:
             return []
         out = []
         try:
             rows = c.execute(
                 "SELECT idx, text FROM turns WHERE conversation_id=? AND role='user'"
-                " ORDER BY idx LIMIT ?", (cid, RECEIPTS_WORDS)).fetchall()
+                " ORDER BY idx", (cid,)).fetchall()
         except Exception:
             return []
         # _connect() here does not set a row factory (this module reads plain
@@ -2901,8 +3130,38 @@ class ChatLog:
         return out
 
     def set_keep_days(self, days) -> int:
-        self._save_settings(keep_days=days)
-        return self.sweep()
+        """Set the retention window, sweeping FIRST and saving after.
+
+        THE ORDER IS THE FIX (data-integrity audit F5, 2026-10-28). It used to
+        save the window and THEN sweep, so a sweep that raised left the new
+        window saved while the caller answered "could not save the setting" -
+        false, and it hid the fact that the window had changed. Now:
+
+          * the sweep runs for the NEW window before anything is saved, so a
+            sweep that fails changes nothing at all and says so;
+          * the window is saved only after the sweep committed, so "saved" is
+            never claimed for a window whose deletion did not happen;
+          * a save that fails after a successful sweep says exactly that, with
+            the number already deleted.
+
+        Raises `KeepDaysFailed` with the plain words for either half."""
+        try:
+            deleted = self.sweep(keep_days=days)
+        except Exception as exc:
+            raise KeepDaysFailed(
+                "Nothing was changed: the conversations outside the new window could not "
+                f"be deleted ({type(exc).__name__}), so the new window was NOT saved.",
+                deleted=0) from exc
+        try:
+            self._save_settings(keep_days=days)
+        except Exception as exc:
+            raise KeepDaysFailed(
+                "The new window could not be saved "
+                f"({type(exc).__name__}), but {deleted} "
+                f"conversation{'' if deleted == 1 else 's'} "
+                f"{'was' if deleted == 1 else 'were'} already deleted for it.",
+                deleted=deleted) from exc
+        return deleted
 
     # -- "Forget a time frame" (jarvis_forget_range.py, 2026-09-28) --------
     #
@@ -3026,6 +3285,49 @@ class ChatLog:
             self._deleted()
         return held
 
+    def purge_held_receipts(self, held) -> int:
+        """Scrub the words of conversations HELD for the Forget-a-time-frame
+        Undo, once that Undo has expired (data-integrity audit F2, 2026-10-28).
+
+        `held` is exactly what `take_out()` returned: the rows, still sealed as
+        they were on disk. This is NOT done at take_out() time because the
+        receipts scrub cannot be undone, and the ten minutes are a real Undo -
+        so `jarvis_forget_range` calls this the moment the window closes.
+        Never raises (the chats are already gone; a receipts store that cannot
+        be reached must not turn that into an error) and returns how many
+        words were handed to the purge.
+
+        KNOWN LIMIT, said rather than hidden: the Undo lives in this process's
+        memory, so a backend restart inside the ten minutes drops the held rows
+        and this scrub never runs (finding F6 of the same audit, not fixed
+        here). The chats are gone either way; only their words in old receipts
+        would remain."""
+        words = []
+        try:
+            aead = self._cipher()
+        except Exception:
+            return 0
+        for cid, h in (held or {}).items():
+            if not isinstance(h, dict):
+                continue
+            for t in h.get("turns") or []:
+                try:
+                    row_cid, idx, _at, role, *_rest, blob = t
+                except (TypeError, ValueError):
+                    continue
+                if role != "user" or not isinstance(blob, (bytes, bytearray)):
+                    continue
+                try:
+                    text = self._open(aead, blob, self._aad(row_cid or cid, idx)).decode("utf-8")
+                except Exception:
+                    continue
+                text = " ".join(text.split())
+                if text:
+                    words.append(text)
+        if words:
+            _purge_receipts(words)
+        return len(words)
+
     def put_back(self, held: dict) -> dict:
         """Undo for take_out(): {"restored": [cid], "failed": {cid: why}}.
 
@@ -3131,7 +3433,7 @@ def _log() -> ChatLog:
         if _DEFAULT is None:
             d = _config_dir()
             _DEFAULT = ChatLog(d / "chat-history.db", d / "chat-history.json",
-                               CredentialKey())
+                               _history_key_provider(d / "chat-history.db"))
         return _DEFAULT
 
 
@@ -3249,6 +3551,13 @@ def take_out(cids) -> dict:
 def put_back(held: dict) -> dict:
     """The Undo of take_out(). See ChatLog.put_back."""
     return _log().put_back(held)
+
+
+def purge_held_receipts(held: dict) -> int:
+    """The receipts scrub for a Forget-a-time-frame whose Undo has expired.
+    See ChatLog.purge_held_receipts: the held rows are exactly what take_out()
+    returned."""
+    return _log().purge_held_receipts(held)
 
 
 def tags() -> dict:
@@ -3406,6 +3715,17 @@ def request_settings(body, *, gate: Optional[Callable] = None,
             return 400, {"error": "keep_days must be 0 (keep until deleted), 30, 90 or 365"}
         try:
             deleted = log.set_keep_days(value)
+        except KeepDaysFailed as exc:
+            # The order changed (data-integrity audit F5, 2026-10-28): the
+            # sweep runs BEFORE the save, so this answer never claims a window
+            # that was changed was not saved, and never calls a failed
+            # half-change "could not save the setting". `exc` carries the
+            # plain words for whichever half failed and how many chats were
+            # already deleted.
+            _audit("history.keep_days_failed", {"keep_days": value,
+                                                "deleted": exc.deleted,
+                                                "saved": exc.saved})
+            return 500, {"ok": False, "error": str(exc), "deleted": exc.deleted}
         except Exception as exc:
             return 500, {"ok": False, "error": f"could not save the setting ({type(exc).__name__})"}
         _audit("history.keep_days", {"keep_days": value, "deleted": deleted})

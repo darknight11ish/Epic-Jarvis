@@ -2236,8 +2236,12 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   focus and PC play/pause tiles show nothing private and, with App lock on
   and the phone locked, ask for the phone's own unlock first. No tile can
   approve or deny. The "tap to turn \"Hey Jarvis\" back on" notice after a
-  restart (§81.1) opens the app, and listening starts only after App lock. The home-screen widget only ever shows the
-  `notice` text and offers Deny only, lock or not. **The floating avatar**
+  restart (§81.1) opens the app, and listening starts only after App lock. The
+  home-screen approval widget shows only the `notice` text, and its Deny is a
+  real denial lock or not (owner, 2026-10-28): the one card that opens the app
+  instead is one the PC marked `deny_ok: false`, and that card draws a single
+  app-opening action rather than a "Deny" that does not deny.
+  **The floating avatar**
   ("Floating Jarvis", §56) is not covered either, for the same reason as the
   desktop's floating face: App lock does not change what it shows
   (`floatingAvatarShowsContent`, `data/FloatingAvatar.kt` - matched to the
