@@ -312,6 +312,11 @@ export function readSchedule(answer) {
     // GET /api/today/cockpit, passed on as it came so today.js reads it.
     // An older PC sends none: the page keeps its Today cards as they were.
     cockpit: available && a.cockpit && typeof a.cockpit === "object" ? a.cockpit : null,
+    // Did the board's own read FAIL? Rust's `cockpit_error` (silent-failure
+    // audit 2026-10-27, row 5). Only a real failure sets it: a PC that has no
+    // board route at all sends no marker, so the page can tell "nothing is
+    // due" from "I could not ask" instead of drawing both the same way.
+    cockpitError: available && a.cockpit_error === true,
   };
 }
 

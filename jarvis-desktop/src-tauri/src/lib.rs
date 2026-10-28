@@ -387,7 +387,12 @@ impl ChatState {
 /// Emits an event to the quickbar window only.
 pub fn emit_quickbar<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
     if let Err(err) = app.emit_to(QUICKBAR_LABEL, event, payload) {
-        eprintln!("[jarvis] unable to emit `{event}` to the quickbar: {err}");
+        // Through the log FILE, not `eprintln!`: a release build has no
+        // console, so an eprintln! here left no trace at all (silent-failure
+        // audit 2026-10-27, row 10).
+        logfile::log(&format!(
+            "[jarvis] unable to emit `{event}` to the quickbar: {err}"
+        ));
     }
 }
 
@@ -402,7 +407,8 @@ pub fn emit_quickbar<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, 
 /// (bug audit 2026-09-26, #6; `tests/security.mjs`).
 pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
     if let Err(err) = app.emit(event, payload) {
-        eprintln!("[jarvis] unable to broadcast `{event}`: {err}");
+        // The log file is the only place a release build can say this.
+        logfile::log(&format!("[jarvis] unable to broadcast `{event}`: {err}"));
     }
 }
 
@@ -435,7 +441,15 @@ pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload:
     let script =
         format!("if (window.__jarvisFeed) {{ window.__jarvisFeed({channel}, {payload}); }}");
     if let Err(err) = hud.eval(&script) {
-        eprintln!("[jarvis] unable to push `{channel}` to the HUD: {err}");
+        // A dropped push is the HUD's only path to the shell's event stream: it
+        // keeps whatever it last had, with no indicator and no retry. The
+        // minimum is that the drop is not silent - and `eprintln!` IS silence
+        // in a release build, which has no console (logfile.rs's own doc). The
+        // page-side gap detector the audit also asks for (T8) is not in this
+        // change; see the PR's limits.
+        logfile::log(&format!(
+            "[jarvis] unable to push `{channel}` to the HUD: {err}"
+        ));
     }
 }
 

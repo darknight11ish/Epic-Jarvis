@@ -302,10 +302,12 @@ import {
   BREAK_COPIED,
   BREAK_LABEL,
   briefingCards,
+  BOARD_UNREADABLE as TODAY_BOARD_UNREADABLE,
   cardMeta as todayCardMeta,
   cardsOf,
   cardTitle as todayCardTitle,
   cockpitOf as todayCockpit,
+  cockpitUnreadable as todayBoardUnreadable,
   DELETE_LABEL as TODAY_DELETE_LABEL,
   DO_THIS_COPIED,
   DO_THIS_COPY_FAILED,
@@ -11442,7 +11444,17 @@ function todayProposalsButton(on) {
  *  owner's own tap, and a tap only copies a prompt for the chat box. */
 function todayBoardNodes(v) {
   const cockpit = todayCockpit(v);
-  if (!cockpit) return [];
+  if (!cockpit) {
+    // No board: either this PC has none (an older backend - nothing to say)
+    // or the read FAILED. The second must never be drawn as nothing: an
+    // unanswered "what is due" is not the answer "nothing" (silent-failure
+    // audit 2026-10-27, row 5).
+    if (!todayBoardUnreadable(v)) return [];
+    const line = el("p", "empty", TODAY_BOARD_UNREADABLE);
+    line.classList.add("failed");
+    line.append(" ", button("Retry", loadComingUp));
+    return [line];
+  }
   const out = [];
   const due = todayDueRows(cockpit);
   if (due.length) {

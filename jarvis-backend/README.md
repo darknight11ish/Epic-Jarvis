@@ -56,6 +56,8 @@ plus these six files:
         theme.css, fonts.css, and seven *.woff2 faces     from backend/static/
         lane-warning.js, hud-actions.js, hud-safety.js,   from backend/static/
         hud-edit.js, hud-presets.js,
+        invoke-budget.js (the shared invoke budget hud-presets.js
+        imports, 2026-10-28),
         galaxy-presets.js (the Galaxy's looks, 2026-10-27),
         private-speech.js,
         face-voice.js, face-moments.js, face-tuning.js,
@@ -75,12 +77,12 @@ and one file this repository DERIVES rather than copies:
     _where.py                backend/_where.py, plus a trailer that says what it is
 ```
 
-The 44 files above that are in the whitelist are the closed-world
+The 45 files above that are in the whitelist are the closed-world
 `STATIC_ASSETS` `jarvis_hud.py` serves at `GET /theme.css`, `/fonts/*`,
 `/<module>.js`, `/faces.html`, `/manifest.webmanifest`, `/sw.js` and `/icons/*`:
 without them the page loads in a browser and every file it
 then asks for is a 404, so the HUD arrives half-dressed with no theme, no
-fonts and every shell module off. The 45th, `three.min.js`, is carried but not
+fonts and every shell module off. The 46th, `three.min.js`, is carried but not
 served yet on purpose: `backend/test_hud_static.py` refuses a whitelist entry
 nothing loads, so the port that draws with three.js adds the page edit and the
 key in one change. The browser HUD's face is the newest of the served ones:

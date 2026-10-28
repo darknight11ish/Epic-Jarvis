@@ -95,7 +95,10 @@ def t_the_rule_is_the_readme_s_rule():
                      "lane-warning.js", "hud-actions.js", "hud-safety.js",
                      # ... and the Galaxy's looks (2026-10-27), which the page's
                      # look switcher loads with a dynamic import()
-                     "hud-edit.js", "hud-presets.js", "galaxy-presets.js",
+                     "hud-edit.js", "hud-presets.js",
+                     # ... and the shared invoke budget (2026-10-28), which
+                     # hud-presets.js imports
+                     "invoke-budget.js", "galaxy-presets.js",
                      "private-speech.js",
                      "face-voice.js", "face-moments.js", "face-tuning.js",
                      "animal-shared.js", "hud-layout.js", "hud-layout-store.js",

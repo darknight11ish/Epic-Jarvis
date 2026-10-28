@@ -111,23 +111,38 @@ export function withBudget(work, { ms = READ_BUDGET_MS, late = LATE_READ } = {})
   let bell = 0;
   const gone = new Promise((_, fail) => {
     bell = setTimeout(() => fail(new Error(late)), ms);
+    // A pending budget must not be the reason a node test process stays alive:
+    // `calendar` here is a real 1,250 s timer for a preset apply. In a browser
+    // `setTimeout` answers a number and there is nothing to unref, so this is
+    // a no-op there.
+    if (bell && typeof bell.unref === "function") bell.unref();
   });
   return Promise.race([work, gone]).finally(() => clearTimeout(bell));
 }
 
-/** The bridge, read at call time - the harness installs it before the page. */
-function bridge() {
-  const tauri = globalThis.__TAURI__;
-  if (!tauri || !tauri.core || !tauri.core.invoke) throw new Error("no desktop backend");
+/**
+ * The bridge, read at call time - the harness installs it before the page.
+ *
+ * `win` is the page object whose bridge to use. It is only given by a caller
+ * that HOLDS a window object rather than running inside it (the HUD's preset
+ * menu, whose roads are tested with a fake window). Left out, this realm's own
+ * `__TAURI__` is used, exactly as before.
+ */
+function bridge(win) {
+  const tauri = win ? win.__TAURI__ : globalThis.__TAURI__;
+  if (!tauri || !tauri.core || typeof tauri.core.invoke !== "function") {
+    throw new Error("no desktop backend");
+  }
   return tauri.core.invoke;
 }
 
 /**
  * Send one command with a budget. `kind` is "read" (the default) or "action";
- * it chooses the sentence, never the size - `budgetFor` owns the size.
+ * it chooses the sentence, never the size - `budgetFor` owns the size. `win`
+ * is optional and only for a caller holding a window object (see `bridge`).
  */
-export function call(command, args = {}, kind = "read") {
-  const invoke = bridge();
+export function call(command, args = {}, kind = "read", win) {
+  const invoke = bridge(win);
   return withBudget(invoke(command, args), {
     ms: budgetFor(command, kind),
     late: lateWords(kind),

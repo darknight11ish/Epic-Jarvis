@@ -173,6 +173,8 @@ BESIDE = (
      "a module the page imports; served at /hud-edit.js"),
     ("hud-presets.js", "{repo}/backend/static/hud-presets.js",
      "a module the page imports; served at /hud-presets.js"),
+    ("invoke-budget.js", "{repo}/backend/static/invoke-budget.js",
+     "a module hud-presets.js imports; served at /invoke-budget.js"),
     ("galaxy-presets.js", "{repo}/backend/static/galaxy-presets.js",
      "the module the Galaxy's look switcher imports; served at /galaxy-presets.js"),
     ("private-speech.js", "{repo}/backend/static/private-speech.js",
