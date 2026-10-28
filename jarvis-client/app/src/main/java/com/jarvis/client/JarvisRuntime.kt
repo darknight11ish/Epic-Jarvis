@@ -9274,6 +9274,42 @@ object JarvisRuntime {
         }
 
     /**
+     * Pin ONE chat to the top of History, or take its pin off (`POST
+     * /api/history/pin`, the shared contract of 2026-10-27). Metadata only:
+     * no approval card, and only the chat's id and the wanted state are sent -
+     * none of its words. Held on a stale link like every other write (rule 4);
+     * refused while the lists are hidden, because a pin is a word about the
+     * chat's place. The caller moves the row ONLY when [ChatLog.Pin.ok] is
+     * true - a refusal says so and leaves it where it was.
+     */
+    suspend fun pinChat(chatId: String, pinned: Boolean): com.jarvis.client.net.ChatLog.Pin {
+        actionBlocker()?.let { return com.jarvis.client.net.ChatLog.Pin(false, said = it) }
+        if (privateListsHidden) {
+            return com.jarvis.client.net.ChatLog.Pin(false, said = com.jarvis.client.net.ChatTags.FILED_HIDDEN)
+        }
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId)) {
+            return com.jarvis.client.net.ChatLog.Pin(false, said = com.jarvis.client.net.ChatLog.PIN_GONE)
+        }
+        return when (val r = api.historyPin(com.jarvis.client.net.ChatLog.pinBody(chatId, pinned))) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.pinAnswer(r.value.first, r.value.second).let { answer ->
+                // The PC may not echo `pinned`; the request that worked stands.
+                if (answer.ok) answer.copy(pinned = answer.pinned ?: pinned) else answer
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.ChatLog.Pin(
+                false,
+                said = if (r.error == ApiError.NotFound) {
+                    // A 404 with no `ok` body is the route missing on an older
+                    // PC (the same reading the tags routes get); the contract's
+                    // unknown-id 404 arrives as an Ok(404, body) above.
+                    com.jarvis.client.net.ChatLog.PIN_OLD_PC
+                } else {
+                    "The pin was not changed. " + describe(r.error)
+                },
+            )
+        }
+    }
+
+    /**
      * "Fork from here" (`POST /api/history/fork`, docs/JARVIS-API.md section
      * 110): a new chat holding turns 0..[upto] of [chatId]. Writes a new chat,
      * so it is held on a stale link (rule 4) and refused while the private

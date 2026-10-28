@@ -3408,6 +3408,23 @@ reads it too), and Rust proves the id against the same
 `jarvis-visual-spec.json` (`spec.rs::has_face`) before anything is stored. A face
 is cosmetic, so the write raises no card, and the command carries no colour,
 binding or animal field: those stay the Faces window's.
+**The phone's Right/Wrong pair moves into a per-message menu, and the new
+pinned messages stay on the phone: one-sided on purpose** (2026-10-27, the
+owner's request: *"i dont want a 'was this answer right' on every response
+from jarvis. put a carrot that opens a menu on each chat that has this, along
+with a pin message button"*). The pair, the chevron that opens it and the Pin
+message action are the Android app's: the HUD page's own chat box has never
+carried a feedback control, and it deliberately has no Incognito, no New
+conversation and no crisis panel either (the HUD limitation row in `features/features.json`), so
+the only thing a menu there could hold is the pin. **Pins are phone-local by
+decision** - a private `SharedPreferences` file (`jarvis-client`'s `data/ChatPins.kt` and `data/PinnedChatStore.kt`), no route, nothing sent to
+the PC - so a desktop pin would be a second, unshared list with no way to
+agree with the phone's; that is a later slice if the owner asks for it, not an
+invented caller. What is NOT one-sided is the mark itself: `POST /api/feedback/mark` is unchanged,
+the phone still sends one mark per answer over it, and the desktop already
+files the same marks. No route, command or capability was added for either
+half, so `tools/check_parity.py` classifies nothing new.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

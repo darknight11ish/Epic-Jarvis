@@ -670,6 +670,38 @@ class HistoryContractTest {
         assertTrue(plate.contains("ChatHistory.IDLE_NEW_CHOICES.forEach"))
     }
 
+    @Test
+    fun `the DeepSeek list's wiring holds the rules`() {
+        val main = "jarvis-client/app/src/main/java/com/jarvis/client"
+        val history = repoFile("$main/ui/screens/HistoryScreen.kt").readText()
+        // The one arranging function, the Pinned header, the menu and Show N more.
+        assertTrue(history.contains("HistoryView.sections("))
+        assertTrue(history.contains("PinnedSectionHeader("))
+        assertTrue(history.contains("HistoryView.menu(tags, filing = false)"))
+        assertTrue(history.contains("HistoryView.showMore("))
+        assertTrue(history.contains("HistoryView.rowAge("))
+        assertTrue(history.contains("HistoryView.sortTitle("))
+        // "New chat" is the idle timer's mechanism, not a new route.
+        assertTrue(history.contains("\"New chat\""))
+        assertTrue(history.contains("onNewChat"))
+        val activity = repoFile("$main/MainActivity.kt").readText()
+        assertTrue(activity.contains("onNewChat = {"))
+        assertTrue(activity.contains("chat.newConversationSaid()"))
+        // A pin is a write through the runtime: held on a stale link, never the API directly.
+        assertTrue(history.contains("JarvisRuntime.pinChat("))
+        val runtime = repoFile("$main/JarvisRuntime.kt").readText()
+        assertTrue(runtime.contains("suspend fun pinChat(chatId: String, pinned: Boolean)"))
+        assertTrue(
+            runtime.contains("actionBlocker()?.let { return com.jarvis.client.net.ChatLog.Pin(false, said = it) }"),
+        )
+        assertTrue(runtime.contains("api.historyPin(com.jarvis.client.net.ChatLog.pinBody(chatId, pinned))"))
+        // The contract's row field and route are read in ONE place, on the wire.
+        val log = repoFile("$main/net/ChatLog.kt").readText()
+        assertTrue(log.contains("const val PIN_PATH = \"/api/history/pin\""))
+        assertTrue(log.contains("val pinned: Boolean = false"))
+        assertEquals(2, Regex("pinned = o\\.flag\\(\"pinned\"\\) == true").findAll(log).count())
+    }
+
     /** A file of this repository, found from wherever the tests run. */
     private fun repoFile(rel: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile

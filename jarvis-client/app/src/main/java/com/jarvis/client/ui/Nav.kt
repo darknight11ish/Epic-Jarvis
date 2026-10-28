@@ -115,6 +115,15 @@ enum class Screen {
      * an older build restores by name.
      */
     FIND,
+
+    /**
+     * "Pinned messages" (ui/screens/PinnedScreen.kt, the owner's request of
+     * 2026-10-27: "a pin message button that pins the message and remembers it
+     * and can be found easily in a new menu"). Opened from Home's More menu.
+     * Last, for the same reason as the others above: a saved back stack from an
+     * older build restores by name.
+     */
+    PINS,
 }
 
 /**
