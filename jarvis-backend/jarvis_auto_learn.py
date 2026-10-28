@@ -501,7 +501,13 @@ def stats_path() -> Path:
 def _stats_read() -> dict:
     out = {"passes": 0, "saved": 0, "carded": 0, "failed": 0,
            "last_pass_at": None, "last_error": None, "last_error_at": None,
-           "last_saved_at": None}
+           "last_saved_at": None,
+           # 2026-10-28 (DEF-017): the model call itself failing is a DIFFERENT
+           # thing from a pass that raised, and it used to be counted nowhere -
+           # the learner printed "reached no model" and `failed` never moved.
+           "model_failures": 0, "last_model_error": None,
+           "last_model_error_at": None}
+
     try:
         raw = json.loads(stats_path().read_text(encoding="utf-8"))
     except Exception:
@@ -556,6 +562,55 @@ def note_failure(where: str, exc: BaseException, *, at: Optional[float] = None) 
     return d
 
 
+def _model_error_words(reason) -> str:
+    """One closed-world sentence for a model call that failed.
+
+    CLOSED WORLD IS THE POINT (2026-10-28, DEF-017): a class name, an HTTP
+    status, Ollama's own `done_reason` and a number of seconds. A prompt and an
+    answer never appear here, so nothing a person typed can reach this file,
+    the audit log or a screen through it.
+    """
+    if not isinstance(reason, dict):
+        return "the local model did not answer"
+    bits = [str(reason.get("kind") or "unknown")]
+    status = reason.get("status")
+    if status:
+        bits.append(f"HTTP {status}")
+    if reason.get("done_reason"):
+        bits.append(f"done_reason {reason['done_reason']}")
+    seconds = reason.get("seconds")
+    if isinstance(seconds, (int, float)):
+        bits.append(f"{float(seconds):.1f}s")
+    return "local model: " + ", ".join(bits)
+
+
+def note_model_failure(reason, *, at: Optional[float] = None) -> dict:
+    """The LOCAL model call itself failed; keep the closed-world reason.
+
+    A separate counter from `failed` on purpose. A pass that RAISED and a model
+    that never answered are two different things, and lumping them together is
+    how eight 2026-10-10 events could sit under a "reached no model" line for
+    two weeks: `failed` never moved, so nothing looked wrong.
+
+    `reason` is `jarvis_extract`'s own dict - kind/status/seconds/done_reason.
+    Nothing here reads the prompt or the answer, and nothing it writes can.
+    """
+    d = _stats_read()
+    d["model_failures"] = int(d.get("model_failures") or 0) + 1
+    now = time.time() if at is None else at
+    d["last_model_error"] = _model_error_words(reason)
+    d["last_model_error_at"] = now
+    _stats_write(d)
+    try:
+        _audit("learning.model_unreachable",
+               {"why": d["last_model_error"],
+                "kind": str((reason or {}).get("kind") or "")[:60]
+                if isinstance(reason, dict) else ""})
+    except Exception:
+        pass
+    return d
+
+
 def note_saved(n: int, *, at: Optional[float] = None) -> dict:
     """`n` facts were saved outside a full pass (a "Remember: ..."). Counted,
     so the total is the truth about how much Jarvis has learned."""
@@ -581,6 +636,9 @@ def stats() -> dict:
         out["note"] = f"{d['saved']} fact(s) saved so far, over {d['passes']} pass(es)."
     if d.get("last_error"):
         out["note"] += f" The last pass failed ({d['last_error']})."
+    if d.get("last_model_error"):
+        out["note"] += (f" The local model did not answer on the last try "
+                        f"({d['last_model_error']}).")
     return out
 
 

@@ -462,7 +462,18 @@ RATCHET = {
     #: these patches are published against and the text every one of the eight
     #: pre-images is actually taken from.
     "jarvis_gate.py": 40,
-    "jarvis_extract.py": 9,
+    #: 11, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
+    #: (DEF-017), and BOTH extra hunks are honest rather than drift - the walk
+    #: reads 11 and names it at 2. Its subject is `jarvis_extract._local_llm`'s
+    #: `except Exception: return None` and the module-level record beside it:
+    #: text of the OWNER's original file that no patch in this walk writes (the
+    #: earlier extractor patches - memory-safety, memory-noise, decide-once,
+    #: memory-intake - anchor inside `propose()` and `_init`, hundreds of lines
+    #: away). Nothing to re-anchor to, and editing the owner's file by hand is
+    #: what these patches exist to avoid. A ratchet: it may still only go down,
+    #: and the day the walk seeds a target from `jarvis-backend/` these two go
+    #: with the rest.
+    "jarvis_extract.py": 11,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,
 }
