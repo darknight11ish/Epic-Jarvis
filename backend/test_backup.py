@@ -1518,6 +1518,39 @@ def t_the_study_decks_are_backed_up_with_their_own_key():
         zb, man = B.build_archive()
     check("study.db without a readable key is not archived (a restore would replace a working file with an unopenable one)",
           "db/study.db" not in zipfile.ZipFile(io.BytesIO(zb)).namelist() and man["study_decks_key"] is False)
+    # ... AND NAMED (data-integrity audit F1, 2026-10-28). A `continue` that only
+    # left the file out still let the result read as a complete backup: the same
+    # lie F4 fixed for a failed snapshot, one store over.
+    check("study.db left out for want of its key is NAMED in excluded_dbs, not silently dropped",
+          man["excluded_dbs"] == [f"study.db ({B.SEALED_KEY_UNREADABLE})"], man["excluded_dbs"])
+    check("... and the sentence the owner is shown names it instead of claiming a whole backup",
+          "study.db" in B.backup_message(man)
+          and "left out to prevent an unreadable backup" in B.backup_message(man),
+          B.backup_message(man))
+
+    # health.db present but its key cannot be read: the same rule, proved by
+    # taking the key away from a real store rather than by a damaged file.
+    conf4, _b4 = fresh_conf()
+    make_memory_db(conf4)
+    mdir = conf4 / "medical"
+    mdir.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(mdir / "health.db")
+    conn.execute("CREATE TABLE records (id INTEGER PRIMARY KEY, label TEXT)")
+    conn.execute("INSERT INTO records (label) VALUES ('HbA1c')")
+    conn.commit()
+    conn.close()
+    saved_medical_key = B._medical_key_b64
+    B._medical_key_b64 = lambda: None
+    try:
+        with _FakeCredentials() as cm:
+            zb, man = B.build_archive()
+    finally:
+        B._medical_key_b64 = saved_medical_key
+    check("health.db without a readable key is not archived (its every payload is sealed)",
+          "db/medical/health.db" not in zipfile.ZipFile(io.BytesIO(zb)).namelist()
+          and man["medical_key"] is False)
+    check("... and it is NAMED in excluded_dbs too, so the medical record is never a silent gap",
+          man["excluded_dbs"] == [f"health.db ({B.SEALED_KEY_UNREADABLE})"], man["excluded_dbs"])
 
 
 def t_a_restore_reopens_the_decks():

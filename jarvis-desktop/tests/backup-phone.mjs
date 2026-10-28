@@ -386,7 +386,7 @@ async function previewOf(counts) {
   return { said, calls, errors };
 }
 
-await check("Preview names a database the backup left out, and a chat history it carries LOCKED",
+await check("Preview names a database the backup left out, and a chat history it leaves out by name",
   async () => {
     // Data-integrity audit F1/F4 (2026-10-28): the backend names a database
     // whose snapshot failed and a chat history with no key that opens it, and
