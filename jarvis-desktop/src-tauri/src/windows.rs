@@ -744,15 +744,6 @@ fn settings_place(place: &str) -> Result<&'static str, String> {
         .ok_or_else(|| "That is not a place in Settings.".to_string())
 }
 
-/// The page a new Settings window is built at: the card's own anchor when a
-/// place was asked for (`settings.html#updates`), plain Settings otherwise.
-fn settings_page(place: Option<&str>) -> String {
-    match place {
-        Some(p) => format!("settings.html#{p}"),
-        None => "settings.html".to_string(),
-    }
-}
-
 fn take_pending_settings_place() -> Option<&'static str> {
     PENDING_SETTINGS_PLACE
         .lock()
@@ -789,34 +780,42 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| format!("unable to focus settings: {e}"));
     }
 
-    let window = tauri::WebviewWindowBuilder::new(
-        app,
-        SETTINGS_LABEL,
-        tauri::WebviewUrl::App(settings_page(place).into()),
-    )
-    .title("Jarvis Desktop — Settings")
-    .inner_size(680.0, 760.0)
-    .min_inner_size(520.0, 480.0)
-    .center()
-    .resizable(true)
-    // Hidden until it is back where the owner left it (window_memory.rs),
-    // so it does not flash up centred first and then jump.
-    .visible(false)
-    .theme(Some(tauri::Theme::Dark))
-    // No capture guard is set here. The settings window's guard is part of the
-    // lock's rule now: a pairing code is a reason `lock::capture_blocked` says
-    // yes, recorded by devices.rs through `lock::set_pairing_code_shown` and
-    // applied to every window by `lock::sweep` - on while a code is on screen,
-    // off when the session ends or the panel closes (PAIRING-DESIGN 7.1).
-    //
-    // It is deliberately NOT Tauri's content-protection builder setting, here
-    // or later: on Windows that reaches `SetWindowDisplayAffinity`, which tao
-    // applies by RECREATING the window - so toggling it closed Settings the
-    // moment pairing succeeded (the owner, 2026-10-07). The one Win32 call
-    // lives in lock.rs and sets the attribute on the window this app already
-    // owns. See its comment for the whole story.
-    .build()
-    .map_err(|e| format!("unable to open settings: {e}"))?;
+    // The place changes only the fragment. Both spellings are LITERALS right
+    // here, the way `show_brain_unlocked` writes `brain.html`: the audit's
+    // `tools/check_invoke_grants.py` reads the page literal above a
+    // `WebviewWindowBuilder` to know which page a window loads, and a helper
+    // that hid it made that check refuse to judge Settings at all - the check
+    // whose whole job is to catch a button calling a command its window was
+    // never granted. Keep the literals beside the builder.
+    let page = match place {
+        Some(p) => format!("settings.html#{p}"),
+        None => "settings.html".to_string(),
+    };
+    let window =
+        tauri::WebviewWindowBuilder::new(app, SETTINGS_LABEL, tauri::WebviewUrl::App(page.into()))
+            .title("Jarvis Desktop — Settings")
+            .inner_size(680.0, 760.0)
+            .min_inner_size(520.0, 480.0)
+            .center()
+            .resizable(true)
+            // Hidden until it is back where the owner left it (window_memory.rs),
+            // so it does not flash up centred first and then jump.
+            .visible(false)
+            .theme(Some(tauri::Theme::Dark))
+            // No capture guard is set here. The settings window's guard is part of the
+            // lock's rule now: a pairing code is a reason `lock::capture_blocked` says
+            // yes, recorded by devices.rs through `lock::set_pairing_code_shown` and
+            // applied to every window by `lock::sweep` - on while a code is on screen,
+            // off when the session ends or the panel closes (PAIRING-DESIGN 7.1).
+            //
+            // It is deliberately NOT Tauri's content-protection builder setting, here
+            // or later: on Windows that reaches `SetWindowDisplayAffinity`, which tao
+            // applies by RECREATING the window - so toggling it closed Settings the
+            // moment pairing succeeded (the owner, 2026-10-07). The one Win32 call
+            // lives in lock.rs and sets the attribute on the window this app already
+            // owns. See its comment for the whole story.
+            .build()
+            .map_err(|e| format!("unable to open settings: {e}"))?;
     show_restored(window, "Settings")
 }
 
@@ -2124,18 +2123,15 @@ mod tests {
         assert!(SETTINGS_PLACES.contains(&"updates"));
     }
 
-    /// A place changes what a NEW window loads and nothing else: the anchor is
-    /// the card's own id, and no place means the page it always was.
-    #[test]
-    fn a_place_opens_a_new_settings_window_at_its_own_card() {
-        assert_eq!(settings_page(Some("updates")), "settings.html#updates");
-        assert_eq!(settings_page(None), "settings.html");
-    }
-
     /// Two spellings, one event: Rust emits this name and the page listens for
     /// it. A rename on one side alone would leave the tray opening Settings at
     /// the top while every test here still passed - and the page has to hold a
     /// card with that id, or the place scrolls nowhere.
+    ///
+    /// The `settings.html#updates` URL itself is a literal beside the builder
+    /// (see `show_settings_unlocked`), and `tools/check_invoke_grants.py` reads
+    /// it there - that check fails if the page literal disappears, which is
+    /// what a helper hiding it did on 2026-10-27.
     #[test]
     fn the_settings_place_event_is_one_name_in_both_languages() {
         let js = include_str!("../../src/settings-place.js");
