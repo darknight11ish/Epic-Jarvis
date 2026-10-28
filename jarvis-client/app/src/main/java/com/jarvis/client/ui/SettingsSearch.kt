@@ -226,9 +226,9 @@ object SettingsSearch {
         ),
         Row(
             key = "manner", title = "How Jarvis talks",
-            label = "Manner; plain answers; humour; thinking levels; deep thinking",
-            quotes = listOf("How Jarvis talks"),
-            source = JUMP + listOf(PLATES + "MannerPlate.kt"),
+            label = "Manner; plain answers; humour; thinking levels; deep thinking; anti-slop filter",
+            quotes = listOf("How Jarvis talks", "Anti-Slop filter", "anti-slop", "slop filter"),
+            source = JUMP + listOf(PLATES + "MannerPlate.kt", PLATES + "AntislopPlate.kt"),
         ),
         Row(
             key = "web-search", title = "Web search",

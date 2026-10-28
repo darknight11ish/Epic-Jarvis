@@ -588,6 +588,14 @@ fun SettingsScreen(
             if (menus.shows("settings.manner")) if (drawn("manner")) if (menus.shows("settings.manner")) item(key = "manner") {
                 MenuFrame(menus, "settings.manner") {
                     MannerSection(canAct = canAct)
+                    // "Anti-Slop filter" (2026-10-28, jarvis_antislop.py;
+                    // JARVIS-API section 159): the master switch and the
+                    // During/After mode, under this same card - the desktop's
+                    // Settings -> How Jarvis talks -> Anti-Slop filter, in the
+                    // same words. It sits HERE rather than as its own row
+                    // because the desktop keeps it inside the same card, and
+                    // the two apps' settings are meant to read alike.
+                    AntislopPlate(canAct = canAct)
                     Gap(16)
                     ThinkingSection(canAct = canAct)
                 }
