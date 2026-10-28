@@ -2242,6 +2242,15 @@ STATIC_ASSETS = {
     # served at /three.min.js by its own vendoring change; this module loads it
     # and stays on the flat picture when it is not there.
     "/galaxy-cosmos.js": ("galaxy-cosmos.js", "text/javascript; charset=utf-8"),
+    # three.js r128, vendored offline (2026-10-27, PR #907) so the 3D cosmos can
+    # load it from THIS origin instead of a CDN. That change registered the file
+    # in both SHIPPED lists and the base's BESIDE table but not here, and the
+    # closed whitelist is what a browser HUD really asks: without this key the
+    # page's engine gets a 404 and stays on the flat picture, which is exactly
+    # the fallback it is built for but not the feature the owner asked for.
+    # Three file(s) must exist beside the server for this to answer: the base
+    # carries its own copy (jarvis-backend/three.min.js).
+    "/three.min.js": ("three.min.js", "text/javascript; charset=utf-8"),
     "/private-speech.js": ("private-speech.js", "text/javascript; charset=utf-8"),
     "/face-voice.js": ("face-voice.js", "text/javascript; charset=utf-8"),
     "/face-moments.js": ("face-moments.js", "text/javascript; charset=utf-8"),

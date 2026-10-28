@@ -80,6 +80,24 @@ PS1 = REPO / "scripts" / "apply-patches.ps1"
 #: closed-world file that is seeded by name rather than discovered from markup.
 FACE_PAGE = "/faces.html"
 
+#: Files the page's own code asks for AT RUN TIME, so no markup reference or
+#: module `import "..."` exists to discover. Each is named here with the reason
+#: it cannot be found by reading the page:
+#:
+#:   /faces.html    the page assembles its `#reactor` iframe URL in JS;
+#:   /three.min.js  `galaxy-cosmos.js` creates a `<script src>` for the vendored
+#:                  three.js r128 (2026-10-27, its own PR) when a 3D look is
+#:                  first drawn. It is deliberately NOT a `<link rel=preload>` in
+#:                  the page: that would download 600 KB on every HUD load,
+#:                  including the ones that never draw a 3D look.
+#:
+#: Both are real whitelist keys, and both must be, or the browser HUD asks for a
+#: file the closed world refuses.
+LOADED_BY_CODE = {
+    FACE_PAGE: "the page builds its #reactor iframe URL in JS",
+    "/three.min.js": "galaxy-cosmos.js creates a <script src> for it when a 3D look is drawn",
+}
+
 #: The exact Content-Type each extension must get (the ruling names exact MIME
 #: types; "text/plain for everything" is what a careful test catches).
 CONTENT_TYPES = {
@@ -268,7 +286,8 @@ def expected_asset_refs(assets: dict) -> set:
     wanted = page_refs()
     # The browser HUD's face page (2026-10-25): `#reactor`'s iframe URL is
     # assembled in the page's own script, not an attribute, so it is named.
-    wanted.add(FACE_PAGE)
+    # Three.js (2026-10-27) is the same shape: the engine creates its <script>.
+    wanted.update(LOADED_BY_CODE)
     seen = set()
     while True:
         new = set()

@@ -1129,7 +1129,7 @@ def set_web_search_provider(provider: str, *, peer=None, local=None) -> Outcome:
 
 
 def set_personality(personality: str, *, peer=None, local=None) -> Outcome:
-    """One of the nine personality presets (jarvis_manner.py, 2026-10-22).
+    """One of the ten personality presets (jarvis_manner.py, 2026-10-22).
 
     Cardless by design, like the manner: it changes how Jarvis words things,
     never what it does, asks, approves or remembers. An unknown name is refused
@@ -2715,7 +2715,7 @@ CHOICE_SETTINGS: tuple = (
         ("the personality", "the persona", "jarvis's personality",
          "the character", "which personality"),
         "manner", _personality_choices, set_personality,
-        "which of the nine personalities Jarvis speaks in (no card)"),
+        "which of the ten personalities Jarvis speaks in (no card)"),
     ChoiceSetting(
         "focus_preset",
         ("the focus preset", "jarvis's preset", "the model preset",

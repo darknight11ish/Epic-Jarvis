@@ -28,7 +28,7 @@
 //!
 //! * [`hud_personalities`] - the personality half of the `GET /api/manner`
 //!   answer, narrowed in Rust by [`personalities_answer`] to the fields the
-//!   menu draws, so its Presets menu can list the nine built-ins and the
+//!   menu draws, so its Presets menu can list the ten built-ins and the
 //!   owner's own and mark the one the PC names.
 //! * [`hud_switch_personality`] - `POST /api/manner {"personality": <id>}`:
 //!   ONE field, at once, NO card (wording only - the PC says this itself in
@@ -476,7 +476,7 @@ pub async fn set_humor(app: AppHandle, on: bool) -> Result<serde_json::Value, St
 }
 
 /// The HUD's read of `GET /api/manner` (2026-10-27): the Presets menu draws
-/// the nine personalities and the owner's own from this answer, and marks the
+/// the ten personalities and the owner's own from this answer, and marks the
 /// one the PC names. Read only - it changes nothing and raises no card.
 ///
 /// Its own command rather than a grant of [`get_manner`], and NARROWER than

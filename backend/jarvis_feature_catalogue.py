@@ -3,7 +3,7 @@
 The owner's feature list, as data: 141 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 c79c80cd5ce6b618544f9bbf28066adebb91bf23c72cf23ff27f825ca27f4940); the apps' Features pages read their own
+`features/features.json` (sha256 9e4da942a364e9c41a8eaab44fc36fd3485e3db91f0946374c43396a39be471c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "c79c80cd5ce6b618544f9bbf28066adebb91bf23c72cf23ff27f825ca27f4940"
+SOURCE_SHA256 = "9e4da942a364e9c41a8eaab44fc36fd3485e3db91f0946374c43396a39be471c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -124,7 +124,7 @@ FEATURES = (
         "id": "manner",
         "group": "Talking",
         "title": "How Jarvis talks",
-        "what": "On the PC, nine built-in personalities decide how Jarvis sounds - Warm Collaborator, Classic British Butler, Dry & Deadpan, Patient Advocate and five more - with four dials for humour, answer length, formality and how it addresses you. \"My personalities\" saves up to 20 mixes of your own, and each chat can have its own.",
+        "what": "On the PC, ten built-in personalities decide how Jarvis sounds - Warm Collaborator, Classic British Butler, Dry & Deadpan, Patient Advocate, Reflective Coach and five more - with four dials for humour, answer length, formality and how it addresses you. \"My personalities\" saves up to 20 mixes of your own, and each chat can have its own.",
         "where": "Settings, How Jarvis talks.",
         "asks": "No card either way - it changes wording only.",
         "limit": "A personality changes how Jarvis sounds, never what it does, asks or remembers, and humour never appears on a card, an error or a serious topic.",

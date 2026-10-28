@@ -232,7 +232,7 @@ MENUS: tuple = (
     _m("settings.voice", "Voice", "Talk, read aloud, hands-free and sounds.",
        names=("voice", "voice settings")),
     _m("settings.manner", "How Jarvis talks",
-       "Nine personalities and four dials, warm and brief by default.",
+       "Ten personalities and four dials, warm and brief by default.",
        names=("how jarvis talks", "manner")),
     # "A new conversation starts after" (the audit of 2026-10-08): the one
     # timing the owner could not change anywhere. A CLIENT-SIDE choice, the

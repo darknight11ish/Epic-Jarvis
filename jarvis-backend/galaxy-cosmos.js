@@ -133,6 +133,39 @@ export const TREE_MAX_WIDTH = 2200;
 export const TREE_LANE_PITCH = 30;
 export const TREE_COL_GAP = 26;
 
+/** How much of the display's pixel ratio the 3D canvas may use.
+ *
+ *  The 2D canvas draws the LABELS, and it always renders at the full device
+ *  pixel ratio - that is the text, and text must stay crisp. The 3D canvas
+ *  draws glow, fog and wireframe bodies, where a softer edge is nearly
+ *  invisible, so it is the one that gives way when a machine cannot present
+ *  six million pixels a frame. `nextRenderScale` is the rule, and it is pure so
+ *  a test can drive it without a GPU.
+ *
+ *  It matters most where it was measured: a software renderer (headless CI, a
+ *  machine with no usable GPU) presents a 2880x2206 canvas at about seven
+ *  frames a second, and the picture has to stay usable there instead of
+ *  crawling. */
+export const RENDER_SCALE_MIN = 0.25;
+export const SLOW_FRAME_MS = 34;   // slower than about 30 frames a second
+export const VERY_SLOW_FRAME_MS = 60;
+export const FAST_FRAME_MS = 19;   // comfortably faster than 60 frames a second
+
+/** One step of the adaptive resolution rule.
+ *
+ *  `medianMs` is the median interval between the last few frames. Slow frames
+ *  give the 3D canvas fewer pixels; a picture that is already cheap gets them
+ *  back, up to the display's own ratio. Nothing here touches the CSS size, the
+ *  projection or the labels - only how many pixels the bodies are drawn with. */
+export function nextRenderScale(scale, medianMs) {
+  const now = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  if (!Number.isFinite(medianMs) || medianMs <= 0) return now;
+  if (medianMs > VERY_SLOW_FRAME_MS) return RENDER_SCALE_MIN;
+  if (medianMs > SLOW_FRAME_MS) return Math.max(RENDER_SCALE_MIN, now * 0.75);
+  if (medianMs < FAST_FRAME_MS && now < 1) return Math.min(1, now / 0.75);
+  return now;
+}
+
 /** One look's palette, camera and Gemini name.
  *
  *  `bg` is the page's own `bgHex` (it sets `document.body.style.
@@ -1477,7 +1510,9 @@ export async function createEngine(options = {}) {
     links: [],
     groups: new Map(),
     meshes: new Map(),
-    linkObjects: [],
+    linkMesh: null,
+    linkSegments: [],
+    linkSignature: "",
     guides: [],
     stalks: [],
     orbits: null,
@@ -1491,6 +1526,9 @@ export async function createEngine(options = {}) {
     width: 2,
     height: 2,
     aspect: 1.6,
+    dprWanted: 1,
+    renderScale: 1,
+    frameGaps: [],
     spinning: true,
     warp: 1,
     followId: null,
@@ -1596,7 +1634,17 @@ export async function createEngine(options = {}) {
     return Math.max(3, Math.min(9, 3 + weight * 1.1));
   }
 
-  function buildNodeObject(node) {
+  /** Past this many names the glow haloes come off the ability bodies.
+   *
+   *  This is the page's own rule applied to the 3D engine: "past the cap,
+   *  decoration goes first" - a dot is never dropped to make room for
+   *  decoration, and here a body is never dropped to make room for its glow.
+   *  Each halo is a transparent sphere 1.7x its body, so 240 of them is several
+   *  screens of blended fragments a frame; without them the picture reads the
+   *  same at a glance and a software renderer can keep up. */
+  const HALO_LIMIT = 120;
+
+  function buildNodeObject(node, sparse) {
     const role = roleOf(node.group);
     const radius = nodeRadius(node);
     const colour = hexToInt(colorFor(node.group) || ROLE_COLORS[role] || ROLE_COLORS.memory);
@@ -1630,9 +1678,11 @@ export async function createEngine(options = {}) {
       mesh = new THREE.Mesh(
         new THREE.SphereGeometry(radius, 16, 16),
         new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.92 }));
-      mesh.add(new THREE.Mesh(
-        new THREE.SphereGeometry(radius * 1.7, 12, 12),
-        new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.22 })));
+      if (!sparse) {
+        mesh.add(new THREE.Mesh(
+          new THREE.SphereGeometry(radius * 1.7, 12, 12),
+          new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.22 })));
+      }
     }
     if (mesh) {
       group.add(mesh);
@@ -1651,8 +1701,9 @@ export async function createEngine(options = {}) {
     }
     state.groups.clear();
     state.meshes.clear();
+    const sparse = state.nodes.length > HALO_LIMIT;
     for (const node of state.nodes) {
-      const object = buildNodeObject(node);
+      const object = buildNodeObject(node, sparse);
       state.groups.set(node.id, object);
       nodeRoot.add(object);
     }
@@ -1842,24 +1893,46 @@ export async function createEngine(options = {}) {
 
   function buildStalks() {
     // One vertical stalk per name, from the name down to the radar floor at
-    // y=-28, coloured by zone - the page's "elevation stalks".
+    // y=-28, coloured by zone - the page's "elevation stalks". All of them are
+    // ONE `LineSegments` with per-vertex colours, for the same reason the links
+    // are: 240 separate lines is 240 draw calls.
     if (state.preset !== "radar-dome") return;
     const floor = -28;
+    const rows = [];
     for (const node of state.nodes) {
       const point = positionOf(node.id);
       if (!point) continue;
-      const zone = ringOf(node.group);
-      const colour = hexToInt(SENTINEL_RINGS[zone].color);
-      const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(point.x, point.y, point.z),
-        new THREE.Vector3(point.x, floor, point.z),
-      ]);
-      const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
-        color: colour, transparent: true, opacity: 0.35, depthWrite: false,
-      }));
-      guideRoot.add(line);
-      state.stalks.push(line);
+      rows.push({ point, zone: ringOf(node.group) });
     }
+    if (!rows.length) return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position",
+      new THREE.BufferAttribute(new Float32Array(rows.length * 6), 3));
+    const colours = new Float32Array(rows.length * 6);
+    rows.forEach((row, i) => {
+      const tone = hexToRgb(SENTINEL_RINGS[row.zone].color);
+      for (let v = 0; v < 2; v++) {
+        colours[i * 6 + v * 3] = tone.r;
+        colours[i * 6 + v * 3 + 1] = tone.g;
+        colours[i * 6 + v * 3 + 2] = tone.b;
+      }
+    });
+    geometry.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+    const mesh = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0.35, depthWrite: false,
+    }));
+    mesh.frustumCulled = false;
+    guideRoot.add(mesh);
+    state.stalks.push(mesh);
+    const array = geometry.getAttribute("position").array;
+    rows.forEach((row, i) => {
+      array[i * 6] = row.point.x;
+      array[i * 6 + 1] = row.point.y;
+      array[i * 6 + 2] = row.point.z;
+      array[i * 6 + 3] = row.point.x;
+      array[i * 6 + 4] = floor;
+      array[i * 6 + 5] = row.point.z;
+    });
   }
 
   /* ---- positions and links -------------------------------------------- */
@@ -1888,63 +1961,89 @@ export async function createEngine(options = {}) {
   }
 
   function updateLinks() {
-    const byId = new Map(positions.map((p) => [p.id, p]));
     const wanted = presetLinks(state.preset, state.nodes, state.links, {
       positions, chords: state.chords,
     });
-    // Rebuild the link objects when the set changes; otherwise reuse them and
-    // only rewrite the vertex buffers (the page rebuilds every link's geometry
-    // every frame in its orrery look; at 360 links that is the one thing not
-    // worth copying).
-    if (state.linkObjects.length !== wanted.length) {
-      for (const line of state.linkObjects) {
-        linkRoot.remove(line);
-        disposeObject(line);
+    // ONE draw call for every link, not one per link. The Gemini page builds a
+    // `THREE.Line` per link, which is fine for 39 of them; at 360 it is 360
+    // draw calls a frame, and a software renderer cannot present that (measured
+    // on 2026-10-27: 240 names, ~7 frames a second, almost all of it draw-call
+    // overhead). The whole set is one `LineSegments` with per-vertex colours,
+    // rebuilt only when the set or the look changes and rewritten in place when
+    // the names move.
+    const signature = `${wanted.length}:${state.preset}:${state.chords}`;
+    if (state.linkSignature !== signature) {
+      state.linkSignature = signature;
+      if (state.linkMesh) {
+        linkRoot.remove(state.linkMesh);
+        disposeObject(state.linkMesh);
+        state.linkMesh = null;
       }
-      state.linkObjects = [];
+      state.linkSegments = [];
+      let vertices = 0;
       for (const link of wanted) {
         const samples = link.control ? link.samples : 2;
+        state.linkSegments.push({ link, samples, start: vertices });
+        vertices += Math.max(1, samples - 1) * 2;
+      }
+      state.linkVertexCount = vertices;
+      if (vertices > 0) {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position",
-          new THREE.BufferAttribute(new Float32Array(samples * 3), 3));
-        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
-          color: hexToInt(link.color), transparent: true, opacity: link.opacity,
-          depthWrite: false,
+          new THREE.BufferAttribute(new Float32Array(vertices * 3), 3));
+        const colours = new Float32Array(vertices * 3);
+        for (const slot of state.linkSegments) {
+          const tone = hexToRgb(slot.link.color);
+          const from = slot.start * 3;
+          const to = from + Math.max(1, slot.samples - 1) * 2 * 3;
+          for (let i = from; i < to; i += 3) {
+            colours[i] = tone.r;
+            colours[i + 1] = tone.g;
+            colours[i + 2] = tone.b;
+          }
+        }
+        geometry.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+        const opacity = wanted.length ? wanted[0].opacity : 0.22;
+        state.linkMesh = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({
+          vertexColors: true, transparent: true, opacity, depthWrite: false,
         }));
-        line.userData.samples = samples;
-        line.userData.link = link;
-        linkRoot.add(line);
-        state.linkObjects.push(line);
+        state.linkMesh.frustumCulled = false;
+        linkRoot.add(state.linkMesh);
       }
     }
-    state.linkObjects.forEach((line, index) => {
-      const link = wanted[index];
-      if (!link) return;
-      const source = byId.get(link.a.id);
-      const sink = byId.get(link.b.id);
-      if (!source || !sink) return;
-      const attribute = line.geometry.getAttribute("position");
-      const array = attribute.array;
-      const samples = line.userData.samples;
-      if (samples <= 2) {
-        array[0] = source.x; array[1] = source.y; array[2] = source.z;
-        array[3] = sink.x; array[4] = sink.y; array[5] = sink.z;
+    if (!state.linkMesh) return;
+    const byId = new Map(positions.map((p) => [p.id, p]));
+    const attribute = state.linkMesh.geometry.getAttribute("position");
+    const array = attribute.array;
+    for (const slot of state.linkSegments) {
+      const source = byId.get(slot.link.a.id);
+      const sink = byId.get(slot.link.b.id);
+      if (!source || !sink) continue;
+      let at = slot.start * 3;
+      if (slot.samples <= 2) {
+        array[at] = source.x; array[at + 1] = source.y; array[at + 2] = source.z;
+        array[at + 3] = sink.x; array[at + 4] = sink.y; array[at + 5] = sink.z;
       } else {
-        const ax = source.x; const ay = source.y; const az = source.z;
-        const bx = sink.x; const by = sink.y; const bz = sink.z;
-        const control = link.control || { x: (ax + bx) / 2, y: (ay + by) / 2, z: (az + bz) / 2 };
-        for (let i = 0; i < samples; i++) {
-          const t = i / (samples - 1);
-          const u = 1 - t;
-          array[i * 3] = u * u * ax + 2 * u * t * control.x + t * t * bx;
-          array[i * 3 + 1] = u * u * ay + 2 * u * t * control.y + t * t * by;
-          array[i * 3 + 2] = u * u * az + 2 * u * t * control.z + t * t * bz;
+        const control = slot.link.control || {
+          x: (source.x + sink.x) / 2, y: (source.y + sink.y) / 2, z: (source.z + sink.z) / 2,
+        };
+        for (let i = 0; i < slot.samples - 1; i++) {
+          const t0 = i / (slot.samples - 1);
+          const t1 = (i + 1) / (slot.samples - 1);
+          const a0 = 1 - t0;
+          const a1 = 1 - t1;
+          array[at] = a0 * a0 * source.x + 2 * a0 * t0 * control.x + t0 * t0 * sink.x;
+          array[at + 1] = a0 * a0 * source.y + 2 * a0 * t0 * control.y + t0 * t0 * sink.y;
+          array[at + 2] = a0 * a0 * source.z + 2 * a0 * t0 * control.z + t0 * t0 * sink.z;
+          array[at + 3] = a1 * a1 * source.x + 2 * a1 * t1 * control.x + t1 * t1 * sink.x;
+          array[at + 4] = a1 * a1 * source.y + 2 * a1 * t1 * control.y + t1 * t1 * sink.y;
+          array[at + 5] = a1 * a1 * source.z + 2 * a1 * t1 * control.z + t1 * t1 * sink.z;
+          at += 6;
         }
       }
-      attribute.needsUpdate = true;
-      line.material.opacity = state.preset === "zen-ring" && !state.chords ? 0 : link.opacity;
-      line.visible = !(state.preset === "zen-ring" && !state.chords);
-    });
+    }
+    attribute.needsUpdate = true;
+    state.linkMesh.visible = !(state.preset === "zen-ring" && !state.chords);
   }
 
   /* ---- morphology, camera and colour ---------------------------------- */
@@ -2275,15 +2374,24 @@ export async function createEngine(options = {}) {
 
   /* ---- frames, resize, dispose --------------------------------------- */
 
+  function applyRenderScale() {
+    const ratio = Math.min(2, Math.max(RENDER_SCALE_MIN,
+      state.dprWanted * state.renderScale));
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(state.width, state.height, false);
+    return ratio;
+  }
+
   function resize(width, height, dpr = 1) {
     state.width = Math.max(1, Math.round(width || 0));
     state.height = Math.max(1, Math.round(height || 0));
     state.aspect = state.width / state.height;
-    renderer.setPixelRatio(Math.min(Math.max(1, dpr || 1), 2));
-    renderer.setSize(state.width, state.height, false);
+    state.dprWanted = Math.min(Math.max(1, dpr || 1), 2);
+    applyRenderScale();
     camera.aspect = state.aspect;
     camera.updateProjectionMatrix();
-    return { width: state.width, height: state.height, aspect: state.aspect };
+    return { width: state.width, height: state.height, aspect: state.aspect,
+      ratio: state.dprWanted * state.renderScale };
   }
 
   function frame(now) {
@@ -2291,6 +2399,21 @@ export async function createEngine(options = {}) {
     if (state.width < 2 || state.height < 2) return false;
     const stamp = Number.isFinite(now) ? now : state.lastTime;
     const dt = state.lastTime ? Math.min((stamp - state.lastTime) / 1000, 0.1) : 0;
+    // The adaptive resolution rule: every few frames, look at how fast frames
+    // are really arriving and give the 3D canvas more or fewer pixels. Slow
+    // frames never touch the picture's size on screen, the camera or a label -
+    // only how much of the display the glow is drawn with.
+    if (state.lastTime) state.frameGaps.push(stamp - state.lastTime);
+    if (state.frameGaps.length >= 6) {
+      const gaps = state.frameGaps.slice().sort((a, b) => a - b);
+      const median = gaps[Math.floor(gaps.length / 2)];
+      const want = nextRenderScale(state.renderScale, median);
+      state.frameGaps.length = 0;
+      if (Math.abs(want - state.renderScale) > 0.001) {
+        state.renderScale = want;
+        applyRenderScale();
+      }
+    }
     state.lastTime = stamp;
     animate(dt, stamp);
     renderer.render(scene, camera);
@@ -2303,8 +2426,9 @@ export async function createEngine(options = {}) {
     for (const group of state.groups.values()) disposeObject(group);
     state.groups.clear();
     state.meshes.clear();
-    for (const line of state.linkObjects) disposeObject(line);
-    state.linkObjects = [];
+    if (state.linkMesh) disposeObject(state.linkMesh);
+    state.linkMesh = null;
+    state.linkSegments = [];
     for (const child of state.guides) disposeObject(child);
     state.guides = [];
     if (state.stars) disposeObject(state.stars);
@@ -2373,7 +2497,7 @@ export async function createEngine(options = {}) {
       return {
         preset: state.preset,
         nodes: state.nodes.length,
-        links: state.linkObjects.length,
+        links: state.linkSegments.length,
         guides: state.guides.length,
         draws: state.draws,
         lost: state.lost,
@@ -2381,6 +2505,9 @@ export async function createEngine(options = {}) {
         spinning: state.spinning,
         width: state.width,
         height: state.height,
+        scale: state.renderScale,
+        ratio: Math.min(2, Math.max(RENDER_SCALE_MIN,
+          state.dprWanted * state.renderScale)),
       };
     },
     dispose,
