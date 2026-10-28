@@ -2,7 +2,7 @@
 
 Holds four things true, and fails by name when one is not:
 
- 1. THE CONTRACT IS USABLE: `contract/personalities.json` has the 9 presets
+ 1. THE CONTRACT IS USABLE: `contract/personalities.json` has the 10 presets
     with every field the engine needs, the four dials, the six reflex acks,
     two exemplars each, a bounded prompt block, the legacy warm/plain aliases
     and the safety sentences. The rules live in
@@ -18,7 +18,7 @@ Holds four things true, and fails by name when one is not:
     the engine's own assembler and must be <= 750 characters (~180 tokens),
     contain no SecAlign markers, and the crisis block must REPLACE all persona
     text (it may not carry a preset's critique/wit instructions).
- 4. THE BEHAVIOUR THE BLUEPRINT ASKS FOR EXISTS: all 9 ids and aliases
+ 4. THE BEHAVIOUR THE BLUEPRINT ASKS FOR EXISTS: all 10 ids and aliases
     normalize; legacy warm/plain map; the four dials validate; the reflex
     table answers each preset in its own voice; the GET view carries the
     personality block; "My Personalities" is capped at 20 with 240-char
@@ -50,7 +50,7 @@ SECALIGN = ("<|im_start|>", "<|im_end|>", "<tool_call>", "<think>")
 PID = [
     "warm_peer", "classic_butler", "tactical_ops", "dry_wit",
     "friday_partner", "socratic_mentor", "devils_advocate", "calm_stoic",
-    "advocate",
+    "advocate", "reflect",
 ]
 #: The longest word each dial can put into the assembled block's style line.
 #: The per-preset check below measures a preset with its OWN dials, which is
@@ -70,6 +70,7 @@ REFLEX_EVIDENCE = {
     "devils_advocate": ("?",),
     "calm_stoic": ("time",),
     "advocate": ("corner",),
+    "reflect": ("no rush",),
 }
 
 CHECKS = []
@@ -85,12 +86,12 @@ def _line(text: str) -> str:
 
 def check_contract(data: dict) -> None:
     problems = GEN.contract_problems(data)
-    check("the contract is usable (9 presets, every field, every budget)",
+    check("the contract is usable (10 presets, every field, every budget)",
           not problems, "\n".join(problems))
     if problems:
         return
     ids = [p["id"] for p in data["personalities"]]
-    check("the 9 preset ids are exactly the blueprint's", ids == PID, str(ids))
+    check("the 10 preset ids are exactly the blueprint's", ids == PID, str(ids))
     check("the default preset is warm_peer (the legacy 'warm')",
           data["default"] == "warm_peer")
     check("legacy warm/plain normalize to warm_peer/tactical_ops",
@@ -107,7 +108,7 @@ def check_contract(data: dict) -> None:
                 dup.append(f"{alias!r} claimed by {aliases[key]} and {preset['id']}")
             aliases[key] = preset["id"]
     check("no spoken alias is claimed by two presets", not dup, "\n".join(dup))
-    check("all 9 docs carry the six reflex acks",
+    check("all 10 docs carry the six reflex acks",
           all(set(p["reflex_acks"]) == set(GEN.REFLEX_KINDS)
               for p in data["personalities"]))
     check("every switch ack is the persona's own line (non-empty, unique)",
@@ -203,7 +204,7 @@ def check_budget(module) -> None:
                 pass
     finally:
         module._read_settings = old
-    check("crisis_active returns the same calm block for all 9 personalities",
+    check("crisis_active returns the same calm block for all 10 personalities",
           len(set(crisis_texts)) == 1 and crisis_texts[0] == safety["crisis_prompt_block"])
     for word in ("sarcas", "deadpan", "no-nonsense", "red-team", "butler",
                  "f.r.i.d.a.y", "socratic"):
@@ -216,13 +217,13 @@ def check_budget(module) -> None:
 
 
 def check_module_behaviour(module) -> None:
-    check("the module's 9 built-ins are the contract's 9",
+    check("the module's 10 built-ins are the contract's 10",
           [p["id"] for p in module._BUILTIN] == PID)
     check("legacy 'warm'/'plain' still answer as the old pair",
           module.current() in ("warm", "plain"))
-    check("all 9 ids normalize to themselves",
+    check("all 10 ids normalize to themselves",
           all(module.normalize_personality_id(pid) == pid for pid in PID))
-    check("all 9 preset titles and aliases normalize to their preset",
+    check("all 10 preset titles and aliases normalize to their preset",
           all(module.normalize_personality_id(a) == p["id"]
               for p in module._BUILTIN for a in [p["title"]] + list(p["aliases"])))
     check("legacy words normalize through the mapping",
@@ -231,11 +232,11 @@ def check_module_behaviour(module) -> None:
     check("an unknown personality name is refused, not guessed",
           module.normalize_personality_id("shouty") is None)
     # The PC may legitimately have saved "My Personalities" presets, so the
-    # check is the NINE BUILT-INS, not "the list is exactly nine entries".
+    # check is the TEN BUILT-INS, not "the list is exactly ten entries".
     view = module.view()
     builtins = [p for p in view["personalities"] if p.get("builtin")]
-    check("the GET view carries the personality block and the 9 built-in presets",
-          len(builtins) == 9
+    check("the GET view carries the personality block and the 10 built-in presets",
+          len(builtins) == 10
           and [p["id"] for p in builtins] == PID
           and view["personality_default"] == "warm_peer"
           and set(view["dials"]) == {"humor", "brevity", "formality", "address"}

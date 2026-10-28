@@ -129,7 +129,7 @@ function fixturePayload(chosen = null) {
 
 /**
  * The PC's own manner answer (GET /api/manner), in the shape the HUD reads:
- * the nine personalities from the contract, the current one, and the owner's
+ * the ten personalities from the contract, the current one, and the owner's
  * own list. No card is involved anywhere in this stub - that is the point of
  * the personality half.
  */
@@ -873,7 +873,7 @@ async function menuReport(page) {
   });
 }
 
-await check("the menu is called Presets and lists the PC's focus presets and nine personalities", async () => {
+await check("the menu is called Presets and lists the PC's focus presets and ten personalities", async () => {
   const { page, problems } = await openHud(browser, { chosen: "general" });
   await openPresetMenu(page);
   const menu = await menuReport(page);
@@ -898,7 +898,7 @@ await check("the menu is called Presets and lists the PC's focus presets and nin
     "the chosen mark is not the PC's chosen_preset");
   assert.deepEqual(menu.people.map((r) => r.personality),
     PERSONALITIES.personalities.map((p) => p.id),
-    "the menu does not list the PC's nine personalities in its order");
+    "the menu does not list the PC's ten personalities in its order");
   assert.deepEqual(menu.people.map((r) => r.text.replace(/ \(current\)$/, "")),
     PERSONALITIES.personalities.map((p) => p.title),
     "the personalities' titles are not the PC's own");
