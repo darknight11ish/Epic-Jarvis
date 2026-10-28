@@ -3054,10 +3054,29 @@ async function galaxySnap(page) {
   });
 }
 
+/** Open the ONE Galaxy options panel (2026-10-27) through whichever door this
+ *  shell shows: the stage bar's word beside Telemetry in the Cockpit, the
+ *  dock's icon or the words-row word in the Studio. */
+async function openGalaxyOptions(page) {
+  const opened = await page.evaluate(() => {
+    const panel = document.getElementById("galaxy-options");
+    if (panel && !panel.hidden) return true;   // already open: a no-op, not a toggle
+    const ids = ["stage-bar-galaxy-options", "rail-galaxy-options", "dock-galaxy-options", "stage-galaxy-options"];
+    const door = ids.map((id) => document.getElementById(id))
+      .find((b) => b && b.getClientRects().length > 0);
+    if (!door) return null;
+    door.click();
+    return Boolean(panel && !panel.hidden);
+  });
+  assert.equal(opened, true, "a Galaxy options door did not open the panel");
+  await page.waitForTimeout(120);
+}
+
 async function openGalaxy(browser, graph) {
   const opened = await openHud(browser, { jarvis: true, ollama: true, proxy: false, graph });
   await opened.page.click('[data-view="brain"]');
   await opened.page.waitForTimeout(500);
+  await openGalaxyOptions(opened.page);
   return opened;
 }
 
@@ -3173,11 +3192,15 @@ await check("GALAXY v2: the counts follow the payload, they are not typed into t
 await check("GALAXY v2: a keyboard user can reach and open a node in every lens", async () => {
   const { page } = await openGalaxy(browser, GALAXY_GRAPH);
   for (const lens of ["neural", "memory", "unified"]) {
+    await openGalaxyOptions(page);
     await page.click(`button[data-galaxy-lens="${lens}"]`);
     await page.waitForTimeout(400);
-    // Tab from the lens pill reaches a node button (the overlay is real HTML,
-    // not something drawn only on the canvas).
-    await page.focus(`button[data-galaxy-lens="${lens}"]`);
+    // The lenses live in the Galaxy options dialog now, so the walk starts by
+    // closing it (Escape returns focus to the door that opened it) and then
+    // tabbing forward into the map's own dot buttons - still real HTML
+    // buttons behind a canvas, never a picture that is only pixels.
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(150);
     let reached = false;
     for (let i = 0; i < 40; i += 1) {
       await page.keyboard.press("Tab");
@@ -3340,7 +3363,11 @@ await check("G2: the cap is deterministic - the same graph draws the same nodes,
 await check("G2: a keyboard user can still reach and open a node when the cap is in force", async () => {
   const { page } = await openGalaxyAt(browser, bigGalaxyGraph(),
     { viewport: { width: 760, height: 600 } });
-  await page.focus('button[data-galaxy-lens="neural"]');
+  // The lenses are in the Galaxy options dialog now: close it (Escape returns
+  // focus to its door) and tab into the capped map's own dot buttons.
+  await openGalaxyOptions(page);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
   let reached = false;
   for (let i = 0; i < 40; i += 1) {
     await page.keyboard.press("Tab");
