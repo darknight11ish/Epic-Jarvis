@@ -383,10 +383,6 @@ fn main() {
             // and Settings both draw it.
             "get_focus_presets",
             "apply_focus_preset",
-            // Pillar 24-B: the highlighted text of the window in front,
-            // read BEFORE the bar takes focus. Quickbar only; it only reads,
-            // writes nothing and raises no card.
-            "read_selection",
             "get_tutorials",
             "mark_tutorial",
             "get_faq",
