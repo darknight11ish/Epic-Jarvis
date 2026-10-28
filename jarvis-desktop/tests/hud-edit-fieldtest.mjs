@@ -56,17 +56,21 @@
  *    preset it started as. That is asserted as what the app does, with the
  *    reason beside it - it is not a failure, and scenario A passes with it.
  *
- * 2. A CHANGE THAT CANNOT BE REVERTED AT ALL, WHICH IS A DEFECT. Once a card is
- *    hidden, nothing on the page can show it again: the card's own Hide control
- *    (painted as a toggle - aria-pressed, a circle instead of a cross) always
- *    sends `visible: false` (hud-edit.js:676), while the one toggling path, the
- *    `h` key (hud-edit.js:709), needs focus on a shell that is `display: none`
- *    while hidden. After a reload the only ways back are Undo / Discard changes
- *    (same editing session) or Reset to preset - and Reset replaces the
- *    arrangement of a layout that is not the base preset. So an owner's own
- *    saved layout cannot be fully restored. Scenario B's (e2) and (f) checks
- *    FAIL on this, on purpose: that is the finding, and they pass the day the
- *    control can show a card again.
+ * 2. A CHANGE THAT USED TO BE UNREVERSIBLE, AND NOW IS NOT (fixed 2026-10-28).
+ *    This suite was written FOR that defect. Once a card was hidden, nothing on
+ *    the page could show it again: the card's own Hide control (painted as a
+ *    toggle - aria-pressed, a circle instead of a cross) always sent a fixed
+ *    `visible: false` (hud-edit.js:676), while the one toggling path, the `h`
+ *    key (hud-edit.js:709), needed focus on a shell that was `display: none`
+ *    while hidden (.hud-card[hidden] in jarvis_hud.html). After a reload the
+ *    only ways back were Undo / Discard changes (same editing session) or Reset
+ *    to preset - and Reset replaces the arrangement of a layout that is not the
+ *    base preset. So an owner's own saved layout could not be fully restored.
+ *    The fix makes the control a real toggle and, while Edit HUD is on, paints a
+ *    hidden card as a dimmed ghost (its header and its own Show control, with its
+ *    body folded away) so it can be shown again; outside edit mode it stays
+ *    hidden exactly as before. Scenario B's (e2) and (f) checks now pass, and the
+ *    (d2) check in EVERY scenario drives both halves on the real page.
  *
  * WHAT THIS DOES *NOT* PROVE. See the note at the end of this file: a headless
  * Chromium is not the packaged Tauri window. The two IPC commands are stubbed
@@ -89,15 +93,21 @@
  * for keyboard use (ruling 27 / WCAG 2.5.7), so this suite activates a card's
  * controls the way the keyboard does - focus, then click - which cannot be
  * intercepted by paint order. The page's own `#hud-edit-*` bar buttons and a
- * VISIBLE card's "Move to" select are driven with real pointer actions. A card
- * the layout has hidden has nothing on screen, so its select is driven by the
- * `change` event its own control sends; the revert counts those and finding 2
- * above is why it has to.
+ * VISIBLE card's "Move to" select are driven with real pointer actions. A hidden
+ * card is a ghost in Edit HUD since the 2026-10-28 fix, so its "Move to" select
+ * is now reachable the same way; the `change`-event road stays as a fallback and
+ * the revert counts every card that needs it (it should be none).
  *
- * WHAT THE TWO CHECKS THAT FAIL MEAN. `B (e2)` names the cause and `B (f)` shows
- * the consequence in the saved document. Everything else in this file passes,
- * including every persistence check in both scenarios - so the failing pair is
- * one defect, not a broken suite.
+ * WHAT (d2) PROVES. On the real page, for a card the saved document says is
+ * hidden: outside Edit HUD it is not painted; inside it is a dimmed ghost with a
+ * Show control; a real POINTER click on that control shows the card, and the same
+ * control hides it again; leaving Edit HUD hides it again. That is the whole fix
+ * in one check, in both scenarios.
+ *
+ * WHAT THE TWO CHECKS THAT USED TO FAIL MEAN. They were the finding, not a broken
+ * suite: `B (e2)` named the cause and `B (f)` its consequence in the saved
+ * document. They pass since the fix, and are kept as the regression guard for the
+ * hand-revert path.
  */
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync } from "node:fs";
