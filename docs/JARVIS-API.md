@@ -24276,6 +24276,25 @@ Tests: `backend/test_presets_cloud.py`,
 gates, the patch round trip on the published base, and the automatic-turn
 fallback).
 
+### 145.2 What a cloud answer is corrected with, and `cloud_refused` (added 2026-10-28)
+
+From the 2026-10-27 AI-safety audit (`.dsh-scratch/AUDITS-2026-10-27/partner-ai-safety.md`, H1 and M1). Two things changed about a cloud turn, and **no existing key moved or changed meaning** - the header gains ONE key, and only when it applies.
+
+**The answer carries the honesty lines.** An answer that came back on a cloud lane is now followed, in the same body, by the same plain lines a local answer gets: the "nothing was actually done" line when the answer claims an action nothing ran, and the four newer corrections (a claimed search, the feature guide's contents, a calculation, a setting claimed unavailable). A cloud lane offers no tools at all, so on that lane a claim of action can never be backed - which is exactly why the line matters there. In a streamed answer the lines arrive as one ordinary `delta.content` chunk AFTER the model's words and BEFORE the `finish_reason` / `data: [DONE]` event; in a whole JSON reply they are appended to `choices[0].message.content`. Nothing else about the answer changes, and a spoken turn gets the version with no brackets.
+
+**A crisis turn is answered on this PC, whatever lane was picked.** When the newest message is a distress message (`jarvis_wellbeing.crisis_in_turn` - the last message, when it is the owner's), a cloud lane is refused for that turn: the local model answers it and the fixed 988/911 help text follows the answer. This is not a setting and no client can turn it off. The route header says what happened rather than pretending the pick was honoured:
+
+| key | what it holds |
+|---|---|
+| `cloud_refused` | **New, 2026-10-28.** `"crisis"` - this turn was picked or routed for a cloud lane and was answered on this PC instead, because the newest message is a distress message. Absent on every other turn. |
+| `lane` | the model that REALLY answered - the local one when `cloud_refused` is present |
+| `where` | `"local"` when `cloud_refused` is present |
+| `reason` | the router's own reason, then `"; answered on this PC: a message like this is never sent to a cloud provider"` |
+
+Both apps already draw the calm panel from `"wellbeing": "crisis"` (§38.1) and never read the answer aloud for such a turn; `cloud_refused` is there so a reader can say WHY the badge says Local after a cloud lane was chosen. A client that does not know the key is unaffected - it sees an ordinary local answer.
+
+Tests: `backend/test_cloud_honesty.py` (the patch round trip on the published base, the cloud lines equal to a local turn's for the same words, the lines landing before the stream ends for a streamed and a whole reply, and the crisis block rebinding the lane), `backend/test_wellbeing.py` (the pasted/share/voice-unverified cases and the fast path's refusal).
+
 ## 146. App control on the phone: one allow-list, ONE card, ONE atomic step (backend half, added 2026-10-19)
 
 The owner asked for "fuller automation inside other apps" and then for the

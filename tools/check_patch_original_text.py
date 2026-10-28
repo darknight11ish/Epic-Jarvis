@@ -106,14 +106,17 @@ position 154 (two of its three hunks: `_lane_names()`'s body, which no patch
 had ever touched, and the cloud reply's reader, which reached the owner's PC
 by a re-take rather than a patch) and `f01-manual-lane-gate.patch` at position
 155 (the manual lane-picking path and `_manual_decision()`, which no patch in
-this walk writes - and whose missing gates WERE the F-01 defect) - with their
-positions, instead of pretending they are not there, plus ONE added on
-2026-10-28: `learning-extract-reason.patch` at position 157 (all three of its
-hunks: `_local_llm()`'s `except Exception: return None`, the `body` dict it
-posts - `think: False`, so a hybrid reasoning model answers instead of spending
-a small budget in `thinking` (Gemini Edition-3 review F1) - and the module-level
-record near `_PROMPT`, in the owner's `jarvis_extract.py`, which no earlier
-patch touches). The position-29 rule is kept as a REPORTED fact, not a gate.
+this walk writes - and whose missing gates WERE the F-01 defect) - plus, on
+2026-10-28, TWO patches, both with their positions: `learning-extract-reason.patch`
+at position 157 (all three of its hunks: `_local_llm()`'s `except Exception:
+return None`, the `body` dict it posts - `think: False`, so a hybrid reasoning
+model answers instead of spending a small budget in `thinking` (Gemini
+Edition-3 review F1) - and the module-level record near `_PROMPT`, in the
+owner's `jarvis_extract.py`, which no earlier patch touches), and
+`cloud-honesty.patch` (one of its three hunks: the cloud relay's
+`_says.close()` block, which reached the owner's PC by the same re-take) - with
+their positions, instead of pretending they are not there. The position-29 rule
+is kept as a REPORTED fact, not a gate.
 
 THE PIN
 
@@ -297,6 +300,19 @@ PIN = {
     # `jarvis-backend/jarvis_extract.py` with `git apply` (no fuzz), reverses
     # it out byte for byte, and drives BOTH texts.
     "learning-extract-reason.patch":           (3, 25),     # position 157
+    # 2026-10-28, cloud-honesty.patch (the AI-safety audit's H1 + M1: the
+    # honesty lines reach the cloud lane, and a crisis turn is never answered
+    # by one). ONE of its three hunks reads text the stack cannot account for,
+    # and it is the same kind of text as cloud-escalate.patch's second hunk:
+    # the cloud relay's `_says.close()` block, which arrived on the owner's PC
+    # by a RE-TAKE (`tools/hud-deltas/reasoning-new.txt`, PR #424) and so is in
+    # the published base and on his PC and in no patch at all. The other two
+    # anchor on patch-written text and invent nothing: the crisis block
+    # wellbeing.patch writes, and the `use_tools` assignment chat-stream.patch
+    # writes. Checked the other way by backend/test_cloud_honesty.py, which
+    # applies this patch to `jarvis-backend/jarvis_hud.py` with `git apply`
+    # (no fuzz), compiles the result and reverses it byte for byte.
+    "cloud-honesty.patch":                     (1, 7),     # position 155
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

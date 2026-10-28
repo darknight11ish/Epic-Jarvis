@@ -877,7 +877,15 @@ def t_the_patch_and_the_lists():
              # it, immediately before plugin-loader.patch: ONE file, jarvis_extract.py
              # (its `_local_llm` block), so it touches no gate list, no tier row, no
              # _RISK row, no _TOOL_ACTIONS line and rewrites nothing this patch wrote.
-             "learning-extract-reason.patch"}
+             "learning-extract-reason.patch",
+             # cloud-honesty.patch (2026-10-28, AI-safety audit H1/M1) is the
+             # last patch ADDED after it, immediately before cloud-escalate.patch:
+             # three hunks, every one in jarvis_hud.py (the route header's crisis
+             # flag, the crisis-turn rebound to this PC's model, and the cloud
+             # relay's postscript lines). It has no hunk in jarvis_gate.py, so it
+             # rewrites nothing this patch wrote, and the later_rewriting() half
+             # below proves it.
+             "cloud-honesty.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

@@ -46,13 +46,29 @@ are code; only the kind sentence around them is the model's, steered by
 NOTE below.
 
 HOW IT WORKS
-crisis(text) looks only at the owner's newest message, in their own words -
-jarvis_agent._TurnWatch.newest_own_words already carries exactly that:
-typed or said by the owner, never a picture caption, a paste, a share, or
-anything read from outside. The text is folded to plain lower case, known
-harmless phrases are blanked out first (FALSE_ALARMS, below - the same
-"blank the harmless bits first" idea jarvis_sensitive.py uses for its own
-false alarms), and what is left is checked against CRISIS_PHRASES_EN.
+crisis(text) folds the text to plain lower case, blanks out known harmless
+phrases first (FALSE_ALARMS, below - the same "blank the harmless bits first"
+idea jarvis_sensitive.py uses for its own false alarms), and then checks what
+is left against CRISIS_PHRASES_EN.
+
+WHERE THE TEXT COMES FROM - ONE RULE, TWO CALLERS (changed 2026-10-28)
+
+crisis_in_turn(messages) is the one place that decides WHICH text is checked:
+the LAST message in the conversation, when it is the owner's (a `user` one),
+whatever its provenance tag. Both callers use it - jarvis_agent.run_local_turn
+(through _TurnWatch) and the HUD's own route header that tells both apps to
+draw the calm panel - so the panel and the help line can never disagree again.
+
+It used to be narrower: `newest_own_words`, set only for provenance `typed` or
+`voice`, so a distress message sent as a paste, a share, a picture caption, or
+said with a FAILED voice print got no help line while the panel still said
+crisis (the 2026-10-27 AI-safety audit, finding M1). Two behaviours that
+disagree about the same message are a bug whichever way it is settled, and the
+panel already treats the newest user message as the owner's. The cost, said
+plainly: a pasted article that quotes a first-person crisis phrase in a way
+`suicid\\w*` matches now gets the help line too. An extra supportive line is a
+far smaller harm than a missing one on the one path where the message must
+never be missed, and nothing is learned from, acted on or stored either way.
 
 Nothing here writes to disk, logs anything, or keeps a count. crisis() answers
 one boolean, every time, from exactly the text it is given - never more.
@@ -312,6 +328,52 @@ def crisis(text: str) -> bool:
         return False
     masked = _FALSE_ALARM_RX.sub(" ", folded)
     return bool(_CRISIS_RX.search(masked))
+
+
+def _message_text(content) -> str:
+    """One message's `content` as text: a string, or OpenAI's list of parts.
+
+    Same rule as jarvis_chatbot_api._text_of and jarvis_agent._text_of, kept
+    local because this module imports nothing from the program (it is read by
+    the gate's own startup and must stay cheap and dependency-free)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(str(p.get("text") or "") for p in content
+                        if isinstance(p, dict) and p.get("type") in ("text", "output_text"))
+    return ""
+
+
+def crisis_in_turn(messages) -> bool:
+    """True when the LAST message in `messages` is a user message naming a
+    crisis, whatever its provenance.
+
+    THE ONE PLACE THIS DECISION IS MADE (2026-10-28). Both the answering turn
+    (jarvis_agent._TurnWatch) and the HUD's route header call this, so the
+    calm panel both apps draw and the help line the answer carries are decided
+    from the same words - they used to be decided from different ones, and on
+    a pasted, shared, caption or voice-unverified message the panel said
+    crisis while the answer never mentioned it (the 2026-10-27 audit, finding
+    M1).
+
+    ONLY THE LAST MESSAGE, and only a user one. An earlier crisis turn in the
+    same conversation must never be inherited by the next question (there is a
+    test for exactly that, from the 2026-10-14 picture turn), and a request
+    whose last message is the assistant's is not the owner speaking. The
+    provenance tag is deliberately NOT read: a demand that it be typed/voice
+    is what made the panel and the line disagree, and a failed voice print is
+    still the owner talking. The trade-off is in this module's docstring under
+    "WHERE THE TEXT COMES FROM". Never raises; anything odd answers False.
+    """
+    try:
+        if not isinstance(messages, (list, tuple)) or not messages:
+            return False
+        last = messages[-1]
+    except TypeError:
+        return False
+    if not isinstance(last, dict) or last.get("role") != "user":
+        return False
+    return crisis(_message_text(last.get("content")))
 
 
 def shown_before(messages) -> bool:

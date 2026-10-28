@@ -628,7 +628,15 @@ def t_hygiene():
              # it, immediately before plugin-loader.patch: ONE file, jarvis_extract.py
              # (its `_local_llm` block), so it touches no gate list, no tier row, no
              # _RISK row, no _TOOL_ACTIONS line and rewrites nothing this patch wrote.
-             "learning-extract-reason.patch"}
+             "learning-extract-reason.patch",
+             # cloud-honesty.patch (2026-10-28, AI-safety audit H1/M1) is the
+             # last patch ADDED after it, immediately before cloud-escalate.patch:
+             # three hunks, every one in jarvis_hud.py (the route header's crisis
+             # flag, the crisis-turn rebound to this PC's model, and the cloud
+             # relay's postscript lines). It has no hunk in jarvis_hud.py's screen wrapper, so it
+             # rewrites nothing this patch wrote, and the later_rewriting() half
+             # below proves it.
+             "cloud-honesty.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")
