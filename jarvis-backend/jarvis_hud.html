@@ -989,6 +989,32 @@ html[data-galaxy-hidden] .galaxy-off{display:flex !important;}
 #model-warn b{color:var(--gold); font-weight:500;}
 #model-warn #model-warn-host{color:var(--dim); opacity:.85;}
 
+/* The Connect button (2026-10-28, the owner's ask: "there should be a connect
+   button next to these notifications saying its offline"). One small control
+   at the end of either offline line, in the page's own mono/gold language, and
+   a real <button> - keyboard reachable, focusable, Enter and Space work, and
+   its words are the PC's own reading. It is never drawn from a guess: the
+   page paints it only while the PC says a press would really start a lane. */
+#model-warn .lane-start,
+#banner .lane-start{
+  align-self:center; padding:3px 10px; min-height:24px;
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.04em;
+  color:var(--gold); background:transparent; cursor:pointer;
+  border:1px solid var(--line-hot); border-radius:3px;
+}
+#model-warn .lane-start:hover,
+#banner .lane-start:hover{border-color:var(--gold);}
+#model-warn .lane-start:focus-visible,
+#banner .lane-start:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+#model-warn .lane-start:disabled,
+#banner .lane-start:disabled{color:var(--dim); border-color:var(--line); cursor:default;}
+#model-warn .lane-start[hidden],
+#banner .lane-start[hidden]{display:none;}
+#model-warn .lane-start-note,
+#banner .lane-start-note{color:var(--dim); font-size:10.5px; opacity:.9;}
+#model-warn .lane-start-note[hidden],
+#banner .lane-start-note[hidden]{display:none;}
+
 /* ---------- Jarvis Live's refusal popup ------------------------------ *
  * The owner's field bug of 2026-10-27: clicking Live with no microphone
  * "gives me a message but its in the left column and hard to read. it should
@@ -2733,18 +2759,29 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
     <div id="initiative" hidden></div>
 
     <div id="banner">
-      <b>Demo data.</b>
-      Jarvis is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.
+      <span id="banner-text"><b>Demo data.</b>
+      Jarvis is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.</span>
+      <!-- The PC is answering and only its model is missing: the one action
+           that starts the lane Jarvis talks to. Painted from the PC's own
+           reading (lane-connect below), never from a guess, and it is the
+           same words and the same command the Jarvis bar's button sends. -->
+      <button id="banner-connect" class="lane-start" type="button" hidden></button>
+      <span id="banner-connect-note" class="lane-start-note" role="status" hidden></span>
     </div>
 
     <!-- The PC is answering and its own model is not. Standing, before any
          question, and its own state: this is NOT "Jarvis isn't connected" -
-         the PC is fine, only answers are. Filled in by lane-warning.js, from
-         `/api/status`'s own `ollama` field on every beat, so it clears itself
-         when the lane comes back and never acts on anything. -->
+         the PC is fine, only answers are. The sentence is filled in by
+         lane-warning.js, from `/api/status`'s own `ollama` field on every
+         beat, so it clears itself when the lane comes back. The BUTTON beside
+         it is the owner's ask of 2026-10-28 (the HUD was the one window with
+         no Start button); lane-connect below draws it from the PC's own
+         `/api/model-lanes` reading and sends the bar's own command. -->
     <div id="model-warn" hidden>
       <b id="model-warn-text"></b>
       <span id="model-warn-fix"></span>
+      <button id="model-warn-start" class="lane-start" type="button" hidden></button>
+      <span id="model-warn-start-note" class="lane-start-note" role="status" hidden></span>
       <span id="model-warn-host" hidden></span>
     </div>
 
@@ -6611,7 +6648,9 @@ async function boot(){
 
   if(!S.online){
     $("banner").classList.add("on");
-    $("banner").innerHTML = status
+    // Written into its own span, never over #banner's whole contents: the
+    // Connect button beside it must survive every status read (2026-10-28).
+    $("banner-text").innerHTML = status
       ? '<b>Model not running.</b> The HUD server is answering; the local model is not. '
         + 'Replies below are sample data.'
       : '<b>Demo data.</b> Jarvis is not answering yet — start '
@@ -6620,6 +6659,7 @@ async function boot(){
       ? "The PC is up, but its local model is not running yet. Everything below is sample data until it is."
       : "Running as a preview. On your desktop, start it with py -3 jarvis_hud.py to connect to the real Jarvis.");
   } else {
+    paintLaneConnectNow();
     addMessage("jarvis", "Systems online, sir. Local model loaded and the brain map is current. What are we working on?");
     if(S.jarvisMemory){
       addMessage("system",
@@ -6807,7 +6847,18 @@ async function paintHost(){
     }
   }catch(e){ /* keep what was last known; never guess "down" from a failure */ }
   hostWarn();
+  // The lane's own reading, on the same beat: it is the PC that decides whether
+  // a press would do anything, and a lane started somewhere else (the Jarvis
+  // bar, the phone, the logon task) has to take this page's button away too.
+  await refreshLane();
 }
+
+/** The last lane reading this page has, or null for "the PC has not said". */
+let laneRead = null;
+/** True while a press is being watched, so the button cannot be pressed twice. */
+let lanePressing = false;
+/** The PC's own refusal, or this page's plain sentence, under the button. */
+let laneNote = "";
 
 /* Draws the ONE standing status row under the title: the model truth and the
  * shell's live link truth, once each (see "ONE status row" below).
@@ -6833,6 +6884,12 @@ function hostWarn(){
     // one thing that has to be true before anything is typed.
     paintLaneWarning(document, S.ollama, S.linkUp);
   }
+  // The Connect button follows the same two facts, and is painted again on
+  // every beat, so a lane started from the Jarvis bar, the phone or the logon
+  // task takes the button (and the offline banner) away here too.
+  paintLaneConnectNow();
+  const banner = document.getElementById("banner");
+  if(banner && S.ollama === true) banner.classList.remove("on");
   const sub = document.getElementById("brand-sub");
   if(!sub) return;
   const modelUp = S.ollama !== false;
@@ -6854,6 +6911,314 @@ function hostWarn(){
 function isBrandFallback(){
   const sub = document.getElementById("brand-sub");
   return !!sub && /^\s*demo\b/i.test(sub.textContent || "");
+}
+
+/* ====================================================================== *
+ *  The Connect button: start the model lane this PC's chat uses
+ *
+ *  THE OWNER'S ASK, 2026-10-28, in his own words: "when jarvis gets opened on
+ *  the desktop from scratch, there should be a connect button next to these
+ *  notifications saying its offline." Two lines say a model is missing - the
+ *  standing #model-warn row ("The local model isn't running on your PC.") and
+ *  #banner ("Model not running. The HUD server is answering; the local model
+ *  is not.") - and until this slice neither offered anything to press. The HUD
+ *  was deliberately the ONE window with no Start button (docs/ARCHITECTURE.md
+ *  section 8, PR #409 era), because its reads were a fixed list in Rust. THE
+ *  OWNER HAS REVERSED THAT FOR THIS PAGE: the HUD now holds the lane's read
+ *  and its one action (`hud-lane` in permissions/surfaces.toml) and nothing
+ *  else of that set - the automatic-restart switch stays off this window.
+ *
+ *  WHAT THE PRESS REALLY DOES. It sends the SAME command the Jarvis bar sends
+ *  (`start_model_lane`, which the PC answers at POST /api/model-lanes/start),
+ *  and that runs the owner's OWN Windows logon task for the lane the chat is
+ *  pointed at, looked up on that PC by the half of its name a rename does not
+ *  touch. This page builds no command line, never says `ollama serve` and
+ *  cannot start a lane the chat is not on. No approval card is raised, because
+ *  the PC's own logon already runs that exact task unattended.
+ *
+ *  STARTING IS NOT ARRIVING, and nothing here says it is. The PC answers
+ *  "starting" at once, so the press then asks again on a short beat until the
+ *  lane really answers or the PC says it did not come up; only `state: "up"`
+ *  clears the warning, and a refusal is shown in the PC's own sentence with
+ *  the warning left standing. That is `lane-start.js`'s rule, in its words -
+ *  this page keeps the same shape here because it cannot import that module:
+ *  the browser-served copy of this page is dressed by the backend's
+ *  STATIC_ASSETS whitelist, which this repository does not own, so a new
+ *  module beside it would 404 and take the whole module graph (including
+ *  lane-warning.js) with it. `tests/hud-connect.mjs` runs this block and
+ *  `lane-start.js`'s `startUntilSettled` through the SAME fakes and demands
+ *  the same outcome, so the two cannot drift apart unannounced.
+ *
+ *  WHO ANSWERS. In the desktop shell the page holds no token (apps security
+ *  audit M2), so the two commands add it in Rust - exactly as the bar's button
+ *  does. Served by the backend in a plain browser there is no shell, so the
+ *  page asks the two routes itself with the header every HUD request carries.
+ * ====================================================================== */
+
+/* == hud-lane-connect start == (tests/hud-connect.mjs lifts this block) */
+
+/** The button, while the PC says a press would really start a lane. */
+const LANE_START_WORDS = "Start the local model";
+/** Mid-press, and until the lane either answers or runs out of time. */
+const LANE_STARTING_WORDS = "Starting\u2026";
+/** What a button that cannot do anything after all is called. */
+const LANE_CANNOT_START_WORDS = "Cannot start it";
+/** How often the page asks what became of a start it asked for. */
+const LANE_WATCH_BEAT_MS = 2000;
+/** The PC gives a lane ninety seconds; this is a little longer so its verdict
+ *  is the one the owner sees rather than this page giving up first. */
+const LANE_WATCH_LIMIT_MS = 100000;
+
+/** Whether a lane reading is the PC saying the lane is really back. */
+function laneIsUp(lane){
+  return Boolean(lane) && String(lane.state || "") === "up";
+}
+
+/**
+ * What the button says, from the PC's own reading of the lane, or null when
+ * the PC has not said. `lane` is `GET /api/model-lanes`'s answer: `state`
+ * ("up", "down", "starting"), `can_start`, `message`/`why`, `elapsed_s`.
+ */
+function laneButtonView(lane){
+  if(!lane || typeof lane !== "object"){
+    return { show: false, disabled: true, words: "", note: "", state: "" };
+  }
+  const state = String(lane.state || "");
+  if(state === "up"){
+    return { show: false, disabled: true, words: "", note: "", state };
+  }
+  if(state === "starting"){
+    return { show: true, disabled: true, words: LANE_STARTING_WORDS,
+             note: laneCountdownWords(lane), state };
+  }
+  if(lane.can_start === true){
+    return { show: true, disabled: false, words: LANE_START_WORDS, note: "", state };
+  }
+  // No such task on this PC, or the PC just tried: the reason, and no button.
+  const note = String(lane.message || lane.why || "");
+  return { show: false, disabled: true, words: LANE_CANNOT_START_WORDS, note, state };
+}
+
+/** The line under the button: what the PC itself said, or the seconds it has
+ *  been, or nothing made up. */
+function laneCountdownWords(lane){
+  const said = String((lane && lane.message) || "").trim();
+  if(said) return said;
+  const elapsed = Number(lane && lane.elapsed_s);
+  if(Number.isFinite(elapsed) && elapsed > 0){
+    const whole = Math.round(elapsed);
+    return `It has been ${whole} second${whole === 1 ? "" : "s"}; this can take up to a minute.`;
+  }
+  return "Starting it now; this can take up to a minute.";
+}
+
+/** What to say when the press could not be sent, or the PC refused it. Plain,
+ *  and never softened into a success: the warning stands either way. */
+function laneRefusalWords(reply){
+  const said = String((reply && (reply.error || reply.message)) || "").trim();
+  return said || "The PC would not start it just now. The local model is still not running.";
+}
+
+/**
+ * Draw the button into both offline surfaces of this page and return whether
+ * it is showing. `opts.banner` decides the banner half: that line only appears
+ * when the PC answers and its MODEL does not, and a page with no server to ask
+ * has nothing to start.
+ */
+function paintLaneConnect(doc, lane, onPress, opts){
+  opts = opts || {};
+  const view = laneButtonView(lane);
+  const bannerHalf = opts.banner === true;
+  let shown = false;
+  const put = (buttonId, noteId, allowed) => {
+    const button = doc && doc.getElementById ? doc.getElementById(buttonId) : null;
+    if(!button) return false;
+    const show = allowed && view.show;
+    button.textContent = show || allowed ? view.words : "";
+    button.hidden = !show;
+    button.disabled = !show || view.disabled;
+    button.setAttribute("aria-busy", show && view.disabled ? "true" : "false");
+    const note = doc.getElementById(noteId);
+    if(note){
+      // The line under the button is the PC's own sentence (or the countdown),
+      // and only while this surface is the one telling the owner about it.
+      note.textContent = allowed && view.note ? view.note : "";
+      note.hidden = !(allowed && view.note);
+    }
+    if(onPress) button.onclick = show && !view.disabled ? onPress : null;
+    return show;
+  };
+  // The standing row: the PC is answering and its own model is not.
+  shown = put("model-warn-start", "model-warn-start-note", true) || shown;
+  // The banner: only in its "model not running" state.
+  put("banner-connect", "banner-connect-note", bannerHalf);
+  return shown;
+}
+
+/* The two ways this page can ask. `core.invoke` for the shell (the token and
+ * every refusal live in Rust there), the routes themselves for a browser. */
+function hudLaneRead(){
+  const tauri = window.__TAURI__;
+  const core = tauri && tauri.core;
+  if(core && typeof core.invoke === "function"){
+    return core.invoke("read_model_lane");
+  }
+  return jfetch("/api/model-lanes", { cache: "no-store",
+    headers: { "X-Jarvis-Client": "hud" } }).then(function(r){
+      return r && r.ok ? r.json() : null;
+    });
+}
+
+function hudLaneAsk(){
+  const tauri = window.__TAURI__;
+  const core = tauri && tauri.core;
+  if(core && typeof core.invoke === "function"){
+    return core.invoke("start_model_lane");
+  }
+  return jfetch("/api/model-lanes/start", {
+    method: "POST", cache: "no-store", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Jarvis-Client": "hud" },
+    body: "{}",
+  }).then(function(r){
+    return r.json().catch(function(){ return null; }).then(function(body){
+      if(r.ok) return body;
+      const said = body && (body.error || body.message);
+      return { ok: false, error: String(said || `the PC answered HTTP ${r.status}`) };
+    });
+  });
+}
+
+/**
+ * Ask the PC to start the lane, then keep asking until it settles.
+ *
+ * Resolves with the LAST reading it saw - never with the press's own answer,
+ * which is only an acknowledgement - and `settled` says whether the lane
+ * reached a verdict inside the limit. A refusal resolves at once, so nothing
+ * is retried behind the owner's back. The shape and the words are
+ * `lane-start.js`'s `startUntilSettled`, which the bar and widget use.
+ */
+async function hudLanePress(io){
+  io = io || {};
+  const ask = io.ask || hudLaneAsk;
+  const read = io.read || hudLaneRead;
+  const wait = io.wait || ((ms) => new Promise(function(done){ setTimeout(done, ms); }));
+  const now = io.now || (() => Date.now());
+  const beatMs = io.beatMs || LANE_WATCH_BEAT_MS;
+  const limitMs = io.limitMs || LANE_WATCH_LIMIT_MS;
+  let first = null;
+  try{
+    first = await ask();
+  }catch(err){
+    return { ok: false, settled: true, lane: null, refused: true,
+             words: laneRefusalWords({ error: String((err && err.message) || err) }) };
+  }
+  if(first && first.ok === false){
+    return { ok: false, settled: true, lane: null, refused: true,
+             words: laneRefusalWords(first) };
+  }
+  if(laneIsUp(first)){
+    return { ok: true, settled: true, lane: first, refused: false, words: "" };
+  }
+  const started = now();
+  let last = first;
+  while(now() - started < limitMs){
+    await wait(beatMs);
+    try{
+      last = await read();
+    }catch(err){
+      continue;   // a read that did not land says nothing about the lane
+    }
+    if(laneIsUp(last)){
+      return { ok: true, settled: true, lane: last, refused: false, words: "" };
+    }
+    if(last && last.state === "down" && last.can_start === false){
+      return { ok: false, settled: true, lane: last, refused: false,
+               words: String(last.message || last.why || "") || laneRefusalWords(last) };
+    }
+  }
+  return { ok: false, settled: false, lane: last, refused: false,
+           words: "It did not come up in time. The local model is still not running." };
+}
+/* == hud-lane-connect end == */
+
+
+/** Redraws the button on both offline surfaces from the last reading. */
+function paintLaneConnectNow(){
+  const banner = document.getElementById("banner");
+  const bannerHalf = !!banner && banner.classList.contains("on") && S.ollama === false;
+  // The LANE's own reading decides, not the live stream's: `linkStatus.up`
+  // false means the shell's event stream dropped, which says nothing about
+  // whether the PC can be asked (the bridge read goes over its own road, and
+  // the warning line above is drawn from `S.ollama` whatever the stream says).
+  // Conflating the two hid this button in a plain browser and on every PC whose
+  // stream was reconnecting - found by driving the page, not by reading it.
+  // A lane mid-press is drawn as "starting" so a slow press cannot look like a
+  // stalled one.
+  const lane = lanePressing
+    ? Object.assign({}, laneRead || {}, { state: "starting" })
+    : laneRead;
+  paintLaneConnect(document, lane, startTheLane, { banner: bannerHalf });
+  if(!laneNote) return;
+  // The PC's refusal, or this page's plain sentence, under whichever line is
+  // the one on screen. Never invented, and never cleared by a repaint that has
+  // nothing new to say.
+  const standing = document.getElementById("model-warn");
+  const standingWanted = !!standing && !standing.hidden;
+  for(const [noteId, surface, wanted] of [
+    ["model-warn-start-note", standing, standingWanted],
+    ["banner-connect-note", banner, bannerHalf],
+  ]){
+    const note = document.getElementById(noteId);
+    if(!note || !surface) continue;
+    note.textContent = wanted ? laneNote : "";
+    note.hidden = !wanted;
+  }
+}
+
+/** Reads the lane and draws from it. Never throws; one read at a time. */
+let laneAsking = false;
+async function refreshLane(){
+  if(laneAsking) return laneRead;
+  laneAsking = true;
+  try{
+    const reading = await hudLaneRead();
+    // Only a read that landed changes anything: "the PC did not say" is not
+    // "the lane is down", and a button drawn from a failed read would be one
+    // more thing to learn to ignore.
+    if(reading && typeof reading === "object") laneRead = reading;
+  }catch(e){
+    /* keep what was last known; an older backend has no such route */
+  }finally{
+    laneAsking = false;
+  }
+  if(laneIsUp(laneRead)) laneNote = "";
+  paintLaneConnectNow();
+  return laneRead;
+}
+
+/** The owner's press: ask the PC, then watch until the lane answers or it gives up. */
+async function startTheLane(){
+  if(lanePressing) return;
+  lanePressing = true;
+  laneNote = "";
+  paintLaneConnectNow();
+  const outcome = await hudLanePress({});
+  lanePressing = false;
+  if(outcome && outcome.lane) laneRead = outcome.lane;
+  if(outcome && outcome.ok){
+    laneNote = "";
+    // The lane really answered: ask again so the line clears from the PC's
+    // own verdict rather than from this page's opinion (`paintHost` re-reads
+    // /api/status and the lane, and the banner clears itself from `ollama`).
+    await paintHost();
+    return;
+  }
+  if(outcome) laneNote = outcome.words || laneRefusalWords(null);
+  // Did not come up, or the PC refused it: the PC's own words, and the
+  // warning is left standing - which is the whole point. The state is read
+  // again so a "starting" reading left by the watch is replaced by the PC's
+  // own verdict, and the button is drawn from that rather than from a guess.
+  await refreshLane();
 }
 
 /* ONE status row (field fix, 2026-10-21).

@@ -2170,9 +2170,13 @@ await check("the HUD page holds no token, and every request it makes goes throug
   // list on 2026-10-27 with the owner's Live button in the left rail: it is a
   // READ of the session's own state (which device owns it, whether it is on),
   // granted by `hud-live` in surfaces.toml, and it carries no words of anyone's.
+  // `read_model_lane` joined on 2026-10-28 with the Connect button the owner
+  // asked for on the offline lines: it is the BAR'S own read of the lane the
+  // chat is on, granted by `hud-lane`; the start half (`start_model_lane`) is
+  // only sent when he presses, so it is not in a load-time list.
   // A command NOT named here is still a failure - that is what this check is for.
   assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout",
-    "get_lock_flags", "live_status"].includes(c)), [],
+    "get_lock_flags", "live_status", "read_model_lane"].includes(c)), [],
     `the HUD called ${JSON.stringify(held.invoked)}`);
   // Every read is one hud_proxy.rs allows (HUD_GET_PATHS and /api/retrieve).
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
@@ -2304,11 +2308,12 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
   }));
   await page.close();
   // The load-time shell calls are not this check's subject: the page's reads,
-  // the layout read, the two lock answers, and (2026-10-27) the rail's Live
-  // button asking once for the session's state. What the MIC does is the rest.
+  // the layout read, the two lock answers, (2026-10-27) the rail's Live
+  // button asking once for the session's state, and (2026-10-28) the Connect
+  // button's own read of the model lane. What the MIC does is the rest.
   assert.deepEqual(after.invokes.map((c) => c[0])
     .filter((c) => c !== "hud_get" && c !== "get_hud_layout" && c !== "get_lock_flags"
-      && c !== "live_status"),
+      && c !== "live_status" && c !== "read_model_lane"),
     ["summon_push_to_talk"],
     "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
   assert.equal(after.listening, false, "the page's own (browser) recogniser started");
@@ -2424,19 +2429,30 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // reload keeps it. Cosmetic: no card, and no binding, colour or animal
       // field can ride along. Appended at the end because that is where the
       // capability file's own list gained it.
-      "hud-faces"]);
+      "hud-faces",
+      // The Connect button on the two offline lines (2026-10-28, the OWNER
+      // ASKED: "when jarvis gets opened on the desktop from scratch, there
+      // should be a connect button next to these notifications saying its
+      // offline"). The BAR'S own two commands - `read_model_lane` and
+      // `start_model_lane` - never a new route: starting runs his own Windows
+      // logon task for the lane the chat is on, raises no card (that task
+      // already runs unattended at his logon), and cannot start the other lane.
+      // Deliberately NOT the whole `model-lane` set: `set_model_lane_auto`
+      // (the automatic-restart switch) stays on the bar, the widget and the
+      // phone. Appended at the end, where the capability file gained it.
+      "hud-lane"]);
   assert.equal(cap.permissions.includes("hud-layout-write"), true,
     "the HUD page's own Edit mode cannot save without the layout write grant");
   assert.equal(cap.permissions.includes("hud-layout-read"), true,
     "the H2 change must not take the H1 read grant away");
   const writeish = cap.permissions.filter((name) => [
     "hud-layout-write", "hud-approvals", "focus-presets", "hud-voice", "hud-schedule",
-    "hud-history", "hud-personalities", "hud-cloud-escalate", "hud-faces",
+    "hud-history", "hud-personalities", "hud-cloud-escalate", "hud-faces", "hud-lane",
   ].includes(name));
   assert.deepEqual(writeish.sort(),
     ["focus-presets", "hud-approvals", "hud-cloud-escalate", "hud-faces", "hud-history",
-      "hud-layout-write", "hud-personalities", "hud-schedule", "hud-voice"],
-    "the HUD window gained a write command beyond its own layout, Reminders, ONE chat's pin/file/delete, the wording-only personality switch, the cloud escalate switch and the face models picker");
+      "hud-lane", "hud-layout-write", "hud-personalities", "hud-schedule", "hud-voice"],
+    "the HUD window gained a write command beyond its own layout, Reminders, ONE chat's pin/file/delete, the wording-only personality switch, the cloud escalate switch, the face models picker and the lane's own start");
   assert.match(cap.description, /hud-layout-write/);
   assert.match(cap.description, /owner-approved/);
   assert.match(cap.description, /holds NO pairing token/);
