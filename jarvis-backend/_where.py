@@ -1308,6 +1308,14 @@ SHIPPED = (
     # Standard library plus the read half only. Nothing imports it yet and no
     # route/app surface exists, so a backend without it runs exactly as before.
     "jarvis_product_capture.py",
+    # Model/preset recommendations (2026-10-28, the owner's request): one cached
+    # check of the public model catalogues, a bounded benchmark of an INSTALLED
+    # model on this PC, and preset changes justified only by measured numbers.
+    # Five PC-only routes; approves, downloads and applies nothing (the existing
+    # /api/models/install and /api/work/apply cards remain the only ways to act).
+    # model-recommendations.patch adds the ONE install block; no gate row, no
+    # tier line, no timer. The same entry is at the end of the script's $SHIPPED.
+    "jarvis_model_recommendations.py",
 )
 
 

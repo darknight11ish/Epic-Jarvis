@@ -8,7 +8,7 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **27 drop-in modules**, in [`ready/`](ready/) -
+- **28 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
 - **131 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -44,6 +44,7 @@ you drop in and take out.
 | 144 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
 | 151 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
 | 153 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
+| 155 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
 
 ## What stays in the core
 

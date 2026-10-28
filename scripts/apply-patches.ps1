@@ -1723,6 +1723,21 @@ $PATCHES = @(
     # must stay LAST OF ALL) and changes nothing that patch anchors on.
     'reminder-actions.patch'
 
+    # model-recommendations.patch (2026-10-28, the owner's request): ONE click
+    # that looks through the public model catalogues, a bounded benchmark of a
+    # model ALREADY on this PC, and preset changes justified only by measured
+    # numbers. Five PC-only routes, all in the shipped
+    # jarvis_model_recommendations.py, wired by ONE install block on the OWNER's
+    # own lines just before the socket (the same shape as picture-card.patch) -
+    # NOT in the install-block chain, so plugin-loader.patch's own anchor is
+    # untouched. It approves nothing, downloads nothing and applies nothing: a
+    # download is the EXISTING /api/models/install card and applying a preset is
+    # the EXISTING /api/work/apply card. No gate row and no tier line. It sits
+    # BEFORE cloud-escalate.patch on purpose: f01-manual-lane-gate.patch must
+    # stay directly after cloud-escalate and directly before plugin-loader
+    # (backend/test_hud_manual_lane_gate.py asserts both).
+    'model-recommendations.patch'
+
     # cloud-escalate.patch (2026-10-27, the owner's decision): ONE cloud lane,
     # and a standing "escalate when the work is too complex" switch that no
     # client can fake. Three hunks, NO install block and no route of its own -
@@ -2375,6 +2390,13 @@ $SHIPPED = @(
 # exists, so a backend without it runs exactly as before (backend/_where.py's
 # SHIPPED list has the same entry; test_shipped_modules fails if they disagree).
 'jarvis_product_capture.py'
+# Model/preset recommendations (2026-10-28, the owner's request): one cached
+# check of the public model catalogues, a bounded benchmark of an INSTALLED
+# model on this PC, and preset changes justified only by measured numbers. Five
+# PC-only routes; approves, downloads and applies nothing (the existing
+# /api/models/install and /api/work/apply cards remain the only ways to act).
+# backend/_where.py's SHIPPED list has the same entry, at the end too.
+'jarvis_model_recommendations.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -4418,3 +4418,55 @@ field-test row, not a pass.
 **Proven by local builds, both directions.** A release APK of this tree with PR #908's InputMerger keep applied passes in 0.82 s (6,824 classes parsed, all four targets and both sweeps OK). The same tree **without** that keep fails in 0.63 s (6,815 classes): `FAIL: reflective instantiation hole - androidx.work.OverwritingInputMerger`, `its constructor <init>()V is missing (the class itself is there)`, and the same for `ArrayCreatingInputMerger`; `dexdump` on that `classes.dex` independently shows the class with no `<init>` at all. A third build, with the keep applied but the Room keep rule removed, fails naming `androidx.work.impl.WorkDatabase_Impl` (6,581 classes), and `dexdump` again agrees - so the prior instance is guarded, not just the one that bit. `--self-test` proves the judgement and the wording with fabricated inventories, including an unlisted concrete `*InputMerger` that must be reported and an abstract one that must not. CI cost: under a second on the release APK the job already builds.
 
 **Not proven, and not claimed:** the table knows only the reflective entry points listed in it, plus the two family sweeps - a future reflective hole in a class nobody has listed will still ship, and adding one is a one-line entry with a comment. The check reads the dex R8 produced, so it asserts the result; it cannot tell whether the keep rules themselves are the right ones. And a build signed with a throwaway key still passes it: signing stays the separate step above it.
+
+## 2026-10-28 — Jarvis recommends a model or preset change; only the owner's cards download and apply
+
+**The owner's request, in their words:** *"can you give jarvis the ability to
+recommend a change to presets (for the local ai models being used) with a one
+click check for new models button and it will look on hugging face for newer
+potentially better models, give me a card to approve a download and a bench
+mark testing locally, then it will recommend changing the presets based on the
+local gpus and what model goes where and i can approve or give my opinion and
+jarvis can change the preset recommendations then i approve?"*
+
+**Decided.** (1) Three read-only, cardless answers for the desktop: a cached
+catalogue check (`POST /api/models/check`), a bounded benchmark of a model
+**already installed** (`POST /api/models/benchmark`), and preset changes
+computed from measured numbers (`POST /api/presets/recommend`), plus the read
+that combines them (`GET /api/models/recommendations`). (2) The owner's note
+refines the recommendation through **deterministic rules** - keep / lower the
+footprint / raise the candidate pool / quality / recorded only - never through a
+model's guess at what they meant, and never by inventing a measurement.
+(3) **Nothing downloads and nothing applies.** A download stays the EXISTING
+`/api/models/install` card, and a preset change stays the EXISTING
+`/api/work/apply` card; this feature adds no install route, no apply route, no
+gate action and no tier line. (4) The five routes are **PC-only**, refused 403
+from another device before the body is read, because the standing rule keeps a
+model catalogue off the phone. (5) The Hugging Face lookup reuses the existing
+capability, `jarvis_models.discover()`'s fixed public catalogue URLs - no new
+key, no token, and no query term derived from the owner. (6) A preset change is
+justified only by numbers this PC measured: tokens/second from Ollama's own
+reply timings, video memory from `/api/ps`, context from `/api/show`, card sizes
+from `nvidia-smi`. A model with no local benchmark is never compared, and a
+candidate with no measured video memory or context is never chosen.
+
+**Deliberately not done.** No timer, watcher or background job: every call is
+the owner's click. No "newest" claim: the existing catalogue pass sorts the
+Hugging Face GGUF list by trending and discards `lastModified`, so the answer
+says "the public trending list" and never "newer than yours". No estimate in a
+preset recommendation (only the candidate list's fit is an estimate, and its own
+sentence says so). No phone screen and no phone route.
+
+**Proven by:** `backend/test_model_recommendations.py` (118 checks) - the check
+endpoint never downloads (source-scanned for every download/apply/gate call),
+the benchmark refuses an uninstalled model before measuring and stores nothing
+when it cannot measure, recommendations quote only benchmark-store rates and
+`nvidia-smi` card sizes, a faster model that would shrink the window is refused,
+an opinion changes the suggestion without changing a single measured number,
+the five routes refuse a phone before reading a body, and the existing
+`/api/models/install` and `/api/work/apply` cards are untouched. **Not proven
+here:** the live Hugging Face lookup - this checkout has no network, so every
+test injects the catalogue pass; the first real click on the owner's PC is the
+field test (and it is a read-only request either way). Also not proven: any
+model's quality. This feature compares speed, memory and context window, and
+says so.

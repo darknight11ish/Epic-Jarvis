@@ -3374,6 +3374,33 @@ settings row is NOT in the registry the phone mirrors
 `jarvis-client`'s generated catalogue), on purpose: this change may not write
 into `jarvis-client`. That is also why `features/features.json` - three
 byte-identical copies, one inside `jarvis-client` - was not extended.
+
+**Model and preset recommendations are the desktop's, and that is the owner's
+standing rule rather than a missing phone screen** (2026-10-28; their words:
+*"can you give jarvis the ability to recommend a change to presets (for the
+local ai models being used) with a one click check for new models button and it
+will look on hugging face for newer potentially better models ... then it will
+recommend changing the presets based on the local gpus and what model goes
+where"*; `docs/JARVIS-API.md` section 160). The five routes
+(`GET /api/models/recommendations`, `POST /api/models/check`,
+`POST /api/models/benchmark`, `POST /api/presets/recommend` and
+`POST /api/presets/recommend/opinion`) are PC-only in the backend itself: each
+one answers 403 from any device but this PC, checked with
+`jarvis_owner_check.from_this_pc` **before** a body is read - the same rule the
+media index's write route and the Brain's read routes use. The reason is
+`CLAUDE.md`'s existing line that the phone must not grow a model catalogue
+(the install-from-phone amendment allows a TYPED ref; it never allowed
+browsing), and a phone screen listing "what you could install" is that
+catalogue however it is worded. **Nothing here is an auto-apply or an
+auto-download:** checking the public catalogues and benchmarking an installed
+model are read-only (the benchmark loads the model to answer one fixed prompt,
+which is what asking it anything does); a download is still the EXISTING
+`/api/models/install` card, and applying a preset is still the EXISTING
+`/api/work/apply` card. **No app calls these five routes yet**, so
+`tools/check_parity.py` has nothing to classify today; when the desktop half
+lands, each route must be classified `deliberate` there with this paragraph as
+its reason (a phone call is then a failure), and that classification change
+rides with the desktop files because a docs edit cannot reclassify a route.
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
