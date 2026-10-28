@@ -6,19 +6,20 @@
 > is the detail.
 
 
-One hundred and fifty-nine patches against the Jarvis backend, each meant to
+One hundred and sixty patches against the Jarvis backend, each meant to
 have an executable test beside it. One does not: `vram-estimate.patch` adds
 `_cache_bits_from_env` and `batch_surcharge_mb` to `jarvis_models.py`, and no
 suite names either function (checked 2026-10-14 with `git grep` over
 `backend/test_*.py`). Both figures come from the `$PATCHES` list in
 `scripts/apply-patches.ps1`, which is the list the installer actually walks -
-all 158 `.patch` files in this folder are in it, one each, and the script
+all 160 `.patch` files in this folder are in it, one each, and the script
 refuses to run if a `.patch` file here is missing from it. That is the number
 to trust, because the list grows. The paragraphs below were written as the list
 grew, so the counts in them are the count at the time.
 *(Both counts were re-measured on 2026-10-27, when `cloud-escalate.patch` and
 `f01-manual-lane-gate.patch` made it 159: they read 146 before, so they had drifted
-11 behind the list.)*
+11 behind the list. They are 160 as of 2026-10-28, when `cloud-honesty.patch`
+was added.)*
 The last four of the older ones - `ui-control-wiring.patch`, `ollama-direct.patch`,
 `tool-calling-wiring.patch` and `loopback-too.patch` - sit outside the ordered
 stack below: each only touches its own few lines, shared with no other patch
@@ -230,6 +231,7 @@ on a throwaway copy instead.
 | `f01-manual-lane-gate.patch` | `jarvis_hud.py` | **F-01: a lane you pick by hand runs the privacy gates** (2026-10-27). `{"lane": "<cloud lane>", "auto": false}` reached a cloud model with private memory text, a tainted conversation, a picture or the owner's screen attached, because the manual path built its decision itself and ran NO gate. Both paths now come through the ONE `jarvis_router.choose()` call, the pick stands in for the owner's yes for that one question, and a pick the router would not have escalated stays on the local model with a plain reason in `X-Jarvis-Route`. No new wire field, no new gate tier, no app change. `backend/test_hud_manual_lane_gate.py` is the proof. See its own section at the end of this file. 
 
 | `cloud-escalate.patch` | `jarvis_hud.py` | **ONE cloud lane, and a standing "escalate when the work is too complex" switch no client can fake** (the owner's decision of 2026-10-27; `docs/DECISIONS.md` that date, `docs/JARVIS-API.md` section 145.1, `docs/ARCHITECTURE.md` section 8). Three hunks and no install block: `_lane_names()` stops reading `litellm-proxy.yaml` - the config of a proxy that is not installed and never was - and asks `jarvis_presets.cloud_lanes()` instead, so the one lane exists only when the owner has chosen a cloud provider and no provider chosen is gate `unavailable` rather than three names that do not exist; the HUD page's `cloud_yes` counts only while THIS PC's `escalate-cloud.json` says on, so a stale page cannot turn a switch that has been turned off into a yes; and the cloud reply's reader is told when a turn was escalated with **no click**, so a reply with nothing usable in it (the measured `finish_reason: "length"` with empty `content`) is answered on this PC under one honest line instead of showing the model's private working-out to somebody who did not ask for it. The route, the one card and the file are `jarvis_presets.install()`'s own (`POST /api/work/cloud-escalate`, action `change_own_config`), so this patch adds no startup block and re-anchors nothing. Two of its three hunks read text only the owner's PC holds, which `tools/check_patch_original_text.py`'s pin records and `backend/test_cloud_escalate_setting.py` proves by applying it to the published base and reversing it byte for byte. |
+| `cloud-honesty.patch` | `jarvis_hud.py` | **The cloud lane gets the honesty lines, and a crisis turn is never answered by one** (2026-10-28, from the 2026-10-27 AI-safety audit's H1 and M1: `.dsh-scratch/AUDITS-2026-10-27/partner-ai-safety.md`). Three hunks and no install block. (1) The route header's crisis flag comes from `jarvis_wellbeing.crisis_in_turn` - the SAME rule the answering turn now uses - so the calm panel both apps draw and the 988/911 line the answer carries are decided from the same words; it used to test `messages[-1]` here while the turn tested the owner's own words only (typed/voice), so a distress message pasted, shared, captioning a picture or said with a failed voice print showed the panel and never the line. (2) A crisis turn on a cloud lane is answered on THIS PC: the lane is rebound to the local model, the payload rebuilt as a local turn's, and `X-Jarvis-Route` says so in a new field, `cloud_refused: "crisis"` (JARVIS-API section 145.2). (3) The cloud relay asks `jarvis_agent.cloud_postscript` for the lines the answer cannot back - `postscript_lines` with an empty step list, the same function the local answer appends, so a cloud turn and a local one cannot say different things - and writes them through `CloudAnswer.close(tail=...)`, after the model's words and BEFORE the `finish_reason`/`[DONE]` events every reader finalizes on. A cloud lane offers no tools at all, so on that lane a claim of action is unbackable by construction; before this it was the one lane with no correction. It sits before `cloud-escalate.patch` (whose `_says = _api.CloudAnswer(...)` line its third hunk follows) and so before `f01-manual-lane-gate.patch`, which stays the last code patch; one of its three hunks reads text only the owner's PC holds (the re-take's `_says.close()` block), pinned in `tools/check_patch_original_text.py` and proved by `backend/test_cloud_honesty.py` applying it to the published base and reversing it byte for byte. A backend whose `jarvis_chatbot_api.py` predates `answer_text()` keeps its old relay behaviour rather than erroring. |
 
 ## The gate reads what an action touches, not the words on its card
 

@@ -93,7 +93,7 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all SIXTEEN - those thirteen, plus `private-chat.patch` at position 152, added
+all SEVENTEEN - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -102,9 +102,11 @@ position 154 (two of its three hunks: `_lane_names()`'s body, which no patch
 had ever touched, and the cloud reply's reader, which reached the owner's PC
 by a re-take rather than a patch) and `f01-manual-lane-gate.patch` at position
 155 (the manual lane-picking path and `_manual_decision()`, which no patch in
-this walk writes - and whose missing gates WERE the F-01 defect) - with their
-positions, instead of pretending they are not there. The position-29 rule is
-kept as a REPORTED fact, not a gate.
+this walk writes - and whose missing gates WERE the F-01 defect) - plus, on
+2026-10-28, `cloud-honesty.patch` (one of its three hunks: the cloud relay's
+`_says.close()` block, which reached the owner's PC by the same re-take) - with
+their positions, instead of pretending they are not there. The position-29 rule
+is kept as a REPORTED fact, not a gate.
 
 THE PIN
 
@@ -265,6 +267,20 @@ PIN = {
     # `jarvis-backend/jarvis_hud.py` with `git apply` and reverses it out byte
     # for byte, which is the check this walk cannot make.
     "f01-manual-lane-gate.patch":              (3, 37),    # position 154
+
+    # 2026-10-28, cloud-honesty.patch (the AI-safety audit's H1 + M1: the
+    # honesty lines reach the cloud lane, and a crisis turn is never answered
+    # by one). ONE of its three hunks reads text the stack cannot account for,
+    # and it is the same kind of text as cloud-escalate.patch's second hunk:
+    # the cloud relay's `_says.close()` block, which arrived on the owner's PC
+    # by a RE-TAKE (`tools/hud-deltas/reasoning-new.txt`, PR #424) and so is in
+    # the published base and on his PC and in no patch at all. The other two
+    # anchor on patch-written text and invent nothing: the crisis block
+    # wellbeing.patch writes, and the `use_tools` assignment chat-stream.patch
+    # writes. Checked the other way by backend/test_cloud_honesty.py, which
+    # applies this patch to `jarvis-backend/jarvis_hud.py` with `git apply`
+    # (no fuzz), compiles the result and reverses it byte for byte.
+    "cloud-honesty.patch":                     (1, 7),     # position 155
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

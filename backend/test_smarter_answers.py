@@ -398,6 +398,123 @@ def t_a_read_is_not_an_action():
 
 
 # --------------------------------------------------------------------------
+#   3b. The 2026-10-27 AI-safety audit: H2, H3 and H4
+# --------------------------------------------------------------------------
+
+#: H2: the confirmations an 8B model really writes, with no subject for
+#: CLAIMS_DONE's first-person head to catch. Every one of these stood with no
+#: correction on `origin/main` before 2026-10-28.
+PASSIVE_CLAIMS = [
+    "Reminder set for 7pm.",
+    "Email sent to Alex.",
+    "Note created in your journal.",
+    "Your timer is running.",
+    "All set.",
+    "The appointment is saved in your journal.",
+    "Your message was sent to Sam.",
+    "Timer started.",
+    "The note is created in your Obsidian vault.",
+    "Reminders set for 7pm and 8pm.",
+]
+#: H2's other half, and the reason the pass is narrow: a false correction after
+#: a true sentence is worse than a missed one. Questions, conditions, offers,
+#: descriptions, something done earlier, and a sentence about remembering.
+NOT_PASSIVE_CLAIMS = [
+    "Should I set a reminder for 7pm?",
+    "Is the reminder set for 7pm?",
+    "If the reminder is set, it will ring.",
+    "Once the timer is running, you can close this.",
+    "When the note is saved, tell me.",
+    "I already set the reminder this morning.",
+    "I'll remember that you prefer tea.",
+    "Noted.",
+    "The backup job is running on your PC.",
+    "Your reminder is set for 7pm - anything else?",  # a question's other half
+    "I will sent an email tomorrow.",                  # future, no object claim
+    "The reminder is set for 7pm and the email is sent, but I have not done it.",
+]
+
+
+def t_which_short_confirmations_claim_an_action():
+    for text in PASSIVE_CLAIMS:
+        check(f"a passive claim: {text!r}", CL.claims_done(text))
+    for text in NOT_PASSIVE_CLAIMS:
+        check(f"not a passive claim: {text!r}", not CL.claims_done(text))
+
+
+def t_noted_does_not_exempt_a_note_write():
+    # H3: the exemption exists for automatic learning ("I've noted that you
+    # prefer tea"), which really does happen with no tool. It was exempting a
+    # note WRITE too, which is the action that most often does not happen
+    # because a card was refused.
+    check("'noted' + a note write is a claim",
+          CL.claims_done("Noted - I've added it to your Obsidian daily note."))
+    check("... in a journal too",
+          CL.claims_done("Noted, the appointment is saved in your journal."))
+    check("... and a note write named without the word 'noted' was always one",
+          CL.claims_done("I have noted your appointment in your Obsidian daily note."))
+    check("CONTROL: 'noted' about learning is still left alone",
+          not CL.claims_done("Noted - I'll remember that your sister likes jazz."))
+    check("CONTROL: a bare 'Noted.' is still left alone", not CL.claims_done("Noted."))
+    check("CONTROL: remembering with no note place is still left alone",
+          not CL.claims_done("I've added that to what I remember about you."))
+
+
+def t_which_tools_can_back_a_claim():
+    """H4: four read-only tools used to count as actions, so a claim after a
+    cheap read was never corrected."""
+    for name in ("read_web_page", "propose_plan", "feature_guide", "rea_investigate"):
+        check(f"{name} is read-only", name in CL.READ_ONLY_TOOLS)
+        check(f"... so its result does not back a claim",
+              CL.unbacked_claim("I've saved it to your vault.",
+                                [{"tool": name, "ran": True, "ok": True}]))
+    check("browser_control stays an action tool (it can click and submit)",
+          "browser_control" not in CL.READ_ONLY_TOOLS)
+    check("an action tool still backs a claim",
+          not CL.unbacked_claim("I've saved it to your vault.",
+                                [{"tool": "create_joplin_note", "ran": True, "ok": True}]))
+
+
+def t_every_tool_is_classified():
+    """The guard the audit asked for: a new tool must be classified by the
+    person adding it, not silently counted as an action (or as a read)."""
+    names = set(AG.TOOLS)
+    unclassified = sorted(names - CL.READ_ONLY_TOOLS - CL.ACTING_TOOLS)
+    check("every tool jarvis_agent offers is read-only or an action",
+          not unclassified, f"classify these in jarvis_claims.py: {unclassified}")
+    check("no tool is in both sets",
+          not (CL.READ_ONLY_TOOLS & CL.ACTING_TOOLS),
+          sorted(CL.READ_ONLY_TOOLS & CL.ACTING_TOOLS))
+    stale = sorted((CL.READ_ONLY_TOOLS | CL.ACTING_TOOLS) - names - {"more_tools"})
+    check("... and no name in either set is a tool that no longer exists",
+          not stale, f"drop or rename these: {stale}")
+
+
+def t_the_cloud_turn_gets_the_same_lines_as_the_local_one():
+    """H1, the half that does not need the HUD: one function builds the lines
+    for both lanes, so they cannot say different things."""
+    said = ("I've emailed Alex the plan and set a reminder for 6 pm. "
+            "Reminder set for 7pm.")
+    local, blob = _turn(said)
+    local_lines = [line for line in (
+        CL.NOTHING_DONE_LINE, CL.NOTHING_DONE_SPOKEN) if line in local["answer"]]
+    cloud = [line for _kind, line in AG.cloud_postscript(
+        said, [{"role": "user", "content": "send this to the cloud", "provenance": "typed"}])]
+    check("the local turn adds the line", local_lines, local["answer"])
+    check("the cloud turn adds exactly the same line", cloud == local_lines,
+          f"cloud={cloud!r} local={local_lines!r}")
+    check("... and the cloud answer is a claim with no steps at all",
+          CL.claims_done(said) and not CL.action_succeeded([]))
+    check("an honest cloud answer gets nothing",
+          AG.cloud_postscript("Paris is the capital of France. Anything else?", []) == [])
+    check("a cloud answer read aloud gets the spoken line",
+          [line for _k, line in AG.cloud_postscript(
+              "Email sent to Alex.",
+              [{"role": "user", "content": "read it", "provenance": "voice"}])]
+          == [CL.NOTHING_DONE_SPOKEN])
+
+
+# --------------------------------------------------------------------------
 #   4. The opposite lie (2026-10-18): denying an ability a tool just used
 # --------------------------------------------------------------------------
 
@@ -687,6 +804,11 @@ if __name__ == "__main__":
                t_an_honest_answer_gets_no_line,
                t_a_real_action_gets_no_line,
                t_a_read_is_not_an_action,
+               t_which_short_confirmations_claim_an_action,
+               t_noted_does_not_exempt_a_note_write,
+               t_which_tools_can_back_a_claim,
+               t_every_tool_is_classified,
+               t_the_cloud_turn_gets_the_same_lines_as_the_local_one,
                t_which_sentences_deny_reminder_or_timer_ability,
                t_the_schedule_correction_is_the_tools_own_words,
                t_a_model_denial_after_a_real_reminder_is_corrected,

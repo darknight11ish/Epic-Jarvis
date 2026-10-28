@@ -306,7 +306,21 @@ RATCHET = {
     #: `cloud-escalate.patch` materialises (its `_lane_names()` body and the
     #: cloud reply's reader, which reached the PC by a re-take) are counted in
     #: the same 63. A ratchet: it may still only go down.
-    "jarvis_hud.py": 63,
+    #: RAISED 2026-10-28: 63 -> 64 for `cloud-honesty.patch` (the AI-safety
+    #: audit's H1 and M1: the honesty lines reach the cloud lane, and a crisis
+    #: turn is never answered by one). ONE of its three hunks has to invent its
+    #: pre-image - the cloud relay's `_says.close()` block, 7 lines that
+    #: arrived on the owner's PC by a RE-TAKE (`tools/hud-deltas/
+    #: reasoning-new.txt`, PR #424) and so are in the published base and on his
+    #: PC and in no patch at all, exactly like cloud-escalate's second hunk.
+    #: The other two anchor on patch-written text and cost nothing: the crisis
+    #: block `wellbeing.patch` writes, and the `use_tools` assignment
+    #: `chat-stream.patch` writes. Measured, not argued: the walk now reads 64.
+    #: Checked the other way with `git apply` against
+    #: `jarvis-backend/jarvis_hud.py` (apply, reverse, byte for byte -
+    #: backend/test_cloud_honesty.py re-runs it). A ratchet: it may still only
+    #: go down.
+    "jarvis_hud.py": 64,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
