@@ -487,7 +487,8 @@ def t_what_is_backed_up_and_what_is_excluded():
     check("the medical record's key is its OWN Credential Manager entry, not chat history's",
           jarvis_medical_advocate.KEY_TARGET == "Jarvis Backend/medical key"
           and jarvis_medical_advocate.KEY_TARGET != jarvis_chat_log.KEY_TARGET)
-    reads = re.findall(r"jarvis_chat_log\.CredentialKey\(([^)]*)\)", src)
+    reads = [r.strip() for r in
+             re.findall(r"jarvis_chat_log\.CredentialKey\(([^)]*)\)", src, re.S)]
     check("CredentialKey (used to READ a key for backup) is jarvis_chat_log's own class, called "
           "with no target (the chat-history key) or with jarvis_decks.KEY_TARGET or with "
           "jarvis_medical_advocate.KEY_TARGET - no other target",

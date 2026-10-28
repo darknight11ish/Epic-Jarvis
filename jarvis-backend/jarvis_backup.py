@@ -1360,8 +1360,9 @@ def _medical_key_b64() -> Optional[str]:
     `build_archive`."""
     try:
         import jarvis_chat_log
-        import jarvis_medical_advocate as medical
-        key = jarvis_chat_log.CredentialKey(medical.KEY_TARGET).get_existing()
+        import jarvis_medical_advocate
+        key = jarvis_chat_log.CredentialKey(
+            jarvis_medical_advocate.KEY_TARGET).get_existing()
         if not isinstance(key, (bytes, bytearray)) or len(bytes(key)) != 32:
             return None
         return base64.b64encode(bytes(key)).decode("ascii")
