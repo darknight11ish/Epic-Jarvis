@@ -49,6 +49,7 @@ import com.jarvis.client.net.JarvisWidgets
 import com.jarvis.client.net.PlainErrors
 import com.jarvis.client.service.EventService
 import com.jarvis.client.service.QuickTileService
+import kotlinx.serialization.json.JsonObject
 
 /**
  * "Jarvis widget" 1, 2 and 3 on the home screen: each draws the saved widget
@@ -85,8 +86,14 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val ready = runCatching { JarvisRuntime.initialize(context) }.isSuccess &&
-            JarvisRuntime.isInitialized
+        // Bounded, and terminal in every branch (WidgetStates.board). The
+        // read used to be bare: `JarvisRuntime.widgetShow` runs on the general
+        // HTTP client, whose read timeout is 120 s on purpose (chat streams),
+        // so one unreachable desktop could hold this widget's whole draw open
+        // for two minutes and then draw nothing. It is one budgeted read now,
+        // and running out of budget is its own state - "Could not reach your
+        // PC" - not an empty widget and not a wait.
+        val ready = WidgetRuntime.start(context) && JarvisRuntime.isInitialized
         val paired = ready && JarvisRuntime.isPaired()
         val live = ready && !JarvisRuntime.stale.value && JarvisRuntime.link.value == LinkState.CONNECTED
         val chosen = if (ready) JarvisRuntime.settings.homeWidgets.value.getOrNull(slot) else null
@@ -95,27 +102,23 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
         val hideWords = security == null || security.appLock || security.privateLists
 
         var view: JarvisWidgets.View? = null
-        var message: Pair<String, String>? = null
-        when {
-            !ready -> message = JarvisWidgets.W_NOT_STARTED to JarvisWidgets.W_NOT_STARTED_SUB
-            !paired -> message = JarvisWidgets.W_NOT_PAIRED to JarvisWidgets.W_NOT_PAIRED_SUB
-            chosen == null -> message = JarvisWidgets.W_NONE to JarvisWidgets.W_NONE_SUB
-            !live -> message = JarvisWidgets.W_STALE to JarvisWidgets.W_STALE_SUB
-            else -> when (val r = JarvisRuntime.widgetShow(chosen)) {
-                is ApiResult.Ok -> {
-                    val v = JarvisWidgets.viewOf(r.value)
-                    if (v == null) {
-                        message = JarvisWidgets.W_FAILED to JarvisWidgets.W_STALE_SUB
-                    } else {
-                        view = if (hideWords) JarvisWidgets.hide(v) else v
-                    }
-                }
-                is ApiResult.Failed -> message = if (r.error == ApiError.NotFound) {
-                    JarvisWidgets.W_GONE to JarvisWidgets.W_NONE_SUB
-                } else {
-                    JarvisWidgets.W_FAILED to JarvisWidgets.W_STALE_SUB
-                }
+        val state = if (!ready || !paired || chosen == null || !live) {
+            // Nothing is asked of the PC until all four of those hold; each of
+            // them has its own words, so none is ever shown as "empty".
+            WidgetStates.board(ready, paired, chosen != null, live, WidgetStates.Read.CONTENT)
+        } else {
+            val answer = WidgetRuntime.readWidget(chosen)
+            view = (answer as? ApiResult.Ok<JsonObject>)?.let { JarvisWidgets.viewOf(it.value) }
+            val read = when {
+                answer == null -> WidgetStates.Read.TIMED_OUT
+                answer is ApiResult.Failed && answer.error == ApiError.NotFound -> WidgetStates.Read.GONE
+                // An answer that is not a drawable view (not ok, no blocks
+                // we know) is "could not read this widget", not "nothing to
+                // show": the two are different sentences on purpose.
+                view == null -> WidgetStates.Read.FAILED
+                else -> WidgetStates.Read.CONTENT
             }
+            WidgetStates.board(ready, paired, true, live, read)
         }
 
         provideContent {
@@ -126,12 +129,12 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
                     .cornerRadius(16.dp)
                     .padding(12.dp),
             ) {
-                val m = message
                 val v = view
-                if (m != null || v == null) {
-                    MessageState(m?.first ?: JarvisWidgets.W_FAILED, m?.second ?: JarvisWidgets.W_STALE_SUB)
+                if (state == WidgetStates.Board.CONTENT && v != null) {
+                    Board(context, if (hideWords) JarvisWidgets.hide(v) else v, security?.appLock)
                 } else {
-                    Board(context, v, security?.appLock)
+                    val words = WidgetStates.boardWords(state)
+                    MessageState(words.first, words.second)
                 }
             }
         }
