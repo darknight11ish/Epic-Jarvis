@@ -92,6 +92,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -124,6 +125,7 @@ import com.jarvis.client.net.Thinking
 import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
+import com.jarvis.client.ui.Chevron
 import com.jarvis.client.ui.parts.AppearanceIcon
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.FormattedAnswer
@@ -422,6 +424,38 @@ data class HomeState(
      * mark against. See [com.jarvis.client.net.Feedback.viewFor].
      */
     val answerFeedback: AnswerFeedback? = null,
+    /**
+     * The kept chat the answer on screen belongs to, or null when this chat is
+     * not kept at all (a temporary chat, a game the PC made temporary, or
+     * nothing said yet) - see
+     * [com.jarvis.client.JarvisRuntime.homeKeptChatId].
+     *
+     * A pin records it as "which chat", so the Pinned messages list can open
+     * that one conversation in History later. An id only, memory only - nothing
+     * is written here, and the id is not a word of the chat.
+     */
+    val chatId: String? = null,
+    /**
+     * The keys ([com.jarvis.client.data.ChatPins.key]) of every message
+     * already pinned on this phone. Read by the per-message menu so the row
+     * says "Unpin message" for a pinned answer and "Pin message" for one that
+     * is not. Ids only - the pinned words themselves are the Pinned messages
+     * screen's to read, not Home's.
+     */
+    val pinnedKeys: Set<String> = emptySet(),
+    /** No more pins fit ([com.jarvis.client.data.ChatPins.full]): the menu says why. */
+    val pinsFull: Boolean = false,
+    /**
+     * Whether pinning is offered at all. False in a temporary chat and in a
+     * game the PC made temporary: the PC keeps nothing of those, so the phone
+     * must not keep a copy of what was said either - the menu says so in
+     * [com.jarvis.client.data.ChatPins.TEMPORARY] rather than drawing a pin
+     * control that would quietly refuse.
+     *
+     * Defaults to FALSE so a caller that forgets this field cannot pin a chat
+     * the owner was promised would not be kept.
+     */
+    val pinsAllowed: Boolean = false,
     /**
      * How many finished questions and answers the next question will carry
      * with it - see [com.jarvis.client.net.ChatHistory]. Above zero, Home
@@ -820,6 +854,22 @@ data class HomeActions(
      * nothing while the link is stale.
      */
     val onMarkAnswer: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
+    /**
+     * Pin the answer whose words are [text] (the owner's request of
+     * 2026-10-27: "a pin message button that pins the message and remembers
+     * it"). [chatLabel] is the owner's question - the "which chat" the
+     * Pinned messages list shows - and [chatId] is "" when this chat is not
+     * kept, in which case the pin still keeps the words but cannot offer to
+     * re-open the chat.
+     *
+     * Nothing is sent to the PC: the list is this phone's own
+     * ([com.jarvis.client.data.PinnedChatStore]).
+     */
+    val onPinMessage: (chatId: String, chatLabel: String, text: String) -> Unit = { _, _, _ -> },
+    /** Unpin the message with this [com.jarvis.client.data.ChatPins.key]. Immediate, local. */
+    val onUnpinMessage: (key: String) -> Unit = {},
+    /** "Pinned messages": the phone's own list, newest first (ui/screens/PinnedScreen.kt). */
+    val onOpenPins: () -> Unit = {},
     /**
      * "Try the cloud model" on the answer on screen's own cloud offer
      * ([com.jarvis.client.net.ChatSession.tryCloudForLast]) - a genuinely
@@ -1634,6 +1684,17 @@ private fun ConversationList(
                 onMark = actions.onMarkAnswer,
                 conversationTurns = state.conversationTurns,
                 onNewConversation = actions.onNewConversation,
+                // The per-message menu's pin half (the owner's request of
+                // 2026-10-27). `allowed` is false in a temporary chat, and the
+                // menu says so instead of drawing a control that would refuse.
+                pins = PinMenu(
+                    chatId = state.chatId,
+                    pinnedKeys = state.pinnedKeys,
+                    full = state.pinsFull,
+                    allowed = state.pinsAllowed,
+                    onPin = actions.onPinMessage,
+                    onUnpin = actions.onUnpinMessage,
+                ),
                 // Hidden while "Hide memory lists and chat history" hides the lists:
                 // the thread is the chat's own words (the owner, 2026-09-28).
                 thread = if (state.memoryHidden) emptyList() else state.thread,
@@ -3220,6 +3281,9 @@ private fun Reply(
     // number"): counts only, never the words. Null when the caller gave no
     // question to count for.
     retrieve: RetrieveAnswer? = null,
+    // The per-message menu's pin half (the owner's request of 2026-10-27):
+    // null only for a caller that offers no pinning at all.
+    pins: PinMenu? = null,
     // The spending table under this answer (docs/JARVIS-API.md section 100):
     // drawn as sent, memory only, never copied, shared or read aloud.
     spending: SpendingAnswer? = null,
@@ -3249,6 +3313,10 @@ private fun Reply(
     val readAloudOffer by com.jarvis.client.JarvisRuntime.readAloud.collectAsState()
     val readingAloud by com.jarvis.client.JarvisRuntime.readingAloud.collectAsState()
     val text = reply()
+    // The per-message menu (the owner's request of 2026-10-27): opened from
+    // the chevron on this answer's own "Jarvis" line, and closed by any row in
+    // it. `remember(text)` so a different answer never inherits an open menu.
+    var menuOpen by remember(text) { mutableStateOf(false) }
     AnimatedVisibility(
         visible = text.isNotBlank() || streaming || question != null || thread.isNotEmpty(),
         enter = fadeIn(motion.enter()),
@@ -3261,7 +3329,7 @@ private fun Reply(
             // at once for a chat carried on from History, where nothing new
             // has been asked yet. Shown only - never read aloud, never kept.
             if (thread.isNotEmpty()) {
-                ThreadFold(thread, startOpen = question == null)
+                ThreadFold(thread, startOpen = question == null, pins = pins)
                 if (question != null || streaming || text.isNotBlank()) Gap(12)
             }
             if (question != null) {
@@ -3278,7 +3346,23 @@ private fun Reply(
                 if (streaming || text.isNotBlank()) Gap(12)
             }
             if (streaming || (question != null && text.isNotBlank())) {
-                Kicker("Jarvis", color = if (streaming) LocalAccent.current else null)
+                // The answer's own actions live behind the chevron at the end
+                // of this line (the owner's request of 2026-10-27: "put a
+                // carrot that opens a menu on each chat that has this"). It is
+                // drawn only once the answer has finished - the same moment
+                // Copy and Share appear - so a half-written answer never
+                // offers to be marked or pinned.
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Kicker("Jarvis", color = if (streaming) LocalAccent.current else null)
+                    if (!streaming && text.isNotBlank()) {
+                        Spacer(Modifier.weight(1f))
+                        MessageActionsButton(
+                            what = "this answer",
+                            pinned = pins?.isPinned(text) == true,
+                            onClick = { menuOpen = true },
+                        )
+                    }
+                }
                 Gap(6)
             }
             if (text.isBlank()) {
@@ -3528,12 +3612,14 @@ private fun Reply(
                         }
                     }
                 }
-                // Only on an answer the desktop gave an id to, and only once
-                // it has finished - the same moment Copy and Share appear.
-                if (feedback != null) {
-                    Gap(4)
-                    AnswerMarks(feedback, canMark, onMark)
-                }
+                // "Was this answer right?" USED TO BE DRAWN HERE, under every
+                // finished answer. It is not any more (the owner's request of
+                // 2026-10-27: "i dont want a 'was this answer right' on every
+                // response from jarvis. put a carrot that opens a menu on each
+                // chat that has this"). The two marks are unchanged - one per
+                // answer, tap again to take it back, never a change to memory -
+                // and now live in [MessageMenu], behind the chevron on this
+                // answer's own "Jarvis" line above, beside Pin message.
             }
             // Follow-ups carry the conversation so far, so there has to be a
             // plain way to start again without it. Not while an answer is
@@ -3559,9 +3645,24 @@ private fun Reply(
                         color = chrome.warnInk,
                     )
                 }
-                Quiet("New conversation", color = chrome.textMid, onClick = onNewConversation)
+                // The same action as "New chat" in the More menu, in the same
+                // words (it used to say "New conversation" here and nothing at
+                // all in the menu, which is how the owner came to ask on
+                // 2026-10-27 "how do i open new ones?").
+                Quiet(MoreMenuWords.NEW_CHAT, color = chrome.textMid, onClick = onNewConversation)
             }
         }
+    }
+    if (menuOpen) {
+        MessageMenu(
+            feedback = feedback,
+            canMark = canMark,
+            onMark = onMark,
+            pins = pins,
+            text = text,
+            question = question,
+            onDismiss = { menuOpen = false },
+        )
     }
 }
 
@@ -3573,12 +3674,20 @@ private fun Reply(
  * ([com.jarvis.client.net.ChatHistory.threadSummary]).
  */
 @Composable
-private fun ThreadFold(thread: List<com.jarvis.client.net.ChatHistory.Exchange>, startOpen: Boolean) {
+private fun ThreadFold(
+    thread: List<com.jarvis.client.net.ChatHistory.Exchange>,
+    startOpen: Boolean,
+    /** The pin half of each answer's own menu, or null when nothing may be pinned. */
+    pins: PinMenu? = null,
+) {
     val chrome = LocalChrome.current
     val words = com.jarvis.client.net.ChatHistory
     // Kept over a rotation (the second chat audit, phone accessibility).
     var open by rememberSaveable { mutableStateOf(startOpen) }
     var showAll by rememberSaveable { mutableStateOf(false) }
+    // The one folded answer whose own menu is open, or null. A pair is the
+    // identity here: the same exchange keeps the same menu.
+    var menuFor by remember { mutableStateOf<com.jarvis.client.net.ChatHistory.Exchange?>(null) }
     Quiet(
         words.threadSummary(thread.size),
         color = chrome.textMid,
@@ -3588,6 +3697,21 @@ private fun ThreadFold(thread: List<com.jarvis.client.net.ChatHistory.Exchange>,
         },
         onClick = { open = !open },
     )
+    // The menu is drawn before this early return: a menu opened from the list
+    // must still be dismissible after the fold is shut.
+    menuFor?.let { pair ->
+        MessageMenu(
+            // A folded answer has no `turn_id` here (the thread keeps words,
+            // not ids), so it carries no mark controls - only the pin.
+            feedback = null,
+            canMark = false,
+            onMark = { _, _ -> },
+            pins = pins,
+            text = pair.answer,
+            question = pair.question,
+            onDismiss = { menuFor = null },
+        )
+    }
     if (!open) return
     // The newest 20 pairs, with "Show older" for the rest: a long chat used
     // to compose up to 100 answers at once (phone worst-three #3).
@@ -3626,7 +3750,20 @@ private fun ThreadFold(thread: List<com.jarvis.client.net.ChatHistory.Exchange>,
             Gap(2)
             Text(pair.question, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
             Gap(6)
-            Kicker("Jarvis")
+            // Each folded answer has its own chevron too (the owner's request
+            // of 2026-10-27: a menu "on each chat that has this"), so a pin can
+            // be taken from any answer in the thread and not only the newest.
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Kicker("Jarvis")
+                if (pins != null) {
+                    Spacer(Modifier.weight(1f))
+                    MessageActionsButton(
+                        what = "this earlier answer",
+                        pinned = pins.isPinned(pair.answer),
+                        onClick = { menuFor = pair },
+                    )
+                }
+            }
             Gap(2)
             pair.answer.split(PARAGRAPH_BREAK).forEachIndexed { i, paragraph ->
                 if (i > 0) Gap(6)
@@ -3679,15 +3816,206 @@ internal data class RetrieveAnswer(
 )
 
 /**
- * "Was this answer right?" - one Right and one Wrong for the ONE answer on
- * screen (`feedback.patch`). There is no "mark all": one answer, one mark.
+ * What the per-message menu's pin half needs (the owner's request of
+ * 2026-10-27: "a pin message button that pins the message and remembers it")
+ * - see [MessageMenu].
+ *
+ * [chatId] is null when this chat is not kept at all; [allowed] is false in a
+ * temporary chat, where nothing may be pinned and the menu says so rather than
+ * drawing a control that would refuse. The keys in [pinnedKeys] were made with
+ * this same [chatId], so "is this message pinned?" is one set lookup.
+ */
+@Immutable
+internal data class PinMenu(
+    val chatId: String?,
+    val pinnedKeys: Set<String>,
+    val full: Boolean,
+    val allowed: Boolean,
+    val onPin: (chatId: String, chatLabel: String, text: String) -> Unit,
+    val onUnpin: (key: String) -> Unit,
+) {
+    /** This message's pin key - the same one the store made ([com.jarvis.client.data.ChatPins.key]). */
+    fun keyFor(text: String): String =
+        com.jarvis.client.data.ChatPins.key(chatId.orEmpty(), text)
+
+    /** True when these words are already pinned, so the menu's row says "Unpin message". */
+    fun isPinned(text: String): Boolean =
+        com.jarvis.client.data.ChatPins.normalise(text).isNotEmpty() &&
+            pinnedKeys.contains(keyFor(text))
+}
+
+/**
+ * The chevron at the end of an answer's own "Jarvis" line - the one control
+ * that opens [MessageMenu] (the owner's request of 2026-10-27: "put a carrot
+ * that opens a menu on each chat that has this").
+ *
+ * Drawn, not typed, for the same reason as every other icon on this screen
+ * ([com.jarvis.client.ui.Chevron]). It sits at the END of the kicker line and
+ * not beside the answer's words, so scrolling or selecting text cannot press
+ * it by accident; the whole 48dp square answers a tap, and its screen-reader
+ * name says which message it belongs to and whether that message is pinned -
+ * the same news the menu's own row carries.
+ */
+@Composable
+private fun MessageActionsButton(what: String, pinned: Boolean, onClick: () -> Unit) {
+    val chrome = LocalChrome.current
+    Box(
+        Modifier
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
+            .clip(LocalRadii.current.insetShape)
+            .pressable(onClick = onClick)
+            .semantics {
+                contentDescription =
+                    if (pinned) "Message actions for $what, pinned" else "Message actions for $what"
+                stateDescription = if (pinned) "Pinned" else "Not pinned"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Chevron(tint = chrome.textMid, size = 18.dp)
+    }
+}
+
+/**
+ * The menu behind the chevron on ONE answer (the owner's request of
+ * 2026-10-27: "i dont want a 'was this answer right' on every response from
+ * jarvis. put a carrot that opens a menu on each chat that has this, along
+ * with a pin message button").
+ *
+ * It holds exactly two things, and both belong to one message:
+ *
+ *  - **"Was this right?"** - the Right / Wrong pair that used to be drawn under
+ *    every finished answer. The rule is unchanged (`feedback.patch`): one mark
+ *    per answer, tapping the chosen one again takes it back, a mark never
+ *    changes memory, and the desktop's own sentence is shown when it cannot
+ *    take one. An answer the desktop gave no id has no marks at all - the same
+ *    "no id, no marks" rule, now expressed as a missing section rather than a
+ *    missing block.
+ *  - **Pin message / Unpin message**, with what pinning does said underneath.
+ *
+ * A folded answer ([ThreadFold]) opens this same menu with no feedback: the
+ * thread keeps words, not ids, so there is nothing to mark - but the pin is
+ * there, which is the point.
+ *
+ * A [Dialog], like the More menu (PhotoReminderDialog's shape: a plain surface,
+ * no Material sheet, no new dependency). Back and a tap outside dismiss it,
+ * every row is a 48dp control with its own words, and the title is a heading,
+ * so a screen reader can reach all of it.
+ */
+@Composable
+private fun MessageMenu(
+    feedback: AnswerFeedback?,
+    canMark: Boolean,
+    onMark: (turnId: String, tapped: AnswerMark) -> Unit,
+    pins: PinMenu?,
+    text: String,
+    question: String?,
+    onDismiss: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(chrome.surface1)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        ) {
+            Text(
+                com.jarvis.client.data.ChatPins.MENU_TITLE,
+                style = MaterialTheme.typography.titleMedium,
+                color = chrome.textHi,
+                modifier = Modifier.semantics { heading() },
+            )
+            Gap(4)
+            Text(
+                com.jarvis.client.data.ChatPins.MENU_SUB,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+            Gap(8)
+            Rule()
+            Gap(4)
+
+            if (feedback != null) {
+                AnswerMarkRows(feedback, canMark, onMark)
+                Gap(8)
+                Rule()
+                Gap(4)
+            }
+
+            // The pin. Its key is worked out once, here, so the row that says
+            // "Unpin message" and the action that unpins cannot disagree.
+            val pinMenu = pins
+            val pinKey = pinMenu?.keyFor(text).orEmpty()
+            val pinned = pinMenu != null && pinMenu.allowed && pinKey.isNotEmpty() &&
+                pinMenu.pinnedKeys.contains(pinKey)
+            when {
+                pinMenu == null -> Unit
+                !pinMenu.allowed -> Text(
+                    com.jarvis.client.data.ChatPins.TEMPORARY,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textLo,
+                )
+                pinned -> {
+                    MoreRow(com.jarvis.client.data.ChatPins.UNPIN) {
+                        onDismiss()
+                        pinMenu.onUnpin(pinKey)
+                    }
+                    Gap(2)
+                    Text(
+                        com.jarvis.client.data.ChatPins.UNPIN_DETAIL,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                        modifier = Modifier.padding(start = 16.dp),
+                    )
+                }
+                // Full: the cap is said in words, in place of the pin. There is
+                // no silent drop and no second list somewhere else.
+                pinMenu.full -> Text(
+                    com.jarvis.client.data.ChatPins.full(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textLo,
+                )
+                else -> {
+                    MoreRow(com.jarvis.client.data.ChatPins.PIN) {
+                        onDismiss()
+                        pinMenu.onPin(pinMenu.chatId.orEmpty(), question.orEmpty(), text)
+                    }
+                    Gap(2)
+                    Text(
+                        com.jarvis.client.data.ChatPins.PIN_DETAIL,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                        modifier = Modifier.padding(start = 16.dp),
+                    )
+                }
+            }
+
+            Gap(8)
+            Rule()
+            Gap(4)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Quiet(MoreMenuWords.CLOSE, color = chrome.textMid, onClick = onDismiss)
+            }
+        }
+    }
+}
+
+/**
+ * "Was this right?" - one Right and one Wrong for the ONE answer the menu was
+ * opened on (`feedback.patch`). There is no "mark all": one answer, one mark.
  *
  * Tapping the chosen one again takes the mark back. A mark never changes
  * memory; at most, if a fact keeps turning up in wrong answers, the desktop
  * asks - with a card in Mind's memory review - whether to stop using it.
+ *
+ * This is the same body that used to be drawn under every answer on Home; it
+ * moved into [MessageMenu] on 2026-10-27, unchanged in what it sends and in
+ * what it says.
  */
 @Composable
-private fun AnswerMarks(
+private fun AnswerMarkRows(
     feedback: AnswerFeedback,
     canMark: Boolean,
     onMark: (turnId: String, tapped: AnswerMark) -> Unit,
@@ -3925,6 +4253,22 @@ private fun Composer(
             if (joined != said) actions.onDraftChange(joined)
         },
     )
+    // An empty chat, with nothing at all said yet: where the old chats went and
+    // where a new one starts, said once, above the box (the owner's questions of
+    // 2026-10-27: "where can i find old jarvis chats? and how do i open new
+    // ones?"). Only while there is nothing else on Home to read - no question,
+    // no conversation, no answer arriving and no note - so it disappears for
+    // good the moment there is a chat to look at.
+    if (state.lastUserText == null && state.conversationTurns == 0 && !state.streaming &&
+        state.chatNote == null
+    ) {
+        Text(
+            MoreMenuWords.EMPTY_HINT,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+    }
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
@@ -4306,6 +4650,32 @@ private fun HomeMoreMenu(
             Rule()
             Gap(4)
 
+            // The chat's own three doors, FIRST (the owner's questions of
+            // 2026-10-27: "where can i find old jarvis chats? and how do i open
+            // new ones?"). They were all reachable before - Earlier chats has
+            // been here since 2026-10-25 - but with nothing under them saying
+            // where they go, and no "New chat" at all until a question had
+            // been asked. Every one of them is navigation or the chat's own
+            // reset: nothing is sent, no card is raised, and Pinned messages
+            // opens a screen whose own "Hide memory lists and chat history"
+            // guard is untouched by opening it.
+            MoreRow(
+                MoreMenuWords.NEW_CHAT,
+                detail = MoreMenuWords.NEW_CHAT_DETAIL,
+            ) { onDismiss(); actions.onNewConversation() }
+            MoreRow(
+                ChatHistory.EARLIER_CHATS,
+                detail = MoreMenuWords.EARLIER_DETAIL,
+            ) { onDismiss(); actions.onEarlierChats() }
+            MoreRow(
+                com.jarvis.client.data.ChatPins.TITLE,
+                detail = MoreMenuWords.PINNED_DETAIL,
+            ) { onDismiss(); actions.onOpenPins() }
+
+            Gap(8)
+            Rule()
+            Gap(4)
+
             // Jarvis Presets (owner decision 2026-10-18): the preset chip used
             // to sit above the box. Its list lives on the Brain's Hardware
             // plate - the destination OpenPlace already names for "open focus
@@ -4355,15 +4725,15 @@ private fun HomeMoreMenu(
                 }
             }
 
-            // Temporary chat (the owner's decision of 2026-09-25) and
-            // "Earlier chats" (the chat audit, 2026-09-28). The marker still
-            // appears above the box while a temporary chat is on; starting or
-            // ending it happens here now.
+            // Temporary chat (the owner's decision of 2026-09-25). The marker
+            // still appears above the box while a temporary chat is on;
+            // starting or ending it happens here now. "Earlier chats" used to
+            // sit beside it - it moved to the chat group at the top of this
+            // menu on 2026-10-27, once, not twice.
             MoreRow(
                 if (state.temporary) TemporaryChat.END else TemporaryChat.START,
                 enabled = !state.streaming,
             ) { onDismiss(); actions.onToggleTemporary() }
-            MoreRow(ChatHistory.EARLIER_CHATS) { onDismiss(); actions.onEarlierChats() }
 
             // Notifications, only while phone notifications are on AND
             // something was captured (HomeState.notificationsAttachable).

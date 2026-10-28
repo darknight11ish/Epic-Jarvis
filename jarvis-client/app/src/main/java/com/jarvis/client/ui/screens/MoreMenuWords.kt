@@ -27,10 +27,43 @@ internal object MoreMenuWords {
      * One line under the title, said in plain words because a menu that is
      * suddenly the only door to nine controls is worth opening with an
      * explanation: only the controls this PC really offers are listed.
+     *
+     * Since 2026-10-27 the chat's own three doors open here, first - the owner
+     * asked where the old chats are and how to start a new one, so the line
+     * that was about presets alone now leads with the chats.
      */
     const val SUBTITLE =
-        "Presets and the chat controls that used to sit around the box. " +
-            "Only what this PC offers is listed."
+        "Your chats, the presets, and the chat controls that used to sit around " +
+            "the box. Only what this PC offers is listed."
+
+    /**
+     * "New chat" - starts a fresh conversation, the same mechanism the idle
+     * timer uses ([com.jarvis.client.net.ChatSession.newConversationSaid]).
+     * The owner's question of 2026-10-27: "how do i open new ones?".
+     */
+    const val NEW_CHAT = "New chat"
+
+    /** Under "New chat": what a new chat does to the one before it. */
+    const val NEW_CHAT_DETAIL = "A fresh conversation. The last one stays in History."
+
+    /**
+     * Under "Earlier chats" ([com.jarvis.client.net.ChatHistory.EARLIER_CHATS],
+     * which was already here but unlabelled): where that row really goes, so
+     * the owner's other question of 2026-10-27 - "where can i find old jarvis
+     * chats?" - is answered by the menu that holds it.
+     */
+    const val EARLIER_DETAIL = "Every chat your PC kept, in History"
+
+    /** Under "Pinned messages" ([com.jarvis.client.data.ChatPins.TITLE]). */
+    const val PINNED_DETAIL = "Messages you pinned, newest first"
+
+    /**
+     * The line above the box while NOTHING has been said yet. It is the one
+     * moment the owner is looking at an empty chat with no idea where the old
+     * ones went - the question he asked on 2026-10-27 - so the answer is
+     * written where he was already looking.
+     */
+    const val EMPTY_HINT = "Old chats are in More, under Earlier chats. New chat is there too."
 
     /** "Jarvis Presets" (the owner's words) - opens the Brain's Hardware plate. */
     const val PRESETS = "Jarvis Presets"
