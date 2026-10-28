@@ -30,6 +30,10 @@
  *     copies of the page byte-identical, the module byte-identical in
  *     backend/static/ and the published base, and the server's closed
  *     whitelist naming it;
+ *   - an open group's chevron points DOWN and a collapsed one points RIGHT.
+ *     The caret is the page's one right-pointing chevron, so the rotation is
+ *     the whole reading; the rule used to rotate the CLOSED case instead, which
+ *     left an open section looking collapsed beside its own rows;
  *   - the Rust side really is the only door for the writes: the command is
  *     in lib.rs's handler, build.rs's manifest and the HUD's own capability
  *     set; the reads go through hud_proxy's allow-list; and the lock
@@ -511,6 +515,23 @@ check("the page's half is hudHistoryHost, with the three functions the panel cal
   assert.match(PAGE, /newChat: function \(\) \{/);
   assert.match(PAGE, /continuable === false/,
     "a support/chatbot record must not be continued in this window");
+});
+
+check("an open section's chevron points DOWN, and a collapsed one points RIGHT", () => {
+  // The caret is one right-pointing chevron in the page's own glyph set
+  // (`chevron: "M9 6l6 6-6 6"` in src/hud-history.js), so a CSS rotation is the
+  // only thing that decides which way it reads. Rotated 90 it points DOWN - an
+  // open section; no rotation it points RIGHT - a collapsed one. The rule used
+  // to be keyed on data-open="0" with rotate(-90deg), which left an OPEN
+  // section showing an unrotated right-pointing caret beside its own rows, i.e.
+  // reading as collapsed (seen in the render check, 2026-10-27).
+  assert.match(PAGE, /\.hh-sec\[data-open="1"\] \.hh-head \.glyph\.hh-caret\{transform:rotate\(90deg\);\}/,
+    "an open section's chevron is not rotated down");
+  assert.doesNotMatch(PAGE, /\.hh-sec\[data-open="0"\] \.hh-head \.glyph\.hh-caret\{/,
+    "a rule still rotates the caret for a CLOSED section - an open one would read as collapsed");
+  // The caret really is the page's right-pointing chevron, not a re-drawn one.
+  assert.match(MODULE, /chevron: "M9 6l6 6-6 6"/);
+  assert.match(MODULE, /icon\("chevron", "hh-caret"\)/);
 });
 
 check("all three vendored copies of the page are byte-identical", () => {
