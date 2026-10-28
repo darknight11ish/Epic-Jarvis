@@ -4343,7 +4343,18 @@ so no chats are kept", "reason"}` - and chat keeps working, keeping nothing.
 Both apps (parity rule): a **History** view - desktop, a History section in
 the Brain window next to Memory; phone, a History screen next to the Brain's
 other sections. (The HUD page sends `conversation_id`, `device: "hud"` and
-`provenance` too, but has no History view of its own.)
+`provenance` too. **Since 2026-10-27 it also has a History view of its own:**
+a History button in its left column opens a sidebar shaped like the DeepSeek
+Harness's chat list - Pinned, one section per tag, then Untagged, with a
+search box, a sort, and Open / Pin / Move to project / Delete on each row.
+It reads the SAME three routes below through `hud_get` (no pairing token
+reaches that page: apps security audit M2), writes through ONE Rust command
+`hud_history_act` that shares the Brain's own bodies - pin, file and delete
+ONE chat, and nothing else - and its rows are withheld under App lock and
+"Hide memory lists and chat history" exactly as the Brain's are. Its row
+words, its delete confirmation and its write shapes live in ONE module both
+windows read (`jarvis-desktop/src/history-actions.js`), so the two cannot
+come to say or send two different things.)
 
 - The list: title, when, device, a small mic mark for `has_voice`, a small
   "read outside text" mark for `tainted`. Newest first, "Load older".

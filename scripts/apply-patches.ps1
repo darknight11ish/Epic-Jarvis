@@ -2092,6 +2092,11 @@ $SHIPPED = @(
     # button silently. backend/test_hud_static.py fails if this copy drifts
     # from jarvis-desktop/src/hud-history.js.
     'static/hud-history.js'
+    # ... and the one module it imports (2026-10-27): the row-action table it
+    # shares with the Brain's History tab. A browser HUD fetches it from beside
+    # the server too, so a deploy that left it out would load the sidebar's
+    # script and then fail to load the module it needs - no panel at all.
+    'static/history-actions.js'
     # The Galaxy's looks (2026-10-27): the HUD's look switcher loads this module
     # with a dynamic import(), so it has to sit beside the server (served at
     # /galaxy-presets.js) like the modules above. backend/test_hud_static.py

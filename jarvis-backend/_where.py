@@ -797,8 +797,12 @@ SHIPPED = (
     "static/hud-presets.js",
     # The History sidebar (2026-10-27): the page loads it with a plain
     # `<script src="hud-history.js" defer>`, so a browser HUD needs it beside
-    # the server like the other files the page asks for.
+    # the server like the other files the page asks for. It imports
+    # history-actions.js (the row-action table it shares with the Brain's
+    # History tab), which that browser fetches too, so that file ships for the
+    # same reason.
     "static/hud-history.js",
+    "static/history-actions.js",
     # The Galaxy's looks (2026-10-27): the HUD's look switcher loads this module
     # with a dynamic import(), so the page's closed whitelist has to serve it
     # from beside the server like the modules above.

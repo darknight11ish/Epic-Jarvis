@@ -178,6 +178,9 @@ BESIDE = (
     # a page whose History button never appears, silently.
     ("hud-history.js", "{repo}/backend/static/hud-history.js",
      "the History sidebar the page loads at /hud-history.js (2026-10-27)"),
+    ("history-actions.js", "{repo}/backend/static/history-actions.js",
+     "the row-action table the History sidebar imports at "
+     "/history-actions.js, shared with the Brain (2026-10-27)"),
     ("galaxy-presets.js", "{repo}/backend/static/galaxy-presets.js",
      "the module the Galaxy's look switcher imports; served at /galaxy-presets.js"),
     ("private-speech.js", "{repo}/backend/static/private-speech.js",

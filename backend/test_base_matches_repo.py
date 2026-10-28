@@ -101,7 +101,8 @@ BESIDE = (
     "ibm-plex-mono-400.woff2", "ibm-plex-mono-500.woff2",
     "ibm-plex-sans-400.woff2",
     "lane-warning.js", "hud-actions.js", "hud-safety.js", "hud-edit.js",
-    "hud-presets.js", "hud-history.js", "private-speech.js", "face-voice.js", "face-moments.js",
+    "hud-presets.js", "hud-history.js", "history-actions.js",
+    "private-speech.js", "face-voice.js", "face-moments.js",
     "face-tuning.js", "animal-shared.js", "hud-layout.js",
     "hud-layout-store.js",                                      # /<module>.js
     # PWA Slice 2's browser bridge: the page loads it with a <script src>, so

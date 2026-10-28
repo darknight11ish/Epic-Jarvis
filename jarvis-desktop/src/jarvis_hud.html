@@ -35,15 +35,18 @@
      the deepseek harness on desktop for the jarvis HUD ... both should have
      pinnable chats, project organization by chat, and more").
 
-     ONE external classic script: no new inline block, so this page's inline
+     ONE external MODULE script: no new inline block, so this page's inline
      count and every CSP hash stay exactly as they were (tests/csp-inline.mjs).
-     It adds its own rail button (#rail-history, beside Presets and Live), its
-     panel, its stylesheet and its row menu - the page's own markup is not
-     touched - and the page's half is the small `window.hudHistoryHost` at the
-     end of its last script, which opens a chat with this page's own
-     addMessage and starts a new one. In a plain browser the same file works
-     against the backend directly, like every other read on this page. -->
-<script src="hud-history.js" defer></script>
+     It is a module because it imports `history-actions.js`, the row-action
+     table and the words it shares with the Brain's History tab (Gemini ruling,
+     2026-10-27). It adds its own rail button (#rail-history, beside Presets and
+     Live), its panel (#history-sidebar), its stylesheet and its row menu - the
+     page's own markup is not touched - and the page's half is the small
+     `window.hudHistoryHost` at the end of its last script, which opens a chat
+     with this page's own addMessage and starts a new one. In a plain browser
+     the same file works against the backend directly, like every other read on
+     this page. -->
+<script type="module" src="hud-history.js"></script>
 <!--
   Theme before first paint, the same synchronous read from localStorage every
   other window does (settings.html, onboarding.html): this page also opens as
@@ -4846,8 +4849,23 @@ function spaceIsThePages(){
   const active = document.activeElement;
   return !active || active === document.body || active === document.documentElement;
 }
+/* The History sidebar owns Space while it is up (Gemini ruling, 2026-10-27):
+ * a row, its "..." menu, a section header or the search box is a control whose
+ * Space must do that control's own job, and a click on the panel's background
+ * leaves focus on <body> - where the old check would have started the
+ * microphone with the panel still open. So: bail for anything inside the
+ * sidebar, for a form control, for a button and for a menu, and bail whenever
+ * the sidebar is open at all. */
+function spaceBelongsToTheSidebar(e){
+  const target = e.target;
+  if(target && target.closest && target.closest(
+    '#history-sidebar, input, textarea, button, [role="menu"]')){
+    return true;
+  }
+  return !!(window.hudHistory && window.hudHistory.isOpen && window.hudHistory.isOpen());
+}
 document.addEventListener("keydown", e => {
-  if(e.code === "Space" && !e.repeat && spaceIsThePages()){
+  if(e.code === "Space" && !e.repeat && spaceIsThePages() && !spaceBelongsToTheSidebar(e)){
     e.preventDefault(); spaceTalks = true; voice.start(false);
   }
 });

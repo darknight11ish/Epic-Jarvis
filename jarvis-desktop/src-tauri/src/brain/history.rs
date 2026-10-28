@@ -411,23 +411,22 @@ pub(crate) fn hud_act_body(
                 return Err(mixed());
             }
             let tag_id = match tag {
-                Some(serde_json::Value::Null) => serde_json::Value::Null,
+                Some(serde_json::Value::Null) => None,
                 Some(serde_json::Value::Number(n)) => match n.as_i64() {
-                    Some(v) if v > 0 && v <= i64::from(u32::MAX) => serde_json::json!(v),
+                    Some(v) if v > 0 && v <= i64::from(u32::MAX) => Some(v),
                     _ => return Err(no_tag()),
                 },
                 _ => return Err(no_tag()),
             };
-            Ok((
-                "/api/history/tag",
-                serde_json::json!({ "id": id, "tag_id": tag_id }),
-            ))
+            // The SAME body builder the Brain's History tab uses.
+            Ok(("/api/history/tag", tag_chat_body(id, tag_id)?))
         }
         "delete" => {
             if pinned.is_some() || tag.is_some() {
                 return Err(mixed());
             }
-            Ok(("/api/history/delete", serde_json::json!({ "id": id })))
+            // ... and the same delete builder.
+            Ok(("/api/history/delete", delete_body(id)?))
         }
         _ => {
             Err("The History sidebar can pin, file or delete one chat - nothing else.".to_string())
@@ -704,6 +703,16 @@ pub(crate) fn tag_chat_body(id: &str, tag_id: Option<i64>) -> Result<serde_json:
         Some(n) => serde_json::json!(checked_tag_id(Some(n))?),
     };
     Ok(serde_json::json!({ "id": id, "tag_id": tag_id }))
+}
+
+/// The body for `POST /api/history/delete`: the id and nothing else.
+///
+/// ONE builder for BOTH surfaces - the Brain's History tab and the HUD's
+/// History sidebar both reach the same route through it (the HUD's own
+/// [`hud_act_body`] calls it), so "delete one chat" cannot come to mean two
+/// different requests in the two windows.
+pub(crate) fn delete_body(id: &str) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({ "id": checked_id(id)? }))
 }
 
 /// The `error` codes the PC's fork route answers with (JARVIS-API section
@@ -1283,9 +1292,9 @@ pub async fn brain_history_tag_suggest(
 #[tauri::command]
 pub async fn brain_history_delete(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
-    let id = checked_id(&id)?;
-    let (status, body) = post(&app, "/api/history/delete", serde_json::json!({ "id": id })).await?;
-    delete_answer(status, &body)
+    let body = delete_body(&id)?;
+    let (status, text) = post(&app, "/api/history/delete", body).await?;
+    delete_answer(status, &text)
 }
 
 /// The HUD's History sidebar: pin or unpin ONE chat, file ONE chat under a
@@ -1535,6 +1544,33 @@ mod tests {
             assert!(
                 hud_act_body("delete", bad, None, None).is_err(),
                 "{bad} was taken as an id"
+            );
+        }
+    }
+
+    /// Filing and deleting ONE chat are the Brain's own requests, not a second
+    /// set of them: the HUD's builder hands back exactly what
+    /// [`tag_chat_body`] and [`delete_body`] build for the same chat, so the
+    /// two windows cannot drift into sending two different bodies to one
+    /// route (the Gemini ruling of 2026-10-27: share the row-action helpers).
+    #[test]
+    fn the_hud_files_and_deletes_with_the_brains_own_bodies() {
+        for id in ["conv-aaaa", "conv-0001-abcd"] {
+            for tag in [None, Some(1), Some(12)] {
+                let value = match tag {
+                    None => serde_json::Value::Null,
+                    Some(n) => serde_json::json!(n),
+                };
+                assert_eq!(
+                    hud_act_body("tag", id, None, Some(&value)).unwrap(),
+                    ("/api/history/tag", tag_chat_body(id, tag).unwrap()),
+                    "the HUD's tag body drifted from the Brain's"
+                );
+            }
+            assert_eq!(
+                hud_act_body("delete", id, None, None).unwrap(),
+                ("/api/history/delete", delete_body(id).unwrap()),
+                "the HUD's delete body drifted from the Brain's"
             );
         }
     }

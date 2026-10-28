@@ -57,7 +57,23 @@
  * The page supplies them (`window.hudHistoryHost`, at the end of its own
  * script). With no host the panel still lists, searches, sorts, pins, files
  * and deletes; only Open and New chat do nothing, and they say so.
+ *
+ * AN ES MODULE, so it can read `history-actions.js` - the row-action table and
+ * the words both windows use (Gemini ruling, 2026-10-27: share them with
+ * brain.js like the Reminders `hud-actions.js`, so pin/file/delete cannot
+ * drift). It is loaded with `<script type="module">`: still ONE external file,
+ * so the page's inline-script count and every CSP hash are untouched.
  */
+import {
+  ACTION_LABELS,
+  DELETE_KEEPS_FACTS,
+  DELETE_QUESTION,
+  DELETE_REMOVES,
+  actArgs,
+  actBody,
+  labelFor,
+} from "./history-actions.js";
+
 (function (root) {
   "use strict";
 
@@ -72,12 +88,6 @@
    *  both apps already use (docs/CHAT-TAGS-DESIGN.md: "Untagged"). */
   var UNTAGGED = "Untagged";
   var PINNED = "Pinned";
-  /** The Brain's own sentence, word for word (history-view.js
-   *  `DELETE_KEEPS_FACTS`, and the phone's `ChatLog`). A test holds the two
-   *  copies equal, so the two windows cannot come to two ways of saying it. */
-  var DELETE_KEEPS_FACTS =
-    "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned " +
-    "over some days, use Forget a time frame. Copies in older backups stay until they age out.";
 
   /* ------------------------------------------------------------------ *
    * Small helpers
@@ -179,6 +189,12 @@
       kind: ICON_KINDS.indexOf(kind) >= 0 ? kind : "chat",
       tag_id: num(c.tag_id, 0) > 0 ? num(c.tag_id) : null,
       pinned: c.pinned === true,
+      // WHEN it was pinned (unix seconds, the PC's own record). The Pinned
+      // group is ordered by this and not by the chat's time, or a chat
+      // pinned last week would jump above one pinned this morning as soon as
+      // a message arrived in it (the Gemini ruling's `pinned_at DESC,
+      // updated_at DESC`).
+      pinned_at: num(c.pinned_at, 0),
       turns: num(c.turns, 0),
       voice: c.has_voice === true,
       tainted: c.tainted === true,
@@ -198,9 +214,23 @@
     return norm(row && row.title).indexOf(q) >= 0;
   }
 
-  /** Newest first (the PC's own order), or A to Z when the owner sorts. */
+  /** Newest first (the PC's own order), A to Z when the owner sorts, or the
+   *  Pinned group's own order: `pinned_at DESC, updated DESC` (the newest pin
+   *  first; two pins in the same second newest-chat first). The Pinned group
+   *  keeps that order whatever the sort button says - it is what a pin MEANS
+   *  - and every other group follows the button. */
   function sortRows(rows, mode) {
     var copy = rows.slice();
+    if (mode === "pinned") {
+      copy.sort(function (a, b) {
+        return (
+          num(b.pinned_at, 0) - num(a.pinned_at, 0) ||
+          b.updated - a.updated ||
+          a.title.localeCompare(b.title)
+        );
+      });
+      return copy;
+    }
     if (mode === "name") {
       copy.sort(function (a, b) {
         return (
@@ -291,7 +321,8 @@
     var sections = [];
     function add(key, title, icon, kind, colour, group, tagId) {
       if (!group.length) return;
-      var sorted = sortRows(group, sort);
+      // The Pinned group is ordered by the pin itself, never by the button.
+      var sorted = sortRows(group, key === "pinned" ? "pinned" : sort);
       var open = query ? true : expanded[key] !== false;
       // "Show N more sessions" is a one-off expansion (the `!` key), so a
       // section the owner opened once does not quietly stay unbounded.
@@ -326,26 +357,6 @@
       n += num(s && s.count, 0);
     });
     return n;
-  }
-
-  /** What one write sends to `hud_history_act` (the Rust command): the
-   *  action, the one chat, and that action's own value - never a route or a
-   *  body, so a script in the page cannot aim this at anything else. */
-  function actArgs(action, id, value) {
-    var args = { action: text(action), id: text(id) };
-    if (action === "pin") {
-      if (value !== true && value !== false) return null;
-      args.pinned = value;
-    } else if (action === "tag") {
-      if (!(value === null || (typeof value === "number" && isFinite(value) && value > 0))) {
-        return null;
-      }
-      args.tag = value;
-    } else if (action !== "delete") {
-      return null;
-    }
-    if (!args.id) return null;
-    return args;
   }
 
   /* ------------------------------------------------------------------ *
@@ -432,13 +443,13 @@
     "#hh-backdrop{position:fixed;inset:0;z-index:88;background:rgba(4,6,9,.44);opacity:0;",
     " pointer-events:none;transition:opacity .16s ease;}",
     "#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}",
-    "#hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw;",
+    ".hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw;",
     " display:flex;flex-direction:column;background:#14161b;color:#e6e8ec;",
     " border-right:1px solid rgba(255,255,255,.09);box-shadow:18px 0 40px rgba(0,0,0,.45);",
     " font-family:var(--font-ui,\"Segoe UI\",system-ui,sans-serif);",
     " font-size:13px;line-height:1.35;transform:translateX(-104%);",
     " transition:transform .18s var(--ease, ease);visibility:hidden;}",
-    "#hh-panel.hh-on{transform:none;visibility:visible;}",
+    ".hh-panel.hh-on{transform:none;visibility:visible;}",
     "#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}",
     "#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}",
     ".hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;",
@@ -465,22 +476,22 @@
     ".hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
     ".hh-count{flex:0 0 auto;color:#6f7681;font-weight:500;}",
     ".hh-rows{margin:1px 0 0;padding:0;list-style:none;}",
-    ".hh-item{position:relative;display:flex;align-items:center;}",
-    ".hh-row{display:flex;align-items:center;gap:7px;width:100%;padding:5px 26px 5px 7px;margin:0;",
-    " border:0;border-radius:7px;background:transparent;color:#cfd4dc;font:inherit;font-size:12.5px;",
-    " cursor:pointer;text-align:left;}",
-    ".hh-row:hover,.hh-row:focus-visible{background:rgba(255,255,255,.07);color:#fff;outline:none;}",
-    ".hh-row[aria-current=\"true\"]{background:rgba(56,240,255,.11);color:#eafcff;}",
-    ".hh-row[aria-current=\"true\"] .hh-t{font-weight:600;}",
-    ".hh-row .glyph{width:13px;height:13px;flex:0 0 auto;color:#8b929d;}",
-    ".hh-row[aria-current=\"true\"] .glyph{color:#7fe9ff;}",
+    ".hh-item{position:relative;display:flex;align-items:center;gap:1px;}",
+    ".hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px;",
+    " margin:0;border:0;border-radius:7px;background:transparent;color:#cfd4dc;font:inherit;",
+    " font-size:12.5px;cursor:pointer;text-align:left;}",
+    ".hh-open:hover,.hh-open:focus-visible{background:rgba(255,255,255,.07);color:#fff;outline:none;}",
+    ".hh-open[aria-current=\"true\"]{background:rgba(56,240,255,.11);color:#eafcff;}",
+    ".hh-open[aria-current=\"true\"] .hh-t{font-weight:600;}",
+    ".hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:#8b929d;}",
+    ".hh-open[aria-current=\"true\"] .glyph{color:#7fe9ff;}",
     ".hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
     ".hh-age{flex:0 0 auto;color:#767d88;font-size:11px;font-variant-numeric:tabular-nums;}",
-    ".hh-dots{position:absolute;right:3px;top:50%;transform:translateY(-50%);",
-    " width:20px;height:20px;padding:0;border:0;border-radius:5px;",
+    ".hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px;",
     " background:transparent;color:#8b929d;cursor:pointer;opacity:0;}",
     ".hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}",
-    ".hh-dots:hover,.hh-dots:focus-visible{background:rgba(255,255,255,.12);color:#fff;outline:none;}",
+    ".hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded=\"true\"]{",
+    " background:rgba(255,255,255,.12);color:#fff;outline:none;opacity:1;}",
     ".hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px;",
     " background:transparent;color:#8a919c;font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}",
     ".hh-more:hover,.hh-more:focus-visible{background:rgba(255,255,255,.06);color:#e6e8ec;outline:none;}",
@@ -550,6 +561,9 @@
       busy: false,
       current: "",
       menu: null,
+      // The `...` button that opened the row menu: focus goes back to it when
+      // the menu is closed with Escape.
+      menuAnchor: null,
     };
 
     /* The column icon, beside Presets and Live. */
@@ -568,8 +582,11 @@
     backdrop.id = "hh-backdrop";
     backdrop.hidden = false;
 
-    var panel = el("section");
-    panel.id = "hh-panel";
+    var panel = el("section", "hh-panel");
+    // `#history-sidebar` is the id the page's Space push-to-talk guard names
+    // (the Gemini ruling of 2026-10-27): while the sidebar is up, Space belongs
+    // to it and must never start the microphone.
+    panel.id = "history-sidebar";
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-labelledby", "hh-title");
     panel.setAttribute("aria-modal", "false");
@@ -658,8 +675,15 @@
       doc.documentElement.classList.toggle("hh-open", state.open);
       railBtn.setAttribute("aria-expanded", state.open ? "true" : "false");
       if (!state.open) {
-        closeMenu();
-        if (doc.activeElement && panel.contains(doc.activeElement)) railBtn.focus();
+        closeMenu(false);
+        // Closing leaves the keyboard on the rail icon that opened the panel:
+        // Escape from anywhere in it comes back here, not to the top of the
+        // page (the Gemini ruling of 2026-10-27).
+        var active = doc.activeElement;
+        if (!active || active === doc.body || active === doc.documentElement ||
+            panel.contains(active)) {
+          railBtn.focus();
+        }
         return;
       }
       refresh();
@@ -732,12 +756,29 @@
       });
     }
 
-    function rowButton(row) {
-      // The row is a button; its "..." is a SIBLING, not a button inside a
-      // button (nested interactive elements are invalid and read badly to a
-      // screen reader). The wrapper holds the two side by side.
+    /** One chat's time as the `datetime` a `<time>` wants (ISO 8601), or ""
+     *  for a chat with no time of its own - a `<time>` with no datetime would
+     *  be a date invented by the page. */
+    function isoOf(seconds) {
+      var n = num(seconds, 0);
+      if (!(n > 0)) return "";
+      var d = new Date(n * 1000);
+      return isFinite(d.getTime()) ? d.toISOString() : "";
+    }
+
+    /**
+     * ONE row: a `<div role="listitem">` holding TWO SIBLING buttons - the chat
+     * and its `...` - never a button inside a button (the Gemini ruling of
+     * 2026-10-27): a nested button is invalid, a keyboard cannot reach it the
+     * way a button should be reached, and a click on it reads as a click on the
+     * row. Two siblings means Tab stops on the chat and then on its menu, and
+     * Space on either is that button's own Space - which is what lets the
+     * page's push-to-talk key bail out for `#history-sidebar` safely.
+     */
+    function rowItem(row) {
       var item = el("div", "hh-item");
-      var button = el("button", "hh-row");
+      item.setAttribute("role", "listitem");
+      var button = el("button", "hh-open");
       button.type = "button";
       button.setAttribute("data-id", row.id);
       var label = row.title + (row.ageLong ? ", " + row.ageLong : "");
@@ -745,7 +786,15 @@
       button.setAttribute("aria-label", label);
       button.appendChild(icon(ICON_KINDS.indexOf(row.kind) >= 0 ? row.kind : "chat"));
       button.appendChild(el("span", "hh-t", row.title));
-      var age = el("span", "hh-age", row.age);
+      // A real <time>: the short words for the eye ("7d"), the ISO moment for
+      // anything reading the markup, the long words on hover. Hidden from a
+      // screen reader because the row's own name already says the age, and a
+      // clock that is ahead of the PC is clamped by `ageWords`, so no row can
+      // say "in 3 minutes".
+      var age = el("time", "hh-age", row.age);
+      var when = isoOf(row.updated);
+      if (when) age.setAttribute("datetime", when);
+      if (row.ageLong) age.setAttribute("title", row.ageLong);
       age.setAttribute("aria-hidden", "true");
       button.appendChild(age);
       if (row.current) button.setAttribute("aria-current", "true");
@@ -754,12 +803,13 @@
       });
       button.addEventListener("contextmenu", function (event) {
         event.preventDefault();
-        openMenu(row, button);
+        openMenu(row, dots);
       });
       var dots = el("button", "hh-dots");
       dots.type = "button";
       dots.setAttribute("aria-label", "More for " + row.title);
       dots.setAttribute("aria-haspopup", "menu");
+      dots.setAttribute("aria-expanded", "false");
       dots.appendChild(icon("more"));
       dots.addEventListener("click", function (event) {
         event.stopPropagation();
@@ -800,6 +850,7 @@
       groups.forEach(function (section) {
         var wrap = el("div", "hh-sec");
         wrap.setAttribute("data-open", section.open ? "1" : "0");
+        wrap.setAttribute("data-key", section.key);
         var headBtn = el("button", "hh-head");
         headBtn.type = "button";
         headBtn.setAttribute("aria-expanded", section.open ? "true" : "false");
@@ -826,19 +877,36 @@
           else delete state.expanded[section.key];
           lsSet(LS_COLLAPSED, JSON.stringify(state.expanded));
           paint();
+          // paint() empties #hh-body, so the header that was just pressed no
+          // longer exists and the keyboard would drop to the top of the page.
+          // Put it back on the SAME section's header (the Gemini ruling of
+          // 2026-10-27: this panel's own repaint never loses the keyboard).
+          var again = body.querySelector(
+            '.hh-sec[data-key="' + section.key + '"] .hh-head'
+          );
+          if (again && again.focus) again.focus();
         });
         wrap.appendChild(headBtn);
 
-        var rows = el("ul", "hh-rows");
+        // A list of `div[role="listitem"]` rows, not an <ul> of buttons: the
+        // listitem is what a screen reader announces, and it holds the chat's
+        // own button beside its menu button (see `rowItem`).
+        var rows = el("div", "hh-rows");
+        rows.setAttribute("role", "list");
         section.rows.forEach(function (row) {
-          var item = el("li");
-          item.appendChild(rowButton(row));
-          rows.appendChild(item);
+          rows.appendChild(rowItem(row));
         });
+        wrap.appendChild(rows);
+        // "Show N more sessions" is a CONTROL beside the list, not a row in
+        // it: a `role="list"` may hold only listitems, so a button inside one
+        // is both invalid markup and read out as if it were a chat.
         if (section.more > 0) {
           var more = el("button", "hh-more");
           more.type = "button";
           more.textContent = "Show " + section.more + " more session" + (section.more === 1 ? "" : "s");
+          // How many rows this section is showing now: the first NEW one is at
+          // that index after the repaint, and it is where focus goes.
+          var shownBefore = section.rows.length;
           more.addEventListener("click", function () {
             state.expanded[section.key] = true;
             // "Show more" is a one-off expansion: it is remembered only for
@@ -847,12 +915,16 @@
             state.expanded["!" + section.key] = true;
             lsSet(LS_COLLAPSED, JSON.stringify(pickRemembered(state.expanded)));
             paint();
+            // Focus the FIRST chat the click revealed, so a keyboard user lands
+            // where the new rows begin instead of back at the top of them (the
+            // Gemini ruling of 2026-10-27).
+            var sec = body.querySelector('.hh-sec[data-key="' + section.key + '"]');
+            var items = sec ? sec.querySelectorAll(".hh-item .hh-open") : [];
+            var target = items[shownBefore] || items[items.length - 1];
+            if (target && target.focus) target.focus();
           });
-          var moreLi = el("li");
-          moreLi.appendChild(more);
-          rows.appendChild(moreLi);
+          wrap.appendChild(more);
         }
-        wrap.appendChild(rows);
         body.appendChild(wrap);
       });
     }
@@ -876,15 +948,19 @@
         return tauri.core.invoke(command, args);
       }
       // A browser: the page talks to the backend itself, exactly as the rest
-      // of this page does. The route each action is the one the PC documents.
+      // of this page does. The route each action is the one the PC documents,
+      // and the body comes from `history-actions.js` - the same module the
+      // Brain's window reads its words from, so the two cannot drift.
       var paths = {
         pin: "/api/history/pin",
         tag: "/api/history/tag",
         delete: "/api/history/delete",
       };
-      var body = { id: args.id };
-      if (args.action === "pin") body.pinned = args.pinned === true;
-      if (args.action === "tag") body.tag_id = args.tag === null ? null : num(args.tag);
+      var body = actBody(args.action, args.id,
+        args.action === "pin" ? args.pinned : args.action === "tag" ? args.tag : null);
+      if (!body || !paths[args.action]) {
+        return Promise.reject(new Error("That was not a change this window can send."));
+      }
       return root.fetch(paths[args.action], {
         method: "POST",
         cache: "no-store",
@@ -948,9 +1024,18 @@
 
     /* ---- the row menu ---- */
 
-    function closeMenu() {
+    /** Shut the row menu. `focusBack` puts the keyboard back on the `...` that
+     *  opened it - which is what Escape does (the Gemini ruling of 2026-10-27):
+     *  a menu that closes and drops focus at the top of the document loses a
+     *  keyboard user's place. A close by clicking elsewhere leaves focus where
+     *  the click went. */
+    function closeMenu(focusBack) {
       menu.hidden = true;
+      if (state.menuAnchor) state.menuAnchor.setAttribute("aria-expanded", "false");
+      var anchor = state.menuAnchor;
       state.menu = null;
+      state.menuAnchor = null;
+      if (focusBack && anchor && anchor.focus) anchor.focus();
     }
 
     function menuItem(words, glyph, danger) {
@@ -979,18 +1064,23 @@
     }
 
     function openMenu(row, anchor) {
+      // One menu at a time: a second `...` closes the first before opening its
+      // own, and the first one's button forgets it was expanded.
+      if (state.menuAnchor) state.menuAnchor.setAttribute("aria-expanded", "false");
       menu.textContent = "";
-      var open = menuItem("Open", "chat");
+      var open = menuItem(ACTION_LABELS.open, "chat");
       open.addEventListener("click", function () {
-        closeMenu();
+        closeMenu(false);
         openChat(row);
       });
-      var pin = menuItem(row.pinned ? "Unpin chat" : "Pin chat", "pin");
+      var pin = menuItem(labelFor("pin", row.pinned), "pin");
       pin.addEventListener("click", function () {
-        closeMenu();
+        closeMenu(false);
         act("pin", row.id, !row.pinned);
       });
-      var move = menuItem("Move to project", "folder");
+      var move = menuItem(ACTION_LABELS.move, "folder");
+      move.setAttribute("aria-haspopup", "menu");
+      move.setAttribute("aria-expanded", "false");
       var sub = el("div");
       sub.className = "hh-menu";
       sub.hidden = true;
@@ -1007,7 +1097,7 @@
         pick.appendChild(el("span", "hh-mtext", text(t.name) || "Tag " + t.id));
         if (row.tag_id === num(t.id)) pick.setAttribute("aria-current", "true");
         pick.addEventListener("click", function () {
-          closeMenu();
+          closeMenu(false);
           act("tag", row.id, num(t.id));
         });
         sub.appendChild(pick);
@@ -1016,23 +1106,24 @@
       none.type = "button";
       none.setAttribute("role", "menuitem");
       none.appendChild(icon("inbox"));
-      none.appendChild(el("span", "hh-mtext", "No project"));
+      none.appendChild(el("span", "hh-mtext", ACTION_LABELS.noTag));
       none.addEventListener("click", function () {
-        closeMenu();
+        closeMenu(false);
         act("tag", row.id, null);
       });
       sub.appendChild(none);
       move.addEventListener("click", function () {
         sub.hidden = !sub.hidden;
+        move.setAttribute("aria-expanded", sub.hidden ? "false" : "true");
       });
-      var del = menuItem("Delete chat", "close", true);
+      var del = menuItem(ACTION_LABELS.delete, "close", true);
       del.addEventListener("click", function () {
         askDelete(row, anchor);
       });
       var sep = el("div", "hh-sep");
-      var add = menuItem("New chat", "plus");
+      var add = menuItem(ACTION_LABELS.newChat, "plus");
       add.addEventListener("click", function () {
-        closeMenu();
+        closeMenu(false);
         newChat();
       });
 
@@ -1045,32 +1136,36 @@
       menu.appendChild(add);
       place(menu, anchor);
       state.menu = row.id;
+      state.menuAnchor = anchor;
+      if (anchor && anchor.setAttribute) anchor.setAttribute("aria-expanded", "true");
       var first = menu.querySelector("button");
       if (first) first.focus();
     }
 
     /* ---- delete, with the page's own are-you-sure ---- */
 
-    /** The delete confirm, in the menu's own box: the sentence both windows
-     *  say, then Delete (danger) and Keep it. No `window.confirm` - a
-     *  webview may not draw one, and a dialog the page cannot see is a
-     *  delete with no question at all. */
+    /** The delete confirm, in the menu's own box. The three sentences are the
+     *  Brain's own, word for word and in its order (`history-actions.js`: the
+     *  Gemini ruling of 2026-10-27 - one confirmation, both windows), only laid
+     *  out for this box: there is no `window.confirm` here, because a webview
+     *  may not draw one, and a dialog the page cannot see is a delete with no
+     *  question at all. */
     function askDelete(row, anchor) {
       menu.textContent = "";
       var note = el(
         "div",
         "hh-note",
-        "Delete this chat? It is removed from this PC and cannot be undone. " + DELETE_KEEPS_FACTS
+        DELETE_QUESTION + " " + DELETE_REMOVES + " " + DELETE_KEEPS_FACTS
       );
       note.setAttribute("id", "hh-del-note");
-      var keep = menuItem("Keep it", "chat");
+      var keep = menuItem(ACTION_LABELS.keep, "chat");
       keep.addEventListener("click", function () {
-        closeMenu();
+        closeMenu(true);
       });
-      var yes = menuItem("Delete chat", "close", true);
+      var yes = menuItem(ACTION_LABELS.delete, "close", true);
       yes.setAttribute("aria-describedby", "hh-del-note");
       yes.addEventListener("click", function () {
-        closeMenu();
+        closeMenu(false);
         act("delete", row.id, null).then(function (ok) {
           if (ok && state.current === row.id) {
             // The chat on screen has just gone: start a fresh one rather than
@@ -1115,18 +1210,25 @@
       }, 90);
     });
     panel.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        if (state.menu) closeMenu();
-        else setOpen(false);
-      }
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      // Escape in the panel: the row menu first, then the panel itself - and
+      // the second Escape puts the keyboard back on the left column's History
+      // icon (the Gemini ruling of 2026-10-27).
+      if (state.menu) closeMenu(true);
+      else setOpen(false);
     });
+    // The menu is appended to <body>, not to the panel, so its own Escape does
+    // not reach the handler above: this one closes it and returns focus to the
+    // `...` that opened it.
     doc.addEventListener("keydown", function (event) {
-      if (event.key === "Escape" && state.menu) closeMenu();
+      if (event.key !== "Escape" || !state.menu) return;
+      event.stopPropagation();
+      closeMenu(true);
     });
     doc.addEventListener("click", function (event) {
       if (state.menu && menu.contains(event.target)) return;
-      if (state.menu) closeMenu();
+      if (state.menu) closeMenu(false);
     });
 
     mounted = {
@@ -1161,6 +1263,12 @@
     MAX_ROWS: MAX_ROWS,
     UNTAGGED: UNTAGGED,
     PINNED: PINNED,
+    // The words and shapes are `history-actions.js`'s (shared with the Brain);
+    // passed through so a test - and the page's own push-to-talk guard - can
+    // read one table instead of two.
+    ACTION_LABELS: ACTION_LABELS,
+    DELETE_QUESTION: DELETE_QUESTION,
+    DELETE_REMOVES: DELETE_REMOVES,
     DELETE_KEEPS_FACTS: DELETE_KEEPS_FACTS,
     TAG_ICONS: TAG_ICONS,
     ICON_KINDS: ICON_KINDS,
@@ -1172,9 +1280,16 @@
     buildSections: buildSections,
     countRows: countRows,
     actArgs: actArgs,
+    actBody: actBody,
+    labelFor: labelFor,
     glyphPath: glyphPath,
     tagDots: tagDots,
     mount: mount,
+    /** Is the sidebar on screen? The page's Space push-to-talk asks this: while
+     *  it is open, Space belongs to the panel and must never start the mic. */
+    isOpen: function () {
+      return !!(mounted && mounted.isOpen && mounted.isOpen());
+    },
   };
   root.hudHistory = API;
 

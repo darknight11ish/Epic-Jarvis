@@ -44,7 +44,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -54,6 +54,7 @@ const SRC = join(DESKTOP, "src");
 const read = (...parts) => readFileSync(join(...parts), "utf8");
 
 const MODULE = read(SRC, "hud-history.js");
+const ACTIONS = read(SRC, "history-actions.js");
 const PAGE = read(SRC, "jarvis_hud.html");
 
 let passed = 0;
@@ -69,12 +70,11 @@ function check(name, fn) {
   }
 }
 
-/* Load the module the way the page does - as a classic script whose global is
- * `window` - but in an empty context with no document, so nothing mounts and
- * nothing touches a browser API. */
-const stub = { window: {}, console };
-new Function("window", "console", MODULE)(stub.window, console);
-const H = stub.window.hudHistory;
+/* Load the module the way the page does - an ES module whose global is
+ * `window` (there is none in Node, so it takes `globalThis`) - with no
+ * document, so nothing mounts and nothing touches a browser API. */
+await import(pathToFileURL(join(SRC, "hud-history.js")).href);
+const H = globalThis.hudHistory;
 assert.ok(H, "the module did not export window.hudHistory");
 
 const NOW = 1_790_000_000; // a fixed clock, so ages are not flaky
@@ -317,15 +317,52 @@ check("a write is pin, tag or delete - one chat, and that action's own value", (
   }
 });
 
-check("the delete sentence is the Brain's own, word for word", () => {
-  const view = read(SRC, "history-view.js");
-  const at = view.indexOf("export const DELETE_KEEPS_FACTS =");
-  assert.notEqual(at, -1, "history-view.js no longer exports DELETE_KEEPS_FACTS");
-  const tail = view.slice(at);
-  const expr = tail.slice(tail.indexOf("=") + 1, tail.indexOf(";"));
-  const parts = [...expr.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
-  assert.equal(H.DELETE_KEEPS_FACTS, parts.join(""),
-    "the HUD and the Brain would say it two different ways");
+check("the delete words are ONE copy, the one both windows read", () => {
+  // The Gemini ruling of 2026-10-27: share the row-action helpers, do not keep
+  // two copies held equal by a test. So the sentence is defined in
+  // history-actions.js and NOWHERE else, and the Brain re-exports it.
+  const definitions = [MODULE, ACTIONS, read(SRC, "history-view.js"), read(SRC, "brain.js")]
+    .filter((text) => /(?:export\s+)?(?:const|var|let)\s+DELETE_KEEPS_FACTS\s*=/.test(text));
+  assert.deepEqual(
+    definitions.map(() => "a copy"),
+    ["a copy"],
+    "DELETE_KEEPS_FACTS is defined in more than one file"
+  );
+  assert.match(ACTIONS, /export const DELETE_KEEPS_FACTS =/, "the shared module lost the words");
+  assert.match(
+    read(SRC, "history-view.js"),
+    /import \{[^}]*DELETE_KEEPS_FACTS[^}]*\} from "\.\/history-actions\.js"/,
+    "the Brain no longer imports the shared sentence"
+  );
+  assert.match(
+    read(SRC, "history-view.js"),
+    /export \{ DELETE_KEEPS_FACTS \};/,
+    "history-view.js must keep its public export working"
+  );
+  assert.equal(H.DELETE_KEEPS_FACTS, H.DELETE_KEEPS_FACTS.trim());
+  assert.ok(H.DELETE_KEEPS_FACTS.includes("Forget a time frame"));
+  assert.ok(H.DELETE_QUESTION.includes("Delete this conversation?"));
+  assert.ok(H.DELETE_REMOVES.includes("cannot be undone"));
+  // The HUD's box shows the Brain's three sentences, in the Brain's order.
+  const at = MODULE.indexOf("DELETE_QUESTION + \" \" + DELETE_REMOVES");
+  assert.notEqual(at, -1, "the HUD's confirm no longer says the Brain's words");
+  assert.ok(MODULE.indexOf("DELETE_KEEPS_FACTS", at) > at);
+});
+
+check("the row menu's labels come from the shared table, not from literals here", () => {
+  assert.equal(H.ACTION_LABELS.delete, "Delete");
+  assert.equal(H.labelFor("pin", false), "Pin chat");
+  assert.equal(H.labelFor("pin", true), "Unpin chat");
+  for (const action of ["open", "pin", "move", "delete"]) {
+    assert.ok(H.ACTION_LABELS[action], action + " has no label");
+    assert.ok(
+      MODULE.includes('ACTION_LABELS.' + action) || MODULE.includes('labelFor("' + action),
+      action + " is labelled with a literal in the HUD"
+    );
+  }
+  // ... and the Brain's own History row uses the same table.
+  assert.match(read(SRC, "brain.js"), /button\(ACTION_LABELS\.delete/);
+  assert.match(read(SRC, "brain.js"), /import \{ ACTION_LABELS \} from "\.\/history-actions\.js"/);
 });
 
 /* ── glyphs ───────────────────────────────────────────────────────────── */
@@ -359,10 +396,112 @@ check("the ten tag icons are the shared contract's ten, in its order", () => {
 
 /* ── the page's half, and the copies ──────────────────────────────────── */
 
-check("the page loads the module with one external script and no new inline block", () => {
-  assert.match(PAGE, /<script src="hud-history\.js" defer><\/script>/);
+check("the page loads the module with one external MODULE script and no inline block", () => {
+  assert.match(PAGE, /<script type="module" src="hud-history\.js"><\/script>/);
+  // One external file either way: no new inline block, so no CSP hash moves.
+  assert.equal((PAGE.match(/src="hud-history\.js"/g) || []).length, 1);
   const before = read(REPO, "backend", "jarvis_hud.html");
   assert.equal(PAGE, before, "the page and its backend copy have drifted");
+});
+
+check("Space on the page bails out for the sidebar, a control or a menu", () => {
+  // The Gemini ruling of 2026-10-27: the global push-to-talk key must never
+  // fire while a sidebar row, its menu, the search box or the panel itself has
+  // the key. `spaceBelongsToTheSidebar` is that guard.
+  assert.match(PAGE, /function spaceBelongsToTheSidebar\(e\)/);
+  assert.ok(
+    PAGE.includes(
+      "'#history-sidebar, input, textarea, button, [role=\"menu\"]'"
+    ),
+    "the push-to-talk guard does not name the sidebar's controls"
+  );
+  assert.match(
+    PAGE,
+    /spaceIsThePages\(\) && !spaceBelongsToTheSidebar\(e\)/,
+    "the key handler does not call the guard"
+  );
+  assert.match(PAGE, /window\.hudHistory\.isOpen/, "an open sidebar does not stop Space");
+  // ... and the panel really is #history-sidebar.
+  assert.match(MODULE, /panel\.id = "history-sidebar"/);
+});
+
+check("a row is a listitem holding two SIBLING buttons, never one inside another", () => {
+  assert.match(MODULE, /item\.setAttribute\("role", "listitem"\)/);
+  assert.match(MODULE, /var button = el\("button", "hh-open"\)/);
+  assert.match(MODULE, /var dots = el\("button", "hh-dots"\)/);
+  const at = MODULE.indexOf("function rowItem(row)");
+  const body = MODULE.slice(at, MODULE.indexOf("function paint()", at));
+  assert.ok(
+    body.indexOf("item.appendChild(button)") < body.indexOf("item.appendChild(dots)"),
+    "the two buttons are not appended as siblings"
+  );
+  // A nested button would show up as one button being appended to the other.
+  assert.doesNotMatch(body, /button\.appendChild\(dots\)/, "a button inside a button");
+  assert.match(MODULE, /rows\.setAttribute\("role", "list"/);
+  assert.match(MODULE, /headBtn\.setAttribute\("aria-expanded"/);
+});
+
+check("each age is a <time> with a datetime and the long words on hover", () => {
+  assert.match(MODULE, /el\("time", "hh-age", row\.age\)/);
+  assert.match(MODULE, /age\.setAttribute\("datetime", when\)/);
+  assert.match(MODULE, /age\.setAttribute\("title", row\.ageLong\)/);
+  assert.match(MODULE, /function isoOf\(seconds\)/);
+  // A clock that is ahead of the PC is clamped, so no row says "in 3 minutes".
+  assert.equal(H.ageWords(T(-600), NOW), "now");
+});
+
+check("Escape gives the keyboard back: to the ... , then to the rail icon", () => {
+  assert.match(MODULE, /function closeMenu\(focusBack\)/);
+  assert.match(MODULE, /if \(focusBack && anchor && anchor\.focus\) anchor\.focus\(\)/);
+  assert.match(MODULE, /if \(state\.menu\) closeMenu\(true\);\s*\n\s*else setOpen\(false\)/);
+  assert.match(MODULE, /doc\.addEventListener\("keydown"[\s\S]{0,220}closeMenu\(true\)/);
+  assert.match(MODULE, /railBtn\.focus\(\)/);
+  assert.match(MODULE, /var railBtn = el\("button", "rail-toolbar-btn"\)/);
+});
+
+check("'Show N more' moves focus to the first chat it revealed", () => {
+  const at = MODULE.indexOf("var shownBefore = section.rows.length;");
+  assert.notEqual(at, -1, "the panel does not count what it has shown");
+  const body = MODULE.slice(at, MODULE.indexOf("wrap.appendChild(more)", at));
+  assert.ok(body.indexOf("paint()") < body.indexOf("target.focus()"), "focus before the repaint");
+  assert.match(body, /items\[shownBefore\]/, "focus does not land on the first NEW row");
+  // ... and the control itself is not a child of `role="list"`, which may hold
+  // only listitems: a button in it is invalid and reads out as one of the chats.
+  assert.doesNotMatch(MODULE, /rows\.appendChild\(more\)/, "a button inside the list");
+  assert.match(MODULE, /wrap\.appendChild\(more\)/, "the control is not beside the list");
+});
+
+check("collapsing a section keeps the keyboard on its own header", () => {
+  const at = MODULE.indexOf('headBtn.addEventListener("click"');
+  assert.notEqual(at, -1, "the section header has no click handler");
+  const body = MODULE.slice(at, MODULE.indexOf("wrap.appendChild(headBtn)", at));
+  const paintAt = body.indexOf("paint()");
+  const focusAt = body.indexOf("again.focus()");
+  assert.ok(paintAt !== -1, "the header no longer repaints the list");
+  assert.ok(focusAt > paintAt, "the repaint drops the keyboard at the top of the page");
+  assert.match(
+    body,
+    /\.hh-sec\[data-key="' \+ section\.key \+ '"\] \.hh-head/,
+    "focus does not go back to the SAME section's header"
+  );
+});
+
+check("the Pinned group is ordered by pinned_at, then updated", () => {
+  const at = NOW - 1000;
+  const pinned = [
+    row("old-pin", "Old pin", 10, { pinned: true, pinned_at: 100 }),
+    row("new-pin", "New pin", 500, { pinned: true, pinned_at: 300 }),
+    row("same-pin", "Same moment", 900, { pinned: true, pinned_at: 300 }),
+  ];
+  const got = H.buildSections(pinned, [], { now: NOW, cap: 5 });
+  // Two pins in the same second: the newer CHAT first, which is the second
+  // half of `pinned_at DESC, updated_at DESC`.
+  assert.deepEqual(got[0].rows.map((r) => r.id), ["new-pin", "same-pin", "old-pin"]);
+  // The sort button does not reorder the Pinned group: a pin's meaning is its
+  // moment, not the chat's name.
+  const named = H.buildSections(pinned, [], { now: NOW, cap: 5, sort: "name" });
+  assert.deepEqual(named[0].rows.map((r) => r.id), ["new-pin", "same-pin", "old-pin"]);
+  assert.equal(H.rowOf(pinned[0], at, "").pinned_at, 100, "pinned_at is not read from the row");
 });
 
 check("the page's half is hudHistoryHost, with the three functions the panel calls", () => {
@@ -382,15 +521,17 @@ check("all three vendored copies of the page are byte-identical", () => {
   assert.equal(a, c);
 });
 
-check("the module is byte-identical in the three places it ships", () => {
-  const a = MODULE;
-  assert.equal(read(REPO, "backend", "static", "hud-history.js"), a);
-  assert.equal(read(REPO, "jarvis-backend", "hud-history.js"), a);
+check("the module and the table it imports are byte-identical in the three places they ship", () => {
+  assert.equal(read(REPO, "backend", "static", "hud-history.js"), MODULE);
+  assert.equal(read(REPO, "jarvis-backend", "hud-history.js"), MODULE);
+  assert.equal(read(REPO, "backend", "static", "history-actions.js"), ACTIONS);
+  assert.equal(read(REPO, "jarvis-backend", "history-actions.js"), ACTIONS);
 });
 
-check("the server's closed whitelist names the module", () => {
+check("the server's closed whitelist names both files the page and its module load", () => {
   const base = read(REPO, "jarvis-backend", "jarvis_hud.py");
   assert.match(base, /"\/hud-history\.js": \("hud-history\.js"/);
+  assert.match(base, /"\/history-actions\.js": \("history-actions\.js"/);
 });
 
 /* ── the Rust side: the reads, the write, the lock ────────────────────── */
@@ -436,13 +577,15 @@ check("the lock takes the words out of the three History reads", () => {
   assert.match(rustLock, /crate::brain::history::redact_tags/);
 });
 
-check("the HUD's static whitelist, the patcher and the base all carry the module", () => {
+check("the HUD's static whitelist, the patcher and the base all carry both files", () => {
   const base = read(REPO, "jarvis-backend", "jarvis_hud.py");
   const ps1 = read(REPO, "scripts", "apply-patches.ps1");
   const where = read(REPO, "backend", "_where.py");
-  assert.ok(base.includes("/hud-history.js"));
-  assert.ok(ps1.includes("'static/hud-history.js'"));
-  assert.ok(where.includes('"static/hud-history.js"'));
+  for (const name of ["hud-history.js", "history-actions.js"]) {
+    assert.ok(base.includes("/" + name), name + " is not in the whitelist");
+    assert.ok(ps1.includes("'static/" + name + "'"), name + " is not shipped by the patcher");
+    assert.ok(where.includes('"static/' + name + '"'), name + " is not in SHIPPED");
+  }
 });
 
 /* ── no HTML sink ─────────────────────────────────────────────────────── */
