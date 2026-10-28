@@ -196,6 +196,10 @@ fn main() {
             "brain_watch_seen",
             "brain_remove_skill",
             "brain_model",
+            // The model advisor's four questions (2026-10-28). Its own set,
+            // granted beside brain_model, because asking what to change is not
+            // the power to change it.
+            "brain_model_recommend",
             // Memory: one decision per fact, and the switch that governs
             // whether facts are proposed at all.
             "brain_memory_decide",

@@ -2432,6 +2432,46 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+**The model advisor is the desktop's alone, and that is one-sided on purpose**
+(2026-10-28; the owner's request: *"can you give jarvis the ability to recommend
+a change to presets (for the local ai models being used) with a one click check
+for new models button and it will look on hugging face for newer potentially
+better models, give me a card to approve a download and a bench mark testing
+locally, then it will recommend changing the presets based on the local gpus and
+what model goes where and i can approve or give my opinion and jarvis can change
+the preset recommendations then i approve?"*). The Brain's Model card gained a
+**Check for new models** button (`brain.js`, `model-advisor.js`): one press asks
+the PC to look on Hugging Face and shows what it found with each candidate's
+size, quantization and fit ("fits", "tight", "does not fit"); a **Download**
+goes through the EXISTING carded `/api/models/install` (`brain_model`); a
+**Benchmark on this PC** loads a model that is already installed and shows
+tokens a second, graphics memory and context under the words "measured on this
+PC"; and a **Preset recommendation** lists the proposed preset-row changes with
+their evidence, where **Approve changes** is the EXISTING carded
+`/api/work/apply` (`apply_focus_preset`), and **Tell Jarvis what you think**
+sends the owner's own note back so the advice is revised before they approve it.
+**The phone has none of this, and the reason is a standing rule rather than a
+gap:** `CLAUDE.md` says do not build the model catalogue on the phone, and the
+owner's 2026-09-20 decision makes the phone's install a name TYPED by hand - a
+list of what could be installed is exactly the thing kept off it, and a phone
+version of this screen would be that list. The benchmark is the other half of
+the reason: it measures the PC's own graphics cards, which the phone cannot run
+or see. So the five routes the advisor uses (`GET /api/models/recommendations`,
+`POST /api/models/check`, `POST /api/models/benchmark`, `POST
+/api/presets/recommend`, `POST /api/presets/recommend/opinion`) are
+`deliberate` in `tools/check_parity.py`, and neither app claims a phone half.
+**Nothing here adds an uncarded way to change the machine:** the download and
+the preset apply are the two commands that already existed, each raising its own
+PC card, and the advisor itself only asks questions - the check sends an empty
+body, and no command it uses can write a file, switch a model or apply a preset.
+**Honest limits, said plainly:** the check needs the PC online and can take a
+while (the panel shows "Looking…" and, on failure, the PC's own sentence); a
+benchmark loads a model, so it is minutes of real work on a slow card and the
+panel says it is measuring rather than guessing; and **no candidate is called
+better than what the owner has until it has been measured on this PC** - when
+the PC's answer carries no measurement the panel says exactly that, in its own
+words, rather than letting a newer version number read as an upgrade.
+
 **A reminder's own action: the desktop CREATES it and the PC OPENS it, and that
 is one-sided on purpose** (2026-10-27, the owner's request: *"id likee to set
 custom reminders that open something ... like makinf a reminder that opens a
