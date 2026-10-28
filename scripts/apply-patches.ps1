@@ -2091,6 +2091,11 @@ $SHIPPED = @(
     # /galaxy-presets.js) like the modules above. backend/test_hud_static.py
     # fails if this copy drifts from jarvis-desktop/src/galaxy-presets.js.
     'static/galaxy-presets.js'
+    # The Galaxy's 3D cosmos (2026-10-27): the engine the page imports when it
+    # draws a look in 3D, served at /galaxy-cosmos.js beside the server like the
+    # modules above. backend/test_hud_static.py fails if this copy drifts from
+    # jarvis-desktop/src/galaxy-cosmos.js.
+    'static/galaxy-cosmos.js'
     'static/private-speech.js'
     'static/face-voice.js'
     'static/face-moments.js'

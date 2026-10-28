@@ -175,6 +175,8 @@ BESIDE = (
      "a module the page imports; served at /hud-presets.js"),
     ("galaxy-presets.js", "{repo}/backend/static/galaxy-presets.js",
      "the module the Galaxy's look switcher imports; served at /galaxy-presets.js"),
+    ("galaxy-cosmos.js", "{repo}/backend/static/galaxy-cosmos.js",
+     "the module the Galaxy's 3D engine imports; served at /galaxy-cosmos.js"),
     ("private-speech.js", "{repo}/backend/static/private-speech.js",
      "the page's speech rule; served at /private-speech.js"),
     ("face-voice.js", "{repo}/backend/static/face-voice.js",

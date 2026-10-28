@@ -118,12 +118,29 @@ carry the SameSite=Strict `jarvis_token` cookie), and an `Origin`, when one is
 present, must pass the origin check. There is no directory serving: an
 unlisted path, `..`, an encoded traversal, a trailing slash, a case variant or
 an absolute URL is a 404, never a file lookup. The served set today is
-`/theme.css`, `/fonts/fonts.css`, the seven self-hosted `.woff2` faces and the
-page's twelve `.js` modules. `/hud-web-bridge.js`, `/manifest.webmanifest`,
-`/sw.js` and `/icons/jarvis-180|192|512.png` are listed ahead of the slices
-that write them, so each answers 404 until its file exists beside the server.
-`backend/test_hud_static.py` keeps the page and the whitelist in step in both
-directions.
+`/theme.css`, `/fonts/fonts.css`, the seven self-hosted `.woff2` faces, the
+page's thirteen `.js` modules and `/three.min.js`. `/hud-web-bridge.js`,
+`/manifest.webmanifest`, `/sw.js` and `/icons/jarvis-180|192|512.png` are listed
+ahead of the slices that write them, so each answers 404 until its file exists
+beside the server. `backend/test_hud_static.py` keeps the page and the whitelist
+in step in both directions.
+
+The page's thirteenth module is `/galaxy-cosmos.js` (2026-10-27), the Galaxy's
+3D engine. It is fetched the same way as `/galaxy-presets.js` - a dynamic
+`import()` from the page's own script, so a browser HUD that cannot fetch it
+keeps the flat picture. It draws with three.js r128, which the page loads with
+its own `<script src="/three.min.js" defer>` and this server serves as
+`/three.min.js`; the library is copied into this repository (the separate
+vendoring change, with its own checksum test and notices entry) and is never
+fetched from a CDN. The page edit and the whitelist key arrive together, which
+is the only state where the closed whitelist and the page agree in both
+directions; if the file is missing, the engine stays on the flat picture and
+asks for nothing else. The engine frames every real name inside 82% of the
+half-frame at the 120- and 240-name budgets (Gemini's own camera whenever the
+picture fits it, the same angle from further back when it does not), scales the
+fog with that distance and grows the camera's far plane with it, so a 240-name
+picture is neither cropped nor fogged out; `jarvis-desktop/tests/galaxy-cosmos.mjs`
+proves the framing without a browser.
 
 ---
 

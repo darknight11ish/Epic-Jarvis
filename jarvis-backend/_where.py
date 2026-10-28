@@ -799,6 +799,9 @@ SHIPPED = (
     # with a dynamic import(), so the page's closed whitelist has to serve it
     # from beside the server like the modules above.
     "static/galaxy-presets.js",
+    # The Galaxy's 3D cosmos (2026-10-27): the engine the page imports when it
+    # draws a look in 3D, served beside the server like the modules above.
+    "static/galaxy-cosmos.js",
     "static/private-speech.js",
     "static/face-voice.js",
     "static/face-moments.js",

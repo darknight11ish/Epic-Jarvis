@@ -61,6 +61,7 @@ import {
   PRESET_STORAGE_KEY,
   layoutIsUsable,
 } from "../src/galaxy-presets.js";
+import { COSMOS_DEFAULT_LOOK } from "../src/galaxy-cosmos.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
@@ -296,10 +297,21 @@ async function openGalaxyOptions(page) {
 
 /** Open the HUD, show the Brain view (the Galaxy), open its options panel and
  *  stop the spin so a flat look's picture is stationary and square-on before
- *  anything is measured. */
-async function openGalaxy(pageOptions = {}) {
+ *  anything is measured.
+ *
+ *  `flat` (the default) asks for REDUCED MOTION, which is the page's own flat
+ *  path: since 2026-10-27 the eight looks are drawn in 3D when the machine can
+ *  draw them, and this suite's layout measurements are about the flat picture
+ *  the page falls back to. Driving that path deliberately means these checks do
+ *  not depend on whether three.js happens to sit beside the page - and the 3D
+ *  path gets its own check at the end of this file. */
+async function openGalaxy(pageOptions = {}, { flat = true } = {}) {
   const page = await K.open(browser, base, "jarvis_hud.html",
     { pending: [] }, { width: 1200, height: 900, ...pageOptions });
+  if(flat){
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.reload();
+  }
   await page.waitForFunction(() =>
     document.querySelectorAll(".galaxy-node-btn").length > 0, null, { timeout: 15000 });
   await page.locator('[data-view="brain"]').click();
@@ -514,8 +526,16 @@ await check("it lists every built look and no planned one, in one order", async 
 await check("choosing each look really applies that layout to the names on screen", async () => {
   const page = await openGalaxy();
   const before = await picture(page);
-  assert.equal(before.look, DEFAULT_PRESET, "the window did not open on the constellation");
-  assert.equal(before.layout, null, "the constellation should have no flat layout");
+  // Since 2026-10-27 the window opens on the owner's default look, the
+  // Planetary Orrery, and with reduced motion that is the flat layout of the
+  // SAME id - which is exactly what this check then measures for all eight.
+  assert.equal(before.look, COSMOS_DEFAULT_LOOK,
+    "the window did not open on the owner's default look");
+  assert.ok(before.layout && before.layout.id === COSMOS_DEFAULT_LOOK,
+    "the default look came back without its flat layout");
+  assert.equal(await page.evaluate(() =>
+    document.getElementById("galaxy-counts").getAttribute("data-galaxy-engine")), "flat",
+  "reduced motion must draw the flat picture, not a 3D scene");
   for (const meta of BUILT_PRESETS) {
     const pic = await choose(page, meta.id);
     assert.equal(pic.look, meta.id, `${meta.id}: the page does not think that look is on`);
@@ -641,14 +661,131 @@ await check("the switcher is one keyboard stop and does not steal the page's key
   assert.equal(focused.isIt, true, "the look switcher cannot take the focus");
   assert.ok(focused.tabIndex >= 0, "the look switcher is not in the tab order");
   assert.equal(focused.space, "false", "the microphone's own state changed");
+  // One step down the list from whatever is showing. The list's own order is
+  // the page's, so this cannot go stale when the default look changes.
+  const was = await page.evaluate(() => document.getElementById("galaxy-look").value);
   await page.keyboard.press("ArrowDown");
   await page.waitForTimeout(150);
+  const next = await page.evaluate((from) => {
+    const values = [...document.getElementById("galaxy-look").options].map((o) => o.value);
+    return values[values.indexOf(from) + 1];
+  }, was);
   const look = await page.evaluate(() => galaxy.look());
-  assert.equal(look, BUILT_PRESETS[0].id,
-    "the arrow keys on the switcher do not choose the next look");
+  assert.equal(look, next,
+    `the arrow keys on the switcher did not choose the next look (was ${was}, got ${look})`);
   assert.deepEqual(realErrors(page), [], `the page logged: ${realErrors(page).join("; ")}`);
   await page.close();
 });
+
+/* ── 3. the 3D engine, when the page can draw it ─────────────────────────── */
+
+await check("the 3D engine draws the eight looks when the page can, and the buttons ride its camera",
+  async () => {
+    const page = await openGalaxy({}, { flat: false });
+    const first = await page.evaluate(() => galaxy.engineInfo());
+    assert.equal(first.module, true, "galaxy-cosmos.js did not load beside the page");
+    assert.equal(first.look, COSMOS_DEFAULT_LOOK, "the 3D page did not open on the default look");
+
+    if(first.failed || !first.ready){
+      // /three.min.js is not in this tree yet - it is vendored by its own pull
+      // request. The page must then be on the flat picture of the same look,
+      // with no error, no empty canvas and no button that does nothing.
+      assert.equal(first.engine, "flat", "no three.js, but the page claims a 3D engine");
+      assert.deepEqual(first.actions, [], "controls appeared with no engine to drive them");
+      assert.deepEqual(realErrors(page), [],
+        `without three.js the page logged: ${realErrors(page).join("; ")}`);
+      console.log("      /three.min.js is not beside the page yet (the vendoring PR owns it): "
+        + "the flat picture drew, and the page said so");
+      await page.close();
+      return;
+    }
+
+    assert.equal(first.engine, "webgl", "the engine is ready but the page says it is not drawing");
+    assert.equal(first.actions.length, 2, "the look's own two controls are missing");
+
+    for(const meta of BUILT_PRESETS){
+      await page.selectOption("#galaxy-look", meta.id);
+      await page.waitForFunction((want) => {
+        const at = document.getElementById("galaxy-counts");
+        return at.getAttribute("data-galaxy-look") === want
+          && at.getAttribute("data-galaxy-engine") === "webgl";
+      }, meta.id, { timeout: 20000 });
+      const now = await page.evaluate(() => ({
+        info: galaxy.engineInfo(),
+        controls: [...document.querySelectorAll("#galaxy-look-actions button")].map((b) => ({
+          key: b.getAttribute("data-galaxy-action"), text: b.textContent,
+        })),
+      }));
+      assert.equal(now.info.preset, meta.id, `${meta.id}: the engine is drawing ${now.info.preset}`);
+      assert.ok(now.info.info && now.info.info.draws > 0, `${meta.id}: the engine never drew a frame`);
+      assert.equal(now.controls.length, 2, `${meta.id}: the look lost its two controls`);
+      for(const control of now.controls){
+        assert.ok(control.key && control.text && control.text.length > 3,
+          `${meta.id}: a control has no plain name (${JSON.stringify(control)})`);
+      }
+    }
+
+    // THE CAMERA IS THE ENGINE'S. Dragging orbits the 3D camera, and every node
+    // button is projected from it, so the buttons must move with the picture.
+    await page.selectOption("#galaxy-look", "planetary-orbit");
+    await page.waitForFunction(() =>
+      document.getElementById("galaxy-counts").getAttribute("data-galaxy-engine") === "webgl",
+    null, { timeout: 20000 });
+    const before = await picture(page);
+    const box = await page.locator("#galaxy").boundingBox();
+    // A drag has to start on the CANVAS: the stage bar floats over it and every
+    // node is a real button on top of it, so the test looks for a pixel where
+    // the canvas itself is what the pointer would hit.
+    const grab = await page.evaluate(() => {
+      const canvas = document.getElementById("galaxy");
+      const r = canvas.getBoundingClientRect();
+      for (let fy = 0.32; fy <= 0.72; fy += 0.04) {
+        for (let fx = 0.32; fx <= 0.72; fx += 0.04) {
+          const x = r.left + r.width * fx;
+          const y = r.top + r.height * fy;
+          if (document.elementFromPoint(x, y) === canvas) return { x, y };
+        }
+      }
+      return null;
+    });
+    assert.ok(grab, "the canvas has no free pixel to drag from");
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    await page.mouse.move(grab.x + 170, grab.y + 50, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const after = await picture(page);
+    const moved = after.dots.filter((dot) => {
+      const was = before.dots.find((d) => d.id === dot.id);
+      return !was || Math.hypot(dot.x - was.x, dot.y - was.y) > 3;
+    });
+    assert.ok(moved.length > before.dots.length / 2,
+      `dragging the 3D camera moved only ${moved.length} of ${before.dots.length} buttons - `
+      + "the buttons are not riding the engine's projection");
+    for(const dot of after.dots){
+      assert.ok(dot.x > box.x - 40 && dot.x < box.x + box.width + 40
+        && dot.y > box.y - 40 && dot.y < box.y + box.height + 40,
+      `a node button landed outside the canvas (${Math.round(dot.x)}, ${Math.round(dot.y)})`);
+    }
+
+    // THE IDLE RULE. A Galaxy that is not on screen must not keep drawing.
+    // The view switch itself takes a few frames, so the count is taken once it
+    // has settled and then watched: a stopped loop cannot draw at all.
+    await page.locator('[data-view="talk"]').click();
+    await page.waitForTimeout(300);
+    const settled = (await page.evaluate(() => galaxy.engineInfo())).info.draws;
+    await page.waitForTimeout(600);
+    const idle = (await page.evaluate(() => galaxy.engineInfo())).info.draws;
+    assert.ok(idle - settled <= 1,
+      `the engine drew ${idle - settled} frames with the Galaxy off screen`);
+    await page.locator('[data-view="brain"]').click();
+    await page.waitForTimeout(400);
+    const awake = (await page.evaluate(() => galaxy.engineInfo())).info.draws;
+    assert.ok(awake > idle, "the engine did not start again when the Galaxy came back");
+
+    assert.deepEqual(realErrors(page), [], `the page logged: ${realErrors(page).join("; ")}`);
+    await page.close();
+  });
 
 await browser.close();
 await close();

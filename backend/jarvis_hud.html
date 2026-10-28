@@ -30,6 +30,14 @@
      "Open the Jarvis bar" control. Nothing here holds the pairing key on
      disk: the PC's HttpOnly cookie is the session. -->
 <script src="hud-web-bridge.js"></script>
+<!-- three.js r128 (2026-10-27): the drawing library the Galaxy's eight 3D
+     looks are built with. It ships inside this app and is served from this
+     same address - never from the internet - so the app still works with no
+     connection. `defer` keeps it off the page's critical path, and the page's
+     inline-script count is unchanged because this is a separate file.
+     galaxy-cosmos.js waits for it and falls back to the flat picture when it
+     is missing, so no machine loses the Galaxy. -->
+<script src="/three.min.js" defer></script>
 <!--
   Theme before first paint, the same synchronous read from localStorage every
   other window does (settings.html, onboarding.html): this page also opens as
@@ -510,6 +518,20 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 #galaxy{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab;}
 #galaxy.dragging{cursor:grabbing;}
 
+/* ---- the 3D cosmos canvas (2026-10-27) ----------------------------------- *
+ * One canvas UNDER #galaxy, never over it: the 3D engine draws the bodies and
+ * the guide shapes, #galaxy keeps drawing the labels and stays the pointer
+ * surface, and the button overlay sits above both. It is `hidden` until the
+ * engine has actually built a WebGL context, so a browser or a server without
+ * three.js sees exactly the picture it saw before this feature existed - the
+ * engine is an upgrade, never a dependency. `pointer-events:none` because the
+ * canvas above it owns every drag, wheel and tap. */
+#galaxy-cosmos{
+  position:absolute; inset:0; width:100%; height:100%; display:block;
+  pointer-events:none;
+}
+#galaxy-cosmos[hidden]{display:none;}
+
 /* ---- GALAXY v2: lenses + the button overlay (2026-10-21, G1) ------------- */
 .lens-group{
   display:flex; gap:2px; padding:2px; border:1px solid var(--line);
@@ -552,6 +574,25 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 .look-pick select:hover{color:var(--ice);}
 .look-pick select:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
 .look-pick option{background:var(--plate-2); color:var(--text);}
+/* ---- the look's two small controls (2026-10-27) ------------------------- *
+ * Gemini's page gives every look a pair of its own buttons. These are that
+ * pair, in this page's own button family and plain words, mounted beside the
+ * look switcher - the Galaxy Options menu workstream moves this whole row; the
+ * engine only needs somewhere to put them. Hidden until the 3D engine is
+ * ready, so no button here can ever do nothing. */
+.look-actions{display:flex; gap:2px; align-items:center;}
+.look-actions[hidden]{display:none;}
+.look-actions button{
+  padding:5px 7px; border:1px solid var(--line); border-radius:2px;
+  background:var(--plate-2); color:var(--dim);
+  font-family:var(--f-mono); font-size:10px; letter-spacing:.03em; white-space:nowrap;
+}
+.look-actions button:hover{color:var(--text); border-color:var(--line-hot);}
+.look-actions button[aria-pressed="true"]{
+  background:rgb(var(--ice-rgb) / .12); color:var(--ice);
+  border-color:rgb(var(--ice-rgb) / .34);
+}
+.look-actions button:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
 .galaxy-overlay{
   position:absolute; inset:0; z-index:2; pointer-events:none;
 }
@@ -2644,6 +2685,13 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
 
     <!-- ---- BRAIN ---- -->
     <section class="view" id="brain">
+      <!-- The 3D cosmos (2026-10-27): galaxy-cosmos.js draws the eight looks
+           here with three.js, and #galaxy above it keeps the labels, the
+           search highlight and every pointer target. It starts hidden and is
+           only shown once a real WebGL context exists, so without WebGL - or
+           without /three.min.js beside the page - this element stays invisible
+           and the picture is the one that shipped before it. -->
+      <canvas id="galaxy-cosmos" aria-hidden="true" hidden></canvas>
       <canvas id="galaxy"></canvas>
 
       <!-- GALAXY OPTIONS (the owner, 2026-10-27: "i would to simplify all the
@@ -2653,7 +2701,9 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
            They are not drawn here any more: they are moved, ids and listeners
            unchanged, into #galaxy-options (after #shell), so every galaxy-only
            control has ONE home and the map is just the map. Nothing is
-           duplicated: the ids below only appear once in this document. -->
+           The 3D look's own buttons (#galaxy-look-actions) live there too,
+           in the Look row, because galaxy-cosmos.js fills that one host by
+           id and a host left here would be a control nothing ever fills. -->
 
       <!-- Every dot in every lens is also a real HTML button (the "nothing is
            drawn only on the canvas" rule). Positions come from the same
@@ -2974,6 +3024,10 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
       <span class="look-pick-label">Look</span>
       <select id="galaxy-look" aria-label="Galaxy look"></select>
     </label>
+    <!-- The look's own two controls (galaxy-cosmos.js's PRESET_ACTIONS).
+         Filled by the page once the 3D engine is ready; hidden before
+         that, so a button here always does something when it is shown. -->
+    <span class="look-actions" id="galaxy-look-actions" hidden></span>
   </div>
   <div class="go-row">
     <label class="go-label" for="gsearch">Search</label>
@@ -3629,6 +3683,10 @@ const galaxy = (() => {
   let dpr = 1, W = 0, H = 0, running = false;
 
   let fitted = false;
+  // Which engine drew the last frame (null = no frame yet), so the counts line
+  // can say "webgl" or "flat" the moment that changes rather than at the next
+  // lens switch.
+  let lastBody3d = null;
 
   // ---- G2 node budget (2026-10-21, Ruling 11.5) -------------------------
   // The inline HUD's Galaxy is capped at MAX_HUD_GALAXY_NODES; the full-size
@@ -3775,6 +3833,21 @@ const galaxy = (() => {
     // the id of the flat layout the owner chose. A test (and a reader of the
     // DOM) can tell the two apart without reading pixels.
     el.setAttribute("data-galaxy-look", lookOf());
+    // Which ENGINE is drawing the bodies: "webgl" when the 3D cosmos is on
+    // screen, "flat" while a look is being drawn without it (no WebGL, reduced
+    // motion, or a hidden map), "constellation" for the physics picture. The
+    // look id alone cannot say this - the same look can be drawn either way.
+    paintEngineMark();
+  }
+
+  /** The engine mark, on its own so the drawing loop can re-take it the moment
+   *  the 3D picture really starts (the engine is built asynchronously, and the
+   *  counts line is written before that on a cold page). */
+  function paintEngineMark(){
+    const el = document.getElementById("galaxy-counts");
+    if(!el) return;
+    el.setAttribute("data-galaxy-engine",
+      cosmosOn() ? "webgl" : (flatLook() ? "flat" : "constellation"));
   }
 
   /** The node buttons: one per visible node, sorted by id so tab order is
@@ -3854,6 +3927,24 @@ const galaxy = (() => {
   let lookId = null;             // the look on screen; null until it is known
   let lookLayout = null;         // that look's layout, guides included
 
+  // ---- the 3D cosmos (2026-10-27) --------------------------------------
+  // The owner: "none of the galaxy on the current jarvis hud look like the one
+  // that gemini made". He chose the exact 3D port, with Planetary Orrery as the
+  // default look. galaxy-cosmos.js is that engine, loaded the same way as the
+  // look list - a dynamic import() of a module beside the page, so the CSP is
+  // untouched and a page served without it keeps today's picture.
+  //
+  // TWO ENGINES, ONE LIST OF LOOKS. The ids are shared with galaxy-presets.js
+  // on purpose: when WebGL works the eight looks are drawn in 3D, and when it
+  // does not - or the owner asked for reduced motion - the flat layout with the
+  // SAME id draws instead. That is why a look can never be "missing" on a
+  // machine that cannot do 3D.
+  let cosmosModule = null;       // galaxy-cosmos.js, once it has loaded
+  let cosmosModuleLoading = null;
+  let cosmosEngine = null;       // the live three.js engine, once it exists
+  let cosmosLoading = null;      // the one in-flight engine build
+  let cosmosFailed = false;      // no WebGL / no three.js: stay flat, stop trying
+
   /** The look's id as the module spells it, or the constellation. */
   function lookOf(){
     return lookEngine ? (lookId || lookEngine.DEFAULT_PRESET) : "constellation";
@@ -3869,11 +3960,28 @@ const galaxy = (() => {
 
   /** What this device remembered, through the module's own safe reader, so an
    *  unknown, stale or corrupt value can only ever come back as the
-   *  constellation - never as a broken picture. */
+   *  constellation - never as a broken picture.
+   *
+   *  A device that has NEVER chosen a look gets the owner's default instead
+   *  (Planetary Orrery, 2026-10-27). The id comes from galaxy-cosmos.js itself,
+   *  never a copy of it here; until that module has loaded this answers the
+   *  constellation, and the module's arrival applies the default. */
   function lookStored(){
     if(!lookEngine) return null;
-    try{ return lookEngine.storedPreset(localStorage.getItem(lookEngine.PRESET_STORAGE_KEY)); }
-    catch(e){ return lookEngine.DEFAULT_PRESET; }
+    try{
+      const raw = localStorage.getItem(lookEngine.PRESET_STORAGE_KEY);
+      if(raw === null && cosmosModule) return cosmosModule.COSMOS_DEFAULT_LOOK;
+      return lookEngine.storedPreset(raw);
+    }catch(e){ return lookEngine.DEFAULT_PRESET; }
+  }
+
+  /** Has this device ever chosen a look? A private-mode window that cannot
+   *  read storage answers "yes", so it keeps the old default rather than
+   *  silently overriding whatever it had. */
+  function lookChosen(){
+    if(!lookEngine) return true;
+    try{ return localStorage.getItem(lookEngine.PRESET_STORAGE_KEY) !== null; }
+    catch(e){ return true; }
   }
 
   /** Remember the choice on this device only, under the module's own key. The
@@ -3958,9 +4066,166 @@ const galaxy = (() => {
       lookId = lookStored();
       paintLookChoices();
       if(nodes.length) applyLens();     // the graph arrived first: lay it out now
+      loadCosmosModule();               // the 3D half follows; no picture waits for it
       return mod;
     }).catch(() => null);   // no module beside the page: the constellation stays
     return lookLoading;
+  }
+
+  /** Load galaxy-cosmos.js: the 3D engine's pure half, then the engine itself
+   *  only when a look needs it. Failure here is the flat picture, not an error. */
+  function loadCosmosModule(){
+    if(cosmosModuleLoading) return cosmosModuleLoading;
+    cosmosModuleLoading = import("./galaxy-cosmos.js").then((mod) => {
+      cosmosModule = mod;
+      // A device that has never chosen a look now gets the owner's default
+      // (Planetary Orrery, 2026-10-27), written down like any other choice - so
+      // it is chosen once and remembered, and choosing the constellation after
+      // this still works.
+      if(lookEngine && !lookChosen()) setLook(mod.COSMOS_DEFAULT_LOOK);
+      paintLookActions();
+      if(cosmosLook()) syncCosmos();
+      return mod;
+    }).catch(() => null);
+    return cosmosModuleLoading;
+  }
+
+  /** True while the chosen look is one galaxy-cosmos.js draws (not the
+   *  constellation, and not an id it does not know). */
+  function cosmosLook(){
+    return Boolean(cosmosModule) && flatLook() && cosmosModule.isCosmosLook(lookId);
+  }
+
+  /** Is the 3D engine the thing on screen RIGHT NOW? A look is chosen AND the
+   *  engine exists AND the owner has not asked for reduced motion AND the map
+   *  is really visible - the same idle rule as the rest of this page, so a
+   *  hidden map never keeps a GPU busy. */
+  function cosmosOn(){
+    return Boolean(cosmosEngine) && cosmosLook() && !S.reduced && shouldRun();
+  }
+
+  function cosmosCanvas(){
+    return document.getElementById("galaxy-cosmos");
+  }
+
+  /** Adopt the engine once it has built: show its canvas, size it to the stage
+   *  the 2D canvas is already using, and hand it the picture. */
+  function adoptCosmos(engine){
+    cosmosEngine = engine;
+    const canvas = cosmosCanvas();
+    if(canvas) canvas.hidden = false;
+    try{
+      engine.resize(W, H, dpr);
+      syncCosmos();
+      renderCounts(nodes);
+    }catch(e){
+      cosmosFailed = true;
+      dropCosmos();
+    }
+  }
+
+  /** Build the engine the first time a 3D look is on screen. It resolves null
+   *  when this machine cannot draw (no WebGL, or three.js is not served beside
+   *  the page); the flat layout of the same look keeps drawing and the page
+   *  never asks again. */
+  function ensureCosmos(){
+    if(cosmosFailed || cosmosEngine || cosmosLoading) return cosmosLoading;
+    const canvas = cosmosCanvas();
+    if(!cosmosModule || !canvas || S.reduced) return null;
+    cosmosLoading = cosmosModule.createEngine({
+      canvas,
+      // The page's own group colours, so the picture cannot drift from the
+      // legend: one palette, one source.
+      colorFor: (group) => colourFor(group),
+      // Lost GPU context: fall back to the flat picture rather than freeze.
+      onFail: () => { cosmosFailed = true; dropCosmos(); syncRunning(); },
+    }).then((engine) => {
+      cosmosLoading = null;
+      if(!engine){ cosmosFailed = true; return null; }
+      adoptCosmos(engine);
+      return engine;
+    }).catch(() => {
+      cosmosLoading = null;
+      cosmosFailed = true;
+      return null;
+    });
+    return cosmosLoading;
+  }
+
+  /** Hide the 3D picture and let go of the GPU context. The look stays chosen -
+   *  this only decides which engine draws it. */
+  function dropCosmos(){
+    const canvas = cosmosCanvas();
+    if(canvas) canvas.hidden = true;
+    if(cosmosEngine){
+      try{ cosmosEngine.dispose(); }catch(e){ /* already gone */ }
+      cosmosEngine = null;
+    }
+    paintLookActions();
+    if(nodes.length) renderCounts(nodes);
+  }
+
+  /** Hand the engine the picture it should be drawing: the chosen look and the
+   *  names on screen, with the SAME node and link budget the 2D pass uses.
+   *  Called after every lens change, so the two engines always show one graph. */
+  function syncCosmos(){
+    const canvas = cosmosCanvas();
+    if(!cosmosModule || !canvas) return;
+    if(!cosmosLook() || cosmosFailed || S.reduced){
+      canvas.hidden = true;
+      paintLookActions();
+      return;
+    }
+    if(!cosmosEngine){ ensureCosmos(); return; }
+    canvas.hidden = false;
+    try{
+      cosmosEngine.resize(W, H, dpr);
+      cosmosEngine.setPreset(lookId);
+      cosmosEngine.setGraph(
+        nodes.map(n => ({ id: n.id, label: n.label, group: n.group, weight: n.weight })),
+        links.map(l => ({ source: l.s.id, target: l.t.id, kind: l.kind })));
+      cosmosEngine.setSpinning(spin && !S.reduced);
+    }catch(e){
+      cosmosFailed = true;
+      dropCosmos();
+      return;
+    }
+    paintLookActions();
+    if(nodes.length) renderCounts(nodes);
+  }
+
+  /** The look's own two controls (Gemini gives every look a pair). They are
+   *  shown only once the 3D engine exists, so every button here does something:
+   *  on a machine that cannot draw 3D there is no row, rather than two dead
+   *  buttons. The Galaxy Options menu workstream moves this row; the engine
+   *  only needs somewhere to put it. */
+  function paintLookActions(){
+    const host = document.getElementById("galaxy-look-actions");
+    if(!host) return;
+    const actions = (cosmosEngine && cosmosModule && cosmosModule.isCosmosLook(lookId))
+      ? cosmosModule.actionsFor(lookId) : [];
+    if(!actions.length){ host.hidden = true; host.textContent = ""; return; }
+    host.hidden = false;
+    host.textContent = "";
+    for(const what of actions){
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = what.label;
+      button.setAttribute("data-galaxy-action", what.key);
+      if(what.toggle){
+        button.setAttribute("aria-pressed",
+          cosmosEngine.actionState(what.key) ? "true" : "false");
+      }
+      button.addEventListener("click", () => {
+        if(!cosmosEngine) return;
+        const on = cosmosEngine.action(what.key);
+        if(what.toggle) button.setAttribute("aria-pressed", on ? "true" : "false");
+        // A one-shot may still change what the picture shows: re-take the
+        // counts line so `data-galaxy-engine` and the look never disagree.
+        if(nodes.length) renderCounts(nodes);
+      });
+      host.appendChild(button);
+    }
   }
 
   loadLookEngine();
@@ -3971,6 +4236,9 @@ const galaxy = (() => {
     W = r.width; H = r.height;
     cv.width = Math.max(1, W*dpr); cv.height = Math.max(1, H*dpr);
     ctx.setTransform(dpr,0,0,dpr,0,0);
+    // The 3D engine draws into its own canvas, so it has to be told the same
+    // size AND the same pixel ratio (the page's cap of 2, above).
+    if(cosmosEngine) cosmosEngine.resize(W, H, dpr);
     // The brain view is hidden at boot, so the first real measurement is the
     // first chance to frame the graph against actual pixels.
     if(nodes.length && W > 0 && !fitted){ fitted = true; fitCamera(); }
@@ -4038,6 +4306,9 @@ const galaxy = (() => {
     buildLegend(graph);
     if(!overlayEl) overlayEl = document.getElementById("galaxy-overlay");
     syncOverlay();
+    // The 3D engine (when this machine has one) is handed the same names, in
+    // the same budget, so the two engines can never show two different graphs.
+    syncCosmos();
   }
 
   // Pull the camera back far enough that the whole galaxy lands on screen,
@@ -4092,7 +4363,14 @@ const galaxy = (() => {
   }
 
   // -- projection ------------------------------------------------------
+  // While the 3D engine draws, the camera that matters is ITS camera: every
+  // label, every search highlight and every node button is placed from the same
+  // projection the bodies were drawn with, so a button is always on its name -
+  // at any orbit, any zoom, any look.
   function project(p){
+    if(cosmosOn() && cosmosEngine){
+      return cosmosEngine.project(p.id);
+    }
     const dx = p.x - camAt.x, dy = p.y - camAt.y, dz = p.z - camAt.z;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     let x = dx*cy - dz*sy, z = dx*sy + dz*cy;
@@ -4217,18 +4495,36 @@ const galaxy = (() => {
 
   function draw(ts){
     if(!shouldRun()){ running = false; return; }
+    // Which engine draws the BODIES this frame. The 3D one, when a look it can
+    // draw is chosen and this machine can draw it; the canvas here otherwise,
+    // exactly as before. Labels, search highlights, recall rings and the button
+    // overlay are drawn here either way - one accessibility surface, both
+    // engines.
+    const body3d = cosmosOn();
+    if(body3d !== lastBody3d){
+      // The engine was built between two frames: keep the counts line's own
+      // `data-galaxy-engine` saying what is really on screen.
+      lastBody3d = body3d;
+      paintEngineMark();
+    }
     if(nodes.length){
-      // A flat look is a stationary diagram: the physics does not run, so the
-      // names stay exactly where the layout put them.
-      if(!flatLook()) step(0.32);
-      if(spin && !dragging && !S.reduced) yaw += 0.0016;
-      camAt.x += (camTarget.x - camAt.x)*0.08;
-      camAt.y += (camTarget.y - camAt.y)*0.08;
-      camAt.z += (camTarget.z - camAt.z)*0.08;
+      if(body3d){
+        // The engine owns the motion in 3D: the orrery's orbit, the nebula's
+        // rotation, the radar sweep. Physics never runs over a 3D layout.
+        cosmosEngine.frame(ts);
+      } else {
+        // A flat look is a stationary diagram: the physics does not run, so the
+        // names stay exactly where the layout put them.
+        if(!flatLook()) step(0.32);
+        if(spin && !dragging && !S.reduced) yaw += 0.0016;
+        camAt.x += (camTarget.x - camAt.x)*0.08;
+        camAt.y += (camTarget.y - camAt.y)*0.08;
+        camAt.z += (camTarget.z - camAt.z)*0.08;
+      }
     }
 
     ctx.clearRect(0,0,W,H);
-    paintGuides();
+    if(!body3d) paintGuides();
 
     const near = focusId ? (adj.get(focusId) || new Set()) : null;
     const q = query.trim().toLowerCase();
@@ -4244,8 +4540,9 @@ const galaxy = (() => {
 
     // links first, behind everything. A flat look draws none of them: they are
     // the constellation's fact-sharing web, and they would cross every ring,
-    // row and orbit (the same reason the Brain window hides them).
-    for(const l of (flatLook() ? [] : links)){
+    // row and orbit (the same reason the Brain window hides them). The 3D
+    // engine draws its own links, in the shape each look gives them.
+    for(const l of ((flatLook() || body3d) ? [] : links)){
       const a = proj.get(l.s.id), b = proj.get(l.t.id);
       if(!a || !b) continue;
       let alpha = 0.34;
@@ -4290,18 +4587,29 @@ const galaxy = (() => {
       if(focusId && !isFocus && !isNear) alpha = 0.1;
       if(q) alpha = hit ? 1 : 0.08;
 
-      let r = Math.max(1.2, n.r * s.k * 1.05);
+      // How big this name is on screen, in pixels. In 3D the engine's own body
+      // radius is the truth (it is `galaxy-cosmos.js`'s `nodeRadius`), so the
+      // label sits just clear of the body it belongs to instead of guessing.
+      let r = body3d
+        ? Math.max(3, Math.min(40, Math.max(3, Math.min(9,
+            3 + (typeof n.weight === "number" ? n.weight : 1) * 1.1)) * s.k))
+        : Math.max(1.2, n.r * s.k * 1.05);
       if(isHit) r *= 1.5;
 
       const decorative = isFocus || hit || n.group === "core" || isHit || isMiss;
-      if(decorative && (!budgetCapped || isFocus || isHit || isMiss || n.group === "core")){
+      // The glow halo is a 2D stand-in for a light: the 3D bodies have their own
+      // materials (and their own halo spheres), so drawing one here too would
+      // double the bright edge.
+      if(!body3d && decorative && (!budgetCapped || isFocus || isHit || isMiss || n.group === "core")){
         ctx.globalAlpha = alpha * (isHit ? 0.5 : isMiss ? 0.3 : 0.35);
         ctx.fillStyle = isHit ? tk("--accent", "#6fe3ff") : isMiss ? tk("--warn", "#ffb648") : colour;
         ctx.beginPath(); ctx.arc(s.x, s.y, r*(isHit?3.6:3.1), 0, Math.PI*2); ctx.fill();
       }
 
-      ctx.globalAlpha = alpha * Math.min(1, 0.35 + s.k*0.9);
-      drawNode(ctx, s.x, s.y, r, n.group, colour);
+      if(!body3d){
+        ctx.globalAlpha = alpha * Math.min(1, 0.35 + s.k*0.9);
+        drawNode(ctx, s.x, s.y, r, n.group, colour);
+      }
 
       // A recalled note wears a ring; a near-miss wears a dashed one. The
       // difference is the whole point of the view.
@@ -4379,9 +4687,15 @@ const galaxy = (() => {
   cv.addEventListener("pointermove", e => {
     const r = cv.getBoundingClientRect();
     if(dragging){
-      yaw   += (e.clientX - lastX) * 0.006;
-      pitch += (e.clientY - lastY) * 0.006;
-      pitch = Math.max(-1.4, Math.min(1.4, pitch));
+      if(cosmosOn() && cosmosEngine){
+        // The same drag, on the 3D camera: the orbit stays around the look's
+        // own target, so dragging never loses the picture.
+        cosmosEngine.orbit((e.clientX - lastX) * 0.006, (e.clientY - lastY) * 0.006);
+      } else {
+        yaw   += (e.clientX - lastX) * 0.006;
+        pitch += (e.clientY - lastY) * 0.006;
+        pitch = Math.max(-1.4, Math.min(1.4, pitch));
+      }
       lastX = e.clientX; lastY = e.clientY;
     } else {
       const n = pick(e.clientX - r.left, e.clientY - r.top);
@@ -4400,6 +4714,7 @@ const galaxy = (() => {
   });
   cv.addEventListener("wheel", e => {
     e.preventDefault();
+    if(cosmosOn() && cosmosEngine){ cosmosEngine.zoom(e.deltaY > 0 ? 0.9 : 1.1); return; }
     zoom = Math.max(0.28, Math.min(4.5, zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
   }, {passive:false});
 
@@ -4489,9 +4804,20 @@ const galaxy = (() => {
 
   return {
     load, resize, setTrace, flyTo, setRunning, syncRunning,
-    reset(){ clearFocus(); if(flatLook()){ yaw = 0; pitch = 0; } else { yaw=.5; pitch=-.25; } fitCamera(); },
+    reset(){
+      clearFocus();
+      // A 3D look has a camera, not a yaw: its own reset puts the look back on
+      // Gemini's angle instead of forcing the constellation's tilt onto it.
+      if(cosmosEngine && cosmosLook()){ cosmosEngine.resetView(); return; }
+      if(flatLook()){ yaw = 0; pitch = 0; } else { yaw=.5; pitch=-.25; }
+      fitCamera();
+    },
     search(v){ query = v; },
-    toggleSpin(){ spin = !spin; return spin; },
+    toggleSpin(){
+      spin = !spin;
+      if(cosmosEngine) cosmosEngine.setSpinning(spin && !S.reduced);
+      return spin;
+    },
     lens(){ return lens; },
     /** Which look is on screen: the constellation, or a flat layout's id. */
     look(){ return lookOf(); },
@@ -4501,6 +4827,24 @@ const galaxy = (() => {
      *  code (the same spirit as budgetInfo below): the module's own object,
      *  guides and all, or null while the constellation is showing. */
     lookInfo(){ return { look: lookOf(), layout: lookLayout }; },
+    /** The 3D half, for the tests and for anyone reading this code: which engine
+     *  is drawing, whether the cosmos module and its GPU context are there, and
+     *  the engine's own report. Nothing here is a promise - `ready` false means
+     *  the flat picture is on screen. */
+    engineInfo(){
+      return {
+        engine: cosmosOn() ? "webgl" : (flatLook() ? "flat" : "constellation"),
+        ready: Boolean(cosmosEngine),
+        failed: cosmosFailed,
+        module: Boolean(cosmosModule),
+        reduced: Boolean(S.reduced),
+        look: lookOf(),
+        preset: cosmosEngine ? cosmosEngine.look() : null,
+        actions: (cosmosEngine && cosmosModule && cosmosModule.isCosmosLook(lookId))
+          ? cosmosModule.actionsFor(lookId).map(what => what.key) : [],
+        info: cosmosEngine ? cosmosEngine.info() : null,
+      };
+    },
     focused(){ return focusId ? nodes.find(n => n.id === focusId) : null; },
     /** G2: what the node budget did, for the tests and for anyone reading this
      *  code - the cap in force, how many nodes the lens really has, how many
