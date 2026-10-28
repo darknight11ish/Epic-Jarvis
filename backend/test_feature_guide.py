@@ -1287,7 +1287,7 @@ def t_aliases_are_the_rows_own_names():
           problems[:8])
     # A row's alias is as usable as its title: the same four questions answer.
     # 2026-10-27 (PR #876): "tell me about my personalities" is answered by
-    # `jarvis_quick`'s own `personality_describe` - the nine presets, each in
+    # `jarvis_quick`'s own `personality_describe` - the ten presets, each in
     # its own words. That IS an explain answer for this one row, so it counts;
     # "where is", "how do I use" and "can I change" still have to reach the
     # feature guide, and every other row is unchanged. The bare

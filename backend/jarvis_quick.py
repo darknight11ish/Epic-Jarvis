@@ -3252,14 +3252,14 @@ def _from_now_on(s: str) -> Optional[Intent]:
 
 # --------------------------------------------------------------------------
 #   Personality presets (2026-10-22, the owner's decision: Jarvis can slip
-#   into any of nine characters, typed or spoken, with no approval card)
+#   into any of ten characters, typed or spoken, with no approval card)
 # --------------------------------------------------------------------------
 #
 # Every phrase below maps to ONE conversation-free action: either a preset
 # switch (base/aliases from contract/personalities.json), one of the four
 # tuning dials, or a question about the current one. Nothing here reaches the
 # model, nothing opens a card, and everything is answered in the new preset's
-# own voice. "What personality are you using?" lists the nine by title,
+# own voice. "What personality are you using?" lists the ten by title,
 # which is how the owner learns the names to say.
 #
 # Deliberately NOT here: "turn on humour" / "turn off humour" - the existing
@@ -3293,7 +3293,7 @@ _P_QUERY = re.compile(
 #: personalities", "tell me about your personalities", "what does each
 #: personality do", "what are your personalities like" - ALL of them
 #: (2026-10-26). "my" is accepted as the owner says it: "describe my
-#: personalities" answers with the same nine (they are the personalities the
+#: personalities" answers with the same ten (they are the personalities the
 #: chat has), and the saved "My Personalities" stay the separate ones the
 #: status answer names.
 #: One line per preset, every word from that preset's own `description`: the
@@ -3306,7 +3306,7 @@ _P_QUERY = re.compile(
 #: backend/test_feature_guide.py's alias sweep, and its
 #: "where do i change the jarvis presets" test. Only a sentence that says
 #: WHOSE personalities are meant - your / the / my - asks to describe them.
-#: A bare "presets" is the layout presets, not the nine, so that noun is gone
+#: A bare "presets" is the layout presets, not the ten, so that noun is gone
 #: from these forms; "personality presets" (the whole phrase) still counts.
 #:
 #: Tried BEFORE the one-preset forms below, deliberately: "tell me about your
@@ -3316,11 +3316,11 @@ _P_QUERY = re.compile(
 _P_DESCRIBE_ALL = re.compile(
     r"(?:describe|explain|tell\s+me\s+about)\s+(?:all\s+(?:of\s+)?)?"
     r"(?:your|the|my)\s+"
-    r"(?:nine\s+)?(?:personalities|personality\s+presets|personas|characters)"
+    r"(?:(?:nine|ten)\s+)?(?:personalities|personality\s+presets|personas|characters)"
     r"|(?:what|which)\s+(?:does|do)\s+each\s+(?:personality|persona|character)\s+do"
-    r"|what\s+(?:are|is)\s+(?:your|the|my)\s+(?:nine\s+)?(?:personalities|personas)"
+    r"|what\s+(?:are|is)\s+(?:your|the|my)\s+(?:(?:nine|ten)\s+)?(?:personalities|personas)"
     r"\s+(?:like|for)"
-    r"|what\s+(?:do|does)\s+(?:all\s+(?:of\s+)?)?(?:your|the|my)\s+(?:nine\s+)?"
+    r"|what\s+(?:do|does)\s+(?:all\s+(?:of\s+)?)?(?:your|the|my)\s+(?:(?:nine|ten)\s+)?"
     r"(?:personalities|personas)\s+do")
 
 #: "what does the Classic Butler personality do", "what is the Classic Butler
@@ -6064,7 +6064,8 @@ def _switch_words(title: str) -> str:
     """The sentence that really switches to a preset - ONE copy for both
     answers that offer it (the status words and the describe words).
 
-    Measured 2026-10-26 on all nine titles: `switch to <title>` alone matches
+    Measured 2026-10-26 on every title the contract held then: `switch to
+    <title>` alone matches
     nothing, because `_P_SWITCH_MODE` needs the noun after the name, while
     `switch to the <title> personality` switches every one of them - including
     the two titles that carry an "&". Having the sentence in two places is how
@@ -6075,7 +6076,7 @@ def _switch_words(title: str) -> str:
 
 def _personality_words() -> str:
     """The answer to "what personality are you using?" - the active preset, its
-    dials, and the nine names (plus the owner's own saved ones), so the owner
+    dials, and the ten names (plus the owner's own saved ones), so the owner
     learns the words to say."""
     try:
         import jarvis_manner
@@ -6088,7 +6089,7 @@ def _personality_words() -> str:
     words = (f"You're using {active['title']}. Humour {dials['humor']}/3, "
              f"{dials['brevity']} answers, {dials['formality'].replace('_', ' ')} formality, "
              f"addressing you as {dials['address'].replace('_', ' ')}. "
-             f"The nine personalities are: " + "; ".join(p["title"] for p in builtin) + ".")
+             f"The ten personalities are: " + "; ".join(p["title"] for p in builtin) + ".")
     saved = jarvis_manner.user_personalities()
     if saved:
         words += " Your own: " + "; ".join(str(u.get("name") or u.get("id")) for u in saved) + "."
@@ -6184,7 +6185,7 @@ def _run_personality_describe(f: dict) -> Result:
     listed in READ_ONLY_INTENTS so it never clears the "cancel that" record.
     Nothing the owner can see is written; like every quick answer,
     `answer()` still records its usual command-digest row for the scheduler.
-    One preset by title, alias or saved name; with no name, all nine in
+    One preset by title, alias or saved name; with no name, all ten in
     contract order plus the dials and how to make one of your own.
     The active preset is deliberately not repeated here: the status answer
     already says which one that is."""

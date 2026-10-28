@@ -65,6 +65,15 @@
     <string name="widget_approval_desc">The oldest pending approval, at a glance.
         Deny answers it directly; approving always opens the app.</string>
 
+    <!-- What every Jarvis widget draws until its first Glance update lands
+         (res/layout/widget_initial.xml). NOT a spinner on purpose: a spinner
+         promises an update is coming, and the failure this replaces was that no
+         update ever came. One string for all five widgets - they all need the
+         same sentence, and the difference belongs in the drawn states, not
+         here. -->
+    <string name="widget_initial_headline">Jarvis</string>
+    <string name="widget_initial_words">No update yet — open Jarvis to connect.</string>
+
     <!-- "Hey Jarvis" on this phone (service/WakeWordService.kt). -->
     <!-- The three Quick Settings tile slots, as Android's tile editor lists
          them (data/QuickTiles.kt). Android's editor reads the MANIFEST, and

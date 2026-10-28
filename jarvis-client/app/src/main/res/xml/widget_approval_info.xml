@@ -3,10 +3,18 @@
      anything before the first Glance update lands, and the launcher shows
      "Problem loading widget". aapt does not enforce it - carried over from
      the retired jarvis-android/'s own widget_approval_info.xml, which found
-     this the hard way. -->
+     this the hard way.
+
+     It is NOT Glance's @layout/glance_default_loading_layout any more, and
+     that change IS the owner's 2026-10-27 fix. That layout's whole content is
+     a ProgressBar; in the release APK no Glance update could run at all (see
+     app/proguard-rules.pro), so all five widgets were that spinner for ever.
+     res/layout/widget_initial.xml is a sentence instead, so even a widget that
+     can never be drawn tells the reader to open Jarvis. previewLayout is the
+     same file, so the widget picker stops showing a spinner too. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:initialLayout="@layout/glance_default_loading_layout"
-    android:previewLayout="@layout/glance_default_loading_layout"
+    android:initialLayout="@layout/widget_initial"
+    android:previewLayout="@layout/widget_initial"
     android:description="@string/widget_approval_desc"
     android:minWidth="260dp"
     android:minHeight="110dp"

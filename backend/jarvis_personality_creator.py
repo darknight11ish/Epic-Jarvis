@@ -50,7 +50,7 @@ WHAT IT MAY NOT DO
 CAPS (the same numbers the Settings form uses)
 
 name 60, the line 240, each half of the example 240, at most 20 saved
-personalities, base preset one of the nine built-ins. The draft is asked for
+personalities, base preset one of the ten built-ins. The draft is asked for
 SHORTER than the caps on purpose (line ~150, example ~60/90): the persona block
 has a 750-character budget and, measured on this engine, a 240-character line
 already pushes a full block over it and silently drops the two cadence
@@ -161,13 +161,13 @@ WANT_EXAMPLE_USER = 60
 WANT_EXAMPLE_JARVIS = 90
 WANT_NAME = 40
 
-#: The nine built-ins this module may start from, in the contract's own order.
+#: The ten built-ins this module may start from, in the contract's own order.
 #: Frozen here as a fallback so the module still runs where jarvis_manner is
 #: absent; the suite asserts this list equals the engine's own built-ins, so
 #: drift fails a test instead of surprising the owner.
 BUILTIN_IDS = (
     "warm_peer", "classic_butler", "tactical_ops", "dry_wit", "friday_partner",
-    "socratic_mentor", "devils_advocate", "calm_stoic", "advocate",
+    "socratic_mentor", "devils_advocate", "calm_stoic", "advocate", "reflect",
 )
 
 #: What a follow-up may change a draft to. Same values the Settings form sends.

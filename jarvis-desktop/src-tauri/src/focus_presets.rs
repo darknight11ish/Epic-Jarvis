@@ -1,5 +1,5 @@
 //! Focus presets on the PC (backend/jarvis_presets.py, JARVIS-API section 128's
-//! successor, PRs #603/#611): the five presets, the hardware block and the ONE
+//! successor, PRs #603/#611): the nine presets, the hardware block and the ONE
 //! approval-gated apply.
 //!
 //! Three commands, granted to the quickbar, Settings and the HUD:
