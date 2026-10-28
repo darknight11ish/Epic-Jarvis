@@ -47,28 +47,25 @@ $dropIns = @($data.entries | Where-Object { $_.bucket -eq 'plug-in' } | Sort-Obj
 # DEF-013 in docs/defect-register.tsv.
 $coreRows = @($data.entries | Where-Object { $_.bucket -ne 'plug-in' })
 
-# A drop-in folder that replaces NO patch is not in the registry at all - the
-# catalogue is generated from the patch stack, and there is no patch for it.
-# Its own plugin.json is the manifest, so it is read from the folder here.
-# (plugins\ready\receipts was the first one, 2026-10-14.)
-$handAdded = @()
-$readyRoot = Join-Path $RepoRoot 'plugins\ready'
-if (Test-Path $readyRoot) {
-    foreach ($dir in @(Get-ChildItem -Directory -Path $readyRoot)) {
-        if (@($dropIns | Where-Object { $_.name -eq $dir.Name }).Count -gt 0) { continue }
-        $manifest = Join-Path $dir.FullName 'plugin.json'
-        if (-not (Test-Path $manifest)) { continue }
-        try { $m = Get-Content $manifest -Raw | ConvertFrom-Json } catch { continue }
-        if ($null -ne $m.replaces_patch -or -not $m.module -or $null -eq $m.stack_order) { continue }
-        $handAdded += [pscustomobject]@{
-            name        = $dir.Name
-            module      = [string]$m.module
-            summary     = [string]$m.summary
-            stack_order = [int]$m.stack_order
-        }
-    }
+# A drop-in folder that replaces NO patch has no row in `entries`: the patch
+# rows come from the patch stack, and there is no patch for it. The generator
+# reads its own plugin.json into `folders` now, so this list and
+# plugins\README.md's count cannot disagree. (plugins\ready\receipts was the
+# first one, 2026-10-14; ten of them by 2026-10-28.)
+if ($null -eq $data.folders) {
+    Write-Host "plugins\registry.json has no 'folders' list - it was written before 2026-10-28."
+    Write-Host "Run: py -3 tools\gen_plugin_catalogue.py"
+    exit 1
 }
-$dropIns = @($dropIns) + @($handAdded) | Sort-Object stack_order
+$folderRows = @($data.folders | ForEach-Object {
+    [pscustomobject]@{
+        name        = [string]$_.name
+        module      = [string]$_.module
+        summary     = [string]$_.summary
+        stack_order = [int]$_.stack_order
+    }
+})
+$dropIns = @(@($dropIns) + @($folderRows) | Sort-Object stack_order)
 
 $pluginsDir = Join-Path $BackendPath 'jarvis_plugins'
 $loader = Join-Path $BackendPath 'jarvis_plugins.py'
