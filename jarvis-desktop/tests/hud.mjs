@@ -4890,14 +4890,15 @@ await check("P-1: private-hidden empties the galaxy, and it re-reads what the PC
     "fixture: the person's name never reached the picture");
   assert.equal(before.hiddenFlag, false, "fixture: the first read was already redacted");
 
-  // Open the inspector on the fact (the click-to-ask path reads the same node
-  // and pre-fills a question about it), type in the search box, and put a
-  // recall trace on screen - so every reach point the report names holds words
-  // when the hide lands. Keyboard, not a mouse click: the dots move with the
-  // camera, which is exactly why the page makes each one a real button.
-  await page.focus('.galaxy-node-btn[data-galaxy-node="fact:1"]');
-  await page.keyboard.press("Enter");
-  await page.fill("#gsearch", "Priya");
+  // Put a recall trace on screen FIRST, then open the inspector on the fact,
+  // then type in the search box - so every reach point the report names holds
+  // words at the same moment when the hide lands. The order matters and is the
+  // page's own: setting a trace closes the inspector on purpose
+  // (`setTrace` -> `clearFocus`, because the trace is a different question),
+  // so a fixture that opened the inspector first would be testing a state the
+  // page never draws. Keyboard, not a mouse click, for the dot: the dots move
+  // with the camera, which is exactly why the page makes each one a real
+  // button.
   await page.evaluate((sentence) => {
     // The page's own trace path: `recall()` unshifts the trace onto S.traces
     // and hands it to showTrace, so the chip (the owner's own question) and
@@ -4908,6 +4909,9 @@ await check("P-1: private-hidden empties the galaxy, and it re-reads what the PC
     S.traces.unshift(trace);
     showTrace(trace);
   }, FACT_SENTENCE);
+  await page.focus('.galaxy-node-btn[data-galaxy-node="fact:1"]');
+  await page.keyboard.press("Enter");
+  await page.fill("#gsearch", "Priya");
   await page.waitForTimeout(200);
   const held = await page.evaluate(() => ({
     title: document.getElementById("insp-title").textContent,
