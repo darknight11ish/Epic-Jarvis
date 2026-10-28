@@ -1068,8 +1068,13 @@ def detect(fresh: bool = False) -> dict:
                  "sources": {"ollama_log": "unreadable", "nvidia_smi": "unreadable",
                              "registry": "unreadable"},
                  "found": f"The graphics cards could not be read ({type(exc).__name__})."}
+    # Stamp the cache AFTER the probe, not with the `now` taken before it: the
+    # probe can take seconds on this PC (one registry read has a 10 s timeout),
+    # and `now` then made the fresh value older than `_CACHE_SECONDS` the moment
+    # it was stored - so every call paid the whole probe again (measured 3 x
+    # ~10.1 s back to back on 2026-10-28). Pinned by test_hardware_cache.py.
     with _DET_LOCK:
-        _DET.update(at=now, value=value)
+        _DET.update(at=time.monotonic(), value=value)
     return value
 
 
