@@ -1,5 +1,5 @@
-"""The Anti-Slop filter (jarvis_antislop.py): the engine, its wiring, and the
-six mutation bite-proofs the blueprint names.
+"""The Anti-Slop filter (jarvis_antislop.py): the engine, its wiring, the
+mutation bite-proofs the blueprint names, and Gemini's Q1-Q4 rulings.
 
     py -3 test_antislop.py
 
@@ -24,6 +24,24 @@ WHAT THIS PROVES
      mode to after", "turn on anti-slop for code" and "is anti-slop on" resolve
      in jarvis_quick.py, raise ZERO approval cards, change the real state and
      leave a receipt.
+  7. WHAT IS ENFORCED AND WHAT IS ONLY GUIDED (Gemini's Q1 ruling): the report
+     names its Class A rules as checked here, labels its Class B rules
+     PROMPT-GUIDED ONLY - never mechanically enforced - and puts that header
+     FIRST in every audit, before any finding or "no findings" line.
+  8. THE OWNER'S EM-DASH OVERRIDE (Gemini's Q3 ruling): `allow_em_dashes`
+     (default false) takes R-02 out of the prompt and the scrub while the rest
+     of the copy scope keeps working, with R-37's automatic precedence still the
+     default.
+  9. THE SCRUB'S TWO SHAPES, AND ITS GUARDS (Gemini's Q4 ruling): only a
+     wordless separator line or an emoji-led comment is ever removed, and never
+     from a shebang, a coding/type/noqa/pragma line, a Rust doc comment, a diff
+     header, or any comment carrying real words - and the scrub is wired only
+     into the chat stream.
+ 10. THE ORDERING (Gemini's Q3 ruling): the scrub is flushed BEFORE
+     `jarvis_claims.py`'s corrections and `jarvis_wellbeing.py`'s crisis line
+     are appended, and a crisis sentence containing an em dash survives it.
+ 11. THE VENDORED RULES ARE INERT (Gemini's Q2 ruling): no chat-template
+     marker, no URL, no "stop and wait" trap in anything that reaches a prompt.
 
 THE MUTATION BITES, and how they are run
 
@@ -422,6 +440,99 @@ def t_write_like_me_wins_under_r37():
     A.set_enabled(False)
 
 
+def t_the_vendored_rules_carry_no_markers_urls_or_traps():
+    """Q2: what reaches a prompt is TEXT, so it must carry nothing that could
+    hijack a turn.
+
+    No chat-template markers (a vendored string must never be able to open or
+    close a turn), no external URL (this feature makes no network call, and a
+    rule that names one is an invitation to), and no installer-style "stop and
+    wait for me" instruction - the rulebook's own Trap 2, which is exactly what
+    the `npx antislop-ai` wizard does and what vendoring avoids.
+    """
+    reset()
+    A.set_enabled(True)
+    texts = [A.REPORT_HEADER, A.SOURCE]
+    for mode in ("during", "after"):
+        A.set_mode(mode)
+        texts.append(A.prompt_block("design a landing page in html and css"))
+    A.set_mode("during")
+    check("the model-facing text is the block, the header and the attribution",
+          len(texts) == 4 and all(isinstance(t, str) for t in texts))
+    for marker in ("<|im_start|>", "<|im_end|>", "<tool_call>", "<think>"):
+        check(f"no chat-template marker {marker!r} in anything model-facing",
+              all(marker not in text for text in texts), marker)
+    for token in ("http://", "https://", "www.", "npx ", "npm "):
+        check(f"no {token!r} in anything model-facing",
+              all(token not in text.lower() for text in texts), token)
+    for trap in ("stop and wait", "wait for", "ignore the", "disregard",
+                 "override", "bypass", "you are now", "system prompt"):
+        check(f"no meta-instruction {trap!r} (Trap 2 or a gate override)",
+              all(trap not in text.lower() for text in texts), trap)
+    # The report header legitimately NAMES jarvis_claims.py as the gate behind
+    # R-17/R-36/R-38, and the block's own words include "no unsourced claims
+    # (R-17)". What must not appear in a prompt is either MODULE, because a line
+    # naming one is a line that could ask the model to override it.
+    check("no prompt block names the wellbeing or claims modules",
+          all("jarvis_wellbeing" not in text.lower()
+              and "jarvis_claims" not in text.lower()
+              and "honesty gate" not in text.lower()
+              for text in texts[2:]),
+          [t for t in texts[2:] if "jarvis_" in t.lower()])
+    A.set_enabled(False)
+
+
+def t_the_owner_can_allow_em_dashes():
+    """Gemini's Q3 ruling: `allow_em_dashes` is the owner's own override.
+
+    FALSE (the default) keeps R-02, and R-37's automatic precedence is
+    untouched. TRUE allows the dash while the REST of the copy scope keeps
+    working, and it is a STORED flag rather than a second reading of the
+    voiceprint: a preference the owner set must not move when their samples do.
+    """
+    reset()
+    check("a PC that has never set it reads allow_em_dashes FALSE",
+          A.get_state()["allow_em_dashes"] is False, A.get_state())
+    A.set_enabled(True)
+    check("with it FALSE the prompt carries R-02",
+          "R-02" in A.prompt_block("copy for a note"), A.prompt_block("copy for a note"))
+    check("...and a prose em dash is scrubbed",
+          A.post_process_reply("Fast \u2014 really") == "Fast, really",
+          repr(A.post_process_reply("Fast \u2014 really")))
+    out = A.set_allow_em_dashes(True)
+    check("the setter writes the flag", A.get_state()["allow_em_dashes"] is True)
+    check("...and says what it just changed, in plain words",
+          "Em dashes allowed" in str(out.get("message")), repr(out.get("message")))
+    block = A.prompt_block("copy for a note")
+    check("...the prompt's R-02 line goes", "R-02" not in block, block)
+    check("...and the rest of the copy scope is still there (R-15 and R-16)",
+          "R-15" in block and "R-16" in block, block)
+    check("...the scrub leaves the owner's own dash alone",
+          A.post_process_reply("Fast \u2014 really") == "Fast \u2014 really",
+          repr(A.post_process_reply("Fast \u2014 really")))
+    check("...a decorative code banner is STILL scrubbed with dashes allowed",
+          A.post_process_reply("```py\n# ==========\nx = 1\n```\n")
+          == "```py\nx = 1\n```\n",
+          repr(A.post_process_reply("```py\n# ==========\nx = 1\n```\n")))
+    check("...and the mode, the scopes and the dials are untouched",
+          A.get_state()["mode"] == "during"
+          and A.get_state()["scopes"] == {"copy": True, "code": True, "ui": True}
+          and A.get_state()["dials"] == {"energy": 1, "rhythm": 2, "motion": 1},
+          A.get_state())
+    code, got = A.handle_post(A.STATE_PATH, {"allow_em_dashes": False})
+    check("POST /api/antislop accepts the key and reports it back",
+          code == 200 and got.get("allow_em_dashes") is False, got)
+    code, got = A.handle_get(A.STATE_PATH)
+    check("...and GET carries it, so both apps can draw the checkbox",
+          code == 200 and "allow_em_dashes" in got, sorted(got))
+    check("a body naming a setting that does not exist is still refused",
+          A.handle_post(A.STATE_PATH, {"allow_em_dash": True})[0] == 400)
+    check("turning it back OFF puts R-02 back at once",
+          A.post_process_reply("Fast \u2014 really") == "Fast, really",
+          repr(A.post_process_reply("Fast \u2014 really")))
+    A.set_enabled(False)
+
+
 # --------------------------------------------------------------------------
 #   3. antislop-code: banners out, "why" comments and code in
 # --------------------------------------------------------------------------
@@ -490,6 +601,96 @@ def t_the_stream_filter_matches_the_whole_text_scrub():
     check("...and the em dash that straddled two pieces really went",
           "\u2014" not in streamed.split("```")[0], repr(streamed))
     A.set_enabled(False)
+
+
+#: Comment lines that MUST survive the scrub, each shaped like something a
+#: looser pattern would have eaten. The first nine are tool instructions, not
+#: decoration; the last three carry real words.
+_COMMENTS_TO_KEEP = (
+    "#!/usr/bin/env python3",
+    "# -*- coding: utf-8 -*-",
+    "# type: ignore[attr-defined]",
+    "# noqa: E501",
+    "# pragma: no cover",
+    "// @ts-expect-error",
+    "// eslint-disable-next-line no-console",
+    "/// ------------ rust doc ------------",
+    "//! ----------------",
+    "# ===== Setup =====",
+    "# --- Phase 2: Database Migration ---",
+    "# \u26a0\ufe0f careful: this one warns",
+)
+
+
+def _the_comment_guard_is_right(module) -> bool:
+    """The Q4 guard in one predicate: keep every real comment, still strip the
+    two decorative shapes. Used by bite 3-heading, which widens the pattern."""
+    module.set_enabled(True)
+    try:
+        kept = all(
+            module.post_process_reply("```py\n" + line + "\nx = 1\n```\n")
+            == "```py\n" + line + "\nx = 1\n```\n"
+            for line in _COMMENTS_TO_KEEP)
+        stripped = (module.post_process_reply("```py\n# ==========\nx = 1\n```\n")
+                    == "```py\nx = 1\n```\n")
+        emoji = (module.post_process_reply("```py\n# \U0001F680 Set x to one\n```\n")
+                 == "```py\n```\n")
+    finally:
+        module.set_enabled(False)
+    return kept and stripped and emoji
+
+
+def t_the_comment_scrub_cannot_touch_a_real_comment():
+    """Gemini's Q4 ruling: only two shapes are ever removed, and both carry no
+    information. Everything else a person wrote stays, word for word."""
+    reset()
+    A.set_enabled(True)
+    for line in _COMMENTS_TO_KEEP:
+        sample = "```py\n" + line + "\nx = 1\n```\n"
+        check(f"KEPT: {line.strip()[:52]}", A.post_process_reply(sample) == sample,
+              repr(A.post_process_reply(sample)))
+    check("a wordless separator IS still stripped",
+          A.post_process_reply("```py\n# ==========\nx = 1\n```\n")
+          == "```py\nx = 1\n```\n")
+    check("an emoji-led comment IS still stripped",
+          A.post_process_reply("```py\n# \U0001F680 Set x to one\n```\n")
+          == "```py\n```\n")
+    check("...and the nine other decorative emoji the rulebook names strip too",
+          all(A.post_process_reply("```py\n# " + e + " note\n```\n") == "```py\n```\n"
+              for e in "\u2728\U0001F4A1\U0001F525\U0001F3AF\u26A1\u2705\U0001F6E0"
+                       "\U0001F4E6\U0001F50D"))
+    diff = ("```diff\n--- a/x.py\n+++ b/x.py\n@@ -1,2 +1,2 @@\n"
+            "-// ------\n+# =====\n```\n")
+    check("a diff header and a diff's own lines are NEVER stripped",
+          A.post_process_reply(diff) == diff, repr(A.post_process_reply(diff)))
+    check("a Markdown table divider outside a fence is prose, untouched",
+          A.post_process_reply("|---|---|\n") == "|---|---|\n")
+    check("the AUDIT still reports a headed banner the scrub keeps",
+          any(f["rule"] == "antislop-code"
+              for f in A.audit_text_or_ui("# ===== Setup =====\n", kind="code")["findings"]))
+    check("...and the scrub never removes it",
+          A.post_process_reply("```py\n# --- Phase 2: Database Migration ---\n```\n")
+          == "```py\n# --- Phase 2: Database Migration ---\n```\n")
+    A.set_enabled(False)
+
+
+def t_the_scrub_is_only_wired_into_the_chat_stream():
+    """Q4: the scrub may only see the model's own chat words.
+
+    No tool input, no file Jarvis writes, no diff or patch, and no file already
+    in a repository. `run_local_turn`'s `on_text` is the one place it is
+    wired; the audit is read-only. Pinned in the source, because the danger
+    here is a later wiring, not today's behaviour.
+    """
+    agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
+    check("the agent builds ONE filter per turn", "slop_filter = _antislop_filter(" in agent)
+    check("...and feeds it only the model's streamed words",
+          "clean = slop_filter.feed(clean)" in agent)
+    for name in ("jarvis_quick.py", "jarvis_settings_registry.py",
+                 "jarvis_feature_guide.py"):
+        text = (HERE / name).read_text(encoding="utf-8")
+        check(f"{name} never calls the scrub",
+              "post_process_reply(" not in text and "reply_filter(" not in text)
 
 
 # --------------------------------------------------------------------------
@@ -586,6 +787,59 @@ def t_the_four_block_delivery_gate():
     clean = A.audit_text_or_ui("<p>A plain sentence with nothing wrong.</p>", kind="html")
     check("a clean page passes every block a program can check",
           clean["gate"]["blocks"][0]["verdict"] == "PASS", clean["gate"]["blocks"][0])
+    A.set_enabled(False)
+
+
+#: The nine rules no static Python check can prove (Gemini's Q1 ruling).
+_CLASS_B_RULES = ("R-03", "R-18", "R-20", "R-23", "R-27", "R-28", "R-30",
+                  "R-34", "R-35")
+
+
+def t_the_report_says_which_rules_a_program_checked():
+    """Gemini's Q1 ruling: two enforcement classes, said on every report.
+
+    A rule that needs a live browser, a person's judgement or the data source
+    must never be described as "mechanically enforced". The header is built
+    from the same two tuples the findings code uses, so it cannot drift.
+    """
+    reset()
+    out = A.audit_text_or_ui("<p>A plain sentence with nothing wrong.</p>", kind="html")
+    enf = out["enforcement"]
+    check("the audit carries both enforcement classes",
+          isinstance(enf.get("class_a"), list) and isinstance(enf.get("class_b"), list),
+          sorted(out))
+    check("Class A names the rules this module really checks",
+          {"R-02", "R-10", "R-13", "R-15", "R-16", "R-25"} <= set(enf["class_a"]),
+          enf["class_a"])
+    for rule in _CLASS_B_RULES:
+        check(f"{rule} is Class B, prompt-guided",
+              any(r.startswith(rule) or (rule + " ") in r or ("(" + rule) in r
+                  for r in enf["class_b"]), enf["class_b"])
+    check("...and no Class B rule appears in Class A",
+          not [a for a in enf["class_a"] for rule in _CLASS_B_RULES if rule in a],
+          enf["class_a"])
+    check("Class B is marked NOT enforced", enf["class_b_enforced"] is False)
+    check("the report's header comes FIRST, before any finding or pass line",
+          out["words"].startswith(A.CLASS_A_LINE), out["words"][:200])
+    check("...and it labels Class B 'PROMPT-GUIDED ONLY'",
+          "PROMPT-GUIDED ONLY" in out["words"], out["words"][:500])
+    check("...and says plainly that it is never mechanically enforced",
+          "never mechanically enforced" in out["words"], out["words"][:500])
+    dirty = A.audit_text_or_ui(AUDIT_SAMPLE, kind="html")
+    check("a report WITH findings carries the same header",
+          dirty["words"].startswith(A.CLASS_A_LINE), dirty["words"][:200])
+    check("...and no finding is attributed to a Class B rule",
+          not [f["rule"] for f in dirty["findings"] if f["rule"] in _CLASS_B_RULES],
+          [f["rule"] for f in dirty["findings"]])
+    gate_rules = {rule for block in dirty["gate"]["blocks"] for rule in block["rules"]}
+    check("the Delivery Gate only names rules a program can check",
+          not gate_rules & set(_CLASS_B_RULES), sorted(gate_rules))
+    # The header is a REPORT header, never prompt text: the block is measured
+    # against its own 1,050-character ceiling, and 240 tokens is the budget.
+    A.set_enabled(True)
+    block = A.prompt_block("design a landing page in html and css")
+    check("the class split is in the report, not in the prompt block",
+          "Class B" not in block and "R-18" not in block, block)
     A.set_enabled(False)
 
 
@@ -917,6 +1171,69 @@ def t_the_agent_scrubs_the_words_it_sends():
     A.set_enabled(False)
 
 
+#: The shape Gemini's Q3 ruling names: a helpline sentence with an em dash in
+#: it. The real `jarvis_wellbeing.reply()` happens not to use one today, so
+#: this exact sentence is what proves the ORDERING - if the filter ran after
+#: the footer was appended, this dash would become a comma.
+CRISIS_FOOTER = "988 Suicide & Crisis Lifeline \u2014 call or text 988"
+HONESTY_LINE = "I did not actually do that \u2014 nothing was changed."
+
+
+def t_safety_and_claim_lines_survive_the_filter():
+    """Q3: the scrub runs BEFORE the safety and honesty lines are appended.
+
+    A helpline number and a corrections sentence are safety-critical SYSTEM
+    strings. The filter may rewrite the model's words; it must never rewrite
+    those. The counter-proof below is the reason the ordering is tested at all:
+    the other order really does damage them.
+    """
+    reset()
+    A.set_enabled(True)
+    answer = "I'm here with you."
+    filtered = A.post_process_reply(answer)
+    final = filtered + "\n\n" + CRISIS_FOOTER
+    check("a crisis sentence appended AFTER the filter keeps its em dash",
+          final.endswith(CRISIS_FOOTER) and "\u2014" in final, repr(final))
+    check("...byte for byte, so a helpline can never be reworded",
+          final.split("\n\n")[-1] == CRISIS_FOOTER, repr(final.split("\n\n")[-1]))
+    honesty = A.post_process_reply(answer) + "\n\n" + HONESTY_LINE
+    check("an honesty-gate sentence appended AFTER the filter keeps its em dash",
+          honesty.endswith(HONESTY_LINE), repr(honesty))
+    wrong = A.post_process_reply(answer + "\n\n" + CRISIS_FOOTER)
+    check("the OPPOSITE order would rewrite the helpline (so the order matters)",
+          "\u2014" not in wrong, repr(wrong))
+    import jarvis_wellbeing as W
+    check("the real crisis message survives unchanged when appended after it",
+          A.post_process_reply(answer) + W.reply() == filtered + W.reply())
+    A.set_enabled(False)
+
+
+def t_the_agent_flushes_the_scrub_before_the_safety_lines():
+    """The ordering, pinned in the source where the agent really appends them.
+
+    `run_local_turn` is this backend's turn output finalizer (the blueprint's
+    `finalize_turn_output` does not exist in this tree - measured 2026-10-28).
+    Its `slop_filter.flush()` must come before `jarvis_claims`' correction lines
+    and before `jarvis_wellbeing`'s crisis line, and nothing may re-filter the
+    answer afterwards.
+    """
+    src = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
+    flush = src.index("rest = slop_filter.flush()")
+    claims = src.index('line = _nothing_done_line("".join(model_words)')
+    corrections = src.index("for claim_line in _claim_corrections(")
+    crisis = src.index("tell_owner(crisis_reply(")
+    check("the scrub is flushed before the \"nothing was done\" honesty line",
+          flush < claims, f"{flush} vs {claims}")
+    check("...before the other claim corrections", claims < corrections,
+          f"{claims} vs {corrections}")
+    check("...and before the crisis help line, which stays last",
+          corrections < crisis, f"{corrections} vs {crisis}")
+    check("nothing feeds or re-filters the answer after the flush",
+          "slop_filter.feed" not in src[flush:]
+          and "post_process_reply" not in src,
+          "a scrub call sits after the safety lines")
+
+
 # --------------------------------------------------------------------------
 #   The wiring that has to exist for any of this to reach the PC
 # --------------------------------------------------------------------------
@@ -948,14 +1265,43 @@ def t_the_registry_row_and_its_reader_exist():
     if setting is not None:
         check("...it is named the way a person says it",
               R.find_bool_setting("anti-slop") is setting
-              and R.find_bool_setting("slop filter") is setting
-              and R.find_bool_setting("ai slop filter") is setting)
+              and R.find_bool_setting("slop filter") is setting)
+        # THE FULLER PHRASINGS still reach the switch: `contract/
+        # feature-controls.json` holds the three short names (the matrix check
+        # requires exact equality), and the registry's tolerant matcher is what
+        # covers "the anti-slop filter" and "ai slop filter" - so the short
+        # list costs no reach.
+        check("...and 'the anti-slop filter' still resolves through the tolerant matcher",
+              R.find_bool_setting_words("the anti-slop filter") is setting,
+              R.find_bool_setting_words("the anti-slop filter"))
+        check("...and so does 'ai slop filter'",
+              R.find_bool_setting_words("ai slop filter") is setting,
+              R.find_bool_setting_words("ai slop filter"))
+        check("...the three names are exactly the Settings half's own",
+              tuple(setting.names) == ("anti-slop", "anti slop", "slop filter"),
+              setting.names)
+        # `section` is NOT "the page this is described on": jarvis_feature_guide.
+        # switches_for() reads it to decide WHICH SWITCHES A FEATURE ROW COVERS,
+        # so naming "manner" made the "How Jarvis talks" row carry two switches
+        # (measured 2026-10-28: that row went from ['humor'] to
+        # ['antislop', 'humor']) and `backend/test_feature_guide.py` failed two
+        # checks - "there are single-switch Switchable rows to check" and "the
+        # turn-on/off half of the sentence is untouched". It stays None until a
+        # real generated row exists; the card is bespoke and the Settings half's
+        # contract records `desktop_row: null` for it for the same reason.
+        check("...and it claims no generated Settings row (section is None)",
+              setting.section is None, setting.section)
     choice = next((c for c in R.CHOICE_SETTINGS if c.key == "antislop_mode"), None)
     check("CHOICE_SETTINGS has an antislop_mode row", choice is not None)
     if choice is not None:
-        check("...whose two choices are during and after",
-              set(choice.options().values()) == {"during", "after"},
+        check("...named the two ways the Settings half does",
+              tuple(choice.names) == ("the anti-slop mode", "antislop mode"),
+              choice.names)
+        check("...whose two choices are during and after, and nothing else",
+              choice.options() == {"during": "during", "after": "after"},
               choice.options())
+        check("...and THAT one does name its Settings card (where is manner)",
+              choice.where == "manner", choice.where)
     import jarvis_feature_guide as FG
     check("the feature guide can READ the switch (so 'is it on?' is never a guess)",
           "antislop" in FG.STATE_READERS)
@@ -1002,7 +1348,7 @@ def run_bites():
     # The exemption lives in two places (the filter and the prompt); break the
     # filter's half, which is the one that would silently rewrite the owner's
     # own style.
-    bites("2-r37", 'need_dashes = bool(scopes.get("copy", True)) and not voiceprint_uses_em_dash',
+    bites("2-r37", 'need_dashes = bool(scopes.get("copy", True)) and not dashes_ok',
           'need_dashes = bool(scopes.get("copy", True))', proves_the_exemption)
 
     print("\n--- bite 3: antislop-code comment cleanup ---")
@@ -1010,9 +1356,18 @@ def run_bites():
     def proves_the_cleanup(module):
         return _comment_cleanup_is_right(module)
 
-    bites("3-code", 'r"^[ \\t]*(?:#|//|--|/\\*)[ \\t]*[=\\-*~_─━═]{4,}[ \\t]*$")',
-          'r"^[ \\t]*(?:#|//|--|/\\*)[ \\t]*NEVERMATCHES{4,}[ \\t]*$")',
+    bites("3-code", 'r"^\\s*(?:#|//)\\s*[=\\-*~─━═]{4,}\\s*$")',
+          'r"^\\s*(?:#|//)\\s*NEVERMATCHES{4,}\\s*$")',
           proves_the_cleanup)
+
+    def proves_the_heading_guard(module):
+        return _the_comment_guard_is_right(module)
+
+    # The Q4 guard: a mutation that WIDENS the pattern to the old behaviour
+    # (a heading with words on it counts as a banner) must make the guard fail.
+    bites("3-heading", 'r"^\\s*(?:#|//)\\s*[=\\-*~─━═]{4,}\\s*$")',
+          'r"^\\s*(?:#|//)\\s*[=\\-*~─━═]{4,}\\s+\\S")',
+          proves_the_heading_guard)
 
     print("\n--- bite 4: R-25, unrounded contrast ---")
 
@@ -1066,16 +1421,29 @@ CHECKS = [
     t_after_mode_asks_for_an_audit_and_rewrites_nothing,
     t_the_dials_are_bounded_and_refused_out_of_range,
     t_write_like_me_wins_under_r37,
+    # Gemini's Q2 ruling (2026-10-28): the vendored rule text is inert.
+    t_the_vendored_rules_carry_no_markers_urls_or_traps,
+    # Gemini's Q3 ruling (2026-10-28): the owner's own override of R-02.
+    t_the_owner_can_allow_em_dashes,
     t_the_code_comment_cleanup_is_exact,
+    # Gemini's Q4 ruling (2026-10-28): what the scrub may never touch.
+    t_the_comment_scrub_cannot_touch_a_real_comment,
+    t_the_scrub_is_only_wired_into_the_chat_stream,
     t_the_stream_filter_matches_the_whole_text_scrub,
     t_contrast_is_unrounded,
     t_the_audit_tiers_are_the_rulebooks_own,
     t_the_four_block_delivery_gate,
+    # Gemini's Q1 ruling (2026-10-28): Class A checked, Class B prompt-guided.
+    t_the_report_says_which_rules_a_program_checked,
     t_every_named_sentence_resolves_with_zero_cards,
     t_the_fast_path_leaves_a_receipt,
     t_the_routes_answer_through_the_core_handler,
     t_the_agent_adds_the_note_only_when_it_is_on,
     t_the_agent_scrubs_the_words_it_sends,
+    # Gemini's Q3 ruling: the safety and honesty lines are appended AFTER the
+    # filter, so a helpline or an honesty-gate sentence can never be rewritten.
+    t_safety_and_claim_lines_survive_the_filter,
+    t_the_agent_flushes_the_scrub_before_the_safety_lines,
     t_the_module_ships_and_the_drop_in_folder_names_it,
     t_the_registry_row_and_its_reader_exist,
 ]

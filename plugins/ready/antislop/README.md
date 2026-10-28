@@ -56,6 +56,24 @@ carries the MIT attribution.
   findings list and not to edit anything, and the scrub is bypassed, because an
   audit is allowed to quote the very em dash it reports.
 
+## What it really checks, and what it only guides
+
+The audit report says which is which in its own header, on every run, because a
+rule that a regex cannot see must never be described as enforced:
+
+- **Class A, checked here:** `R-02` (with the exemptions below), the `R-10` /
+  `R-13` dose caps, `R-15` generic CTAs, `R-16` AI buzzwords, `R-17`/`R-36`/`R-38`
+  through `jarvis_claims.py`, the **static** half of `R-24`/`R-26` (dead links,
+  unwired buttons), `R-25` unrounded WCAG 2.1 contrast on a static hex pair, the
+  **static** half of `R-32` (`outline: none` with no ring put back), and
+  `antislop-code` comment banners.
+- **Class B, prompt-guided only:** `R-03`'s dynamic overflow and rendered 44x44
+  tap targets, `R-18` (is a testimonial fabricated?), `R-20` (the identity test),
+  `R-23` (asset confirmation), `R-27` (semantic empty/loading/error states),
+  `R-28` (is an FAQ generic?), `R-30` (clone detection) and `R-34`/`R-35` (live
+  theme switching and click-through). These need a live browser, a person's
+  judgement or the data source; this module guides them and does not check them.
+
 ## One rule that wins over the filter
 
 `R-02` bans em dashes in agent-written copy, and `R-37` says a sample of the
@@ -63,3 +81,20 @@ owner's own writing is direction. When **Write Like Me** (`jarvis_voiceprint`)
 is on and the owner's own samples use em dashes, the ban yields - both in the
 prompt and in the scrub. `jarvis_antislop.voiceprint_uses_em_dash()` is the one
 place that is decided, and it answers False whenever it cannot read the samples.
+
+The owner can also allow em dashes outright: `allow_em_dashes` (default off)
+drops the R-02 line and leaves prose dashes alone while the rest of the copy
+scope keeps working, and it is a stored flag rather than a second reading of the
+samples. `POST /api/antislop {"allow_em_dashes": true}` is the one door; the
+Settings card's checkbox posts the same key.
+
+## What the scrub may never touch
+
+Only the words the model wrote in a chat answer - its prose, and the fenced code
+blocks inside it. Never a tool's input or output, a file Jarvis writes, a diff or
+a patch, or a file already in a repository; the audit is read-only. Inside fenced
+code it removes only a wordless separator line or a comment led by one of ten
+decorative emoji. Shebangs, `# -*- coding`, `# type:`, `# noqa`, `# pragma:`,
+`// @ts-`, `// eslint-`, Rust `///` and `//!` doc comments, diff headers and any
+comment carrying real words are never touched.
+

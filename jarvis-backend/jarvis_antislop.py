@@ -44,13 +44,65 @@ instant and NEITHER raises an approval card (the owner's own classification -
 with a one-click Undo (jarvis_receipts.py, when that module is present), which
 is the project's pattern for "this changed something, put it back".
 
+WHAT IS ENFORCED, AND WHAT IS ONLY GUIDED (Gemini's Q1 ruling, 2026-10-28)
+
+Two classes, and the audit report says which is which on every run. Quoting a
+rule and then claiming a Python check proves it is the one overclaim this
+feature could make, so the split is data (`ENFORCEMENT_CLASS_A` /
+`ENFORCEMENT_CLASS_B`) and the report header is built from it, never typed out
+twice:
+
+  Class A - DETERMINISTIC, checked or scrubbed in this module:
+    R-02 (em dash in prose, with the R-37 voiceprint exemption and the
+    `allow_em_dashes` override), R-10 / R-13 (the glass and glow dose caps),
+    R-15 (generic CTAs), R-16 (AI buzzwords), R-17 / R-36 / R-38 (backed by
+    the existing jarvis_claims.py honesty gate), R-24 / R-26 (STATIC dead
+    links and unwired buttons), R-25 (unrounded WCAG 2.1 contrast on a static
+    hex pair), R-32 (STATIC `outline: none` with no focus ring put back), and
+    `antislop-code` (decorative comment banners and emoji comments).
+
+  Class B - PROMPT-GUIDED ONLY, never claimed as mechanically enforced:
+    R-03's dynamic half (real viewport overflow and rendered 44x44 tap targets
+    need Playwright layout, not a regex), R-18 (is a testimonial fabricated?),
+    R-20 (the swap-the-logo identity test), R-23 (the owner confirming an
+    external asset), R-27 (semantic Empty/Loading/Error completeness), R-28
+    (is an FAQ "generic"?), R-30 (is this a Linear/Vercel/Stripe clone?), and
+    R-34 / R-35 (live theme switching and element-by-element click-through,
+    which the project's own Playwright suites prove, not this module).
+
+WHERE THE SCRUB MAY TOUCH, AND WHERE IT NEVER DOES (Gemini's Q4 ruling)
+
+`post_process_reply` and `ReplyFilter` only ever see the words the MODEL wrote
+in a chat answer: its prose, and the fenced code blocks inside that answer.
+They are wired into `run_local_turn`'s own stream (`on_text`), and nowhere
+else. They never see a tool's input or output, a file Jarvis writes, a diff or
+a patch, or a file already in a repository - `audit_text_or_ui` is read-only
+and reports on a file without touching it. Inside fenced code the scrub strips
+ONLY two shapes, both of which carry no information a person needs: a purely
+decorative separator line with no words on it (`# ============`), and a
+comment that opens with one of the ten decorative emoji. A heading with real
+words on it (`# --- Phase 2: Database Migration ---`) is left to the prompt
+rule and the `after`-mode audit, and shebangs, coding/type/noqa/pragma lines,
+Rust doc comments and diff headers are never touched at all.
+
 STATE
 
 `antislop.json` in the Jarvis settings folder (`~/.openjarvis` by default, or
 `jarvis_framework.CONFIG_DIR` when that module is present), written atomically
 under a lock like every other setting file here. Default: OFF, `during` mode,
 copy + code + ui scopes, dials ENERGY 1 / RHYTHM 2 / MOTION 1 - the rulebook's
-own starting dials in its Liveliness section.
+own starting dials in its Liveliness section - and `allow_em_dashes` FALSE, so
+R-02 is in force until the owner says otherwise.
+
+`allow_em_dashes` is the owner's own override for one rule (Gemini's Q3
+ruling). False - the default - means R-02 applies, and R-37 still removes it
+automatically when "Write Like Me" is on and the owner's own samples use em
+dashes. True means the owner has said they want em dashes in Jarvis's replies
+too: R-02 goes out of the prompt and the scrub, while the REST of the copy
+scope (R-15's generic CTAs, R-16's buzzwords) keeps working. It is a stored
+flag rather than a reading of the voiceprint because the owner may want
+dashes even with Write Like Me off, and a preference they set must not change
+when their samples do.
 
 ROUTES (installed by this module's install(), which is what the drop-in folder
 plugins/ready/antislop asks jarvis_plugins.py to call - no patch of its own)
@@ -101,7 +153,9 @@ DEFAULT_DIALS = {"energy": 1, "rhythm": 2, "motion": 1}
 DIAL_MIN, DIAL_MAX = 1, 3
 
 #: Every state key, in the order a reader of the JSON sees them.
-STATE_KEYS = ("enabled", "mode", "scopes", "dials",
+#: `allow_em_dashes` is the owner's override for R-02 (Gemini's Q3 ruling): it
+#: defaults to FALSE, so the ban is in force unless the owner turns it off.
+STATE_KEYS = ("enabled", "mode", "scopes", "dials", "allow_em_dashes",
               "show_delivery_gate_on_ui_tasks", "updated_at")
 
 # --------------------------------------------------------------------------
@@ -145,6 +199,40 @@ RULE_TIER = {
 
 #: The rulebook's own dose cap for R-10 and R-13: "at most 1-2 elements".
 DOSE_CAP = 2
+
+# What this module really checks, and what it can only ask the model to do.
+# Gemini's Q1 ruling (2026-10-28) split the rulebook's rules into these two
+# classes, and the reason is plain: a regex cannot see a rendered page. Reading
+# `scrollWidth > innerWidth`, a 44x44 tap target's bounding box, or a
+# testimonial that was made up needs a browser, a person, or the data source -
+# so claiming a Python check "enforces" those would be a lie in the one place
+# the project keeps its word (docs/CLAIMS.tsv).
+#: Rule numbers this module audits or scrubs deterministically.
+ENFORCEMENT_CLASS_A = (
+    "R-02", "R-10", "R-13", "R-15", "R-16",
+    "R-17/R-36/R-38 (via jarvis_claims.py)",
+    "R-24/R-26 (static)", "R-25", "R-32 (static)", "antislop-code",
+)
+
+#: Rules the compact prompt block guides but no static check can prove.
+ENFORCEMENT_CLASS_B = (
+    "R-03 (dynamic overflow / tap targets)", "R-18 (fabricated testimonial)",
+    "R-20 (identity test)", "R-23 (external asset confirmation)",
+    "R-27 (semantic state completeness)", "R-28 (generic FAQ)",
+    "R-30 (clone detection)", "R-34/R-35 (live theme / click-through)",
+)
+
+#: The report's own header, built from the two tuples so it can never drift
+#: from them. It goes FIRST in an audit's words, before any finding: a reader
+#: must know which half of the list was checked before reading a PASS.
+CLASS_A_LINE = ("Class A - checked here, deterministically: "
+                + ", ".join(ENFORCEMENT_CLASS_A) + ".")
+CLASS_B_LINE = ("Class B - PROMPT-GUIDED ONLY, never mechanically enforced: "
+                + ", ".join(ENFORCEMENT_CLASS_B)
+                + ". These need a live browser, a person's judgement or the "
+                  "data source; they are guided by the compact prompt filter "
+                  "and are NOT checked by this auditor.")
+REPORT_HEADER = CLASS_A_LINE + "\n" + CLASS_B_LINE
 
 #: WCAG 2.1 AA: 4.5:1 for normal text, 3:1 for large text (>= 18pt, or 14pt
 #: bold). Compared UNROUNDED - see `check_contrast` for why that is the whole
@@ -193,6 +281,7 @@ def _default_state() -> dict:
     return {"enabled": False, "mode": DEFAULT_MODE,
             "scopes": {name: True for name in SCOPES},
             "dials": dict(DEFAULT_DIALS),
+            "allow_em_dashes": False,
             "show_delivery_gate_on_ui_tasks": True,
             "updated_at": 0.0}
 
@@ -225,6 +314,11 @@ def _clean(doc: object) -> dict:
                 out["dials"][name] = max(DIAL_MIN, min(DIAL_MAX, value))
     if isinstance(doc.get("show_delivery_gate_on_ui_tasks"), bool):
         out["show_delivery_gate_on_ui_tasks"] = doc["show_delivery_gate_on_ui_tasks"]
+    # The owner's own override for R-02. A value of the wrong type falls back
+    # to FALSE, which is the safe direction: a damaged file can never quietly
+    # turn the em-dash ban off.
+    if isinstance(doc.get("allow_em_dashes"), bool):
+        out["allow_em_dashes"] = doc["allow_em_dashes"]
     stamp = doc.get("updated_at")
     if isinstance(stamp, (int, float)) and not isinstance(stamp, bool):
         out["updated_at"] = float(stamp)
@@ -430,6 +524,26 @@ def set_delivery_gate(on: bool) -> dict:
         lambda s: s.__setitem__("show_delivery_gate_on_ui_tasks", on))
 
 
+def set_allow_em_dashes(on: bool) -> dict:
+    """The owner's override for R-02 (Gemini's Q3 ruling): allow em dashes.
+
+    FALSE is the default and means R-02 applies, with R-37 still removing it
+    automatically when the owner's own samples use em dashes. TRUE means the
+    owner wants them in Jarvis's replies whatever the samples say, and the
+    REST of the copy scope - R-15's generic CTAs and R-16's buzzwords - keeps
+    working either way.
+
+    Cardless like every other setter here: it changes the words Jarvis writes
+    and nothing else, so there is nothing for a card to decide.
+    """
+    on = bool(on)
+    summary = ("Em dashes allowed in Jarvis's replies (R-02 off; the generic "
+               "CTAs and buzzword checks stay on)." if on else
+               "Em dashes are back under R-02 (a comma, a colon or a full "
+               "stop instead).")
+    return _change(summary, lambda s: s.__setitem__("allow_em_dashes", on))
+
+
 # --------------------------------------------------------------------------
 #   "Write Like Me" wins under R-37 (the owner's own sample is direction)
 # --------------------------------------------------------------------------
@@ -523,7 +637,7 @@ def prompt_block(user_text: str = "", *, spoken_live: bool = False,
     so they are only paid for when a screen is being built). `spoken_live`
     suppresses the code and ui lines: a spoken answer has no code fence and no
     page. `voiceprint_uses_em_dash` drops the R-02 line when Write Like Me owns
-    the prose style (R-37).
+    the prose style (R-37); the owner's stored `allow_em_dashes` drops it too.
     """
     state = get_state()
     if not state.get("enabled", False):
@@ -531,9 +645,13 @@ def prompt_block(user_text: str = "", *, spoken_live: bool = False,
     mode = state.get("mode", DEFAULT_MODE)
     scopes = state.get("scopes") or {}
     dials = state.get("dials") or dict(DEFAULT_DIALS)
+    # R-37 and the owner's own override both take the em-dash line out: the
+    # first because the owner's writing samples are direction, the second
+    # because the owner asked for dashes outright (Gemini's Q3 ruling).
+    dashes_ok = bool(voiceprint_uses_em_dash or state.get("allow_em_dashes"))
     rules: list = []
     if scopes.get("copy", True):
-        if not voiceprint_uses_em_dash:
+        if not dashes_ok:
             rules.append("- R-02: no em dashes (\u2014) in prose - use a comma, "
                          "a colon, a full stop or brackets.")
         rules.append("- R-15/R-16: no generic CTAs (\"Get Started\", \"Learn "
@@ -572,40 +690,78 @@ def prompt_block(user_text: str = "", *, spoken_live: bool = False,
 #: tildes, at most three spaces in, exactly as CommonMark reads them.
 _FENCE = re.compile(r"^[ \t]{0,3}(?:`{3,}|~{3,})")
 
-#: A comment whose body is pure decoration: a run of four or more of these
-#: characters (`# ============`, `// ------------`). Four is the rulebook's own
-#: threshold, and it matters: three dashes is how a person writes a separator
-#: with a reason after it (`# --- why: WDDM wants a retry`), which is a comment
-#: to KEEP.
-_BANNER_RUN = re.compile(
-    r"^[ \t]*(?:#|//|--|/\*)[ \t]*[=\-*~_─━═]{4,}[ \t]*$")
+#: A comment whose body is PURE decoration: a run of four or more of these
+#: characters and NOTHING ELSE on the line (`# ============`, `// ------------`).
+#:
+#: This is Gemini's Q4 regex, and the "nothing else" half is the whole guard:
+#: `$` after the run means a line carrying any word at all cannot match, so the
+#: scrub can never delete a comment a person wrote for a reason. A line such as
+#: `# --- Phase 2: Database Migration ---` is a comment to KEEP, because it has
+#: words on it. The audit still reports headings with words, through
+#: `is_banner_comment` below - that is a finding, not a rewrite.
+#:
+#: Three dashes is also deliberately not enough (the rulebook's own threshold):
+#: `# --- why` is how a person writes a separator with a reason after it.
+_BANNER_RUN = re.compile(r"^\s*(?:#|//)\s*[=\-*~─━═]{4,}\s*$")
 
-#: A comment whose body STARTS with a run of block-drawing characters and then
-#: carries text: `# ===== Setup =====`. Still a banner, still removed. The
-#: WHITESPACE before the text is required, and it is not cosmetic: without it
-#: `[=\-*~_─━═]{4,}\S` lets the run give one character back to `\S`, so a bare
-#: `# ================` matched here and the run pattern below was never the
-#: thing that removed it (measured 2026-10-28: the mutation bite for it passed,
-#: which is how this was found).
-_BANNER_BODY = re.compile(
-    r"^[ \t]*(?:#|//|--|/\*)[ \t]*[=\-*~_─━═]{4,}[ \t]+\S")
-
-#: An emoji-led comment (`# 🚀 Set x to 1`): decorative, not a reason.
-_EMOJI = ("\U0001F300-\U0001FAFF"      # symbols, pictographs, emoticons
-          "\u2600-\u27BF"              # misc symbols and dingbats
-          "\u2B00-\u2BFF"              # arrows and stars
-          "\uFE0F\u200D")              # variation selector, zero-width joiner
+#: A comment that opens with one of the ten decorative emoji the rulebook's
+#: "antislop-code" skill names, then a space, then anything. Narrowed on purpose
+#: (Q4): this is a LIST, not "any emoji", so `# ⚠️ careful` - a warning a person
+#: wrote - is not mistaken for decoration. Note there is no `--` or `/*` branch:
+#: a SQL `--` line and a C `/* */` comment are somebody's code, not ours.
 _EMOJI_COMMENT = re.compile(
-    r"^[ \t]*(?:#|//|--|/\*)[ \t]*(?:[" + _EMOJI + r"])[ \t]*\S")
+    r"^\s*(?:#|//)\s*[🚀✨💡🔥🎯⚡✅🛠📦🔍]\s+.*$")
+
+#: Comments that belong to a tool, not to a writer, and are NEVER stripped even
+#: if a future change widened the two patterns above. Listed rather than relied
+#: on to be structurally impossible, because "it cannot happen today" is how a
+#: guard gets lost tomorrow: a shebang, a Python coding declaration, a type
+#: checker's `ignore`, a linter's `noqa` / `eslint-disable` / `@ts-expect-error`,
+#: a coverage `pragma`, and Rust's `///` and `//!` doc comments.
+_PROTECTED_COMMENT = re.compile(
+    r"^\s*(?:#!|#\s*-\*-|#\s*(?:type|noqa|pragma|pyright|mypy)\b|"
+    r"//\s*(?:@ts-|eslint-|ts-|prettier-|#region)\b|///|//!)", re.I)
+
+
+def _is_protected_comment(line: str) -> bool:
+    """A tool's own instruction to itself, never decoration."""
+    return bool(_PROTECTED_COMMENT.match(str(line or "")))
 
 
 def is_slop_comment(line: str) -> bool:
-    """Is this whole line a decorative code comment (antislop-code)?"""
+    """Is this whole line PURE decoration, safe for the SCRUB to remove?
+
+    Only the two shapes the owner can lose nothing by: a wordless separator
+    line, or an emoji-led comment. A banner heading WITH words is not in here
+    on purpose - see `is_banner_comment`.
+    """
     text = str(line or "").rstrip("\r\n")
     if not text.strip():
         return False
-    return bool(_BANNER_RUN.match(text) or _BANNER_BODY.match(text)
-                or _EMOJI_COMMENT.match(text))
+    if _is_protected_comment(text):
+        return False
+    return bool(_BANNER_RUN.match(text) or _EMOJI_COMMENT.match(text))
+
+
+#: A comment whose body STARTS with a run of border characters and then carries
+#: real words: `# ===== Setup =====`, `# --- Phase 2: Database Migration ---`.
+#: AUDIT ONLY. The scrub leaves these alone (Q4: "leaving multi-line banner
+#: headings to the prompt rule and the after-mode audit"), because a section
+#: label is information, and only a person can say whether they wanted it.
+_BANNER_BODY = re.compile(
+    r"^\s*(?:#|//)\s*[=\-*~─━═]{4,}\s+\S")
+
+
+def is_banner_comment(line: str) -> bool:
+    """Is this line a decorative comment the AUDIT should report?
+
+    Everything `is_slop_comment` strips, plus the headed banners the scrub
+    deliberately keeps. Never used to rewrite anything.
+    """
+    text = str(line or "").rstrip("\r\n")
+    if not text.strip() or _is_protected_comment(text):
+        return False
+    return bool(is_slop_comment(text) or _BANNER_BODY.match(text))
 
 
 #: "[ \t]*—[ \t]*" -> ", ". The em dash itself decides nothing; the spacing
@@ -715,6 +871,11 @@ def reply_filter(*, voiceprint_uses_em_dash: bool = False) -> Optional[ReplyFilt
     None is returned when the switch is off AND when the mode is `after`: an
     audit answers with findings and may quote the very em dash it reports, so
     its own words are never rewritten.
+
+    R-02 yields in two cases, both of which leave the REST of the copy scope
+    running: the owner's own samples use em dashes (R-37) and he has asked
+    Jarvis to write like him, or he has set `allow_em_dashes` himself. With
+    both off - the default - a prose em dash is removed.
     """
     try:
         state = get_state()
@@ -723,7 +884,8 @@ def reply_filter(*, voiceprint_uses_em_dash: bool = False) -> Optional[ReplyFilt
     if not state.get("enabled", False) or state.get("mode", DEFAULT_MODE) != "during":
         return None
     scopes = state.get("scopes") or {}
-    need_dashes = bool(scopes.get("copy", True)) and not voiceprint_uses_em_dash
+    dashes_ok = bool(voiceprint_uses_em_dash or state.get("allow_em_dashes"))
+    need_dashes = bool(scopes.get("copy", True)) and not dashes_ok
     need_code = bool(scopes.get("code", True))
     if not need_dashes and not need_code:
         return None
@@ -735,9 +897,18 @@ def post_process_reply(text: str, *, voiceprint_uses_em_dash: bool = False) -> s
     and emoji comments out of fenced code (antislop-code).
 
     Returns `text` UNCHANGED when the filter is off, when the mode is `after`,
-    or when both scopes are off - and that is the 0 ms half of the switch. Run
-    through the same `ReplyFilter` the stream uses, so the whole-text and
-    piece-by-piece results cannot drift apart.
+    when the owner allows em dashes, or when the code scope is off - and that
+    is the 0 ms half of the switch. Run through the same `ReplyFilter` the
+    stream uses, so the whole-text and piece-by-piece results cannot drift
+    apart.
+
+    WHAT IT MAY BE GIVEN, AND WHAT IT MAY NEVER BE GIVEN (Gemini's Q4 ruling).
+    Only the words the model wrote in a CHAT answer. Never a tool's input or
+    output, never a file Jarvis writes, never a diff or a patch, never a file
+    that is already in a repository - and `run_local_turn` is its only caller
+    in the backend, on the model's own stream. This function rewrites nothing
+    on disk and opens nothing; a file handed to `audit_text_or_ui` instead is
+    read, reported on, and left exactly as it was.
     """
     filt = reply_filter(voiceprint_uses_em_dash=voiceprint_uses_em_dash)
     if filt is None:
@@ -859,7 +1030,7 @@ def _text_findings(content: str, findings: list, *, prose: bool) -> None:
             in_fence = not in_fence
             continue
         if in_fence:
-            if is_slop_comment(line):
+            if is_banner_comment(line):
                 findings.append(_finding(
                     "antislop-code", number,
                     "decorative comment banner or emoji comment: "
@@ -888,11 +1059,12 @@ def _code_findings(content: str, findings: list) -> None:
 
     `_text_findings` only looks for banners INSIDE a fence (that is where code
     lives in a chat answer). A file handed to the audit has no fences at all,
-    so it needs this second reading - the same `is_slop_comment` rule, applied
-    to every line.
+    so it needs this second reading - the same `is_banner_comment` rule,
+    applied to every line. READ ONLY: this reports a banner, it never removes
+    one from the file it was given.
     """
     for number, line in enumerate(str(content or "").splitlines(), start=1):
-        if is_slop_comment(line):
+        if is_banner_comment(line):
             findings.append(_finding(
                 "antislop-code", number,
                 "decorative comment banner or emoji comment: "
@@ -1022,11 +1194,12 @@ def audit_text_or_ui(content: object, kind: str = "auto") -> dict:
 
     READ-ONLY AND DETERMINISTIC. It writes nothing, calls no model, and every
     finding names the rule it comes from and the line it is on. What it
-    deliberately cannot check: anything that needs to see the page running
-    (R-35's click-through), a screenshot's real stacking (R-10's "1-2" is
-    counted as declarations here, not as pixels), and R-27's empty/loading/
-    error states, which are only detectable with the data source in hand. Those
-    are named as NOT CHECKED in the gate rather than silently passed.
+    deliberately cannot check - and never claims to - is `ENFORCEMENT_CLASS_B`:
+    things that need to see the page running (R-03's overflow and tap targets,
+    R-34/R-35's live theme and click-through), a person's judgement (R-18, R-20,
+    R-28, R-30), or the data source (R-27, R-23). The report's own header says
+    so on every run, and the gate marks the judgement block NOT CHECKED rather
+    than PASS.
 
     `kind` is one of KINDS; "auto" reads the content's own shape.
     """
@@ -1064,6 +1237,14 @@ def audit_text_or_ui(content: object, kind: str = "auto") -> dict:
         "total": len(findings), "gate": gate, "checked": checked,
         "state": {k: state.get(k) for k in ("enabled", "mode", "scopes", "dials")},
         "source": SOURCE,
+        # Gemini's Q1 ruling: the report says which rules a PROGRAM checked and
+        # which are only guided, on every run, before any finding is read.
+        "enforcement": {
+            "class_a": list(ENFORCEMENT_CLASS_A),
+            "class_b": list(ENFORCEMENT_CLASS_B),
+            "class_b_enforced": False,
+            "header": REPORT_HEADER,
+        },
         "words": audit_words(findings, counts, gate),
     }
     if wanted in ("html", "ui") and state.get("mode") == "during" \
@@ -1073,19 +1254,27 @@ def audit_text_or_ui(content: object, kind: str = "auto") -> dict:
 
 
 def audit_words(findings: list, counts: dict, gate: dict) -> str:
-    """The findings list as plain text, numbered, HIGH first."""
+    """The findings list as plain text, numbered, HIGH first.
+
+    THE HEADER COMES FIRST, always, before any finding and before any "no
+    findings" sentence: what a machine checked and what it only guided is the
+    first thing a reader of an audit needs, so that a clean-looking report is
+    never mistaken for "all 38 rules were verified".
+    """
     if not findings:
-        return ("No anti-slop findings: the checks this can run (R-02, R-10, "
-                "R-13, R-15, R-16, R-25, R-26, R-32, antislop-code) all pass.")
-    order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
-    rows = sorted(findings, key=lambda f: (order.get(f["tier"], 3), f["line"]))
-    lines = [f"{counts['HIGH']} HIGH, {counts['MEDIUM']} MEDIUM, "
-             f"{counts['LOW']} LOW:"]
-    for number, finding in enumerate(rows, start=1):
-        lines.append(f"{number}. {finding['tier']} {finding['rule']} "
-                     f"(line {finding['line']}): {finding['detail']}")
-    lines.append(gate["words"])
-    return "\n".join(lines)
+        body = [f"No anti-slop findings: the Class A checks this can run "
+                f"({', '.join(ENFORCEMENT_CLASS_A)}) all pass. The Class B "
+                f"rules are prompt-guided only and are NOT part of this pass."]
+    else:
+        order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+        rows = sorted(findings, key=lambda f: (order.get(f["tier"], 3), f["line"]))
+        body = [f"{counts['HIGH']} HIGH, {counts['MEDIUM']} MEDIUM, "
+                f"{counts['LOW']} LOW:"]
+        for number, finding in enumerate(rows, start=1):
+            body.append(f"{number}. {finding['tier']} {finding['rule']} "
+                        f"(line {finding['line']}): {finding['detail']}")
+        body.append(gate["words"])
+    return "\n".join([REPORT_HEADER] + body)
 
 
 # --------------------------------------------------------------------------
@@ -1106,6 +1295,9 @@ def status_words() -> str:
                   else "After - auditing and listing findings first")
     extra = ("" if mode != "during" else
              "; the 4-block Delivery Gate closes a UI task" if gate else "")
+    if state.get("allow_em_dashes", False):
+        extra += ("; em dashes are allowed (R-02 off), so copy still loses "
+                  "generic CTAs and buzzwords")
     return (f"The Anti-Slop filter is ON. Mode: {mode_words}. Watching: "
             f"{_scope_words(scopes)}. Dials: {_dials_words(state.get('dials') or {})}"
             f"{extra}.")
@@ -1131,6 +1323,7 @@ def _public(state: dict) -> dict:
            "mode": state.get("mode", DEFAULT_MODE),
            "scopes": dict(state.get("scopes") or {}),
            "dials": dict(state.get("dials") or {}),
+           "allow_em_dashes": bool(state.get("allow_em_dashes", False)),
            "show_delivery_gate_on_ui_tasks":
                bool(state.get("show_delivery_gate_on_ui_tasks", True)),
            "updated_at": state.get("updated_at") or 0.0}
@@ -1160,7 +1353,7 @@ def _apply(body: dict) -> dict:
     body may carry several parts at once, which the Settings page does when it
     saves a whole card.
     """
-    known = {"enabled", "mode", "scopes", "dials",
+    known = {"enabled", "mode", "scopes", "dials", "allow_em_dashes",
              "show_delivery_gate_on_ui_tasks"}
     unknown = sorted(set(body) - known)
     if unknown:
@@ -1186,6 +1379,11 @@ def _apply(body: dict) -> dict:
         touched = True
     if isinstance(body.get("show_delivery_gate_on_ui_tasks"), bool):
         set_delivery_gate(body["show_delivery_gate_on_ui_tasks"])
+        touched = True
+    # The owner's own override for R-02 (Gemini's Q3 ruling). The Settings
+    # checkbox and the phone can both send this key; the route is the one door.
+    if isinstance(body.get("allow_em_dashes"), bool):
+        set_allow_em_dashes(body["allow_em_dashes"])
         touched = True
     if isinstance(body.get("enabled"), bool):
         set_enabled(body["enabled"])

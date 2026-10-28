@@ -10010,6 +10010,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # or em dash kept back so the piece after it could decide what it meant,
         # or the end of a code block. Sent before the checks below read
         # `model_words`, so they see the words the app was actually given.
+        #
+        # THE PLACE OF THIS BLOCK IS A SAFETY PROPERTY, not tidiness (Gemini's
+        # Q3 ruling, 2026-10-28). It must stay ABOVE the claim corrections and
+        # the crisis help line below: those are safety-critical SYSTEM strings
+        # (a helpline number, "nothing was actually done"), and one of them can
+        # contain an em dash. The filter rewrites the MODEL's words; running it
+        # after they were appended would rewrite theirs too. `backend/
+        # test_antislop.py` pins the order in this source and proves a crisis
+        # sentence containing an em dash survives it.
         if slop_filter is not None:
             rest = slop_filter.flush()
             if rest:

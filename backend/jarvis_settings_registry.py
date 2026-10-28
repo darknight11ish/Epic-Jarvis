@@ -638,7 +638,15 @@ def set_antislop_scope(scope: str, on: bool, *, peer=None, local=None) -> Outcom
 
 
 def antislop_mode_choices() -> dict:
-    """The two modes in the owner's words, for the spoken-choice matcher."""
+    """The two modes in the owner's words, for anything that asks a question.
+
+    NOT the row's option table: `CHOICE_SETTINGS`' `antislop_mode` entry holds
+    the bare `{"during": ..., "after": ...}` pair, because the contract the two
+    apps read requires exactly those two values. This helper stays for a
+    caller that wants to offer the familiar synonyms without putting them in
+    the table (nothing dispatches on it today; kept, not wired, rather than
+    deleted and re-invented).
+    """
     return {"during": "during", "live": "during", "filter": "during",
             "filter live": "during", "after": "after", "audit": "after",
             "audit only": "after", "audit first": "after"}
@@ -1955,13 +1963,30 @@ BOOL_SETTINGS: tuple = (
     # both directions: it changes the WORDS Jarvis writes and nothing else -
     # no network door, no folder, no action, no gate. OFF is also the state a
     # PC that has never run it is in, and the prompt block costs 0 tokens
-    # while it is off. `section` is deliberately None until the Settings card
-    # exists (the UI half of this feature lands separately); the desktop has
-    # no row to open yet, which is why no "open ..." phrase is offered.
+    # while it is off.
+    #
+    # `section` IS None ON PURPOSE, and it already broke a suite once when it
+    # was set to "manner" (2026-10-28). A BoolSetting's `section` does not mean
+    # "the page this feature is described on": `jarvis_feature_guide.
+    # switches_for()` reads it to decide WHICH SWITCHES A FEATURE ROW COVERS, so
+    # naming "manner" made the "How Jarvis talks" row carry TWO switches
+    # (`anti-slop` and `humour`), and its own sentence degraded from "say turn
+    # on humour" to "It has more than one switch". The Settings card this row's
+    # switch is drawn on is bespoke (`contract/feature-controls.json` records
+    # `desktop_row: null` for it for the same reason), so it is not a section
+    # link. `backend/test_feature_guide.py`'s single-switch test is what caught
+    # it; leave this None until a real generated row exists.
+    #
+    # THE NAMES ARE SHORT ON PURPOSE, and it is a merge decision rather than a
+    # style one: `contract/feature-controls.json` holds these three for this
+    # switch (written by the Settings half), and `tools/check_feature_controls.py`
+    # requires them to be equal, word for word. The fuller phrasings a person
+    # actually says - "the anti-slop filter", "ai slop filter" - are reached by
+    # the registry's own tolerant matcher (`find_bool_setting_words`), which
+    # accepts words that CONTAIN one whole name; `backend/test_antislop.py`
+    # pins both of them, so the shorter list costs no reach.
     BoolSetting("antislop",
-               ("anti-slop", "anti slop", "antislop", "anti-slop filter",
-                "anti slop filter", "slop filter", "ai slop filter",
-                "the ai slop filter", "the slop filter"),
+               ("anti-slop", "anti slop", "slop filter"),
                None, set_antislop),
     BoolSetting("ask_before_every_search",
                ("asking before every web search", "ask before every search",
@@ -2824,13 +2849,16 @@ CHOICE_SETTINGS: tuple = (
                     "jarvis-visual-spec.json is not in the backend folder, so "
                     "I cannot name a face. Nothing was changed.")),
     # The Anti-Slop filter's mode (2026-10-28): filter as it writes, or audit
-    # and list findings first. Cardless like its master switch.
+    # and list findings first. Cardless like its master switch. Its names and
+    # its two options are the Settings half's own, word for word, because the
+    # matrix check requires them equal; "anti-slop mode" without the leading
+    # "the" is reached by the tolerant matcher. The options are a plain dict
+    # rather than a table of extra aliases: two values exist, and the "set
+    # <name> to <value>" grammar refuses anything else in words.
     ChoiceSetting(
         "antislop_mode",
-        ("anti-slop mode", "the anti-slop mode", "anti slop mode",
-         "the anti-slop filter's mode", "the slop filter's mode",
-         "antislop mode"),
-        None, antislop_mode_choices, set_antislop_mode,
+        ("the anti-slop mode", "antislop mode"),
+        "manner", {"during": "during", "after": "after"}, set_antislop_mode,
         "whether the Anti-Slop filter works as it writes (during) or audits "
         "first (after)"),
 )

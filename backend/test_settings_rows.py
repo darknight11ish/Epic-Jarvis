@@ -226,9 +226,13 @@ def t_setting_links_are_real():
     # (the `memory-learning` card) and added eight switches with no toggle row of
     # their own (chat history, Write like me, three big-model switches, the second
     # card's combined mode and two suggestion switches), so the list is thirteen.
+    # `antislop` joined on 2026-10-28: its desktop control is the bespoke card in
+    # "How Jarvis talks" (master switch, three scopes, the During/After choice,
+    # the Delivery Gate and three dials), not a generated toggle row, so the
+    # list is sixteen.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known fifteen",
-          orphans == ["background_learning", "big_coder", "big_model",
+    check("...and the BoolSettings with no desktop row are the known sixteen",
+          orphans == ["antislop", "background_learning", "big_coder", "big_model",
                       "big_model_deep_questions", "big_model_wiki", "chat_history",
                       "learn_sensitive_topics", "lights_without_card", "media_index",
                       "phone_notifications", "second_card_combined",
@@ -312,9 +316,18 @@ def t_bool_settings_is_the_measured_thirteen():
     say why neither direction raises a card - and `jarvis_quick.py` matches the
     phrase and dispatches on the same key, so both phrases really work. Any
     further growth has to be argued the same way.
+
+    Thirty-two since 2026-10-28: `antislop`, the Anti-Slop filter. A cardless
+    preference in both directions (it changes the words Jarvis writes, opens no
+    network door and loosens no gate), so it is one of the orphans above rather
+    than a linked row: its desktop control is the bespoke card in "How Jarvis
+    talks" (master switch, three scopes, the During/After choice, the Delivery
+    Gate and three dials), not one of the generated `<label class="toggle">`
+    rows this file counts. Its `section` is "manner", so "open how jarvis
+    talks" lands on the card that draws it.
     """
-    check("BOOL_SETTINGS holds its thirty-one spoken settings",
-          len(R.BOOL_SETTINGS) == 31, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-two spoken settings",
+          len(R.BOOL_SETTINGS) == 32, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

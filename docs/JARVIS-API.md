@@ -26031,9 +26031,9 @@ checks, before anything is read.
 
 | Route | Body / query | Answer |
 |---|---|---|
-| `GET /api/antislop` | none | **200** `{ok, enabled, mode, scopes{ copy, code, ui }, dials{ energy, rhythm, motion }, show_delivery_gate_on_ui_tasks, updated_at, words, source, max_prompt_chars}`. A read. |
-| `POST /api/antislop` | any of `enabled` (bool), `mode` (`during`\|`after`), `scopes` (object of bools), `dials` (object of 1..3), `show_delivery_gate_on_ui_tasks` (bool) | **200** with the same shape as the GET. **400** `{"ok": false, "error": "unknown_setting", "message": "the anti-slop filter has no setting called X"}` for a key it does not have (a typo must never read back as "saved"), `"bad_mode"` for a mode that is not one of the two, `"refused"` for a dial outside 1..3, `"nothing_to_change"` for an empty body. |
-| `POST /api/antislop/audit` | `{"content": "...", "kind": "auto"\|"text"\|"html"\|"css"\|"js"\|"code"\|"ui"}` | **200** `{ok, kind, findings[{rule, tier, line, detail}], counts{HIGH, MEDIUM, LOW}, total, gate{blocks[4], passes, words}, checked, state, source, words}` and, for a UI kind in `during` mode, `delivery_gate`. Read-only: it changes no setting. **400** `"no_content"` / `"too_long"` (over 400,000 characters). |
+| `GET /api/antislop` | none | **200** `{ok, enabled, mode, scopes{ copy, code, ui }, dials{ energy, rhythm, motion }, allow_em_dashes, show_delivery_gate_on_ui_tasks, updated_at, words, source, max_prompt_chars}`. A read. |
+| `POST /api/antislop` | any of `enabled` (bool), `mode` (`during`\|`after`), `scopes` (object of bools), `dials` (object of 1..3), `allow_em_dashes` (bool), `show_delivery_gate_on_ui_tasks` (bool) | **200** with the same shape as the GET. **400** `{"ok": false, "error": "unknown_setting", "message": "the anti-slop filter has no setting called X"}` for a key it does not have (a typo must never read back as "saved"), `"bad_mode"` for a mode that is not one of the two, `"refused"` for a dial outside 1..3, `"nothing_to_change"` for an empty body. |
+| `POST /api/antislop/audit` | `{"content": "...", "kind": "auto"\|"text"\|"html"\|"css"\|"js"\|"code"\|"ui"}` | **200** `{ok, kind, findings[{rule, tier, line, detail}], counts{HIGH, MEDIUM, LOW}, total, gate{blocks[4], passes, words}, checked, state, source, enforcement{class_a, class_b, class_b_enforced, header}, words}` and, for a UI kind in `during` mode, `delivery_gate`. Read-only: it changes no setting. **400** `"no_content"` / `"too_long"` (over 400,000 characters). |
 
 **A change takes effect on the very next turn** (no restart) and is announced on
 the event stream as kind `antislop` carrying the whole state, which is this
@@ -26057,8 +26057,39 @@ it a "settings" event; no such kind exists here and none was invented.
   the scrub is bypassed - an audit may quote the em dash it reports.
 - **`R-37` wins over `R-02`**: when "Write Like Me" is on and the owner's own
   samples use em dashes, the ban yields in both the note and the scrub.
+- **The owner can allow em dashes outright**: `allow_em_dashes` (default
+  `false`) drops the R-02 line from the note and leaves prose dashes alone while
+  the REST of the copy scope keeps working - generic CTAs (R-15) and AI
+  buzzwords (R-16) are still flagged in the audit and still named in the note.
+  It is a stored flag rather than a second voiceprint reading, so a preference
+  the owner set cannot move when their samples change. **Reached by the route
+  only for now**: the Settings card's checkbox posts this key, and there is no
+  spoken sentence for it yet - a follow-up on the Settings half, recorded here
+  rather than left to be discovered.
+- **The scrub only ever sees the model's own chat words**: its prose and the
+  fenced code blocks inside that answer. Never a tool's input or output, a file
+  Jarvis writes, a diff or a patch, or a file already in a repository - and
+  `audit_text_or_ui` is read-only, so a file handed to it is reported on and
+  left exactly as it was. Inside fenced code it removes **only** a wordless
+  separator line (`# ============`) or a comment led by one of the ten
+  decorative emoji; a shebang, a coding/`type`/`noqa`/`pragma` line, a Rust doc
+  comment, a diff header, and any comment carrying real words are never
+  touched. A headed banner (`# --- Phase 2: Database Migration ---`) is left to
+  the prompt rule and the `after` audit.
 
-### 159.2 The audit's rules and tiers
+### 159.2 What is enforced, and what is only guided
+
+The report says which is which, on every run, in its own `words` header and in
+the `enforcement` object. The split is data (`ENFORCEMENT_CLASS_A` /
+`ENFORCEMENT_CLASS_B` in `jarvis_antislop.py`), so the header cannot drift from
+what the code really does.
+
+| Class | Rules | How it is described |
+|---|---|---|
+| **A - deterministic, checked here** | `R-02` (with the `R-37` voiceprint exemption and the `allow_em_dashes` override), `R-10` / `R-13` dose caps, `R-15`, `R-16`, `R-17`/`R-36`/`R-38` (through `jarvis_claims.py`), `R-24`/`R-26` **static** dead links and unwired buttons, `R-25` **unrounded** WCAG 2.1 contrast on a static hex pair, `R-32` **static** `outline: none` with no ring put back, `antislop-code` banners | may be claimed as checked by `jarvis_antislop.py` |
+| **B - prompt-guided only** | `R-03` dynamic overflow and rendered 44x44 tap targets, `R-18` a fabricated testimonial, `R-20` the identity test, `R-23` asset confirmation, `R-27` semantic state completeness, `R-28` a generic FAQ, `R-30` clone detection, `R-34`/`R-35` live theme switching and click-through | **PROMPT-GUIDED ONLY, never mechanically enforced** - they need a live browser, a person's judgement or the data source. The project's Playwright suites (`themecheck.mjs`, `hud.mjs`) are what prove R-34/R-35, not this module |
+
+### 159.3 The audit's rules and tiers
 
 | Rule | Tier | What it reports |
 |---|---|---|
@@ -26075,11 +26106,13 @@ it a "settings" event; no such kind exists here and none was invented.
 The answer also carries the rulebook's **4-block Delivery Gate** (Hard Gate,
 Purpose-Gate, Liveliness, Craftsmanship). Liveliness is reported as `NOT
 CHECKED`, never as a pass: a focal point, one accent and real whitespace are a
-judgement, and no regex may certify them. What the auditor cannot see at all -
-a rendered page, a real keyboard focus ring, the empty/loading/error states of a
-data source - is named here rather than silently passed.
+judgement, and no regex may certify them. The Class B rules above are not
+reported as passes either - they are named in the header as prompt-guided, and
+no finding is ever attributed to one of them. What the auditor cannot see at all
+- a rendered page, a real keyboard focus ring, the empty/loading/error states of
+a data source - is named here rather than silently passed.
 
-### 159.3 Saying it in chat
+### 159.4 Saying it in chat
 
 All of these are answered by the fast path (`backend/jarvis_quick.py`, no model,
 **0 cards**): "turn on anti-slop", "turn off anti-slop", "enable anti-slop",
