@@ -110,7 +110,14 @@ pub fn allowed_get(path: &str) -> Option<String> {
         }
         return Some(format!("{RETRIEVE_PATH}?q={q}"));
     }
-    None
+    // The History sidebar's three reads (2026-10-27). They are the only
+    // reads here that need a query string, so their shape is checked in ONE
+    // place - the Brain's own History module, next to the paths its list,
+    // open and tag commands already build (`history_read_path`). It accepts
+    // only what the sidebar really sends, each parameter at most once, and
+    // hands back a path rebuilt from the checked pieces; `None` means
+    // nothing is sent, exactly as for a route that is not on this list.
+    crate::brain::history::history_read_path(path)
 }
 
 /// The body of `POST /api/chat` the HUD may send: only the fields the page

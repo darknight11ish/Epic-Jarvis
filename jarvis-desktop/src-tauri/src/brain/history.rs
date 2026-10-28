@@ -241,6 +241,203 @@ pub(crate) fn list_path_tagged(
     Ok(path)
 }
 
+// ---------------------------------------------------------------------------
+// The HUD's History sidebar (2026-10-27)
+// ---------------------------------------------------------------------------
+//
+// The owner asked for "a history tab with a column icon that opens up a menu
+// that looks like all the conversations in the deepseek harness on desktop
+// for the jarvis HUD ... both should have pinnable chats, project
+// organization by chat". The page that draws it (`jarvis_hud.html`'s new
+// History button, `src/hud-history.js`) holds NO pairing token (apps
+// security audit M2), so every read it makes goes through
+// `hud_proxy::hud_get`, whose allow-list is exact paths - and these three
+// reads need a query.
+//
+// SO THE QUERY IS CHECKED HERE, ONCE. `history_read_path` is the only place
+// that turns a page's string into a History read, it accepts only the three
+// shapes the sidebar really sends, each parameter at most once, and it gives
+// back a path rebuilt from checked pieces. The allow-list never learns to
+// pass a free-form string through, and nothing typed into the HUD's search
+// box ever reaches a URL as a parameter.
+
+/// The most rows one History read may ask for (the PC's own `LIST_MAX`).
+const HUD_LIST_MAX: u32 = 100;
+
+/// A string of ASCII digits, at most `max_digits` long, as a number in
+/// `1..=max`. A leading zero is refused (`03`): the page never writes one, and
+/// two spellings of the same page are two things to reason about for nothing.
+fn digits_in(v: &str, max_digits: usize, max: u32) -> Option<u32> {
+    if v.is_empty()
+        || v.len() > max_digits
+        || !v.bytes().all(|b| b.is_ascii_digit())
+        || (v.len() > 1 && v.starts_with('0'))
+    {
+        return None;
+    }
+    match v.parse::<u32>() {
+        Ok(n) if (1..=max).contains(&n) => Some(n),
+        _ => None,
+    }
+}
+
+/// `before=<unix seconds>`, kept as the digits the page wrote (never
+/// re-formatted through an `f64`, which can print in exponent form).
+fn seconds_text(v: &str) -> Option<String> {
+    let (whole, frac) = match v.split_once('.') {
+        Some((w, f)) => (w, Some(f)),
+        None => (v, None),
+    };
+    if whole.is_empty() || whole.len() > 12 || !whole.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if let Some(f) = frac {
+        if f.is_empty() || f.len() > 6 || !f.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+    }
+    match v.parse::<f64>() {
+        Ok(n) if n.is_finite() && n > 0.0 => Some(v.to_string()),
+        _ => None,
+    }
+}
+
+/// `/api/history`'s query as the HUD may send it: at most one each of
+/// `limit`, `before`, `kind` and `tag`, in any order, rebuilt in one order.
+fn hud_list_path(query: &str) -> Option<String> {
+    let mut limit: Option<u32> = None;
+    let mut before: Option<String> = None;
+    let mut kind: Option<&str> = None;
+    let mut tag: Option<String> = None;
+    for pair in query.split('&') {
+        let (key, value) = pair.split_once('=')?;
+        if value.is_empty() {
+            return None;
+        }
+        match key {
+            "limit" if limit.is_none() => limit = Some(digits_in(value, 3, HUD_LIST_MAX)?),
+            "before" if before.is_none() => before = Some(seconds_text(value)?),
+            "kind" if kind.is_none() => {
+                kind = Some(*KINDS.iter().find(|k| **k == value)?);
+            }
+            "tag" if tag.is_none() => tag = Some(tag_filter(value).ok()?),
+            _ => return None,
+        }
+    }
+    let mut path = String::from("/api/history");
+    let mut sep = '?';
+    if let Some(n) = limit {
+        path.push_str(&format!("{sep}limit={n}"));
+        sep = '&';
+    }
+    if let Some(b) = before {
+        path.push_str(&format!("{sep}before={b}"));
+        sep = '&';
+    }
+    if let Some(k) = kind {
+        path.push_str(&format!("{sep}kind={k}"));
+        sep = '&';
+    }
+    if let Some(t) = tag {
+        path.push_str(&format!("{sep}tag={t}"));
+    }
+    Some(path)
+}
+
+/// One History read the HUD sidebar may make, as a path to send, or `None`.
+///
+/// * `/api/history` (optional `limit`, `before`, `kind`, `tag`) - the list.
+/// * `/api/history/conversation?id=` - one chat, for a click on a row.
+/// * `/api/history/tags` - the owner's tags with their counts (the groups).
+///
+/// Pinning is NOT a read: it is `hud_history_act`, below.
+pub(crate) fn history_read_path(path: &str) -> Option<String> {
+    if path.is_empty()
+        || !path.bytes().all(|b| (0x21..0x7f).contains(&b))
+        || path.contains('#')
+        || path.contains("..")
+    {
+        return None;
+    }
+    let (route, query) = match path.split_once('?') {
+        Some((route, query)) => (route, Some(query)),
+        None => (path, None),
+    };
+    match route {
+        "/api/history/tags" => query.is_none().then(|| route.to_string()),
+        "/api/history/conversation" => {
+            let id = checked_id(query?.strip_prefix("id=")?).ok()?;
+            Some(format!("{route}?id={id}"))
+        }
+        "/api/history" => match query {
+            None => Some(route.to_string()),
+            Some(q) => hud_list_path(q),
+        },
+        _ => None,
+    }
+}
+
+/// What ONE History write from the HUD sidebar sends: the route and body, or
+/// why not. Pure - every refusal below is held by a test without a Tauri app.
+///
+/// Three actions, the same three the Brain's History tab offers on one chat:
+/// `pin` (`pinned` true or false), `tag` (`tag` a tag id, or JSON null to
+/// take the tag off) and `delete`. Anything else is refused, and a field the
+/// action does not use is refused rather than ignored: a page that sent
+/// "pin" with a tag meant something this command does not do.
+pub(crate) fn hud_act_body(
+    action: &str,
+    id: &str,
+    pinned: Option<bool>,
+    tag: Option<&serde_json::Value>,
+) -> Result<(&'static str, serde_json::Value), String> {
+    let id = checked_id(id)?;
+    let mixed = || "That request mixed two History actions up, so nothing was sent.".to_string();
+    match action {
+        "pin" => {
+            let pinned = pinned.ok_or_else(|| {
+                "A pin has to say which way: true to pin, false to take it off.".to_string()
+            })?;
+            if tag.is_some() {
+                return Err(mixed());
+            }
+            Ok((
+                "/api/history/pin",
+                serde_json::json!({ "id": id, "pinned": pinned }),
+            ))
+        }
+        "tag" => {
+            if pinned.is_some() {
+                return Err(mixed());
+            }
+            let tag_id = match tag {
+                Some(serde_json::Value::Null) => None,
+                Some(serde_json::Value::Number(n)) => match n.as_i64() {
+                    Some(v) if v > 0 && v <= i64::from(u32::MAX) => Some(v),
+                    _ => return Err(no_tag()),
+                },
+                _ => return Err(no_tag()),
+            };
+            // The SAME body builder the Brain's History tab uses.
+            Ok(("/api/history/tag", tag_chat_body(id, tag_id)?))
+        }
+        "delete" => {
+            if pinned.is_some() || tag.is_some() {
+                return Err(mixed());
+            }
+            // ... and the same delete builder.
+            Ok(("/api/history/delete", delete_body(id)?))
+        }
+        _ => {
+            Err("The History sidebar can pin, file or delete one chat - nothing else.".to_string())
+        }
+    }
+}
+
+fn no_tag() -> String {
+    "A chat is filed under one of the tags History already lists, or under none.".to_string()
+}
+
 /// [`chat_continue_open`]'s reading: the conversation, only when it is a
 /// kind the bar may carry on. An older PC that sends no `kind` is an
 /// ordinary chat (every conversation it kept was one, or a support record,
@@ -506,6 +703,16 @@ pub(crate) fn tag_chat_body(id: &str, tag_id: Option<i64>) -> Result<serde_json:
         Some(n) => serde_json::json!(checked_tag_id(Some(n))?),
     };
     Ok(serde_json::json!({ "id": id, "tag_id": tag_id }))
+}
+
+/// The body for `POST /api/history/delete`: the id and nothing else.
+///
+/// ONE builder for BOTH surfaces - the Brain's History tab and the HUD's
+/// History sidebar both reach the same route through it (the HUD's own
+/// [`hud_act_body`] calls it), so "delete one chat" cannot come to mean two
+/// different requests in the two windows.
+pub(crate) fn delete_body(id: &str) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({ "id": checked_id(id)? }))
 }
 
 /// The `error` codes the PC's fork route answers with (JARVIS-API section
@@ -1085,9 +1292,45 @@ pub async fn brain_history_tag_suggest(
 #[tauri::command]
 pub async fn brain_history_delete(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
-    let id = checked_id(&id)?;
-    let (status, body) = post(&app, "/api/history/delete", serde_json::json!({ "id": id })).await?;
-    delete_answer(status, &body)
+    let body = delete_body(&id)?;
+    let (status, text) = post(&app, "/api/history/delete", body).await?;
+    delete_answer(status, &text)
+}
+
+/// The HUD's History sidebar: pin or unpin ONE chat, file ONE chat under a
+/// tag, or delete ONE chat (2026-10-27; JARVIS-API section 18.3).
+///
+/// It lives here rather than in `hud_proxy.rs` on purpose: these are the
+/// History routes the Brain's own tab already uses, with the same bodies
+/// ([`hud_act_body`]), the same id check and the same two guards. The HUD
+/// page holds no token, so this command is its only door - the page's own
+/// POST is refused by `hud_bootstrap.js` before it leaves the window.
+///
+/// * **Hidden lists are asked FIRST**, like every other History write here:
+///   a chat's title is the owner's words, and no route that names a chat is
+///   answered while "Hide memory lists" or App lock is on.
+/// * **Held on a stale link** (rule 4), before anything is sent.
+/// * **No approval card**, and nothing loosened: pinning, filing and deleting
+///   ONE chat are the owner's own tidying, exactly what the Brain's History
+///   tab does with the same routes.
+#[tauri::command]
+pub async fn hud_history_act(
+    app: AppHandle,
+    action: String,
+    id: String,
+    pinned: Option<bool>,
+    tag: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    if crate::lock::private_hidden(&app) {
+        return Err(HISTORY_STILL_HIDDEN.to_string());
+    }
+    require_link_live(&app)?;
+    let (path, body) = hud_act_body(&action, &id, pinned, tag.as_ref())?;
+    let (status, text) = post(&app, path, body).await?;
+    if (200..300).contains(&status) {
+        return parsed(&text).ok_or_else(|| UNREADABLE.to_string());
+    }
+    Err(commands::backend_refusal(status, &text))
 }
 
 /// Changes ONE chat history setting: `enabled` (the switch) or `keep_days`.
@@ -1178,6 +1421,173 @@ mod tests {
                 "{bad}"
             );
         }
+    }
+
+    /// The HUD sidebar's three reads, and only those. The allow-list in
+    /// `hud_proxy.rs` takes a path from the page, so this is the one place a
+    /// query string is checked before anything is sent: the shapes below are
+    /// exactly what `src/hud-history.js` builds, and a parameter that is not
+    /// one of them, a repeated one, or a value the PC would not accept is
+    /// refused rather than passed on.
+    #[test]
+    fn the_hud_history_reads_are_the_three_the_sidebar_sends() {
+        // The list, with nothing asked for, and with each parameter.
+        assert_eq!(history_read_path("/api/history").unwrap(), "/api/history");
+        assert_eq!(
+            history_read_path("/api/history?limit=100").unwrap(),
+            "/api/history?limit=100"
+        );
+        assert_eq!(
+            history_read_path("/api/history?tag=none").unwrap(),
+            "/api/history?tag=none"
+        );
+        assert_eq!(
+            history_read_path("/api/history?tag=3&kind=live&before=1790000300.25&limit=30")
+                .unwrap(),
+            "/api/history?limit=30&before=1790000300.25&kind=live&tag=3",
+            "the parameters come back in one fixed order, and `before` keeps the page's digits"
+        );
+        // One chat, for a click on a row.
+        assert_eq!(
+            history_read_path("/api/history/conversation?id=conv-aaaa").unwrap(),
+            "/api/history/conversation?id=conv-aaaa"
+        );
+        // The tags, for the groups - and no query at all.
+        assert_eq!(
+            history_read_path("/api/history/tags").unwrap(),
+            "/api/history/tags"
+        );
+        for bad in [
+            "/api/history?",
+            "/api/history?",
+            "/api/history?limit=",
+            "/api/history?limit=0",
+            "/api/history?limit=101",
+            "/api/history?limit=03",
+            "/api/history?limit=10&limit=10",
+            "/api/history?before=-1",
+            "/api/history?before=1e9",
+            "/api/history?before=1790000300.1234567890",
+            "/api/history?kind=secret",
+            "/api/history?q=hello",
+            "/api/history?tag=all",
+            "/api/history?limit=10&",
+            "/api/history?limit=10#frag",
+            "/api/history?limit=10&why=1",
+            "/api/history/conversation",
+            "/api/history/conversation?id=",
+            "/api/history/conversation?id=short",
+            "/api/history/conversation?id=conv-aaaa&limit=1",
+            "/api/history/conversation?id=../../etc/passwd",
+            "/api/history/tags?limit=10",
+            "/api/history/tags/",
+            "/api/history/search?q=hello",
+            "/api/history/tags/suggest",
+            "/api/history/delete",
+            "/api/history?limit=1 0",
+        ] {
+            assert!(history_read_path(bad).is_none(), "{bad} was passed on");
+        }
+    }
+
+    /// One pin, one tag or one delete, and nothing else: the body is built
+    /// from checked parts, so a page cannot turn this into another route,
+    /// another chat, or a request that means two things.
+    #[test]
+    fn the_hud_history_write_is_one_of_three_actions() {
+        let pin = hud_act_body("pin", "conv-aaaa", Some(true), None).unwrap();
+        assert_eq!(pin.0, "/api/history/pin");
+        assert_eq!(
+            pin.1,
+            serde_json::json!({"id": "conv-aaaa", "pinned": true})
+        );
+        let unpin = hud_act_body("pin", "conv-aaaa", Some(false), None).unwrap();
+        assert_eq!(
+            unpin.1,
+            serde_json::json!({"id": "conv-aaaa", "pinned": false})
+        );
+        let filed = hud_act_body("tag", "conv-aaaa", None, Some(&serde_json::json!(7))).unwrap();
+        assert_eq!(filed.0, "/api/history/tag");
+        assert_eq!(filed.1, serde_json::json!({"id": "conv-aaaa", "tag_id": 7}));
+        let unfiled =
+            hud_act_body("tag", "conv-aaaa", None, Some(&serde_json::Value::Null)).unwrap();
+        assert_eq!(
+            unfiled.1,
+            serde_json::json!({"id": "conv-aaaa", "tag_id": null})
+        );
+        let gone = hud_act_body("delete", "conv-aaaa", None, None).unwrap();
+        assert_eq!(gone.0, "/api/history/delete");
+        assert_eq!(gone.1, serde_json::json!({"id": "conv-aaaa"}));
+        // A pin with no direction, an action that is not one of the three,
+        // a field the action does not use, a tag that is not a tag id, and an
+        // id that is not this PC's: all refused before anything is sent.
+        assert!(hud_act_body("pin", "conv-aaaa", None, None).is_err());
+        assert!(hud_act_body("pin", "conv-aaaa", Some(true), Some(&serde_json::json!(1))).is_err());
+        assert!(hud_act_body("archive", "conv-aaaa", None, None).is_err());
+        assert!(hud_act_body("delete", "conv-aaaa", Some(true), None).is_err());
+        assert!(hud_act_body("tag", "conv-aaaa", Some(true), None).is_err());
+        assert!(hud_act_body("tag", "conv-aaaa", None, None).is_err());
+        for bad in [
+            serde_json::json!(0),
+            serde_json::json!(-1),
+            serde_json::json!(1.5),
+            serde_json::json!("7"),
+            serde_json::json!(true),
+            serde_json::json!({}),
+        ] {
+            assert!(
+                hud_act_body("tag", "conv-aaaa", None, Some(&bad)).is_err(),
+                "{bad} was taken as a tag"
+            );
+        }
+        for bad in ["", "short", "conv aaaa", "conv/aaaa", "../../etc/passwd"] {
+            assert!(
+                hud_act_body("delete", bad, None, None).is_err(),
+                "{bad} was taken as an id"
+            );
+        }
+    }
+
+    /// Filing and deleting ONE chat are the Brain's own requests, not a second
+    /// set of them: the HUD's builder hands back exactly what
+    /// [`tag_chat_body`] and [`delete_body`] build for the same chat, so the
+    /// two windows cannot drift into sending two different bodies to one
+    /// route (the Gemini ruling of 2026-10-27: share the row-action helpers).
+    #[test]
+    fn the_hud_files_and_deletes_with_the_brains_own_bodies() {
+        for id in ["conv-aaaa", "conv-0001-abcd"] {
+            for tag in [None, Some(1), Some(12)] {
+                let value = match tag {
+                    None => serde_json::Value::Null,
+                    Some(n) => serde_json::json!(n),
+                };
+                assert_eq!(
+                    hud_act_body("tag", id, None, Some(&value)).unwrap(),
+                    ("/api/history/tag", tag_chat_body(id, tag).unwrap()),
+                    "the HUD's tag body drifted from the Brain's"
+                );
+            }
+            assert_eq!(
+                hud_act_body("delete", id, None, None).unwrap(),
+                ("/api/history/delete", delete_body(id).unwrap()),
+                "the HUD's delete body drifted from the Brain's"
+            );
+        }
+    }
+
+    /// The command itself asks the lock and the link, in that order, before
+    /// it sends anything - the same two rules every other History write here
+    /// keeps. Read from the source, because both live on the Tauri app.
+    #[test]
+    fn the_hud_history_write_asks_the_hidden_lists_and_the_link_first() {
+        let src = include_str!("history.rs");
+        let name = "pub async fn hud_history_act(";
+        let at = src.find(name).expect(name);
+        let body = &src[at..];
+        let body = &body[..body.find("\n}").expect("the command's end")];
+        assert!(body.contains("private_hidden"), "ignores the lock");
+        let live = body.find("require_link_live").expect("rule 4");
+        assert!(live < body.find("post(").unwrap(), "posts before rule 4");
     }
 
     #[test]

@@ -727,7 +727,7 @@
     "group": "Memory",
     "title": "Your past chats",
     "what": "The chats Jarvis kept, with the switches that govern keeping them.",
-    "where": "Brain, History. On the phone, the History row in the Brain.",
+    "where": "Brain, History. In the HUD, the History button in the left column. On the phone, the History row in the Brain.",
     "asks": "Turning keeping back on raises a card; deleting one chat is instant; forgetting what a chat taught asks first.",
     "limit": "Kept on the PC, encrypted, by default. This phone keeps none of it.",
     "surface": "both",

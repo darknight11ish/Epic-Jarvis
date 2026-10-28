@@ -38,6 +38,23 @@
      galaxy-cosmos.js waits for it and falls back to the flat picture when it
      is missing, so no machine loses the Galaxy. -->
 <script src="/three.min.js" defer></script>
+<!-- The History sidebar (2026-10-27, the owner's ask: "a history tab with a
+     column icon that opens up a menu that looks like all the coversations in
+     the deepseek harness on desktop for the jarvis HUD ... both should have
+     pinnable chats, project organization by chat, and more").
+
+     ONE external MODULE script: no new inline block, so this page's inline
+     count and every CSP hash stay exactly as they were (tests/csp-inline.mjs).
+     It is a module because it imports `history-actions.js`, the row-action
+     table and the words it shares with the Brain's History tab (Gemini ruling,
+     2026-10-27). It adds its own rail button (#rail-history, beside Presets and
+     Live), its panel (#history-sidebar), its stylesheet and its row menu - the
+     page's own markup is not touched - and the page's half is the small
+     `window.hudHistoryHost` at the end of its last script, which opens a chat
+     with this page's own addMessage and starts a new one. In a plain browser
+     the same file works against the backend directly, like every other read on
+     this page. -->
+<script type="module" src="hud-history.js"></script>
 <!--
   Theme before first paint, the same synchronous read from localStorage every
   other window does (settings.html, onboarding.html): this page also opens as
@@ -5497,8 +5514,23 @@ function spaceIsThePages(){
   const active = document.activeElement;
   return !active || active === document.body || active === document.documentElement;
 }
+/* The History sidebar owns Space while it is up (Gemini ruling, 2026-10-27):
+ * a row, its "..." menu, a section header or the search box is a control whose
+ * Space must do that control's own job, and a click on the panel's background
+ * leaves focus on <body> - where the old check would have started the
+ * microphone with the panel still open. So: bail for anything inside the
+ * sidebar, for a form control, for a button and for a menu, and bail whenever
+ * the sidebar is open at all. */
+function spaceBelongsToTheSidebar(e){
+  const target = e.target;
+  if(target && target.closest && target.closest(
+    '#history-sidebar, input, textarea, button, [role="menu"]')){
+    return true;
+  }
+  return !!(window.hudHistory && window.hudHistory.isOpen && window.hudHistory.isOpen());
+}
 document.addEventListener("keydown", e => {
-  if(e.code === "Space" && !e.repeat && spaceIsThePages()){
+  if(e.code === "Space" && !e.repeat && spaceIsThePages() && !spaceBelongsToTheSidebar(e)){
     e.preventDefault(); spaceTalks = true; voice.start(false);
   }
 });
@@ -8720,5 +8752,72 @@ mountCurrentModels();
     }).catch(() => {});
   }
 }());
+
+/* ---------------------------------------------------------------------
+ * The History sidebar's page half (src/hud-history.js, loaded above).
+ *
+ * The sidebar is that module's: it lists, searches, sorts, pins, files and
+ * deletes on its own. These three functions are the only part this page
+ * knows how to do, because they need its own chat state:
+ *
+ *   current()   - the conversation this window is in (`S.conversationId`,
+ *                 the id every message is filed under, section 18)
+ *   open(conv)  - draw one kept chat here, with this page's own addMessage,
+ *                 and make it the chat new messages belong to
+ *   newChat()   - empty the log and start a fresh conversation
+ *
+ * A record of a chat with someone else (a support conversation, a chatbot
+ * run, a comparison - `continuable: false`) is drawn read-only and gets a
+ * NEW id: typing after reading one must never file the owner's words into
+ * that record. Its own line says so, in the words the Brain uses.
+ * ------------------------------------------------------------------- */
+window.hudHistoryHost = {
+  current: function () {
+    return S.conversationId;
+  },
+  open: function (conv) {
+    const c = conv && typeof conv === "object" ? conv : {};
+    const box = document.getElementById("log");
+    if (box) box.textContent = "";
+    S.messages = [];
+    S.dropped = 0;
+    const turns = Array.isArray(c.turns) ? c.turns : [];
+    // A chat that cannot be continued is READ here; the next message starts
+    // a chat of its own, which is what the Brain's History tab does too.
+    const record = c.continuable === false;
+    S.conversationId = record ? newConversationId() : String(c.id || newConversationId());
+    turns.forEach(function (t) {
+      const turn = t && typeof t === "object" ? t : {};
+      const words = typeof turn.text === "string" ? turn.text : "";
+      if (turn.role === "user") {
+        addMessage("user", words);
+        if (!record) {
+          S.messages.push({
+            role: "user",
+            content: words,
+            provenance: typeof turn.provenance === "string" ? turn.provenance : "typed",
+          });
+        }
+      } else if (turn.role === "assistant") {
+        addMessage("jarvis", words);
+        if (!record) S.messages.push({ role: "assistant", content: words });
+      }
+    });
+    if (record) {
+      addMessage(
+        "system",
+        "This is a record of a conversation with someone other than Jarvis, kept in History. " +
+          "It can be read here, and it cannot be carried on: what you type now starts a new chat."
+      );
+    }
+  },
+  newChat: function () {
+    const box = document.getElementById("log");
+    if (box) box.textContent = "";
+    S.messages = [];
+    S.dropped = 0;
+    S.conversationId = newConversationId();
+  },
+};
 </script>
 

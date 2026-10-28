@@ -95,8 +95,12 @@ def t_the_rule_is_the_readme_s_rule():
                      "lane-warning.js", "hud-actions.js", "hud-safety.js",
                      # ... and the Galaxy's looks (2026-10-27), which the page's
                      # look switcher loads with a dynamic import(), plus the 3D
-                     # engine that draws them (the same day's cosmos port)
-                     "hud-edit.js", "hud-presets.js", "galaxy-presets.js",
+                     # engine that draws them (the same day's cosmos port), and
+                     # the History sidebar the same page loads with a plain
+                     # <script src>, with the row-action table it shares with the
+                     # Brain's History tab
+                     "hud-edit.js", "hud-presets.js", "hud-history.js",
+                     "history-actions.js", "galaxy-presets.js",
                      "galaxy-cosmos.js",
                      "private-speech.js",
                      "face-voice.js", "face-moments.js", "face-tuning.js",

@@ -44,6 +44,15 @@ fn main() {
             // Brain uses, held on a stale link, no card. HUD window only.
             "hud_schedule_add",
             "hud_schedule_act",
+            // The HUD History sidebar's ONE write (2026-10-27, the owner's
+            // request for "pinnable chats, project organization by chat"):
+            // pin/unpin ONE chat, file ONE chat under a tag, or delete ONE
+            // chat. Declared here as well as in lib.rs's generate_handler! -
+            // a command in one and not the other is refused by the ACL from
+            // every window, which is invisible at compile time
+            // (tools/check_command_acl.py is what catches it). Its reads are
+            // hud_get's three History paths, on hud-link's list. HUD only.
+            "hud_history_act",
             // A reminder's own action (2026-10-27, the owner's request): the
             // Open button on a reminder that has gone off. The job's ID only -
             // the PC reads the target back from its own answer and re-checks
