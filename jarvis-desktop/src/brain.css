@@ -1034,6 +1034,115 @@ body {
   min-width: 0;
 }
 
+/* The model advisor (2026-10-28): "Check for new models", the candidates it
+   finds, a benchmark measured here, and the preset changes to approve or argue
+   with. It is its own block under the install form - separated the same way
+   "Install a model" is, because it is a question about the list above rather
+   than a second list of installed models. */
+.model-advisor {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: var(--stroke-hair) solid var(--border-strong);
+}
+
+/* Its own heading, one step under the card's, in the same quiet uppercase the
+   card titles use - the panel is a section of "Models", not a second card. */
+.model-advisor-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.model-advisor-presets h4 {
+  margin: 16px 0 6px;
+  font-family: var(--font-display);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.model-advisor-lede {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.model-advisor-status {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* A measurement of THIS PC, marked by weight as well as by its words: it is the
+   only line in the panel that is evidence rather than a suggestion. */
+.model-advisor-measured {
+  color: var(--text);
+}
+
+.advisor-preset {
+  margin: 10px 0 0;
+  padding: 8px 0 2px;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+
+.advisor-preset-name {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.advisor-changes {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.advisor-change {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.advisor-change-why {
+  display: block;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  margin-bottom: 4px;
+}
+
+.advisor-evidence {
+  margin-top: 2px;
+}
+
+.advisor-opinion-label {
+  display: block;
+  margin: 12px 0 4px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.advisor-opinion {
+  width: 100%;
+  min-height: 54px;
+  resize: vertical;
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.advisor-opinion + .row-actions {
+  padding-top: 8px;
+}
+
 /* A review card whose text reads like a planted instruction. */
 .row-warning {
   display: block;

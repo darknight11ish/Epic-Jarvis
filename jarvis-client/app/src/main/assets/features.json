@@ -187,6 +187,24 @@
     "covers": []
   },
   {
+    "id": "anti-slop",
+    "group": "Talking",
+    "title": "Anti-Slop filter",
+    "what": "Watches what Jarvis writes for the tells that make it read as machine-made: em-dashes in prose, AI buzzwords like seamless and revolutionary, decorative comment banners in code, dead buttons and unreadable contrast. The rules are distilled from the MIT-licensed miqdadbadjuber/anti-slop ruleset, which is vendored on this PC - nothing is downloaded when it runs.",
+    "where": "Settings, How Jarvis talks, Anti-Slop filter. On the phone, Settings, How Jarvis talks, which has the switch, the em-dash exemption and the During/After mode.",
+    "asks": "No card either way - it changes only how an answer is worded.",
+    "limit": "Off costs 0 prompt tokens: nothing is added to a prompt and no answer is rewritten. The rules really checked in code are a fixed list (em-dashes, buzzwords, comment banners, dead buttons, contrast, focus rings, glass and glow caps); layout, taste and rendered sizes are guidance only, and the Playwright suites are what prove those. The three scopes, the Delivery Gate switch and the three Liveliness dials are on the desktop card only; the phone has the switch, the em-dash exemption and the mode. Allow em-dashes is off by default, and Write Like Me's own em-dash habit already wins whether it is on or off.",
+    "surface": "both",
+    "aliases": [
+      "anti slop",
+      "slop filter",
+      "ai slop"
+    ],
+    "covers": [
+    "settings.manner"
+  ]
+  },
+  {
     "id": "interrupt",
     "group": "Talking",
     "title": "Interrupt Jarvis while it talks",
@@ -1759,13 +1777,14 @@
     "id": "models",
     "group": "The PC itself",
     "title": "Models",
-    "what": "The models Jarvis can use - switch the everyday one, install another by name, roll back.",
-    "where": "Brain, Model, Models. On the phone, Brain, Models. The Model tab also holds Compute and Skills.",
-    "asks": "Switching or installing raises one approval card, and nothing downloads until you approve it.",
-    "limit": "There is no catalogue to scroll or search - you type the model's name by hand, the same as at a terminal.",
+    "what": "The models Jarvis can use - switch the everyday one, install another by name, roll back, and on the PC check Hugging Face for newer ones that fit your graphics cards.",
+    "where": "Brain, Model, Models. The \"Check for new models\" button is at the bottom of that list, with the candidates it finds, their benchmark, and the preset changes it suggests. On the phone, Brain, Models. The Model tab also holds Compute and Skills.",
+    "asks": "Switching or installing raises one approval card, and nothing downloads until you approve it. A check raises no card and downloads nothing; benchmarking measures this PC and changes nothing; the preset advice is applied only through the PC's own preset card.",
+    "limit": "On the PC the check shows a short list the PC chose from what fits your graphics cards - not a searchable catalogue, and nothing in it is called better until it has been measured on this PC. The phone still has no list at all: you type the model's name by hand, the same as at a terminal.",
     "surface": "both",
     "covers": [
       "models",
+      "model_recommendations",
       "brain.model.models",
       "brain.tab.faculties",
       "model-page"

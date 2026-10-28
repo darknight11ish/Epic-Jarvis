@@ -294,6 +294,7 @@ def t_the_patch_is_registered_last():
              # relay's postscript lines). It has no hunk in jarvis_gate.py, so it
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
+             "model-recommendations.patch",
              "cloud-honesty.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",

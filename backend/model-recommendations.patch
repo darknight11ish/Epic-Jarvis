@@ -1,0 +1,22 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -6871,3 +6871,19 @@
+     # Before the main socket, so the banner lists every address together.
++    # model-recommendations.patch (2026-10-28, the owner's request): ONE check of
++    # the public model catalogues, a bounded benchmark of a model ALREADY on this
++    # PC, and preset changes justified only by measured numbers. Five PC-only
++    # routes: GET /api/models/recommendations, POST /api/models/check,
++    # POST /api/models/benchmark, POST /api/presets/recommend and
++    # POST /api/presets/recommend/opinion. It approves nothing and changes
++    # nothing: a download is the EXISTING /api/models/install card and applying
++    # a preset is the EXISTING /api/work/apply card. See jarvis_model_recommendations.py.
++    try:
++        import jarvis_model_recommendations
++        print(jarvis_model_recommendations.install(Handler, origin_ok=_origin_ok,
++                                                   token_ok=_token_ok,
++                                                   read_body=_read_body))
++    except Exception as exc:
++        print(f"  models     NOT ON ({type(exc).__name__}) - the model recommendations are off")
++        print("             until jarvis_model_recommendations.py is back: run apply-patches.ps1 again")
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

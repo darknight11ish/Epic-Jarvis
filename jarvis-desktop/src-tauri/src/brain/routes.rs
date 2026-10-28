@@ -24,6 +24,13 @@ use super::guardian::SNAPSHOTS_PATH;
 const READ_ROUTES: &[(&str, &str)] = &[
     ("status", "/api/status"),
     ("models", "/api/models"),
+    // The model advisor's last answer (2026-10-28, the owner's ask): the models a
+    // Hugging Face lookup found, the graphics cards it measured against, and the
+    // preset changes it recommends - plus when it last checked. This is a READ of
+    // what the PC last worked out; pressing "Check for new models" is the POST
+    // that asks for a fresh one (`brain_model_recommend`), because a read grant
+    // must never be able to start a network lookup.
+    ("model_recommendations", "/api/models/recommendations"),
     ("compute", "/api/compute"),
     ("skills", "/api/skills"),
     ("jobs", "/api/jobs"),
@@ -142,6 +149,17 @@ mod tests {
             "/api/models/install",
             "/api/models/switch",
             "/api/models/rollback",
+            // The model advisor's four questions (2026-10-28) are POSTs, so they
+            // can never be reached with the read grant: a check reaches the
+            // internet, a benchmark loads a model, and an opinion is the owner's
+            // own words. All four go through `brain_model_recommend`, which holds
+            // the benchmark on a live link. The two that CHANGE the machine stay
+            // the existing carded writes above (`brain_model`, `apply_focus_preset`)
+            // - the advisor has no route that downloads or applies anything.
+            "/api/models/check",
+            "/api/models/benchmark",
+            "/api/presets/recommend",
+            "/api/presets/recommend/opinion",
             "/api/attention/mute",
             "/api/attention/unmute",
             "/api/digest/seen",

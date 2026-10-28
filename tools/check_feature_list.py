@@ -297,6 +297,7 @@ LESSON_EXEMPT = {
     "write-like-me": "the training screen it would teach is the next UI slice; this row is the catalogue half, so a lesson now would teach a screen that is not built yet",
     "setup-questionnaire": "the card explains itself: fourteen questions in the owner's own words, a read-only plan naming each effect, and one Apply that asks twice; a lesson would repeat the card",
     "reminder-actions": "the Reminders lesson was written before a reminder could carry an action and does not teach it; this is a work item for the teaching side, and until then the HUD's own Then row says, in one sentence under the field, what will happen when the reminder goes off",
+    "anti-slop": "one switch, one mode and one line saying what OFF costs, on the How Jarvis talks card that already has its own lesson; a lesson would repeat the card's own words, and the card is the lesson",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

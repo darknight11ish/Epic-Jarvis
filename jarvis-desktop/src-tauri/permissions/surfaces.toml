@@ -788,6 +788,13 @@ permissions = [
   "allow-get-manner",
   "allow-set-manner",
   "allow-set-humor",
+  # "Anti-Slop filter" (2026-10-28; JARVIS-API section 159): the master switch,
+  # the three scopes, the During/After mode and the three Liveliness dials, on
+  # GET/POST /api/antislop. Wording and output quality only; no card either
+  # way, no model call, and NOT held on a stale link either - a stale link says
+  # nothing about whether an answer should be de-slopped.
+  "allow-get-antislop",
+  "allow-set-antislop",
   # "Thinking levels" (Section 5.5): per running model.
   "allow-get-thinking",
   "allow-set-thinking",
@@ -970,8 +977,20 @@ permissions = [
 # that skips them.
 [[set]]
 identifier = "brain-faculties"
-description = "Remove a skill; install, switch or roll back a model. Privileged: keep this to the Brain window."
-permissions = ["allow-brain-remove-skill", "allow-brain-model"]
+description = "Remove a skill; install, switch or roll back a model; and ask the model advisor what to look at or change. Privileged: keep this to the Brain window."
+permissions = [
+  "allow-brain-remove-skill",
+  "allow-brain-model",
+  # The model advisor (2026-10-28, the owner's "one click check for new models"
+  # ask): look on Hugging Face, benchmark an installed model on this PC, and ask
+  # what the focus presets should change to - revised with the owner's own words.
+  # It CHANGES NOTHING: the download is the existing carded `brain_model` install
+  # above and the apply is the existing carded `apply_focus_preset`. The benchmark
+  # is the only action that touches the graphics card and is held on a stale link
+  # (brain.rs brain_model_recommend); a lookup is not held, because a question
+  # that fails says so plainly and nothing here acts on the answer.
+  "allow-brain-model-recommend",
+]
 
 # Changing what Jarvis remembers about the owner.
 #
@@ -1989,10 +2008,13 @@ permissions = [
 
 
 # ---------------------------------------------------------------------------
-# Focus presets (backend/jarvis_presets.py; PRs #603/#611). The quickbar's chip
-# and Settings both read the PC's nine presets and can ask the PC to apply ONE
-# preset. Applying approves nothing: it raises the existing switch_model ask
-# card on the PC. Neither window may write anything else with this set.
+# Focus presets (backend/jarvis_presets.py; PRs #603/#611). The quickbar's chip,
+# Settings and the Brain's Model card both read the PC's nine presets and can ask
+# the PC to apply ONE preset. Applying approves nothing: it raises the existing
+# switch_model ask card on the PC. No window may write anything else with this
+# set. (The Brain's Model card only ASKS - its "Approve changes" is the same one
+# command and the same one card; the recommendation itself arrives through
+# brain-faculties' model advisor, which applies nothing.)
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "focus-presets"

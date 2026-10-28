@@ -1,0 +1,8 @@
+{
+  "name": "model-recommendations",
+  "summary": "suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies.",
+  "module": "jarvis_model_recommendations",
+  "install": "handler",
+  "replaces_patch": "model-recommendations.patch",
+  "stack_order": 155
+}

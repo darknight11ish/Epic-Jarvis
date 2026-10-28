@@ -1124,6 +1124,96 @@
              switch, "Keep this sample", "Forget this sample") are held while
              the link catches up, here and in src-tauri/src/voiceprint.rs.
              Nothing here raises an approval card: they are local settings. -->
+        <!-- ── Anti-Slop filter (2026-10-28; jarvis_antislop.py, JARVIS-API
+             section 159): the master switch, the three scopes, the em-dash
+             exemption, the During/After mode, the Delivery Gate switch and the
+             three Liveliness dials. Drawn by antislop-settings.js into this
+             empty section, from antislop.js's words and the PC's own state -
+             the same "How Jarvis talks" card both apps keep this under, and the
+             same shape as "Write like me" below.
+
+             NO CARD EITHER WAY, AND NOT HELD ON A STALE LINK: it filters the
+             wording of an answer, opens no way out of the PC, reads no folder
+             and takes no action. OFF costs 0 prompt tokens and rewrites
+             nothing, which the card says in one line.
+
+             TWO LINES ARE HONESTY, NOT DECORATION: `asf-reality` names which
+             rules are really checked in code and which are only guidance
+             (Gemini review Q1), and the em-dash box's detail line says the
+             voiceprint already wins (Q3). Both are drawn from antislop.js so
+             the phone can say the same words.
+
+             The rows are built at runtime rather than written here, so this
+             block is deliberately NOT one of the `<label class="toggle">` rows
+             tools/gen_settings_cases.py owns (that table lives in
+             backend/jarvis_settings_registry.py; the `antislop` switch IS one
+             of its BOOL_SETTINGS rows, but this card is bespoke and draws its
+             own controls, like the personality grid). -->
+        <section id="antislop" class="block">
+          <h3 class="subhead" id="asf-title">Anti-Slop filter</h3>
+          <p class="note" id="asf-detail"></p>
+          <!-- The enforcement reality, in ONE sentence (2026-10-28, Gemini
+               review Q1; drawn from antislop.js's REALITY). A separate line on
+               purpose: the deterministic rules are a FIXED LIST run in code on
+               the PC, while the layout and taste rules are prompt guidance that
+               only a rendered page or a person can judge. "All the anti-slop
+               rules are enforced" would be a lie, and this line is where that
+               lie would have to be typed to exist. -->
+          <p class="note" id="asf-reality"></p>
+          <p class="note" id="asf-off-note"></p>
+          <p class="state" id="asf-state" role="status">Asking Jarvis…</p>
+          <div id="asf-body" hidden>
+            <label class="asf-switch">
+              <input id="asf-enabled" type="checkbox" />
+              <span>
+                <span id="asf-enabled-label">Anti-Slop filter</span>
+                <span class="toggle-detail" id="asf-enabled-detail"></span>
+              </span>
+            </label>
+            <div class="asf-block" id="asf-scopes-block" hidden>
+              <h4 class="asf-heading">What it filters</h4>
+              <div id="asf-scopes"></div>
+              <!-- The em-dash exemption (2026-10-28, Gemini review Q3). It sits
+                   in "What it filters" because it is a hole cut in that list,
+                   not a fourth scope. OFF is the PC's default, and its detail
+                   line says who already wins: Write Like Me's own em-dash habit
+                   (R-37), which applies whether this box is ticked or not.
+                   Deliberately NOT a `.toggle` row - that class belongs to
+                   jarvis_settings_registry.py's SETTINGS_ROWS. -->
+              <label class="asf-switch">
+                <input id="asf-em-dash" type="checkbox" />
+                <span>
+                  <span id="asf-em-dash-label">Allow em-dashes (—)</span>
+                  <span class="toggle-detail" id="asf-em-dash-detail"></span>
+                </span>
+              </label>
+            </div>
+            <div class="asf-block" id="asf-modes-block" hidden>
+              <fieldset class="theme-list" id="asf-modes-list">
+                <legend class="label">How it applies</legend>
+                <div id="asf-modes"></div>
+              </fieldset>
+            </div>
+            <div class="asf-block" id="asf-gate-row" hidden>
+              <label class="asf-switch">
+                <input id="asf-gate" type="checkbox" />
+                <span>
+                  <span id="asf-gate-label">Close a UI answer with the four-block Anti-Slop Delivery Gate</span>
+                  <span class="toggle-detail" id="asf-gate-detail"></span>
+                </span>
+              </label>
+            </div>
+            <div class="asf-block" id="asf-dials-block" hidden>
+              <h4 class="asf-heading">Liveliness</h4>
+              <p class="note">How a screen Jarvis builds should feel, so filtering
+                everything does not turn it into a plain grey void.</p>
+              <div id="asf-dials"></div>
+            </div>
+            <div class="row">
+              <span class="status" id="asf-status" role="status"></span>
+            </div>
+          </div>
+        </section>
         <section id="voiceprint" class="block"></section>
       </section>
 
@@ -3477,6 +3567,7 @@
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="antislop-settings.js"></script>
     <script type="module" src="voiceprint-settings.js"></script>
     <script type="module" src="idle-new-settings.js"></script>
     <script type="module" src="prompt-coach-settings.js"></script>

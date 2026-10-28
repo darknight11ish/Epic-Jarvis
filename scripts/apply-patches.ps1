@@ -1723,6 +1723,20 @@ $PATCHES = @(
     # must stay LAST OF ALL) and changes nothing that patch anchors on.
     'reminder-actions.patch'
 
+    # model-recommendations.patch (2026-10-28, the owner's request): ONE click
+    # that looks through the public model catalogues, a bounded benchmark of a
+    # model ALREADY on this PC, and preset changes justified only by measured
+    # numbers. Five PC-only routes, all in the shipped
+    # jarvis_model_recommendations.py, wired by ONE install block on the OWNER's
+    # own lines just before the socket (the same shape as picture-card.patch) -
+    # NOT in the install-block chain, so plugin-loader.patch's own anchor is
+    # untouched. It approves nothing, downloads nothing and applies nothing: a
+    # download is the EXISTING /api/models/install card and applying a preset is
+    # the EXISTING /api/work/apply card. No gate row and no tier line. It sits
+    # BEFORE cloud-escalate.patch on purpose: f01-manual-lane-gate.patch must
+    # stay directly after cloud-escalate and directly before plugin-loader
+    # (backend/test_hud_manual_lane_gate.py asserts both).
+    'model-recommendations.patch'
     # cloud-honesty.patch (2026-10-28, the owner's fix for the AI-safety
     # audit's H1 and M1): the honesty lines every LOCAL answer already carries
     # now reach the CLOUD lane too - and a crisis turn is never answered by a
@@ -1917,6 +1931,7 @@ $SHIPPED = @(
     'jarvis_owner_check.py'      # owner-check.patch: Windows Hello for risky approvals from this PC, and the approval stamp
     'jarvis_manner.py'           # manner.patch: warm and brief, or plain - the wording of answers only
     'jarvis_personality_creator.py' # chat co-creation of a personality (2026-10-25): drafts with the LOCAL model in the conversation and saves through jarvis_manner; called from jarvis_quick.py, no patch
+    'jarvis_antislop.py'         # the Anti-Slop filter (2026-10-28): miqdadbadjuber/anti-slop v3.2.23 (MIT) distilled into one module - a prompt block scoped by the copy/code/ui switches, a deterministic em-dash and code-comment scrub, and a HIGH/MEDIUM/LOW auditor. GET/POST /api/antislop and POST /api/antislop/audit come from its own install(), called by plugins/ready/antislop, so it needs no patch of its own. A cardless preference either way, like the prompt coach
     'jarvis_card_words.py'       # approval-notice.patch: every approval card's plain title, and what Jarvis says aloud about a card
     'jarvis_card_summary.py'     # card-prefs.patch (the owner's request of 2026-10-09): the "Start short" / "Always show everything" choice for approval cards - GET/POST /api/card-prefs, kept in card-prefs.json so BOTH apps read the one setting. Cosmetic, so no card either way. The summary's words are jarvis_card_words.py's; this owns the preference and the "what one card shows" rule both apps follow
     # --- the tools jarvis_agent.py offers the model ---
@@ -2446,6 +2461,13 @@ $SHIPPED = @(
 # exists, so a backend without it runs exactly as before (backend/_where.py's
 # SHIPPED list has the same entry; test_shipped_modules fails if they disagree).
 'jarvis_product_capture.py'
+# Model/preset recommendations (2026-10-28, the owner's request): one cached
+# check of the public model catalogues, a bounded benchmark of an INSTALLED
+# model on this PC, and preset changes justified only by measured numbers. Five
+# PC-only routes; approves, downloads and applies nothing (the existing
+# /api/models/install and /api/work/apply cards remain the only ways to act).
+# backend/_where.py's SHIPPED list has the same entry, at the end too.
+'jarvis_model_recommendations.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
