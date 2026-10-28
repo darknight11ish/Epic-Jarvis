@@ -75,7 +75,7 @@ class SettingsCatalogTest {
     }
 
     @Test
-    fun `there are 29 desktop toggles and 3 phone rows`() {
+    fun `there are 31 desktop toggles and 3 phone rows`() {
         // The number this work was briefed with was 19, which is the count of
         // rows spelled exactly `<label class="toggle">` - it misses the seven
         // that also carry a label id. Pinned here so it cannot quietly move.
@@ -83,18 +83,18 @@ class SettingsCatalogTest {
         // bare one: 20 to 21 bare, 27 to 28 desktop.
         // "Data and maths sandbox" (LM-1C, 2026-10-18) is one more again:
         // 21 to 22 bare, 28 to 29 desktop, and 2 to 3 phone rows.
-        assertEquals(29, rows.count { it.s("owner") == "desktop" })
+        assertEquals(31, rows.count { it.s("owner") == "desktop" })
         assertEquals(3, rows.count { it.s("owner") == "phone" })
-        assertEquals(32, rows.size)
-        assertEquals(32, doc["counts"]!!.jsonObject.i("all"))
-        assertEquals(29, doc["counts"]!!.jsonObject.i("desktop"))
+        assertEquals(34, rows.size)
+        assertEquals(34, doc["counts"]!!.jsonObject.i("all"))
+        assertEquals(31, doc["counts"]!!.jsonObject.i("desktop"))
         assertEquals(3, doc["counts"]!!.jsonObject.i("phone"))
     }
 
     @Test
-    fun `every order is unique and the desktop rows run 1 to 29`() {
+    fun `every order is unique and the desktop rows run 1 to 31`() {
         val desktop = rows.filter { it.s("owner") == "desktop" }.map { it.i("order") }
-        assertEquals((1..29).toList(), desktop)
+        assertEquals((1..31).toList(), desktop)
         assertEquals(rows.size, SettingsCatalog.ROWS.map { it.id }.toSet().size)
     }
 
@@ -185,10 +185,10 @@ class SettingsCatalogTest {
     fun `exactly one row is not a setting at all`() {
         val notSettings = SettingsCatalog.ROWS.filter { !it.settingRow }.map { it.id }
         assertEquals(listOf("spd-accept"), notSettings)
-        // 31 since "Data and maths sandbox" joined (LM-1C, 2026-10-18): 32 rows,
+        // 33 since the Learning card's two switches joined (settings audit G1, 2026-10-28): 34 rows,
         // one of which is the spending accept-all control and not a setting.
-        // (It was 29 when "Making pictures" joined on 2026-10-11, at 30 rows.)
-        assertEquals(31, SettingsCatalog.SETTING_ROWS.size)
+        // (It was 31 when "Making pictures" joined on 2026-10-11, at 30 rows; 32 after the sandbox, 34 after Learning.)
+        assertEquals(33, SettingsCatalog.SETTING_ROWS.size)
         // ...and it is hidden, because it is the spending screen's accept-all
         // control rather than a preference.
         assertTrue(rows.first { it.s("id") == "spd-accept" }.b("hidden"))

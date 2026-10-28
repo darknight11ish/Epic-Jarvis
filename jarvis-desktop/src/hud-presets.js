@@ -2337,7 +2337,7 @@ export function faceSwitchWords(row, loaded) {
 export async function setFaceOnPc(win, id) {
   const core = shellCoreOf(win);
   if (!core) throw new Error(FACE_NO_SHELL);
-  return core.invoke("hud_set_face", { face: id });
+  return call("hud_set_face", { face: id }, "action", win);
 }
 
 /**
