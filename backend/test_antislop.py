@@ -1219,8 +1219,12 @@ def t_the_agent_flushes_the_scrub_before_the_safety_lines():
     """
     src = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
     flush = src.index("rest = slop_filter.flush()")
-    claims = src.index('line = _nothing_done_line("".join(model_words)')
-    corrections = src.index("for claim_line in _claim_corrections(")
+    # The safety lines moved into ONE helper on 2026-10-28 (the cloud-honesty
+    # patch asks the same function for the cloud relay), so the anchor is the
+    # helper's loop in the finalizer, not the old inline "_nothing_done_line"
+    # call - and the claimed-undone marker is still the first of its kinds.
+    claims = src.index("for _kind, _line in postscript_lines(")
+    corrections = src.index('if _kind == "claimed_undone":')
     crisis = src.index("tell_owner(crisis_reply(")
     check("the scrub is flushed before the \"nothing was done\" honesty line",
           flush < claims, f"{flush} vs {claims}")
