@@ -271,7 +271,9 @@ shortened.
 | #556 | `feat/tool-schema-sanitiser-wiring` | The tool-schema sanitiser on the way out, and validation on the way in. **Merged 2026-10-26.** |
 
 `gh` reported all ten as `MERGEABLE` at the 2026-10-18 revision. Mergeable was
-not the same as tested or merged: the six required CI checks decide that, and
+not the same as tested or merged: the required CI checks decide that (**seven**
+since 2026-10-25, when `phone-unit-tests` became required; six when this page
+was written - `CLAUDE.md`, the final section), and
 they are read on each PR's page, not here. **On 2026-10-26 all ten were merged
 except #554, which was closed.**
 
@@ -410,7 +412,8 @@ symbol names still find it.
   `scripts/apply-patches.ps1` from a clean tree, then comparing every `*.py` in
   the live folder to `origin/main:jarvis-backend/`, would confirm it.
 - **The pull requests' CI.** Only `gh`'s state, mergeability and titles were
-  read - not the six required checks on any PR, and not the merged commits'
+  read - not the required checks on any PR (six when this page was written,
+  seven since 2026-10-25), and not the merged commits'
   CI either. A merged commit is assumed green by the merge, not checked here.
   #554's diff was not read at all; it was closed without merging (2026-10-26,
   re-checked at `7acd7db54`).

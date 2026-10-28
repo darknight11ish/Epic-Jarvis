@@ -7,8 +7,10 @@ additional info."*
 
 There is nothing like it today. Tutorials, FAQ and PC help exist in both apps
 and each covers a subset. The only complete inventory of what Jarvis can do
-lives in the code — 249 backend routes on the desktop, 222 on the phone, with
-`tools/check_parity.py` already proving the two agree. The owner chose: both
+lives in the code — when this note was written, 249 backend route calls on the
+desktop and 222 on the phone; on 2026-10-27 the same checker reported **294 and
+259** on a tree of `main` — and it already proves the two agree. The owner
+chose: both
 apps, one shared list, and a test that fails when a feature exists but is not
 listed.
 
@@ -150,7 +152,8 @@ the other Python suites.
 
 ## Honest limit of the first version
 
-249 routes are not 249 features to a human; several are plumbing. The list is
+294 route calls are not 294 features to a human (249 when this note was
+written); several are plumbing. The list is
 therefore curated for reading, and the `INTERNAL` allow-list with its reasons is
 what keeps "curated" from meaning "incomplete". The two apps' entries are
 written once in the shared file, so the phone and the PC can never disagree
