@@ -778,9 +778,14 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     # setter calls the module's own request_enabled(), the same function the
     # Settings card route calls, so the tool can reach it exactly as the phrase
     # can - which is what this test is about.
-    check("the count is now 31: the 23 measured on 2026-10-19 plus the eight"
-              " added by the universal-control pass on 2026-10-22",
-          len(R.BOOL_SETTINGS) == 31, str(len(R.BOOL_SETTINGS)))
+    # 32 since 2026-10-28: `antislop` (the Anti-Slop filter) joined. Its setter
+    # calls jarvis_antislop's own set_enabled() - the same function its route
+    # and the spoken phrase call. The count is pinned so a switch that arrives
+    # without a phrase, or a phrase without a switch, is noticed.
+    check("the count is now 32: the 23 measured on 2026-10-19, the eight added"
+          " by the universal-control pass on 2026-10-22, and antislop on"
+          " 2026-10-28",
+          len(R.BOOL_SETTINGS) == 32, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:

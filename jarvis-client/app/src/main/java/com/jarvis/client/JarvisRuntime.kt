@@ -1681,6 +1681,12 @@ object JarvisRuntime {
                 // does not (a focus session's Quiet, then the owner's own).
                 if (event.kind == "power") refreshPowerWhy()
             }
+            // The Anti-Slop filter was changed somewhere else - chat, the
+            // desktop card, another phone. One `antislop` frame carrying the
+            // whole state, but a doorbell like the rest: the Settings plate
+            // reads the route again, and nothing is fetched while that plate
+            // is not open.
+            com.jarvis.client.net.Antislop.EVENT -> _antislopTick.update { it + 1 }
             // The brief covers these; the Watches plate on Mind reads its
             // lists again, as the desktop's Brain does.
             "finding" -> _watchTick.update { it + 1 }
@@ -3032,6 +3038,83 @@ object JarvisRuntime {
         val body = com.jarvis.client.net.Manner.body(manner)
             ?: return "That is not one of the two choices."
         return com.jarvis.client.net.Manner.replyLine(api.mannerPost(body), manner)
+    }
+
+    // ------------------------------------------------- anti-slop filter ----
+    // "Anti-Slop filter" (2026-10-28) - see
+    // [com.jarvis.client.net.Antislop] and ui/screens/AntislopPlate.kt. The
+    // master switch, the em-dash exemption and the During/After mode, under
+    // "How Jarvis talks". NO
+    // approval card either way: it changes only the wording of an answer, so
+    // rule 4's stale-link hold is the only holding that applies - and "at once"
+    // means no card, not "works while the link is down", the same reading
+    // [setPromptCoach] takes.
+    //
+    // These three call `api.antislopPost` DIRECTLY, never through
+    // [writeNoticingCards]: that wrapper refreshes the approval queue and
+    // returns a `DesktopWrite.Outcome`, and this route can never raise a card
+    // (the filter only changes the words of an answer). Wrapping it would both
+    // be a type mismatch and imply a card this feature must never have.
+
+    /** `GET /api/antislop`. A read: never held. */
+    suspend fun antislop(): ApiResult<JsonObject> = api.antislop()
+
+    /**
+     * Goes up by one on every `antislop` event, so the Settings plate reads
+     * itself again when the filter was changed somewhere else - chat, the
+     * desktop card, another phone. The frame carries the whole state
+     * (`jarvis_antislop._publish`), but the event is a doorbell like every
+     * other kind ([onEvent]'s own rule): the plate owns its read, so this
+     * re-runs the SAME [antislop] GET it opens with rather than growing a
+     * second way to fill one view. Only an open plate is composed to see it,
+     * so nothing is fetched while Settings is closed.
+     */
+    private val _antislopTick = MutableStateFlow(0)
+
+    /** Read by `AntislopPlate`'s `LaunchedEffect` beside its own re-reads. */
+    val antislopTick: StateFlow<Int> = _antislopTick.asStateFlow()
+
+    /**
+     * The master switch, on or off. Held on a stale link ([actionBlocker]).
+     * @return the sentence to show under the switch.
+     */
+    suspend fun setAntislop(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        return com.jarvis.client.net.Antislop.replyLine(
+            api.antislopPost(com.jarvis.client.net.Antislop.enabledBody(on)),
+            on,
+        )
+    }
+
+    /**
+     * During or After. The same route and the same hold as [setAntislop]:
+     * setting the mode never resets the switch, because each change names one
+     * field.
+     */
+    suspend fun setAntislopMode(mode: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Antislop.modeBody(mode)
+            ?: return "That is not one of the two modes."
+        return com.jarvis.client.net.Antislop.modeReplyLine(
+            api.antislopPost(body),
+            mode,
+        )
+    }
+
+    /**
+     * The em-dash exemption (2026-10-28): "Allow em-dashes (—)", off by
+     * default. One field (`allow_em_dashes`) on the same route and under the
+     * same stale-link hold as [setAntislop], so ticking it never resets the
+     * switch or the mode - and it is NOT the voiceprint rule, which the PC
+     * applies on its own whether this is on or off.
+     * @return the sentence to show under the row.
+     */
+    suspend fun setAntislopEmDashes(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        return com.jarvis.client.net.Antislop.emDashReplyLine(
+            api.antislopPost(com.jarvis.client.net.Antislop.emDashBody(on)),
+            on,
+        )
     }
 
     /**

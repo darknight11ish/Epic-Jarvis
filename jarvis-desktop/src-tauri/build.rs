@@ -493,6 +493,16 @@ fn main() {
             // only.
             "get_prompt_coach",
             "set_prompt_coach",
+            // Settings' "Anti-Slop filter" (2026-10-28; JARVIS-API section
+            // 159, backend/jarvis_antislop.py): the whole state (a read) and
+            // ONE change - the master switch, one scope, the During/After
+            // mode, the Delivery Gate switch or a Liveliness dial. At once in
+            // BOTH directions, no approval card either way and never held on a
+            // stale link: it filters the wording of an answer, opens no way
+            // out of the PC, reads no folder and takes no action. Settings
+            // window only.
+            "get_antislop",
+            "set_antislop",
             // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
             // critique of the words in the box plus the last few turns, from
             // the same local model, through the same route. It sends nothing

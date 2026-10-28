@@ -1761,3 +1761,26 @@ select:focus-visible {
 #mn-custom-form .row { margin-top: 12px; }
 #mn-custom-form input[type="text"] { min-width: 280px; }
 #mn-custom-form label.label { display: block; margin-bottom: 4px; }
+
+/* ── Anti-Slop filter (2026-10-28; JARVIS-API section 159) ────────────────
+   The master switch and the Delivery Gate switch are drawn as `.as-switch`,
+   deliberately NOT `.toggle`: that class is the one
+   backend/jarvis_settings_registry.py's SETTINGS_ROWS owns through
+   tools/gen_settings_cases.py, and these two rows are this card's own, not
+   rows of the settings table. The look is the same. */
+#antislop { margin-top: 22px; }
+.asf-block { margin-top: 16px; }
+.asf-heading { font-size: var(--text-sm); color: var(--text); margin: 0 0 6px; font-weight: 600; }
+.asf-switch { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font-size: var(--text-sm); color: var(--text); cursor: pointer; }
+.asf-switch input { accent-color: var(--cyan); margin-top: 3px; }
+.asf-switch .toggle-detail { display: block; color: var(--text-muted); font-size: var(--text-xs); margin-top: 2px; }
+.asf-scope { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-size: var(--text-sm); color: var(--text); cursor: pointer; }
+.asf-scope input { accent-color: var(--cyan); margin-top: 3px; }
+.asf-scope-text { display: flex; flex-direction: column; gap: 2px; }
+.asf-scope-name { color: var(--text); }
+.asf-scope-why { color: var(--text-muted); font-size: var(--text-xs); }
+.asf-dial { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.asf-dial-head { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
+.asf-dial-label { font-size: var(--text-sm); color: var(--text); }
+.asf-dial-why { font-size: var(--text-xs); color: var(--text-muted); }
+#asf-modes-list { border: 0; padding: 0; margin: 0; }

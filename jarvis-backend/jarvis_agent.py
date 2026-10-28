@@ -8139,6 +8139,78 @@ def with_focus_note(msgs: list) -> list:
 
 
 # --------------------------------------------------------------------------
+#   The Anti-Slop filter (jarvis_antislop.py, 2026-10-28)
+# --------------------------------------------------------------------------
+#
+# THE TWO HALVES, and why they sit in different places. The prompt block is a
+# system message just before the newest question, exactly like the manner,
+# focus and spoken notes - one more thing the model is told about THIS answer.
+# The scrub of the words it wrote runs where those words are already on their
+# way to the app, in `one_round`'s `on_text`: a whole-answer rewrite after the
+# stream has gone out would change nothing on the screen.
+#
+# BOTH ARE FREE WHEN THE FILTER IS OFF: `prompt_block()` returns "" (0 tokens)
+# and `reply_filter()` returns None, so not one line added here runs. That is
+# the switch's own promise, and backend/test_antislop.py proves both halves.
+#
+# NOT IN THE WARM-UP. `chat_prefix()` builds the bytes a real first question
+# sends, and a per-question note cannot be part of that (the warm-up has no
+# question, and WARM_WORD matches no UI word). The cached prefix is unaffected
+# either way: this note sits at the END of the prompt, after the rules, the
+# tools and the history.
+
+
+def _antislop_dash_exemption() -> bool:
+    """Whether "Write Like Me" owns the prose style (R-37) - read ONCE a turn,
+    because it reads the owner's own samples and they do not change mid-turn."""
+    try:
+        import jarvis_antislop as AS
+        return bool(AS.voiceprint_uses_em_dash())
+    except Exception:
+        return False
+
+
+def _antislop_prompt(question: str, spoken: bool, exempt: bool) -> str:
+    """The `<antislop_filter>` note for this round, or "" (off: 0 tokens)."""
+    try:
+        import jarvis_antislop as AS
+        return AS.prompt_block(question, spoken_live=bool(spoken),
+                               voiceprint_uses_em_dash=bool(exempt))
+    except Exception:
+        return ""
+
+
+def _antislop_filter(exempt: bool):
+    """The per-turn scrub of the model's own words, or None when it is off.
+
+    ONE filter for the whole turn, not one per round: a fenced code block opened
+    in one round is still open in the next, and the answer is their
+    concatenation.
+    """
+    try:
+        import jarvis_antislop as AS
+        return AS.reply_filter(voiceprint_uses_em_dash=bool(exempt))
+    except Exception:
+        return None
+
+
+def with_antislop_note(msgs: list, note: str) -> list:
+    """A new list: `msgs` with `note` as a system message just before the newest
+    user message - never first, placed exactly like with_focus_note. A "" note
+    returns a plain copy, which is what the filter being off produces."""
+    if not note:
+        return list(msgs)
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users:
+        return list(msgs)
+    at = users[-1]
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM},
+                {"role": "system", "content": note}] + list(msgs)
+    return list(msgs[:at]) + [{"role": "system", "content": note}] + list(msgs[at:])
+
+
+# --------------------------------------------------------------------------
 #   "Remind me next time I talk about X" (jarvis_next_time.py, 2026-09-28)
 # --------------------------------------------------------------------------
 #
@@ -8550,7 +8622,8 @@ def tidy_assistant_whitespace(msgs: list) -> list:
 
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    next_time: str = "", spoken: bool = False, live: bool = False,
-                   cut_off: str = "", crisis: bool = False) -> list:
+                   cut_off: str = "", crisis: bool = False,
+                   antislop: str = "") -> list:
     """The notes a local turn adds to its (already trimmed) messages, in
     their order - manner, focus, next-time, spoken, live, cut-off, crisis, each just before
     the newest user message - and then keep_rules_first, last, so the rules
@@ -8573,6 +8646,11 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
         # further than spoken/cut-off/crisis, which say how to answer at all.
         # Never on the warm-up, which carries no conversation.
         out = with_next_time_note(out, next_time)
+    if antislop:
+        # The Anti-Slop filter's own note (jarvis_antislop.py, 2026-10-28):
+        # OFF is "", which adds nothing at all - 0 tokens and the same bytes the
+        # warm-up sends.
+        out = with_antislop_note(out, antislop)
     if spoken:
         # After trimming, so trimming can never leave the note first.
         out = with_spoken_note(out)
@@ -9355,6 +9433,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # The model's own words this answer, without the lines Jarvis itself
     # adds (tell_owner) - what the "I've done it" check reads.
     model_words: list = []
+    # The Anti-Slop filter (2026-10-28): its prose/code scrub for THIS turn, or
+    # None when the owner has it off (or is in `after` mode, where an audit may
+    # quote what it reports). When it is None not one extra call is made.
+    dash_exempt = _antislop_dash_exemption()
+    slop_filter = _antislop_filter(dash_exempt)
     claimed_undone = False
     said = {"any": False, "gap": False}
     # The delay of a spoken turn (jarvis_voice_flow.py): when this answer's
@@ -9451,6 +9534,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             compact_messages(prefix_messages, room,
                              question=question_text),
             manner=manner, focus=focus_brief, next_time=next_time["note"],
+            antislop=_antislop_prompt(question_text, watch.spoken, dash_exempt),
             spoken=watch.spoken, live=watch.live,
             cut_off=watch.cut_off, crisis=watch.crisis)
         body = chat_body(cur["model"], sent_messages, opts,
@@ -9474,6 +9558,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
         def on_text(piece: str) -> None:
             clean = stripper.feed(piece)
+            if slop_filter is not None:
+                # The Anti-Slop scrub (R-02 in prose, antislop-code in fenced
+                # code), piece by piece. It holds back only a trailing space or
+                # em dash, or a line inside a code block, so the words still
+                # stream; with the filter off this branch does not run.
+                clean = slop_filter.feed(clean)
             if clean:
                 # Kept per round too: a round that then asks for a tool goes
                 # back to the model with the words it wrote before asking.
@@ -9916,6 +10006,24 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         elif watch.spending_asked and not watch.spending_done:
             deliver_plain("")
         deliver_retirement()
+        # The Anti-Slop filter's last held words (2026-10-28): a trailing space
+        # or em dash kept back so the piece after it could decide what it meant,
+        # or the end of a code block. Sent before the checks below read
+        # `model_words`, so they see the words the app was actually given.
+        #
+        # THE PLACE OF THIS BLOCK IS A SAFETY PROPERTY, not tidiness (Gemini's
+        # Q3 ruling, 2026-10-28). It must stay ABOVE the claim corrections and
+        # the crisis help line below: those are safety-critical SYSTEM strings
+        # (a helpline number, "nothing was actually done"), and one of them can
+        # contain an em dash. The filter rewrites the MODEL's words; running it
+        # after they were appended would rewrite theirs too. `backend/
+        # test_antislop.py` pins the order in this source and proves a crisis
+        # sentence containing an em dash survives it.
+        if slop_filter is not None:
+            rest = slop_filter.flush()
+            if rest:
+                model_words.append(rest)
+                emit(rest)
         # "I've done it" when nothing was done ("Smarter answers",
         # 2026-09-28): the answer claims an action and no action tool
         # returned ok in it (jarvis_claims.py). One plain line at the end, in

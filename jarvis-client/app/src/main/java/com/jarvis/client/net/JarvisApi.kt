@@ -2629,6 +2629,38 @@ class JarvisApi(
      */
     suspend fun manner(): ApiResult<JsonObject> = probe(Manner.PATH)
 
+    // ------------------------------------------------- anti-slop filter ----
+    // "Anti-Slop filter" (2026-10-28, jarvis_antislop.py; JARVIS-API section
+    // 159). The master switch and the During/After mode, under "How Jarvis
+    // talks". No approval card either way: it changes only the wording of an
+    // answer. `probe` reads; the POST carries ONE change and the PC sends its
+    // whole state back, so the screen paints the PC's answer rather than its
+    // own optimism. The bodies come from [Antislop], which AntislopTest pins.
+
+    /** `GET /api/antislop` - the switch and the mode, in the PC's own shape. */
+    suspend fun antislop(): ApiResult<JsonObject> = probe(Antislop.PATH)
+
+    /**
+     * `POST /api/antislop` with ONE change ([Antislop.enabledBody] or
+     * [Antislop.modeBody]). Nothing but a body one of those made is sent.
+     */
+    suspend fun antislopPost(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(Antislop.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /**
      * `POST /api/manner` with ONE change ([Manner.body]): at once, no card
      * either way - it changes only how answers are worded. Nothing but a

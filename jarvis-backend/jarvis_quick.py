@@ -3700,6 +3700,79 @@ _WAKE_WORD = re.compile(
     r"|(?P<enable>enable|disable)\s+(?:the\s+|my\s+|your\s+)?"
     r"(?:wake\s+word|hey\s+jarvis(?:\s+wake\s+word)?)")
 
+#: The Anti-Slop filter (jarvis_antislop.py, 2026-10-28). TWO sentences need
+#: their OWN patterns, and both would be answered wrongly by the generic
+#: grammar if they did not have them:
+#:
+#:   * "turn on anti-slop for code" - `_ADJUST_ONOFF` reads a switch named
+#:     "anti-slop for code", misses the exact name, and the tolerant matcher
+#:     then finds the whole switch inside those words and turns the WHOLE
+#:     filter on. The owner asked for one scope; getting three is a different
+#:     change from the one they asked for. So this is matched FIRST.
+#:   * "is anti-slop on" - would otherwise be answered by the generic
+#:     is-it-on lane, which can only say on or off. The filter also has a mode,
+#:     three scopes and three dials, and they are what the owner is asking
+#:     about when they name the filter itself (and an answer that omits them
+#:     would be a worse answer than the one this feature exists to give).
+#:
+#: "set anti-slop mode to after" is deliberately NOT here: `antislop_mode` is a
+#: CHOICE_SETTINGS row, so the repo's existing "set <name> to <value>" grammar
+#: already reaches the same setter, with the same refusal for a value that is
+#: not one of the two. A second path for it would be a second way to say the
+#: same thing, and `test_settings_registry.py` walks every choice row through
+#: that grammar.
+#:
+#: NEITHER of the two is a second gate: each calls the registry's own setter,
+#: which calls jarvis_antislop's own setter, which is the same function the
+#: route and the Settings page call. No card is raised in any direction, and
+#: nothing is claimed unless the state reads back changed.
+_ANTISLOP_NAMES = r"(?:anti[\s-]?slop|ai[\s-]slop|slop\s+filter|ai\s+slop\s+filter)"
+_ANTISLOP_SCOPE = re.compile(
+    r"(?:turn|switch)\s+(?P<on>on|off)\s+(?:the\s+)?(?:" + _ANTISLOP_NAMES + r")"
+    r"(?:\s+filter)?\s+(?:for|on|in)\s+(?P<scope>[\w\s-]+?)"
+    r"|(?P<enable>enable|disable)\s+(?:the\s+)?(?:" + _ANTISLOP_NAMES + r")"
+    r"(?:\s+filter)?\s+(?:for|on|in)\s+(?P<scope2>[\w\s-]+?)")
+_ANTISLOP_STATE = re.compile(
+    r"is\s+(?:the\s+)?(?:" + _ANTISLOP_NAMES + r")(?:\s+filter)?\s+"
+    r"(?:on|off|enabled|disabled|active|running|switched\s+on|switched\s+off)"
+    r"(?:\s+(?:right\s+now|now|currently|at\s+the\s+moment))?"
+    r"|(?:what|what's|whats|how)\s+(?:is|are)\s+(?:the\s+)?(?:" + _ANTISLOP_NAMES + r")"
+    r"(?:\s+filter)?\s+(?:set\s+to|set|configured|doing|state|status)"
+    r"|(?:tell|show)\s+me\s+(?:the\s+)?(?:" + _ANTISLOP_NAMES + r")(?:\s+filter)?"
+    r"\s+(?:state|status|settings)")
+#: What a scope word means. Only these three exist, and a sentence that names
+#: something else is answered with the three real ones - never guessed at.
+_ANTISLOP_SCOPES = {
+    "copy": "copy", "writing": "copy", "prose": "copy", "answers": "copy",
+    "words": "copy", "text": "copy",
+    "code": "code", "comments": "code", "comment": "code",
+    "code comments": "code", "programming": "code",
+    "ui": "ui", "design": "ui", "web": "ui", "pages": "ui", "page": "ui",
+    "interface": "ui", "screens": "ui", "screen": "ui",
+}
+
+
+def _antislop_intent(s: str) -> Optional[Intent]:
+    """A sentence that names the Anti-Slop filter itself, or None.
+
+    `s` is the tidied, lower-cased sentence. The state ask is checked first: it
+    is a question and changes nothing.
+    """
+    state = _ANTISLOP_STATE.fullmatch(s)
+    if state:
+        return Intent("settings_antislop_state", {})
+    scope = _ANTISLOP_SCOPE.fullmatch(s)
+    if scope:
+        on = ((scope.group("on") or "") == "on"
+              or (scope.group("enable") or "") == "enable")
+        word = (scope.group("scope") or scope.group("scope2") or "").strip()
+        name = _ANTISLOP_SCOPES.get(word)
+        if name is None:
+            return Intent("settings_antislop_bad", {"field": "scope", "words": word})
+        return Intent("settings_antislop_scope", {"scope": name, "on": on})
+    return None
+
+
 #: Which browser Jarvis uses (jarvis_browser_engine.MODES): automatic, the
 #: visible browser, or the windowless one. A local behaviour choice with its
 #: own route (POST /api/browser/engine {"mode": ...}) and NO card: it changes
@@ -4001,6 +4074,12 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     cards = _card_mode_intent(s)
     if cards is not None:
         return cards
+    # The Anti-Slop filter's own three sentences (2026-10-28). BEFORE the
+    # on/off block: "turn on anti-slop for code" must not be read as the whole
+    # switch, and "set anti-slop mode to after" is a value, not a state.
+    got = _antislop_intent(s)
+    if got is not None:
+        return got
     # The PC's own "hey Jarvis" switch and which browser Jarvis uses
     # (2026-10-26). Neither is a BOOL_SETTINGS/CHOICE_SETTINGS row - see
     # jarvis_settings_registry's own block for why - so neither is reachable
@@ -4570,6 +4649,11 @@ CHANGE_BY_ASKING = frozenset({
     # so in its docstring (jarvis_settings_registry.set_prompt_coach,
     # set_humor, set_voice_follows_face, set_pictures).
     "prompt_coach", "humor", "voice_follows_face", "pictures",
+    # The Anti-Slop filter (2026-10-28): instant in both directions, no card
+    # either way (jarvis_settings_registry.set_antislop). Its reader answers a
+    # real True/False (`_read_antislop`), so the read-back below is a read and
+    # not a claim.
+    "antislop",
     # The five PC-notification switches. They ride `jarvis_limits.change`, and
     # all seven of those rows are `loosening="none"` on purpose: a switch that
     # only decides whether this PC shows its owner a toast may not wait behind
@@ -6593,6 +6677,76 @@ def _run_settings_browser_mode_bad(f: dict) -> Result:
                   "settings_browser_mode_bad")
 
 
+def _antislop_read_back(key: str, window: int = 6):
+    """What jarvis_antislop says now, or None - never a guess.
+
+    A scope or a mode is a value inside the state file, so it is read from the
+    module rather than remembered from the sentence: a change that did not
+    stick must be reported as not having stuck. `key` is "enabled", "mode", or
+    "scope:<name>"."""
+    try:
+        import jarvis_antislop as AS
+        state = AS.get_state()
+    except Exception:
+        return None
+    if key == "enabled":
+        value = state.get("enabled")
+        return value if isinstance(value, bool) else None
+    if key == "mode":
+        value = state.get("mode")
+        return value if isinstance(value, str) else None
+    if key.startswith("scope:"):
+        value = (state.get("scopes") or {}).get(key.split(":", 1)[1])
+        return value if isinstance(value, bool) else None
+    return None
+
+
+def _run_settings_antislop_scope(f: dict, peer, local) -> Result:
+    """"Turn on anti-slop for code" - ONE scope, through the module's own setter.
+
+    The sentence names one scope and the answer says what the OTHER two are
+    doing, because a person who asked for code only needs to know the filter is
+    still watching their copy. Nothing is claimed that was not read back.
+    """
+    import jarvis_settings_registry as R
+    name = str(f.get("scope") or "")
+    want = bool(f.get("on"))
+    out = R.set_antislop_scope(name, want, peer=peer, local=local)
+    said = str(getattr(out, "said", "") or "").strip()
+    if not getattr(out, "ok", False):
+        return Result(said or "That did not work, so nothing was changed.",
+                      "settings_antislop_scope")
+    after = _antislop_read_back(f"scope:{name}")
+    if after is not want:
+        return Result(f"I asked the PC to turn anti-slop {'on' if want else 'off'} "
+                      f"for {name}, but I could not read it back, so I will not "
+                      f"say it worked.", "settings_antislop_scope")
+    try:
+        import jarvis_antislop as AS
+        state = AS.get_state()
+        others = [s for s in AS.SCOPES if s != name]
+        also = ", ".join(f"{s} {'on' if (state.get('scopes') or {}).get(s) else 'off'}"
+                         for s in others)
+    except Exception:
+        also = ""
+    if also:
+        said = ((said + " ") if said else "") + f"The other scopes are unchanged ({also})."
+    return Result(said, "settings_antislop_scope")
+
+
+def _run_settings_antislop_state(f: dict) -> Result:
+    """"Is anti-slop on?" - the module's own sentence: mode, scopes and dials."""
+    import jarvis_settings_registry as R
+    return Result(R.antislop_words(), "settings_antislop_state")
+
+
+def _run_settings_antislop_bad(f: dict) -> Result:
+    """A scope the filter does not have: say the three real ones, change nothing."""
+    return Result("The Anti-Slop filter has three scopes: copy, code and ui. "
+                  "Say for example \"turn off anti-slop for code\". Nothing "
+                  "was changed.", "settings_antislop_bad")
+
+
 def _run_control_set(f: dict, peer, local) -> Result:
     """The one generic multi-field setter: the SAME ChoiceSetting.set the
     Settings control calls - no second mutation path."""
@@ -7024,6 +7178,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_browser_mode(f, peer, local)
     if n == "settings_browser_mode_bad":
         return _run_settings_browser_mode_bad(f)
+    # The Anti-Slop filter (2026-10-28): two sentences of its own, both
+    # cardless, both through the settings registry's own setters. Its MODE
+    # needs nothing here - `antislop_mode` is a CHOICE_SETTINGS row, so the
+    # generic "set <name> to <value>" grammar already reaches the same setter.
+    if n == "settings_antislop_scope":
+        return _run_settings_antislop_scope(f, peer, local)
+    if n == "settings_antislop_state":
+        return _run_settings_antislop_state(f)
+    if n == "settings_antislop_bad":
+        return _run_settings_antislop_bad(f)
     if n == "control_set":
         return _run_control_set(f, peer, local)
     if n == "control_ask":
@@ -7526,6 +7690,10 @@ READ_ONLY_INTENTS = frozenset({
     "reach_list", "sayable_help", "screen_status", "search_explain", "settings_choice_bad",
     "settings_choice_help", "settings_help", "settings_not_by_asking", "settings_only",
     "settings_browser_mode_bad",
+    # Reading the Anti-Slop filter (2026-10-28): "is anti-slop on?" changes
+    # nothing, so "cancel that" must not lose its record to it. Its change and
+    # refusal intents are NOT here - they write or refuse, like every other one.
+    "settings_antislop_state", "settings_antislop_bad",
     "settings_open", "settings_unknown", "tellme_help", "thinking_status", "thinking_when",
     "time_now", "timer_status", "today_list", "todo_list", "weather_now", "wellbeing_me",
     "wellbeing_now", "where_put",

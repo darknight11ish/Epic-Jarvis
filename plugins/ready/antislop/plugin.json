@@ -1,0 +1,7 @@
+{
+  "name": "antislop",
+  "summary": "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings.",
+  "module": "jarvis_antislop",
+  "install": "handler",
+  "stack_order": 157
+}

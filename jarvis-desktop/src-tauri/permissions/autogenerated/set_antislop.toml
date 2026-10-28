@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-antislop"
+description = "Enables the set_antislop command without any pre-configured scope."
+commands.allow = ["set_antislop"]
+
+[[permission]]
+identifier = "deny-set-antislop"
+description = "Denies the set_antislop command without any pre-configured scope."
+commands.deny = ["set_antislop"]

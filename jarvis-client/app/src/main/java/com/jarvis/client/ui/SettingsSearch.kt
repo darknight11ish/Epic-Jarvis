@@ -226,9 +226,14 @@ object SettingsSearch {
         ),
         Row(
             key = "manner", title = "How Jarvis talks",
-            label = "Manner; plain answers; humour; thinking levels; deep thinking",
-            quotes = listOf("How Jarvis talks"),
-            source = JUMP + listOf(PLATES + "MannerPlate.kt"),
+            label = "Manner; plain answers; humour; thinking levels; deep thinking; " +
+                "anti-slop filter; em-dashes",
+            // Every quote must be the app's own words in a file the row names
+            // (SettingsSearchTest holds this): the plate says "Anti-Slop
+            // filter" and "Allow em-dashes (—)", and the label above carries
+            // the lowercase spellings the search index needs.
+            quotes = listOf("How Jarvis talks", "Anti-Slop filter", "Allow em-dashes", "em-dashes"),
+            source = JUMP + listOf(PLATES + "MannerPlate.kt", PLATES + "AntislopPlate.kt"),
         ),
         Row(
             key = "web-search", title = "Web search",

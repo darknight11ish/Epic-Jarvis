@@ -580,6 +580,93 @@ def set_prompt_coach(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(200, out or {})
 
 
+# --- the Anti-Slop filter (jarvis_antislop.py, 2026-10-28) ----------------
+#
+# CARDLESS IN BOTH DIRECTIONS, and that is the same class as the prompt coach:
+# this changes the WORDS Jarvis writes. It opens no network door, reads no
+# folder, takes no action and loosens no gate, so neither direction asks and
+# neither waits. Every change still leaves ONE action receipt with a one-click
+# Undo (the module's own record, jarvis_receipts.py).
+#
+# The three setters below are the SAME functions the module's own routes call,
+# so a spoken sentence, a tap in Settings and a phone POST cannot disagree.
+
+def set_antislop(on: bool, *, peer=None, local=None) -> Outcome:
+    """Turn the Anti-Slop filter on or off. No card either way."""
+    try:
+        import jarvis_antislop as AS
+    except Exception:
+        return _missing("the Anti-Slop filter")
+    try:
+        out = AS.set_enabled(bool(on))
+    except Exception as exc:
+        return Outcome(False, "The Anti-Slop filter's setting could not be "
+                              f"saved ({type(exc).__name__}).")
+    return _say(200, out or {})
+
+
+def set_antislop_mode(value: str, *, peer=None, local=None) -> Outcome:
+    """`during` (filter as it writes) or `after` (audit and list findings)."""
+    try:
+        import jarvis_antislop as AS
+    except Exception:
+        return _missing("the Anti-Slop filter")
+    try:
+        out = AS.set_mode(str(value or ""))
+    except ValueError as exc:
+        return Outcome(False, str(exc))
+    except Exception as exc:
+        return Outcome(False, "The Anti-Slop mode could not be saved "
+                              f"({type(exc).__name__}).")
+    return _say(200, out or {})
+
+
+def set_antislop_scope(scope: str, on: bool, *, peer=None, local=None) -> Outcome:
+    """One of copy / code / ui inside the filter."""
+    try:
+        import jarvis_antislop as AS
+    except Exception:
+        return _missing("the Anti-Slop filter")
+    try:
+        out = AS.set_scope(str(scope or ""), bool(on))
+    except ValueError as exc:
+        return Outcome(False, str(exc))
+    except Exception as exc:
+        return Outcome(False, "The Anti-Slop scope could not be saved "
+                              f"({type(exc).__name__}).")
+    return _say(200, out or {})
+
+
+def antislop_mode_choices() -> dict:
+    """The two modes in the owner's words, for anything that asks a question.
+
+    NOT the row's option table: `CHOICE_SETTINGS`' `antislop_mode` entry holds
+    the bare `{"during": ..., "after": ...}` pair, because the contract the two
+    apps read requires exactly those two values. This helper stays for a
+    caller that wants to offer the familiar synonyms without putting them in
+    the table (nothing dispatches on it today; kept, not wired, rather than
+    deleted and re-invented).
+    """
+    return {"during": "during", "live": "during", "filter": "during",
+            "filter live": "during", "after": "after", "audit": "after",
+            "audit only": "after", "audit first": "after"}
+
+
+def antislop_words() -> str:
+    """What the filter is doing now - the module's own sentence, or a plain
+    "not on this PC" that never claims a state."""
+    try:
+        import jarvis_antislop as AS
+    except Exception:
+        return ("The Anti-Slop filter is not on this PC yet - run "
+                "apply-patches.ps1 on the PC.")
+    try:
+        return AS.status_words()
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return (f"I could not read the Anti-Slop filter's setting "
+                f"({type(exc).__name__}), so I will not guess whether it is on.")
+
+
 # --- background learning (jarvis_auto_learn.py) ---------------------------
 
 def set_background_learning(on: bool, *, peer=None, local=None) -> Outcome:
@@ -1871,6 +1958,36 @@ BOOL_SETTINGS: tuple = (
                ("prompt coach", "the prompt coach", "prompt coaching",
                 "coaching my prompts"),
                "prompt-coach", set_prompt_coach),
+    # The Anti-Slop filter (2026-10-28, `miqdadbadjuber/anti-slop` v3.2.23,
+    # MIT, rules distilled into jarvis_antislop.py). A cardless preference in
+    # both directions: it changes the WORDS Jarvis writes and nothing else -
+    # no network door, no folder, no action, no gate. OFF is also the state a
+    # PC that has never run it is in, and the prompt block costs 0 tokens
+    # while it is off.
+    #
+    # `section` IS None ON PURPOSE, and it already broke a suite once when it
+    # was set to "manner" (2026-10-28). A BoolSetting's `section` does not mean
+    # "the page this feature is described on": `jarvis_feature_guide.
+    # switches_for()` reads it to decide WHICH SWITCHES A FEATURE ROW COVERS, so
+    # naming "manner" made the "How Jarvis talks" row carry TWO switches
+    # (`anti-slop` and `humour`), and its own sentence degraded from "say turn
+    # on humour" to "It has more than one switch". The Settings card this row's
+    # switch is drawn on is bespoke (`contract/feature-controls.json` records
+    # `desktop_row: null` for it for the same reason), so it is not a section
+    # link. `backend/test_feature_guide.py`'s single-switch test is what caught
+    # it; leave this None until a real generated row exists.
+    #
+    # THE NAMES ARE SHORT ON PURPOSE, and it is a merge decision rather than a
+    # style one: `contract/feature-controls.json` holds these three for this
+    # switch (written by the Settings half), and `tools/check_feature_controls.py`
+    # requires them to be equal, word for word. The fuller phrasings a person
+    # actually says - "the anti-slop filter", "ai slop filter" - are reached by
+    # the registry's own tolerant matcher (`find_bool_setting_words`), which
+    # accepts words that CONTAIN one whole name; `backend/test_antislop.py`
+    # pins both of them, so the shorter list costs no reach.
+    BoolSetting("antislop",
+               ("anti-slop", "anti slop", "slop filter"),
+               None, set_antislop),
     BoolSetting("ask_before_every_search",
                ("asking before every web search", "ask before every search",
                 "asking before every search"),
@@ -2731,6 +2848,19 @@ CHOICE_SETTINGS: tuple = (
         when_empty=("This PC has no list of faces yet - the file "
                     "jarvis-visual-spec.json is not in the backend folder, so "
                     "I cannot name a face. Nothing was changed.")),
+    # The Anti-Slop filter's mode (2026-10-28): filter as it writes, or audit
+    # and list findings first. Cardless like its master switch. Its names and
+    # its two options are the Settings half's own, word for word, because the
+    # matrix check requires them equal; "anti-slop mode" without the leading
+    # "the" is reached by the tolerant matcher. The options are a plain dict
+    # rather than a table of extra aliases: two values exist, and the "set
+    # <name> to <value>" grammar refuses anything else in words.
+    ChoiceSetting(
+        "antislop_mode",
+        ("the anti-slop mode", "antislop mode"),
+        "manner", {"during": "during", "after": "after"}, set_antislop_mode,
+        "whether the Anti-Slop filter works as it writes (during) or audits "
+        "first (after)"),
 )
 
 
