@@ -188,7 +188,22 @@ _NOT_A_CLAIM = re.compile(
     r"\?\s*$|^\s*(if|should|shall|would|could|can|do you want|want me|once|when|"
     r"whenever|unless|until|whether|after|before|in case)\b"
     r"|\b(if|once|when) i\b"
-    r"|\bif\s+you(?:'d|\s+(?:like|want|wish|prefer))\b",
+    # Gemini review 2026-10-28 (i): the SAME sentence-level exclusion reaches
+    # every matcher. A condition or an offer can sit mid-sentence, after the
+    # claim grammar has already matched: "Set a reminder for 6pm when you're
+    # home.", "Added a reminder for 6pm whenever you like.", "You can have a
+    # reminder set for 5 PM." None of those says an action was taken.
+    r"|\b(?:if|once|when|whenever|unless|until|in case|whether)\s+you\b"
+    r"|\b(?:would\s+you|want\s+me\s+to|can\s+have\s+a)\b"
+    # Gemini review 2026-10-28 (i), the NEGATION half: the sentence itself
+    # says the action was not taken ("The reminder is set for 7pm and the
+    # email is sent, but I have not done it."), so no matcher's match in that
+    # sentence may be read as a claim.
+    r"|\b(?:have|has|had|did|do|does|was|were|is|are)\s+not\s+"
+    r"(?:actually\s+|really\s+|ever\s+)?(?:been\s+)?(?:done|set|sent|added|"
+    r"saved|created|scheduled|started|emailed|called|notified|booked|deleted|"
+    r"cancelled|paid|ordered|written|noted|turned|switched|locked|moved|"
+    r"opened|closed|finished|completed)\b",
     re.I)
 #: Something done before this answer ("I already set it this morning").
 _EARLIER = re.compile(
@@ -201,7 +216,12 @@ _MEMORY = re.compile(r"\b(remember\w*|memor(y|ies)|in mind|noted)\b|(?<!in )\bfa
 _NOTED = re.compile(r"\bnoted\b", re.I)
 _NOTE_PLACE = re.compile(
     r"\b(notes?|journals?|diary|vault|obsidian|logseq|joplin|one ?note|notebook|"
-    r"daily|apple notes)\b", re.I)
+    r"daily|apple notes|lists?|to-?dos?|todo(?:\s+list)?|reminders?|timers?|"
+    r"alarms?|tasks?|entries|entry|items?|files?|folders?|calendar|events?|"
+    r"appointments?|meetings?|inbox)\b", re.I)
+#: A sentence that OPENS with "Noted" and then a separator is a conversational
+#: opener ("Noted - I've emailed Alex."), not a statement about remembering.
+_BARE_NOTED = re.compile(r"^\s*noted\s*[,.;:\-\u2014\u2013]", re.I)
 
 #: H2: the object of an action, in the words a short confirmation uses for one.
 #: Deliberately a named list and not "any noun": "the backup is running" must
@@ -261,7 +281,16 @@ def _memory_sentence(sentence: str) -> bool:
     """
     if not _MEMORY.search(sentence):
         return False
-    return not (_NOTED.search(sentence) and _NOTE_PLACE.search(sentence))
+    if _NOTED.search(sentence):
+        # H3: "noted" + a place the note is STORED is a note write, not
+        # learning - the memory exemption must not swallow that claim.
+        if _NOTE_PLACE.search(sentence):
+            return False
+        # Gemini review 2026-10-28 (ii): a bare conversational "Noted - ..."
+        # opener is not a statement about remembering either. Only the
+        # "I've noted that ..." shape earns the exemption.
+        return not _BARE_NOTED.search(sentence)
+    return True
 
 
 def _passive_claim(sentence: str) -> bool:
