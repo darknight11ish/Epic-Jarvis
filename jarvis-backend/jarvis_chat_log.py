@@ -519,6 +519,55 @@ TAG_STARTERS = (("Work", 0, "briefcase"), ("Learning", 1, "book"), ("Personal", 
 _TAGS_KEY = "tags"
 _TAGS_AAD = b"meta|tags"
 
+# ------------------------------------------------------- pinned chats
+#
+# "Pinnable chats" (owner, 2026-10-27; JARVIS-API section 18.3). A pinned chat
+# sits at the top of the History sidebar, above every tag's group, and stays
+# pinned across a restart because the flag is a column in this same encrypted
+# history file - not a list in either app. It is metadata only: no text is
+# written by the pin, no approval card is raised, and the phone and the PC read
+# the same `pinned` field back from GET /api/history, so the two agree.
+#
+# TWO columns, not one: `pinned` is the yes/no, and `pinned_at` is WHEN it was
+# pinned, so the Pinned group has a stable order of its own (`pinned_at DESC,
+# updated DESC` - the newest pin first, a chat pinned before another never
+# jumping above it because a message arrived). Pinning a chat that is already
+# pinned keeps the first `pinned_at`: pinning twice is pinning once.
+_PIN_MESSAGES = {
+    "bad_request": "A pin needs one chat's id and pinned set to true or false.",
+    "not_found": "That chat is gone - it may have been deleted.",
+    "locked": 'Hidden while App lock or "Hide memory lists and chat history" is on.',
+}
+
+
+def _pin_fail(code: str) -> dict:
+    """{"ok": false, "error", "message"} for POST /api/history/pin."""
+    return {"ok": False, "error": code, "message": _PIN_MESSAGES[code]}
+
+
+#: The longest id the pin route will even look at. A real conversation id is 32
+#: characters; the cap only stops a request from carrying a novel to SQLite.
+_PIN_ID_MAX = 128
+
+
+def _private_view() -> dict:
+    """App lock / "Hide memory lists and chat history", as `jarvis_private_view`
+    has it for this process (Q1 ruling, 2026-10-20).
+
+    The hook is ABSENT -> unlocked, which is that module's own rule 2: a
+    standalone checkout, a test or an older PC behaves exactly as it did before
+    the module existed. It can only ever ADD withholding, never remove it."""
+    try:
+        import jarvis_private_view as _pv
+    except Exception:
+        return {"locked": False, "why": ""}
+    try:
+        got = _pv.effective()
+    except Exception:
+        return {"locked": False, "why": ""}
+    return {"locked": bool(got.get("locked")),
+            "why": str(got.get("why") or "")}
+
 
 def _tag_filter(tag):
     """GET /api/history's `tag=` value: an int id, "none", or None (no filter;
@@ -643,7 +692,8 @@ def _tag_id(v):
 _LAST_AT = ("COALESCE((SELECT MAX(at) FROM turns t2 WHERE t2.conversation_id=c.id),"
             " c.updated)")
 
-CONV_COLS = ("id", "title", "started", "updated", "device", "kind", "project", "tag_id")
+CONV_COLS = ("id", "title", "started", "updated", "device", "kind", "project", "tag_id",
+             "pinned", "pinned_at")
 
 
 def _conv_cols(alias: str = "", *, raw: bool = False) -> str:
@@ -688,15 +738,20 @@ def _conv_named(row) -> dict:
 
 
 def _row(cid, title, started, updated, turns, device, voice, outside, kind, project,
-         tag_id=None) -> dict:
+         tag_id=None, pinned=None, pinned_at=None) -> dict:
     """One History list row, as GET /api/history and the search send it.
-    `tag_id`: the chat's one tag (chat tags, 2026-09-30), or None."""
+    `tag_id`: the chat's one tag (chat tags, 2026-09-30), or None.
+    `pinned`: the owner pinned it to the top of the list (2026-10-27), and
+    `pinned_at` when that happened (unix seconds, or None when it is not
+    pinned) - so the Pinned group can order itself by the pin and not by the
+    chat's own time."""
     return {"id": cid, "title": title,
             "started": int(started or 0), "updated": int(updated or 0),
             "turns": int(turns), "device": device or "unknown",
             "has_voice": bool(voice), "tainted": bool(outside),
             "kind": kind if kind in KINDS else "chat", "project": project or None,
-            "tag_id": _tag_id(tag_id)}
+            "tag_id": _tag_id(tag_id), "pinned": bool(pinned),
+            "pinned_at": int(pinned_at) if pinned_at else None}
 
 
 def _title_from(rows) -> str:
@@ -971,7 +1026,8 @@ class ChatLog:
         c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE TABLE IF NOT EXISTS conversations ("
                   " id TEXT PRIMARY KEY, title BLOB, started REAL, updated REAL,"
-                  " device TEXT, kind TEXT, project TEXT, tag_id INTEGER)")
+                  " device TEXT, kind TEXT, project TEXT, tag_id INTEGER,"
+                  " pinned INTEGER, pinned_at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS turns ("
                   " conversation_id TEXT NOT NULL, idx INTEGER NOT NULL, at REAL,"
                   " role TEXT, provenance TEXT, device TEXT, lane TEXT,"
@@ -1004,6 +1060,15 @@ class ChatLog:
             # The names live sealed in `meta` (key "tags"), never here.
             if "tag_id" not in cols:
                 c.execute("ALTER TABLE conversations ADD COLUMN tag_id INTEGER")
+            # Pinned chats (JARVIS-API section 18.3, 2026-10-27): a plain
+            # column beside `tag_id`, 1 or NULL, plus the moment of the pin.
+            # Nothing about the words is stored here, so there is nothing to
+            # seal: the title stays the only text this table keeps, and it is
+            # sealed as it always was.
+            if "pinned" not in cols:
+                c.execute("ALTER TABLE conversations ADD COLUMN pinned INTEGER")
+            if "pinned_at" not in cols:
+                c.execute("ALTER TABLE conversations ADD COLUMN pinned_at REAL")
             c.execute("UPDATE conversations SET kind='support' WHERE kind IS NULL AND id IN"
                       " (SELECT DISTINCT conversation_id FROM turns WHERE role='support')")
             c.execute("UPDATE conversations SET kind='chat' WHERE kind IS NULL")
@@ -1911,7 +1976,7 @@ class ChatLog:
             out["conversations"].append(_row(
                 cv["id"], self._title(aead, cv["id"], cv["title"]), cv["started"],
                 cv["updated"], n, cv["device"], bool(voice), bool(outside),
-                cv["kind"], cv["project"], cv["tag_id"]))
+                cv["kind"], cv["project"], cv["tag_id"], cv["pinned"], cv["pinned_at"]))
         return out
 
     def _title(self, aead, cid, blob) -> str:
@@ -1966,7 +2031,8 @@ class ChatLog:
         return {"id": cid, "title": title, "history": self._keeping(),
                 "tainted": any(bool(r[4]) for r in rows), "turns": turns,
                 "kind": kind, "project": conv["project"] or None,
-                "tag_id": _tag_id(conv["tag_id"]),
+                "tag_id": _tag_id(conv["tag_id"]), "pinned": bool(conv["pinned"]),
+                "pinned_at": int(conv["pinned_at"]) if conv["pinned_at"] else None,
                 "started": int(conv["started"] or 0), "updated": int(conv["updated"] or 0),
                 "continuable": kind in CONTINUABLE and not crisis,
                 "continue_why": (CRISIS_CONTINUE_WHY if crisis
@@ -2063,6 +2129,8 @@ class ChatLog:
                 cv = _conv_named(conv_row)
                 cid, title_blob, started, updated = cv["id"], cv["title"], cv["started"], cv["updated"]
                 device, rkind, project, tid = cv["device"], cv["kind"], cv["project"], cv["tag_id"]
+                pin = cv["pinned"]
+                pin_at = cv["pinned_at"]
                 if time.monotonic() > deadline:
                     out["partial"] = True
                     break
@@ -2090,7 +2158,7 @@ class ChatLog:
                     break
                 snippet, hits = hit
                 row = _row(cid, title, started, updated, len(rows), device, voice, outside,
-                           rkind, project, tid)
+                           rkind, project, tid, pin, pin_at)
                 row.update(snippet=snippet, hits=hits)
                 found.append(row)
         out["conversations"] = found
@@ -2570,6 +2638,50 @@ class ChatLog:
             with c:
                 c.execute("UPDATE conversations SET tag_id=? WHERE id=?", (tag_id, cid))
         return 200, {"ok": True, "id": cid, "tag_id": tag_id}
+
+    def set_pin(self, cid, pinned) -> tuple:
+        """POST /api/history/pin: pin one chat to the top of History, or take
+        the pin off. (http code, answer). One flag per chat; the flag itself
+        is the whole record, so pinning twice is the same as pinning once -
+        including its `pinned_at`, which keeps the FIRST moment it was pinned
+        so a second pin cannot shuffle the Pinned group around.
+
+        The refusals are the contract (JARVIS-API section 18.3): an id that is
+        not a string, is empty, or is longer than 128 characters is a 400, a
+        `pinned` that is not a JSON boolean is a 400, and a chat that is not
+        there is a 404 with **nothing written** - never a ghost row. The id
+        itself is only ever a bound SQL parameter, so a strange one is simply
+        not found rather than an error the caller could read something into.
+
+        Metadata only, like a tag: no text is opened, sealed or rewritten,
+        no approval card is raised (it is the owner's own tidying, and it
+        loosens nothing). The pin survives a restart because it is a column in
+        the same encrypted history file every other History fact lives in -
+        and both apps read it back from the same list, so the phone and the PC
+        agree without either one keeping a list of its own."""
+        if not (isinstance(cid, str) and 0 < len(cid) <= _PIN_ID_MAX):
+            return 400, _pin_fail("bad_request")
+        if not isinstance(pinned, bool):
+            return 400, _pin_fail("bad_request")
+        if not self.db_path.exists():
+            return 404, _pin_fail("not_found")
+        with self._lock, closing(self._connect()) as c:
+            got = c.execute("SELECT pinned_at FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
+            if got is None:
+                return 404, _pin_fail("not_found")
+            if pinned:
+                at = got[0] if got[0] else int(self._clock())
+                with c:
+                    c.execute("UPDATE conversations SET pinned=1, pinned_at=? WHERE id=?",
+                              (at, cid))
+            else:
+                at = None
+                with c:
+                    c.execute("UPDATE conversations SET pinned=NULL, pinned_at=NULL"
+                              " WHERE id=?", (cid,))
+        return 200, {"ok": True, "id": cid, "pinned": bool(pinned),
+                     "pinned_at": int(at) if at else None}
 
     def fork(self, cid, upto) -> tuple:
         """POST /api/history/fork: (http code, answer). Copies turns 0..`upto`
@@ -3394,6 +3506,25 @@ def _query(qs: str) -> dict:
 SEARCH_PATH = "/api/history/search"
 
 
+def _hidden_list(out: dict) -> dict:
+    """GET /api/history's answer while App lock or "Hide memory lists and chat
+    history" is on: every row goes - a title is the owner's own words, and a
+    PINNED row is no different, so the Pinned group disappears with the rest -
+    and the counts and the switch stay, because they say nothing about what
+    was said. This is the same shape the desktop applies to the same answer
+    (`redact_list` in `lock/rules.rs`), so the two cannot describe it two
+    ways; a client that gets it shows its "hidden" line instead of a list."""
+    if not isinstance(out, dict):
+        return out
+    rows = out.get("conversations")
+    if isinstance(rows, list):
+        out = dict(out)
+        out["hidden_count"] = len(rows)
+        out["hidden"] = True
+        out["conversations"] = []
+    return out
+
+
 def handle_get(path: str, query: str = "") -> tuple:
     """GET /api/history, /api/history/conversation, /api/history/search and
     /api/history/tags. (code, body)."""
@@ -3412,8 +3543,13 @@ def handle_get(path: str, query: str = "") -> tuple:
                 before = b
         except (TypeError, ValueError):
             before = None
-        return 200, log.list(limit=limit, before=before, kind=q.get("kind") or None,
-                             tag=q.get("tag") or None)
+        out = log.list(limit=limit, before=before,
+                       kind=q.get("kind") or None, tag=q.get("tag") or None)
+        # While App lock or "Hide memory lists and chat history" is on, EVERY
+        # row is withheld - a pinned one too - so no caller can learn a chat's
+        # title (or that it exists) from this route. The hook is absent ->
+        # unlocked, so a standalone checkout is unchanged.
+        return 200, _hidden_list(out) if _private_view()["locked"] else out
     if path == "/api/history/tags":
         return 200, log.tags()
     if path == "/api/history/tags/suggest":
@@ -3448,7 +3584,8 @@ def handle_get(path: str, query: str = "") -> tuple:
 
 
 def handle_post(route: str, body) -> tuple:
-    """POST /api/history/delete, /settings, /tags, /tag, /fork, /mark and /tags/suggest. (code, body)."""
+    """POST /api/history/delete, /settings, /tags, /tag, /pin, /fork, /mark and
+    /tags/suggest. (code, body)."""
     if route == "/api/history/delete":
         if not isinstance(body, dict) or set(body) != {"id"} or not isinstance(body["id"], str):
             return 400, {"error": 'need {"id": "<conversation id>"} - one conversation '
@@ -3466,6 +3603,25 @@ def handle_post(route: str, body) -> tuple:
         if not isinstance(body, dict) or set(body) != {"id", "tag_id"}:
             return 400, _tag_fail("bad_request")
         return _log().set_tag(body["id"], body["tag_id"])
+    if route == "/api/history/pin":
+        # Pinned chats (section 18.3, 2026-10-27): one chat, one flag, no
+        # card. The audit line says which way it went and nothing else - no
+        # title, no words.
+        #
+        # WHILE THE LISTS ARE HIDDEN THIS ROUTE ANSWERS 423 FOR EVERY ID,
+        # before it looks at one: a 200 ("pinned it") against a 404 ("no such
+        # chat") would tell a locked PC's caller whether a chat exists, which
+        # is exactly what App lock is for. Same body, same sentence, whatever
+        # was asked.
+        view = _private_view()
+        if view["locked"]:
+            return 423, _pin_fail("locked")
+        if not isinstance(body, dict) or set(body) != {"id", "pinned"}:
+            return 400, _pin_fail("bad_request")
+        code, out = _log().set_pin(body["id"], body["pinned"])
+        if code == 200:
+            _audit("history.pin", {"pinned": out["pinned"]})
+        return code, out
     if route == "/api/history/tags/suggest":
         # Overnight suggested tags (section 104): on = ONE card, off = at once.
         try:

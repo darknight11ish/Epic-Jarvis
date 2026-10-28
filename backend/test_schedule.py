@@ -42,6 +42,7 @@ model.
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import re
@@ -68,6 +69,38 @@ for p in (HERE / "rebuilt",):
 import jarvis_schedule as S  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
 import _stack  # noqa: E402
+
+# THIS SUITE'S OWN EMPTY CONFIG FOLDER, and why it is here.
+#
+# The wording checks below assert the reply the fast path gives with the
+# SHIPPED defaults: no personality chosen, manner warm. Both of those are the
+# owner's SAVED settings (manner.json), so on a PC where a personality has been
+# chosen the same command answers in that character's own voice - the classic
+# butler says "Very good, sir. Timer set for 10 minutes." - and every wording
+# check here would fail on that machine while passing in CI. That is the test
+# reading the desk it runs on, not a wrong answer: the same four checks passed
+# 468/468 with this folder empty (measured 2026-10-27, the day the four failed
+# at the owner's desk with "Very good, sir" in the detail).
+#
+# So the folder is made empty for this process, the way test_manner.py's Folder
+# does it, and the defaults are what is asserted. Nothing is written to the
+# owner's real config, and the setting is put back on the way out.
+_CFG = tempfile.TemporaryDirectory(prefix="jarvis-schedule-cfg-")
+_SAVED_CONFIG_DIR = os.environ.get("OPENJARVIS_CONFIG_DIR")
+os.environ["OPENJARVIS_CONFIG_DIR"] = _CFG.name
+import jarvis_manner as _manner  # noqa: E402
+_manner._config_dir = lambda: Path(_CFG.name)
+
+
+def _restore_config_dir():
+    if _SAVED_CONFIG_DIR is None:
+        os.environ.pop("OPENJARVIS_CONFIG_DIR", None)
+    else:
+        os.environ["OPENJARVIS_CONFIG_DIR"] = _SAVED_CONFIG_DIR
+    _CFG.cleanup()
+
+
+atexit.register(_restore_config_dir)
 
 PASSED, FAILED = [], []
 SKIPPED = []
