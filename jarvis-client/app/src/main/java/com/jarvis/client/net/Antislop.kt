@@ -125,8 +125,12 @@ object Antislop {
             enabled = enabled,
             mode = mode,
             // OFF unless the PC says a real `true`: a backend that predates the
-            // field paints the box unticked, which is the state it holds.
-            allowEmDashes = (body["allow_em_dashes"] as? JsonPrimitive)?.booleanOrNull == true,
+            // field paints the box unticked, which is the state it holds. A
+            // JSON string ("true") is not a yes - a stray string must not tick
+            // a box the owner never ticked.
+            allowEmDashes = (body["allow_em_dashes"] as? JsonPrimitive)
+                ?.takeIf { it.isBoolean }
+                ?.booleanOrNull == true,
             detail = body.text("detail") ?: DETAIL,
             offNote = body.text("off_note") ?: OFF_NOTE,
         )
