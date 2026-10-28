@@ -4147,6 +4147,11 @@ const galaxy = (() => {
    *  never asks again. */
   function ensureCosmos(){
     if(cosmosFailed || cosmosEngine || cosmosLoading) return cosmosLoading;
+    // LAZY, and it means it: nothing is built while the map is not on screen.
+    // The drawing loop's own switch builds it on the first frame the Galaxy is
+    // really shown (`resumeCosmos`), so a page that opens on the conversation
+    // never creates a WebGLRenderer at all.
+    if(!shouldRun()) return null;
     const canvas = cosmosCanvas();
     if(!cosmosModule || !canvas || S.reduced) return null;
     cosmosLoading = cosmosModule.createEngine({
@@ -4180,6 +4185,23 @@ const galaxy = (() => {
     }
     paintLookActions();
     if(nodes.length) renderCounts(nodes);
+  }
+
+  /** Let go of the 3D engine, and with it the GPU context, while the map is not
+   *  drawn. The engine is built on the first frame the map is on screen and
+   *  dropped again when it leaves - the owner's guardrail for this wave
+   *  (2026-10-28): a picture nobody is looking at must not hold a WebGL context
+   *  or keep ~1,500 objects alive. The look stays chosen; only the engine goes,
+   *  and the flat 2D pass of the same look draws until it is back. */
+  function releaseCosmos(){
+    if(cosmosEngine) dropCosmos();
+  }
+
+  /** Build the 3D engine again when the map comes back on screen. A failure is
+   *  remembered in `cosmosFailed`, so this can never become a rebuild loop. */
+  function resumeCosmos(){
+    if(cosmosEngine || cosmosFailed || !cosmosLook() || S.reduced) return;
+    ensureCosmos();
   }
 
   /** Hand the engine the picture it should be drawing: the chosen look and the
@@ -4426,7 +4448,13 @@ const galaxy = (() => {
     const want = !!on && shouldRun();
     if(want === running) return;
     running = want;
-    if(running) requestAnimationFrame(draw);
+    if(!running) return;
+    // The map is on screen again: build the 3D engine if it was let go while
+    // the galaxy was hidden (`releaseCosmos`). A machine that cannot draw, or
+    // one where the engine already failed, stays flat - `cosmosFailed` stops
+    // this from ever becoming a rebuild loop.
+    resumeCosmos();
+    requestAnimationFrame(draw);
   }
 
   /** The view or the window's visibility changed: keep the loop in step with
@@ -4820,7 +4848,7 @@ const galaxy = (() => {
   }
 
   return {
-    load, resize, setTrace, flyTo, setRunning, syncRunning,
+    load, resize, setTrace, flyTo, setRunning, syncRunning, releaseCosmos,
     reset(){
       clearFocus();
       // A 3D look has a camera, not a yaw: its own reset puts the look back on
@@ -5621,6 +5649,12 @@ $("g-spin").addEventListener("click", e => {
     paintHidden();
     // A picture that is not drawn is not stepped: the one drawing loop follows
     // the same fact the CSS does.
+    // A galaxy the owner has HIDDEN also lets go of its 3D engine and the GPU
+    // context behind it (2026-10-28). Showing it again builds one, through the
+    // drawing loop's own switch (`resumeCosmos`), and the flat picture of the
+    // same look draws until that first 3D frame - so the way back never shows
+    // an empty stage.
+    try{ if(hidden) galaxy.releaseCosmos(); }catch(e){}
     try{ galaxy.syncRunning(); }catch(e){}
   }
 
@@ -6778,6 +6812,10 @@ galaxy.syncRunning();
 document.addEventListener("visibilitychange", () => {
   document.documentElement.classList.toggle("hud-window-hidden", document.hidden);
   galaxy.syncRunning();
+  // A minimised or backgrounded window is not drawing anything: let go of the
+  // 3D engine's GPU context instead of holding it behind a blank screen
+  // (2026-10-28). Coming back rebuilds it by the same path as the view switch.
+  if(document.hidden) galaxy.releaseCosmos();
   if(!document.hidden){ galaxy.resize(); apprTick(); apprPoll(); }
 });
 apprPoll();
