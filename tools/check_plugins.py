@@ -11,6 +11,9 @@ What it checks, and why each one matters:
   3. every drop-in module named really is in `backend/` and really has an
      `install()`, which is the only thing the loader calls;
   4. every drop-in folder exists, and its manifest agrees with the catalogue;
+  4a. every folder under `plugins/ready/` is accounted for - either a patch's
+     generated mirror or a `plugin.json` of its own - so no real drop-in can be
+     left out of the catalogue again (ten of them were until 2026-10-28);
   5. `backend/plugin-loader.patch` is well formed: hunk counts add up, it
      targets `jarvis_hud.py`, its context is the output of the patch above it
      in the stack (`tutorials.patch`), and it adds exactly the one import and
@@ -21,8 +24,8 @@ What it checks, and why each one matters:
      `$SHIPPED` and `backend/_where.py`'s `SHIPPED`) - they are checked
      against each other by test_shipped_modules.py, and a module in only one
      of them never reaches the PC;
-  8. the loader's own suite passes, in this process, with no owner's PC and
-     no network.
+  8. the loader's own suite AND the catalogue's own suite pass, in this
+     process, with no owner's PC and no network.
 
 Run:  py -3 tools/check_plugins.py
 Exit: 0 when everything passes, 1 otherwise.
@@ -142,18 +145,67 @@ def main() -> int:
     check("drop-ins: every folder is there and agrees with the catalogue",
           not bad_folder, "\n".join(bad_folder))
 
+    # --- 4a. every plugins/ready folder is accounted for ------------------
+    # Ten real drop-in folders (receipts, skill-hub, vault, voiceprint,
+    # notion-obsidian, media-index, sandbox, self-improve, auto-router and
+    # vault-organizer) were in NEITHER the registry nor plugins/README.md
+    # until 2026-10-28: the generator built its list from `$PATCHES`, and
+    # those ten have no patch. They are read from their own plugin.json now;
+    # a folder the generator cannot account for is refused (its `unaccounted`
+    # list) and is a failure here too - never skipped.
+    ready_dir = PLUGINS / "ready"
+    folder_entries = data.get("folders", [])
+    unaccounted = built.get("unaccounted", [])
+    check("folders: the generator can account for every folder in plugins/ready/",
+          not unaccounted,
+          "\n".join(f"{u.get('folder')}: {u.get('why')}" for u in unaccounted)
+          or "run: py -3 tools/gen_plugin_catalogue.py")
+    ready_names = ({c.name for c in ready_dir.iterdir() if c.is_dir()}
+                   if ready_dir.is_dir() else set())
+    accounted = ({e["name"] for e in drop_ins}
+                 | {f.get("name") for f in folder_entries})
+    check("folders: every folder on disk is in one of the catalogue's two lists",
+          ready_names == accounted,
+          f"on disk but not listed: {sorted(ready_names - accounted)}\n"
+          f"listed but not on disk: {sorted(accounted - ready_names)}")
+    check("folders: the counts add up - patch-backed + no-patch = every folder",
+          data.get("folder_count") == len(folder_entries)
+          and data.get("ready_count") == len(drop_ins) + len(folder_entries)
+          and len(ready_names) == data.get("ready_count"),
+          f"folder_count={data.get('folder_count')} "
+          f"ready_count={data.get('ready_count')} listed={len(folder_entries)} "
+          f"on_disk={len(ready_names)} patch_backed={len(drop_ins)}")
+    folder_bad: list[str] = []
+    for f in folder_entries:
+        manifest = ready_dir / str(f.get("name")) / "plugin.json"
+        if not manifest.is_file():
+            folder_bad.append(f"{f.get('name')}: its folder or plugin.json is missing")
+            continue
+        try:
+            m = json.loads(manifest.read_text(encoding="utf-8"))
+        except Exception as exc:
+            folder_bad.append(f"{f.get('name')}: plugin.json will not parse "
+                              f"({type(exc).__name__})")
+            continue
+        for key in ("name", "module", "install", "stack_order", "summary"):
+            if m.get(key) != f.get(key):
+                folder_bad.append(f"{f.get('name')}: {key} disagrees with its "
+                                  f"plugin.json ({m.get(key)!r} vs {f.get(key)!r})")
+        if "replaces_patch" in m:
+            folder_bad.append(f"{f.get('name')}: it names a patch, so the "
+                              f"patch's own row belongs in `entries`, not `folders`")
+    check("folders: every no-patch row is its own plugin.json, and names no patch",
+          not folder_bad, "\n".join(folder_bad))
+
     # --- 4b. folders that replace NO patch ---------------------------------
-    # `plugins/ready/receipts` is the first (2026-10-14, action receipts and
-    # one-click undo): a feature whose whole wiring is a folder, so there is
-    # no patch for the catalogue to mirror it from and no row for it there.
-    # The generator leaves such a folder alone (`replaces_no_patch`); this is
-    # what keeps it honest - the module it names is in `backend/`, has the
-    # `install()` the loader calls, and is one `apply-patches.ps1` copies in,
-    # because a folder whose module never reaches the PC loads nothing.
+    # The generator now lists those folders under `data["folders"]` (4a). This
+    # is the second, independent check that each is loadable: the module it
+    # names is in `backend/`, has the `install()` the loader calls, and is one
+    # `apply-patches.ps1` copies in, because a folder whose module never
+    # reaches the PC loads nothing.
     catalogue_folders = {e["name"] for e in drop_ins}
     shipped = set(ps1_shipped())
     extra_bad: list[str] = []
-    ready_dir = PLUGINS / "ready"
     for child in sorted(ready_dir.iterdir()) if ready_dir.is_dir() else []:
         if not child.is_dir() or child.name in catalogue_folders:
             continue
@@ -325,6 +377,29 @@ def main() -> int:
           not mod.FAILED,
           "failed: " + ", ".join(mod.FAILED) if mod.FAILED else "")
     print(f"        ({len(mod.PASSED)} loader checks passed)")
+
+    # --- 8b. the catalogue's own suite ------------------------------------
+    # The pin against a silent skip: a plugins/ready folder that is neither a
+    # patch's mirror nor a complete no-patch manifest must be REPORTED, and the
+    # committed tree must account for all 37. The suite proves both, and a
+    # synthetic folder in a temporary plugins/ is how the refusal is exercised.
+    spec = importlib.util.spec_from_file_location(
+        "test_plugin_catalogue", BACKEND / "test_plugin_catalogue.py")
+    cmod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cmod)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        for name, fn in sorted(vars(cmod).items()):
+            if name.startswith("t_") and callable(fn):
+                try:
+                    fn()
+                except Exception as exc:  # noqa: BLE001
+                    cmod.FAILED.append(name)
+                    cmod.check(f"{name} raised", False, f"{type(exc).__name__}: {exc}")
+    check("catalogue: its own suite passes here (every ready folder accounted for)",
+          not cmod.FAILED,
+          "failed: " + ", ".join(cmod.FAILED) if cmod.FAILED else "")
+    print(f"        ({len(cmod.PASSED)} catalogue checks passed)")
 
     print()
     if FAILED:
