@@ -542,6 +542,26 @@ OURS = {
     "remind me to do the laundry at 5": ("reminder_set", {"text": "do the laundry"}),
     "remind me at noon to eat": ("reminder_set", {"text": "eat"}),
     "set a reminder for 5pm to leave": ("reminder_set", {"text": "leave"}),
+    # The HUD field bug of 2026-10-27, the owner's own words: "i added a
+    # reminder on the current jarvis hud ... and jarvis said he added it, yet
+    # when i go to reminders i see nothing coming up." The natural "add a
+    # reminder ..." (and "i need a reminder", "reminder to ...", "new
+    # reminder") was NOT in the grammar, so the sentence went to a model with
+    # no reminder tool, which could only SAY it had set one. These now answer
+    # here, and the row is really written (t_a_hud_reminder_really_lands).
+    "add a reminder to take my pills at 6pm": ("reminder_set", {"text": "take my pills"}),
+    "add a reminder for tomorrow at 6pm to call Mum": ("reminder_set", {"text": "call Mum"}),
+    "Add a reminder in 20 minutes to check the oven": ("reminder_set",
+                                                       {"text": "check the oven"}),
+    "add reminder to call the bank tomorrow": ("reminder_set", {"text": "call the bank"}),
+    "i need a reminder to call the dentist tomorrow": ("reminder_set",
+                                                       {"text": "call the dentist"}),
+    "can you add a reminder to drink water at 3pm": ("reminder_set", {"text": "drink water"}),
+    "could you please set a reminder to call Mum at 6pm": ("reminder_set", {"text": "call Mum"}),
+    "i want to add a reminder to check the oven in 20 minutes": ("reminder_set",
+                                                                 {"text": "check the oven"}),
+    "reminder to call Mum at 6": ("reminder_set", {"text": "call Mum"}),
+    "new reminder to pay rent on Friday at 5pm": ("reminder_set", {"text": "pay rent"}),
     "remind me on Friday at 5pm to pay rent": ("reminder_set", {"text": "pay rent"}),
     "remind me every weekday at 7 to take my pills": ("reminder_set", {"text": "take my pills"}),
     "remind me to stretch every 2 hours": ("reminder_set", {"text": "stretch"}),
@@ -569,6 +589,12 @@ NOT_OURS = [
     "I have to do my taxes", "what should I add to my list", "the timer on my oven is broken",
     "my alarm didn't go off this morning", "what's the best way to remember things",
     "remind me to", "stop", "cancel", "add it to my to-do list",
+    # A CLAIM, not a command: the model's words must not set a reminder of
+    # their own (the same 2026-10-27 bug, the other direction), and an offer
+    # is not one either.
+    "reminder set for 6pm", "added a reminder for 6pm", "set a reminder for 6pm",
+    "add a reminder to my phone", "should i add a reminder for 6pm",
+    "add a reminder for the meeting if you like",
     "set a timer for 10 minutes and then tell me a joke",
     "Stelle einen Timer für 10 Minuten", "pon un temporizador de 10 minutos",
 ]
@@ -942,6 +968,93 @@ def t_no_model_on_a_match():
         socket.socket.connect, urllib.request.urlopen = saved
         jarvis_agent.run_local_turn = saved_turn
         S._SCHED = None
+
+
+def t_a_hud_reminder_really_lands():
+    """The owner's HUD bug of 2026-10-27, end to end.
+
+    Their words: "i added a reminder on the current jarvis hud and jarvis said
+    he added it, yet when i go to reminders i see nothing coming up." The
+    natural "add a reminder ..." was not in the fast grammar, so the sentence
+    went to the model - which is offered set_reminder only when
+    [tools].enabled names it, and the shipped list does not - so it could only
+    SAY it had set one. Nothing was written.
+
+    This proves the chain for the owner's own wording, through the function
+    schedule.patch calls in /api/chat before any model turn (answer_turn's own
+    `answer()`, with no model anywhere):
+
+        chat text -> a row in the scheduler -> the body GET /api/schedule
+        answers -> the page the HUD's Reminders tab draws.
+
+    The /api/chat wiring itself (that block, with the model made to fail) is
+    t_no_model_on_a_match's, where it already lives. The near-miss half is in
+    NOT_OURS above, and the false-claim correction is test_smarter_answers'."""
+    use_tz("Europe/London")
+    now = time.time()
+    w = World(now, name="hud-reminder")
+    S._SCHED = w.s
+    try:
+        for words, want in (
+                ("add a reminder to take my pills at 6pm", "take my pills"),
+                ("i need a reminder to call the dentist tomorrow", "call the dentist"),
+                ("reminder to water the plants at 9", "water the plants")):
+            got = Q.answer(words, sched=w.s, now=now)
+            check(f"the HUD's own wording is answered without the model: {words!r}",
+                  got is not None, got)
+            if got is None:
+                continue
+            check(f"... and the answer says the reminder is set: {words!r}",
+                  "reminder set" in got.reply.lower(), got.reply)
+            jobs = [j for j in w.s.listed() if want in (j.get("text") or "")]
+            check(f"... and a ROW is really in the scheduler: {words!r}",
+                  len(jobs) == 1, jobs)
+            if not jobs:
+                continue
+            check(f"... an active one-off reminder: {words!r}",
+                  jobs[0]["kind"] == "reminder" and jobs[0]["state"] == "active", jobs[0])
+            api_jobs = w.s.status().get("jobs") or []
+            check(f"... and GET /api/schedule's body lists it: {words!r}",
+                  any(want in (j.get("text") or "") for j in api_jobs), api_jobs)
+            row = next((j for j in api_jobs if want in (j.get("text") or "")), None)
+            # The HUD's own reader keeps a row only when it looks like this
+            # (jarvis_hud.html `readSchedule`'s `ok()`: an `s` + 10 hex id and a
+            # known kind/text/state). This is the contract its Reminders list
+            # draws; the Playwright suite hud.mjs drives that list's DOM over
+            # GET /api/schedule in CI (REMINDERS_SCHEDULE fixture).
+            check(f"... and the row passes the HUD reader's own filter: {words!r}",
+                  row is not None and re.fullmatch(r"s[0-9a-f]{10}", row.get("id") or "")
+                  and row.get("kind") == "reminder" and row.get("text") == want
+                  and row.get("state") == "active", row)
+    finally:
+        S._SCHED = None
+    # The HUD half of the chain: the page draws GET /api/schedule through the
+    # shell's fixed read list, so the row above is what the owner sees.
+    proxy = (REPO / "jarvis-desktop" / "src-tauri" / "src" / "hud_proxy.rs").read_text(
+        encoding="utf-8")
+    check("the HUD window may read /api/schedule through the shell (hud_proxy)",
+          '"/api/schedule",' in proxy, "not in hud_proxy.rs's fixed read list")
+    page = (REPO / "jarvis-desktop" / "src" / "jarvis_hud.html").read_text(encoding="utf-8")
+    check("the HUD page's Reminders tab reads GET /api/schedule",
+          'fetch("/api/schedule",' in page or "fetch('/api/schedule'" in page,
+          "no read of /api/schedule in the HUD page")
+    # ...and the LIST that draws those jobs is driven in CI by the Playwright
+    # suite hud.mjs (a browser suite: NOT run here), over a GET /api/schedule
+    # fixture, asserting #reminders-body rows and titles. So: this test proves
+    # the chat request really writes the row into the body the page reads, and
+    # hud.mjs proves the page renders that body's jobs as rows.
+    hud_suite = (REPO / "jarvis-desktop" / "tests" / "hud.mjs").read_text(encoding="utf-8")
+    check("the HUD Reminders list's rendering is pinned in CI against /api/schedule (hud.mjs)",
+          "REMINDERS_SCHEDULE" in hud_suite
+          and "#reminders-body .rem-row" in hud_suite
+          and 'url.pathname === "/api/schedule"' in hud_suite,
+          "hud.mjs no longer drives the Reminders list from a /api/schedule fixture")
+    # And the half that must never pass silently: a model that only SAYS it
+    # added a reminder gets the plain correction line (2026-10-27).
+    import jarvis_claims as CL
+    check("a model's 'Added a reminder' with no tool is a claim, and it is corrected",
+          CL.unbacked_claim("Added a reminder to take my pills at 6pm.", []))
+
 
 # --------------------------------------------------------------------------
 #   The learner, and the model's own tools

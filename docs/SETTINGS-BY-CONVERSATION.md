@@ -117,10 +117,12 @@ Added by `feat/models-on-d-and-storage-tiers` (PR #229):
 The adjustment-truth audit found that the first control matrix over-claimed. The follow-up
 fix (task-118, same PR) makes the claim smaller and checkable:
 
-- **Counts are now 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 70 Command-Only,
-  12 Always-On (140 features).** The desktop Private chat row joined Command-Only on
-  2026-10-26, and Choose Jarvis's face moved PC-Only -> Switchable/Adjustable the same
-  day when it became changeable by asking (one named choice, no card). The previous
+- **Counts are now 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only,
+  12 Always-On (141 features).** The desktop Private chat row joined Command-Only on
+  2026-10-26, Choose Jarvis's face moved PC-Only -> Switchable/Adjustable the same
+  day when it became changeable by asking (one named choice, no card), and
+  Command-Only moved 70 -> 71 on 2026-10-27 when the reminder actions joined it.
+  The previous
   42/2/13/70/12 was wrong: `picture-mode`
   really sets `screen_picture` (so it is Switchable/Adjustable), and `calendar`,
   `phone-notifications` and `phone-watch` are PC-only controls (so they are PC-Only).
@@ -135,7 +137,7 @@ fix (task-118, same PR) makes the claim smaller and checkable:
   planned; and every displayed phrase must resolve.
 - **Both apps have the directory now.** The desktop's Settings -> Abilities &
   commands and the phone's Settings both draw the same generated, read-only
-  directory of all 140 features; the phone's is searchable and says where each
+  directory of all 141 features; the phone's is searchable and says where each
   control lives, but it changes nothing and offers no fake switch. The phone's
   own Settings screens and search remain its way to CHANGE settings; "open all
   features and abilities" on the phone opens the directory row.
