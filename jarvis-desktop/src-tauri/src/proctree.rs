@@ -313,3 +313,103 @@ mod tests {
         let _ = child.wait();
     }
 }
+
+/// No console window of this app's own.
+///
+/// THE OWNER'S QUESTION, 2026-10-28: *"why does a powershell open automatically?
+/// is that necessary? can it be done behind the scenes"*. The answer measured on
+/// his PC that day was that the visible window is **not** this app's: the app
+/// starts the Python backend through [`crate::proctree::spawn`], which passes
+/// `CREATE_NO_WINDOW`, and the window was his own Ollama lane task, launched by
+/// Task Scheduler (`scripts/hide-lane-window.ps1` is the fix for that half, and
+/// `backend/test_hide_lane_window.py` is its suite).
+///
+/// These pins keep the app's half true. They read this crate's own source
+/// rather than running anything, which is the same shape `sidecar.rs` already
+/// uses for its "the argument cannot quietly come back" check, and they are
+/// deliberately narrow: each names the program and the file, so a failure says
+/// which call stopped hiding itself. A spawn added tomorrow is not covered here.
+/// What is covered is that the two facts which make this app console-free (its
+/// release subsystem and the flag on the child it starts) cannot be edited away
+/// without a red test.
+#[cfg(test)]
+mod no_visible_console {
+    /// The file's own text, read from the crate root at test time.
+    fn source(file: &str) -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join(file);
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("could not read {}: {e}", path.display()))
+    }
+
+    /// `needle` occurs in `file`, and every occurrence has `CREATE_NO_WINDOW`
+    /// within `within` lines after it (the flag is set in a block just below
+    /// the `Command::new`, never on the same line).
+    fn spawn_hides_its_console(file: &str, needle: &str, within: usize) {
+        let text = source(file);
+        let mut found = 0;
+        let lines: Vec<&str> = text.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
+            if !line.contains(needle) {
+                continue;
+            }
+            found += 1;
+            let end = (i + within + 1).min(lines.len());
+            let window = lines[i..end].join("\n");
+            assert!(
+                window.contains("CREATE_NO_WINDOW"),
+                "{file}: `{needle}` at line {} does not pass CREATE_NO_WINDOW \
+                 within {within} lines - a console window would appear behind the GUI",
+                i + 1
+            );
+        }
+        assert!(found > 0, "{file}: `{needle}` was not found at all");
+    }
+
+    /// A release build has no console of its own: Windows would otherwise put
+    /// one beside the app, which is what the owner used to see.
+    #[test]
+    fn a_release_build_declares_no_console() {
+        let main = source("main.rs");
+        assert!(
+            main.contains("#![cfg_attr(not(debug_assertions), windows_subsystem = \"windows\")]"),
+            "main.rs must keep the release-only windows_subsystem attribute; without \
+             it a release build draws a console window of its own"
+        );
+        assert!(
+            main.contains("debug_assertions"),
+            "the attribute is release-only on purpose: a debug build keeps the console \
+             so println! from the hotkey/tray/capture paths stays visible"
+        );
+    }
+
+    /// The one child this app starts on its own: the Python backend.
+    #[test]
+    fn the_backend_is_spawned_with_no_window_and_only_here() {
+        let here = source("proctree.rs");
+        assert!(
+            here.contains(
+                ".creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP)"
+            ),
+            "proctree.rs's Windows spawn must keep CREATE_NO_WINDOW: the backend is a \
+             Python console program and would otherwise appear behind the GUI"
+        );
+        let sidecar = source("sidecar.rs");
+        assert!(
+            sidecar.contains("proctree::spawn(&mut command)"),
+            "sidecar.rs must start the backend through proctree::spawn - a plain \
+             `Command::spawn()` there would undo the hidden window and the job object"
+        );
+    }
+
+    /// The other console programs this app runs by itself, each of which showed
+    /// a window before it was given the flag: `git` (the backend folder's
+    /// commit), `nvidia-smi` (the cards), and the device probe.
+    #[test]
+    fn the_other_console_programs_are_hidden_too() {
+        spawn_hides_its_console("backend_update.rs", "Command::new(\"git\")", 15);
+        spawn_hides_its_console("commands.rs", "Command::new(\"nvidia-smi\")", 15);
+        spawn_hides_its_console("devices.rs", "Command::new(&program)", 15);
+    }
+}
