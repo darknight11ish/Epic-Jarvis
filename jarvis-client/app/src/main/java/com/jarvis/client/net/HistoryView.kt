@@ -1,0 +1,269 @@
+package com.jarvis.client.net
+
+/**
+ * The DeepSeek-shaped History list the owner asked for (2026-10-27): pinned
+ * chats first, then one collapsible section per chat tag (the owner's
+ * "projects"), then the chats in no project; rows carry the conversation's
+ * kind, its title and its age, and long sections say "Show N more".
+ *
+ * Pure Kotlin, no Android types, so `HistoryViewTest` runs it on a plain JVM.
+ * Nothing here reads or writes the PC, and nothing here keeps a word of a
+ * chat: [ChatLog] and [ChatTags] hold the wire shapes, this file only arranges
+ * rows already read.
+ *
+ * TWO RULES DECIDED HERE, both tested:
+ * - A pinned chat appears ONCE, in Pinned, never again in its tag's section.
+ *   A tag's count therefore has the loaded pinned rows taken off it, so
+ *   "Work (9)" counts the 9 Work chats under Work.
+ * - "Show N more" only ever opens rows the phone ALREADY has. A section's
+ *   header may count more than are loaded (that is the PC's own number);
+ *   "Load older" is still the way to bring more in.
+ */
+object HistoryView {
+
+    // ------------------------------------------------------------ words ---
+
+    /** The Pinned section's title, and its key in the folded-sections store. */
+    const val PINNED = "Pinned"
+
+    /** The folded-sections key for Pinned (a tag id is positive, Untagged is -1). */
+    const val PINNED_KEY = -2
+
+    /** The one section shown when the PC has no tags at all. */
+    const val CHATS = "Chats"
+
+    /** How many rows a section shows before "Show N more". */
+    const val SECTION_LIMIT = 5
+
+    /** A row's markers and the overflow menu's words. */
+    const val CURRENT = "You're here"
+    const val PINNED_MARK = "Pinned"
+    const val MENU = "Chat actions"
+    const val OPEN = "Open"
+    const val PIN = "Pin to top"
+    const val UNPIN = "Unpin"
+    const val DELETE = "Delete"
+
+    /** What the PC's answer means, in one sentence. */
+    const val PIN_SAVED = "Pinned to the top."
+    const val UNPIN_SAVED = "Pin taken off."
+
+    /** The sort control's three orders, in the order its tap cycles through them. */
+    enum class Sort(val id: String, val label: String, val short: String) {
+        NEWEST("newest", "Newest first", "Newest"),
+        OLDEST("oldest", "Oldest first", "Oldest"),
+        TITLE("title", "Title A-Z", "A-Z"),
+    }
+
+    /** A stored sort id, or Newest first for anything this build does not know. */
+    fun sortOf(id: String?): Sort = Sort.values().firstOrNull { it.id == id } ?: Sort.NEWEST
+
+    /** The next order a tap on the sort control picks. */
+    fun nextSort(sort: Sort): Sort = Sort.values()[(sort.ordinal + 1) % Sort.values().size]
+
+    /** "Sort: Newest first. Tap to change." - the control's name for TalkBack. */
+    fun sortTitle(sort: Sort): String = "Sort: ${sort.label}. Tap to change."
+
+    fun pinSaid(pinned: Boolean): String = if (pinned) PIN_SAVED else UNPIN_SAVED
+
+    /** "Show 7 more" - only ever about rows already loaded. */
+    fun showMore(n: Int): String = "Show $n more"
+
+    fun showMoreTitle(section: String, n: Int): String = "Show $n more in $section"
+
+    /** "Pinned (3)" and its spoken form: "Pinned, 3 chats, expanded". */
+    fun pinnedHeader(count: Int): String = "$PINNED ($count)"
+
+    fun pinnedHeaderSpoken(count: Int, expanded: Boolean): String =
+        "$PINNED, $count chats, ${if (expanded) "expanded" else "collapsed"}"
+
+    /** The overflow trigger's name: "Chat actions for Dentist on Tuesday". */
+    fun actionsFor(title: String): String = "$MENU for $title"
+
+    /** A row's age in the DeepSeek list's short form: "now", "25min", "7d". */
+    fun age(at: Long?, nowSeconds: Long): String {
+        if (at == null) return ""
+        val s = (nowSeconds - at).coerceAtLeast(0L)
+        return when {
+            s < 60L -> "now"
+            s < 3_600L -> "${s / 60L}min"
+            s < 86_400L -> "${s / 3_600L}h"
+            s < 7L * 86_400L -> "${s / 86_400L}d"
+            s < 30L * 86_400L -> "${s / (7L * 86_400L)}w"
+            s < 365L * 86_400L -> "${s / (30L * 86_400L)}mo"
+            else -> "${s / (365L * 86_400L)}y"
+        }
+    }
+
+    // ---------------------------------------------------------- sorting ---
+
+    /** [rows] in [sort] order. A row with no time is last in both time orders. */
+    fun sortRows(rows: List<ChatLog.Summary>, sort: Sort): List<ChatLog.Summary> = when (sort) {
+        Sort.NEWEST -> rows.sortedWith(
+            compareByDescending<ChatLog.Summary> { it.updated ?: it.started ?: Long.MIN_VALUE }
+                .thenByDescending { it.started ?: Long.MIN_VALUE },
+        )
+        Sort.OLDEST -> rows.sortedWith(
+            compareBy<ChatLog.Summary> { it.updated ?: it.started ?: Long.MAX_VALUE }
+                .thenBy { it.started ?: Long.MAX_VALUE },
+        )
+        Sort.TITLE -> rows.sortedWith(
+            compareBy<ChatLog.Summary, String>(String.CASE_INSENSITIVE_ORDER) { it.title }
+                .thenByDescending { it.updated ?: it.started ?: Long.MIN_VALUE },
+        )
+    }
+
+    // --------------------------------------------------------- sections ---
+
+    /**
+     * One section of the list. [tag] is the tag it stands for, or null for
+     * Pinned and for the chats in no project. [count] is what the header says:
+     * the PC's own number when nothing narrows the list, never less than the
+     * rows loaded; the rows shown otherwise (the same rule as [ChatTags.group]).
+     */
+    data class Section(
+        /** Stable for LazyColumn keys and the "Show N more" memory: "pinned", "t3", "untagged". */
+        val id: String,
+        val title: String,
+        val tag: ChatTags.Tag?,
+        val pinned: Boolean,
+        val rows: List<ChatLog.Summary>,
+        val count: Int,
+    )
+
+    /** The folded-sections key of a section: Pinned -2, a tag's id, Untagged -1. */
+    fun prefsKey(section: Section): Int = when {
+        section.pinned -> PINNED_KEY
+        section.tag != null -> section.tag.id
+        else -> ChatTags.UNTAGGED_KEY
+    }
+
+    private fun idOf(tag: ChatTags.Tag?): String = tag?.let { "t${it.id}" } ?: "untagged"
+
+    /**
+     * [rows] in the DeepSeek order: Pinned first, then one section per tag in
+     * the owner's order, then Untagged last. A pinned row appears only in
+     * Pinned. [only] narrows to one tag id or [ChatTags.UNTAGGED_KEY], the
+     * same filter the chips send. With no tags at all there is one "Chats"
+     * section (plus Pinned, when anything is pinned).
+     *
+     * [exact] false is a narrowed list ("Show" or the title words): a header
+     * then counts the rows shown, never the PC's whole number.
+     */
+    fun sections(
+        rows: List<ChatLog.Summary>,
+        tags: List<ChatTags.Tag>,
+        untagged: Int,
+        only: Int? = null,
+        exact: Boolean = true,
+        sort: Sort = Sort.NEWEST,
+    ): List<Section> {
+        val known = tags.mapTo(HashSet()) { it.id }
+        fun loose(r: ChatLog.Summary): Boolean {
+            val t = r.tagId
+            return t == null || t !in known
+        }
+        fun belongs(r: ChatLog.Summary): Boolean = when (only) {
+            null -> true
+            ChatTags.UNTAGGED_KEY -> loose(r)
+            else -> r.tagId == only
+        }
+        val sorted = sortRows(rows.filter(::belongs), sort)
+        val pinned = sorted.filter { it.pinned }
+        val rest = sorted.filterNot { it.pinned }
+        val out = ArrayList<Section>()
+        if (pinned.isNotEmpty()) {
+            out += Section("pinned", PINNED, null, true, pinned, pinned.size)
+        }
+        if (tags.isEmpty()) {
+            if (rest.isNotEmpty()) {
+                val count = if (exact) maxOf(untagged - rows.count { it.pinned }, rest.size) else rest.size
+                out += Section("untagged", CHATS, null, false, rest, count)
+            }
+            return out
+        }
+        for (t in tags) {
+            if (only != null && only != t.id) continue
+            val mine = rest.filter { it.tagId == t.id }
+            // Pinned rows are not shown under their tag, so the PC's count has
+            // the loaded pinned ones taken off. A pinned chat not loaded yet is
+            // the one case a header can still be one high - said in the PR.
+            val pinnedHere = rows.count { it.pinned && it.tagId == t.id }
+            val count = if (exact) maxOf(t.count - pinnedHere, mine.size) else mine.size
+            if (mine.isNotEmpty() || count > 0) out += Section(idOf(t), t.name, t, false, mine, count)
+        }
+        if (only == null || only == ChatTags.UNTAGGED_KEY) {
+            val looseRows = rest.filter(::loose)
+            val pinnedLoose = rows.count { it.pinned && loose(it) }
+            val count = if (exact) maxOf(untagged - pinnedLoose, looseRows.size) else looseRows.size
+            if (looseRows.isNotEmpty() || count > 0) {
+                out += Section("untagged", ChatTags.UNTAGGED, null, false, looseRows, count)
+            }
+        }
+        return out
+    }
+
+    /** Whether [section] is short enough to draw all of it: [revealed] or within [limit]. */
+    fun isShort(section: Section, revealed: Boolean, limit: Int = SECTION_LIMIT): Boolean =
+        revealed || section.rows.size <= limit
+
+    /** The rows a section draws: all of them once opened, else the first [limit]. */
+    fun shown(section: Section, revealed: Boolean, limit: Int = SECTION_LIMIT): List<ChatLog.Summary> =
+        if (isShort(section, revealed, limit)) section.rows else section.rows.take(limit)
+
+    /** How many loaded rows "Show N more" would add: 0 once opened or when all fit. */
+    fun hidden(section: Section, revealed: Boolean, limit: Int = SECTION_LIMIT): Int =
+        if (isShort(section, revealed, limit)) 0 else (section.rows.size - limit).coerceAtLeast(0)
+
+    // ------------------------------------------------------------- menu ---
+
+    /** One row of the overflow menu, in drawing order. */
+    enum class Action { OPEN, PIN, MOVE, DELETE }
+
+    /**
+     * A row's overflow actions: Open, Pin/Unpin, Move to (only when the PC has
+     * tags) and Delete. Empty while a "file it under" banner is up: there a tap
+     * on the row files it, and an extra menu would be two meanings for one row.
+     */
+    fun menu(tags: List<ChatTags.Tag>, filing: Boolean): List<Action> {
+        if (filing) return emptyList()
+        val out = mutableListOf(Action.OPEN, Action.PIN)
+        if (tags.isNotEmpty()) out += Action.MOVE
+        out += Action.DELETE
+        return out
+    }
+
+    /** The word on a menu row: Pin reads "Unpin" already pinned. */
+    fun actionLabel(action: Action, pinned: Boolean): String = when (action) {
+        Action.OPEN -> OPEN
+        Action.PIN -> if (pinned) UNPIN else PIN
+        Action.MOVE -> ChatTags.MOVE_TO
+        Action.DELETE -> DELETE
+    }
+
+    // -------------------------------------------- pin, in the loaded list ---
+
+    /** [rows] with one row's pin changed - only the PC's answer ever calls this. */
+    fun withPin(rows: List<ChatLog.Summary>, id: String, pinned: Boolean): List<ChatLog.Summary> =
+        rows.map { if (it.id == id) it.copy(pinned = pinned) else it }
+
+    /** The same for a word-the-PC search's results, where the row may not be loaded. */
+    fun withPin(found: ChatLog.Search, id: String, pinned: Boolean): ChatLog.Search = found.copy(
+        found = found.found.map { hit ->
+            if (hit.row.id == id) hit.copy(row = hit.row.copy(pinned = pinned)) else hit
+        },
+    )
+
+    /** A row's age from the list's own timestamp; a Live session's end, else its start. */
+    fun rowAge(row: ChatLog.Summary, nowSeconds: Long): String =
+        age(row.updated ?: row.started, nowSeconds)
+
+    /** The type icon's name for TalkBack; the row's own kind mark follows it in words. */
+    fun kindSpoken(kind: String): String = when (kind) {
+        "live" -> "Live session"
+        "support" -> "Support chat"
+        "chatbot" -> "Chat with another AI"
+        "compare" -> "Comparison"
+        else -> "Chat"
+    }
+}

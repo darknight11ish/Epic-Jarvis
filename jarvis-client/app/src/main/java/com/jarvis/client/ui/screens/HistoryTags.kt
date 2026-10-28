@@ -1,5 +1,6 @@
 package com.jarvis.client.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,13 +30,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ChatTags
+import com.jarvis.client.net.HistoryView
 import com.jarvis.client.net.TagSuggest
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.Gap
@@ -45,6 +55,7 @@ import com.jarvis.client.ui.parts.TagIcon
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.parts.pressable
+import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.launch
 
@@ -100,10 +111,16 @@ internal fun TagSectionHeader(
     tag: ChatTags.Tag?,
     count: Int,
     expanded: Boolean,
+    /**
+     * The header's name when it is not the tag's own: the no-tags list says
+     * "Chats", the with-tags ungrouped section says "Untagged". Null keeps
+     * the tag's name (and "Untagged" for a null tag), as before.
+     */
+    title: String? = null,
     onToggle: () -> Unit,
 ) {
     val chrome = LocalChrome.current
-    val name = tag?.name ?: ChatTags.UNTAGGED
+    val name = title ?: tag?.name ?: ChatTags.UNTAGGED
     val ink = if (tag != null) tagInk(tag.colour) else chrome.textMid
     val tint = if (tag != null) tagTint(tag.colour) else chrome.surface1
     Row(
@@ -129,6 +146,183 @@ internal fun TagSectionHeader(
             maxLines = 1,
         )
         Text(if (expanded) "▾" else "▸", style = MaterialTheme.typography.bodyMedium, color = ink)
+    }
+}
+
+/**
+ * The Pinned section's header: a drawn pin, "Pinned (3)" and the same
+ * chevron-in-words as a tag's. Spoken as one control: "Pinned, 3 chats,
+ * expanded".
+ */
+@Composable
+internal fun PinnedSectionHeader(
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(accent.copy(alpha = if (chrome.dark) ChatTags.TINT_DARK else ChatTags.TINT_LIGHT))
+            .pressable(role = Role.Button, onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = HistoryView.pinnedHeaderSpoken(count, expanded)
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        PinMark(accent, spoken = false)
+        Text(
+            HistoryView.pinnedHeader(count),
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.textHi,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+        )
+        Text(if (expanded) "▾" else "▸", style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+    }
+}
+
+/**
+ * A drawn pin, 24-unit grid like TagIcons.kt: no icon font, no vector asset.
+ * [spoken] adds "Pinned" for TalkBack; a header that already says it passes
+ * false so nothing is read twice.
+ */
+@Composable
+internal fun PinMark(
+    tint: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 14.dp,
+    spoken: Boolean = true,
+) {
+    Canvas(
+        modifier
+            .size(size)
+            .then(
+                if (spoken) Modifier.semantics { contentDescription = HistoryView.PINNED_MARK } else Modifier,
+            ),
+    ) {
+        val u = this.size.minDimension / 24f
+        val stroke = Stroke(
+            width = 1.8f * u.coerceAtLeast(0.65f),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+        drawCircle(tint, radius = 4.2f * u, center = Offset(12f * u, 8.5f * u), style = stroke)
+        drawLine(
+            tint,
+            Offset(12f * u, 12.7f * u),
+            Offset(12f * u, 21f * u),
+            strokeWidth = stroke.width,
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            tint,
+            Offset(8f * u, 17f * u),
+            Offset(16f * u, 17f * u),
+            strokeWidth = stroke.width,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+/**
+ * A conversation's type, drawn so the row says what it is before its words
+ * are read: a speech bubble for a chat, a broadcast dot for Live, a headset
+ * for a support record, two bubbles for another AI, two columns for a
+ * comparison. Decorative in form, but [HistoryView.kindSpoken] names it for
+ * TalkBack - colour is never the only clue, and neither is shape.
+ */
+@Composable
+internal fun ConversationKindIcon(
+    kind: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 20.dp,
+) {
+    Canvas(
+        modifier
+            .size(size)
+            .semantics { contentDescription = HistoryView.kindSpoken(kind) },
+    ) {
+        val u = this.size.minDimension / 24f
+        val stroke = Stroke(
+            width = 1.7f * u.coerceAtLeast(0.65f),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+        when (kind) {
+            "live" -> {
+                drawCircle(tint, radius = 2.2f * u, center = Offset(12f * u, 12f * u), style = stroke)
+                drawArc(
+                    tint, 300f, 120f, false,
+                    topLeft = Offset(4f * u, 4f * u), size = Size(16f * u, 16f * u), style = stroke,
+                )
+                drawArc(
+                    tint, 120f, 120f, false,
+                    topLeft = Offset(4f * u, 4f * u), size = Size(16f * u, 16f * u), style = stroke,
+                )
+            }
+            "support" -> {
+                drawArc(
+                    tint, 180f, 180f, false,
+                    topLeft = Offset(4f * u, 3f * u), size = Size(16f * u, 15f * u), style = stroke,
+                )
+                drawRoundRect(
+                    tint, Offset(3.5f * u, 11f * u), Size(4f * u, 7f * u),
+                    CornerRadius(2f * u), style = stroke,
+                )
+                drawRoundRect(
+                    tint, Offset(16.5f * u, 11f * u), Size(4f * u, 7f * u),
+                    CornerRadius(2f * u), style = stroke,
+                )
+                drawLine(
+                    tint, Offset(18.5f * u, 17.5f * u), Offset(13f * u, 20f * u),
+                    strokeWidth = stroke.width, cap = StrokeCap.Round,
+                )
+            }
+            "chatbot" -> {
+                drawRoundRect(
+                    tint, Offset(3f * u, 4f * u), Size(12f * u, 10f * u),
+                    CornerRadius(3f * u), style = stroke,
+                )
+                drawRoundRect(
+                    tint, Offset(9f * u, 10f * u), Size(12f * u, 10f * u),
+                    CornerRadius(3f * u), style = stroke,
+                )
+            }
+            "compare" -> {
+                drawRoundRect(
+                    tint, Offset(3f * u, 5f * u), Size(7f * u, 14f * u),
+                    CornerRadius(2f * u), style = stroke,
+                )
+                drawRoundRect(
+                    tint, Offset(14f * u, 5f * u), Size(7f * u, 14f * u),
+                    CornerRadius(2f * u), style = stroke,
+                )
+                drawLine(
+                    tint, Offset(10f * u, 12f * u), Offset(14f * u, 12f * u),
+                    strokeWidth = stroke.width, cap = StrokeCap.Round,
+                )
+            }
+            else -> {
+                drawRoundRect(
+                    tint, Offset(3f * u, 4f * u), Size(18f * u, 13f * u),
+                    CornerRadius(4f * u), style = stroke,
+                )
+                val tail = Path().apply {
+                    moveTo(8f * u, 17f * u)
+                    lineTo(8f * u, 21f * u)
+                    lineTo(13f * u, 17f * u)
+                }
+                drawPath(tail, tint, style = stroke)
+            }
+        }
     }
 }
 

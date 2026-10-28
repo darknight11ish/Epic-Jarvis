@@ -2973,6 +2973,14 @@ class MainActivity : FragmentActivity() {
                         // Only turning the switch ON waits for this - rule 4.
                         canAct = link == LinkState.CONNECTED && !stale,
                         onBack = { nav.back() },
+                        // "New chat" on History: exactly what Home's New
+                        // conversation and the idle timer do - a new
+                        // conversation on the phone, no route and no request.
+                        // Home is where the box is, so go there.
+                        onNewChat = {
+                            chat.newConversationSaid()
+                            nav.resetTo(Screen.HOME)
+                        },
                         // "Hide memory lists and chat history" hides the conversations too.
                         privateHidden = privateHidden,
                         onShowPrivate = ::showPrivateLists,

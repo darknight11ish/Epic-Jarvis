@@ -44,6 +44,14 @@ object ChatLog {
     const val DELETE_PATH = "/api/history/delete"
     const val SETTINGS_PATH = "/api/history/settings"
 
+    /**
+     * `POST /api/history/pin` `{"id": "<conversation id>", "pinned": true|false}`
+     * (the owner's ask of 2026-10-27; the shared contract). Metadata only -
+     * it changes no word of the chat and raises no approval card. Rows of the
+     * list carry `"pinned": true|false` beside their `tag_id`.
+     */
+    const val PIN_PATH = "/api/history/pin"
+
     /** The gate action the PC raises the ON card under. */
     const val ENABLE_ACTION = "history_enable"
 
@@ -169,6 +177,11 @@ object ChatLog {
         val kind: String = "chat",
         /** The tag it is filed under (docs/CHAT-TAGS-DESIGN.md section 10), or null: untagged, or an older PC. */
         val tagId: Int? = null,
+        /**
+         * Whether it is pinned to the top (the owner's ask of 2026-10-27).
+         * False from an older PC that sends no `pinned` - nothing is guessed.
+         */
+        val pinned: Boolean = false,
     )
 
     /** One page: the settings, its rows, and whether there may be older ones. */
@@ -278,6 +291,7 @@ object ChatLog {
                 tainted = o.flag("tainted") == true,
                 kind = kindOf(o.str("kind")),
                 tagId = o.whole("tag_id")?.toInt(),
+                pinned = o.flag("pinned") == true,
             )
         }
         val raw = (body["conversations"] as? JsonArray)?.size ?: 0
@@ -412,6 +426,7 @@ object ChatLog {
                     tainted = o.flag("tainted") == true,
                     kind = kindOf(o.str("kind")),
                     tagId = o.whole("tag_id")?.toInt(),
+                    pinned = o.flag("pinned") == true,
                 ),
                 hits = o.whole("hits")?.toInt() ?: 0,
                 snippet = Snippet(
@@ -522,6 +537,57 @@ object ChatLog {
         is DesktopWrite.Outcome.Refused -> "Not changed. ${outcome.why}"
         is DesktopWrite.Outcome.Done -> outcome.said?.let { DesktopWrite.asSentence(it) }
             ?: if (on) "Chat history is on." else OFF_SAID
+    }
+
+    // ----------------------------------------------------------- pin ---
+    //
+    // The owner's ask of 2026-10-27: pin a chat to the top of History. The
+    // shared contract is POST /api/history/pin {"id", "pinned"} -> 200
+    // {"ok": true, "id", "pinned"}, 404 for a chat the PC does not know, 400
+    // for a body it cannot read. Metadata only: no card, no word of the chat
+    // is sent, and the row only changes after the PC says yes.
+
+    /** The PC does not have that chat any more (contract 404). */
+    const val PIN_GONE = "That chat is gone - it may have been deleted."
+
+    /**
+     * A bodyless 404: an older PC whose Jarvis has no pin route, or a chat it
+     * does not know. The tags' own 404 is read the same way (the route is the
+     * thing missing), and this sentence says the useful thing to do.
+     */
+    const val PIN_OLD_PC =
+        "This PC's Jarvis cannot pin chats yet. Update it by running apply-patches.ps1 on the PC."
+
+    /** A refusal the PC gave no plain sentence for (contract 400, or anything else). */
+    const val PIN_REFUSED = "The pin was not changed. Your PC did not accept it."
+
+    /** What a pin request came to: [ok] is the only thing that may move a row. */
+    data class Pin(val ok: Boolean, val pinned: Boolean? = null, val said: String? = null)
+
+    /** The contract's body, exactly `{"id": "...", "pinned": true|false}`. */
+    fun pinBody(id: String, pinned: Boolean): String = buildJsonObject {
+        put("id", id)
+        put("pinned", pinned)
+    }.toString()
+
+    /**
+     * A `POST /api/history/pin` answer. Only a 2xx whose body does not say
+     * `ok: false` is a yes; [Pin.pinned] is the PC's own value when it sends
+     * one, else null for the caller's request to stand in. A 404 is
+     * [PIN_GONE]; on any other refusal the PC's own `message` wins, else
+     * [PIN_REFUSED].
+     */
+    fun pinAnswer(code: Int, body: JsonObject?): Pin {
+        val message = body?.str("message")
+        if (code in 200..299 && body?.flag("ok") != false) {
+            return Pin(true, body?.flag("pinned"))
+        }
+        val error = body?.str("error")
+        return when {
+            code == 404 || error == "not_found" || error == "unknown_id" -> Pin(false, said = PIN_GONE)
+            message != null -> Pin(false, said = "The pin was not changed. " + DesktopWrite.asSentence(message))
+            else -> Pin(false, said = PIN_REFUSED)
+        }
     }
 
     // --------------------------------------------------------- delete ---

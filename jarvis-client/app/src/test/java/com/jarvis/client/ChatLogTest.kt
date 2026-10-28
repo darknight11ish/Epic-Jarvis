@@ -58,6 +58,56 @@ class ChatLogTest {
     }
 
     @Test
+    fun `a pinned row is read from the list and from a word search`() {
+        val body = obj(
+            """
+            {"conversations": [
+              {"id":"p1","updated":3,"pinned":true},
+              {"id":"p2","updated":2,"pinned":false},
+              {"id":"p3","updated":1},
+              {"id":"p4","updated":0,"pinned":"true"}
+            ]}
+            """.trimIndent(),
+        )
+        // Only a JSON true is pinned: a string or no field is not guessed at.
+        assertEquals(listOf(true, false, false, false), ChatLog.page(body).conversations.map { it.pinned })
+        val search = ChatLog.search(
+            obj(
+                """
+                {"query_ok":true,"conversations":[
+                  {"id":"s1","title":"Dentist","updated":9,"pinned":true,
+                   "snippet":{"role":"user","parts":[]}}
+                ]}
+                """.trimIndent(),
+            ),
+        )
+        assertTrue(search.found.single().row.pinned)
+    }
+
+    @Test
+    fun `the pin request is the contract's body, and only a real yes changes the row`() {
+        assertEquals("""{"id":"c-2","pinned":true}""", ChatLog.pinBody("c-2", true))
+        assertEquals("""{"id":"c-2","pinned":false}""", ChatLog.pinBody("c-2", false))
+        assertEquals("/api/history/pin", ChatLog.PIN_PATH)
+        assertEquals(
+            ChatLog.Pin(ok = true, pinned = true),
+            ChatLog.pinAnswer(200, obj("""{"ok":true,"id":"c-2","pinned":true}""")),
+        )
+        // A 2xx that does not echo `pinned` is still a yes; the caller's request stands.
+        assertEquals(ChatLog.Pin(ok = true, pinned = null), ChatLog.pinAnswer(200, obj("""{"ok":true}""")))
+        // `ok: false` in a 2xx is NOT a yes.
+        assertFalse(ChatLog.pinAnswer(200, obj("""{"ok":false,"error":"not_found"}""")).ok)
+        assertEquals(ChatLog.PIN_GONE, ChatLog.pinAnswer(404, null).said)
+        assertEquals(ChatLog.PIN_GONE, ChatLog.pinAnswer(404, obj("""{"ok":false,"error":"not_found"}""")).said)
+        assertEquals(ChatLog.PIN_REFUSED, ChatLog.pinAnswer(400, obj("""{"ok":false,"error":"bad_request"}""")).said)
+        // The PC's own sentence wins over this app's fallback.
+        assertEquals(
+            "The pin was not changed. Chat history is off.",
+            ChatLog.pinAnswer(409, obj("""{"ok":false,"error":"off","message":"chat history is off"}""")).said,
+        )
+    }
+
+    @Test
     fun `the settings half is read, and an empty why_not is no reason at all`() {
         val s = ChatLog.page(obj(listBody)).status
         assertEquals(true, s.enabled)
