@@ -31,6 +31,13 @@ no owner file):
     everything this code writes;
   * a call that WORKS clears the previous reason instead of leaving a stale
     one behind;
+  * the request the extractor really sends carries `think: False` (Gemini
+    Edition-3 review F1). `qwen3.5:9b` is a HYBRID REASONING model: with a
+    small budget it can spend the whole of it in `thinking` and answer 200
+    with `response: ""` and `done_reason: "length"` - measured on the owner's
+    own PC on 2026-10-28. Recording that silence is not enough; the call has
+    to ask for the answer. The pre-patch text provably does NOT send the flag,
+    so the check has something to catch;
   * THE BITE PROOF, on this repository's own text: with this PR's patch
     (backend/learning-extract-reason.patch) taken back off
     `jarvis-backend/jarvis_extract.py`, the old `_local_llm` has no way to say
@@ -161,6 +168,14 @@ def opener_raising(exc):
     return _open
 
 
+def opener_capturing(status, body, seen):
+    """An opener that records the request it was handed, then answers."""
+    def _open(req, timeout=None):
+        seen.append(req)
+        return _Resp(status, body)
+    return _open
+
+
 class patched_opener:
     """Monkeypatch `urllib.request.urlopen` for exactly one call."""
 
@@ -237,6 +252,14 @@ def load_file(text, name):
 
 def patched_module(name="jarvis_extract_under_test"):
     return load_file(published_base_text(), name)
+
+
+def _payload_body(mod):
+    """The JSON body `mod._local_llm()` really posts, captured from the opener."""
+    seen = []
+    with patched_opener(opener_capturing(200, {"response": '{"facts": []}'}, seen)):
+        mod._local_llm("hello", model="qwen3.5:9b")
+    return json.loads(seen[0].data) if seen else {}
 
 
 def _scratch_with_base():
@@ -425,12 +448,49 @@ def t_a_working_call_clears_the_last_reason():
           X.local_llm_failure() is None, repr(X.local_llm_failure()))
 
 
+def t_the_request_asks_the_model_not_to_think():
+    """F1 from the Gemini Edition-3 review: send `think: False`, not just record
+    the silence afterwards.
+
+    `qwen3.5:9b` is a hybrid reasoning model. A small budget can be spent
+    ENTIRELY in `thinking`, and the answer is then a 200 with `response: ""`
+    and `done_reason: "length"` - measured on the owner's own PC on 2026-10-28
+    (`.dsh-scratch/.../learning/POST-DIAGNOSTIC.txt`). Asking for the answer is
+    the fix; the recorded reason is the evidence if it still happens.
+    """
+    X = patched_module()
+    body = _payload_body(X)
+    check("the extractor really posts a request the opener can read",
+          bool(body), body)
+    check("the extraction request tells the local model NOT to think",
+          body.get("think") is False, sorted(body))
+    check("... and still sends the prompt, the model and no streaming",
+          body.get("prompt") == "hello" and body.get("model") == "qwen3.5:9b"
+          and body.get("stream") is False,
+          {k: body.get(k) for k in ("model", "prompt", "stream")})
+    check("... and still sends a format schema, which the flag leaves alone",
+          body.get("format") is not None, sorted(body))
+    # The closed-world reason must still behave with the flag in the body.
+    X2 = patched_module("jarvis_extract_after_a_silent_200")
+    with patched_opener(opener_returning(
+            200, {"response": "", "thinking": "Okay", "done_reason": "length"})):
+        out = X2._local_llm("hello")
+    reason = X2.local_llm_failure() or {}
+    check("a thinking-only 200 still returns None and records done_reason length",
+          out is None and reason.get("kind") == "empty_response"
+          and reason.get("done_reason") == "length", repr(reason))
+
+
 def t_the_old_text_cannot_say_why():
     """THE BITE PROOF. Without this, the checks above only prove the new code
     works; they do not prove they would have caught the old swallow."""
     old = old_module()
     check("the pre-patch text has no local_llm_failure at all",
           not hasattr(old, "local_llm_failure"))
+    old_body = _payload_body(old)
+    check("... and its request does NOT carry the thinking-off flag, so the "
+          "payload check above fails on the code being replaced",
+          "think" not in old_body, sorted(old_body))
     # A fresh folder, so "recorded nothing" cannot be hidden by the checks above.
     fresh = _TMP / "config-bite"
     fresh.mkdir(parents=True, exist_ok=True)
@@ -457,6 +517,7 @@ if __name__ == "__main__":
                t_the_learner_counters_carry_the_reason,
                t_no_prompt_word_and_no_answer_word_reaches_anything,
                t_a_working_call_clears_the_last_reason,
+               t_the_request_asks_the_model_not_to_think,
                t_the_old_text_cannot_say_why):
         print(f"\n--- {fn.__name__} ---")
         try:

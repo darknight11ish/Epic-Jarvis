@@ -133,8 +133,14 @@ def _local_llm(prompt: str, model: Optional[str] = None, timeout: float = 60) ->
     # nothing else - and `{}` parses, as does `{"facts": "lots"}`. A schema
     # constrains the decoding itself, so the shape stops being something to
     # check after the fact.
+    # `think: False` asks a hybrid reasoning model (qwen3.5:9b) to ANSWER rather
+    # than spend a small budget in `thinking` and return a 200 with response ""
+    # and done_reason "length" (measured here on 2026-10-28, DEF-017). Ollama
+    # ignores a request field it does not know, so an older build needs no
+    # fallback - it simply keeps the old behaviour.
     body = {"model": model or os.environ.get("JARVIS_LOCAL_MODEL", "qwen3:8b"),
             "prompt": prompt, "stream": False,
+            "think": False,
             "options": {"temperature": 0.1}}
     try:
         import jarvis_structured
