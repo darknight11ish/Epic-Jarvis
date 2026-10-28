@@ -1975,13 +1975,13 @@ permissions = [
 
 # ---------------------------------------------------------------------------
 # Focus presets (backend/jarvis_presets.py; PRs #603/#611). The quickbar's chip
-# and Settings both read the PC's five presets and can ask the PC to apply ONE
+# and Settings both read the PC's nine presets and can ask the PC to apply ONE
 # preset. Applying approves nothing: it raises the existing switch_model ask
 # card on the PC. Neither window may write anything else with this set.
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "focus-presets"
-description = "Read the five focus presets and the hardware block, and ask the PC to apply one (the PC's own switch_model approval card). Read-only otherwise."
+description = "Read the nine focus presets and the hardware block, and ask the PC to apply one (the PC's own switch_model approval card). Read-only otherwise."
 permissions = [
   "allow-get-focus-presets",
   "allow-apply-focus-preset",
@@ -2040,7 +2040,7 @@ permissions = [
 # every other write; the read decides nothing.
 [[set]]
 identifier = "hud-personalities"
-description = "Read the nine personalities and the owner's own - the PC's answer narrowed to the personality half - and switch ONE of them. Wording only, no card, held on a stale link; nothing else about how Jarvis talks is reachable here."
+description = "Read the ten personalities and the owner's own - the PC's answer narrowed to the personality half - and switch ONE of them. Wording only, no card, held on a stale link; nothing else about how Jarvis talks is reachable here."
 permissions = [
   "allow-hud-personalities",
   "allow-hud-switch-personality",

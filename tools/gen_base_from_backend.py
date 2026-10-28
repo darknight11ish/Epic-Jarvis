@@ -28,7 +28,8 @@ re-taken", and nothing else:
         quiz_grader_cases.json   from backend/
         rust-crates.lock         from jarvis-desktop/src-tauri/Cargo.lock
         jarvis-visual-spec.json  the owner's own copy, which is what /api/visual-spec reads
-        theme.css, fonts.css, the fourteen .js modules and the seven woff2 faces
+        theme.css, fonts.css, the fourteen .js modules, sw.js and three.min.js,
+        and the seven woff2 faces
                                  from backend/static/ - jarvis_hud.py's
                                  STATIC_ASSETS whitelist reads each beside
                                  itself (PWA Slice 3a, 2026-10-23); the page's
@@ -239,6 +240,14 @@ BESIDE = (
      "a module jarvis-link.js imports; served at /card-words.js"),
     ("replace-confirm.js", "{repo}/backend/static/replace-confirm.js",
      "a module jarvis-link.js imports; served at /replace-confirm.js"),
+    # The HUD's offline 3D library (2026-10-27): three.js r128, the official
+    # MIT build the approved "exact Gemini cosmos" port draws with. It is
+    # carried like the files above but deliberately NOT a whitelist key yet,
+    # and no page loads it - the port PR adds both together. It is plain ASCII
+    # with LF endings, so the text copy below is byte for byte the official
+    # build; backend/test_vendored_three.py pins its SHA-256 in every copy.
+    ("three.min.js", "{repo}/backend/static/three.min.js",
+     "the vendored three.js r128 the HUD's 3D port will load; served at /three.min.js"),
 )
 
 #: The beside-files that are BYTES, not text: the seven woff2 faces and the

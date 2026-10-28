@@ -3569,7 +3569,7 @@ fn sample_gpus() -> Vec<GpuSample> {
     // `.await` in `lib.rs` would never resolve, freezing the widget's numbers
     // and the widget-position flush for the rest of the session, with one
     // blocking-pool thread parked forever and nothing printed anywhere.
-    let Some(output) = run_with_deadline(command, GPU_PROBE_TIMEOUT) else {
+    let Some(output) = run_with_deadline("a GPU probe", command, GPU_PROBE_TIMEOUT) else {
         // Timed out and was killed. Do NOT latch: a driver that is busy now is
         // usually fine on the next tick.
         return Vec::new();
@@ -3606,7 +3606,12 @@ const GPU_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2)
 /// `None` means it did not finish in time and has been killed. `Some(Err)`
 /// means it could not be started at all — a different and permanent thing,
 /// which is why the caller tells them apart.
-fn run_with_deadline(
+///
+/// `what` names the probe in the one line printed when it overruns, so a killed
+/// `git` read is not reported as a GPU probe (`backend_update::repo_commit`
+/// uses this too).
+pub(crate) fn run_with_deadline(
+    what: &str,
     mut command: std::process::Command,
     limit: std::time::Duration,
 ) -> Option<std::io::Result<std::process::Output>> {
@@ -3636,7 +3641,7 @@ fn run_with_deadline(
                 if std::time::Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
-                    eprintln!("[jarvis] a GPU probe overran {limit:?} and was killed");
+                    eprintln!("[jarvis] {what} overran {limit:?} and was killed");
                     return None;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(25));

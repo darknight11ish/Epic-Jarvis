@@ -5435,7 +5435,7 @@ What it understands:
 |---|---|
 | Timers | "set a timer for 10 minutes", "10 minute timer", "timer for 1h30", "set a pasta timer for 12 minutes", "cancel the timer", "cancel the pasta timer", "pause / resume the timer", "add 5 minutes to the timer", "5 more minutes" (only while a timer runs), "take 2 minutes off the timer", "how long is left" (only while a timer **or** a focus session is running) |
 | Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
-| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat). **Time-first works too** (2026-10-18): "remind me in 2 minutes to drink water", "remind in 2 minutes to drink water" (the phone's own shorthand, no "me"), and "in 10 minutes remind me to drink water" |
+| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat). **Time-first works too** (2026-10-18): "remind me in 2 minutes to drink water", "remind in 2 minutes to drink water" (the phone's own shorthand, no "me"), and "in 10 minutes remind me to drink water". **Since 2026-10-27 the owner's own HUD wording is here too** (see below): "add a reminder to take my pills at 6pm", "add a reminder for tomorrow at 6pm to call Mum", "i need a reminder to call the dentist tomorrow", "reminder to call Mum at 6", "new reminder to pay rent on Friday at 5pm", and any of these after a polite lead-in ("please", "can you", "i want to") |
 | To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
 | Named lists (21.9) | "add milk to the shopping list", "add milk, eggs and bread to the shopping list", "what's on my shopping list", "cross milk off the shopping list", "remove eggs from the shopping list", "what lists do I have", "clear the shopping list" (changes nothing: it points to the app) |
 | Snooze (21.9) | "snooze", "snooze 5 minutes", "snooze the alarm", "remind me again in 10 minutes" |
@@ -5443,6 +5443,25 @@ What it understands:
 | Morning briefing | "brief me now", "brief me every weekday at 7" (**a card**), "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
 | Features (§130) | "what is the prompt coach", "what does the prompt coach do", "is the prompt coach on", "is the prompt coach on right now", "how do I turn on the prompt coach", "how do I turn off the prompt coach", "what features do you have", "list the memory features", "turn on <a feature that names one switch>" - added 2026-10-20 |
+
+**A reminder the grammar missed can no longer become a model's prose success
+(2026-10-27, the owner's HUD bug).** The owner typed "add a reminder ..." into
+the HUD, Jarvis's answer said it had set one, nothing was written and the
+Reminders tab stayed empty. Two causes, both fixed. First, the grammar above
+did not know "add a reminder", "i need a reminder" / "i want a reminder",
+"reminder to ..." or a polite lead-in before any of them ("can you add a
+reminder ..."), so the sentence went to the model. Second, the model's own
+`[tools].enabled` list does not name `set_reminder` (the fast path is the
+intended route; see `jarvis_agent.SCHEDULE_TOOLS`), so it had no tool to call
+and answered in prose. The phrasings above are answered here now, and a model
+answer that claims a reminder, timer or to-do item with the verb first or the
+job first ("Added a reminder ...", "Reminder set for 6pm.") is corrected with
+"(Nothing was actually done - no action ran in this answer.)" exactly like
+"I've set a reminder..." - `jarvis_claims.CLAIMS_SCHEDULE_DONE`, which also
+counts a read-only `feature_guide` result as no action. Questions, offers and
+instructions are not claims: "Reminder set for 6pm" typed as a command is
+still not a command (it goes to the model), and neither is "Set a reminder
+for 6pm if you like.".
 
 **Feature questions are answered from the feature list, not the model.** The
 three "Features" wordings above read `features/features.json` itself (through
@@ -7275,25 +7294,30 @@ reads the file, changes only the key(s) sent, and writes it back).
 
 ### 27.7 Personality presets and tuning dials (added 2026-10-23)
 
-The owner's decision of 2026-10-22: Jarvis can slip into one of **nine
+The owner's decision of 2026-10-22: Jarvis can slip into one of **ten
 personalities** - `warm_peer` (Warm Collaborator, the default), `classic_butler`,
 `tactical_ops`, `dry_wit`, `friday_partner`, `socratic_mentor`,
-`devils_advocate`, `calm_stoic`, and `advocate` (Patient Advocate, added
+`devils_advocate`, `calm_stoic`, `advocate` (Patient Advocate, added
 2026-10-24: plain-English medical and billing words, three questions for the
-care team, and never a diagnosis) - with **four tuning dials** (`humor` 0-3,
+care team, and never a diagnosis) and `reflect` (Reflective Coach, added
+2026-10-27: reflects first, asks one gentle question at a time, never
+diagnoses, never claims to be a therapist and keeps no therapy record) - with
+**four tuning dials** (`humor` 0-3,
 `brevity` concise/balanced/thorough, `formality` casual/warm_peer/formal_butler/
 tactical, `address` first_name/sir/ma'am/boss/captain/none), plus up to **20
 "My Personalities"** presets. It is wording and voice only, exactly like manner:
 it changes no rule, no card, no tier, no memory and nothing that is sent
 anywhere, and the legacy words `warm` and `plain` still work (they map to
-`warm_peer` and `tactical_ops`).
+`warm_peer` and `tactical_ops`). The Reflective Coach's block carries no crisis
+number and no crisis script: the code-owned 988/911 message and the crisis
+block that replaces every personality are unchanged (§38).
 
 **GET** extends the §27.1 payload with:
 
 | Field | Shape |
 |---|---|
 | `personality` | the active preset id (`"classic_butler"`) |
-| `personalities` | the nine built-ins + saved ones: `{"id", "title", "description", "switch_ack", "greeting_subtitle", "quote", "voice_blend", "voice_speed", "voice": {"blend", "fallback", "speed"}, "dials": {"humor", "brevity", "formality", "address"}, "builtin"}` |
+| `personalities` | the ten built-ins + saved ones: `{"id", "title", "description", "switch_ack", "greeting_subtitle", "quote", "voice_blend", "voice_speed", "voice": {"blend", "fallback", "speed"}, "dials": {"humor", "brevity", "formality", "address"}, "builtin"}` |
 | `dials` | the active preset's four dials with any saved overrides applied |
 | `voice_sync` | bool - whether switching a personality also switches the spoken voice (default true) |
 | `custom_personalities` | saved presets, in the full shape a Duplicate needs: `{"id", "name", "line", "example", "example_user", "example_jarvis", "dials", "based_on", "voice_spec", "voice_speed"}`. The `id` is whatever the panel/caller chose (`mine-...`) or a generated `custom-...`; use and delete accept it as-is. |
@@ -7328,12 +7352,12 @@ Classic Butler personality do", "what is TARS like", "describe the butler
 personality" and "tell me about TARS" answer with that preset's own
 `description` from this payload (no new copy) and `Say "switch to the <title>
 personality" to use it.` - the sentence that really switches, measured for all
-nine titles. Titles, aliases and saved "My Personalities" names all resolve
+ten titles. Titles, aliases and saved "My Personalities" names all resolve
 through `jarvis_manner.normalize_personality_id()`. "Describe your
 personalities", "describe my personalities", "explain your personalities",
 "tell me about your personalities", "what does each personality do" and "what
 are your personalities like" answer with one `- <title> - <description>` line
-for each of the nine in contract order, then the four dials and how to make
+for each of the ten in contract order, then the four dials and how to make
 your own. Both are quick-intent reads - `personality_describe` is in
 `READ_ONLY_INTENTS` - so no card and no model; as for every quick answer, the
 sentence's usual command digest is still recorded, and nothing the owner can
@@ -7343,8 +7367,9 @@ its answer, except that its switch example is now the sentence that works
 ("switch to the Classic Butler personality").
 
 What it changes in a turn, and only this: the local model's request gets the
-active preset's compact `<jarvis_persona>` block (measured at <= 721 characters
-worst case, under the 750-character ~180-token cap) plus a one-line recency
+active preset's compact `<jarvis_persona>` block (measured at most 722 characters
+with each preset's own dials - 730 with the longest word on every dial - under the
+750-character ~180-token cap) plus a one-line recency
 hint just before the newest question; the block's spoken-live variant keeps
 `Jarvis Live` answers to 1-3 sentences with no Markdown; a **crisis turn
 replaces the whole persona block with the calm support text**, so no preset can
@@ -7395,7 +7420,7 @@ draft is finished before the fast path's ordinary grammar sees the sentence:
 |---|---|
 | "make it ...", "change the ...", "shorter", "more formal" | the draft is revised by the local model, in place |
 | "call it ...", "name it ..." | renamed, with no model call |
-| "base it on ..." | the base preset changes to one of the nine built-ins, with no model call |
+| "base it on ..." | the base preset changes to one of the ten built-ins, with no model call |
 | "show it again" | the draft is shown again, with no model call |
 | "save it", "keep it" | saved as a "My personalities" preset, and the draft is removed |
 | "forget it", "discard it", "cancel it", "scrap it" | dropped; nothing is saved |
@@ -7405,7 +7430,7 @@ already had.
 
 **The draft, in the conversation.** Jarvis replies with a name, one line of how
 it should sound, one example exchange (the owner's line and Jarvis's) and which
-of the nine built-in presets it starts from, then: say "save it" to keep it, or
+of the ten built-in presets it starts from, then: say "save it" to keep it, or
 tell me what to change.
 
 **Saving** goes through `jarvis_manner.save_user_personality()` - the same
@@ -7421,7 +7446,7 @@ talks -> My personalities.
 | Name | 60 characters |
 | One line of how it sounds | 240 characters |
 | Each half of the example exchange | 240 characters |
-| Base preset | one of the nine built-ins (§27.7) |
+| Base preset | one of the ten built-ins (§27.7) |
 | The persona block it feeds | 750 characters, unchanged |
 
 The draft is asked for shorter than these caps on purpose: the persona block's
@@ -15026,6 +15051,56 @@ zone from the PC can differ from the PC's day near midnight.
 ---
 
 
+### 82.7 The Today board (`/api/today/cockpit`, GTD-2, added 2026-10-18)
+
+The Today page's board is ONE new route on an install that already exists:
+`jarvis_today.py` builds the answer and `jarvis_brain_reads.py` serves it (the
+server already wraps that module, so the route needs no patch and no
+registration). The scheduler's older reads (`status()`, `listed()`, `job()`) are
+unchanged; the board only adds sections, and never edits an older reply.
+
+| Route | Body / query | Answers |
+|---|---|---|
+| `GET /api/today/cockpit` | `?hidden=1` from an app whose "Hide memory lists and chat history" or App lock is on | 200 `{"available": true, "unspoken_commitments_enabled": <bool>, "rollover_cards": []}` plus `due_reminders`, `active_next_steps`, `proposals` and `pulse`, each present ONLY when it has something. `hidden=1` answers `{"available": true, "hidden": true}` and no words at all. 503 `{"available": false, "why": <sentence>}` when this PC's `jarvis_today.py` is missing (an older install). A read: pairing token and origin like every private list, and never held on a stale link |
+| `POST /api/today/cockpit` | `{"enabled": true\|false}` | The board's own said-I'd-do switch. `false` is 200 at once (`{"ok": true, "enabled": false, "waiting": false, "message": ...}`) and withdraws a card still waiting. `true` is 202 (`{"ok": true, "waiting": true, "enabled": false, "message": ...}`) with **ONE approval card** - `change_own_config`, tier `ask`, and nothing turns on until a person approves it; the card may be decided on the PC or the phone (that action is not in `jarvis_owner_check.PC_ONLY_ACTIONS`). Already on: 200. A card already waiting: 202 with its own message. 400 not a true/false; 503 the action's tier is not `ask` or the card could not be raised; 413 over 16 KiB; 501 when an older install cannot read a body; 400 when the body is not JSON |
+
+What each section carries:
+
+- `due_reminders` - at most 8 (`MAX_DUE_REMINDERS`), the most useful first:
+  what went off in the last hour, then anything still active whose time has
+  passed. Each row is `{"id", "kind", "text", "due", "when", "went_off",
+  "overdue"}`, plus `fired_at` and the optional GTD-1 fields (`context_bundle`,
+  `suggested_prompt`, `snooze_count`, `stuck_hint`) only when the scheduler
+  really has them. Kinds: reminder, alarm, timer. Read-only - nothing is
+  changed, fired or snoozed here.
+- `active_next_steps` - at most 6 (`MAX_NEXT_STEPS`): the first open step of
+  each active goal and of each project whose work list still has open items.
+  Each row is `{"kind": "goal"|"project", "id", "name", "step", "by"}`. No
+  step is ticked, no goal accepted, no list changed.
+- `proposals` - at most 5 (`MAX_PROPOSALS`), "You said you would" commitments
+  found ONLY in the owner's own words (`role == "user"`) in recent kept chats:
+  never an incognito or crisis chat, never Jarvis's or a tool's words, and none
+  that an open reminder or Today card already covers. Each row is `{"text",
+  "suggested_due", "source_conv_id"}`; one said more than 3 days ago fades.
+  Strictly proposals: nothing is created from one, no model is called and no
+  socket is opened. A tap in an app only copies a "Remind me to ..." prompt for
+  the owner to send through the ordinary chat flow.
+- `pulse` - the latest briefing's Daily Pulse (`lines`, `where_to_look`,
+  `not_checked`), read from the briefing already made in this process, so it
+  adds no new read. Absent when no briefing exists.
+- `rollover_cards` - always `[]`, and honestly so: a Today card is a repeating
+  rule with no per-day "done" state to roll over. Building it needs a new
+  per-day record, which is a schema change, not a read.
+
+**Who draws it.** Desktop: Brain → Work → Today (`brain/schedule.rs`
+`COCKPIT_PATH` and `brain_schedule`; `brain_schedule_set_unspoken` for the
+switch; the board's words are blanked in Rust by `redact_list` while the
+private lists are hidden). The phone has no Today board yet - its Today is
+unchanged in this slice, and a phone board is the named follow-up. So
+`tools/check_parity.py` records the route as `todo` (still to port), not
+`deliberate`, and `ARCHITECTURE.md` section 8 records the gap rather than
+claiming a parity pass.
+
 **The Daily Pulse on the Today board (Wave D-1, 2026-10-22).** The board's
 answer grows one more optional key: when a briefing has been made in this
 process, `pulse` carries that briefing's `lines`, `where_to_look` (top 1-3) and
@@ -16478,6 +16553,45 @@ in `capabilities/settings.json`); the phone's Settings, the same row
 (`net/HandoffFront.kt`, `ui/screens/HandoffFrontPlate.kt`,
 `JarvisRuntime.setHandoffFront`). Both read the same words from the PC, and
 `tools/gen_handoff_cases.py` carries them into both apps' contract file so
+neither can drift.
+
+### 87.8.2 When nobody answers: "Stop early" or "Keep offering it" (`jarvis_handoff_mode.py`, 2026-10-08)
+
+The owner's own decision of 2026-10-08: **"make this a setting for both
+options with 1 as the default"** (`docs/CAPTCHA-HANDOFF-DESIGN.md` section 5).
+It chooses how long "Solve it here" stays on offer. It is its own module and
+its own route, and it never touches the hand-off's picture or input path.
+
+| The choice | What happens | Gated? |
+|---|---|---|
+| **"Stop early"** (THE DEFAULT, and the narrower one) | About a minute (60 s) with nobody looking ends the hand-off (`idle`), and the PC says plainly which window Jarvis is stuck on, leaving it for the owner to solve there | **No** - it is the default, it does less, and going back to it is immediate from either app, never held on a stale link |
+| **"Keep offering it"** | The live picture stays on offer for the full 15-minute ceiling, so the owner can pick their phone up late | **ONE approval card** (`handoff_keep_offering`, tier `ask`), **and on `jarvis_owner_check.PC_ONLY_ACTIONS`**: decided on the PC with Windows Hello, and refused from any other device |
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/chatbot/handoff_mode` | | 200 `{"mode", "default", "modes", "mode_name", "words", "patient", "idle_s", "ceiling_s", "waiting", "last", "pc_only": true}`, plus `why` when the settings file is damaged. A read: never held on a stale link, no card |
+| `POST /api/chatbot/handoff_mode` | `{"mode": "stop_early"}` | 200 at once (and it withdraws a card still waiting); never a card, never held on a stale link |
+| | `{"mode": "keep_offering"}` | 202 with `{"ok": true, "waiting": true, "mode": "stop_early", "message": ...}` while ONE card waits - nothing changes until a person says yes on the PC. Already on: 200. Any other name: 400 with the two names in plain words. 503 when the action's tier is not `ask`, or the card could not be raised. Held on a stale link |
+
+**The spelling matters.** The route is `/api/chatbot/handoff_mode` - an
+underscore. It is a SIBLING of the hand-off's own
+`/api/chatbot/handoff/{start,frame,input,end}` (87.8) and of
+`/api/chatbot/handoff_front` (87.8.1), and a client that guesses
+`handoff-mode` gets a 404. It carries one word and fixed sentences: no picture,
+no page, no window title and no tap.
+
+**Fail closed.** No file at all, an unreadable one, one that is not JSON, or
+one holding anything but the two names reads as "Stop early" with a plain
+`why` - a damaged file must never quietly leave the window on offer for fifteen
+minutes. Only one word and the time it changed are kept, in
+`handoff-mode.json` (deliberately not 87.8.1's `handoff-front.json`).
+
+**Where both apps show it:** desktop Settings, "When the phone does not
+answer" (`handoff-mode.js`, `handoff-mode-rules.js`, `src-tauri/src/handoff.rs`
+`handoff_mode`, the `handoff-mode` set in `permissions/surfaces.toml`); the
+phone's Settings, the same row (`net/HandoffMode.kt`,
+`ui/screens/HandoffModePlate.kt`, `JarvisRuntime.setHandoffMode`).
+`tools/gen_handoff_cases.py` carries the words into both apps' contract file so
 neither can drift.
 
 ## 88. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
@@ -21863,7 +21977,7 @@ fixed phrases, but no chat path could EXPLAIN a feature: "how do I turn on the p
 coach?" was answered thinly by the model (never saying what the coach does or where it
 lives), and "is the prompt coach on right now?" was answered "I don't know its current
 state directly". The exact answers were already written down - `features/features.json`,
-the 140 rows both apps' Features pages draw - and nothing read them.
+the 141 rows both apps' Features pages draw - and nothing read them.
 
 **One read-only tool, `feature_guide`** (`jarvis_feature_guide.py`; the tool in
 `jarvis_agent.py`). Its one argument is `feature`, in the owner's words (or a group
@@ -21922,7 +22036,7 @@ grammar learned the rest of the questions a person actually asks:
 Every explain answer is assembled by one renderer (`jarvis_feature_guide.explain_words`), so a
 model turn and a fixed phrase cannot say different things. "Can I change it?" is read-only:
 it is in `jarvis_quick.READ_ONLY_INTENTS`, so "cancel that" never takes back something it
-did not do, and the test suite proves no `BoolSetting.set` runs for any of the 140 rows.
+did not do, and the test suite proves no `BoolSetting.set` runs for any of the 141 rows.
 
 **And a setting can now be CHANGED by asking, not only explained (2026-10-27).** The
 plainest sentences - "make the prompt coach off", "set web search to off", "I want the
@@ -21993,12 +22107,12 @@ owner's decision of 2026-10-19/20); on an existing install the model tool is off
 inherited `config.toml`, if the settings file names no `[tools]` section) - the fixed
 phrases need no config at all.
 
-**Tests.** `backend/test_feature_guide.py` (1707 checks, measured 2026-10-26): all 140 rows
+**Tests.** `backend/test_feature_guide.py` (1707 checks, measured 2026-10-26): all 141 rows
 found with facts equal to the JSON; every switch has a state reader and the answers never
 claim a state they did not read; unknown/ambiguous honesty; the fixed phrases and their near
 misses; switching through the real setter with its real words; the tool's 300-token text,
 `auto`-tier no-card turn, and exact facts fed to the model. The 2026-10-26 section asks every
-one of the 140 rows all nine questions through its title, id AND aliases, and requires the
+one of the 141 rows all nine questions through its title, id AND aliases, and requires the
 answer that question needs (the full facts for explain/use/where, where + card + exact phrase
 for how-to, status + how for change, the real state for state); "can I change" is proved to
 run no setter for any row; every alias is proved to name only its own row; every one-sided

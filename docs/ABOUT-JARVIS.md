@@ -554,10 +554,13 @@ estimates, and they change — re-run the command rather than trusting the numbe
 | Defect register | **16 rows**, 15 closed / 1 open | `docs/defect-register.tsv` |
 | Launch videos kept | **6** numbered versions, v1–v6, never replaced | `videos/README.md`; the owner's rule of 2026-09-24 (`CLAUDE.md`) |
 
-**What runs when a change is pushed.** Ten CI jobs are declared in
-`.github/workflows/ci.yml` — `rust`, `frontend`, `backend`, `backend-windows`,
-`credential-manager`, `powershell-5`, `phone-unit-tests`, `audit`,
-`python-advisories` (and the `push` trigger). **Seven of them gate a merge** —
+**What runs when a change is pushed.** Ten jobs are declared in
+`.github/workflows/ci.yml` — `rust`, `frontend-shard`, `frontend`, `backend`,
+`backend-windows`, `credential-manager`, `powershell-5`, `phone-unit-tests`,
+`audit`, `python-advisories`. (`frontend-shard` is the four-way split of the
+desktop suite; `frontend` is the fan-in job that depends on every shard and
+passes only when all of them did. The `push` trigger starts the workflow - it
+is not a job.) **Seven of them gate a merge** —
 `rust`, `frontend`, `backend`, `backend-windows`, `credential-manager`,
 `powershell-5`, `phone-unit-tests` — while `audit` and `python-advisories` are
 informational (`CLAUDE.md`, final section; the set became seven at 2026-10-25

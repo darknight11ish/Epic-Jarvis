@@ -25,7 +25,7 @@
  *
  *   * the five local-AI focus presets (`GET /api/presets`, JARVIS-API section
  *     145), with the PC's own `chosen_preset` marking the chosen one;
- *   * Jarvis's nine personalities plus the owner's own "My personalities"
+ *   * Jarvis's ten personalities plus the owner's own "My personalities"
  *     (`GET /api/manner`), with the PC's own `personality` marking the current
  *     one.
  *
@@ -415,7 +415,7 @@ export function modelPresetRows(payload) {
 }
 
 /**
- * The personalities the PC offers (`GET /api/manner`): its nine built-ins in
+ * The personalities the PC offers (`GET /api/manner`): its ten built-ins in
  * its own order, then the owner's saved "My personalities" when there are
  * any. The PC's `personalities` list already carries the saved ones too -
  * each marked `builtin: false` (`jarvis_manner.py` `all_personalities`) - so
@@ -1205,7 +1205,7 @@ export function mountHudPresets(options = {}) {
     if (target && typeof target.focus === "function") target.focus();
   }
 
-  /** Jarvis's nine personalities (GET /api/manner), then the owner's own
+  /** Jarvis's ten personalities (GET /api/manner), then the owner's own
    *  "My personalities" as their own section when there are any. A click is
    *  immediate - no card - and the mark comes from the PC's own `personality`. */
   function renderPersonalities() {

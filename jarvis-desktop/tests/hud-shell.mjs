@@ -594,7 +594,7 @@ await check("modelPresetRows reads the PC's chosen_preset - and nothing else mar
   assert.equal(P.modelPresetRows({ presets: [{ id: "fast", title: "Fast" }] })[0].chosen, false);
 });
 
-await check("personalityRows reads the nine and the owner's own, and marks the PC's current", () => {
+await check("personalityRows reads the ten and the owner's own, and marks the PC's current", () => {
   const payload = {
     personality: "classic_butler",
     personalities: [

@@ -392,10 +392,33 @@ async function savePhone(box, input) {
     // is null, which means "keep the one already there" - this card never
     // touches it, and never shows it.
     await invoke("set_api_settings", { base: null, token: null, bindAddress: address });
-    note = {
-      text: "Saved. This works only while \"Let Jarvis Desktop start and stop Jarvis\" above is on — that is how the address reaches Jarvis.",
-      tone: "ok",
-    };
+    // The address only reaches Jarvis because the app starts Jarvis, and the
+    // row above can be ON with no program set (`paintSupervise` says so two
+    // rows up). So ask the PC rather than promising: an answer that assumed
+    // supervision was configured would tell the owner his phone can reach the
+    // PC while nothing will ever start it - which is the file:line hole this
+    // read closes.
+    let supervisor = null;
+    try {
+      supervisor = await invoke("supervisor_status");
+    } catch (error) {
+      supervisor = null;
+    }
+    const superviseOn = Boolean(supervisor && supervisor.supervise);
+    const configured = Boolean(supervisor && supervisor.configured);
+    if (superviseOn && !configured) {
+      note = {
+        text: "Saved, but nothing will answer yet: \"Let Jarvis Desktop start and stop Jarvis\" above is on with no program set. Set it under More options, \"Starting Jarvis for you\" - Find it for me fills it in.",
+        tone: "bad",
+      };
+    } else if (superviseOn) {
+      note = { text: "Saved. Jarvis Desktop starts Jarvis with that address, so your phone can reach this PC.", tone: "ok" };
+    } else {
+      note = {
+        text: "Saved. This works only while \"Let Jarvis Desktop start and stop Jarvis\" above is on — that is how the address reaches Jarvis.",
+        tone: "ok",
+      };
+    }
   } catch (error) {
     note = { text: problemWords(error), tone: "bad" };
   }
