@@ -40,6 +40,7 @@ import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -119,11 +120,12 @@ def t_the_read_answer_is_the_contract_shape_and_touches_no_network():
         out = M.recommendations_view(path=path, gpus=GPUS)
     finally:
         M.measured_gpus = real
-    check("GET's answer is exactly the five contract keys",
-          set(out) == {"checked_at", "gpus", "candidates", "recommendations",
-                       "benchmarked"}, sorted(out))
+    check("GET's answer is exactly the six contract keys",
+          set(out) == {"checked_at", "gpus", "candidates", "skipped_no_size",
+                       "recommendations", "benchmarked"}, sorted(out))
     check("nothing checked yet reads as checked_at null, no candidates, nothing measured",
           out["checked_at"] is None and out["candidates"] == []
+          and out["skipped_no_size"] == 0
           and out["recommendations"] == [] and out["benchmarked"] == {}, out)
     check("the measured cards are reported", out["gpus"] == GPUS)
     check("... and GET wrote no file", not path.exists())
@@ -140,7 +142,11 @@ MODELS = [
      "tags": ["text-generation", "gguf", "license:apache-2.0"]},
     {"ref": "tiny:1b", "source": "ollama", "params": 1_000_000_000,
      "size_gb": 1.0, "context": 8192, "trending": 2},
-    {"ref": "acme/NoSize-GGUF", "source": "huggingface", "context": 4096},
+    # THE FIELD TEST'S SHAPE (2026-10-28): an absent `bytes_` became 0.0 in
+    # `jarvis_models.Model.as_dict()`, so the row reached here with size_gb 0.0
+    # rather than no key at all. That is the value that used to get through.
+    {"ref": "acme/NoSize-GGUF", "source": "huggingface", "context": 4096,
+     "bytes_": None, "size_gb": 0.0},
 ]
 
 
@@ -158,15 +164,18 @@ def t_the_check_caches_candidates_and_never_downloads():
           code == 200 and set(out) >= {"checked_at", "gpus", "candidates",
                                        "recommendations", "benchmarked"}, out)
     check("... checked_at is the clock it ran at", out["checked_at"] == T0)
-    check("... a candidate with no size in the listing is not judged",
+    check("... a candidate with no real size in the listing is not judged",
           all(c["ref"] != "acme/NoSize-GGUF" for c in out["candidates"]),
           out["candidates"])
+    check("... and the answer says how many were left out, so the gap is explained",
+          out["skipped_no_size"] == 1, out.get("skipped_no_size"))
     check("... two judged candidates", len(out["candidates"]) == 2,
           out["candidates"])
     first = out["candidates"][0]
     check("a candidate carries exactly the contract fields",
           set(first) == {"ref", "name", "family", "params_b", "quant", "size_gb",
-                         "context_tokens", "licence", "fit", "source_url", "why"},
+                         "context_tokens", "licence", "provider", "fit",
+                         "source_url", "why"},
           sorted(first))
     check("... its fit is one of the three words",
           first["fit"] in ("fits", "tight", "no"), first["fit"])
@@ -232,6 +241,127 @@ def t_the_check_answer_has_no_fit_claim_without_an_estimate():
           code == 200 and len(out["candidates"]) == 2, out)
     check("... and none of them is called fitting",
           all(c["fit"] == "no" and "no fit is claimed" in c["why"]
+              for c in out["candidates"]), out["candidates"])
+
+
+def estimate_from_catalogue_size(model):
+    """A stand-in for `jarvis_models.estimate_vram_mb` in the one property that
+    matters here: the need is the model's own download (its weights) plus the
+    runtime floor, so it scales with the size. A constant cannot do that."""
+    size = M._real_size_gb(M._model_fields(model))
+    return size * 1024.0 + 1500.0 if size else None
+
+
+def t_a_candidate_with_no_real_size_is_never_a_fits_row():
+    """THE 2026-10-28 FIELD TEST, reproduced: an absent `bytes_` became 0.0 in
+    `jarvis_models.Model.as_dict()`, so a 27B row reached the answer as
+    "size 0.00 GB" with a FITS label and "estimated to need about 1.5 GB" -
+    the estimator's runtime floor with no weights in it."""
+    path = fresh("field-no-size")
+    models = [
+        {"ref": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF",
+         "source": "huggingface", "bytes_": None, "size_gb": 0.0,
+         "context": 32768},
+        {"ref": "spark:4b", "source": "ollama", "size_gb": 0.0},
+        {"ref": "Qwen/Qwen3-27B-GGUF", "source": "huggingface",
+         "bytes_": 16 * 2 ** 30},
+    ]
+    code, out = M.check_models(path=path, gpus=GPUS,
+                               discover=lambda: list(models),
+                               estimate=lambda m: 1502, clock=lambda: T0)
+    check("a catalogue row with no real size is not in the answer",
+          code == 200 and [c["ref"] for c in out["candidates"]]
+          == ["Qwen/Qwen3-27B-GGUF"], out["candidates"])
+    check("... the count of rows not judged is on the answer",
+          out["skipped_no_size"] == 2, out.get("skipped_no_size"))
+    check("... no row quotes a 0.00 GB size or a 1.5 GB need",
+          all("size 0.00 GB" not in c["why"] and "1.5 GB" not in c["why"]
+              for c in out["candidates"]), [c["why"] for c in out["candidates"]])
+    seen = M.recommendations_view(path=path, gpus=GPUS)
+    check("... and a later read keeps the count, so the panel can explain it",
+          seen["skipped_no_size"] == 2, seen.get("skipped_no_size"))
+
+
+def t_a_27b_candidate_with_a_real_size_gets_a_proportional_estimate():
+    path = fresh("real-size")
+    models = [
+        {"ref": "big:27b", "source": "ollama", "bytes_": 16 * 2 ** 30},
+        {"ref": "small:4b", "source": "ollama", "bytes_": 2 * 2 ** 30},
+    ]
+    code, out = M.check_models(path=path, gpus=GPUS,
+                               discover=lambda: list(models),
+                               estimate=estimate_from_catalogue_size,
+                               clock=lambda: T0)
+    rows = {c["ref"]: c for c in out["candidates"]}
+    big, small = rows["big:27b"], rows["small:4b"]
+    check("a 27B candidate with a real 16 GB size is not described as needing 1.5 GB",
+          big["size_gb"] == 16.0 and "1.5 GB" not in big["why"], big)
+    check("... its need is proportional to its own size, and called an estimate",
+          "estimated to need about 17.5 GB" in big["why"], big["why"])
+    check("... a 27B model is not called a fit for a 12 GB card",
+          big["fit"] == "no", big["fit"])
+    check("a 4B candidate gets its own smaller need, not the 27B's",
+          "estimated to need about 3.5 GB" in small["why"]
+          and small["fit"] == "fits", small)
+
+
+def t_an_estimate_below_the_download_is_not_a_fit_claim():
+    path = fresh("floor-estimate")
+    code, out = M.check_models(
+        path=path, gpus=GPUS,
+        discover=lambda: [{"ref": "big:27b", "source": "ollama",
+                           "bytes_": 16 * 2 ** 30}],
+        estimate=lambda m: 1502, clock=lambda: T0)   # the field test's floor
+    row = out["candidates"][0]
+    check("an estimate smaller than the weights it must hold is not used",
+          "1.5 GB" not in row["why"]
+          and "could not be estimated" in row["why"], row["why"])
+    check("... so it carries no fit claim", row["fit"] == "no", row["fit"])
+
+
+def t_a_catalogue_with_no_real_sizes_says_so_and_shows_nothing():
+    """The honest end of the same rule: if the pass genuinely reports no sizes,
+    the answer is an empty, explained list - never a fabricated row."""
+    path = fresh("all-no-size")
+    models = [
+        {"ref": "a:27b", "source": "ollama", "size_gb": 0.0},
+        {"ref": "b:8b", "source": "ollama", "bytes_": None},
+    ]
+    code, out = M.check_models(path=path, gpus=GPUS,
+                               discover=lambda: list(models),
+                               estimate=lambda m: 1502, clock=lambda: T0)
+    check("a pass where no row reports a size answers with no candidates",
+          code == 200 and out["candidates"] == []
+          and out["skipped_no_size"] == 2, out)
+    check("... and no size or need is invented to fill the list",
+          out["candidates"] == [] and "error" not in out, out)
+    seen = M.recommendations_view(path=path, gpus=GPUS)
+    check("... the read answer keeps the empty list and the count",
+          seen["candidates"] == [] and seen["skipped_no_size"] == 2, seen)
+
+
+def t_every_rows_provider_words_name_its_link_host():
+    path = fresh("providers")
+    models = [
+        {"ref": "acme/NewModel-GGUF", "source": "huggingface", "size_gb": 4.0},
+        {"ref": "qwen3:8b", "source": "ollama", "size_gb": 5.0},
+    ]
+    code, out = M.check_models(path=path, gpus=GPUS,
+                               discover=lambda: list(models),
+                               estimate=lambda m: 6000, clock=lambda: T0)
+    rows = {c["ref"]: c for c in out["candidates"]}
+    hf, ollama = rows["acme/NewModel-GGUF"], rows["qwen3:8b"]
+    check("a Hugging Face row says Hugging Face and links to huggingface.co",
+          hf["provider"] == "Hugging Face"
+          and urlsplit(hf["source_url"]).hostname == "huggingface.co", hf)
+    check("an Ollama row says Ollama's library and links to ollama.com",
+          ollama["provider"] == "Ollama's library"
+          and urlsplit(ollama["source_url"]).hostname == "ollama.com", ollama)
+    check("... no row says Hugging Face over an ollama.com link, or the reverse",
+          all(((c["provider"] == "Ollama's library")
+               == (urlsplit(c["source_url"]).hostname == "ollama.com"))
+              and ((c["provider"] == "Hugging Face")
+                   == (urlsplit(c["source_url"]).hostname == "huggingface.co"))
               for c in out["candidates"]), out["candidates"])
 
 
@@ -778,7 +908,11 @@ def t_a_damaged_store_reads_as_empty():
           and doc["candidates"] == [] and doc["benchmarked"] == {}, doc)
     path.write_text(json.dumps({
         "checked_at": "yesterday",
-        "candidates": [{"ref": "ok:1b", "fit": "sideways"},
+        "skipped_no_size": 3,
+        "candidates": [{"ref": "ok:1b", "fit": "sideways", "size_gb": 4.0,
+                        "source_url": "https://ollama.com/library/ok"},
+                       {"ref": "ghost:27b", "fit": "fits", "size_gb": 0.0,
+                        "source_url": "https://huggingface.co/x/ghost"},
                        {"not": "a candidate"}, 7],
         "benchmarked": {"a:1b": {"tokens_per_s": 20, "vram_gb": 3},
                         "b:1b": {"vram_gb": 4},
@@ -790,6 +924,16 @@ def t_a_damaged_store_reads_as_empty():
     check("a bad fit word becomes 'no' and junk candidates are dropped",
           [c["ref"] for c in doc["candidates"]] == ["ok:1b"]
           and doc["candidates"][0]["fit"] == "no", doc["candidates"])
+    check("... a stored row with no real size is dropped rather than shown as 0.00 GB",
+          all(c["ref"] != "ghost:27b" for c in doc["candidates"]), doc["candidates"])
+    check("... a pre-provider store still names the host its link goes to",
+          doc["candidates"][0]["provider"] == "Ollama's library",
+          doc["candidates"][0])
+    check("... and the count of models not judged is kept, including a legacy row",
+          doc["skipped_no_size"] == 4, doc.get("skipped_no_size"))
+    M.save_store(doc, path)
+    check("... and a saved, already-cleaned store does not count the legacy row twice",
+          M.load_store(path)["skipped_no_size"] == 4, M.load_store(path))
     check("a benchmark with no measured rate is not a benchmark",
           list(doc["benchmarked"]) == ["a:1b"], doc["benchmarked"])
     check("a malformed opinion is dropped",
@@ -809,6 +953,11 @@ def main() -> int:
         t_check_refuses_when_no_card_was_measured_and_does_no_lookup,
         t_check_refuses_honestly_without_the_catalogue_module,
         t_the_check_answer_has_no_fit_claim_without_an_estimate,
+        t_a_candidate_with_no_real_size_is_never_a_fits_row,
+        t_a_27b_candidate_with_a_real_size_gets_a_proportional_estimate,
+        t_an_estimate_below_the_download_is_not_a_fit_claim,
+        t_a_catalogue_with_no_real_sizes_says_so_and_shows_nothing,
+        t_every_rows_provider_words_name_its_link_host,
         t_benchmark_refuses_an_uninstalled_model_before_measuring,
         t_benchmark_measures_stores_and_returns_the_measurement,
         t_benchmark_stores_nothing_when_it_cannot_measure,

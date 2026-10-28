@@ -250,6 +250,32 @@ await check("the hash is never invented: the catalogue has none, and the page sa
   assert.equal(rows.filter((r) => "sha_256" in r).length, 0);
 });
 
+await check("a row's provider words name the host its link goes to", async () => {
+  assert.equal(A.providerWords({ sourceUrl: "https://huggingface.co/Qwen/Qwen3-8B-GGUF" }),
+    "Hugging Face");
+  assert.equal(A.providerWords({ sourceUrl: "https://ollama.com/library/qwen3" }),
+    "Ollama's library");
+  // The link wins over a stale or wrong word: the field test's mismatch cannot
+  // come back through this door.
+  assert.equal(A.providerWords({ provider: "Hugging Face",
+    sourceUrl: "https://ollama.com/library/qwen3" }), "Ollama's library");
+  assert.equal(A.providerWords({ provider: "Ollama's library" }), "Ollama's library");
+  assert.equal(A.providerWords({ sourceUrl: "https://example.test/x" }), "example.test");
+  assert.equal(A.providerWords({}), "the public listing");
+  assert.equal(A.providerWords(null), "the public listing");
+});
+
+await check("rows the public listing gave no size for are explained, not silently dropped", async () => {
+  assert.equal(A.notJudgedNote({}), "");
+  assert.equal(A.notJudgedNote({ skipped_no_size: 0 }), "");
+  assert.equal(A.notJudgedNote({ skipped_no_size: null }), "");
+  assert.match(A.notJudgedNote({ skipped_no_size: 1 }),
+    /^1 model was left out because the public listing gave no download size/);
+  assert.match(A.notJudgedNote({ skipped_no_size: 7 }),
+    /^7 models were left out because the public listing gave no download size/);
+  assert.match(A.notJudgedNote({ skipped_no_size: 7 }), /not judged/);
+});
+
 await check("the measured-note choice reads the PC's benchmark index, not a bare flag", async () => {
   assert.equal(A.anyMeasured({ benchmarked: { "qwen3:8b": { tokens_per_s: 18.4 } } }), true);
   assert.equal(A.anyMeasured({ benchmarked: {} }), false);
@@ -432,7 +458,7 @@ await check("one click shows progress, then the candidates with size, quant, fit
   await p.evaluate(() => { window.__advisorHold = true; });
   await p.locator("#model-check").click();
   await K.until(p, "the check to be sent", async () => (await advisorCalls(p)).length === 1);
-  assert.match(await modelsText(p), /Looking on Hugging Face/,
+  assert.match(await modelsText(p), /Looking through the public model libraries/,
     "no progress was shown while the lookup was in flight");
   await p.evaluate(() => window.__advisorRelease());
   await K.until(p, "the candidates", async () => /Qwen3 14B/.test(await modelsText(p)));
@@ -458,6 +484,49 @@ await check("one click shows progress, then the candidates with size, quant, fit
   assert.match(text, /Nothing here has been measured on this PC yet/,
     "the panel let an unmeasured list read as an upgrade");
   assert.match(text, /Nothing downloads until you approve that card/);
+});
+
+await check("an Ollama row says Ollama's library, and rows with no size are explained", async () => {
+  // THE 2026-10-28 FIELD TEST: rows linked to ollama.com while the copy said
+  // Hugging Face, and every row claimed a size/fit the listing never gave.
+  const payload = {
+    ...CANDIDATES,
+    skipped_no_size: 2,
+    candidates: [
+      { ref: "qwen3:8b", name: "Qwen3 8B", size_gb: 5.1, fit: "fits",
+        provider: "Ollama's library",
+        source_url: "https://ollama.com/library/qwen3",
+        why: "estimated to need about 6.6 GB, which the measured RTX 2060 holds; " +
+          "size 5.10 GB from the public file listing" },
+    ],
+  };
+  const p = await tab({}, { answers: { check: payload, benchmark: BENCHMARK, opinion: REVISED } });
+  await p.locator("#model-check").click();
+  await K.until(p, "the Ollama candidate", async () => /Qwen3 8B/.test(await modelsText(p)));
+  const text = await modelsText(p);
+  await p.close();
+  assert.match(text, /On Ollama's library: https:\/\/ollama\.com\/library\/qwen3/,
+    "a row linked to ollama.com was labelled Hugging Face");
+  assert.doesNotMatch(text, /On Hugging Face: https:\/\/ollama\.com/);
+  assert.match(text, /2 models were left out because the public listing gave no download size/,
+    "the rows the PC could not judge were not explained");
+  assert.match(text, /Nothing here has been measured on this PC yet/,
+    "the honest banner was lost");
+  assert.match(text, /No SHA-256 is shown/, "the no-hash note was lost");
+});
+
+await check("an empty list says why it is empty: no public size, not 'nothing found'", async () => {
+  const payload = { ...CANDIDATES, skipped_no_size: 3, candidates: [] };
+  const p = await tab({}, { answers: { check: payload, benchmark: BENCHMARK, opinion: REVISED } });
+  await p.locator("#model-check").click();
+  await K.until(p, "the empty answer", async () => /found no newer model/.test(await modelsText(p)));
+  const text = await modelsText(p);
+  await p.close();
+  assert.match(text, /found no newer model/);
+  assert.match(text, /3 models were left out because the public listing gave no download size/,
+    "an empty list did not say why it was empty");
+  assert.doesNotMatch(text, /estimated to need about/,
+    "an empty list still carried a fabricated estimate");
 });
 
 await check("Download goes to the EXISTING carded install, and the advisor is not asked to install", async () => {

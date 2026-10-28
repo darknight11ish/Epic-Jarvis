@@ -1876,7 +1876,7 @@ async function checkForModels() {
   advisor.phase = "looking";
   advisor.error = "";
   renderModels();
-  announce("Looking for newer models on Hugging Face.");
+  announce("Looking through the public model libraries.");
   const out = await advisorAsk(Advisor.ACTION_CHECK);
   advisor.at = Date.now();
   if (!out.ok) {
@@ -2034,7 +2034,12 @@ function advisorCandidateRow(candidate) {
   if (candidate.sourceUrl) {
     // A plain sentence, never a link: this window has no permission to open an
     // address, and a stray link in a webview could navigate the window away.
-    main.append(el("span", "row-meta", `On Hugging Face: ${candidate.sourceUrl}`));
+    // The provider words come from the row (or its host), so a row linking to
+    // ollama.com can never be labelled Hugging Face - the 2026-10-28 field
+    // test found exactly that mismatch.
+    main.append(
+      el("span", "row-meta", `On ${Advisor.providerWords(candidate)}: ${candidate.sourceUrl}`)
+    );
   }
   item.append(main);
 
@@ -2112,15 +2117,16 @@ function advisorPanel() {
     el(
       "p",
       "model-advisor-lede",
-      "Ask Jarvis to look on Hugging Face for newer local models that fit this " +
-        "computer's graphics cards. It is a suggestion, not an upgrade: a model is " +
-        "only better here once it has been measured here."
+      "Ask Jarvis to look through the public model libraries (Hugging Face and " +
+        "Ollama's library) for newer local models that fit this computer's " +
+        "graphics cards. It is a suggestion, not an upgrade: a model is only " +
+        "better here once it has been measured here."
     )
   );
 
   const actions = el("div", "row-actions");
   const check = button("Check for new models", checkForModels, {
-    title: "Asks your PC to look on Hugging Face for newer models that fit its graphics cards. Nothing downloads.",
+    title: "Asks your PC to look through the public model libraries (Hugging Face and Ollama's library) for newer models that fit its graphics cards. Nothing downloads.",
   });
   check.id = "model-check";
   if (advisor.phase === "looking") {
@@ -2134,7 +2140,7 @@ function advisorPanel() {
     const status = el(
       "p",
       "model-advisor-status",
-      "Looking on Hugging Face. This can take a moment, and nothing is downloading."
+      "Looking through the public model libraries. This can take a moment, and nothing is downloading."
     );
     status.setAttribute("role", "status");
     wrap.append(status);
@@ -2195,6 +2201,9 @@ function advisorPanel() {
   }
 
   const candidates = Advisor.candidateRows(payload);
+  // Rows the PC could not judge are explained, not silently dropped: the count
+  // is the PC's own, and it says the public listing gave no download size.
+  const notJudged = Advisor.notJudgedNote(payload);
   // A real check is the only thing that may say "found nothing": an answer with
   // no `checked_at` has simply never been checked, and NO_CANDIDATES would be a
   // claim about a lookup nobody ran.
@@ -2206,8 +2215,10 @@ function advisorPanel() {
     wrap.append(el("p", "note", anyMeasuredNow(payload) ? Advisor.MEASURED_SOMEWHERE : Advisor.NOT_MEASURED));
     wrap.append(el("p", "note", Advisor.NO_HASH));
     wrap.append(el("p", "note", Advisor.DOWNLOAD_IS_CARDED));
+    if (notJudged) wrap.append(el("p", "note model-advisor-not-judged", notJudged));
   } else if (everChecked) {
     wrap.append(el("p", "note", Advisor.NO_CANDIDATES));
+    if (notJudged) wrap.append(el("p", "note model-advisor-not-judged", notJudged));
   } else {
     wrap.append(el("p", "note", Advisor.NOT_CHECKED_YET));
   }

@@ -26497,9 +26497,11 @@ and no candidates. The shape:
  "candidates": [{"ref": "owner/model-GGUF", "name": "model-GGUF",
                  "family": "model", "params_b": 8.0, "quant": "Q4_K_M",
                  "size_gb": 4.0, "context_tokens": 131072,
-                 "licence": "apache-2.0", "fit": "fits",
+                 "licence": "apache-2.0", "provider": "Hugging Face",
+                 "fit": "fits",
                  "source_url": "https://huggingface.co/owner/model-GGUF",
                  "why": "estimated to need about 5.9 GB, which the measured ..."}],
+ "skipped_no_size": 0,
  "recommendations": [{"preset": "fast",
                       "changes": [{"row": "model", "from": "qwen3.5:4b",
                                    "to": "best:7b",
@@ -26514,6 +26516,28 @@ and no candidates. The shape:
 about (`model`, `lane` or `context`); `preset` names the row itself. `fit` is
 `fits` / `tight` / `no`, from the measured card sizes and the candidate's
 **estimated** need (the only estimate in the answer, labelled in `why`).
+
+**A candidate with no real public size is not a candidate.** The catalogue's
+`Model.as_dict()` writes `size_gb` as `0.0` when the listing gave no `bytes_`,
+and `discover()` enriches only its first few repos, so most rows arrive with no
+size at all. The 2026-10-28 desktop field test
+(`.dsh-scratch/MAXOUT-2026-10-28/FIELDTEST-DESKTOP-2026-10-28/REPORT.md`) showed
+what admitting them did: every row read "size 0.00 GB from the public file
+listing" and "estimated to need about 1.5 GB" - the estimator's 1500 MB runtime
+floor with no weights in it - including 27B models marked FITS. So:
+
+- a row with no **positive** size is dropped, and `skipped_no_size` says how
+  many were dropped, so the panel can say "N models were left out because the
+  public listing gave no download size" instead of looking like they were
+  considered and rejected;
+- a kept row quotes the size the listing really reported, and its need must be
+  at least that size (the weights alone are the download) or no fit is claimed
+  and `why` says the need could not be estimated;
+- `provider` and `source_url` always agree: `provider` names the host the link
+  goes to ("Hugging Face" for `huggingface.co`, "Ollama's library" for
+  `ollama.com`), and the desktop falls back to the URL host. The same field test
+  found every row labelled "On Hugging Face" while most linked to
+  `ollama.com`; that sentence is now derived, not assumed.
 
 `licence` is the repository's own declared licence, read from the catalogue's
 `license:<id>` tag (Hugging Face publishes one) and `null` when the catalogue

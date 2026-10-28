@@ -127,7 +127,8 @@ THE SHAPES (the desktop half is built against these; JARVIS-API section 160)
     GET /api/models/recommendations
       {"checked_at": <epoch seconds or null>, "gpus": [{name, vram_gb, role}],
        "candidates": [{ref, name, family, params_b, quant, size_gb,
-                       context_tokens, licence, fit, source_url, why}],
+                       context_tokens, licence, provider, fit, source_url, why}],
+       "skipped_no_size": <how many catalogue rows had no public size>,
        "recommendations": [{preset, changes: [{row, from, to, why}], evidence}],
        "benchmarked": {ref: {tokens_per_s, vram_gb, context_tokens, measured_at}}}
 
@@ -135,6 +136,23 @@ THE SHAPES (the desktop half is built against these; JARVIS-API section 160)
 "context" - because `preset` already names the row of `backend/jarvis_presets.py`
 (a `Preset` entry) the change belongs to. `fit` is "fits" / "tight" / "no",
 from the measured card sizes and the candidate's estimated need.
+
+**A candidate with no real public size is not a candidate.** `jarvis_models.
+Model.as_dict()` writes `size_gb = 0.0` when the catalogue gave no `bytes_`
+(`jarvis-backend/jarvis_models.py`), and `discover()` enriches only its first
+few repos, so most rows arrive with no size at all. The 2026-10-28 field test
+showed what admitting them did: every row said "size 0.00 GB from the public
+file listing" and "estimated to need about 1.5 GB" - the estimator's 1500 MB
+runtime floor with no weights in it - including 27B models marked FITS. So a
+row with no positive size is dropped, `skipped_no_size` says how many were
+dropped, and the desktop says so in words. A row that is kept quotes the size
+the listing really reported, and its need must be at least that size (the
+weights alone are the download) or no fit is claimed.
+
+`provider` and `source_url` always agree: the words name the host the link
+goes to ("Hugging Face" for huggingface.co, "Ollama's library" for
+ollama.com). The panel may not say Hugging Face over an ollama.com link, which
+is the second half of the same field test.
 
 `licence` is the repository's own declared licence, taken from the catalogue's
 `license:<id>` tag (Hugging Face publishes one) and `null` when the catalogue
@@ -277,7 +295,8 @@ def store_path() -> Path:
 
 def _empty_store() -> dict:
     return {"schema": STORE_SCHEMA, "checked_at": None, "candidates": [],
-            "benchmarked": {}, "opinions": [], "last_opinion": None}
+            "skipped_no_size": 0, "benchmarked": {}, "opinions": [],
+            "last_opinion": None}
 
 
 def _clean_benchmark(value) -> Optional[dict]:
@@ -315,27 +334,78 @@ def _licence(tags) -> Optional[str]:
     return None
 
 
+def _real_size_gb(d: dict) -> Optional[float]:
+    """The download size the public listing really reported, or None.
+
+    `jarvis_models.Model.as_dict()` writes `size_gb = 0.0` when the catalogue
+    gave no `bytes_` (see `jarvis-backend/jarvis_models.py`), and `discover()`
+    enriches only its first few repos, so most rows arrive that way. **Zero is
+    not a small model: it is no report at all.** Treating it as a size is what
+    let the 2026-10-28 field test show 27B models at "size 0.00 GB from the
+    public file listing" and "estimated to need about 1.5 GB" - the
+    estimator's runtime floor with no weights in it.
+
+    Only a positive number counts. `bytes_` is read too, because a caller that
+    passes a `Model` through `_model_fields` as a dict may carry the raw field
+    rather than `as_dict`'s derived `size_gb`.
+    """
+    for raw in (d.get("size_gb"),
+                _gib(_number(d.get("bytes_")) or _number(d.get("bytes")))):
+        gb = _number(raw)
+        if gb is not None and gb > 0:
+            return gb
+    return None
+
+
+def _provider_words(url: str) -> str:
+    """The public library a row's link goes to, named the way the row says it.
+
+    `_source_url` builds one of two hosts, and the 2026-10-28 field test found
+    every row labelled "On Hugging Face" while most linked to ollama.com.
+    Deriving the words from the URL makes that sentence true for either
+    library, and for any host a later catalogue adds.
+    """
+    host = (urllib.parse.urlsplit(url or "").hostname or "").lower()
+    if host == "ollama.com" or host.endswith(".ollama.com"):
+        return "Ollama's library"
+    if host == "huggingface.co" or host.endswith(".huggingface.co"):
+        return "Hugging Face"
+    return host or "the public listing"
+
+
 def _clean_candidate(value) -> Optional[dict]:
     if not isinstance(value, dict):
         return None
     ref = str(value.get("ref") or "").strip()
     if not ref:
         return None
+    size_gb = _real_size_gb(value)
+    if size_gb is None:
+        # A stored row with no real public size cannot carry an honest fit.
+        # The 2026-10-28 store was full of them ("size 0.00 GB") because an
+        # absent `bytes_` was written as zero; drop them on read rather than
+        # show a fit that was computed from nothing.
+        return None
     fit = str(value.get("fit") or "")
     if fit not in ("fits", "tight", "no"):
         fit = "no"
+    source_url = str(value.get("source_url") or "")[:300]
     return {"ref": ref[:MAX_REF_CHARS],
             "name": str(value.get("name") or ref)[:120],
             "family": str(value.get("family") or "")[:80],
             "params_b": _optional_round(value.get("params_b"), 3),
             "quant": (str(value.get("quant"))[:24]
                       if value.get("quant") else None),
-            "size_gb": _optional_round(value.get("size_gb"), 2),
+            "size_gb": round(size_gb, 2),
             "context_tokens": _optional_int(value.get("context_tokens")),
             "licence": (str(value.get("licence"))[:40]
                         if value.get("licence") else None),
+            # A store written before this field existed still names its host
+            # from the URL rather than inheriting a Hugging Face claim.
+            "provider": str(value.get("provider")
+                            or _provider_words(source_url))[:60],
             "fit": fit,
-            "source_url": str(value.get("source_url") or "")[:300],
+            "source_url": source_url,
             "why": str(value.get("why") or "")[:1000]}
 
 
@@ -364,11 +434,20 @@ def load_store(path: Optional[Path] = None) -> dict:
     checked = raw.get("checked_at")
     out["checked_at"] = (_int_or_none(checked))
     cands = []
+    dropped_no_size = 0
     for c in raw.get("candidates") or []:
         row = _clean_candidate(c)
         if row:
             cands.append(row)
+        elif (isinstance(c, dict) and str(c.get("ref") or "").strip()
+              and _real_size_gb(c) is None):
+            # A row written before the 2026-10-28 fix carried 0.0 for an absent
+            # size. It cannot be shown honestly, and it must not vanish without
+            # a word either - the count below is what the panel explains.
+            dropped_no_size += 1
     out["candidates"] = cands[:64]
+    out["skipped_no_size"] = max(
+        0, _optional_int(raw.get("skipped_no_size")) or 0) + dropped_no_size
     bench = {}
     for ref, value in (raw.get("benchmarked") or {}).items():
         row = _clean_benchmark(value)
@@ -644,18 +723,23 @@ def _candidate_row(model, gpus: list, estimate: Callable) -> Optional[dict]:
     ref = str(d.get("ref") or "").strip()
     if not ref or len(ref) > MAX_REF_CHARS:
         return None
-    size_gb = _number(d.get("size_gb"))
-    if size_gb is None:
-        size_gb = _gib(_number(d.get("bytes_")) or _number(d.get("bytes")))
+    size_gb = _real_size_gb(d)
     if size_gb is None:
         # No download size from the public listing. A fit judged from nothing is
-        # the exact "confident wrong answer" this project keeps paying for.
+        # the exact "confident wrong answer" this project keeps paying for: on
+        # 2026-10-28 it put 27B models on screen at "size 0.00 GB" and "needs
+        # about 1.5 GB", FITS. No size, no row.
         return None
     need_mb = None
     try:
         got = estimate(model)
         need_mb = _number(got)
     except Exception:
+        need_mb = None
+    if need_mb is not None and need_mb < size_gb * 1024.0:
+        # The weights ARE the download, so a need smaller than them contains no
+        # weights at all - the 1.5 GB runtime floor the field test saw. Say the
+        # need could not be estimated rather than dress that floor up as a fit.
         need_mb = None
     fit, card, ratio = _fit_label(need_mb, gpus)
     context = _optional_int(d.get("context") or d.get("context_tokens"))
@@ -669,6 +753,7 @@ def _candidate_row(model, gpus: list, estimate: Callable) -> Optional[dict]:
         family = family()
     family = str(family or _family_of(ref))
     source = str(d.get("source") or "")
+    source_url = _source_url(ref, source)
     why = []
     bench = d.get("bench") if isinstance(d.get("bench"), dict) else {}
     code = _number(bench.get("humaneval+"))
@@ -701,7 +786,8 @@ def _candidate_row(model, gpus: list, estimate: Callable) -> Optional[dict]:
             "params_b": params_b, "quant": (str(quant)[:24] if quant else None),
             "size_gb": round(size_gb, 2), "context_tokens": context,
             "licence": _licence(d.get("tags")),
-            "fit": fit, "source_url": _source_url(ref, source),
+            "provider": _provider_words(source_url),
+            "fit": fit, "source_url": source_url,
             "why": "; ".join(why[:MAX_REASONS])}
 
 
@@ -711,18 +797,27 @@ def _family_of(ref: str) -> str:
 
 
 def build_candidates(models, gpus: list,
-                     estimate: Optional[Callable] = None) -> list:
+                     estimate: Optional[Callable] = None,
+                     skipped: Optional[dict] = None) -> list:
     """The candidate list, pure: no network, no store, no clock.
 
     Sorted fits-first, then by the catalogue's own trending/downloads figures as
     a weak tie-break (never as evidence of quality), then by ref so the answer
     is stable.
+
+    `skipped` is filled with `no_size`: how many catalogue rows were left out
+    because the listing reported no download size for them. The caller puts
+    that number on the answer so a missing model is explained, not silently
+    dropped.
     """
     estimate = estimate or _default_estimate
     rows = []
     for model in models if isinstance(models, list) else []:
         row = _candidate_row(model, gpus, estimate)
         if row is None:
+            if (skipped is not None
+                    and _real_size_gb(_model_fields(model)) is None):
+                skipped["no_size"] = int(skipped.get("no_size") or 0) + 1
             continue
         d = _model_fields(model)
         rows.append((row, _number(d.get("trending")) or 0.0,
@@ -1170,6 +1265,7 @@ def recommendations_view(*, path: Optional[Path] = None,
     return {"checked_at": doc.get("checked_at"),
             "gpus": gpus,
             "candidates": doc.get("candidates") or [],
+            "skipped_no_size": doc.get("skipped_no_size") or 0,
             "recommendations": preset_recommendations(
                 presets=presets, gpus=gpus,
                 benchmarked=doc.get("benchmarked"),
@@ -1186,14 +1282,17 @@ def check_models(*, path: Optional[Path] = None,
     """POST /api/models/check: one look at the public catalogue, cached.
 
     NO DOWNLOAD. The only work is the existing catalogue pass (fixed public
-    URLs, no key) and the JSON write. The candidates are the models that pass
-    have a size for; the fit is an ESTIMATE against the measured cards and says
-    so. If the PC's cards were not measured, nothing is looked up at all - a
+    URLs, no key) and the JSON write. The candidates are the models the pass
+    has a REAL size for - a row the listing gave no size for is left out and
+    counted in `skipped_no_size`, because a fit judged from nothing is a
+    guess. The fit is an ESTIMATE against the measured cards and says so. If
+    the PC's cards were not measured, nothing is looked up at all - a
     candidate list for unknown hardware would be a guess dressed as an answer.
     """
     gpus = gpus if gpus is not None else measured_gpus()
     if not gpus:
         return 503, {"checked_at": None, "gpus": [], "candidates": [],
+                     "skipped_no_size": 0,
                      "recommendations": [],
                      "benchmarked": (load_store(path).get("benchmarked") or {}),
                      "ok": False,
@@ -1204,11 +1303,13 @@ def check_models(*, path: Optional[Path] = None,
         found = (discover or _default_discover)()
     except DiscoveryUnavailable as exc:
         return 503, {"checked_at": None, "gpus": gpus, "candidates": [],
+                     "skipped_no_size": 0,
                      "recommendations": [],
                      "benchmarked": (load_store(path).get("benchmarked") or {}),
                      "ok": False, "error": str(exc)}
     except Exception as exc:
         return 503, {"checked_at": None, "gpus": gpus, "candidates": [],
+                     "skipped_no_size": 0,
                      "recommendations": [],
                      "benchmarked": (load_store(path).get("benchmarked") or {}),
                      "ok": False,
@@ -1217,19 +1318,25 @@ def check_models(*, path: Optional[Path] = None,
                                "and nothing was saved")}
     if not found:
         return 503, {"checked_at": None, "gpus": gpus, "candidates": [],
+                     "skipped_no_size": 0,
                      "recommendations": [],
                      "benchmarked": (load_store(path).get("benchmarked") or {}),
                      "ok": False,
                      "error": ("the public catalogue pass returned no models at "
                                "all (the PC may be offline); nothing was saved, "
                                "and the last cached check is untouched")}
-    candidates = build_candidates(found, gpus, estimate=estimate)
+    skipped = {}
+    candidates = build_candidates(found, gpus, estimate=estimate,
+                                  skipped=skipped)
+    no_size = int(skipped.get("no_size") or 0)
     at = int((clock or time.time)())
     doc = load_store(path)
     doc["checked_at"] = at
     doc["candidates"] = candidates
+    doc["skipped_no_size"] = no_size
     save_error = save_store(doc, path)
     out = {"checked_at": at, "gpus": gpus, "candidates": candidates,
+           "skipped_no_size": no_size,
            "recommendations": preset_recommendations(
                presets=presets, gpus=gpus, benchmarked=doc.get("benchmarked"),
                opinion=doc.get("last_opinion")),
