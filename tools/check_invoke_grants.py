@@ -77,6 +77,17 @@ SRC_TAURI = REPO / "jarvis-desktop" / "src-tauri"
 # broken - and three panels' worth of calls - invisible to this check too.
 INVOKE = re.compile(r"(?:\bTAURI\.core|\btauriCore|__TAURI__\.core|\bcore|\bTAURI)\.invoke\s*\(")
 
+# The shared budget module (`invoke-budget.js`) is the ONE road the silent-failure
+# rule sends every command down, and it is an IMPORTED helper, not a page-local
+# wrapper: a file that does `import { call } from "./invoke-budget.js"` and then
+# `call("name", ...)` is calling the IPC exactly as `TAURI.core.invoke("name")`
+# does. Reading only the raw spellings above made this checker blind to the
+# newest HUD writes (measured 2026-10-28: hud_set_face and apply_focus_preset
+# were never checked, so a set granted to the wrong window would have passed).
+BUDGET_IMPORT = re.compile(
+    r'import\s*\{[^}]*\bcall\b[^}]*\}\s*from\s*"\./invoke-budget\.js"', re.S)
+BUDGET_CALL = re.compile(r"(?<![\w$.])call\s*\(")
+
 # A call site whose first argument is not a literal is put against this list.
 # Key: (file, first argument as written). Value: the one-line reason.
 #
@@ -92,6 +103,7 @@ DYNAMIC_BELOW = {
     ("main.js", "command"): "the Jarvis bar's invoke(command, args) and invokeStrict(command, args); every caller passes a literal.",
     ("widget.js", "command"): "the widget's invoke(command, args) and invokeStrict(command, args); every caller passes a literal.",
     ("settings.js", "command"): "the settings window's invoke(command, args); every caller passes a literal.",
+    ("learning-settings.js", "command"): "the Learning card's setSwitch picks one of two literals for the shared invoke-budget `call` (brain_memory_learning / brain_memory_learning_sensitive, both granted to settings), so every real name is checked above.",
     ("tutorials.js", "name"): "tutorials.js's own invoke(name, args); every caller passes a literal.",
     ("guardian-panel.js", "command"): "guardian-panel.js's own invoke(command, args) wrapper; every caller passes a literal (brain_read, guardian_diff, guardian_restore).",
     ("live-badge.js", "command"): "the Live badge's invoke(command, args); every caller passes a literal.",
@@ -333,6 +345,9 @@ def calls(src: str) -> list[tuple[int, int, str]]:
     mask = code_mask(src)
     found = [(m.start(), arguments(src, m.end() - 1))
              for m in INVOKE.finditer(src) if mask[m.start()]]
+    if BUDGET_IMPORT.search(src):
+        found += [(m.start(), arguments(src, m.end() - 1))
+                  for m in BUDGET_CALL.finditer(src) if mask[m.start()]]
     for name, (begin, end) in helpers(src, mask).items():
         for c in re.finditer(r"(?<![\w$.])" + re.escape(name) + r"\s*\(", src):
             if not mask[c.start()] or begin <= c.start() <= end:
@@ -345,7 +360,20 @@ def calls(src: str) -> list[tuple[int, int, str]]:
     return out
 
 
-def command_names(arg: str) -> tuple[list[str], bool]:
+def constants(src: str) -> dict[str, str]:
+    """{NAME: "command"} for the module-level string constants in one page.
+
+    Some pages name their commands once - `focus-presets-bridge.js`'s
+    `READ_COMMAND` / `APPLY_COMMAND` - and hand the constant to the shared
+    budget module. The two are literals in the SAME file, so the checker can
+    follow them without guessing: an identifier that is not in this map is
+    still opaque and still needs a DYNAMIC_BELOW entry.
+    """
+    return {m.group(1): m.group(2) for m in re.finditer(
+        r'(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"([a-z][a-z0-9_]*)"', src)}
+
+
+def command_names(arg: str, consts: dict[str, str] | None = None) -> tuple[list[str], bool]:
     """The command names a call site can reach, and whether it is opaque.
 
     `"get_theme"` is one name. `fromServer ? "get_appearance" :
@@ -356,6 +384,10 @@ def command_names(arg: str) -> tuple[list[str], bool]:
     one = re.fullmatch(r'"([a-z0-9_]+)"', arg)
     if one:
         return [one.group(1)], False
+    if consts:
+        named = re.fullmatch(r"([A-Za-z_$][\w$]*)", arg)
+        if named and named.group(1) in consts:
+            return [consts[named.group(1)]], False
     names = [s for s in re.findall(r'"([a-z0-9_]+)"', arg) if re.fullmatch(r"[a-z][a-z0-9_]*", s)]
     if names:
         return names, False
@@ -555,7 +587,7 @@ def main() -> int:
                 continue
             owners = blocks(text)
             for line, at, arg in calls(text):
-                names, opaque = command_names(arg)
+                names, opaque = command_names(arg, constants(text))
                 if opaque:
                     dynamic.append((name, line, arg, page))
                     continue
@@ -582,7 +614,7 @@ def main() -> int:
         if not text:
             continue
         for line, _at, arg in calls(text):
-            names, opaque = command_names(arg)
+            names, opaque = command_names(arg, constants(text))
             for command in names:
                 everywhere.setdefault(command, []).append(f"{name}:{line}")
 
