@@ -33,7 +33,7 @@
  * THE FOUR ACTIONS, and the routes they reach in Rust (`src-tauri/src/brain.rs`,
  * `model_recommend_request`; the window names an action, never a URL):
  *
- *   check     -> POST /api/models/check               the Hugging Face lookup
+ *   check     -> POST /api/models/check               the public catalogue lookup
  *   benchmark -> POST /api/models/benchmark {ref}     a local measurement
  *   recommend -> POST /api/presets/recommend          preset changes only
  *   opinion   -> POST /api/presets/recommend/opinion {text}  revised changes
@@ -77,8 +77,9 @@ export const OPINION_MAX_CHARS = 2_000;
 
 /** What the panel says before the owner has asked for anything. */
 export const NOT_CHECKED_YET =
-  "Not checked yet. Check for new models asks Jarvis to look on Hugging Face for " +
-  "models that fit your graphics cards. Nothing downloads from the check.";
+  "Not checked yet. Check for new models asks Jarvis to look through the public " +
+  "model libraries (Hugging Face and Ollama's library) for models that fit your " +
+  "graphics cards. Nothing downloads from the check.";
 
 /** This PC's Jarvis has no advisor (a 404 or 503), which is a fact, not a fault. */
 export const MISSING_MODULE =
@@ -103,6 +104,22 @@ export const NOT_MEASURED =
 export const MEASURED_SOMEWHERE =
   "Some of these have been measured on this PC. Those numbers are the PC's own; " +
   "the rest are still only a fit.";
+
+/**
+ * Why a model the owner might expect is not in the list: the public listing
+ * gave no download size, so nothing could be judged. The PC sends the count in
+ * `skipped_no_size`; silence there would look like the model was considered and
+ * rejected, which would be a claim nobody made.
+ */
+export function notJudgedNote(payload) {
+  const n = num(payload && payload.skipped_no_size);
+  if (n === null || n <= 0) return "";
+  return n === 1
+    ? "1 model was left out because the public listing gave no download size for " +
+        "it, so its fit was not judged."
+    : `${n} models were left out because the public listing gave no download size ` +
+        `for them, so their fits were not judged.`;
+}
 
 /**
  * Said once under the candidate list: the catalogue carries no file hash, so no
@@ -180,6 +197,29 @@ export function fitWords(fit) {
   return { label: "fit not reported", state: "" };
 }
 
+/**
+ * Which public library a row's link goes to, in words that match the link.
+ *
+ * The 2026-10-28 field test found every row labelled "On Hugging Face" while
+ * most linked to ollama.com. The host is the one fact that cannot drift from
+ * the link, so it is read first; the PC's `provider` is used only for a row
+ * with no address at all. A row may never say Hugging Face over an ollama.com
+ * URL, whatever the answer claims.
+ */
+export function providerWords(row) {
+  const url = text(row && row.sourceUrl);
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    host = "";
+  }
+  if (host === "ollama.com" || host.endsWith(".ollama.com")) return "Ollama's library";
+  if (host === "huggingface.co" || host.endsWith(".huggingface.co")) return "Hugging Face";
+  if (host) return host;
+  return text(row && row.provider) || "the public listing";
+}
+
 /** The ref, without Ollama's implicit `:latest`, for comparing two names. */
 export function bareRef(ref) {
   return text(ref).replace(/:latest$/i, "");
@@ -203,6 +243,7 @@ export function candidateRow(candidate) {
     sizeGb: num(candidate.size_gb),
     contextTokens: num(candidate.context_tokens),
     licence: text(candidate.licence),
+    provider: text(candidate.provider),
     fit: text(candidate.fit).toLowerCase(),
     fitLabel: fit.label,
     fitState: fit.state,
