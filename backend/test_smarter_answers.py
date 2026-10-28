@@ -265,6 +265,15 @@ CLAIMS = [
     "I went ahead and scheduled it for Monday.",
     "I've called 911 for you, help is on the way.",
     "I have cancelled your dentist appointment.",
+    # The shape the model actually used on the owner's HUD (2026-10-27): the
+    # verb first, or the job first, so CLAIMS_DONE's "I've"/"Done" prefix never
+    # saw it - and the reminder it "set" was never written.
+    "Added a reminder to take your pills at 6pm.",
+    "Reminder added for 6pm.",
+    "Set a timer for 10 minutes.",
+    "Timer set for 10 minutes.",
+    "Added it to your to-do list.",
+    "Done - reminder set for 6pm.",
 ]
 NOT_CLAIMS = [
     "Should I set a reminder for 7pm?",
@@ -275,6 +284,15 @@ NOT_CLAIMS = [
     "I have not sent anything yet.",
     "Would you like me to add it to your list?",
     "Paris is the capital of France.",
+    # Other subjects with the same verbs, and an offer: none of these is a
+    # scheduler claim (the new pattern is anchored and needs the scheduler's
+    # own nouns).
+    "Added salt to the pasta.",
+    "Set the scene for a relaxing evening.",
+    "Set a reminder for 6pm if you like.",
+    "The timer on my oven is broken.",
+    "A reminder went off at 6pm.",
+    "You can add a reminder by saying it.",
 ]
 
 
@@ -289,6 +307,8 @@ def t_what_backs_a_claim():
     ok_action = [{"tool": "set_reminder", "ran": True, "ok": True}]
     check("an action tool that returned ok backs the claim",
           not CL.unbacked_claim("I've set a reminder.", ok_action))
+    check("... and it backs the verb-first form of the same claim",
+          not CL.unbacked_claim("Added a reminder to take your pills at 6pm.", ok_action))
     check("a read-only tool does not",
           CL.unbacked_claim("I've set a reminder.", [{"tool": "calendar_read", "ran": True,
                                                        "ok": True}]))
@@ -298,6 +318,11 @@ def t_what_backs_a_claim():
     check("a plug-in tool counts as an action (never a wrong 'nothing was done')",
           not CL.unbacked_claim("I've created it.", [{"tool": "mcp__x__make", "ran": True,
                                                        "ok": True}]))
+    check("explaining a feature is a read, so it backs no claim (2026-10-27)",
+          CL.unbacked_claim("Added a reminder to take your pills at 6pm.",
+                            [{"tool": "feature_guide", "ran": True, "ok": True}]))
+    check("... and feature_guide really is in the read-only set",
+          "feature_guide" in CL.READ_ONLY_TOOLS)
 
 
 def t_the_tool_test_uses_the_same_pattern():
@@ -340,6 +365,22 @@ def t_a_false_claim_in_a_whole_answer():
     body = json.loads(blob)
     check("a non-streamed answer carries the line too",
           body["choices"][0]["message"]["content"].endswith(CL.NOTHING_DONE_LINE), body)
+
+
+def t_a_verb_first_reminder_claim_gets_the_line():
+    """The owner's HUD bug of 2026-10-27, the answer half: the model said
+    "Added a reminder ..." with no tool behind it and no line was added, so
+    they read it as done while nothing was written. Now it ends with the same
+    plain correction as any other false "I've done it"."""
+    for said in ("Added a reminder to take your pills at 6pm.",
+                 "Reminder added for 6pm.",
+                 "Set a timer for 10 minutes."):
+        res, blob = _turn(said)
+        text = TA.answer_text([blob])
+        check(f"a verb-first false claim is corrected: {said!r}",
+              text.startswith(said.rstrip(".")) and text.endswith(CL.NOTHING_DONE_LINE),
+              text)
+        check(f"... and the summary says so: {said!r}", res["claimed_undone"] is True)
 
 
 def t_a_voice_turn_says_it_without_brackets():

@@ -42,7 +42,9 @@
 /** This page's own words. Every question, option and sentence is the PC's. */
 export const TITLE = "First-time setup";
 export const KICKER =
-  "Fourteen questions about how you want Jarvis to behave. Every answer " +
+  "Fourteen questions about how you want Jarvis to behave. Do \"Set up Jarvis\" " +
+  "above first if you have not - it is the five choices that matter on day " +
+  "one, and this page assumes they are made. Every answer " +
   "changes settings that already exist; nothing here is a new kind of rule.";
 export const HELP =
   "Pick the answers that sound like you, then read what would change before " +
