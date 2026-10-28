@@ -70,14 +70,24 @@ class ApprovalWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        // runCatching, because MainActivity.kt wraps this identical call for
-        // a stated reason: the Keystore, the preferences and the HTTP client
-        // "can fail on a device in a way it cannot here". Called bare from a
-        // Glance worker, that same failure is an uncaught exception in the
-        // update coroutine and the launcher replaces the widget with
-        // "Problem loading widget".
-        val ready = runCatching { JarvisRuntime.initialize(context) }.isSuccess &&
-            JarvisRuntime.isInitialized
+        // The whole draw is bounded and its outcome is ONE terminal state
+        // (WidgetStates.approval) - never a "loading" one. The spinner the
+        // owner saw on 2026-10-27 was not drawn by this class at all: it was
+        // the launcher's `initialLayout` (Glance's own bare ProgressBar),
+        // because no Glance worker ever ran in the release APK (see
+        // proguard-rules.pro). Two things follow from that, and both are here:
+        //  * the layout a widget shows before its first draw is now Jarvis's
+        //    own sentence (res/layout/widget_initial.xml), not a spinner; and
+        //  * nothing this class waits for is open-ended any more
+        //    (WidgetRuntime.start), so a slow or wedged startup is a state.
+        //
+        // `runCatching` lives in WidgetRuntime.start for the reason
+        // MainActivity.kt wraps this identical call: the Keystore, the
+        // preferences and the HTTP client "can fail on a device in a way it
+        // cannot here". Called bare from a Glance worker, that same failure is
+        // an uncaught exception in the update coroutine and the launcher
+        // replaces the widget with "Problem loading widget".
+        val ready = WidgetRuntime.start(context) && JarvisRuntime.isInitialized
         val pending = if (ready) JarvisRuntime.pending.value else emptyList()
         val paired = ready && JarvisRuntime.isPaired()
         // "Do we actually KNOW what is waiting?" - a different question from
@@ -90,21 +100,19 @@ class ApprovalWidget : GlanceAppWidget() {
         // `_pending` that means "not looked", not "nothing there". Rendering
         // "Nothing waiting" from that state is an approvals widget claiming
         // there are no approvals, which is the single failure it exists to
-        // prevent.
+        // prevent. WidgetStates.approval encodes that distinction, and the
+        // rest of the old `when` order with it:
         //
-        // And it is the queue question only. Deny used to be gated by the
-        // same value because `decisionBlocker` refused it on `_stale` too -
-        // a Deny button shown on a stale-but-connected link was swallowed,
-        // with the explanation in an in-app notice nobody is looking at.
-        // Since 2026-10-17 that is the other way round: a stale link holds
-        // APPROVE only, and page 7's promise is "refusing is never held". So
-        // the last known queue is shown WITH Deny reachable, and only a link
-        // that cannot deliver anything at all hides it.
-        val live = ready && !JarvisRuntime.stale.value &&
-            JarvisRuntime.link.value == LinkState.CONNECTED
-        val reachable = ApprovalWidgetRules.denyReachable(
+        //  - a stale-but-CONNECTED link with a last known queue still shows
+        //    the card WITH Deny reachable: page 7's "refusing is never held"
+        //    (2026-10-17). Only a link that cannot deliver anything at all is
+        //    UNREACHABLE, and it says so.
+        val state = WidgetStates.approval(
             ready = ready,
-            connected = JarvisRuntime.link.value == LinkState.CONNECTED,
+            paired = paired,
+            connected = ready && JarvisRuntime.link.value == LinkState.CONNECTED,
+            stale = !ready || JarvisRuntime.stale.value,
+            waiting = pending.size,
         )
         val extra = (pending.size - 1).coerceAtLeast(0)
         // The home screen is public: under App lock (or hidden lists) only a
@@ -124,21 +132,15 @@ class ApprovalWidget : GlanceAppWidget() {
                     .cornerRadius(16.dp)
                     .padding(12.dp),
             ) {
-                when {
-                    !ready -> MessageState("Jarvis could not start", "Tap to open and see why")
-                    !paired -> MessageState("Approvals need a pairing token", "Tap to open Jarvis and pair")
-                    // Before the empty check, not after: an empty list here
-                    // is an unanswered question, not an answer.
-                    !live && pending.isEmpty() -> MessageState(
-                        "Not checked yet",
-                        "Tap to open Jarvis and connect",
-                    )
-                    pending.isEmpty() -> EmptyState()
-                    !reachable -> MessageState(
-                        "Approvals pending — desktop unreachable",
-                        "Tap to open Jarvis and reconnect",
-                    )
-                    else -> ActiveApproval(pending.first(), extra, hidden)
+                when (state) {
+                    // `first()` is safe because CARD is only returned with a
+                    // non-empty queue (WidgetStates.approval).
+                    WidgetStates.Approval.CARD -> ActiveApproval(pending.first(), extra, hidden)
+                    WidgetStates.Approval.EMPTY -> EmptyState()
+                    else -> {
+                        val words = WidgetStates.approvalWords(state)
+                        MessageState(words.first, words.second)
+                    }
                 }
             }
         }
@@ -204,25 +206,23 @@ class ApprovalWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.defaultWeight().fillMaxWidth()
                     .clickable(actionStartActivity<MainActivity>()),
             ) {
-                // `item.notice` first, `item.title`/`item.risk.why` only as
-                // the fallback - the same order, and for the same reason, as
-                // `ApprovalNotifier.textFor`. Its doc says outright why:
-                // those two are row prose, "and row prose can carry text
-                // somebody else wrote... composing it here at all is the
-                // mistake". A `raised` item is exactly that - an attacker's
-                // sentence, quoted - and this widget was putting it on the
-                // home screen in full while the notification refused to.
-                // The notice is the desktop's own wording for the same item.
-                val headline = if (hidden) {
-                    ApprovalWidgetRules.HIDDEN_TITLE
-                } else {
-                    item.notice?.title?.takeIf { it.isNotBlank() } ?: item.title
-                }
+                // `notice` first, `title`/`risk.why` only as the fallback -
+                // see ApprovalWidgetRules.cardTitle, which holds the order
+                // and the App-lock rule as pure code the JVM tests can check.
+                val headline = ApprovalWidgetRules.cardTitle(
+                    hidden = hidden,
+                    noticeTitle = item.notice?.title,
+                    title = item.title,
+                )
                 // Never `item.summary` as the fallback: it carries the
                 // readable part of `detail` now (decodePendingRows), and the
                 // home screen is as public as a lock screen. The title is
                 // built from the action name alone, so it is safe here.
-                val detail = if (hidden) "" else item.notice?.body?.takeIf { it.isNotBlank() } ?: item.risk.why
+                val detail = ApprovalWidgetRules.cardDetail(
+                    hidden = hidden,
+                    noticeBody = item.notice?.body,
+                    riskWhy = item.risk.why,
+                )
                 Text(text = headline, maxLines = 1, style = TextStyle(
                     color = Palette.TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                 ))

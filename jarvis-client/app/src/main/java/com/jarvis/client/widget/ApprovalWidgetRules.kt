@@ -34,4 +34,31 @@ object ApprovalWidgetRules {
      * [denyActsDirectly] still routes Deny through the app.
      */
     fun denyReachable(ready: Boolean, connected: Boolean): Boolean = ready && connected
+
+    /**
+     * The card's headline, under App lock and without it.
+     *
+     * `notice.title` first, `title` only as the fallback - the same order, and
+     * for the same reason, as `ApprovalNotifier.textFor`: `title`/`risk.why`
+     * are row prose and can carry text somebody else wrote, while `notice` is
+     * the desktop's own wording for the same item. While hidden, neither may
+     * appear at all: only [HIDDEN_TITLE].
+     *
+     * Lifted out of the composable so the App-lock promise is checked on the
+     * JVM (`ApprovalWidgetRulesTest`) instead of only by reading the drawing
+     * code - the home screen is as public as a lock screen.
+     */
+    fun cardTitle(hidden: Boolean, noticeTitle: String?, title: String): String =
+        if (hidden) HIDDEN_TITLE else noticeTitle?.takeIf { it.isNotBlank() } ?: title
+
+    /**
+     * The card's second line, under the same rule as [cardTitle].
+     *
+     * Never `summary`: it carries the readable part of `detail`, and the home
+     * screen is as public as a lock screen. While hidden the line is empty
+     * rather than a redacted one - a row of "•••" would still tell a passer-by
+     * that there is something to read.
+     */
+    fun cardDetail(hidden: Boolean, noticeBody: String?, riskWhy: String): String =
+        if (hidden) "" else noticeBody?.takeIf { it.isNotBlank() } ?: riskWhy
 }
