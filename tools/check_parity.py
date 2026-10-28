@@ -51,9 +51,25 @@ Failures - each one means a decision is missing or has gone stale:
      not classify it. Parity runs both ways.
   6. A route in PHONE_ONLY that the phone no longer calls, or that the
      desktop now calls too (move it to CLASSIFICATION).
+  7. docs/JARVIS-API.md documents a route that NO app calls, that is not
+     classified above, and that BACKEND_ONLY below does not name with a
+     written reason. This is the 2026-10-28 wiring audit's blind spot: the
+     route sets used to be built ONLY from the two apps' source, so a route no
+     app called was in neither set, no rule above could see it, and "No
+     undecided drift." printed over a feature neither app could reach.
 
 A route marked `todo` that the phone has started calling is a warning, not
 a failure: it means "reclassify as ported", which is good news.
+
+The documented route universe comes from docs/JARVIS-API.md, and every route
+in it must be one of: called by the desktop or the phone, already classified
+in CLASSIFICATION or PHONE_ONLY, or named in BACKEND_ONLY with a written
+reason. Only the doc's route shapes count - a fenced route line
+(`GET /api/...`), a table row whose first cell is the route, or a heading
+naming it with its method - and section 8, "Draft, proposed, or not actually
+wired", is skipped because the doc says nothing in it is confirmed to exist.
+A route mentioned only in prose is not in the universe: that is the honest
+limit of a line parser, and it is said here rather than implied.
 
 A route marked `planned` is built on the backend and neither app calls it
 yet (the backend is written first, then each app builds against it). It is
@@ -717,6 +733,55 @@ PHONE_ONLY = {
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 
+# Every route docs/JARVIS-API.md documents that NO app calls, and that is not
+# classified above. This register exists because the checker used to build its
+# route sets ONLY from the two apps' source: a route no app called was in
+# neither set, could fail no rule, and "No undecided drift." printed over a
+# backend-only feature neither app could reach (the 2026-10-28 wiring audit,
+# finding 8). A documented route now has to be called, classified, or named
+# here WITH A WRITTEN REASON - silence is a failure.
+#
+# The first eight are the routes the audit named. The rest are the same sweep's
+# finding: documented, live on the backend, and called by no app today. Each
+# reason says what the docs say about the app surface and what the follow-up
+# is, so this is a register of decisions rather than an allow-list of holes.
+#
+# When an app starts calling one of these, the check FAILS and says to remove
+# the entry: a backend-only reason that has stopped being true is a lie.
+BACKEND_ONLY = {
+    # The 2026-10-28 wiring audit's eight.
+    "/api/receipts": "The receipts list (JARVIS-API section 132.5; the section 132.7 heading at line 22450 says 'Neither app has a screen for it yet'; jarvis_receipts.py, plugins/ready/receipts/). The store and both routes are built, and neither app has a receipts screen yet: no list and no Undo button in the desktop's Jarvis bar or Brain, none on the phone. When the screen is built it goes on BOTH apps, on this same store and the same undo_action card (ARCHITECTURE section 8).",
+    "/api/receipts/{id}/undo": "The receipts Undo (JARVIS-API section 132.5; section 132.7, line 22450, records that no app has the screen): POST <receipt_id>/undo raises ONE undo_action card and reverses the change only on the gate's own yes. Neither app has the button yet; when it is built it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/skills/hub/references": "A skill's reference manuals (JARVIS-API section 135.2; the section 135.6 heading at line 22902 says 'Neither app has a screen for it yet'; jarvis_skill_hub.py, plugins/ready/skill-hub/). It lists the manuals' names and sizes, or reads one manual when asked; no app reads a skill's own folder yet. The skill hub is the backend-only half of section 135, and when a screen is built it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/skills/hub/projects": "A trusted project's own skills (JARVIS-API section 135.2; section 135.6, line 22902): every skill under <project folder>/.jarvis/skills, trusted through jarvis_projects.check_folder() at use time. No app has a skill-hub screen; both apps should get one (ARCHITECTURE section 8).",
+    "/api/skills/chain": "The /skill and /bundle chain parse (JARVIS-API section 135.2; section 135.6, line 22902, says no app calls it): it names the skills a message starts with and returns the rest untouched, and it runs nothing. No app calls it - the chat fast path does not use this route - and a screen would go on BOTH apps (ARCHITECTURE section 8).",
+    "/api/skills/learn": "The /learn writer (JARVIS-API section 135.2/135.3; section 135.6, line 22902): it saves a four-section skill only through jarvis_skills.write_skill(), behind the existing modify_own_code card, and writes nothing when the scrubber is absent. No app offers /learn yet; ARCHITECTURE section 8 records the backend-only slice and says a screen goes on BOTH apps.",
+    "/api/notion/preview": "The Notion export dry run (JARVIS-API section 152; its heading at line 25349 says 'backend only'): it plans an Obsidian vault from a Notion export on this PC and writes nothing into the vault. Both routes are refused from any device but this PC before the body is read. No app has the screen; a desktop screen is the named follow-up and the phone deliberately gets none, because the export and the vault are files on this PC (ARCHITECTURE section 8).",
+    "/api/notion/import": "The Notion import writer (JARVIS-API section 152; the heading at line 25349 says 'backend only'): it writes the vault after ONE import_notion_export card and records a reversible receipt. Same PC-only rule and same missing screen as /api/notion/preview; the desktop screen is the follow-up and the phone gets none.",
+    # The same doc-vs-callers sweep, beyond the audit's eight.
+    "/api/skills/hub/lock": "The skill hub's lock and trust read (JARVIS-API section 138.1): the lock file, each skill's effective trust and which skills a tool hides. The skill hub has no app screen (section 135.6, ARCHITECTURE section 8), so nothing reads it yet.",
+    "/api/vault/handles": "The blind credential vault's name list (JARVIS-API section 134): every name, its handle and bound host - never a value, a masked prefix or a length. No app has a vault screen, and section 134 says this is backend only on purpose; GET handles is the read an app may have when the screen is built, and then it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/vault/put": "The blind credential vault's one write (JARVIS-API section 134): store ONE secret behind ONE vault_put card at tier ask, typed on the PC, never sent to an app. Neither app calls it and neither has a vault screen (ARCHITECTURE section 8).",
+    "/api/voiceprint/learn_edit": "The voiceprint's gold-sample writer (JARVIS-API section 133.5): POST learn_edit records the owner's final version of a draft. The other three voiceprint routes are ported (Write Like Me, PR #665), but no app offers learn_edit - there is no 'this is my final version' button on either side yet (ARCHITECTURE section 8).",
+    "/api/models/uncensored": "The owner's uncensored opt-ins (JARVIS-API section 125; its heading says the backend half is built and shipped and the app controls are not yet): GET reads the two switches and the on-disk choices, POST changes ONE switch behind its own card. No app calls it; the app controls are the follow-up (ARCHITECTURE section 8).",
+    "/api/live/stream": "The phone's persistent Live stream (JARVIS-API section 63.7, Slice G): built and switched OFF - it answers 501 with a plain sentence while [live] stream is off, which is the shipped state. No app calls it while the switch is off.",
+    "/api/self-improve/diagnose": "The owner's self-improvement diagnosis (JARVIS-API section 139.1/139.3): a PC-only, read-only question over the program's own text files, with the cited lines re-read when reported. Section 139.3 says neither app calls either route and that is deliberate - the owner asked for a diagnostic to query, not a product button.",
+    "/api/self-improve/contract": "The model-contract probe (JARVIS-API section 139.2/139.3): one read-only POST to the local Ollama's /api/show, PC-only. Same decision as /api/self-improve/diagnose - no desktop or Android face in this slice.",
+    "/api/backup/restore/dismiss": "Clearing the last restore's outcome (JARVIS-API section 45.3/45.5): the explicit action the persisted record needs, and the only thing that clears it. No app draws the dismiss button yet; it is the named follow-up (ARCHITECTURE section 8).",
+    "/api/config": "The read-only config view (JARVIS-API section 6's route table): only the desktop Brain's READ_ROUTES allow-list names it, under the section name 'config', and no window asks for that section, so no app reads it. The phone's column is deliberately no.",
+    "/api/data-health": "The data-health view (JARVIS-API section 49.2): read-only checks used by backend/selftest.py --preflight. It exists for the preflight's PowerShell output, not for a screen - neither app shows it, as ARCHITECTURE section 8's own row says.",
+    "/api/email/drafting": "The email-drafting settings read (JARVIS-API section 40.4/40.5): it connects to no mail server and saves nothing. Neither app has a Settings screen for it yet; section 40.5 says the route is there to build one against.",
+    "/api/feedback/counts": "The feedback counts (JARVIS-API section 6's route table): helpful/harmful counts per fact and per answer, read-only. The table's own Desktop and Android columns both say no ('not built'), and no app calls it.",
+    "/api/focus/diag": "The focus diagnosis (JARVIS-API section 31.6): booleans and counts for 'it didn't notice' / 'it locked the wrong thing', never what was in front. Neither app shows it; the section says to read it on the PC.",
+    "/api/goals/{id}": "Reading ONE goal (JARVIS-API section 59's route table). Both apps read the goal list (/api/goals) and the per-goal subroutes (accept, step, stop); neither reads a single goal by id.",
+    "/api/news": "The news-feed list (JARVIS-API section 46.1). It exists so a settings screen can be added later: there is no add/remove settings screen in either app, because feeds are added and removed through the chat fast path. No app calls the three news routes.",
+    "/api/news/add": "Adding a news feed (JARVIS-API section 46.1): ONE change_own_config card. The owner adds one by saying it through jarvis_quick.py's fast path, not from a settings screen; section 46.1 says the route exists so one can be added later.",
+    "/api/news/remove": "Removing a news feed (JARVIS-API section 46.1): at once, no card. Same as /api/news/add - the chat fast path performs it, and no app screen calls the route yet.",
+    "/api/sayable": "The 'Things you can say' text (JARVIS-API section 41.2): fixed text, no setting and no card. Both apps hold a hardcoded copy (sayable.js, Sayable.kt) rather than fetching it live, so this route is backend-only by design.",
+    "/api/secret-handoff/create": "The owner-secret hand-off's host fallback (JARVIS-API section 157): it raises a card from the password-masked control that has focus right now. The doc says it is the honest fallback for a host caller and the HUD does not use it; the HUD's pending/fill/cancel routes are classified 'deliberate' above.",
+    "/api/skills/suggestions": "The skill-suggestion read (JARVIS-API section 6's route table, skill-suggest.patch): read-only suggestions and their status. The table's own Desktop and Android columns both say no, and an offer is decided only on its approval card, never by this read.",
+}
+
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)
 _HTML = re.compile(r"<!--.*?-->", re.S)
 # `//` at the start of a line, or after whitespace - never the `//` inside
@@ -738,6 +803,106 @@ def normalise(route: str) -> str:
 
 def routes_in(text):
     return {normalise(m) for m in ROUTE.findall(text)}
+
+
+# --------------------------------------------------------------------------
+#   The documented route universe, from docs/JARVIS-API.md
+# --------------------------------------------------------------------------
+# The checker's route sets above come from the two apps' source, which is why a
+# route no app calls was invisible. The other half of the contract is the doc,
+# so the universe is read from it too. Only three shapes count as "documented":
+#
+#   * a fenced route line:        GET  /api/receipts
+#   * a table row whose FIRST     | `GET /api/vault/handles` | ...
+#     cell is the route, with a   | `/api/config` | GET | ...
+#     method in that cell or the
+#     method column beside it
+#   * a heading with the method   ### 139.2 `GET /api/self-improve/contract`
+#     beside the route
+#
+# A route mentioned only inside a sentence is NOT documented for this check:
+# the doc also names Ollama's `/api/ps`, Home Assistant's `/api/states/<id>` and
+# OpenRouter's `/api/v1` in prose, and none of those is a Jarvis route. Requiring
+# the route to be the subject of a row or heading keeps them out. This is a line
+# parser, like the rest of this file, and that limit is stated rather than
+# implied.
+DOC = os.path.join(ROOT, "docs", "JARVIS-API.md")
+_DOC_SKIP_FROM = "## 8. Draft, proposed, or not actually wired"
+_DOC_SKIP_TO = "## 9. Rules that constrain this API"
+_DOC_ROUTE = re.compile(r"/api/[A-Za-z0-9_{}$<>][A-Za-z0-9_/{}$<>.\-]*")
+_DOC_METHOD = re.compile(r"\b(?:GET|POST|PUT|DELETE|PATCH)\b")
+_DOC_CODE = re.compile(r"^\s{0,8}(?:GET|POST|PUT|DELETE|PATCH)\s+(/api/\S+)")
+_DOC_HEADING = re.compile(r"^#{1,5}\s")
+_DOC_PH = re.compile(r"<[^>]+>")
+
+
+def _doc_route(token):
+    """A doc route token -> the checker's normalised spelling.
+
+    The doc writes ids as `<receipt_id>`, where app source writes `{id}` or
+    `${id}`; all three become `{id}` so the doc and the callers compare equal.
+    A query string is not part of the route, and trailing markdown punctuation
+    is not either."""
+    token = _DOC_PH.sub("{id}", token.split("?")[0].rstrip(".,;:)`\\"))
+    return normalise(token)
+
+
+def documented_routes():
+    """{route: first line number} for every route docs/JARVIS-API.md documents.
+
+    Section 8 of the doc, "Draft, proposed, or not actually wired", is skipped
+    on purpose: the doc says nothing in it is confirmed to exist, and its table
+    names `/api/approvals` (does not exist), `GET /api/holds` (deliberately not
+    invented) and `POST /api/note` (superseded). Those are not the contract, so
+    they must not become routes the API is required to classify.
+    """
+    if not os.path.isfile(DOC):
+        print(f"::error::{os.path.relpath(DOC, ROOT)} is not in this checkout; "
+              "has it moved?")
+        sys.exit(2)
+    with open(DOC, encoding="utf-8", errors="replace") as fh:
+        lines = fh.read().splitlines()
+    start = next((i for i, l in enumerate(lines, 1)
+                  if l.startswith(_DOC_SKIP_FROM)), None)
+    end = next((i for i, l in enumerate(lines, 1)
+                if l.startswith(_DOC_SKIP_TO)), None)
+    if start is None or end is None or end <= start:
+        print("::error::docs/JARVIS-API.md no longer has its section 8 draft "
+              "block ending at section 9, so the checker cannot tell a "
+              "documented route from a proposal. Update _DOC_SKIP_FROM/_TO in "
+              "tools/check_parity.py.")
+        sys.exit(2)
+    found = {}
+    for line_no, line in enumerate(lines, 1):
+        if start <= line_no < end:
+            continue
+        stripped = line.strip()
+        m = _DOC_CODE.match(line)
+        if m:
+            found.setdefault(_doc_route(m.group(1)), line_no)
+            continue
+        if stripped.startswith("|") and "/api/" in stripped:
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            first = cells[0].strip("`").strip()
+            m = _DOC_ROUTE.search(first)
+            if not m:
+                continue
+            has_method = _DOC_METHOD.search(
+                first[:m.start()] + " " + first[m.end():])
+            if not has_method and len(cells) > 1:
+                has_method = _DOC_METHOD.match(cells[1].strip().strip("`"))
+            if not has_method:
+                continue
+            found.setdefault(_doc_route(m.group(0)), line_no)
+            continue
+        if _DOC_HEADING.match(line) and "/api/" in line:
+            for m in _DOC_ROUTE.finditer(line):
+                # The method must sit beside the route, in the same heading:
+                # "## 135. ... four routes under `/api/skills/hub`" names a
+                # PREFIX, not a route, and is not one the API must classify.
+                if _DOC_METHOD.search(line[max(0, m.start() - 20):m.start()]):
+                    found.setdefault(_doc_route(m.group(0)), line_no)
+    return found
 
 
 _ENTRY = re.compile(r'\(\s*"([A-Za-z0-9_]+)"\s*,\s*"(/api/[^"?]+)')
@@ -1086,6 +1251,10 @@ def main():
     for route, files in built.items():
         phone_at.setdefault(route, set()).update(files)
     desk, phone = set(desk_at), set(phone_at)
+    # A route the phone's source only names inside a builder nothing calls is
+    # not a call; `nothing_calls_it` is the checker's own answer for that.
+    real_phone = phone - nothing_calls_it
+    documented = documented_routes()
 
     for r, (s, _) in CLASSIFICATION.items():
         if s not in STATUSES:
@@ -1173,6 +1342,51 @@ def main():
             f"{r} is in PHONE_ONLY but the desktop calls it now "
             f"({', '.join(sorted(desk_at[r]))}). Move it to CLASSIFICATION.")
 
+    # The documented universe, and BACKEND_ONLY's own honesty. A backend-only
+    # entry is a fact about the code, so it is checked in BOTH directions: the
+    # route must still be documented, still be called by NEITHER app, and have
+    # a written reason. The check that catches the original blind spot is the
+    # last loop: a documented route in no app and in no table is now a FAILURE.
+    for r in sorted(BACKEND_ONLY):
+        if not isinstance(BACKEND_ONLY[r], str) or not BACKEND_ONLY[r].strip():
+            problems.append(
+                f"{r} is in BACKEND_ONLY in tools/check_parity.py without a "
+                "written reason. Say why no app has a surface for it.")
+        if r in CLASSIFICATION or r in PHONE_ONLY:
+            problems.append(
+                f"{r} is in BACKEND_ONLY AND classified for an app; keep one. "
+                "A route with a caller belongs in CLASSIFICATION or PHONE_ONLY.")
+    for r in sorted(set(BACKEND_ONLY) & desk):
+        problems.append(
+            f"{r} is in BACKEND_ONLY but the desktop calls it now "
+            f"({', '.join(sorted(desk_at[r]))}). Remove it from BACKEND_ONLY "
+            "and classify it: a backend-only reason that has stopped being "
+            "true is a lie.")
+    for r in sorted(set(BACKEND_ONLY) & real_phone):
+        problems.append(
+            f"{r} is in BACKEND_ONLY but the phone calls it now "
+            f"({', '.join(sorted(phone_at[r]))}). Remove it from BACKEND_ONLY "
+            "and classify it: a backend-only reason that has stopped being "
+            "true is a lie.")
+    for r in sorted(set(BACKEND_ONLY) - set(documented)):
+        problems.append(
+            f"{r} is in BACKEND_ONLY in tools/check_parity.py but "
+            "docs/JARVIS-API.md does not document it. Remove the entry, or "
+            "document the route.")
+    # Membership in CLASSIFICATION/PHONE_ONLY is enough for "accounted for":
+    # every status except `planned` is already required to have a caller by the
+    # loops above, and `planned` is the one status allowed to have none - its
+    # own loop demands UNREACHABLE or RETIRED instead. So the only routes this
+    # last loop can find are the ones no table above knew existed.
+    for r in sorted(set(documented) - desk - real_phone - set(CLASSIFICATION)
+                    - set(PHONE_ONLY) - set(BACKEND_ONLY)):
+        problems.append(
+            f"{r} is documented in docs/JARVIS-API.md (line {documented[r]}) "
+            "but NO app calls it, it is not classified in tools/check_parity.py, "
+            "and BACKEND_ONLY does not name it. Add it to BACKEND_ONLY with a "
+            "written reason (it is backend-only today), or wire a caller in the "
+            "desktop or the phone.")
+
     check_route_fields(problems, warnings)
 
     todo, no = sorted(by("todo")), sorted(by("deliberate"))
@@ -1180,6 +1394,8 @@ def main():
           f"ported: {len(by('ported'))}   not porting: {len(no)}   still to port: {len(todo)}   "
           f"not the backend's: {len(by('not-backend'))}   "
           f"planned (backend first): {len(by('planned'))}")
+    print(f"documented in docs/JARVIS-API.md: {len(documented)} routes   "
+          f"backend-only (documented, no app caller): {len(BACKEND_ONLY)}")
     if todo:
         print("\nStill to port:")
         for r in todo:
