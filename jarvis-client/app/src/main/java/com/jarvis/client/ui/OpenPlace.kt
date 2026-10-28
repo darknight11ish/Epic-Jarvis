@@ -122,6 +122,12 @@ object OpenPlace {
         // (SettingsScreen.kt, item "sandbox"), so "open the data sandbox" lands
         // on it instead of the top of Settings.
         "sandbox" to Where.Go(Screen.SETTINGS, "sandbox"),
+        // "Learning" (2026-10-28, the settings audit's G1): the two learning
+        // switches now have their own Settings row on both apps
+        // (SettingsScreen.kt, item "learning"), so "open learning" lands on it
+        // rather than the top of Settings. Before this the section did not
+        // exist and the switches could only be found in the Brain.
+        "learning" to Where.Go(Screen.SETTINGS, "learning"),
         // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
         // fourteen questions and its read-only plan. An ordinary Settings row
         // on the phone (SettingsScreen.kt, item "setup-questionnaire", always

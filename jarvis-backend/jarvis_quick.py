@@ -238,6 +238,24 @@ holds this file to NOT matching them. It also holds the commands this slice
 did NOT build (HUD layout, bar pinning, "open galaxy/today", mute/unmute,
 "repeat that", scroll/back/home) to returning None with the reason: no honest
 backend action exists for them today.
+
+A NOTION EXPORT INTO OBSIDIAN (2026-10-28, the owner's screenshot of
+2026-10-27 205732). "can you process all of my notion notes into obsidian?"
+reached the model, which answered "I cannot directly access or process files
+from Notion to transfer them to Obsidian" - false, twice: this PC has
+`jarvis_documents.import_notion` (unzip a Notion export into a NEW folder in a
+listed folder; PC only; no card, because that folder was approved when it was
+listed) and `jarvis_notion_obsidian.py` (the export tidied into an Obsidian
+vault, `/api/notion/import`; PC only; ONE card). The model can drive neither:
+it is offered no Notion tool, and the guide it may ask mentions the folder
+import only inside the `folders` row (asking it for "notion export" answers
+"I do not have a feature called ...") and has no row at all for the converter.
+So it answered the only way it could. This file now answers instead, from the
+real steps and the real limits: the export itself is made in Notion, the import
+unpacks into a NEW folder and edits nothing on Notion's side, and the vault
+converter is built but has no button in either app yet - so the answer says
+that rather than promising either half is automatic. It reads nothing, changes
+nothing, opens no card, and is in READ_ONLY_INTENTS.
 """
 from __future__ import annotations
 
@@ -1489,6 +1507,19 @@ def _match(text, now: float) -> Optional[Intent]:
                      r"(?:\s+list)?", s)
     if m:
         return Intent("todo_remove", {"text": m.group(1).strip()})
+    # --- "process all my Notion notes into Obsidian" (2026-10-28) ---------------
+    # The owner's screenshot of 2026-10-27 205732. This sentence used to reach
+    # the model, which has no Notion tool and answered "I cannot directly
+    # access or process files from Notion" - while both the export import
+    # (jarvis_documents.import_notion) and the vault converter
+    # (jarvis_notion_obsidian.py) exist on this PC. LAST among the real
+    # matchers, beside _open and for the same reason: a reminder or a watch
+    # that merely mentions Notion keeps its own answer, and "open Notion"
+    # still opens the app (jarvis_open.py) instead of landing here.
+    got = _notion(s)
+    if got is not None:
+        return got
+
     # --- "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     # the owner's request of 2026-10-10) --------------------------------------
     # LAST among the real matchers, and the placement is the fix, not a
@@ -4417,6 +4448,18 @@ def _feature_own_controls(row: dict) -> tuple:
     except Exception:
         return (), ()
     fid = str((row or {}).get("id") or "")
+    # An Always-On SAFETY RULE owns no switch (the same rule
+    # `jarvis_feature_guide._build_matrix` applies through ALWAYS_ON_IDS,
+    # Lead's 2026-10-22 ruling). It matters here because `switches_for` links a
+    # switch through the SECTION a feature's covers name, and a section can be
+    # shared: "Lock Jarvis" (app-lock) and the chat-history switch both live in
+    # Settings, Security. Without this, "turn on Lock Jarvis" found exactly one
+    # switch in its section and would have turned chat history on - the one
+    # thing this matcher must never do. Caught by
+    # tools/check_feature_controls.py guard 2 on 2026-10-28, when
+    # chat_history.section became "security" (the settings audit's G5).
+    if fid in (getattr(FG, "ALWAYS_ON_IDS", frozenset()) or ()):
+        return (), ()
     keys = list((getattr(FG, "EXTRA_CONTROLS", {}) or {}).get(fid, ()))
     if not keys:
         own = (getattr(FG, "OWN_CONTROLS", {}) or {}).get(fid) or ()
@@ -5632,6 +5675,110 @@ def _run_update_start(desktop, *, fetch=None, tier_of=None, spawn=None) -> Resul
         f"approve it - on this PC.", kind)
 
 
+# --------------------------------------------------------------------------
+#   A Notion export into Obsidian (2026-10-28)
+# --------------------------------------------------------------------------
+#
+# WHY THIS IS HERE. The owner asked, on 2026-10-27 at 20:57:32, "can you
+# process all of my notion notes into obsidian?" - and the model answered
+# "I cannot directly access or process files from Notion to transfer them to
+# Obsidian without explicit file paths or content provided here." The PC has
+# two real things for that request (jarvis_documents.import_notion, and
+# jarvis_notion_obsidian's /api/notion/import), but the model can drive neither:
+# it is offered no Notion tool, and the guide it can ask mentions the folder
+# import only inside the `folders` row (asking for "notion export" answers that
+# it does not have that feature) and has no row for the converter - so the one
+# honest thing a machine here can do is answer with the steps, the limits, and
+# which half of it has no button yet.
+#
+# THE WORDS ARE HELD TO THE REAL ONES. `test_notion_answer.py` checks every
+# step below against `jarvis_documents.NOTION_DETAIL` and `NOTION_TITLE`,
+# against `jarvis_notion_obsidian.PATHS` and its gate action, and against the
+# shipped `jarvis-framework.toml`'s `import_notion_export = "ask"` tier - so a
+# reworded export step, a moved route or a loosened tier fails a suite instead
+# of quietly leaving a wrong answer in place. It also drives the folder import
+# end to end on a real zip in a temp folder, because "I unpack it into a NEW
+# folder" is a promise and not a sentence.
+#
+# NOTHING IS DONE BY SAYING THIS: the .zip is chosen with this PC's own file
+# picker (folders.rs `import_notion`, PC only), so the answer can only say
+# where - never claim the import happened.
+
+#: What the owner calls the thing Notion holds.
+_NOTION_THING = (r"(?:notes?|pages?|files?|documents?|content|everything|workspace|"
+                 r"export|library|stuff|data)")
+
+#: The verbs that mean "bring it across". Deliberately NOT "open", so "open
+#: Notion" keeps opening the app (jarvis_open.py) and is never answered here.
+_NOTION_MOVE = (r"(?:process|import|convert|move|transfer|copy|migrate|bring|pull|load|"
+                r"put|export|sync|take)")
+
+#: A question lead and the polite lead-ins `normalise` does not take off.
+#: "can you ..." is already gone by the time this runs; allowed again here so
+#: the grammar does not depend on that. "i'd like to" keeps its own apostrophe
+#: form: `normalise` leaves it alone, so there is no space after the "i".
+_NOTION_LEAD = (r"(?:(?:how\s+(?:do|can|could|would)\s+i"
+                r"|what(?:'s|\s+is)\s+the\s+best\s+way\s+to"
+                r"|what\s+(?:do\s+i\s+need|would\s+it\s+take)\s+to"
+                r"|i(?:'d\s+(?:like|love)|\s+want|\s+need)\s+to)\s+)?"
+                r"(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:help\s+me\s+)?")
+
+#: "... notion notes (over) to obsidian", and the other order,
+#: "... everything from notion into obsidian". Whole-sentence, so a sentence
+#: with one more condition ("... tomorrow at 5") stays the model's.
+_NOTION_TO_OBSIDIAN = re.compile(
+    _NOTION_LEAD + _NOTION_MOVE + r"\s+"
+    r"(?:"
+    r"(?:(?:all|every\s+one)\s+(?:of\s+)?)?(?:(?:my|the|your|our)\s+)?notion"
+    r"(?:\s+" + _NOTION_THING + r")?"
+    r"|"
+    r"(?:(?:all|every\s+one)\s+(?:of\s+)?)?(?:(?:my|the|your|our)\s+)?"
+    + _NOTION_THING + r"\s+from\s+notion"
+    r")"
+    r"\s+(?:(?:over|across|back)\s+)?(?:in)?to\s+obsidian")
+
+#: "import my Notion export" on its own - the follow-up that used to get the
+#: same "I cannot access Notion" answer.
+_NOTION_JUST_IMPORT = re.compile(
+    _NOTION_LEAD + r"(?:import|bring\s+in|load|restore)\s+"
+    r"(?:(?:the|my|our)\s+)?notion\s+export")
+
+#: The answer to "can you process all of my Notion notes into Obsidian?".
+#: Every step is one this PC really has: the export is Notion's own; the
+#: import unpacks into a NEW folder in a listed folder (PC only, no card);
+#: and the vault converter is `/api/notion/import` - PC only, ONE card, and
+#: no button in either app yet, which is why the sentence says so instead of
+#: promising it. No Notion login, no sync, no edit on Notion's side.
+NOTION_WORDS = (
+    "I cannot log into Notion, but I do have a Notion import. In Notion: Settings, "
+    "Export all workspace content, as Markdown & CSV, then save the .zip. On this PC: "
+    "Settings, Folders Jarvis may look in, then under Bring in a Notion export pick a "
+    "folder from the list and press Choose the .zip… - I unpack it into a NEW folder "
+    "there that I can read and search, and nothing in Notion is changed. The full "
+    "Notion-to-Obsidian-vault converter is built (POST /api/notion/import, PC only, "
+    "one card) but no app has a button for it yet.")
+
+#: The same steps for "import my Notion export" on its own: the .zip is picked
+#: with this PC's own file picker, so the one honest thing to say is where.
+NOTION_PICK_WORDS = (
+    "Picking the .zip needs this PC's own file picker, so it is two taps there: "
+    "Settings, Folders Jarvis may look in, then under Bring in a Notion export pick a "
+    "folder from the list and press Choose the .zip… - I unpack it into a NEW folder "
+    "in that folder and change nothing in Notion.")
+
+
+def _notion(s: str) -> Optional[Intent]:
+    """"process all my notion notes into obsidian", "convert my Notion pages to
+    Obsidian", "copy everything from Notion into Obsidian", "import my Notion
+    export" (the owner's screenshot, 2026-10-27 205732). Both forms are read-
+    only answers - no card, no import, no Notion login."""
+    if _NOTION_TO_OBSIDIAN.fullmatch(s):
+        return Intent("notion_export")
+    if _NOTION_JUST_IMPORT.fullmatch(s):
+        return Intent("notion_export", {"step": "import"})
+    return None
+
+
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     the owner's request of 2026-10-10).
@@ -5651,6 +5798,16 @@ def _open(s: str) -> Optional[Intent]:
     what, is_jarvis = got
     opened = OPEN.resolve(what, is_jarvis)
     return Intent("open_app", {"opened": opened})
+
+
+def _run_notion(f: dict) -> Result:
+    """"Can you process all my Notion notes into Obsidian?", and "import my
+    Notion export" on its own (2026-10-28). Fixed text, from the constants
+    above - which the test holds to the real module, route and button. Reads
+    nothing, changes nothing, opens no card: the .zip is chosen with this PC's
+    own file picker, so there is nothing here that could do the import."""
+    return Result(NOTION_PICK_WORDS if f.get("step") == "import" else NOTION_WORDS,
+                  "notion_export")
 
 
 def _run_sayable(intent: Intent) -> Result:
@@ -7128,6 +7285,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n == "notion_export":
+        # "can you process all of my notion notes into obsidian?" (2026-10-28):
+        # a fixed answer, like reach/sayable - it names the export steps, the
+        # import button on this PC and the converter's half that has no button
+        # yet. Nothing is read and nothing is imported.
+        return _run_notion(f)
     if n == "sayable_help":
         return _run_sayable(intent)
     if n == "identity_help":
@@ -7518,6 +7681,10 @@ READ_ONLY_INTENTS = frozenset({
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
     "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",
+    # "can you process all my Notion notes into Obsidian?" (2026-10-28): a
+    # fixed answer that reads nothing and imports nothing, so it must not
+    # clear what "cancel that" would take back.
+    "notion_export",
     "open_app", "open_chat", "pc_help", "personality_create",
     "personality_create_failed", "personality_create_help",
     "personality_create_refused", "personality_describe", "personality_refine",

@@ -265,6 +265,14 @@ SECTIONS: tuple = (
     Section("briefing-settings", ("the morning briefing", "briefing settings")),
     Section("shortcuts", ("shortcuts", "keyboard shortcuts", "hotkeys"), app="desktop"),
     Section("security", ("security", "app lock", "windows hello")),
+    # "Learning" (2026-10-28, the settings audit's G1). The two learning
+    # switches had a real route and a spoken name but no Settings card on
+    # either app: they lived only in Brain -> Memory -> Learning, which is why
+    # SETTINGS_GAPS recorded them. The card is drawn by learning-settings.js
+    # from the SAME two routes the Brain and the typed sentence use.
+    Section("learning", ("learning", "the learning switches", "background learning",
+                         "automatic learning", "learn automatically",
+                         "what jarvis learns")),
     Section("voices", ("jarvis's voice", "jarvis's voices", "custom voices",
                        "how jarvis sounds")),
     Section("web-search", ("web search", "search settings", "the search provider")),
@@ -1317,13 +1325,13 @@ class SettingRow:
     source: str = ""
 
 
-#: The desktop page's 26 toggle rows, in page order. The PAGE-OWNED rows
+#: The desktop page's 31 toggle rows, in page order. The PAGE-OWNED rows
 #: (owner="desktop") are generated into settings.html between its
 #: "settings-toggles:begin/end" markers; the two phone rows are carried for
 #: the phone's SettingsCatalog.kt only.
 SETTINGS_ROWS: tuple = (
     # ------------------------------------------------------------------
-    #   The desktop page's own 26 rows, in page order. Every field that
+    #   The desktop page's own 31 rows, in page order. Every field that
     #   the page can answer for itself (the ids, and the label and detail
     #   words, line breaks included) was read FROM settings.html; the
     #   rest - which BoolSetting a row is the same switch as, which card
@@ -1598,6 +1606,40 @@ SETTINGS_ROWS: tuple = (
         indent=8,
         has_detail=True,
         fallback=True),
+    # "Learning" (2026-10-28, the settings audit's G1): the two switches that
+    # had a route and a spoken name but no Settings row anywhere. Both are the
+    # SAME switch as the Brain's: `set_background_learning` posts
+    # /api/memory/learning and `set_learn_sensitive` posts
+    # /api/memory/learning/sensitive, through the same Rust commands the Brain
+    # uses (learning-settings.js). ON raises one approval card; OFF is at once.
+    # The row's own words are this page's, always: the state line under each
+    # row is the PC's (GET /api/memory/learning), so no fallback flag.
+    SettingRow(
+        "learning-background",
+        "background_learning",
+        "",
+        "learning-background-label",
+        "",
+        'Background learning',
+        "",
+        19,
+        "learning",
+        "desktop",
+        indent=10,
+        label_span_is_wrapper=True),
+    SettingRow(
+        "learning-sensitive",
+        "learn_sensitive_topics",
+        "",
+        "learning-sensitive-label",
+        "",
+        'Also remember sensitive topics automatically',
+        "",
+        20,
+        "learning",
+        "desktop",
+        indent=10,
+        label_span_is_wrapper=True),
     SettingRow(
         "cv-face-switch",
         "voice_follows_face",
@@ -1606,7 +1648,7 @@ SETTINGS_ROWS: tuple = (
         "cv-face-detail",
         'Voice follows the face',
         '',
-        19,
+        21,
         "voices",
         "desktop",
         indent=12,
@@ -1620,7 +1662,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Make custom voices on the second graphics card',
         'A more natural copy of the voice. Turning it on shows you an approval card first; turning it off happens at once.',
-        20,
+        22,
         "voices",
         "desktop",
         indent=12,
@@ -1633,7 +1675,7 @@ SETTINGS_ROWS: tuple = (
         "ws-enabled-detail",
         'Web search',
         '',
-        21,
+        23,
         "web-search",
         "desktop",
         indent=10,
@@ -1647,7 +1689,7 @@ SETTINGS_ROWS: tuple = (
         "ws-ask-detail",
         'Ask before every web search',
         '',
-        22,
+        24,
         "web-search",
         "desktop",
         indent=10,
@@ -1661,7 +1703,7 @@ SETTINGS_ROWS: tuple = (
         "",
         '',
         "",
-        23,
+        25,
         "spending",
         "desktop",
         indent=12,
@@ -1678,7 +1720,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Turn on Picture mode (slow)',
         "",
-        24,
+        26,
         "screen-look",
         "desktop",
         indent=10,
@@ -1691,35 +1733,11 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis use the windowless browser (Obscura)',
         "",
-        25,
+        27,
         "browser-engine",
         "desktop",
         indent=10,
         label_span_is_wrapper=True),
-    SettingRow(
-        "supervise",
-        None,
-        "",
-        "",
-        "",
-        'Let Jarvis Desktop start and stop Jarvis',
-        "",
-        26,
-        "start-jarvis",
-        "desktop",
-        indent=10),
-    SettingRow(
-        "autostart",
-        None,
-        "",
-        "",
-        "",
-        'Start Jarvis Desktop when Windows starts',
-        "",
-        27,
-        "more-options",
-        "desktop",
-        indent=10),
     # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
     # JARVIS-API section 129). The one switch that belongs to the Pictures card
     # and, with the record button above it, the one row on the page whose
@@ -1730,6 +1748,12 @@ SETTINGS_ROWS: tuple = (
     # The words are NOT a fallback: `set_pictures` answers in its own sentence
     # and the paragraph above the row carries the PC's own state line, but the
     # row's own label is this page's, always.
+    #
+    # WHERE IT SITS (2026-10-28, the settings audit's G3): the switch is back in
+    # its OWN card, id="pictures", inside that card's `pc-body`. A bad merge on
+    # 2026-10-11 (7380ad8f8) had swapped it into the id-less "Startup and logs"
+    # card and moved `supervise` into `pc-body`, so the Pictures card held the
+    # wrong switch and the registry was the only record of where each belonged.
     SettingRow(
         "pc-switch",
         "pictures",
@@ -1743,6 +1767,30 @@ SETTINGS_ROWS: tuple = (
         "desktop",
         indent=10,
         label_span_is_wrapper=True),
+    SettingRow(
+        "supervise",
+        None,
+        "",
+        "",
+        "",
+        'Let Jarvis Desktop start and stop Jarvis',
+        "",
+        29,
+        "start-jarvis",
+        "desktop",
+        indent=10),
+    SettingRow(
+        "autostart",
+        None,
+        "",
+        "",
+        "",
+        'Start Jarvis Desktop when Windows starts',
+        "",
+        30,
+        "more-options",
+        "desktop",
+        indent=10),
     # "Data and maths sandbox" (LM-1C, 2026-10-18). The row's own label is this
     # page's; the state line under it is the PC's (GET /api/sandbox), so both
     # apps show the same sentence and the same card result. The row is last on
@@ -1755,7 +1803,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis run small Python scripts for sums and averages',
         "",
-        29,
+        31,
         "sandbox",
         "desktop",
         indent=10,
@@ -1837,13 +1885,12 @@ def setting_row(dom_id: str) -> Optional[SettingRow]:
 class BoolSetting:
     key: str
     names: tuple
-    #: The matching SECTIONS id, for a future "open" alias - or None: the
-    #: two learning switches live in the Brain window's Memory tab (`brain.
-    #: html#memory-auto`, jarvis-desktop/src/auto-learn.js), a different
-    #: navigation surface from settings.html's anchors, which SECTIONS and
-    #: "open" only reach today. Not read by any code yet - kept accurate
-    #: rather than wired to a place that does not exist, so a later "open
-    #: the Brain" pass has the right answer already written down.
+    #: The matching SECTIONS id, for "open <section>" and for the feature list's
+    #: "can I change this, and where?" link. None only when the switch has no
+    #: card of its own anywhere (none today: the two learning switches gained
+    #: the `learning` card on 2026-10-28, the settings audit's G1). Kept
+    #: Optional so a future switch can say plainly that it has no page yet
+    #: rather than point at a place that does not exist.
     section: Optional[str]
     set: Callable[..., Outcome] = field(repr=False)
     #: What each state is called, for "is background learning on?" - not
@@ -1857,12 +1904,12 @@ BOOL_SETTINGS: tuple = (
     BoolSetting("background_learning",
                ("background learning", "automatic learning", "learn automatically",
                 "learning automatically"),
-               None, set_background_learning),
+               "learning", set_background_learning),
     BoolSetting("learn_sensitive_topics",
                ("remembering sensitive topics automatically",
                 "also remember sensitive topics automatically",
                 "sensitive topics automatically", "auto-remembering sensitive topics"),
-               None, set_learn_sensitive),
+               "learning", set_learn_sensitive),
     BoolSetting("lights_without_card",
                ("lights without asking", "lights, plugs and fans without a card",
                 "lights without a card", "switching lights without asking"),
@@ -1987,10 +2034,14 @@ BOOL_SETTINGS: tuple = (
     # --- the universal-control pass (2026-10-22): switches that had a real
     # route/control but no spoken name. See the setters above; every section
     # is the Settings card that already draws the control.
+    # `chat_history`'s card is Security, where `ch-switch` / `ch-keep` are
+    # drawn by chat-history-settings.js (2026-10-28: it said None while the
+    # control had been there since 2026-10-22, so SETTINGS_GAPS["history"]
+    # claimed no Settings control existed - the settings audit's G5).
     BoolSetting("chat_history",
                ("chat history", "keeping chat history", "saving my chats",
                 "my conversation history", "keeping conversations"),
-               None, set_chat_history),
+               "security", set_chat_history),
     BoolSetting("write_like_me",
                ("write like me", "the write like me switch", "my writing voice",
                 "the writing style profile", "voiceprint", "my voiceprint"),

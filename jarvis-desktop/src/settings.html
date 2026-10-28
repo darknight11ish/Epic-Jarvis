@@ -158,6 +158,7 @@
             <span class="settings-jump-place-label">On this PC</span>
             <a href="#shortcuts">Shortcuts</a>
             <a href="#security">Security</a>
+            <a href="#learning">Learning</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Voice and sound</span>
@@ -219,9 +220,10 @@
         </div>
       </nav>
       <p class="note settings-brain-note">
-        Looking for chat history, saved facts or background learning?
+        Looking for saved facts, or the lists Jarvis keeps about you?
         Those live in the <strong>Brain</strong>, not here — open it from
-        the tray icon, "Open the Brain".
+        the tray icon, "Open the Brain". Chat history's own switch is in
+        Security below, and the two learning switches are in Learning.
       </p>
 
       <div id="menus-hidden-bar" class="menus-hidden-bar" hidden>
@@ -1607,6 +1609,50 @@
         <span class="status" id="sec-status" role="status"></span>
       </section>
 
+      <!-- ── Learning ───────────────────────────────────────────────────────
+           The two learning switches (2026-10-28, the settings audit's G1;
+           learning-settings.js). They are the SAME two switches the Brain's
+           Memory tab draws: `background_learning` posts
+           /api/memory/learning and `learn_sensitive_topics` posts
+           /api/memory/learning/sensitive, through the same Rust commands
+           (brain_memory_learning, brain_memory_learning_sensitive), so a
+           change here and "turn on background learning" are one write path.
+           ON raises ONE approval card on the PC and the switch stays off
+           until it is approved; OFF is at once and never held. The line under
+           each row is the PC's own sentence from GET /api/memory/learning
+           (the state, whether a card waits, and how the last one ended) -
+           nothing here is worked out by the page. The rest of the learning
+           controls - "Learn automatically" and "Saved automatically" - stay
+           in the Brain, where the fact list is. -->
+      <section class="card" id="learning">
+        <h2>Learning</h2>
+        <p class="note">
+          Jarvis learns facts about you and your projects from your own words
+          only - never from web pages, emails, documents or notes. These two
+          switches decide whether it does that by itself. Everything it saved,
+          and the "Learn automatically" switch beside it, are in the Brain
+          under Memory.
+        </p>
+        <p class="state" id="learning-state" role="status">Asking Jarvis…</p>
+        <div id="learning-body" hidden>
+          <label class="toggle">
+            <input id="learning-background" type="checkbox" />
+            <span id="learning-background-label">Background learning</span>
+          </label>
+          <p class="note" id="learning-background-line"></p>
+          <p class="note" id="learning-background-waiting" data-tone="warn" hidden></p>
+
+          <label class="toggle">
+            <input id="learning-sensitive" type="checkbox" />
+            <span id="learning-sensitive-label">Also remember sensitive topics automatically</span>
+          </label>
+          <p class="note" id="learning-sensitive-line"></p>
+          <p class="note" id="learning-sensitive-waiting" data-tone="warn" hidden></p>
+
+          <span class="status" id="learning-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── Jarvis's voice ────────────────────────────────────────────────
            Custom voices: GET /api/voice/voices and its four POSTs
            (voice-panel.js; the words are in custom-voices.js). Adding a
@@ -2644,8 +2690,8 @@
         <div id="pc-body" hidden>
           <p class="note" id="pc-detail"></p>
           <label class="toggle">
-            <input id="supervise" type="checkbox" />
-            <span>Let Jarvis Desktop start and stop Jarvis</span>
+            <input id="pc-switch" type="checkbox" />
+            <span id="pc-switch-label">Making pictures</span>
           </label>
           <div class="row">
             <label for="pc-runtime">The program that draws</label>
@@ -2999,8 +3045,8 @@
           </p>
 
           <label class="toggle">
-            <input id="autostart" type="checkbox" />
-            <span>Start Jarvis Desktop when Windows starts</span>
+            <input id="supervise" type="checkbox" />
+            <span>Let Jarvis Desktop start and stop Jarvis</span>
           </label>
 
           <label class="field">
@@ -3064,8 +3110,8 @@
           </p>
 
           <label class="toggle">
-            <input id="pc-switch" type="checkbox" />
-            <span id="pc-switch-label">Making pictures</span>
+            <input id="autostart" type="checkbox" />
+            <span>Start Jarvis Desktop when Windows starts</span>
           </label>
           <p class="note" id="autostart-note">
             This starts this app, not Jarvis itself. Jarvis starts with it only
@@ -3453,6 +3499,7 @@
     <script type="module" src="media-index-settings.js"></script>
 <script type="module" src="big-coder-settings.js"></script>
 <script type="module" src="chat-history-settings.js"></script>
+    <script type="module" src="learning-settings.js"></script>
     <script type="module" src="setup-settings.js"></script>
   </body>
 </html>

@@ -1287,6 +1287,12 @@ html.hud-window-hidden *::after{
  * --------------------------------------------------------------------- */
 .rail-toolbar{
   display:flex; align-items:center; gap:6px; flex-shrink:0;
+  /* 2026-10-28: the face models button made this three. The rail is 212px
+     (188px in the two-column shell) and two labelled buttons already fill it,
+     so a third would squeeze all three - it WRAPS instead, which changes
+     nothing while two fit and keeps every label readable at three. In the
+     Studio shell this bar is a column, where wrapping has no effect. */
+  flex-wrap:wrap;
   padding:10px 10px 8px; border-bottom:1px solid var(--line);
 }
 .rail-toolbar-btn{
@@ -1303,6 +1309,11 @@ html.hud-window-hidden *::after{
   color:var(--ice); border-color:var(--line-hot);}
 .rail-toolbar-btn[aria-expanded="true"]{color:var(--ice); border-color:var(--line-hot);}
 .rail-toolbar-btn .glyph{width:14px; height:14px; flex:0 0 auto;}
+/* The face models button keeps its own width on the toolbar's second row, so
+   the two labelled buttons keep their share of the rail (2026-10-28). It is
+   the one rule this icon adds: size, colour, hover and the Studio shrink are
+   the shared `.rail-toolbar-btn` rules above. */
+.rail-toolbar #rail-faces{flex:0 1 auto;}
 
 .bento-empty{
   display:none; margin:2px 0 4px; font-family:var(--f-mono); font-size:11px;
@@ -1903,6 +1914,19 @@ body[data-hud-edit="on"] .hud-card-head{
 }
 body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;}
 .hud-card-body .rail-section{margin-top:0;}
+/* 2026-10-28 (the owner's Edit HUD field test): a hidden card used to be
+ * unreachable in Edit HUD. Its shell was `display: none`, so the Hide control -
+ * already painted as a toggle - could only ever hide, and after a reload nothing
+ * on the page could show the card again. While Edit HUD is on, a hidden card is
+ * now painted as a dimmed ghost: its header, the word "hidden" and its own Show
+ * control, with its body folded away so the card itself is still hidden. Outside
+ * edit mode `.hud-card[hidden]` hides the whole shell exactly as before. */
+body[data-hud-edit="on"] .hud-card-hidden{opacity:.6; border-style:dotted;}
+body[data-hud-edit="on"] .hud-card-hidden .hud-card-body{display:none;}
+.hud-card-hidden-word{
+  font-family:var(--f-mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--dim); border:1px solid var(--line); border-radius:2px; padding:0 4px;
+}
 @media (max-width:720px){
   .hud-edit-words{display:none;}
 }
@@ -2127,6 +2151,24 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
     background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
   }
   .hud-models-route[aria-pressed="true"] .tag{color:var(--ice);}
+  /* The face models panel (the owner's ask of 2026-10-28: "add a jarvis model
+     icon to the left column of the jarvis desktop that has all of the jarvis
+     models (face models)"). It wears the Presets menu's popover classes above
+     - one panel look, one set of tokens - so only its row and its id tag are
+     its own. The current face takes the SAME ice-pressed look the Current
+     Models panel's chosen lane wears, because it is the same idea: the PC's
+     own answer, drawn as chosen. */
+  .hud-faces-panel{width:min(308px, calc(100vw - 16px));}
+  .hud-faces-item{display:flex; align-items:center; justify-content:space-between;
+    gap:10px;}
+  .hud-faces-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .hud-faces-id{flex:0 0 auto; font-size:9px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--dimmer);}
+  .hud-faces-item[aria-pressed="true"]{
+    border-color:var(--ice); color:var(--ice);
+    background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
+  }
+  .hud-faces-item[aria-pressed="true"] .hud-faces-id{color:var(--ice);}
   .hud-presets-dialog{
     width:min(560px, calc(100vw - 32px)); max-height:82vh; overflow:auto;
     border:1px solid var(--line-hot); border-radius:6px; padding:14px;
@@ -2306,7 +2348,7 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
 /* History sidebar styles, moved out of hud-history.js on 2026-10-28:
    the packaged CSP refuses a <style> element built at run time, and this
    page's own <style> carries the nonce. Keep this text here, not in JS. */
-html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-ico:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);}.hh-head:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}.hh-sec[data-open="0"] .hh-head .glyph.hh-caret{transform:rotate(-90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);}.hh-open:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);opacity:1;}.hh-dots:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);}.hh-more:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);}#hh-new:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);}.hh-menu button:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-ico:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);}.hh-head:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}/* An open section's chevron points DOWN (rotated 90) and a collapsed one points RIGHT - the other way round read as "collapsed" beside an open section's own rows (seen in the render check, 2026-10-27). */.hh-sec[data-open="1"] .hh-head .glyph.hh-caret{transform:rotate(90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);}.hh-open:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);opacity:1;}.hh-dots:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);}.hh-more:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);}#hh-new:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);}.hh-menu button:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
 </style>
 
 <!-- ==================================================================== *
@@ -2503,6 +2545,39 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
           <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/>
         </svg>
         <span class="rt-label">Live</span>
+      </button>
+      <!-- The Jarvis model / face models icon (the owner's ask of 2026-10-28:
+           "add a jarvis model icon to the left column of the jarvis desktop
+           that has all of the jarvis models (face models)").
+
+           It lists EVERY face in `faces-spec.js` - the one list the Faces
+           window draws and the Rust tray reads - and it switches through the
+           SAME save the Faces window's own "Use this face" uses, via this
+           window's narrow `hud_set_face` command (`hud-faces` in
+           capabilities/hud.json): the PC's settings store first, then
+           POST /api/appearance, so the phone wears it too and a reload keeps
+           it. No new store, no second list, no approval card.
+
+           Labelled "Faces", NOT "Models": the Current Models panel and the
+           model chip in the stage bar already own the word "model" for the AI
+           model answering, and two different things called Models in one HUD
+           is how the owner loses track of which one he is clicking.
+
+           Hidden until the shell is there, like Live above: a plain browser
+           has no command to send (the page holds no token), so the door would
+           open a menu whose every row failed. `mountFacePicker` reveals it. -->
+      <button type="button" class="rail-toolbar-btn" id="rail-faces"
+              title="Jarvis faces: all the face models, and the one it wears"
+              aria-label="Jarvis faces: all the face models, and the one it wears"
+              aria-haspopup="dialog" aria-expanded="false" hidden>
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="8"/>
+          <circle cx="9.2" cy="10.3" r="1.1"/>
+          <circle cx="14.8" cy="10.3" r="1.1"/>
+          <path d="M8.7 14.3c1.9 1.6 4.7 1.6 6.6 0"/>
+        </svg>
+        <span class="rt-label">Faces</span>
       </button>
       <!-- Why Live did not start, for a screen reader. The button's title
            carries the on/off wording; the READABLE refusal is the stage's
@@ -8851,6 +8926,11 @@ mountSafetyRail().then((rail) => {
  * hides itself: there is no shell to save a layout through. */
 import { mountHudEditor } from "./hud-edit.js";
 import { mountHudPresets, mountCurrentModels } from "./hud-presets.js";
+/* The face models picker (2026-10-28) lives in the SAME module and is
+ * imported on its own line: the line above is pinned verbatim by
+ * tests/hud-current-models.mjs, and there is no reason to disturb a pin that
+ * is still true. */
+import { mountFacePicker } from "./hud-presets.js";
 /* PWA slice 2: a plain browser keeps per-DEVICE layouts (localStorage, via
  * hud-layout-store.js) instead of the host PC's store, so the editor and the
  * Layouts menu are offered there too. The store still uses Tauri IPC when
@@ -8876,6 +8956,14 @@ mountHudPresets({
  * from the page's own #lanes buttons. The three reads are hud_proxy.rs's fixed
  * list, and there is no write, no command and no approval card here. */
 mountCurrentModels();
+/* The face models icon in the left column (the owner's ask of 2026-10-28:
+ * "add a jarvis model icon to the left column of the jarvis desktop that has
+ * all of the jarvis models (face models)"). ONE list - `faces-spec.js`, loaded
+ * by the mount and never copied here - and ONE save: the Faces window's own
+ * `set_appearance`, reached through this window's narrow `hud_set_face`.
+ * In a plain browser the mount hides its door: there is no shell command to
+ * send, and a menu whose every row would fail is worse than no icon. */
+mountFacePicker();
 
 /* ── Jarvis Live, from the left rail (the owner's ask of 2026-10-27:
  *    "a live mode button in the left column of the Jarvis HUD") ────────────

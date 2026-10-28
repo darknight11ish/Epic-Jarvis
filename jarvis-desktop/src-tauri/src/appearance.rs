@@ -463,6 +463,49 @@ pub async fn set_appearance(app: AppHandle, appearance: Appearance) -> Result<Lo
     })
 }
 
+/// The stored document with `face` replaced, and nothing else touched.
+///
+/// The HUD's face models icon is the caller (`hud_set_face`): it may change
+/// WHICH face Jarvis wears and nothing else - not one binding, colour, pattern
+/// or animal switch - so this is the owner's document with one field set. An
+/// id the spec does not define is REFUSED rather than stored: `faces.html`
+/// draws its first face for an unknown id, so a typo would look like "the
+/// choice was ignored" instead of saying so.
+pub fn with_face(doc: &Appearance, face: &str) -> Result<Appearance, String> {
+    let face = face.trim();
+    if face.is_empty() {
+        return Err("A face needs a name.".into());
+    }
+    if !crate::spec::has_face(face) {
+        return Err(format!("{face} is not one of Jarvis's faces."));
+    }
+    let mut next = doc.clone();
+    next.face = Some(face.to_string());
+    Ok(next)
+}
+
+/// The HUD's face models icon: ONE face id, saved through the SAME path the
+/// Faces window's own save uses ([`set_appearance`] - this PC's store first,
+/// then `POST /api/appearance`), so a reload keeps it and the phone wears it
+/// too.
+///
+/// The document to change is READ FIRST ([`get_appearance`]), not taken from
+/// this process's cache. The server is the truth (`appearance.rs`'s own rule),
+/// and saving a document built from a stale or empty cache would post an
+/// appearance with no bindings - wiping the colours the owner set in the
+/// Faces window or on the phone. `get_appearance` already falls back to this
+/// machine's store and then to the default, so an unreachable PC costs one
+/// short timeout, never a lost setting.
+///
+/// Cosmetic, so no approval card: `backend/README.md` says why the appearance
+/// route needs none.
+#[tauri::command]
+pub async fn hud_set_face(app: AppHandle, face: String) -> Result<Loaded, String> {
+    let current = get_appearance(app.clone()).await;
+    let doc = with_face(&current.appearance, &face)?;
+    set_appearance(app, doc).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -631,5 +674,70 @@ mod tests {
         let json = r#"{"face":"orbit","bindings":{},"updated":1.0,"mood":"calm"}"#;
         let a: Appearance = serde_json::from_str(json).unwrap();
         assert_eq!(a.face.as_deref(), Some("orbit"));
+    }
+
+    /// The HUD's face picker changes WHICH face is worn and nothing else.
+    ///
+    /// This is the bug the feature could introduce, and it would be silent:
+    /// `set_appearance` posts the WHOLE document, so a face change built on an
+    /// empty document would save `bindings: {}` and wipe every colour the
+    /// owner set in the Faces window or on the phone. `with_face` must carry
+    /// the document through untouched apart from `face`.
+    #[test]
+    fn a_face_change_keeps_every_binding_and_the_animal_switches() {
+        let mut animal = serde_json::Map::new();
+        animal.insert("still".into(), serde_json::json!(true));
+        animal.insert("nods".into(), serde_json::json!(false));
+        let mut doc = Appearance {
+            face: Some("arc".into()),
+            updated: 42.0,
+            animal: Some(animal),
+            ..Default::default()
+        };
+        doc.bindings.insert(
+            "thinking".into(),
+            Binding {
+                pattern: "sweep".into(),
+                color: Some("ice-3".into()),
+                params: serde_json::Map::new(),
+            },
+        );
+        let next = with_face(&doc, "redpanda").expect("red panda is a spec face");
+        assert_eq!(next.face.as_deref(), Some("redpanda"));
+        assert_eq!(
+            next.updated, 42.0,
+            "the timestamp was rewritten before the save"
+        );
+        assert_eq!(next.bindings.len(), 1, "a binding was dropped");
+        assert_eq!(next.bindings["thinking"].pattern, "sweep");
+        assert_eq!(next.bindings["thinking"].color.as_deref(), Some("ice-3"));
+        assert_eq!(
+            next.animal.as_ref().and_then(|a| a.get("still")),
+            Some(&serde_json::json!(true)),
+            "the animal switches were dropped"
+        );
+        // The document the picker started from is untouched: the caller may
+        // still be holding it.
+        assert_eq!(doc.face.as_deref(), Some("arc"));
+    }
+
+    /// An id the renderer cannot draw is refused, never stored.
+    ///
+    /// `faces.html` falls back to its first face for an unknown id, so a
+    /// stored typo looks exactly like "the choice was ignored" - the one
+    /// failure this feature must not have.
+    #[test]
+    fn a_face_the_spec_does_not_have_is_refused() {
+        let doc = Appearance::default();
+        for bad in ["", "   ", "not-a-face", "Arc", "../arc"] {
+            let refused = with_face(&doc, bad);
+            assert!(refused.is_err(), "{bad:?} was accepted as a face");
+        }
+        // And the error is the PC's own sentence, not an empty string.
+        let message = with_face(&doc, "not-a-face").unwrap_err();
+        assert!(
+            message.contains("not-a-face"),
+            "the refusal does not say what was refused"
+        );
     }
 }

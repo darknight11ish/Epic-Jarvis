@@ -1016,4 +1016,27 @@ mod tests {
             "the refresh reads the route and then throws the answer away"
         );
     }
+
+    #[test]
+    fn a_dropped_event_reaches_the_log_file_and_not_a_dead_console() {
+        // Silent-failure audit 2026-10-27, row 10. These three are the ONLY
+        // record of an event the windows never received: a HUD push that threw
+        // (the HUD's only path to the shell's event stream), a quickbar event
+        // that could not be emitted, a broadcast that failed. `eprintln!` wrote
+        // to a handle a RELEASE build does not have (`logfile.rs` says so in its
+        // own doc: `windows_subsystem = "windows"` means no console), so the one
+        // place the failure would be readable was the place that did not exist.
+        let lib = include_str!("lib.rs");
+        for name in ["fn push_to_hud<", "fn emit_quickbar<", "fn emit_all<"] {
+            let body = function(lib, name);
+            assert!(
+                body.contains("logfile::log"),
+                "{name} no longer writes the log file, so a dropped event leaves no trace"
+            );
+            assert!(
+                !body.contains("eprintln!("),
+                "{name} is back on eprintln!, which a release build cannot see"
+            );
+        }
+    }
 }

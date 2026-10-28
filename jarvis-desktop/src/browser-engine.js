@@ -18,6 +18,7 @@
  */
 
 import { currentLink, linkWords, onLink } from "./jarvis-link.js";
+import { call } from "./invoke-budget.js";
 import {
   BROWSER,
   MODE_IDS,
@@ -145,7 +146,7 @@ function paint() {
 async function load() {
   if (!el.body || !IS_TAURI) return;
   try {
-    const raw = await TAURI.core.invoke("browser_engine", { action: "read" });
+    const raw = await call("browser_engine", { action: "read" });
     view = browserView(raw);
     // Not part of the shared table: only whether the file is on this PC.
     view.needsInstall =
@@ -182,9 +183,7 @@ async function setSwitch(on) {
   say(on ? BROWSER.asking : BROWSER.turningOff);
   paint();
   try {
-    const out = await TAURI.core.invoke("browser_engine", {
-      action: on ? "on" : "off",
-    });
+    const out = await call("browser_engine", { action: on ? "on" : "off" }, "action");
     say(
       on ? BROWSER.askedCard : words(out && out.message) || BROWSER.off,
       "ok",
@@ -204,15 +203,25 @@ async function setMode(mode) {
   if (busy) return;
   busy = true;
   paint();
+  let asked = false;
   try {
-    await TAURI.core.invoke("browser_engine", { action: "mode", mode });
-    say(BROWSER.modeSaved, "ok");
+    await call("browser_engine", { action: "mode", mode }, "action");
+    asked = true;
   } catch (error) {
     say(refusedWords(error), "warn");
   } finally {
     busy = false;
   }
+  // "Saved." is a claim about what the PC now has, so it is said only when a
+  // fresh READ of the setting shows the mode that was asked for
+  // (silent-failure audit 2026-10-27, row 9: it used to be said on the
+  // strength of the write returning, and could stand beside a page still
+  // showing the old mode). A write the PC accepted but has not applied says
+  // "Asked your PC."; a read that failed already said why on the card.
   await load();
+  if (!asked || !view) return;
+  say(view.mode === mode ? BROWSER.modeSaved : BROWSER.modeAsked,
+    view.mode === mode ? "ok" : "warn");
 }
 
 async function copyLine() {

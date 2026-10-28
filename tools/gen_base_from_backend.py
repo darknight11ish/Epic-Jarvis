@@ -182,6 +182,8 @@ BESIDE = (
     ("history-actions.js", "{repo}/backend/static/history-actions.js",
      "the row-action table the History sidebar imports at "
      "/history-actions.js, shared with the Brain (2026-10-27)"),
+    ("invoke-budget.js", "{repo}/backend/static/invoke-budget.js",
+     "a module hud-presets.js imports; served at /invoke-budget.js"),
     ("galaxy-presets.js", "{repo}/backend/static/galaxy-presets.js",
      "the module the Galaxy's look switcher imports; served at /galaxy-presets.js"),
     ("galaxy-cosmos.js", "{repo}/backend/static/galaxy-cosmos.js",
