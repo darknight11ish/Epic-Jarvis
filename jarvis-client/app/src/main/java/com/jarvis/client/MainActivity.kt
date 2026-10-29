@@ -4418,6 +4418,18 @@ class MainActivity : FragmentActivity() {
         if (JarvisRuntime.isPaired()) {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }
+            // The approval queue is the one list the PC settles on its own
+            // while the phone was away. Since 2026-10-28 the gate runs its
+            // expiry sweep on every read (`jarvis_gate._expire_overdue`), so
+            // a card whose deadline passed while Jarvis sat in the background
+            // is simply no longer in the answer — but the list on screen is a
+            // copy, and nothing told it to re-read. That left the owner
+            // reopening Jarvis onto the same expired cards, with nothing on
+            // the card and nothing on the screen to clear them ("there is
+            // approval cards that are expired, how do I clear them easily
+            // from my android phone", 2026-10-28). A read: it approves,
+            // denies and clears nothing.
+            lifecycleScope.launch { JarvisRuntime.refreshPending() }
             // Coming back to a link that is "Catching up…" reconnects at
             // once, the same forced reconnect as Home's Retry (phone
             // walk-through, 2026-09-27). After the phone slept the socket is

@@ -516,8 +516,16 @@ def t_never_expires_cannot_be_reached_by_omission_zero_negative_malformed_or_unk
           "waited = timeout_for(action) if timeout is None else timeout" in src)
     check("pending() takes expires_in from the same function",
           'left = timeout_for(d.get("action"))' in src)
-    check("the start-up sweep exempts the same set, not a copy of it",
-          "_forever = sorted(APPROVAL_NEVER_EXPIRES)" in src)
+    check("the sweep exempts the same set, not a copy of it",
+          "forever = sorted(APPROVAL_NEVER_EXPIRES)" in src)
+    # Since 2026-10-28 the sweep is one helper, run at start-up AND on every
+    # read of the queue (`pending()`), because the start-up half alone left a
+    # card behind for the life of the process (the owner's "approval cards
+    # that are expired" on his phone). Both call sites are that one helper, so
+    # there is still exactly one place the exemption set is read.
+    check("...and start-up and every read go through that one sweep",
+          src.count("_expire_overdue(c)") == 2,
+          src.count("_expire_overdue(c)"))
 
 
 # ---------------------------------------------------------------------------

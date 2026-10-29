@@ -473,9 +473,19 @@ RATCHET = {
     #: nothing that shows here: both files are shipped whole, never patched, so
     #: they are not targets this walk builds. The pin may come back down the
     #: day the walk seeds a target from `jarvis-backend/`, which is the base
-    #: these patches are published against and the text every one of the eight
+    #: these patches are published against and the text every one of the nine
     #: pre-images is actually taken from.
-    "jarvis_gate.py": 40,
+    #: RAISED 2026-10-28, 40 -> 41, for the NINTH hunk the same patch gained
+    #: when the owner reported "there is approval cards that are expired" on
+    #: his phone: `pending()`'s own opening (`_init()` and the SELECT) is where
+    #: the read-time sweep `_expire_overdue(c)` is now called, and that opening
+    #: is the owner's text - no earlier patch in this walk writes it. The walk
+    #: reads 41 and names `no-expiry-cards.patch` at 9 in `by_patch`; read
+    #: exactly with `materialised("jarvis_gate.py", patches)`. Honest rather
+    #: than drift, for the same reason as the eight above: there is no earlier
+    #: patch to anchor to, and hand-editing the owner's gate is what these
+    #: patches exist to avoid. A ratchet: it may still only go down.
+    "jarvis_gate.py": 41,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s
