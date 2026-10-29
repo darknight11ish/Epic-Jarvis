@@ -8,6 +8,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,16 +35,36 @@ import kotlinx.coroutines.launch
  * the desktop's Settings -> How Jarvis talks, in the same words: on the
  * phone, settings for a PC feature live on Mind.
  *
- * Two choices, each with the PC's own "why" line: "Warm and brief (default)"
- * and "Plain". Wording only - never what Jarvis does, asks or remembers - so
- * neither raises an approval card. ONE tap is ONE change, held on a stale
- * link ([JarvisRuntime.setManner]).
+ * ONE list, from the PC. Since 2026-10-28 the same `GET /api/manner` answer
+ * carries the ten personality presets (plus the owner's saved ones, §27.7), so
+ * this screen draws THAT list - titles, descriptions and order exactly as the
+ * PC sends them - and marks the PC's own `personality` as in use. The desktop's
+ * Settings panel draws the same answer and hides the same legacy warm/plain
+ * pair (`manner-settings.js` `paintPersona()`); before this the phone marked
+ * "Plain" whenever the PC was on any preset but Warm Collaborator, because
+ * `manner` is derived on the PC - a screen naming a preset Jarvis was not in.
+ *
+ * The PC's older Warm/Plain pair is still drawn when its answer has no
+ * personality list (an older backend): the phone keeps working, and nothing
+ * here pretends a list the PC did not send. Wording only - never what Jarvis
+ * does, asks or remembers - so neither choice raises an approval card. ONE tap
+ * is ONE change, held on a stale link ([JarvisRuntime.setManner],
+ * [JarvisRuntime.usePersonality]).
+ *
+ * What is NOT here, on purpose: the four tuning dials and "My personalities"
+ * editor. Those are the desktop's (docs/ARCHITECTURE.md §8, "One-sided on
+ * purpose"), and the screen says where they are in one line rather than
+ * offering a weaker second control that could disagree with the PC's own.
  */
 @Composable
 internal fun MannerSection(canAct: Boolean) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var reads by remember { mutableIntStateOf(0) }
+    // The PC's `manner` doorbell: a personality switched in the desktop's
+    // Settings, the HUD's Presets menu or by the chat sentence re-reads this
+    // plate, so the row marked "in use" is never a stale local copy.
+    val tick by JarvisRuntime.mannerTick.collectAsState()
     var view by remember { mutableStateOf<Manner.View?>(null) }
     var missing by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
@@ -83,7 +104,7 @@ internal fun MannerSection(canAct: Boolean) {
         }
     }
 
-    LaunchedEffect(reads) {
+    LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.manner()) {
             is ApiResult.Ok -> {
                 val v = Manner.parse(r.value)
@@ -109,6 +130,22 @@ internal fun MannerSection(canAct: Boolean) {
         scope.launch {
             try {
                 said = JarvisRuntime.setManner(id)
+            } finally {
+                busy = false
+                reads += 1
+            }
+        }
+    }
+
+    // ONE preset: the PC's own id, one field - never a `manner` word, which
+    // would flatten the chosen preset and reset its dials on the PC.
+    fun choosePersonality(preset: Manner.Personality) {
+        if (busy) return
+        busy = true
+        said = null
+        scope.launch {
+            try {
+                said = JarvisRuntime.usePersonality(preset.id, preset.title)
             } finally {
                 busy = false
                 reads += 1
@@ -163,7 +200,43 @@ internal fun MannerSection(canAct: Boolean) {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
+                // The PC's list is the screen: same rows, same names, same
+                // order, and the mark is the PC's own `personality`. The
+                // legacy pair is not drawn beside it - two lists on one screen
+                // is the disagreement this card exists to prevent.
                 else -> {
+                    if (v.hasPersonalities) {
+                    Text(Manner.PERSONALITIES_TITLE, style = MaterialTheme.typography.titleSmall,
+                        color = chrome.textHi)
+                    v.personalities.forEach { preset ->
+                        Gap(8)
+                        val chosen = v.isCurrent(preset)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // "(in use)" as well as the colour: not by colour alone.
+                            Text(if (chosen) "${preset.title} (in use)" else preset.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (chosen) chrome.okInk else chrome.textHi,
+                                modifier = Modifier.weight(1f))
+                            if (!chosen) {
+                                Quiet("Use this", enabled = canAct && !busy,
+                                    onClick = { choosePersonality(preset) })
+                            }
+                        }
+                        if (preset.description.isNotBlank()) {
+                            Text(preset.description, style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid)
+                        }
+                    }
+                    Gap(8)
+                    Text(v.spoken, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                    Gap(6)
+                    // The dials and "My personalities" are the desktop's; the
+                    // phone says where they are instead of drawing a second,
+                    // weaker humour control (the desktop hides its own too).
+                    Text(Manner.DIALS_ON_PC, style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo)
+                    Gap(12)
+                } else {
                     v.choices.forEach { c ->
                         Gap(8)
                         val chosen = c.id == v.manner
@@ -202,6 +275,7 @@ internal fun MannerSection(canAct: Boolean) {
                     }
                     Text(v.humorDetail, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                     Gap(12)
+                }
                     // "Write like me" (PR #665's UI): the owner's own samples
                     // and their switch, under the same "How Jarvis talks"
                     // card. An older PC says so in one line instead of drawing
