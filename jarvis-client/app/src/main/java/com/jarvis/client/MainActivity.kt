@@ -3198,6 +3198,24 @@ class MainActivity : FragmentActivity() {
                         // it), so a later manual visit to Settings does not
                         // scroll anywhere on its own.
                         onSectionConsumed = sectionConsumed,
+                        // "Pair with your PC" in Settings, Devices (2026-10-28):
+                        // the same two lines "Platform checks" already runs for
+                        // its "Change desktop or token" button, so there is ONE
+                        // definition of how re-pairing starts. It is offered
+                        // whether or not this phone is paired: when it is not,
+                        // the pairing screen is already what the app shows, and
+                        // this simply leaves Settings for it.
+                        //
+                        // The saved address is filled in unless a re-pair is
+                        // already under way, exactly as on Platform checks -
+                        // otherwise a half-typed address would be thrown away.
+                        // `resetTo`, not `go`: Back must not walk into a
+                        // Settings screen the pairing flow has already left.
+                        onPairWithPc = {
+                            if (!repairing) pairingHost = JarvisRuntime.settings.host.value
+                            repairing = true
+                            nav.resetTo(Screen.HOME)
+                        },
                         // Picture mode's button to the Looking at your screen
                         // switch, which is on the Security screen.
                         onOpenLookSwitch = {

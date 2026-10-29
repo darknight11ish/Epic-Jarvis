@@ -55,9 +55,16 @@ import kotlinx.coroutines.launch
  * Removing this phone itself: its key stops working at once, and the event
  * stream is restarted so the refusal ("This phone's key was removed ...")
  * brings back the pairing screen, as for any refused key.
+ *
+ * [onPair] is "Pair with your PC" (2026-10-28): it opens the SAME pairing
+ * screen "Platform checks" reaches through "Change desktop or token", and it
+ * is here because this card was where the owner looked - and found only
+ * "Unpair & clear the token", the action that takes the pairing AWAY. Null
+ * when the screen has no way to show it (unit tests, previews); the button is
+ * then not drawn, rather than drawn doing nothing.
  */
 @Composable
-internal fun DevicesSection() {
+internal fun DevicesSection(onPair: (() -> Unit)? = null) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var reads by remember { mutableIntStateOf(0) }
@@ -110,6 +117,25 @@ internal fun DevicesSection() {
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textMid,
             )
+            // The way back INTO pairing, first and above the list: a phone
+            // that cannot reach its PC is here to fix that, not to read a list
+            // it cannot load. Drawn even when the list below fails to load,
+            // and above "Unpair & clear the token" because that one takes the
+            // pairing away and this one is what the owner usually wants.
+            onPair?.let { pair ->
+                Gap(10)
+                Primary(
+                    text = Devices.PAIR_BUTTON,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = pair,
+                )
+                Gap(4)
+                Text(
+                    Devices.PAIR_HELP,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+            }
             if (missing) {
                 Gap(8)
                 Text(Devices.MISSING, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)

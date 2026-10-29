@@ -623,6 +623,40 @@ phone**, use the app's own command palette — the Jarvis bar → `/` → the ro
 **Devices** — and the owner's own click. That is also the only way the card can be
 approved, since `pair_device` is PC-only and needs Windows Hello.
 
+### Already paired, and it will not connect (added 2026-10-28)
+
+A phone that has paired before does **not** show the pairing screen on its next
+launch, however badly the link is broken. The screen is drawn only while
+`!paired || repairing` (`jarvis-client/app/src/main/java/com/jarvis/client/MainActivity.kt:2150`),
+so a phone that still holds a token sits on Home instead, saying "Your PC isn't
+answering." or "Waiting for the connection to your PC."
+
+**Where to pair again, in the order to try it:**
+
+1. **Phone, Settings → Devices → "Pair with your PC"** (primary button, above
+   "Unpair & clear the token"; added 2026-10-28). It opens the same pairing screen
+   step 10 above uses, with the saved address already filled in. Nothing is lost
+   unless the new address and key actually connect — the old pair is put back
+   otherwise.
+2. **Phone, Platform checks → "Change desktop or token"** — the same screen, and the
+   only way in before 2026-10-28. Reach it by tapping the connection line at the
+   bottom of Home (it looks like text, but it is a button) → Checks.
+3. **Phone, Settings → Devices → "Unpair & clear the token"** — last, because it is
+   destructive: it forgets the PC and clears the key, and there is no undo.
+
+**Do not reach for "Unpair & clear the token" first.** It is the one control on that
+card that takes the pairing away, and it used to be the only one there; the phone's
+own sentence after it ("Pair again to use Jarvis") named a step it gave you no way to
+take.
+
+**Check the PC is on the network the phone can see.** The phone reaches the PC only
+by a name ending `.ts.net` or `.nord` (never a bare number —
+`jarvis-client/app/src/main/java/com/jarvis/client/data/PhoneAddress.kt`). Measured
+2026-10-28 on the owner's PC: its `100.75.21.228` address was on the **NordLynx**
+interface, while `tailscale status` answered **"Logged out."** — so a phone paired by
+a `.ts.net` name had nothing to reach, and no amount of re-pairing on the phone could
+have fixed it.
+
 ---
 
 ## The steps, in order, in plain words
