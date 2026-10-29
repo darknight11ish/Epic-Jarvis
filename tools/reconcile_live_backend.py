@@ -1486,23 +1486,25 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
                                      if region.get("replace_file") else ())
                         r_probes = tuple(str(p) for p in (region.get("probes") or ()))
                     except Exception as exc:                      # noqa: BLE001
-                        region_error = (f"{patch} -> {target}: a region's block file "
-                                        f"could not be read ({type(exc).__name__})")
+                        region_error = (f"{patch} -> {target}: the block file for "
+                                        f"region {region.get('file')!r} could not be "
+                                        f"read ({type(exc).__name__})")
                         break
                     if r_probes and all(p in text for p in r_probes):
                         continue
                     if not old_lines:
-                        region_error = (f"{patch} -> {target}: a region has no old "
-                                        f"block; only replace-shaped regions are "
-                                        f"supported here")
+                        region_error = (f"{patch} -> {target}: region "
+                                        f"{region.get('file')!r} has no old block; only "
+                                        f"replace-shaped regions are supported here")
                         break
                     old = "\n".join(old_lines)
                     count = text.count(old)
                     if count != 1:
                         region_error = (
-                            f"{patch} -> {target}: one region's old block appears "
-                            f"{count} time(s) in the live file; expected exactly 1. "
-                            f"Refusing rather than guessing.")
+                            f"{patch} -> {target}: region {region.get('file')!r} "
+                            f"(replacing {region.get('replace_file')!r}) has an old "
+                            f"block that appears {count} time(s) in the live file; "
+                            f"expected exactly 1. Refusing rather than guessing.")
                         break
                     text = text.replace(old, "\n".join(new_lines), 1)
                     changed = True

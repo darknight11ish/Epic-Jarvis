@@ -3161,6 +3161,10 @@ def t_the_no_expiry_chain_carries_965_byte_for_byte():
                   "                                         + float(APPROVAL_TIMEOUT)" not in text)
         check("... the twelve probes the entry proves presence with are all there",
               all(p in text for r in R.NOEXPIRY_REGIONS for p in r["probes"]))
+        counts = [(r["file"], p, text.count(p))
+                  for r in R.NOEXPIRY_REGIONS for p in r["probes"]]
+        check("... and each appears exactly once, so 'present' means that region is in",
+              all(n == 1 for _f, _p, n in counts), [c for c in counts if c[2] != 1])
         check("... it compiles", R.rehearse(staged) == [], R.rehearse(staged))
         check("... the live gate was never touched",
               (live / "jarvis_gate.py").read_bytes() == before)
@@ -3198,6 +3202,39 @@ def t_the_no_expiry_chain_carries_965_byte_for_byte():
         check("... it finishes at exactly the same bytes as the patch itself",
               staged2.get("jarvis_gate.py", "") == oracle,
               (len(staged2.get("jarvis_gate.py", "")), len(oracle)))
+
+        # A HALF-applied #965 must be finished, not replaced twice: d1 (the docstring
+        # region) deployed, the other three not.
+        first = R.NOEXPIRY_REGIONS[8]
+        partial = live_shape.replace("\n".join(R._delta_lines(first["replace_file"])),
+                                     "\n".join(R._delta_lines(first["file"])), 1)
+        check("... the half-applied fixture really is half-applied",
+              partial != live_shape
+              and "def _expire_overdue(c: sqlite3.Connection) -> int:" not in partial)
+        live3 = make_base_live(root, "no-expiry-965-partial",
+                               {"jarvis_gate.py": partial})
+        deltas3, staged3, refusals3 = R.plan_deltas(
+            live3, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("a half-applied #965 is finished to the same bytes, not refused",
+              refusals3 == [] and staged3.get("jarvis_gate.py", "") == oracle,
+              (refusals3, len(staged3.get("jarvis_gate.py", "")), len(oracle)))
+
+        # A region whose text was edited by hand is REFUSED, and the refusal names
+        # the region's own block file so the operator knows what to look at.
+        # Removing the #773 `APPROVAL_NEVER_EXPIRES` block leaves both that region's
+        # old block and its probes absent - nothing the tool may guess at.
+        h2 = R.NOEXPIRY_REGIONS[1]
+        broken = live_shape.replace(
+            "\n".join(R._delta_lines(h2["file"])) + "\n", "", 1)
+        live4 = make_base_live(root, "no-expiry-965-broken",
+                               {"jarvis_gate.py": broken})
+        deltas4, staged4, refusals4 = R.plan_deltas(
+            live4, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("a gate missing a whole region is REFUSED, and nothing is staged",
+              staged4 == {} and len(refusals4) == 1, (staged4, refusals4))
+        check("... the refusal names the region's own block file",
+              bool(refusals4) and "gate-noexpiry-h2-old.txt" in refusals4[0],
+              refusals4)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
