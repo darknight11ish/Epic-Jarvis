@@ -3097,6 +3097,111 @@ def t_no_test_touches_a_live_folder():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def t_the_no_expiry_chain_carries_965_byte_for_byte():
+    """#965 rewrote no-expiry-cards.patch in place; the chain must still land it.
+
+    Measured read-only on the owner's live `jarvis_gate.py` (2026-10-28): all eight
+    #773 probes were present, `_expire_overdue` was in it 0 times, and region 7's OLD
+    block was still there with its NEW block absent - so the tool said
+    ALREADY_PRESENT while #965's four regions were missing, and #773's own
+    `expires_in` change had never deployed either (its probe was a line the patch
+    REWRITES, so it was in the pre-image and could never prove anything).
+
+    Two starting points are proved here, and both must end at the same bytes:
+      * a gate with NONE of the patch = the published base, with this PC's 180-second
+        `approval_timeout_seconds` fallback (the patch was cut at 900; the deploy must
+        not change that number);
+      * the MEASURED live shape - regions 1-6 and 8 of #773 present, region 7 absent,
+        which is what the owner's file actually holds.
+    The result is compared with `git apply`, so the chain cannot carry a paraphrase.
+    """
+    base_gate = BASE_GATE.read_text(encoding="utf-8")
+    pc_base = base_gate.replace('"approval_timeout_seconds", 900',
+                               '"approval_timeout_seconds", 180')
+    name = "no-expiry-cards.patch"
+    oracle = git_apply_oracle(base_gate, [name], "jarvis_gate.py").replace(
+        '"approval_timeout_seconds", 900', '"approval_timeout_seconds", 180')
+
+    raw = patch_text(name).decode("utf-8")
+    pre_image = R.patch_pre_image(raw, "jarvis_gate.py")
+    rewritten = [(r["file"], p) for r in R.NOEXPIRY_REGIONS for p in r["probes"]
+                 if p in pre_image]
+    check("no region's probe is a line the patch's own pre-image already holds",
+          rewritten == [], rewritten)
+    in_old = []
+    for region in R.NOEXPIRY_REGIONS:
+        old = "\n".join(R._delta_lines(region["replace_file"]))
+        for probe in region["probes"]:
+            if probe in old:
+                in_old.append((region["file"], probe))
+    check("... nor a line inside its OWN old block (region 7's old bug)",
+          in_old == [], in_old)
+    check("the entry has the #773 eight regions plus #965's four",
+          len(R.NOEXPIRY_REGIONS) == 12 and len(R.DELTA_TABLE[name]
+                                               ["jarvis_gate.py"]["probes"]) == 12)
+
+    root = tmpdir()
+    try:
+        live = make_base_live(root, "no-expiry-965", {"jarvis_gate.py": pc_base})
+        before = (live / "jarvis_gate.py").read_bytes()
+        deltas, staged, refusals = R.plan_deltas(
+            live, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        text = staged.get("jarvis_gate.py", "")
+        check("a gate with none of the patch plans cleanly",
+              refusals == [] and list(staged) == ["jarvis_gate.py"],
+              (refusals, sorted(staged)))
+        check("... the staged gate is byte-for-byte what git apply makes of the patch",
+              text == oracle, (len(text), len(oracle)))
+        check("... #965's read-time sweep is defined and called from both places",
+              "def _expire_overdue(c: sqlite3.Connection) -> int:" in text
+              and text.count("_expire_overdue(c)") == 2)
+        check("... and expires_in is left off a no-deadline card, not counted down",
+              'left = timeout_for(d.get("action"))' in text
+              and "d[\"expires_in\"] = max(0, int(float(d.get(\"created\"))\n"
+                  "                                         + float(APPROVAL_TIMEOUT)" not in text)
+        check("... the twelve probes the entry proves presence with are all there",
+              all(p in text for r in R.NOEXPIRY_REGIONS for p in r["probes"]))
+        check("... it compiles", R.rehearse(staged) == [], R.rehearse(staged))
+        check("... the live gate was never touched",
+              (live / "jarvis_gate.py").read_bytes() == before)
+        check("... and the action is an insert, not 'already'",
+              [d.status for d in deltas] == ["insert"], deltas)
+
+        (live / "jarvis_gate.py").write_bytes(text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("a second plan sees the patch ALREADY_PRESENT and changes nothing",
+              refusals2 == [] and staged2 == {} and [d.status for d in again] == ["already"],
+              (again, staged2, refusals2))
+
+        # The MEASURED live shape: #773's regions 1-6 and 8, region 7 NOT deployed.
+        live_shape = pc_base
+        for index, region in enumerate(R.NOEXPIRY_REGIONS[:8], 1):
+            if index == 7:
+                continue              # measured: #773's expires_in never reached it
+            old = "\n".join(R._delta_lines(region["replace_file"]))
+            new = "\n".join(R._delta_lines(region["file"]))
+            if live_shape.count(old) != 1:
+                raise AssertionError(f"#773 region {index} is not in the fixture")
+            live_shape = live_shape.replace(old, new, 1)
+        check("the measured live shape holds every #773 probe and no #965 line",
+              all(p in live_shape for r in R.NOEXPIRY_REGIONS[:6] for p in r["probes"])
+              and "_expire_overdue" not in live_shape)
+
+        live2 = make_base_live(root, "no-expiry-965-live-shape",
+                               {"jarvis_gate.py": live_shape})
+        deltas2, staged2, refusals2 = R.plan_deltas(
+            live2, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("the measured live gate is NOT called already present",
+              refusals2 == [] and [d.status for d in deltas2] == ["insert"],
+              (deltas2, refusals2))
+        check("... it finishes at exactly the same bytes as the patch itself",
+              staged2.get("jarvis_gate.py", "") == oracle,
+              (len(staged2.get("jarvis_gate.py", "")), len(oracle)))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -3120,6 +3225,7 @@ def main():
                t_cloud_escalate_with_its_hunks_absent_is_refused_not_skipped,
                t_cloud_escalate_and_f01_are_carried_as_their_hunks,
                t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks,
+               t_the_no_expiry_chain_carries_965_byte_for_byte,
                t_a_patch_whose_only_match_is_unchanged_context_is_refused,
                t_a_patch_with_no_distinctive_line_is_refused_by_name,
                t_the_dry_run_prints_every_refusal_and_writes_nothing,

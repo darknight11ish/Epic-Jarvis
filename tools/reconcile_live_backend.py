@@ -310,6 +310,35 @@ GATE_FINAL_PENDING_NEW_FILE = "gate-final-pending-new.txt"
 #: still 180 while the patch was cut against a tree that says 900 - the region
 #: changes that context line not at all. Each region's probe appears only in the
 #: post-image, so a second deploy skips it instead of replacing twice.
+#:
+#: #965 (`640a16a7f`, 2026-10-28) then REWROTE the same patch in place: it added
+#: `_expire_overdue()` (the read-time sweep), called it from `_init()` and from
+#: `pending()`, changed the docstring, and moved `expires_in` onto `timeout_for()`.
+#: The eight regions above still carried the #773 spelling, so the tool called the
+#: patch ALREADY_PRESENT on the owner's live gate (all eight probes were present)
+#: while `_expire_overdue` was nowhere in it - the measured silent skip this entry
+#: exists to prevent, and exactly the trap `cloud-escalate.patch` hit. The facts,
+#: measured read-only on 2026-10-28 against the live `jarvis_gate.py`:
+#:   * all eight old probes present, `_expire_overdue` 0 times;
+#:   * region 7's OLD block still present and its NEW block absent, i.e. #773's
+#:     `expires_in` change never deployed at all - its probe
+#:     ("Sent as seconds LEFT...") is a line the patch RE-WRITES, so it is in the
+#:     pre-image too and could never prove anything. Region 7 now probes
+#:     `left = timeout_for(...)`, which only the post-image contains.
+#: So the chain below has two halves, in this order:
+#:   * regions 1-8 carry a folder that has none of the patch from the base to the
+#:     #773 state (they are unchanged except region 7's probe);
+#:   * regions 9-12 carry the #773 state #965's post-image. Three of them (d1, d2,
+#:     d3) REWRITE a region #773 already wrote, so their OLD side is that #773
+#:     post-image (a fresh base reaches it through regions 1-3 first, and this PC
+#:     already has it); d4 inserts the new read-time sweep, whose pre-image is the
+#:     base's own `pending()` opening and is in both. Order matters and is checked:
+#:     `backend/test_reconcile_live_backend.py` proves that the twelve regions, applied
+#:     in order to the published base gate, reproduce `no-expiry-cards.patch`'s own
+#:     nine hunks BYTE FOR BYTE - and that a second pass changes nothing.
+#: Region 2 and 7's context/new bytes keep THIS PC's 180-second
+#: `approval_timeout_seconds` fallback, never the patch's 900: a hunk's context
+#: must not quietly change a number the owner's file already chose.
 NOEXPIRY_REGIONS = (
     {"file": "gate-noexpiry-h1-new.txt", "replace_file": "gate-noexpiry-h1-old.txt",
      "probes": ("silence stops being an answer",)},
@@ -325,9 +354,25 @@ NOEXPIRY_REGIONS = (
     {"file": "gate-noexpiry-h6-new.txt", "replace_file": "gate-noexpiry-h6-old.txt",
      "probes": ("would keep polling a row that",)},
     {"file": "gate-noexpiry-h7-new.txt", "replace_file": "gate-noexpiry-h7-old.txt",
-     "probes": ("Sent as seconds LEFT, not a clock time, so a phone",)},
+     "probes": ('left = timeout_for(d.get("action"))',)},
     {"file": "gate-noexpiry-h8-new.txt", "replace_file": "gate-noexpiry-h8-old.txt",
      "probes": ("the waiter it wakes reports timed_out",)},
+    # Regions 9-12: the #965 half. Each OLD block is what the live gate holds at
+    # that spot today (#773's post-image for d1-d3, the base's own pending() opening
+    # for d4), each NEW block is #965's post-image. The probes are lines only the
+    # NEW side contains - which is what makes a second deploy skip instead of
+    # replacing twice, and what makes a half-applied gate refuse rather than guess.
+    {"file": "gate-noexpiry-d1-new.txt", "replace_file": "gate-noexpiry-d1-old.txt",
+     "probes": ("A card whose window HAS passed is settled by _expire_overdue(): "
+                "at start-up",)},
+    {"file": "gate-noexpiry-d2-new.txt", "replace_file": "gate-noexpiry-d2-old.txt",
+     "probes": ("def _expire_overdue(c: sqlite3.Connection) -> int:",)},
+    {"file": "gate-noexpiry-d3-new.txt", "replace_file": "gate-noexpiry-d3-old.txt",
+     "probes": ("            # before - and `pending()` runs the same sweep on every "
+                "read, so a",)},
+    {"file": "gate-noexpiry-d4-new.txt", "replace_file": "gate-noexpiry-d4-old.txt",
+     "probes": ("# A card past its deadline is not waiting for anybody, even while "
+                "its",)},
 )
 
 #: PWA Slice 3a (2026-10-23): the browser's own files. The page at "/" was the
@@ -561,13 +606,20 @@ DELTA_TABLE = {
             "replace_file": GATE_FINAL_PENDING_OLD_FILE,
         },
     },
-    # The owner's 2026-10-23 card-expiry ruling (PR #773): the only patch since
-    # 2026-10-21 that touches `jarvis_gate.py`, and it touches it in eight
-    # disjoint places - which a single anchor insert cannot express. It is
-    # carried as eight literal region pairs (NOEXPIRY_REGIONS). The top-level
-    # probes are one post-image line from every region: all eight present means
-    # the whole patch is in, and a half-applied live gate is refused on the
-    # region whose OLD block no longer appears exactly once - never guessed.
+    # The owner's 2026-10-23 card-expiry ruling (PR #773), rewritten by #965 on
+    # 2026-10-28: a patch that touches `jarvis_gate.py` in nine disjoint places,
+    # which a single anchor insert cannot express. It is carried as the twelve
+    # literal region pairs in NOEXPIRY_REGIONS - eight for the #773 half and four
+    # for #965's - applied in order (see that table for why the chain is split,
+    # and `backend/test_reconcile_live_backend.py` for the byte-for-byte proof).
+    # The top-level probes are one post-image line from EVERY region: all twelve
+    # present means the whole patch is in; anything less sends the region loop
+    # over the file, where each region whose own probe is present is skipped and
+    # each remaining one must find its OLD block exactly once - a half-applied
+    # gate is refused on that region, never guessed at. Before #965 updated this
+    # entry the probes were the #773 eight, all of which a live gate deployed by
+    # #773 satisfies - so the tool said ALREADY_PRESENT and `_expire_overdue`
+    # stayed off the owner's PC. That is what the twelve-probe tuple fixes.
     "no-expiry-cards.patch": {
         "jarvis_gate.py": {
             "probes": tuple(r["probes"][0] for r in NOEXPIRY_REGIONS),
