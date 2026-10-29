@@ -1172,46 +1172,54 @@ html.hud-window-hidden *::after{
  * Raised by the HOST when an agent's plan asks to type into a password field.
  * Box 1 is measured by this PC; box 2 is the agent's note and is UNVERIFIED.
  * The secret never goes to the model and the input is wiped after submit. */
-#secret-handoff{
+#secret-handoff, #connect-account{
   border:1px solid rgb(var(--bad-rgb) / .55); border-left:3px solid var(--bad);
   background:linear-gradient(180deg, rgb(var(--bad-rgb) / .10), rgb(var(--bad-rgb) / .03));
   border-radius:10px; padding:12px 14px; margin:0 0 14px;
 }
-#secret-handoff .sh-head{ display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
-#secret-handoff .sh-title{ font-weight:650; letter-spacing:.01em; }
-#secret-handoff .sh-kind{
+/* The connect-account card is the same card in a calmer colour (2026-10-28):
+   it is the owner setting up his own account, not a secret being typed into a
+   control somewhere else. */
+#connect-account{
+  border-color: rgb(var(--ok-rgb) / .55); border-left-color: var(--ok);
+  background:linear-gradient(180deg, rgb(var(--ok-rgb) / .10), rgb(var(--ok-rgb) / .03));
+}
+:is(#secret-handoff,#connect-account) .sh-head{ display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+:is(#secret-handoff,#connect-account) .sh-title{ font-weight:650; letter-spacing:.01em; }
+:is(#secret-handoff,#connect-account) .sh-kind{
   font:600 10px/1 "IBM Plex Mono",monospace; text-transform:uppercase;
   letter-spacing:.12em; padding:3px 7px; border-radius:5px;
   background:rgb(var(--bad-rgb) / .18); color:var(--diff-remove);
 }
-#secret-handoff .sh-badge{
+:is(#secret-handoff,#connect-account) .sh-badge{
   font:700 10px/1 "IBM Plex Mono",monospace; letter-spacing:.10em;
   padding:4px 7px; border-radius:5px; background:var(--bad); color:var(--text);
 }
-#secret-handoff .sh-box{
+:is(#secret-handoff,#connect-account) .sh-box{
   border:1px solid var(--border-strong); border-radius:8px;
   padding:8px 10px; margin:0 0 8px; background:transparent;
 }
-#secret-handoff .sh-purpose{ border-style:dashed; opacity:.92; }
-#secret-handoff .sh-label{
+:is(#secret-handoff,#connect-account) .sh-purpose{ border-style:dashed; opacity:.92; }
+:is(#secret-handoff,#connect-account) .sh-label{
   font:600 10px/1.3 "IBM Plex Mono",monospace; text-transform:uppercase;
   letter-spacing:.11em; color:var(--text-muted); margin:0 0 4px;
 }
-#secret-handoff .sh-value{ font:12.5px/1.5 "IBM Plex Mono",monospace; color:var(--text);
+:is(#secret-handoff,#connect-account) .sh-value{ font:12.5px/1.5 "IBM Plex Mono",monospace; color:var(--text);
   word-break:break-word; white-space:pre-wrap; }
-#secret-handoff .sh-field{ display:flex; flex-direction:column; gap:4px; margin:8px 0; }
-#secret-handoff .sh-field span{ font-size:12px; color:var(--text-muted); }
-#secret-handoff .sh-field input{
+:is(#secret-handoff,#connect-account) .sh-field{ display:flex; flex-direction:column; gap:4px; margin:8px 0; }
+:is(#secret-handoff,#connect-account) .sh-field span{ font-size:12px; color:var(--text-muted); }
+:is(#secret-handoff,#connect-account) .sh-field input{
   border:1px solid var(--border-strong); border-radius:7px; padding:8px 10px;
   background:var(--surface-1); color:var(--text); font:13px/1.2 "IBM Plex Mono",monospace;
 }
-#secret-handoff .sh-btns{ display:flex; gap:8px; }
-#secret-handoff .sh-btns button{
+:is(#secret-handoff,#connect-account) .sh-btns{ display:flex; gap:8px; }
+:is(#secret-handoff,#connect-account) .sh-btns button{
   border-radius:7px; padding:7px 15px; font-weight:600; cursor:pointer;
   border:1px solid var(--border-strong); background:transparent; color:var(--text);
 }
-#secret-handoff #sh-type{ background:var(--ok-fill); border-color:var(--ok-edge); color:var(--ok-text); }
-#secret-handoff .sh-status{ margin-top:8px; font-size:12.5px; color:var(--text-muted); }
+:is(#secret-handoff,#connect-account) .sh-go{ background:var(--ok-fill); border-color:var(--ok-edge); color:var(--ok-text); }
+:is(#secret-handoff,#connect-account) .sh-hint{ font-size:11.5px; line-height:1.45; color:var(--text-muted); }
+:is(#secret-handoff,#connect-account) .sh-status{ margin-top:8px; font-size:12.5px; color:var(--text-muted); }
 
 /* ---- initiative & memory cards --------------------------------------- */
 #initiative{ display:flex; flex-direction:column; gap:10px; margin:0 0 14px; }
@@ -2751,10 +2759,37 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
         <input id="sh-secret" type="password" autocomplete="off" spellcheck="false" maxlength="4096">
       </label>
       <div class="sh-btns">
-        <button id="sh-type" type="button">Type into the checked target</button>
+        <button id="sh-type" class="sh-go" type="button">Type into the checked target</button>
         <button id="sh-cancel" type="button">Cancel</button>
       </div>
       <div id="sh-status" class="sh-status" hidden></div>
+    </section>
+    <!-- Connect-account card (2026-10-28): "connect my calendar", "set up
+         github". The HOST raises it and says which service; the boxes are
+         typed HERE, on this PC, and go straight into Windows Credential
+         Manager through a host-only route. Nothing typed in this card is ever
+         in the chat, the model's context, a log or a file, and the phone has
+         no card at all. What this PC will do is stated in the card's own
+         words, never the model's. -->
+    <section id="connect-account" hidden aria-live="polite">
+      <div class="sh-head">
+        <span class="sh-title">Connect an account</span>
+        <span class="sh-kind" id="ca-service"></span>
+      </div>
+      <div class="sh-box sh-target">
+        <div class="sh-label">What this PC will do</div>
+        <div class="sh-value" id="ca-summary"></div>
+      </div>
+      <div class="sh-box sh-purpose" id="ca-note-box" hidden>
+        <div class="sh-label">Jarvis's note (unverified):</div>
+        <div class="sh-value" id="ca-note"></div>
+      </div>
+      <div id="ca-fields"></div>
+      <div class="sh-btns">
+        <button id="ca-save" class="sh-go" type="button">Save it on this PC</button>
+        <button id="ca-cancel" type="button">Cancel</button>
+      </div>
+      <div id="ca-status" class="sh-status" hidden></div>
     </section>
     <div id="initiative" hidden></div>
 
@@ -7683,6 +7718,148 @@ async function shCancel(){
   if(cancel) cancel.addEventListener("click", shCancel);
   shPoll();
   SH.pollTimer = setInterval(shPoll, 2000);
+})();
+
+/* ---- connect-account card (2026-10-28) --------------------------------
+ * "connect my calendar" / "set up github". The HOST raises the card and names
+ * the service and its boxes (the page never decides either); the owner types
+ * the values HERE, on this PC, and Rust POSTs them to the backend's host-only
+ * route, which writes them straight into Windows Credential Manager and then
+ * tests the service once. The values are never logged, never put in the DOM
+ * after submit (every box is cleared), never sent to the model and never kept
+ * in this window. The receipt this card prints is the host's own words. */
+const CA = { inflight:false, pollTimer:null, card:null };
+function caCards(){ return (window.__caCards || []); }
+function caFieldId(name){ return "ca-f-" + String(name || ""); }
+function caInputs(){ return Array.prototype.slice.call(document.querySelectorAll("#ca-fields input")); }
+function caClearValues(){ caInputs().forEach(function(i){ i.value = ""; }); }
+function caStatus(text){
+  const el = document.getElementById("ca-status");
+  if(!el) return;
+  el.textContent = String(text || "");
+  el.hidden = !text;
+}
+function caFields(card){
+  const box = document.getElementById("ca-fields");
+  if(!box) return;
+  box.textContent = "";
+  (card.fields || []).forEach(function(f){
+    const label = document.createElement("label");
+    label.className = "sh-field";
+    const span = document.createElement("span");
+    span.textContent = String(f.label || f.name || "");
+    const input = document.createElement("input");
+    input.id = caFieldId(f.name);
+    input.type = (f.secret === true) ? "password" : "text";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.maxLength = 4096;
+    // The host's OWN hint, never the model's words. Title keeps it one line.
+    if(f.hint) input.title = String(f.hint);
+    label.appendChild(span);
+    label.appendChild(input);
+    if(f.hint){
+      const hint = document.createElement("span");
+      hint.className = "sh-hint";
+      hint.textContent = String(f.hint);
+      label.appendChild(hint);
+    }
+    box.appendChild(label);
+  });
+}
+function caPaint(){
+  const box = document.getElementById("connect-account");
+  if(!box) return;
+  const card = caCards()[0];
+  if(!card){ CA.card = null; box.hidden = true; return; }
+  box.hidden = false;
+  const changed = !CA.card || CA.card.card_id !== card.card_id;
+  CA.card = card;
+  const svc = document.getElementById("ca-service");
+  if(svc) svc.textContent = String(card.service_label || card.service || "");
+  const summary = document.getElementById("ca-summary");
+  if(summary) summary.textContent = String(card.summary || "");
+  const noteBox = document.getElementById("ca-note-box");
+  const note = document.getElementById("ca-note");
+  const said = String(card.agent_claimed_note || "");
+  if(noteBox) noteBox.hidden = !said;
+  if(note) note.textContent = said || "";
+  if(changed) caFields(card);
+  const btn = document.getElementById("ca-save");
+  if(btn) btn.textContent = "Save it on this PC";
+}
+async function caPoll(){
+  if(CA.inflight || document.hidden) return;
+  CA.inflight = true;
+  try{
+    const r = await jfetch("/api/connect-account/pending", {
+      cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    if(!r.ok){ return; }
+    const data = await r.json();
+    window.__caCards = (data && data.cards) || [];
+    caPaint();
+  }catch(e){ return; }
+  finally{ CA.inflight = false; }
+}
+async function caSave(){
+  const card = caCards()[0];
+  if(!card) return;
+  const values = {};
+  let empty = "";
+  (card.fields || []).forEach(function(f){
+    const input = document.getElementById(caFieldId(f.name));
+    const v = input ? input.value : "";
+    if(!String(v).trim()){ empty = empty || String(f.label || f.name); }
+    values[String(f.name)] = String(v);
+  });
+  if(empty){ caStatus("Fill in " + empty + " first."); return; }
+  const btn = document.getElementById("ca-save");
+  if(btn) btn.disabled = true;
+  try{
+    // The page holds NO token (audit M2): Rust makes this POST and adds the
+    // token itself (`hud_connect_account_save`). The values are not logged.
+    const out = await shInvoke("hud_connect_account_save",
+                               {cardId: card.card_id, values: values});
+    // Clear every box BEFORE any repaint or message, and never echo a value.
+    caClearValues();
+    window.__caCards = [];
+    caPaint();
+    caStatus(caReceipt(out));
+    setTimeout(caPoll, 300);
+  }catch(e){
+    caClearValues();
+    caStatus(String((e && e.message) || "The values were not saved."));
+  }finally{ if(btn) btn.disabled = false; }
+}
+function caReceipt(out){
+  // The host's own receipt: the store entry names and what the one real test
+  // proved. It cannot contain a value - the backend builds it from names and a
+  // verdict - and this function adds none.
+  const r = (out && typeof out === "object") ? out : {};
+  const saved = Array.isArray(r.saved_to) ? r.saved_to.join(", ") : "";
+  const said = String(r.verify_words || (r.verified ? "It works." : "It was not tested."));
+  let text = (saved ? ("Saved in Windows Credential Manager: " + saved + ". ") : "Saved. ") + said;
+  if(r.note) text += " " + String(r.note);
+  return text;
+}
+async function caCancel(){
+  const card = caCards()[0];
+  caClearValues();
+  window.__caCards = [];
+  caPaint();
+  if(!card) return;
+  try{
+    await shInvoke("hud_connect_account_cancel", {cardId: card.card_id});
+  }catch(e){}
+  setTimeout(caPoll, 300);
+}
+(function(){
+  const save = document.getElementById("ca-save");
+  const cancel = document.getElementById("ca-cancel");
+  if(save) save.addEventListener("click", caSave);
+  if(cancel) cancel.addEventListener("click", caCancel);
+  caPoll();
+  CA.pollTimer = setInterval(caPoll, 2000);
 })();
 
 setInterval(apprTick, 1000);

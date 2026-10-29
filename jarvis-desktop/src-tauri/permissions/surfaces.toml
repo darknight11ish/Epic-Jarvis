@@ -242,6 +242,12 @@ permissions = [
   # never logged, and the host-only backend route does the typing.
   "allow-hud-secret-handoff-fill",
   "allow-hud-secret-handoff-cancel",
+  # The connect-account card (2026-10-28): save or cancel ONE card. The values
+  # are typed by the owner into the page, cross Rust once and go straight into
+  # Windows Credential Manager through the backend's host-only route; nothing
+  # is kept in this window and the phone has no card at all.
+  "allow-hud-connect-account-save",
+  "allow-hud-connect-account-cancel",
 ]
 
 # The daily brief and the interruption budget. Granted to the quickbar alone,

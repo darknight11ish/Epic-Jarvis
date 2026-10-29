@@ -1,0 +1,216 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -27,6 +27,13 @@
+   - the database cannot be opened at all         -> denied
+ That last one matters. A gate that opens when it breaks is not a gate, so if
+ this module cannot do its job it refuses rather than waving things through.
++
++The timeout is per action, and four deliberate cards have NONE - see
++APPROVAL_NEVER_EXPIRES. Waiting is not approving: such a card still runs
++nothing until a person answers it, it is still answerable only while it is
++the live card, and a denial is still a denial. What changes is only that
++silence stops being an answer, and only for the three interactive ceremonies
++the owner approved on 2026-10-23 - every routine card keeps its window.
+ """
+ 
+ from __future__ import annotations
+@@ -67,6 +74,65 @@
+     "JARVIS_APPROVAL_TIMEOUT",
+     _cfg("autonomy", "approval_timeout_seconds", 900)))
+ POLL_SECONDS = 0.25
++
++# Cards that do NOT expire: the three flows the owner approved on 2026-10-23
++# (ruling Q1), and nothing else. Pairing a device (its QR/text code, and the
++# old shared key's "bring back"), registering a phone's approval key, and
++# restoring a backup are interactive ceremonies the owner starts and has to
++# finish AT THIS PC: finding a recovery code, signing in on a new tablet, or
++# reconnecting after a restore can each take longer than the 15-minute window
++# #378 gives every ordinary card. A card that lapses half way through one of
++# those loses work and has to be started again from scratch.
++#
++# What is NOT here, on purpose: the twenty-three-action list this work was
++# rescued from. "Forget a time frame" and every switch that loosens a rule
++# (web search, reading tools, notifications, learning, limits, the voice bar)
++# are NOT exempt: those are exactly the cards a stale "yes" makes dangerous,
++# and the owner's ruling keeps them on the ordinary 15-minute window.
++#
++# The names are the gate's OWN action ids - the strings jarvis_devices.py and
++# jarvis_backup.py pass to check() and jarvis-framework.toml declares - not
++# tool names, not flow names, and not anything a caller supplies.
++#   pair_device, unretire_shared_key, register_approval_key   jarvis_devices.py
++#   restore_backup                                            jarvis_backup.py
++#
++# There is no "flow" argument anywhere in this module: an action is exempt
++# because its own id is in the set below, so no caller can ask for no deadline
++# by naming a flow, by omitting one, or by sending 0, a negative number or an
++# unknown name. timeout_for() treats every value that is not exactly one of
++# these ids as an ordinary 15-minute card - see its own docstring.
++APPROVAL_NEVER_EXPIRES = frozenset({
++    "pair_device", "unretire_shared_key", "register_approval_key",
++    "restore_backup",
++})
++
++
++def timeout_for(action: Any) -> Optional[float]:
++    """How long `action`'s card waits for a person, or None: no deadline.
++
++    None is not a very long time - it is the absence of one. A caller must
++    treat it as "wait", never as "wait for a while": there is no number here
++    to round, and adding one (an hour, a day) would only move the refusal to a
++    moment nobody chose. `check()` is the caller that matters; `pending()`
++    reads it too, so a card with no deadline carries no `expires_in` and the
++    apps show no countdown rather than one that never ends.
++
++    THE ONLY WAY IN IS THE EXACT ACTION ID. A value that is not one of the
++    strings in APPROVAL_NEVER_EXPIRES - None, "", 0, -1, a flow name such as
++    "pairing", the wrong case, a padded or truncated name, an unknown name -
++    is an ordinary 15-minute card. The `str()` is deliberate: it turns an
++    unhashable or non-string value into something that cannot be in the set
++    instead of raising, so a malformed value fails closed rather than
++    escaping the check. A caller-supplied `timeout=` on check() still wins
++    over this: a caller that passes one is deciding for itself, which is what
++    the suites do.
++    """
++    try:
++        name = str(action) if action is not None else ""
++    except Exception:
++        return APPROVAL_TIMEOUT
++    return None if name in APPROVAL_NEVER_EXPIRES else APPROVAL_TIMEOUT
++
+ 
+ # An action nobody thought to classify is not thereby safe. Configurable, but
+ # only downward-unsafe by explicit choice - the default stays "ask".
+@@ -123,9 +189,24 @@
+             # A process that died mid-wait leaves its row 'pending' forever,
+             # and the HUD keeps offering it. Anything older than the timeout
+             # plus a grace period cannot still have a waiter.
+-            c.execute("UPDATE approvals SET state='expired', decided=? "
+-                      "WHERE state='pending' AND created < ?",
+-                      (time.time(), time.time() - APPROVAL_TIMEOUT - 60))
++            # Not for a card with NO deadline (APPROVAL_NEVER_EXPIRES): such
++            # a card is supposed to sit there until the owner answers it, and
++            # sweeping it on age would expire by the back door the very cards
++            # this change exists to leave waiting. The cost is said plainly: a
++            # deliberate card whose waiting thread died stays pending, and
++            # stays on screen, until the owner withdraws it or starts the
++            # pairing/restore again. That is the smaller risk of the two for
++            # these four ceremonies, and it is why withdraw() exists below and
++            # why the pairing and approval-key flows call it when their
++            # session is cancelled or replaced. Every other action, including
++            # every action nobody thought to classify, is swept exactly as
++            # before.
++            _forever = sorted(APPROVAL_NEVER_EXPIRES)
++            _marks = ",".join("?" * len(_forever))
++            c.execute(f"UPDATE approvals SET state='expired', decided=? "
++                      f"WHERE state='pending' AND created < ? "
++                      f"AND action NOT IN ({_marks})",
++                      (time.time(), time.time() - APPROVAL_TIMEOUT - 60, *_forever))
+             c.execute("""
+                 CREATE TABLE IF NOT EXISTS taint (
+                     key   TEXT PRIMARY KEY,
+@@ -1844,7 +1925,13 @@
+     _push(_note["title"],
+           _note["body"] + f"\n(id {rid}) - open Jarvis to decide")
+ 
+-    deadline = time.time() + (APPROVAL_TIMEOUT if timeout is None else timeout)
++    # How long this card waits. `timeout` is the caller deciding for itself
++    # (the suites do); otherwise the action decides, and None means the owner
++    # has as long as they need - see APPROVAL_NEVER_EXPIRES. A deadline of a
++    # day would still be a deadline, and it would refuse the pairing card of
++    # somebody who came back tomorrow.
++    waited = timeout_for(action) if timeout is None else timeout
++    deadline = None if waited is None else time.time() + waited
+     # One connection for the whole wait rather than one per poll.
+     watch = None
+     try:
+@@ -1852,7 +1939,10 @@
+             watch = _connect()
+         except Exception:
+             watch = None
+-        while time.time() < deadline:
++        # None is the no-deadline case, and it must not be read as "already
++        # past" (`time.time() < None` raises in Python 3): with no deadline
++        # the wait ends when the row does - answered, withdrawn, or replaced.
++        while deadline is None or time.time() < deadline:
+             time.sleep(POLL_SECONDS)
+             try:
+                 if watch is None:
+@@ -1870,5 +1960,11 @@
+                     pass
+                 watch = None
+                 continue
++            if row is not None and row["state"] not in ("pending", "approved", "denied"):
++                # Withdrawn, or swept by another process's start-up: the card
++                # is not waiting any more, so neither is this. Without this
++                # line a card with no deadline would keep polling a row that
++                # exists and can never change again.
++                break
+             if row is None:
+                 break
+@@ -2208,16 +2304,22 @@
+         d["replaces_heading"] = _kinds.get("heading", "")
+         d["replaces_note"] = _kinds.get("note", "")
+         # approval-expiry.patch: how many seconds this card has left before
+-        # check() stops waiting and refuses it. check() waits APPROVAL_TIMEOUT
+-        # from just after the row is written, so `created` plus that is the
+-        # deadline. Sent as seconds LEFT, not a clock time, so a phone whose
+-        # clock disagrees with this PC still counts down correctly. A row
++        # check() stops waiting and refuses it. check() waits this action's own
++        # timeout from just after the row is written, so `created` plus that is
++        # the deadline. Sent as seconds LEFT, not a clock time, so a phone
++        # whose clock disagrees with this PC still counts down correctly. A row
+         # whose `created` is not a number gets no field, and the clients then
+-        # show no countdown rather than a wrong one.
++        # show no countdown rather than a wrong one - and so does a card whose
++        # action never expires (APPROVAL_NEVER_EXPIRES, timeout_for returning
++        # None), which is a card that waits for the owner rather than one that
++        # runs out. The field is left OFF, never 0: 0 means "expired now" to
++        # both apps, and they would refuse a card that is still answerable.
+         try:
+-            d["expires_in"] = max(0, int(float(d.get("created"))
+-                                         + float(APPROVAL_TIMEOUT)
+-                                         - time.time()))
++            left = timeout_for(d.get("action"))
++            if left is not None:
++                d["expires_in"] = max(0, int(float(d.get("created"))
++                                             + float(left)
++                                             - time.time()))
+         except (TypeError, ValueError):
+             pass
+         # Why this is being asked about at all, when the table said otherwise.
+@@ -2249,6 +2351,35 @@
+             ("approved" if approved else "denied", time.time(),
+              str(by or "hud")[:64], request_id))
+         return cur.rowcount > 0
++
++
++def withdraw(request_id: str, why: str = "") -> bool:
++    """Take a card off the list because the work it asked about is gone.
++
++    Not a decision - nobody said yes or no - so the row is recorded exactly as
++    a lapse is (state 'expired', and the waiter it wakes reports timed_out,
++    "nobody answered"), never as a denial: a denial is an answer, it proposes
++    a memory rule, and inventing one would be putting words in the owner's
++    mouth. What this adds is the one thing a card with NO deadline cannot do
++    for itself: with no clock to run out, a pairing or approval-key card whose
++    session was cancelled or replaced would sit in the list for ever,
++    answerable but never answerable-to-anything.
++
++    The waiting thread polls the row, so the UPDATE below ends its wait on the
++    next tick, exactly as a lapse does. Returns False for an unknown id or one
++    already decided, so a cancel after the fact changes nothing. Called
++    through getattr by jarvis_devices.py, so a backend without this patch
++    keeps working exactly as it did.
++    """
++    _init()
++    with closing(_connect()) as c:
++        cur = c.execute("UPDATE approvals SET state='expired', decided=?"
++                        " WHERE id=? AND state='pending'",
++                        (time.time(), request_id))
++        gone = cur.rowcount > 0
++    if gone:
++        _audit("gate.withdrawn", {"id": request_id, "why": why})
++    return gone
+ 
+ 
+ def history(limit: int = 50) -> list[dict]:

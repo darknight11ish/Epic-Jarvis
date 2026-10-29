@@ -1,7 +1,13 @@
-"""Four account secrets, moved off plain-text Windows environment variables
+"""Seven account secrets, moved off plain-text Windows environment variables
 into Windows Credential Manager (ease-of-use audit row 15, "Security G3"):
 the IMAP username and password (jarvis_email.py), the private calendar link
-(jarvis_calendar.py) and the Home Assistant token (jarvis_home.py).
+(jarvis_calendar.py), the Home Assistant token (jarvis_home.py) - and, since
+the owner's ask of 2026-10-28 ("connect my accounts by talking to Jarvis"),
+the CalDAV username and password (jarvis_calendar.py) and the GitHub personal
+access token (jarvis_research.py and jarvis_tellme.py). The last three had no
+Credential Manager entry at all before that: they were read ONLY from a
+plain-text environment variable, which is the rule 3 breach the connect card
+fixed.
 
     python3 test_account_secrets.py
 
@@ -32,6 +38,13 @@ WHAT THIS PROVES
     their own Credential Manager target, and each target's text matches
     what jarvis-desktop/src-tauri/src/token_store.rs writes under (so a
     value the owner types into Settings is the value the backend reads).
+  - the three the connect-account card writes (2026-10-28) resolve the same
+    way and are filed under the reading module's own name:
+    jarvis_calendar.login() for the CalDAV username and password, and
+    jarvis_research._token() (shared with jarvis_tellme) for the GitHub token.
+    They have no Settings box - the card is their door - so they are NOT in
+    the desktop's ACCOUNT_SECRET_TARGETS table and are checked against the
+    backend modules instead.
   - default_store(target) is parametrized (a decision-only refactor to serve
     more than one target) and the pairing token's own resolve() is
     unaffected: default_store() with no argument still opens the pairing
@@ -49,6 +62,7 @@ import jarvis_token_store as TS  # noqa: E402
 import jarvis_email as EMAIL  # noqa: E402
 import jarvis_calendar as CAL  # noqa: E402
 import jarvis_home as HOME  # noqa: E402
+import jarvis_research as RES  # noqa: E402
 import jarvis_scrub as SCRUB  # noqa: E402
 
 REPO = HERE.parent
@@ -234,6 +248,69 @@ def t_home_assistant_token():
             os.environ[HOME.TOKEN_ENV] = saved
 
 
+def t_caldav_and_github_resolve_through_the_same_mechanism():
+    """The three entries the connect-account card writes (2026-10-28). Same
+    order as every other one: the environment variable first, Credential
+    Manager second, and never a value made up."""
+    import jarvis_research as RES
+
+    def _(store_factory, fn):
+        saved = TS._STORE_FACTORY
+        TS._STORE_FACTORY = store_factory
+        try:
+            return fn()
+        finally:
+            TS._STORE_FACTORY = saved
+
+    import os
+    saved_env = {k: os.environ.get(k) for k in
+                 (CAL.USER_ENV, CAL.PASSWORD_ENV, RES.TOKEN_ENV)}
+    try:
+        for k in saved_env:
+            os.environ.pop(k, None)
+        factory = lambda target: {  # noqa: E731
+            CAL.USER_TARGET: FakeStore("owner@example.com"),
+            CAL.PASSWORD_TARGET: FakeStore("calendar-app-password"),
+            RES.TOKEN_TARGET: FakeStore("ghp_stored"),
+        }.get(target, FakeStore(None))
+        check("jarvis_calendar.login() falls back to Credential Manager",
+              _(factory, CAL.login) == ("owner@example.com", "calendar-app-password"))
+        check("authenticated() follows login()", _(factory, CAL.authenticated) is True)
+        check("jarvis_research._token() falls back to Credential Manager",
+              _(factory, RES._token) == "ghp_stored")
+        check("jarvis_research.authenticated() follows it",
+              _(factory, RES.authenticated) is True)
+        import jarvis_tellme as TELL
+        check("jarvis_tellme's GitHub watches use the same resolver",
+              _(factory, TELL._github_token) == "ghp_stored")
+        os.environ[CAL.PASSWORD_ENV] = "set-by-hand"
+        check("the environment variable still wins over Credential Manager",
+              _(factory, CAL.login)[1] == "set-by-hand")
+        os.environ[RES.TOKEN_ENV] = "ghp_from_env"
+        check("... for the GitHub token too", _(factory, RES._token) == "ghp_from_env")
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def t_the_connect_cards_entries_are_the_reading_modules_own_names():
+    """The connect card must write where the feature reads. The three names
+    are the modules' own constants, so a rename in one place fails here."""
+    import jarvis_connect_account as CONNECT
+    want = {"calendar_ics": {"url": CAL.ICS_URL_TARGET},
+            "calendar_caldav": {"username": CAL.USER_TARGET,
+                                "password": CAL.PASSWORD_TARGET},
+            "github": {"token": RES.TOKEN_TARGET}}
+    for sid, mapping in want.items():
+        check(f"the connect card's {sid} entries are the reader's own names",
+              CONNECT.targets(sid) == mapping, f"{CONNECT.targets(sid)} != {mapping}")
+        check(f"... and every one is a Jarvis Backend/ name",
+              all(v.startswith("Jarvis Backend/") for v in mapping.values()))
+
+
 def t_no_secret_ever_appears_in_an_error_message():
     """Same rule test_token_store.py checks for the pairing token: every
     raise in jarvis_token_store.py names a Windows error or a reason, never
@@ -299,6 +376,37 @@ def t_live_windows_round_trip():
             pass
 
 
+def t_live_the_three_connect_entries_on_real_windows():
+    """The connect-account card's three entries, on the real store (2026-10-28).
+
+    On Windows only, exactly like the round trip above: each REAL name is
+    checked for being writable under a THROWAWAY name derived from it, so the
+    required `credential-manager` CI job covers the shape of every new entry
+    without ever touching a real one. Off Windows this prints the skip and does
+    not pretend to have run - a skip is never a pass."""
+    import os
+    import secrets
+
+    if os.name != "nt":
+        print("skip  live connect-account entries (not Windows)")
+        return
+    import jarvis_connect_account as CONNECT
+    for sid in ("calendar_caldav", "github", "calendar_ics"):
+        for target in CONNECT.targets(sid).values():
+            throwaway = f"{target} test {secrets.token_hex(6)}"
+            store = TS.WindowsStore(throwaway)
+            try:
+                value = secrets.token_urlsafe(24)
+                store.write(value)
+                check(f"live: {target} - the real name's shape is accepted",
+                      store.read() == value)
+            finally:
+                try:
+                    store.delete()
+                except TS.StoreError:
+                    pass
+
+
 if __name__ == "__main__":
     for fn in (t_env_wins_when_set, t_falls_back_to_the_store, t_blank_env_falls_through,
                t_nothing_anywhere_is_simply_unconfigured,
@@ -307,9 +415,12 @@ if __name__ == "__main__":
                t_default_store_is_parametrized_and_the_pairing_token_is_unaffected,
                t_only_a_store_sourced_value_is_registered_with_the_scrubber,
                t_imap_credentials, t_calendar_ics_link, t_home_assistant_token,
+               t_caldav_and_github_resolve_through_the_same_mechanism,
+               t_the_connect_cards_entries_are_the_reading_modules_own_names,
                t_no_secret_ever_appears_in_an_error_message,
                t_the_desktop_writes_under_the_same_four_names,
-               t_live_windows_round_trip):
+               t_live_windows_round_trip,
+               t_live_the_three_connect_entries_on_real_windows):
         try:
             fn()
         except Exception as exc:

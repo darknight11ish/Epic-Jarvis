@@ -20,6 +20,16 @@ was designed to be injected into. It does four things and nothing else:
      `execute_owner_fill(..., from_this_pc=True)`. The engine - not this module
      - decides every void condition and whether anything is typed.
 
+AND ONE SIBLING DOOR (2026-10-28)
+
+`install()` also installs the connect-account card's three routes
+(`jarvis_connect_account_wiring.py`), because the patch that calls this one
+function is the only place a new route may come from here: "connect my
+calendar" saves a value into Credential Manager instead of typing it into a
+control, so it is a different card with the same host-only, no-log discipline.
+It is installed in its own module and its own try, so a backend without it
+keeps the hand-off and loses only that card.
+
 WHAT IS DELIBERATELY NOT WIRED (honest, 2026-10-26)
 
 The browser path is NOT wired in this slice. `jarvis_browser_control.py` has no
@@ -444,5 +454,24 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     handler_cls.do_GET = do_GET
     if post0 is not None:
         handler_cls.do_POST = do_POST
-    return "  secrets    Owner-secret hand-off card: on"
+    return "  secrets    Owner-secret hand-off card: on" + _install_connect(handler_cls, origin_ok=origin_ok, token_ok=token_ok, read_body=read_body)
+
+
+def _install_connect(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
+    """Install the connect-account card's routes through THIS same entry point.
+
+    The connect card ("connect my calendar", 2026-10-28) is a host-only write
+    that saves into Credential Manager rather than typing into a control, so it
+    is a sibling door and not a second patch: `secret-handoff.patch` already
+    calls `install()` once, and that call installs both. A backend without
+    `jarvis_connect_account_wiring.py` keeps the hand-off and loses only the
+    connect card - the banner says which, in words, on its own line.
+    """
+    try:
+        import jarvis_connect_account_wiring
+        return "\n" + jarvis_connect_account_wiring.install(
+            handler_cls, origin_ok=origin_ok, token_ok=token_ok, read_body=read_body)
+    except Exception as exc:                # noqa: BLE001 - the NAME only
+        return (f"\n  connect    NOT ON ({type(exc).__name__}) - connecting an account "
+                "from the HUD card is off")
 

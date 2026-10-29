@@ -67,9 +67,21 @@ GITHUB_API = "https://api.github.com"
 #: than cached at import time, so rotating it needs no restart.
 TOKEN_ENV = "JARVIS_GITHUB_TOKEN"
 
+#: Windows Credential Manager name for the same token (2026-10-28, the owner's
+#: "connect my accounts by talking to Jarvis" ask). Until this, the token was
+#: read ONLY from `TOKEN_ENV` - a plain-text Windows user environment variable -
+#: which is the rule 3 breach that ask made worth fixing. `_token()` keeps the
+#: order every other named secret uses (jarvis_token_store.resolve_secret): the
+#: environment variable still wins when one is set, so an installation that
+#: already works keeps working, and Credential Manager is only ever the
+#: fallback. The connect-account card on this PC is the one writer
+#: (jarvis_connect_account.py); the value is never in the chat, a log or a file.
+TOKEN_TARGET = "Jarvis Backend/GitHub token"
+
 
 def _token() -> str:
-    return os.environ.get(TOKEN_ENV, "").strip()
+    import jarvis_token_store
+    return jarvis_token_store.resolve_secret(TOKEN_ENV, TOKEN_TARGET)
 
 
 def authenticated() -> bool:

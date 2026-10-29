@@ -47,6 +47,7 @@ import com.jarvis.client.ui.SettingsSearch
 import com.jarvis.client.ui.SettingsSearchWords
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
+import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.Secondary
@@ -246,6 +247,17 @@ fun SettingsScreen(
      * as a destination before there is a desktop to push to.
      */
     onOpenAppearance: (() -> Unit)? = null,
+    /**
+     * "Pair with your PC", inside the Devices card - the way back into the
+     * pairing screen from Settings (2026-10-28).
+     *
+     * Never null in the running app: unlike [onTrainVoice] and its neighbours
+     * this needs no desktop, because it is the control that decides WHICH
+     * desktop, so an unpaired or unreachable phone is exactly who needs it.
+     * Null only for previews and tests, where the button is then not drawn
+     * rather than drawn doing nothing.
+     */
+    onPairWithPc: (() -> Unit)? = null,
     /** "Floating Jarvis" - saved on this phone only, so it needs no `canAct` gate. */
     floatingAvatar: FloatingAvatarMode = FloatingAvatarMode.OFF,
     onFloatingAvatarChange: (FloatingAvatarMode) -> Unit = {},
@@ -696,19 +708,49 @@ fun SettingsScreen(
 
             // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),
             // shown only when the PC reports pairing (section 5.5).
+            //
+            // "Pair with your PC" lives in this card (2026-10-28). The owner
+            // reported a phone that would not pair and a Settings screen with
+            // nothing to reconnect to the PC with - correctly: this card held
+            // only "Unpair & clear the token", which takes the pairing AWAY.
+            // The pairing screen is drawn only while `!paired || repairing`,
+            // so a phone still holding a token (after the PC's key was
+            // rotated, or the address moved) never saw it again. The card now
+            // offers the way back, in BOTH branches, because the branch that
+            // used to say "does not have a device list yet" is also the branch
+            // a phone with no reachable PC lands in.
             if (menus.shows("settings.devices")) if (drawn("devices")) if (menus.shows("settings.devices")) item(key = "devices") {
                 MenuFrame(menus, "settings.devices") {
                     val version by com.jarvis.client.JarvisRuntime.version.collectAsState()
                     if (version?.can("pairing") == true) {
-                        DevicesSection()
+                        DevicesSection(onPair = onPairWithPc)
                     } else {
                         Section("Devices") {
                             Plate {
+                                // Two different reasons for no list, and they
+                                // used to read as one: not reached at all, or
+                                // reached a PC too old to serve it. Devices
+                                // .notShown picks; the pair button is drawn
+                                // either way.
                                 Text(
-                                    com.jarvis.client.net.Devices.MISSING,
+                                    com.jarvis.client.net.Devices.notShown(version != null),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = chrome.textLo,
                                 )
+                                onPairWithPc?.let { pair ->
+                                    Gap(10)
+                                    Primary(
+                                        text = com.jarvis.client.net.Devices.PAIR_BUTTON,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = pair,
+                                    )
+                                    Gap(4)
+                                    Text(
+                                        com.jarvis.client.net.Devices.PAIR_HELP,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = chrome.textMid,
+                                    )
+                                }
                             }
                         }
                     }

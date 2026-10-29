@@ -3198,6 +3198,24 @@ class MainActivity : FragmentActivity() {
                         // it), so a later manual visit to Settings does not
                         // scroll anywhere on its own.
                         onSectionConsumed = sectionConsumed,
+                        // "Pair with your PC" in Settings, Devices (2026-10-28):
+                        // the same two lines "Platform checks" already runs for
+                        // its "Change desktop or token" button, so there is ONE
+                        // definition of how re-pairing starts. It is offered
+                        // whether or not this phone is paired: when it is not,
+                        // the pairing screen is already what the app shows, and
+                        // this simply leaves Settings for it.
+                        //
+                        // The saved address is filled in unless a re-pair is
+                        // already under way, exactly as on Platform checks -
+                        // otherwise a half-typed address would be thrown away.
+                        // `resetTo`, not `go`: Back must not walk into a
+                        // Settings screen the pairing flow has already left.
+                        onPairWithPc = {
+                            if (!repairing) pairingHost = JarvisRuntime.settings.host.value
+                            repairing = true
+                            nav.resetTo(Screen.HOME)
+                        },
                         // Picture mode's button to the Looking at your screen
                         // switch, which is on the Security screen.
                         onOpenLookSwitch = {
@@ -4400,6 +4418,18 @@ class MainActivity : FragmentActivity() {
         if (JarvisRuntime.isPaired()) {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }
+            // The approval queue is the one list the PC settles on its own
+            // while the phone was away. Since 2026-10-28 the gate runs its
+            // expiry sweep on every read (`jarvis_gate._expire_overdue`), so
+            // a card whose deadline passed while Jarvis sat in the background
+            // is simply no longer in the answer — but the list on screen is a
+            // copy, and nothing told it to re-read. That left the owner
+            // reopening Jarvis onto the same expired cards, with nothing on
+            // the card and nothing on the screen to clear them ("there is
+            // approval cards that are expired, how do I clear them easily
+            // from my android phone", 2026-10-28). A read: it approves,
+            // denies and clears nothing.
+            lifecycleScope.launch { JarvisRuntime.refreshPending() }
             // Coming back to a link that is "Catching up…" reconnects at
             // once, the same forced reconnect as Home's Retry (phone
             // walk-through, 2026-09-27). After the phone slept the socket is

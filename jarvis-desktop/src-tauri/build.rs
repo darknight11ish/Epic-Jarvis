@@ -141,6 +141,16 @@ fn main() {
             // its own POSTs stay refused; hud_proxy.rs owns the read.
             "hud_secret_handoff_fill",
             "hud_secret_handoff_cancel",
+            // The HUD connect-account card (2026-10-28): save or cancel ONE
+            // card. The values are typed by the owner on this PC and cross Rust
+            // once into Windows Credential Manager; the page holds no token and
+            // its own POSTs stay refused. The two entries are what generate
+            // `allow-hud-connect-account-{save,cancel}`, which `surfaces.toml`'s
+            // hud-link set names - without them Tauri generates no such
+            // permission and the card's own Save is refused by the ACL from
+            // every window (`tools/check_command_acl.py` caught exactly that).
+            "hud_connect_account_save",
+            "hud_connect_account_cancel",
             // The HUD's Presets menu (2026-10-27, the owner: the menu should
             // list "the different personalities of jarvis that i can select"):
             // read the personalities, and switch ONE of them. Wording only,

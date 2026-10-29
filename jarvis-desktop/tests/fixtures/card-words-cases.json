@@ -171,6 +171,10 @@
       "title": "Jarvis wants to check GitHub for a \"tell me when\""
     },
     {
+      "action": "google_calendar_write",
+      "title": "Jarvis wants to add, change or delete an event in your Google Calendar"
+    },
+    {
       "action": "handoff_bring_to_front",
       "title": "Jarvis wants to bring the stuck browser window to the front"
     },
@@ -917,6 +921,18 @@
       "notice": {
         "title": "Jarvis wants to check GitHub for a \"tell me when\"",
         "summary": "Jarvis wants to check GitHub for a \"tell me when\".",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "google_calendar_write",
+      "notice": {
+        "title": "Jarvis wants to add, change or delete an event in your Google Calendar",
+        "summary": "Jarvis wants to add, change or delete a calendar event.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

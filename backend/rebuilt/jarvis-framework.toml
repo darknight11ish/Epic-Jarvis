@@ -240,6 +240,13 @@ send_email                = "ask"
 tidy_inbox                = "ask"
 edit_calendar_event       = "ask"
 delete_calendar_event     = "ask"
+# The Google Calendar sign-in's ONE write action (2026-10-28,
+# jarvis_google_calendar.ACTION_WRITE): one card per create, change or delete,
+# at the same tier the two lines above already use. It resolved to "ask" before
+# this line existed, through unknown_action_tier, and that fallback is exactly
+# what test_gate_names.py refuses to leave unstated - the line makes the tier a
+# decision on the record instead of an accident.
+google_calendar_write     = "ask"
 delete_file               = "ask"
 run_shell_on_host         = "ask"
 spend_money               = "ask"

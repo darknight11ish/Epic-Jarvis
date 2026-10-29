@@ -112,6 +112,24 @@ class _Sched:
 OWNER_SAID = "can you connect directly to external calendars like google or outlook?"
 OWNER_SAID_2 = "set up a calendar bridge for me"
 
+#: WHAT THIS ANSWER STILL OWNS AFTER THE 2026-10-28 MERGE. Three branches
+#: touched `jarvis_quick.py`'s calendar answer the same day, so one sentence now
+#: has exactly one owner, and this is the table (`t_one_owner_per_sentence`):
+#:
+#:   * the CONNECT CARD (`connect_account`, in `_settings_adjust`) owns every
+#:     "connect/link/set up/add <a service>" sentence - including the two the
+#:     owner actually said above, which is why they are no longer asserted here:
+#:     the card is the act, and it takes the value where the owner types it;
+#:   * the GOOGLE answer (`google_calendar`) owns "what's on my calendar" and
+#:     "add/schedule/change an event", and is asked only after the fast path has
+#:     declined, so it cannot compete for "connect";
+#:   * THIS answer owns the setup shapes the card's grammar declines - the same
+#:     request in other words - and changes nothing.
+#:
+#: These two are that third shape, measured on the merged tree.
+SETUP_SAID = "sync my calendar with jarvis"
+SETUP_SAID_2 = "give jarvis access to my calendar"
+
 #: The model's answer in the screenshot, which this fix exists to replace. Only
 #: the false claims are quoted - "bridge" itself is in the honest answer too
 #: ("there is no bridge to set up"), so the test looks for the refusal shapes.
@@ -138,12 +156,12 @@ FORBIDDEN = (
 )
 
 
-def _answer(text=OWNER_SAID_2):
+def _answer(text=SETUP_SAID_2):
     return Q.answer(text, sched=_Sched())
 
 
-def t_the_owners_two_sentences_are_answered_without_the_model():
-    for said in (OWNER_SAID, OWNER_SAID_2):
+def t_the_setup_sentences_are_answered_without_the_model():
+    for said in (SETUP_SAID, SETUP_SAID_2):
         i = Q.match(said)
         check(f"{said!r} is the fast path's own answer",
               i is not None and i.name == "calendar_setup", i)
@@ -163,28 +181,126 @@ def t_the_owners_two_sentences_are_answered_without_the_model():
 
 
 def t_close_phrasings():
-    said = (
-        "can you connect to my google calendar?",
-        "connect my calendar",
-        "set up my calendar",
-        "set up my calendar please",
-        "add my google calendar",
-        "link my outlook calendar",
-        "hook up my calendar to jarvis",
+    #: Sentences THIS answer owns - the card's grammar declines them, so the
+    #: setup steps are the only answer. Measured, not guessed.
+    ours = (
         "sync my calendar with jarvis",
         "import my ics file into jarvis",
-        "how do I connect my calendar",
-        "how do I set up a calendar connection",
-        "can you set up a calendar connection",
         "give jarvis access to my calendar",
-        "connect a calendar",
         "calendar setup",
-        "is my calendar connected?",
     )
-    for s in said:
+    for s in ours:
         i = Q.match(s)
         check(f"{s!r} is answered without the model",
               i is not None and i.name == "calendar_setup", i)
+    #: The same request in the shapes the CONNECT CARD claims (2026-10-28
+    #: merge). This answer must NOT shadow the card for any of them:
+    #: `backend/test_connect_account.py` holds the card's own half, and the
+    #: split itself is pinned by `t_one_owner_per_sentence` below.
+    card = (
+        "can you connect to my google calendar?",
+        "can you connect directly to external calendars like google or outlook?",
+        "connect my calendar",
+        "set up my calendar",
+        "set up my calendar please",
+        "set up a calendar bridge for me",
+        "add my google calendar",
+        "link my outlook calendar",
+        "hook up my calendar to jarvis",
+        "how do I connect my calendar",
+        "how do I set up a calendar connection",
+        "connect a calendar",
+        "is my calendar connected?",
+    )
+    for s in card:
+        i = Q.match(s)
+        check(f"{s!r} belongs to the connect card, not this answer",
+              i is not None and i.name == "connect_account", i)
+
+
+def t_one_owner_per_sentence():
+    """The table: which branch answers which calendar sentence, after three
+    branches touched `jarvis_quick.py`'s answer path on 2026-10-28.
+
+    The rule this pins: ONE owner per sentence. A "connect my calendar"
+    sentence reaches the connect-account CARD (the card is the act and it takes
+    the value on this PC); a setup shape the card's grammar declines reaches
+    THIS answer; a read or an event change reaches `jarvis_google_calendar`'s
+    answer, which is asked only after the fast path has declined - so it can
+    never compete for "connect". Nothing here is a guess: every row is
+    measured through `Q.match`/`Q.answer` on the merged tree.
+    """
+    import jarvis_google_calendar as G
+
+    table = (
+        # -- the connect card: it raises a card, or answers a state question --
+        ("connect my calendar", "connect_account", "card", "calendar_ics"),
+        ("set up my calendar", "connect_account", "card", "calendar_ics"),
+        ("set up a calendar bridge for me", "connect_account", "card", "calendar_ics"),
+        ("can you connect directly to external calendars like google or outlook?",
+         "connect_account", "card", "calendar_ics"),
+        ("is my calendar connected?", "connect_account", "status", "calendar_ics"),
+        ("set up github", "connect_account", "card", "github"),
+        ("is github set up?", "connect_account", "status", "github"),
+        # an account this PC cannot test yet: answered honestly, no card
+        ("connect my email", "connect_account", "later", ""),
+        # -- this answer: the setup shapes the card does not claim --
+        ("calendar setup", "calendar_setup", None, None),
+        ("sync my calendar with jarvis", "calendar_setup", None, None),
+        # -- the Google answer: reads and event changes, asked only last --
+        ("what's on my calendar today", None, None, None),
+        ("add a meeting Tuesday 3pm", None, None, None),
+        ("add a calendar event at 5pm", None, None, None),
+        # -- and the two that must never move --
+        ("open my calendar", "open_app", None, None),
+        ("remind me to connect my calendar at 5pm", "reminder_set", None, None),
+    )
+    for said, owner, ask, service in table:
+        got = Q.match(said)
+        name = getattr(got, "name", None)
+        check(f"{said!r} is answered by {owner!r}", name == owner, got)
+        if owner == "connect_account":
+            check(f"... and its own facts say {ask!r}",
+                  (got.f.get("ask"), got.f.get("service", "")) == (ask, service), got.f)
+
+    # The connect sentence is answered end to end by the card, never by the
+    # setup steps: this is the sentence the Lead's rule names.
+    said = "connect my calendar"
+    reply = Q.answer(said, sched=_Sched())
+    check("'connect my calendar' answers with the card waiting, not the steps",
+          reply is not None and reply.intent == "connect_account" and
+          "One card is waiting" in reply.reply, reply and (reply.intent, reply.reply))
+    check("... and it does not carry the setup-steps answer",
+          reply is not None and "Integrate calendar" not in reply.reply,
+          reply and reply.reply)
+
+    # The Google answer owns the reads and the event sentences. Its own store
+    # read is stubbed, so this suite touches no network and no Credential
+    # Manager on this PC.
+    old_list, old_mode = G.list_events, G.mode
+    G.list_events = lambda days, **kw: {"ok": False, "connected": False,
+                                        "reason": "Google Calendar is not connected yet"}
+    G.mode = lambda: "off"
+    try:
+        r = Q.answer("what's on my calendar today", sched=_Sched())
+        check("a calendar read is the Google answer's, marked as a read",
+              r is not None and r.intent == "google_calendar" and
+              r.read == ["calendar_read"], r and (r.intent, r.read))
+        check("... answered from the real state, not a promise",
+              r is not None and "Not connected yet" in r.reply, r and r.reply)
+        add = Q.answer("add a meeting Tuesday 3pm", sched=_Sched())
+        check("an event sentence is the Google answer's too",
+              add is not None and add.intent == "google_calendar", add)
+        check("... and it never claims the event was created",
+              add is not None and "needs the Google sign-in way" in add.reply and
+              "I have added" not in add.reply and "Done" not in add.reply,
+              add and add.reply)
+    finally:
+        G.list_events, G.mode = old_list, old_mode
+
+    # A private chat must not reach Google at all (private-chat.patch).
+    check("a private chat does not reach the Google answer",
+          Q.answer("what's on my calendar today", sched=_Sched(), private=True) is None)
 
 
 def t_near_misses_keep_their_own_answer():
@@ -218,14 +334,14 @@ def t_near_misses_keep_their_own_answer():
 
 
 def t_the_test_would_have_caught_the_old_answer():
-    """The pre-fix tree had no matcher: with this one disabled, the owner's
-    sentence produces no intent and reaches the model - the defect itself."""
+    """The pre-fix tree had no matcher: with this one disabled, these sentences
+    produce no intent and reach the model - the defect itself."""
     old = Q._calendar_setup
     Q._calendar_setup = lambda s: None
     try:
-        check("with this answer disabled the owner's sentence reaches the model",
-              Q.match(OWNER_SAID) is None)
-        check("... and so does the second one", Q.match(OWNER_SAID_2) is None)
+        check("with this answer disabled the sentence reaches the model",
+              Q.match(SETUP_SAID) is None)
+        check("... and so does the second one", Q.match(SETUP_SAID_2) is None)
     finally:
         Q._calendar_setup = old
 
@@ -307,7 +423,7 @@ def t_already_set_up_names_the_source_and_never_the_link():
             "private-6f1c9a2b4d/basic.ics")
     try:
         os.environ["JARVIS_CALENDAR_ICS_SECRET_URL"] = link
-        r = _answer("set up my calendar")
+        r = _answer(SETUP_SAID)
         check("a set-up calendar is answered as already set up", r is not None)
         if r is None:
             return
@@ -323,7 +439,7 @@ def t_already_set_up_names_the_source_and_never_the_link():
 
     try:
         os.environ["JARVIS_CALDAV_URL"] = "https://cloud.example.com/remote.php/dav/calendars/o/p/"
-        r = _answer("set up my calendar")
+        r = _answer(SETUP_SAID)
         check("a CalDAV address is answered as already set up",
               r is not None and "over CalDAV" in r.reply, r and r.reply)
         check("... with no address in the answer",
@@ -337,7 +453,7 @@ def t_already_set_up_names_the_source_and_never_the_link():
 def t_it_changes_nothing_and_opens_only_the_accounts_card():
     check("the answer is in READ_ONLY_INTENTS", "calendar_setup" in Q.READ_ONLY_INTENTS)
     sched = _Sched()
-    r = Q.answer(OWNER_SAID_2, sched=sched, conversation="c-calendar")
+    r = Q.answer(SETUP_SAID_2, sched=sched, conversation="c-calendar")
     check("... answering it runs", r is not None)
     check("... it does not clear what 'cancel that' would take back",
           sched.forgotten == [], sched.forgotten)
@@ -349,20 +465,21 @@ def t_it_changes_nothing_and_opens_only_the_accounts_card():
     # The same words typed into a chat arrive through answer_turn; pasted text
     # is not the owner's own words and still goes to the model (JARVIS-API
     # section 156), exactly like every other fixed answer.
-    typed = {"messages": [{"role": "user", "content": OWNER_SAID_2, "provenance": "typed"}],
+    typed = {"messages": [{"role": "user", "content": SETUP_SAID_2, "provenance": "typed"}],
              "conversation_id": "c-calendar"}
     got = Q.answer_turn(typed, sched=_Sched())
     check("... typed into a chat: answered here too",
           getattr(got, "intent", None) == "calendar_setup", got)
-    pasted = {"messages": [{"role": "user", "content": OWNER_SAID_2, "provenance": "pasted"}],
+    pasted = {"messages": [{"role": "user", "content": SETUP_SAID_2, "provenance": "pasted"}],
               "conversation_id": "c-calendar"}
     check("... but pasted text goes to the model",
           Q.answer_turn(pasted, sched=_Sched()) is None)
 
 
 def main():
-    for fn in (t_the_owners_two_sentences_are_answered_without_the_model,
+    for fn in (t_the_setup_sentences_are_answered_without_the_model,
                t_close_phrasings,
+               t_one_owner_per_sentence,
                t_near_misses_keep_their_own_answer,
                t_the_test_would_have_caught_the_old_answer,
                t_every_step_the_answer_names_is_real,
