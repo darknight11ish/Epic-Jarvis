@@ -26587,3 +26587,111 @@ no network, so the suite injects the catalogue pass. The shape and the refusal
 paths are tested; the first real click on the owner's PC is the field test. And
 no model's QUALITY is measured by any of this - the feature compares tokens per
 second, video memory and context window, and says exactly that.
+
+## 161. Connecting an account by talking: one card, Credential Manager, one real test (added 2026-10-28)
+
+The owner asked, on 2026-10-28:
+
+> "in regards to the calendar AUDits I meant to check if other features of jarvis
+> can be connected to my accounts through chat and if I need to put in a password
+> a notification will pop up or if I need to put in a USername and a password.
+> it should be able to connect all features just through me talking to jarvis"
+
+The answer he had been given - *"jarvis cannot connect directly to external
+calendars ... Would you like instructions on exporting your calendar to ICS?"* -
+was false about Jarvis, which reads CalDAV and a private iCal link today. The
+storage half (`jarvis_token_store.py`, Windows Credential Manager) and the card
+half (`§157`) both existed; nothing joined them, and the model had no setup tool,
+so it filled the gap with a generic limitation.
+
+**Phase 1 covers three services, and only these:**
+
+| service id | what the card asks for | Credential Manager entry | the one real test |
+|---|---|---|---|
+| `calendar_ics` | the private iCal link ("Secret address in iCal format") | `Jarvis Backend/Calendar iCal link` (existed since 2026-09-27) | one `GET` of the link: 200 **and** `BEGIN:VCALENDAR` in the answer |
+| `calendar_caldav` | username + password | `Jarvis Backend/CalDAV username`, `Jarvis Backend/CalDAV password` (**new**) | one `PROPFIND` with Basic auth on the CalDAV address already saved in Settings, Accounts: 200 or 207 |
+| `github` | a personal access token | `Jarvis Backend/GitHub token` (**new**) | `GET https://api.github.com/user`: 200, and the login name GitHub answers with |
+
+The CalDAV username/password and the GitHub token had **no Credential Manager
+entry at all** before this: they were read only from `JARVIS_CALDAV_USER`,
+`JARVIS_CALDAV_PASSWORD` and `JARVIS_GITHUB_TOKEN` - plain-text Windows user
+environment variables - which is the rule 3 breach the owner's ask made worth
+fixing. All three now resolve through `jarvis_token_store.resolve_secret`, so the
+environment variable still wins when one is set (nothing already working breaks)
+and the store is only ever the fallback. `jarvis_calendar.login()` is the one
+reader for both calendar secrets; `jarvis_research._token()` and
+`jarvis_tellme._github_token()` share the GitHub one.
+
+**How a card is raised - two doors, one implementation.** `jarvis_connect_account.raise_card(service, label)`
+is called by (a) the model's `connect_account` tool, and (b) `jarvis_quick.py`'s
+own sentence grammar ("connect my calendar", "set up github", "is my calendar
+connected?", "connect my email"), which needs no model at all and runs **before**
+the 2026-10-22 Settings-only refusal - the card types the value on this PC, which
+is the same act Settings performs. A sentence naming an account with no test yet
+(email, Notion, Obsidian, the search and chatbot keys, Home Assistant) is answered
+with what CAN be connected, not with a card for something unverifiable. A
+reminder that merely mentions a calendar keeps its own answer.
+
+**The card's shape (nothing here is or can be a value):**
+
+```json
+{
+  "kind": "connect_account",
+  "card_id": "ca_<24 lower-case hex>",
+  "service": "calendar_caldav",
+  "service_label": "Calendar - a CalDAV server (username and password)",
+  "summary": "<the host's own sentence: what this PC will do>",
+  "note": "<the host's own caveat, e.g. the CalDAV address lives in Settings>",
+  "fields": [
+    {"name": "username", "label": "CalDAV username", "kind": "username", "secret": false, "hint": ""},
+    {"name": "password", "label": "CalDAV password", "kind": "password", "secret": true, "hint": "..."}
+  ],
+  "agent_claimed_note": "<the model's own words, cleaned and capped>",
+  "agent_note_is_untrusted": true,
+  "stores_where": "Windows Credential Manager, on this PC",
+  "store_entries": ["Jarvis Backend/CalDAV username", "Jarvis Backend/CalDAV password"],
+  "from_this_pc_only": true,
+  "expires_in_seconds": 300
+}
+```
+
+**Routes (host-only: pairing token AND a loopback caller; the body is never
+logged, echoed or stored).**
+
+| route | what it does |
+|---|---|
+| `GET /api/connect-account/pending` | the cards waiting for the owner, metadata only. Never a value - none exists yet. |
+| `POST /api/connect-account/save` | body `{"card_id": "ca_...", "values": {"<field>": "<value>", ...}}`. Refuses any field the card did not declare (by name), an empty or oversized value (by label), and an unknown/expired/used card - none of those sentences ever contains a value. Then: each value goes to `jarvis_token_store.store_secret` (Credential Manager **and nowhere else**), the card is spent, the service is tested with the values that will actually be used, and the receipt names the store entries, the source that won, and the verdict. |
+| `POST /api/connect-account/cancel` | body `{"card_id": "ca_..."}`. The owner pressed Cancel. |
+
+Both POST routes refuse a non-loopback caller **before the body is read** (403),
+and origin/token are checked before that. There is **no plaintext fallback**: a
+store that refuses produces an error that says so and writes nothing else, and
+the value is never put in a file, an environment variable, a database, the
+clipboard or a log line. A saved value is registered with `jarvis_scrub` at once
+(there is no environment variable NAME for the scrubber's own scan to catch).
+
+**"Connected" is only ever the verifier's verdict.** A saved-but-broken link
+answers "saved, but it did not work just now - the private link answered HTTP
+404. Nothing is reading it until that works." and never "connected". The status
+read is `jarvis_connect_account.status()` / `status_words(service)`; the chat
+answers "is my calendar connected?" from it. `probe=False` answers from the store
+alone (no socket) and says "not tested just now".
+
+**What this deliberately does not do.** No OAuth of any kind, no Google or
+Microsoft API, no public tunnel, no network broker (rule 2). No phone card and no
+phone route: the value is typed on this PC only (rule 3; `ARCHITECTURE.md` §8's
+connect-account row). No second store and no Settings box of its own - the same
+Credential Manager entries the reading modules own. The model gets **no argument
+for a value**: `connect_account` takes a service and a note, and an argument that
+looks like a value is refused with an explanation rather than dropped.
+
+**Tests.** `backend/test_connect_account.py` (153 checks: the store mapping, the
+card carrying no value, a refused store saving nothing, the verifiers passing and
+failing through an injected request hook, the status sentences, the tool's
+refusal of a value, the quick path's sentences, the host-only route, and that
+this adds no raw-key route) and `backend/test_account_secrets.py` (which now
+covers the three new entries - and, in the required `credential-manager` CI job,
+writes/reads/deletes each one's shape on real Windows under a throwaway name).
+The HUD card's fields and its post path are pinned in
+`jarvis-desktop/tests/hud.mjs`.

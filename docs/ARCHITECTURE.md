@@ -2436,6 +2436,25 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+**Connecting an account: the card is the PC's alone, and that is one-sided on
+purpose** (2026-10-28; the owner's ask: *"if I need to put in a password a
+notification will pop up ... it should be able to connect all features just
+through me talking to jarvis"*; JARVIS-API §161). The card that takes a token, a
+private calendar link or a CalDAV username and password is drawn only by the
+desktop HUD, and the phone has no version of it: its three routes
+(`/api/connect-account/{pending,save,cancel}`) are classified `deliberate` in
+`tools/check_parity.py`, because a phone-side card would have to send the value
+over the network to reach this PC's Credential Manager - which is worse than the
+store it is meant to be kept out of, and the rule the owner's own note already
+states ("the secret is typed on this PC, into the host, and the phone has no
+card to type it into"). **What the phone does get** is the answer: asking
+"connect my calendar" or "is my calendar connected?" in the phone's chat reaches
+the same quick path (`jarvis_quick.py`) and gets the same honest reply - the
+card is waiting on the PC, or the test's verdict - because those sentences need
+no card. The model's `connect_account` tool ships OFF like every other tool that
+is not in the shipped `[tools].enabled` list, and it only ever raises the same
+PC card; nothing about it can save a value from a model turn.
+
 **The model advisor is the desktop's alone, and that is one-sided on purpose**
 (2026-10-28; the owner's request: *"can you give jarvis the ability to recommend
 a change to presets (for the local ai models being used) with a one click check

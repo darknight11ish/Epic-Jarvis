@@ -313,9 +313,19 @@ def t_what_it_saves():
     # `test_tool_text.py` raised its own MEASURED_BUDGET 2600 -> 2700 for the
     # same pair in the same change; its note carries the campaign evidence.
     # The cost is paid only with `[tools] short_list = true`, which ships OFF.
-    check("more_tools itself stays small (at most 345 tokens)",
+    # Pinned 345 -> 380 on 2026-10-28, and here is exactly why, because a pin is
+    # a decision: `connect_account` (connecting a calendar or GitHub by talking
+    # to Jarvis, JARVIS-API section 161) needed its own `more_tools` group -
+    # raising that ONE card is a single deliberate act and no other group's
+    # members may do it - and a group costs about 17 tokens in this text.
+    # Measured with this module's own estimate_tokens rule on this tree: without
+    # the tool the schema is 343 (2 tokens under the old pin, so there was no
+    # room at all), and with it 360. 380 leaves 20 tokens spare rather than 0.
+    # The cost is paid only with `[tools] short_list = true`, which ships OFF;
+    # the deterministic answer in jarvis_quick.py needs no tool and no tokens.
+    check("more_tools itself stays small (at most 380 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 345)
+          <= 380)
 
 
 if __name__ == "__main__":

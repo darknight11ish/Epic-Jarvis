@@ -2155,7 +2155,12 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // The owner-secret hand-off card (2026-10-26): fill or cancel ONE card
       // with the token added in Rust; the page holds none.
       "allow-hud-secret-handoff-fill",
-      "allow-hud-secret-handoff-cancel"]);
+      "allow-hud-secret-handoff-cancel",
+      // The connect-account card (2026-10-28): save or cancel ONE card. The
+      // values are typed by the owner on this PC, cross Rust once and go into
+      // Windows Credential Manager; the page never holds the token.
+      "allow-hud-connect-account-save",
+      "allow-hud-connect-account-cancel"]);
   // And the preset grant holds exactly the contract read and the BAR'S ONE
   // apply: no model switch, no lane start, no approval command beside them.
   const hudPresets = surfaces.slice(surfaces.indexOf('identifier = "focus-presets"'));
@@ -2174,6 +2179,43 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
   const stopPerms = hudStop.slice(hudStop.indexOf("permissions = ["),
     hudStop.indexOf("]") + 1);
   assert.deepEqual(stopPerms.match(/allow-[a-z-]+/g), ["allow-stop-everything"]);
+  // THE CONNECT-ACCOUNT CARD (2026-10-28). "connect my calendar" / "set up
+  // github" is answered by ONE card drawn from the HOST's own service table:
+  // the page decides neither the service nor its boxes, and the values it takes
+  // are typed by the owner on this PC, cross Rust once and go straight into
+  // Windows Credential Manager. The checks below hold the page to that shape:
+  // every box is built from `card.fields`, a secret field is masked, every box
+  // is cleared before any message, the receipt is the host's words, and the
+  // page never posts to the route itself (it holds no token - audit M2).
+  const page = readFileSync(join(SRC, "jarvis_hud.html"), "utf8");
+  assert.match(page, /<section id="connect-account" hidden aria-live="polite">/,
+    "the connect-account card is gone or is not hidden until the host raises it");
+  assert.match(page, /id="ca-service"/, "the card no longer shows which service");
+  assert.match(page, /id="ca-summary"/, "the card no longer says what this PC will do");
+  assert.match(page, /id="ca-fields"/, "the card has no place for its boxes");
+  assert.match(page, /id="ca-save" class="sh-go" type="button">Save it on this PC/,
+    "the card's Save button is gone or no longer says where the value goes");
+  assert.match(page, /id="ca-cancel"/, "the card's Cancel button is gone");
+  assert.match(page, /input\.type = \(f\.secret === true\) \? "password" : "text"/,
+    "a connect box is no longer masked when the host says it is a secret");
+  assert.match(page, /input\.autocomplete = "off"/, "a connect box allows autofill");
+  assert.match(page, /input\.maxLength = 4096/, "a connect box has no length cap");
+  assert.match(page, /caInputs\(\)\.forEach\(function\(i\)\{ i\.value = ""; \}\)/,
+    "the card no longer clears its boxes");
+  assert.match(page, /await shInvoke\("hud_connect_account_save",\s*\n?\s*\{cardId: card\.card_id, values: values\}\)/,
+    "the card no longer saves through the Rust door");
+  assert.match(page, /await shInvoke\("hud_connect_account_cancel", \{cardId: card\.card_id\}\)/,
+    "the card no longer cancels through the Rust door");
+  assert.doesNotMatch(page, /fetch\("\/api\/connect-account\/save"/,
+    "the page posts the values itself - it holds no token and must not");
+  assert.doesNotMatch(page, /console\.(log|info|warn|error)\([^)]*(values|caInputs|secret)/,
+    "the page logs a connect value");
+
+  // And the docs say the same shape, in the API document's own section.
+  const api = readFileSync(join(HERE, "..", "..", "docs", "JARVIS-API.md"), "utf8");
+  assert.match(api, /connect_account/, "docs/JARVIS-API.md does not document the card");
+  assert.match(api, /api\/connect-account\/save/,
+    "docs/JARVIS-API.md does not document the host-only save route");
   // ...and the History panel's grant is its own set, holding ONE command: pin,
   // file or delete one chat. No tag creation, no bulk clear, no send.
   const hudHistory = surfaces.slice(surfaces.indexOf('identifier = "hud-history"'));

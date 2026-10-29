@@ -2468,6 +2468,17 @@ $SHIPPED = @(
 # /api/models/install and /api/work/apply cards remain the only ways to act).
 # backend/_where.py's SHIPPED list has the same entry, at the end too.
 'jarvis_model_recommendations.py'
+    # Connecting an account by talking to Jarvis (2026-10-28, the owner's ask:
+    # "it should be able to connect all features just through me talking to
+    # jarvis"). The service table, the ONE card, the real test per service and
+    # the status the chat reads; and the host-only routes the HUD card posts to
+    # - installed by jarvis_secret_handoff_wiring.install(), the ONE call
+    # secret-handoff.patch already makes, so this feature adds no patch. Every
+    # value is typed on this PC and saved into Windows Credential Manager, and
+    # nowhere else. The same two entries are at the end of backend/_where.py's
+    # SHIPPED list.
+    'jarvis_connect_account.py'
+    'jarvis_connect_account_wiring.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

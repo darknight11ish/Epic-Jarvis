@@ -1339,6 +1339,17 @@ SHIPPED = (
     # model-recommendations.patch adds the ONE install block; no gate row, no
     # tier line, no timer. The same entry is at the end of the script's $SHIPPED.
     "jarvis_model_recommendations.py",
+    # Connecting an account by talking to Jarvis (2026-10-28, the owner's ask:
+    # "it should be able to connect all features just through me talking to
+    # jarvis"). jarvis_connect_account.py is the service table, the ONE card
+    # state machine, the real test per service and the status the chat reads;
+    # jarvis_connect_account_wiring.py serves its host-only pending/save/cancel
+    # routes, installed by jarvis_secret_handoff_wiring.install() - the ONE call
+    # secret-handoff.patch already makes, so this feature adds no patch. Every
+    # value is typed on this PC and saved into Windows Credential Manager, and
+    # nowhere else. The same two entries are at the end of the script's $SHIPPED.
+    "jarvis_connect_account.py",
+    "jarvis_connect_account_wiring.py",
 )
 
 

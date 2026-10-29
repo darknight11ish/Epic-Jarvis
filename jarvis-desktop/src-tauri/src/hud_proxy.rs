@@ -62,6 +62,11 @@ pub const HUD_GET_PATHS: [&str; 9] = [
     // the cards the host measured; filling/cancelling are the two shell
     // commands in hud_secret_handoff.rs, never the page's own POSTs.
     "/api/secret-handoff/pending",
+    // The connect-account card's pending list (2026-10-28): read-only, the card
+    // the host raised for one service. Saving its values and cancelling it are
+    // the two shell commands in hud_secret_handoff.rs, never the page's own
+    // POSTs - and the card holds no value at all until the owner types one.
+    "/api/connect-account/pending",
     // The Current Models panel's model/loaded facts (2026-10-26): a plain
     // GET, read-only, no card and no switch - see the doc comment above.
     "/api/models",
