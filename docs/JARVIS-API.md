@@ -6265,6 +6265,65 @@ and the shipped TOML's `import_notion_export = "ask"` tier, the folder import
 driven end to end on a real zip in a temp folder, and the answer held to
 promising nothing it cannot keep.
 
+### 21.13 "Can you connect to my calendar?" (added 2026-10-28)
+
+The owner asked exactly that in the HUD chat on 2026-10-28 and Jarvis answered
+*"Jarvis cannot connect directly to external calendars like Google or Outlook
+without you manually granting permissions and setting up a bridge… Would you
+like instructions on exporting your calendar to ICS?"*, then refused again on
+"set up a calendar bridge for me". False about this PC: `jarvis_calendar.py`
+reads Google Calendar through its **private iCal link** and any CalDAV calendar,
+read-only, with **no OAuth and no bridge** (§22.8), and the model is offered a
+`calendar_read` tool. **What was missing was a fast-path sentence**: every one of
+the owner's phrasings returned `None` from `jarvis_quick.match()` (16 of 16
+measured), so the local model answered, and its system prompt
+(`jarvis_agent.LANE_SYSTEM`) says nothing about a calendar.
+
+`jarvis_quick.py` now answers - `quick: "calendar_setup"`, no model, no card, in
+`READ_ONLY_INTENTS` so it does not take away what "cancel that" would undo. It
+matches a whole sentence that asks to **connect / set up / add / link / hook up
+/ sync / integrate / enable / configure / import** a calendar, including "like
+google or outlook", "a calendar bridge", "calendar setup" and "is my calendar
+connected?", and the question forms ("how do I …", "can you …"). It answers from
+the reader's own state:
+
+* **Not set up** (this PC today): the real two steps - Google Calendar → gear →
+  Settings → your calendar → Integrate calendar → copy the **Secret address in
+  iCal format**; then paste it into **Settings, Accounts, the Calendar iCal
+  link** box (written straight into Windows Credential Manager by the desktop's
+  Rust, §44). It says plainly that the link **cannot be typed in chat** (it is
+  kept as a password) and that any calendar giving a private `.ics` address
+  works the same way. When `[tools].enabled` does not offer `calendar_read` (the
+  shipped list does not), it adds the one sentence that raises that card:
+  **"let the AI model read my calendar"** (`enable_reading_tool`, PC only, one
+  card plus Windows Hello). It also carries `open_settings: "account-secrets"`,
+  so the desktop jumps its Settings window to that card - the same cardless jump
+  "open accounts" makes, and nothing is changed by it.
+* **Already set up**: the reader's own name for the source ("your Google
+  Calendar (private link)", "your calendar over CalDAV"), never the link or the
+  address; plus the missing-username caveat for a CalDAV address with no
+  `JARVIS_CALDAV_USER`, and the tool sentence while the tool is off.
+
+**Not matched, deliberately.** "Open my calendar" still opens it
+(`jarvis_open.py`); a reminder that mentions a calendar is still a reminder; and
+a plain "what's on my calendar today" still goes to the model, which reads it
+through `calendar_read` once the tool is offered - this fix adds the setup
+answer, not a second way to read a calendar. A sentence with one more condition
+("… tomorrow at 5", "… on my phone") still falls through. And in a private chat
+every read-only fast-path answer goes to the model by design (§156), so this one
+does too.
+
+Tests: `backend/test_calendar_answer.py` - both of the owner's 2026-10-28
+sentences and 16 close phrasings answered with no model, 11 near misses keeping
+their own answer, the answer's steps checked against
+`jarvis_settings_registry.SECTIONS`, `jarvis_calendar.ICS_URL_TARGET` and its
+own docstring, the reading-tool sentence checked through `jarvis_quick`'s real
+`_TOOL_ON` grammar, the shipped `enable_reading_tool = "ask"` tier and the
+shipped `[tools].enabled` list, both "already set up" branches driven with a
+fake link and a fake CalDAV address (and held to never printing either), and a
+mutation check that the owner's sentence reaches the model when the new matcher
+is disabled.
+
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for
