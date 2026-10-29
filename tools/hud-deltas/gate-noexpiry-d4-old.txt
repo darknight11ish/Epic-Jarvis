@@ -1,0 +1,6 @@
+    """
+    _init()
+    with closing(_connect()) as c:
+        rows = c.execute(
+            "SELECT id,action,tier,detail,prompt,created,raised FROM approvals"
+            " WHERE state='pending' ORDER BY created").fetchall()
