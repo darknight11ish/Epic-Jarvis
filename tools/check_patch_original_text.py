@@ -97,7 +97,7 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all EIGHTEEN - those thirteen, plus `private-chat.patch` at position 152, added
+all NINETEEN - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -107,16 +107,23 @@ had ever touched, and the cloud reply's reader, which reached the owner's PC
 by a re-take rather than a patch) and `f01-manual-lane-gate.patch` at position
 155 (the manual lane-picking path and `_manual_decision()`, which no patch in
 this walk writes - and whose missing gates WERE the F-01 defect) - plus, on
-2026-10-28, TWO patches, both with their positions: `learning-extract-reason.patch`
+2026-10-28, THREE patches, all with their positions: `learning-extract-reason.patch`
 at position 157 (all three of its hunks: `_local_llm()`'s `except Exception:
 return None`, the `body` dict it posts - `think: False`, so a hybrid reasoning
 model answers instead of spending a small budget in `thinking` (Gemini
 Edition-3 review F1) - and the module-level record near `_PROMPT`, in the
 owner's `jarvis_extract.py`, which no earlier patch touches), and
 `cloud-honesty.patch` (one of its three hunks: the cloud relay's
-`_says.close()` block, which reached the owner's PC by the same re-take) - with
-their positions, instead of pretending they are not there. The position-29 rule
-is kept as a REPORTED fact, not a gate.
+`_says.close()` block, which reached the owner's PC by the same re-take), and
+`no-deadline-cards.patch` at position 37 (the owner's ruling that no approval
+card has a deadline: EIGHT of its sixteen hunks read the owner's `jarvis_gate.py`
+- `_pending_card_id()`'s SELECT and loop, check()'s ask branch and INSERT, its
+late-answer block after the wait, `pending()`'s opening, `decide()`'s body, the
+insertion point of `still_waiting()` and `withdraw()`'s docstring - and no
+earlier patch writes any of them; its other eight hunks edit
+`no-expiry-cards.patch`'s own output and cost nothing) - with their positions,
+instead of pretending they are not there. The position-29 rule is kept as a
+REPORTED fact, not a gate.
 
 THE PIN
 
