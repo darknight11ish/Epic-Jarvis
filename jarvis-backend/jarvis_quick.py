@@ -3715,6 +3715,16 @@ _SET_HANDOFF_FRONT = re.compile(
 _SET_PRESET_NATURAL = re.compile(
     r"(?:use|apply|switch\s+to)\s+(?:the\s+)?(.+?)\s+(?:focus\s+)?preset")
 
+#: "use the Clara voice", "switch to the Ashby voice" (2026-10-28 - the
+#: owner's own phrasing for changing the built-in voice by asking). CLOSED
+#: WORLD, exactly like the preset sentence above: the value is looked up in
+#: the built-in voice's OWN list, and a name that list does not have returns
+#: None and falls through as before. That is what keeps "use the passive
+#: voice" (a writing request) reaching the model instead of being answered
+#: with a voice refusal, and it means no voice id can ever be guessed here.
+_VOICE_USE = re.compile(
+    r"(?:use|switch\s+to)\s+(?:the\s+)?(.+?)\s+voice")
+
 #: The ONE generic multi-field grammar (Gemini ruling Q3, 2026-10-22):
 #: "set <control> <field> to <value>" / "change ...". The closed control/field
 #: vocabulary lives in jarvis_settings_registry.CONTROL_FIELDS; a sentence that
@@ -4090,6 +4100,18 @@ def _settings_choice(s: str) -> Optional[Intent]:
         preset = R.choice_from_words(setting, value)
         if preset is not None:
             return Intent("settings_choice", {"key": "focus_preset", "value": preset})
+    # "use the Clara voice", "switch to the Ashby voice" (2026-10-28). Only a
+    # name the built-in voice list really has becomes an intent; anything else
+    # falls through to the model exactly as it did before this pattern existed.
+    m = _VOICE_USE.fullmatch(s)
+    if m:
+        setting = next((c for c in R.CHOICE_SETTINGS
+                        if c.key == "voice_speaker"), None)
+        chosen = (R.choice_from_words(setting, m.group(1))
+                  if setting is not None else None)
+        if chosen is not None:
+            return Intent("settings_choice",
+                          {"key": "voice_speaker", "value": chosen})
     m = _SET_CHOICE_HELP.fullmatch(s)
     if m:
         name = (m.group(1) or m.group(2) or "").strip()

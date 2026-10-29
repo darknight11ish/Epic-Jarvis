@@ -984,6 +984,46 @@ def t_a_setting_with_named_choices_can_be_changed_too():
         R.CHOICE_SETTINGS = real
 
 
+def t_the_natural_words_name_the_builtin_voice_to_the_tool():
+    """2026-10-28: the owner's "change your voice to Ashby".
+
+    The phrase grammar answers that sentence without the model. This is the
+    other half: when the model DOES understand it and restates it as a
+    `change_setting` call, the tool must not refuse "your voice" as an unknown
+    setting while the same change works by typing. The value is checked
+    against the built-in voice's OWN list, so an unknown name changes nothing
+    and the answer names the real voices."""
+    import dataclasses
+    calls = []
+
+    def spy(chosen, *, peer=None, local=None):
+        calls.append(chosen)
+        return R.Outcome(True, "the built-in voice is now Ashby.")
+
+    real = R.CHOICE_SETTINGS
+    R.CHOICE_SETTINGS = tuple(
+        dataclasses.replace(c, choices={"ashby": "mix_ashby"}, set=spy)
+        if c.key == "voice_speaker" else c for c in real)
+    try:
+        for wording in ("your voice", "his voice", "jarvis's voice"):
+            calls.clear()
+            got, _steps, _events, _w = run_tool(wording, "Ashby")
+            check(f"the tool reaches the built-in voice from {wording!r}",
+                  calls == ["mix_ashby"] and got.get("changed") is True,
+                  repr((calls, got)))
+        calls.clear()
+        got, steps, _events, _w = run_tool("your voice", "nobody")
+        check("an unknown voice changes nothing through the tool either",
+              calls == [] and "not one of the choices" in str(got.get("error", "")),
+              repr((calls, got)))
+        check("...and the refusal names the real voices",
+              "ashby" in str(got.get("error", "")).lower(), repr(got))
+        check("...and it is recorded as a refusal, not a run",
+              steps and steps[0].get("ran") is False, repr(steps))
+    finally:
+        R.CHOICE_SETTINGS = real
+
+
 def t_the_wake_word_and_the_browser_mode_are_reachable_by_the_tool():
     """The two settings that are NOT table rows (2026-10-26).
 
@@ -1042,6 +1082,7 @@ if __name__ == "__main__":
                t_a_page_only_setting_is_not_reached_by_a_filler_form,
                t_a_bad_value_changes_nothing,
                t_a_setting_with_named_choices_can_be_changed_too,
+               t_the_natural_words_name_the_builtin_voice_to_the_tool,
                t_the_wake_word_and_the_browser_mode_are_reachable_by_the_tool,
                t_an_answer_that_has_asked_too_often_changes_nothing,
                t_outside_text_stops_a_setting_change,

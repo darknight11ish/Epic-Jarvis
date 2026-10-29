@@ -12028,10 +12028,30 @@ than storing a guessed id. The list itself is the spec's
 (`_appearance_faces()`), so a face added to the visual spec can be asked for
 without editing Python.
 
+The BUILT-IN VOICE has the owner's own natural shapes since 2026-10-28:
+**"change your voice to Ashby"**, **"change his voice to Ashby"**,
+**"use the Clara voice"**, **"switch to the Ashby voice"** - and the older
+"set the built-in voice to heart" still works. "your voice" and "his voice" are
+aliases of the same `voice_speaker` choice, so those sentences reach
+`jarvis_settings_registry.set_voice_speaker`, which calls
+`jarvis_voices.set_speaker` - the function `POST /api/voice/voices/speaker`
+calls. It changes the built-in voice only, and it raises **no card either way**:
+the change is cosmetic and PC-wide, like the speed and the manner, so it is one
+`voices/state.json` write and one `voices` event and both apps follow. Ashby
+and Clara answer to the short name the owner says as well as to their picker
+label ("Ashby (made for Jarvis)") and their real id (`mix_ashby`), because the
+label alone never matched the sentence. A name this PC's pack does not offer is
+refused with the real voice names and changes nothing. A RECORDED voice is a
+different feature: adding or switching to one is the `custom_voice` card, in
+the Voices screen, and no chat sentence can select one.
+
 "What can I change?" counts each named choice as ONE setting - 68 with the face
-on 2026-10-26. The model-facing `change_setting` tool still accepts `on`/`off`
-only: asking for a named value is the grammar's job, not the model's, and a
-sentence the grammar does not recognise still never changes anything.
+on 2026-10-26. The model-facing `change_setting` tool accepts a named value too
+(2026-10-26): it resolves a switch, a named choice, the wake word or the browser
+mode, then checks the value against that setting's OWN list, so a name the
+setting does not have is refused with the real ones and changes nothing (see
+`_settings_call` in `backend/jarvis_agent.py`). A sentence the phrase grammar
+does not recognise still never changes anything.
 
 ### 58.3 What is NOT covered, and why
 
