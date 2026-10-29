@@ -23,6 +23,7 @@ screen"):
 Runs anywhere: standard library only, no owner's files.
 """
 import builtins
+import json
 import re
 import sys
 import traceback
@@ -215,6 +216,63 @@ def t_the_file_both_apps_read_is_current():
         have = p.read_text(encoding="utf-8") if p.exists() else ""
         check(f"{p.relative_to(G.ROOT)} matches (python3 tools/gen_card_words_cases.py)",
               have == doc)
+
+
+def t_an_expired_card_says_one_sentence_on_both_screens():
+    """2026-10-28, the owner's ruling: "the cards on android should match the
+    cards on desktop". The two screens said the same event two ways - the phone
+    "Timed out - ask the desktop to raise this again.", the PC "Timed out:
+    Jarvis stopped waiting and refused it by itself." - so the FACT is now one
+    sentence here, drawn by both, and the phone's advice is its own second
+    sentence, drawn only there.
+    """
+    check("the fact is one sentence, and it starts with the one word for it",
+          W.TIMED_OUT.startswith("Timed out")
+          and W.TIMED_OUT.count(".") == 1 and W.TIMED_OUT.endswith("."), W.TIMED_OUT)
+    check("it says what actually happened, so a reader is not left guessing",
+          "refused it by itself" in W.TIMED_OUT, W.TIMED_OUT)
+    check("the phone's advice is a second sentence, and only the phone's",
+          W.TIMED_OUT_NEXT.endswith(".") and "desktop" in W.TIMED_OUT_NEXT,
+          W.TIMED_OUT_NEXT)
+    check("neither sentence tells the owner to press anything - the card is gone",
+          not re.search(r"\bpress\b|\bapprove\b|\btap\b", W.TIMED_OUT + W.TIMED_OUT_NEXT, re.I))
+    # Both apps draw the PC's own words: the desktop from card-words.js, the
+    # phone from net/CardWords.kt. The generated file carries the ground truth
+    # (see t_the_file_both_apps_read_is_current) and each app's test holds its
+    # constant to it; this only checks the app-side copies are the same text.
+    from _where import REPO
+    js = _read("static/card-words.js")
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+          / "client" / "net" / "CardWords.kt")
+    js_src = (REPO / "jarvis-desktop" / "src" / "card-words.js").read_text(encoding="utf-8")
+    kt_src = kt.read_text(encoding="utf-8") if kt.is_file() else ""
+    check("the desktop's constant is the PC's sentence",
+          f'export const CARD_TIMED_OUT = "{W.TIMED_OUT}";' in js_src)
+    check("the served copy of it is byte-identical to the desktop's",
+          js == js_src)
+    check("the phone's constant is the PC's sentence",
+          f'const val TIMED_OUT = "{W.TIMED_OUT}"' in kt_src)
+    check("...and its advice half is too",
+          f'const val TIMED_OUT_NEXT = "{W.TIMED_OUT_NEXT}"' in kt_src)
+
+
+def t_the_pc_only_set_is_the_one_the_phone_is_taught():
+    """The cards only the PC may approve: the phone keeps its own copy so a card
+    never depends on a second read to know which buttons it may draw, and the
+    PC's set is what that copy is checked against. `desktop_update` joined the
+    PC's set on 2026-10-26 and the phone went on offering Approve for it -
+    which is why the set is generated into the file both apps' tests read.
+    """
+    import jarvis_owner_check as OC
+    import gen_card_words_cases as G
+    doc = json.loads(G.document())
+    check("the generated file carries the PC's own set",
+          doc.get("pc_only_actions") == sorted(OC.PC_ONLY_ACTIONS), doc.get("pc_only_actions"))
+    check("the update card is in it (a phone cannot install a PC update)",
+          "desktop_update" in OC.PC_ONLY_ACTIONS)
+    check("the risky cards the owner allowed from the phone are NOT in it",
+          not ({"raise_api_limit", "send_email", "app_merge_change"}
+               & set(OC.PC_ONLY_ACTIONS)))
 
 
 # ==========================================================================

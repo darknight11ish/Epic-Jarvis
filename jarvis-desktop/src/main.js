@@ -109,6 +109,7 @@ import {
   linkWords,
   riskLine,
   expiryWords,
+  cardHasExpired,
   quickActionable,
   typedDecision,
   typedMaybe,
@@ -219,7 +220,7 @@ import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
 import { CONTINUED_PRIVATE_OFF, PRIVATE_ENDED, createPrivateToggle } from "./private-chat.js";
 // One card on every screen, and what a spoken question hears about a card
 // (the creativity audit, 2026-09-25) - card-words.js.
-import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
+import { CARD_KICKER, CARD_TIMED_OUT, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
 import { HeavyGate, isHeavy } from "./heavy-approve.js";
 import {
   ReplaceGate,
@@ -706,6 +707,10 @@ const state = {
   deciding: false,
   /** The id of the gate a decision was sent for, so it cannot be sent twice. */
   decided: null,
+  /** Whether the card on screen is past its deadline (2026-10-28). Kept so the
+   *  one-second clock calls `syncApprovalButtons` exactly ONCE, at the moment
+   *  the card stops being decidable - not on every tick after it. */
+  expiredCard: false,
   /** A note is being sent for the current approval - §3b. Its own flag: the
    *  Logseq/Joplin capture path and `deciding` already learned this lesson
    *  once, so a note (which runs a whole chat turn) does not silently
@@ -2544,6 +2549,9 @@ function refreshApproval(approval) {
   // overwritten below - the note field depends on it.
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
+  // The card's own deadline state, recorded at the paint so the one-second
+  // clock only has to notice the moment it CHANGES (2026-10-28).
+  state.expiredCard = cardHasExpired(approval.expiresAt);
   // Review ruling 8.2: is this one of the cards that replaces what is already
   // there? A different card starts unarmed; a repaint of the same card keeps
   // whatever arm it already had, so a queue resync cannot disarm the guard
@@ -3029,6 +3037,10 @@ function closeApproval() {
   dom.approvalOptions.replaceChildren();
   dom.approvalOptions.hidden = true;
   dom.approvalApprove.hidden = false;
+  // Both buttons come back for the NEXT card, however the last one ended: a
+  // card past its deadline hides them (2026-10-28), and leaving Deny hidden
+  // here would carry that onto a live card.
+  dom.approvalDeny.hidden = false;
   dom.approvalNoteInput.value = "";
   renderRaised(null);
   // The pin was taken to hold the window open for the gate. Every path that
@@ -3063,6 +3075,24 @@ function syncApprovalButtons() {
   // a state-replacing card only arms it (the click handler below), so nothing
   // is sent while the label still reads "Approve".
   dom.approvalApprove.textContent = approveLabel(state.approval, replaceGate.armed);
+  // AN EXPIRED CARD SHOWS NO BUTTONS (2026-10-28), the same rule the phone has
+  // followed since DEF-010 (2026-10-11): measured on the owner's phone, he
+  // tapped a faded Approve on a card that had already run out, and a control
+  // captioned by a line he had not connected to it does not read as "you cannot
+  // act". The gate has refused the card by itself at the deadline, so drawing
+  // live buttons offers a decision nothing will take.
+  //
+  // Nothing about the DECISION changes: `decideApproval` refuses an expired
+  // card too, which is what makes this a drawing that matches the rule rather
+  // than the rule itself. Deny goes with it, because on an expired card the
+  // gate is not waiting for either answer (the phone made the same call).
+  const expiredCard = Boolean(state.approval && cardHasExpired(state.approval.expiresAt));
+  const multiple = Boolean(
+    !state.appLock && state.approval && Array.isArray(state.approval.options)
+      && state.approval.options.length > 1
+  );
+  dom.approvalApprove.hidden = multiple || expiredCard;
+  dom.approvalDeny.hidden = expiredCard;
   // A card whose request was cut off on its way here cannot be approved: what
   // is on screen is not all of what would run. Deny stays - refusing
   // something unread costs a retry, approving it is the thing to prevent.
@@ -3096,7 +3126,7 @@ function syncApprovalButtons() {
   // still needs to stop once a decision on THIS card is in flight or has
   // already landed — sending a note for a plan already being decided would
   // arrive after the fact.
-  const noteBlocked = blocked || state.noteBusy || state.deciding
+  const noteBlocked = blocked || state.noteBusy || state.deciding || expiredCard
     || (state.approval && state.decided === state.approval.id);
   dom.approvalNoteInput.disabled = noteBlocked;
   dom.approvalNoteSend.disabled = noteBlocked;
@@ -3165,7 +3195,17 @@ function clockWaitMs() {
 }
 
 const approvalClock = clockTimer(() => {
-  if (state.approval && !dom.approval.hidden) paintApprovalClock();
+  if (!state.approval || dom.approval.hidden) return;
+  // ONE state change, at the deadline (2026-10-28): the card stops offering
+  // either button and starts saying the shared "Timed out" sentence. Every
+  // other tick only repaints the clock.
+  const expiredNow = cardHasExpired(state.approval.expiresAt);
+  if (expiredNow !== state.expiredCard) {
+    state.expiredCard = expiredNow;
+    syncApprovalButtons();
+    return;
+  }
+  paintApprovalClock();
 }, { delay: clockWaitMs, name: "hud" });
 approvalClock.wake();
 
@@ -3212,6 +3252,17 @@ async function decideApproval(approved, optionId = null) {
   // Ctrl+Enter used to send the same decision again. The id latch closes that
   // window; it is cleared when a different gate opens.
   if (state.decided === approval.id) return;
+  // A card past its deadline is not decidable any more - neither direction,
+  // and this is the same rule the phone has had since DEF-010 (2026-10-28,
+  // the owner's ruling that the two cards must match). The gate has already
+  // stopped waiting and refused it by itself; sending anyway would earn a 409
+  // and teach nothing. The sentence is the shared one, so the card says the
+  // same words the phone says.
+  if (cardHasExpired(approval.expiresAt)) {
+    dom.approvalHint.textContent = `${CARD_TIMED_OUT} Nothing was sent.`;
+    announce(`${CARD_TIMED_OUT} Nothing was sent.`);
+    return;
+  }
 
   state.decided = approval.id;
   state.deciding = true;

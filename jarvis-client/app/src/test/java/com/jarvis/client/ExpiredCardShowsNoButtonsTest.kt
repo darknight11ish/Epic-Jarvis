@@ -109,18 +109,37 @@ class ExpiredCardShowsNoButtonsTest {
     }
 
     @Test
-    fun `the expiry wording has exactly one source`() {
+    fun `the expiry wording has one source, and it is the PC's own words`() {
         val src = repoFile(card).readText()
-        val literal = Regex("Timed out — ask the desktop to raise this again\\.")
-        val hits = literal.findAll(src).count()
+        // NO LITERAL IN THE CARD ANY MORE (2026-10-28). The sentence used to be
+        // typed here, which is how the phone and the desktop came to word the
+        // same expired card two different ways. Both halves now come from
+        // CardWords, which holds `backend/jarvis_card_words.py`'s
+        // TIMED_OUT / TIMED_OUT_NEXT - and CardWordsContractTest holds those to
+        // the generated contract file, so the PC's words are the only source.
+        val facts = Regex("Timed out: Jarvis stopped waiting").findAll(src).count()
+        val advice = Regex("Ask the desktop to raise this again").findAll(src).count()
         assertTrue(
-            "the expiry sentence is written out $hits times: two copies let the reason and the " +
-                "dead control drift apart, which is the defect itself",
-            hits == 1,
+            "the expiry sentence is written out in the card ($facts fact / $advice advice " +
+                "copies): it belongs in CardWords, or the reason and the dead control can " +
+                "drift apart again",
+            facts == 0 && advice == 0,
         )
         assertTrue(
-            "the one copy is not the exported constant the card draws",
-            src.contains("private const val EXPIRED_WHY = \"Timed out — ask the desktop"),
+            "the one EXPIRED_WHY is no longer built from CardWords.TIMED_OUT / TIMED_OUT_NEXT",
+            src.contains("private val EXPIRED_WHY =") &&
+                src.contains("CardWords.TIMED_OUT_NEXT"),
+        )
+        // ...and the two halves still read as one sentence about the same event.
+        val words = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/net/CardWords.kt")
+            .readText()
+        assertTrue(
+            "CardWords no longer carries the PC's TIMED_OUT fact",
+            words.contains("const val TIMED_OUT = \"Timed out: Jarvis stopped waiting"),
+        )
+        assertTrue(
+            "CardWords no longer carries the phone's TIMED_OUT_NEXT advice",
+            words.contains("const val TIMED_OUT_NEXT = \"Ask the desktop to raise this again.\""),
         )
     }
 

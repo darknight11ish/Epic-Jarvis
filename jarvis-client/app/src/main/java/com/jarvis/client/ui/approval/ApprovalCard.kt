@@ -77,8 +77,16 @@ import kotlin.math.roundToInt
  * can be decided, and (since DEF-010, 2026-10-11) also what is drawn where the
  * buttons used to be. Two copies of this sentence would let the explanation and
  * the dead control drift apart, which is the defect itself.
+ *
+ * The words are NOT written here any more (2026-10-28): the FACT is
+ * [CardWords.TIMED_OUT], the sentence the PC draws too, and [CardWords.TIMED_OUT_NEXT]
+ * is this phone's own advice on top of it - the PC has no use for it because
+ * the owner is already in front of the window that raises cards. Both come from
+ * `backend/jarvis_card_words.py`, so the two screens cannot word the same
+ * expired card differently.
  */
-private const val EXPIRED_WHY = "Timed out — ask the desktop to raise this again."
+private val EXPIRED_WHY =
+    "${CardWords.TIMED_OUT} ${CardWords.TIMED_OUT_NEXT}"
 
 /**
  * Feasibility I110, "Slower Approve on risky cards": how long a heavy card's
