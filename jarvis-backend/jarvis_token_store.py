@@ -72,6 +72,24 @@ like `KEY_TARGETS` already does for the Exa/Tavily/Brave/DeepSeek keys in
 `jarvis_search.py`), entered on the PC only, in the desktop's Settings
 ("Accounts"), and the matching environment variable - if the owner already
 has one set - still wins, unchanged, so nothing already working breaks.
+
+THREE MORE, FOR "CONNECT MY ACCOUNT" (2026-10-28)
+The owner asked (2026-10-28) that Jarvis be able to connect his accounts by
+talking to it, with a pop-up for a password when one is needed - never the
+words in the chat. Two of the three secrets that needed did not have a
+Credential Manager entry at all; they were read ONLY from a plain-text Windows
+user environment variable, which is the rule 3 breach this module exists to
+end:
+  - the CalDAV username and password (`jarvis_calendar.py`'s `USER_ENV` and
+    `PASSWORD_ENV`, under `USER_TARGET` / `PASSWORD_TARGET`);
+  - the GitHub personal access token (`jarvis_research.py`'s `TOKEN_ENV` and
+    `jarvis_tellme.py`'s watches, under `TOKEN_TARGET`);
+  - the private calendar link already had one (`ICS_URL_TARGET`).
+`store_secret()` below is the WRITE half those three use when the owner types
+a value into the connect-account card: the value goes straight into Credential
+Manager and NOWHERE else. There is no fallback - if Credential Manager refuses,
+the card says so and the value is not written to a file, an environment
+variable, a database or a log.
 """
 
 from __future__ import annotations
@@ -284,6 +302,43 @@ def resolve_secret(env_name: str, target: str, *, environ=None, store=None) -> s
         except Exception:
             pass
     return value
+
+
+def store_secret(target: str, value: str, *, store=None) -> None:
+    """Save ONE named secret in Credential Manager, and nowhere else.
+
+    The write half of `resolve_secret()` above, for the connect-account card
+    (`jarvis_connect_account.py`) and nothing else. The owner's own rule
+    (CLAUDE.md rule 3) is that a value is "kept out of anything the app writes
+    to disk in plain text", so there is deliberately NO FALLBACK here: if
+    Credential Manager refuses, a `StoreError` is raised, the card says so, and
+    the value is not written to a file, an environment variable, a database or
+    a log. Nothing about this function reads the value back.
+
+    `value` is never returned, never logged and never put in the error
+    sentence - a failure carries the Windows error number only, exactly like
+    `resolve_secret()`'s store errors.
+
+    A saved value is registered with `jarvis_scrub` at once, for the same
+    reason `resolve_secret()` registers one it read from the store: it has left
+    the environment for Credential Manager, so there is no environment
+    variable NAME for the scrubber's own scan to catch, and without this call
+    the value could reach the log in clear text on some later line. (This is
+    safe where registering an env-sourced value is not: a value that is now in
+    the store for good is not "only sometimes there".)
+    """
+    text = str(value or "")
+    if not text.strip():
+        raise StoreError("a secret was not saved because it was empty")
+    st = store if store is not None else default_store(target)
+    if isinstance(st, StoreError):
+        raise st
+    st.write(text)
+    try:
+        import jarvis_scrub
+        jarvis_scrub.register_secret(text)
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------------ resolve

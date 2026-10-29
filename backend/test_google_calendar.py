@@ -984,17 +984,28 @@ check("'add a meeting Tuesday 3pm' proposes it and says it needs the sign-in way
 check("an unrelated sentence is not swallowed",
       G.answer("what's the weather like") is None)
 
-parsed = G.parse_meeting("add a meeting Tuesday 3pm",
-                         now=datetime(2026, 10, 28, 16, 0).astimezone())
+# THE OFFSET IS THE MACHINE'S OWN, TAKEN FROM THE SAME `now` THE PARSER WAS
+# GIVEN. These two checks pinned "-07:00" until the 2026-10-28 integration
+# merge, which is the owner's PC and not the CI runner: the required `backend`
+# job runs on UTC, so both checks failed there ("+00:00") while passing here.
+# Built from `_tuesday_now.tzinfo` they assert the same two facts - the next
+# Tuesday at 15:00, and tomorrow 12:30-14:00 - on any machine.
+_tuesday_now = datetime(2026, 10, 28, 16, 0).astimezone()
+parsed = G.parse_meeting("add a meeting Tuesday 3pm", now=_tuesday_now)
 check("Tuesday 3pm is the next Tuesday, 15:00-16:00",
-      parsed["start"] == "2026-11-03T15:00:00-07:00"
-      and parsed["end"] == "2026-11-03T16:00:00-07:00", parsed)
+      parsed["start"] == datetime(2026, 11, 3, 15, 0,
+                                 tzinfo=_tuesday_now.tzinfo).isoformat()
+      and parsed["end"] == datetime(2026, 11, 3, 16, 0,
+                                    tzinfo=_tuesday_now.tzinfo).isoformat(), parsed)
 check("the title comes from the owner's words", parsed["summary"] == "Meeting", parsed)
+_lunch_now = datetime(2026, 10, 28, 9, 0).astimezone()
 lunch = G.parse_meeting("add a lunch tomorrow at 12:30 for 90 minutes",
-                        now=datetime(2026, 10, 28, 9, 0).astimezone())
+                        now=_lunch_now)
 check("'tomorrow at 12:30 for 90 minutes' is 12:30-14:00 tomorrow",
-      lunch["start"].startswith("2026-10-29T12:30")
-      and lunch["end"].endswith("14:00:00-07:00"), lunch)
+      lunch["start"] == datetime(2026, 10, 29, 12, 30,
+                                 tzinfo=_lunch_now.tzinfo).isoformat()
+      and lunch["end"] == datetime(2026, 10, 29, 14, 0,
+                                   tzinfo=_lunch_now.tzinfo).isoformat(), lunch)
 check("a day but no time is not guessed at",
       G.parse_meeting("add a meeting sometime next week") is None)
 check("no day at all is not guessed at",

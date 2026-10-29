@@ -2446,6 +2446,25 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+**Connecting an account: the card is the PC's alone, and that is one-sided on
+purpose** (2026-10-28; the owner's ask: *"if I need to put in a password a
+notification will pop up ... it should be able to connect all features just
+through me talking to jarvis"*; JARVIS-API §162). The card that takes a token, a
+private calendar link or a CalDAV username and password is drawn only by the
+desktop HUD, and the phone has no version of it: its three routes
+(`/api/connect-account/{pending,save,cancel}`) are classified `deliberate` in
+`tools/check_parity.py`, because a phone-side card would have to send the value
+over the network to reach this PC's Credential Manager - which is worse than the
+store it is meant to be kept out of, and the rule the owner's own note already
+states ("the secret is typed on this PC, into the host, and the phone has no
+card to type it into"). **What the phone does get** is the answer: asking
+"connect my calendar" or "is my calendar connected?" in the phone's chat reaches
+the same quick path (`jarvis_quick.py`) and gets the same honest reply - the
+card is waiting on the PC, or the test's verdict - because those sentences need
+no card. The model's `connect_account` tool ships OFF like every other tool that
+is not in the shipped `[tools].enabled` list, and it only ever raises the same
+PC card; nothing about it can save a value from a model turn.
+
 **The model advisor is the desktop's alone, and that is one-sided on purpose**
 (2026-10-28; the owner's request: *"can you give jarvis the ability to recommend
 a change to presets (for the local ai models being used) with a one click check
@@ -3569,7 +3588,7 @@ the phone still sends one mark per answer over it, and the desktop already
 files the same marks. No route, command or capability was added for either
 half, so `tools/check_parity.py` classifies nothing new.
 
-**Google Calendar's read/write way is the desktop's, and the phone has none of it** (2026-10-28, JARVIS-API §161). The phone has no screen, no card and no route for the sign-in: it must never hold the refresh token, and a phone-side card would have to send a secret over the network to reach the store - worse than the store (`docs/ARCHITECTURE.md` §3, `DESIGN-SECRET-HANDOFF.md`). The private iCal link is not affected: it is read by the backend, so the phone sees calendar answers in chat exactly as before. The Settings card for this feature is not built either, and that is a this-slice gap rather than a design: every Settings card in this program is a Rust command in `src-tauri/src/lib.rs`, which the parallel account-connect work owned, so the one-time setup is `py -3 jarvis_google_calendar.py client/mode/connect`. `answer()` is the deterministic chat sentence and is **not wired** into `jarvis_quick.py` - that is a follow-up for the Lead, and the module's own WIRING note carries the exact block (it must wrap the string in a `Result`, because `jarvis_quick.answer()` returns `Optional[Result]` and its caller reads `.reply`).
+**Google Calendar's read/write way is the desktop's, and the phone has none of it** (2026-10-28, JARVIS-API §161). The phone has no screen, no card and no route for the sign-in: it must never hold the refresh token, and a phone-side card would have to send a secret over the network to reach the store - worse than the store (`docs/ARCHITECTURE.md` §3, `DESIGN-SECRET-HANDOFF.md`). The private iCal link is not affected: it is read by the backend, so the phone sees calendar answers in chat exactly as before. The Settings card for this feature is not built either, and that is a this-slice gap rather than a design: every Settings card in this program is a Rust command in `src-tauri/src/lib.rs`, which the parallel account-connect work owned, so the one-time setup is `py -3 jarvis_google_calendar.py client/mode/connect`. `answer()` is the deterministic chat sentence and **is wired** in this tree: `jarvis_quick.answer()` calls it after the fast path has declined and wraps the string in a `Result` (`jarvis_quick.answer()` returns `Optional[Result]` and its caller reads `.reply`), marks the turn as having read outside text (`read: ["calendar_read"]`), and never reaches it in a private chat. The connect sentences are not its: those belong to the connect-account card (§162), which is why one sentence has one owner (JARVIS-API §21.13).
 
 ## 9. Where the backend lives
 

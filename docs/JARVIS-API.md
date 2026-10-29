@@ -6279,12 +6279,30 @@ the owner's phrasings returned `None` from `jarvis_quick.match()` (16 of 16
 measured), so the local model answered, and its system prompt
 (`jarvis_agent.LANE_SYSTEM`) says nothing about a calendar.
 
-`jarvis_quick.py` now answers - `quick: "calendar_setup"`, no model, no card, in
-`READ_ONLY_INTENTS` so it does not take away what "cancel that" would undo. It
-matches a whole sentence that asks to **connect / set up / add / link / hook up
-/ sync / integrate / enable / configure / import** a calendar, including "like
-google or outlook", "a calendar bridge", "calendar setup" and "is my calendar
-connected?", and the question forms ("how do I …", "can you …"). It answers from
+**One owner per sentence, after three branches landed the same day (2026-10-28).**
+The connect-account work (§162) and the Google sign-in (§161) merged on top of
+this answer, so `jarvis_quick.py`'s calendar path has exactly one owner for each
+sentence now. `t_one_owner_per_sentence` in this answer's own suite is the
+table, measured through `Q.match`/`Q.answer`, so a reworded grammar cannot
+quietly shadow another answer:
+
+| the sentence | who answers it |
+|---|---|
+| "connect my calendar", "set up my calendar", "set up a calendar bridge for me", "can you connect directly to external calendars like google or outlook?", "is my calendar connected?", "set up github", "is github set up?" | the **connect-account card** (§162): one card that takes the value on this PC, or the state answered from the store and one real test |
+| "calendar setup", "sync my calendar with jarvis", "import my ics file into jarvis", "give jarvis access to my calendar" | **this answer** (`calendar_setup`) - the setup shapes the card's grammar declines |
+| "what's on my calendar today", "add a meeting Tuesday 3pm", "add/update/delete a calendar event …" | **`jarvis_google_calendar.answer()`** (§161), asked only after the fast path has declined, so it cannot compete for "connect" |
+
+The owner's two 2026-10-28 sentences reach the **card** now, not the steps below
+(the card is the act, and it saves the link where he types it); the steps keep
+the same request in the shapes the card does not claim. A private chat reaches
+none of the three (§156).
+
+`jarvis_quick.py` answers with `quick: "calendar_setup"`, no model, no card, in
+`READ_ONLY_INTENTS` so it does not take away what "cancel that" would undo. Its
+grammar covers the whole family - **connect / set up / add / link / hook up /
+sync / integrate / enable / configure / import** a calendar - but the card's
+matcher runs first and owns the connect shapes; what reaches this answer is
+"calendar setup" and the same request in other words. It answers from
 the reader's own state:
 
 * **Not set up** (this PC today): the real two steps - Google Calendar → gear →
@@ -6306,22 +6324,23 @@ the reader's own state:
 
 **Not matched, deliberately.** "Open my calendar" still opens it
 (`jarvis_open.py`); a reminder that mentions a calendar is still a reminder; and
-a plain "what's on my calendar today" still goes to the model, which reads it
-through `calendar_read` once the tool is offered - this fix adds the setup
-answer, not a second way to read a calendar. A sentence with one more condition
-("… tomorrow at 5", "… on my phone") still falls through. And in a private chat
-every read-only fast-path answer goes to the model by design (§156), so this one
-does too.
+a plain "what's on my calendar today" is not this answer's either - it is
+`jarvis_google_calendar.answer()`'s (§161), which reads the calendar and marks
+the turn as having read outside text (`read: ["calendar_read"]`). A sentence
+with one more condition ("… tomorrow at 5", "… on my phone") still falls through
+to the model. And in a private chat every read-only fast-path answer goes to the
+model by design (§156), so this one does too.
 
-Tests: `backend/test_calendar_answer.py` - both of the owner's 2026-10-28
-sentences and 16 close phrasings answered with no model, 11 near misses keeping
-their own answer, the answer's steps checked against
+Tests: `backend/test_calendar_answer.py` - the setup sentences this answer keeps
+and the card's own shapes checked to belong to the card, the phrase→owner table
+above, 11 near misses keeping their own answer, the answer's steps checked against
 `jarvis_settings_registry.SECTIONS`, `jarvis_calendar.ICS_URL_TARGET` and its
 own docstring, the reading-tool sentence checked through `jarvis_quick`'s real
 `_TOOL_ON` grammar, the shipped `enable_reading_tool = "ask"` tier and the
 shipped `[tools].enabled` list, both "already set up" branches driven with a
-fake link and a fake CalDAV address (and held to never printing either), and a
-mutation check that the owner's sentence reaches the model when the new matcher
+fake link and a fake CalDAV address (and held to never printing either), the
+Google answer's read and event sentences driven with a stubbed read, and a
+mutation check that the setup sentence reaches the model when the new matcher
 is disabled.
 
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
@@ -26766,13 +26785,16 @@ Google Cloud setup is `docs/GOOGLE-CALENDAR-SETUP.md`.
 **Not built in this slice, said plainly.** The Settings card (the Settings
 window has no door of its own to the backend; every Settings card here is a Rust
 command in `src-tauri/src/lib.rs`, which the parallel account-connect work owns),
-a model tool, and any phone surface. `jarvis_google_calendar.answer(text)` is the
-deterministic chat sentence, and it is **not wired** into `jarvis_quick.py` yet:
-that is a follow-up integration step for the Lead, and the module's own WIRING
-note carries the exact block. It must wrap the string in a `Result`, because
-`jarvis_quick.answer()` returns `Optional[Result]` and its caller reads
-`.reply` - a bare `str` breaks the turn. Wiring it would still not create an
-event: `answer()` only describes one, and creating it is a second explicit step.
+a model tool, and any phone surface. `jarvis_google_calendar.answer(text)` **is
+wired** in this tree: `jarvis_quick.answer()` calls it after the fast path has
+declined, wraps the string in a `Result` (a bare `str` would break the turn,
+because `jarvis_quick.answer()` returns `Optional[Result]` and its caller reads
+`.reply`), marks the turn as having read outside text (`read:
+["calendar_read"]`), and never reaches it in a private chat. The connect
+sentences are not its: "connect my calendar" belongs to the connect-account card
+(§162), so the two answers do not compete - the phrase→owner table is §21.13.
+Wiring it still does not create an event: `answer()` only describes one, and
+creating it is a second explicit step.
 
 **What Google imposes.** `calendar.events` is a *sensitive* scope. In "Testing"
 with the owner added as a test user it works and only he can use it, and Google
@@ -26792,3 +26814,127 @@ than the request, the stale refusals, the revoke path, and the status/banner
 words. It runs no network request. **The real Google round trip has not been run
 in this checkout** (no Google account, no network): the first `connect` on the
 owner's PC is the field test.
+## 162. Connecting an account by talking: one card, Credential Manager, one real test (added 2026-10-28)
+
+The owner asked, on 2026-10-28:
+
+> "in regards to the calendar AUDits I meant to check if other features of jarvis
+> can be connected to my accounts through chat and if I need to put in a password
+> a notification will pop up or if I need to put in a USername and a password.
+> it should be able to connect all features just through me talking to jarvis"
+
+The answer he had been given - *"jarvis cannot connect directly to external
+calendars ... Would you like instructions on exporting your calendar to ICS?"* -
+was false about Jarvis, which reads CalDAV and a private iCal link today. The
+storage half (`jarvis_token_store.py`, Windows Credential Manager) and the card
+half (`§157`) both existed; nothing joined them, and the model had no setup tool,
+so it filled the gap with a generic limitation.
+
+**Phase 1 covers three services, and only these:**
+
+| service id | what the card asks for | Credential Manager entry | the one real test |
+|---|---|---|---|
+| `calendar_ics` | the private iCal link ("Secret address in iCal format") | `Jarvis Backend/Calendar iCal link` (existed since 2026-09-27) | one `GET` of the link: 200 **and** `BEGIN:VCALENDAR` in the answer |
+| `calendar_caldav` | username + password | `Jarvis Backend/CalDAV username`, `Jarvis Backend/CalDAV password` (**new**) | one `PROPFIND` with Basic auth on the CalDAV address already saved in Settings, Accounts: 200 or 207 |
+| `github` | a personal access token | `Jarvis Backend/GitHub token` (**new**) | `GET https://api.github.com/user`: 200, and the login name GitHub answers with |
+
+The CalDAV username/password and the GitHub token had **no Credential Manager
+entry at all** before this: they were read only from `JARVIS_CALDAV_USER`,
+`JARVIS_CALDAV_PASSWORD` and `JARVIS_GITHUB_TOKEN` - plain-text Windows user
+environment variables - which is the rule 3 breach the owner's ask made worth
+fixing. All three now resolve through `jarvis_token_store.resolve_secret`, so the
+environment variable still wins when one is set (nothing already working breaks)
+and the store is only ever the fallback. `jarvis_calendar.login()` is the one
+reader for both calendar secrets; `jarvis_research._token()` and
+`jarvis_tellme._github_token()` share the GitHub one.
+
+**How a card is raised - two doors, one implementation.** `jarvis_connect_account.raise_card(service, label)`
+is called by (a) the model's `connect_account` tool, and (b) `jarvis_quick.py`'s
+own sentence grammar ("connect my calendar", "set up github", "is my calendar
+connected?", "connect my email"), which needs no model at all and runs **before**
+the 2026-10-22 Settings-only refusal - the card types the value on this PC, which
+is the same act Settings performs. A sentence naming an account with no test yet
+(email, Notion, Obsidian, the search and chatbot keys, Home Assistant) is answered
+with what CAN be connected, not with a card for something unverifiable. A
+reminder that merely mentions a calendar keeps its own answer.
+
+**The card's shape (nothing here is or can be a value):**
+
+```json
+{
+  "kind": "connect_account",
+  "card_id": "ca_<24 lower-case hex>",
+  "service": "calendar_caldav",
+  "service_label": "Calendar - a CalDAV server (username and password)",
+  "summary": "<the host's own sentence: what this PC will do>",
+  "note": "<the host's own caveat, e.g. the CalDAV address lives in Settings>",
+  "fields": [
+    {"name": "username", "label": "CalDAV username", "kind": "username", "secret": false, "hint": ""},
+    {"name": "password", "label": "CalDAV password", "kind": "password", "secret": true, "hint": "..."}
+  ],
+  "agent_claimed_note": "<the model's own words, cleaned and capped>",
+  "agent_note_is_untrusted": true,
+  "stores_where": "Windows Credential Manager, on this PC",
+  "store_entries": ["Jarvis Backend/CalDAV username", "Jarvis Backend/CalDAV password"],
+  "from_this_pc_only": true,
+  "expires_in_seconds": 300
+}
+```
+
+**Routes (host-only: pairing token AND a loopback caller; the body is never
+logged, echoed or stored).**
+
+| route | what it does |
+|---|---|
+| `GET /api/connect-account/pending` | the cards waiting for the owner, metadata only. Never a value - none exists yet. |
+| `POST /api/connect-account/save` | body `{"card_id": "ca_...", "values": {"<field>": "<value>", ...}}`. Refuses any field the card did not declare (by name), an empty or oversized value (by label), and an unknown, expired or used card - none of those sentences ever contains a value. The card is spent exactly once, and the re-check and the removal are **one step under the lock**, so two submits of the same card at the same moment cannot both save (one receipt, one write; the other is refused as voided). Then: each value goes to `jarvis_token_store.store_secret` (Credential Manager **and nowhere else**), the service is tested with the values that will actually be used, and the receipt names the store entries, the source that won, and the verdict. |
+| `POST /api/connect-account/cancel` | body `{"card_id": "ca_..."}`. The owner pressed Cancel. |
+
+Both POST routes refuse a non-loopback caller **before the body is read** (403),
+and origin/token are checked before that. There is **no plaintext fallback**: a
+store that refuses produces an error that says so and writes nothing else, and
+the value is never put in a file, an environment variable, a database, the
+clipboard or a log line. A saved value is registered with `jarvis_scrub` at once
+(there is no environment variable NAME for the scrubber's own scan to catch).
+
+**"Connected" is only ever the verifier's verdict.** A saved-but-broken link
+answers "saved, but it did not work just now - the private link answered HTTP
+404. Nothing is reading it until that works." and never "connected". The status
+read is `jarvis_connect_account.status()` / `status_words(service)`; the chat
+answers "is my calendar connected?" from it. `probe=False` answers from the store
+alone (no socket) and says "not tested just now". When that answer is "not
+connected yet" the quick path's `Result` carries `open_settings:
+"account-secrets"`, the same jump the calendar-setup answer (#960) makes, so the
+desktop opens Settings, Accounts at the box that has to be filled in; an answer
+that says connected (or saved-but-failing) opens nothing.
+
+**What this deliberately does not do.** No OAuth of any kind, no Google or
+Microsoft API, no public tunnel, no network broker (rule 2). No phone card and no
+phone route: the value is typed on this PC only (rule 3; `ARCHITECTURE.md` §8's
+connect-account row). No second store and no Settings box of its own - the same
+Credential Manager entries the reading modules own. The model gets **no argument
+for a value**: `connect_account` takes a service and a note, and an argument that
+looks like a value is refused with an explanation rather than dropped. A sentence
+about the PHONE is not this path's either: "is my phone connected?" is a question
+about pairing, and answering it with this card's own "what I cannot connect yet"
+text would be a true sentence about the wrong thing, so the phone's words are not
+in that list and the sentence keeps its own answer.
+
+**Tests.** `backend/test_connect_account.py` (187 checks: the store mapping, the
+card carrying no value, the model's note stripped of every format character (a
+right-to-left override made it read backwards), a card spent exactly once by two
+threads saving at the same moment, an expired card refused before anything is
+written, a refused store saving nothing, the verifiers passing and failing through
+an injected request hook - including an absent plain-http rule failing CLOSED
+rather than open - the status sentences, #960's Settings jump on a "not connected
+yet" answer, the tool's refusal of a value, the quick path's sentences (and the
+phone's question NOT reaching this path), the host-only route refusing another
+machine before it reads a single byte of the body, and that this adds no raw-key
+route) and `backend/test_account_secrets.py` (which now
+covers the three new entries - and, in the required `credential-manager` CI job,
+writes/reads/deletes each one's shape on real Windows under a throwaway name).
+The HUD card is driven in a real browser: `jarvis-desktop/tests/hud.mjs` hands the
+page the host's own card list, clicks Save, and asserts the boxes come from
+`card.fields`, the secret box is masked, the NEWEST waiting card is the one drawn,
+the boxes are empty after the save and the values reached the backend as one card
+id plus the declared fields - with no token in the page.

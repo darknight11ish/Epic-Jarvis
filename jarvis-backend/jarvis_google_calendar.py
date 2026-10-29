@@ -24,9 +24,9 @@ Settings window has no door of its own to the backend - every Settings card in
 this program is a Rust command, and `src-tauri/src/lib.rs` is where the parallel
 account-connect work is - so the Settings row and the chat tool are NOT built
 here. The routes below are the whole surface a Settings card or the account
-tool needs when one lands, and `answer()` is the deterministic chat sentence
-ready to be called from `jarvis_quick.py` (the wiring note at the bottom of
-this docstring, which is NOT wired yet).
+tool needs when one lands, and `answer()` is the deterministic chat sentence,
+wired into `jarvis_quick.py` by the 2026-10-28 integration branch (see "WIRING"
+below for the position and why it is after the fast path, not before it).
 
 WHY THE FLOW IS SHAPED THIS WAY (the rules that are not negotiable)
 
@@ -111,10 +111,9 @@ WHAT IS NOT HERE
   * No model tool. The parallel account-connect work owns the tool list
     (`jarvis_agent.py`, `jarvis_quick.py`, `jarvis_ui_control.py`,
     `jarvis_hud.html`), so the chat sentences are DETERMINISTIC functions in
-    this module (`answer()`, `parse_meeting()`) with their own tests, and the
-    wiring note at the bottom of this docstring is a follow-up step for the
-    Lead rather than a second copy of the quick path - it is NOT wired. See
-    "WIRING" below.
+    this module (`answer()`, `parse_meeting()`) with their own tests. The
+    wiring into `jarvis_quick.answer()` is the integration branch's one call,
+    not a second copy of the quick path. See "WIRING" below.
   * No second store, no second redactor, no second outside-text path: every
     one of those is the module that already does it.
   * No background sync. A read happens when something asks for one.
@@ -134,24 +133,35 @@ ROUTES (installed by `install()`, called from plugins/ready/google-calendar)
     POST /api/google-calendar/events/update   change (ONE card)
     POST /api/google-calendar/events/delete   delete (ONE card)
 
-WIRING: NOT DONE, AND THIS IS THE CORRECT BLOCK FOR THE LEAD
+WIRING: DONE IN THE INTEGRATION BRANCH, AND THE POSITION MOVED FOR A REASON
 
-This is a FOLLOW-UP INTEGRATION STEP owned by the Lead, not something this
-module does today and not something this PR wires. Two facts have to be right
-before anyone pastes it in:
+The 2026-10-28 integration branch calls `answer()` from `jarvis_quick.answer()` -
+but AFTER `intent = match(text, now)`, not before it. The original note said
+"before `match`, because no quick intent owns these sentences"; that stopped
+being true the day the connect-account work merged, because its grammar owns
+"connect my calendar" and `answer()` also carries a connect sentence. Asking
+this module first would shadow the connect card, which is the wrong card for
+that sentence. One owner per sentence, and the table is pinned by
+`backend/test_calendar_answer.py` (`t_one_owner_per_sentence`):
+
+  * "connect my calendar" (and "set up github", "is my calendar connected?") ->
+    the connect-account CARD, `jarvis_quick._connect`;
+  * the setup shapes that card does not claim ("calendar setup", "sync my
+    calendar with jarvis") -> `calendar_setup`;
+  * a read ("what's on my calendar today") or an event ("add a meeting Tuesday
+    3pm") -> this module's `answer()`, asked LAST, so it cannot compete.
+
+Two facts shape the call:
 
   * `answer()` below returns `Optional[str]` - one sentence, or None.
   * `jarvis_quick.answer()` returns `Optional[Result]` (a dataclass), and its
-    caller then runs `res.reply = in_manner(res.reply, ...)`
-    (`jarvis_quick.py:8475`). A bare string returned from that function breaks
-    the turn: a `str` has no `.reply`. The sentence must be wrapped in a
-    `Result`, which is why the block below does that and the old note's
-    `return said` was wrong.
+    caller then runs `res.reply = in_manner(res.reply, ...)`. A bare string
+    returned from that function breaks the turn: a `str` has no `.reply`. The
+    sentence must be wrapped in a `Result`.
 
-The correct call, inside `jarvis_quick.answer()`, AFTER the `_creator` block
-(`jarvis_quick.py:8224-8229`) and BEFORE `intent = match(text, now)` (8231) -
-before `match` because no quick intent owns these sentences, and guarded
-because a private chat must not reach Google:
+The call, as `jarvis_quick.answer()` now has it, inside `if intent is None:` -
+after the fast path has declined, before returning None to the model - and
+guarded because a private chat must not reach Google:
 
     if not private:
         try:
@@ -162,10 +172,9 @@ because a private chat must not reach Google:
         if _said is not None:
             return Result(str(_said), "google_calendar", read=["calendar_read"])
 
-`answer()` returns None for anything that is not one of the three calendar
-sentences ("connect my google calendar", "what's on my calendar", "add a
-meeting Tuesday 3pm"), so it cannot swallow another answer. No model tool is
-added, so `tools/check_invoke_grants.py` stays green.
+From that position a connect sentence never reaches `answer()`, so its own
+connect sentence is unreachable from chat ON PURPOSE. No model tool is added, so
+`tools/check_invoke_grants.py` stays green.
 
 WHAT THAT WIRING STILL DOES NOT DO: create an event. `answer()` only DESCRIBES
 a proposed event ("I can add ... it needs one approval card"); nothing is sent

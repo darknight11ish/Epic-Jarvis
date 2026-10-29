@@ -256,6 +256,21 @@ unpacks into a NEW folder and edits nothing on Notion's side, and the vault
 converter is built but has no button in either app yet - so the answer says
 that rather than promising either half is automatic. It reads nothing, changes
 nothing, opens no card, and is in READ_ONLY_INTENTS.
+
+CONNECTING AN ACCOUNT BY TALKING (2026-10-28). "connect my calendar", "set up
+github", "is my calendar connected?" - the owner's ask, and the answer to the
+refusal that made it worth asking for: the HUD had told him "jarvis cannot
+connect directly to external calendars ... Would you like instructions on
+exporting your calendar to ICS?", which was false about Jarvis. This file now
+raises ONE card (`jarvis_connect_account.py`, drawn by the HUD) whose boxes are
+typed on this PC and saved straight into Windows Credential Manager, then runs
+one real test and says exactly what it proved; a question about state is
+answered from the store and that same test. No value is ever in this file's
+sentence, in the chat, in the model's context or in a log - the card is the
+only place a value is typed, and the page posts it to a host-only route. It
+runs BEFORE the Settings-only refusal, because the card is the same act
+Settings performs, and it supersedes that sentence for the calendar and GitHub
+only (the rest still get it, unchanged).
 """
 from __future__ import annotations
 
@@ -4193,6 +4208,14 @@ def _settings_adjust(s: str) -> Optional[Intent]:
             setting = R.find_bool_setting_words(name)
         if setting is not None:
             return Intent("settings_bool", {"key": setting.key, "on": on})
+    # "connect my calendar", "set up github", "is my calendar connected?"
+    # (2026-10-28, the owner's ask). BEFORE the Settings-only refusal below,
+    # because that sentence is exactly what this replaces for these services -
+    # the card types them on the PC, the same act Settings performs. See
+    # `_connect` for why nothing else changes hands.
+    got = _connect(s)
+    if got is not None:
+        return got
     # The owner's two Settings-only exceptions are refused before anything
     # else can read them as a setting (ruling Q3.3, 2026-10-22).
     got = _settings_only(s)
@@ -5865,9 +5888,18 @@ _CALENDAR_STATE = re.compile(
 #: card's label, and the reading-tool sentence is this module's own `_TOOL_ON`
 #: grammar. `{tool}` is the reading-tool sentence, or "" when the tool is
 #: already offered (so the answer never asks for a switch that is already on).
+#:
+#: THE FIRST SENTENCE IS THE 2026-10-28 MERGE'S, and it has to be true of the
+#: MERGED tree: `jarvis_google_calendar.py` (merged the same day) really does
+#: add a Google sign-in, so "no Google sign-in" - true when this answer was
+#: written - would be false now. It names the read-only way this answer walks
+#: the owner through, and says the sign-in way exists without pretending the
+#: Settings window has a row for it yet (its one-time setup is a command).
 CALENDAR_SETUP_WORDS = (
-    "There is no bridge to set up, and no Google sign-in or permission grant: "
-    "Jarvis reads a calendar itself, read-only, on this PC. "
+    "There is no bridge to set up: Jarvis reads a calendar itself, read-only, "
+    "on this PC. (New on 2026-10-28: a real Google sign-in exists beside it - "
+    "read/write, one card per change - and its one-time setup is a command in "
+    "the backend folder, in docs/GOOGLE-CALENDAR-SETUP.md.) "
     "1. In Google Calendar on a computer: the gear, Settings, your calendar, "
     "Integrate calendar, then copy the Secret address in iCal format. "
     "2. Paste it into Jarvis: Settings, Accounts, the Calendar iCal link box. "
@@ -6051,6 +6083,202 @@ def _notion(s: str) -> Optional[Intent]:
     if _NOTION_JUST_IMPORT.fullmatch(s):
         return Intent("notion_export", {"step": "import"})
     return None
+
+
+# --- "connect my calendar", "set up github" (2026-10-28) ---------------------
+#
+# WHAT THIS IS FOR. The owner asked, on 2026-10-28: "it should be able to
+# connect all features just through me talking to jarvis", with a pop-up for a
+# password. The HUD answered his "can you connect directly to external
+# calendars like google or outlook?" with "jarvis cannot connect directly to
+# external calendars ... Would you like instructions on exporting your calendar
+# to ICS?" - false about Jarvis (it reads CalDAV and a private iCal link today)
+# and useless to him. The storage and the card both existed; nothing joined
+# them, and the model held no setup tool, so it filled the gap with a generic
+# limitation. This is the same fix as the Notion answer above: a deterministic
+# path with the real steps, so the model is never the one answering.
+#
+# WHAT IT DOES. It raises ONE card (jarvis_connect_account.raise_card) whose
+# boxes are typed on this PC and saved straight into Windows Credential
+# Manager, then tested with one real request. NO value is ever in this
+# sentence, in the chat, in the model's context or in a log: the card is the
+# only place a value is ever typed, and the page posts it to a host-only route.
+# Nothing is saved until the owner presses Save on that card, and the answer
+# says so - a spoken "yes" approves nothing, as everywhere else.
+#
+# WHERE IT SITS. Before `_settings_only` below, deliberately: that matcher
+# answers "set my github token" with the 2026-10-22 Settings-only sentence
+# ("Accounts and API keys are never typed or spoken"), and the owner's ask of
+# 2026-10-28 supersedes it for exactly these services - the card types them on
+# the PC, which is the same act as Settings, not a second one. Every other
+# account noun it does not know still gets that sentence, unchanged. After
+# every real action matcher, so "remind me to connect my calendar" stays a
+# reminder.
+#
+# "Is my calendar connected?" is answered from the store and from the service's
+# own test (jarvis_connect_account.status_words) - never from a guess, and
+# "not connected yet" when nothing is saved.
+
+_CONNECT_START = re.compile(
+    r"^(?:how\s+(?:do|can|could|would)\s+i\s+(?:please\s+)?"
+    r"|(?:do|does|will|would)\s+(?:you|jarvis)\s+(?:please\s+)?"
+    r"|i\s+(?:want|need|would\s+like)\s+(?:you\s+)?to\s+(?:please\s+)?"
+    r"|let\s+you\s+)?"
+    r"(?P<verb>connect|set|set\s*up|setup|link|hook\s+up|integrate|configure|add|enable|"
+    r"sign\s+in\s+to|log\s+in\s+to)\b")
+
+#: "is my calendar connected?", "do you have github set up?", "is github
+#: linked?" - a QUESTION about state, answered from the store and one test. It
+#: changes nothing, so it is in READ_ONLY_INTENTS.
+_CONNECT_STATUS = re.compile(
+    r"^(?:is|are|do|does|did|have|has|can)\b.{0,70}\b"
+    r"(?:connected|linked|set\s*up|working|hooked\s+up|signed\s+in|logged\s+in)\b"
+    r"|\bis\s+(?:my|the)\s+.{0,40}\b(?:connected|linked|set\s*up|working)\b")
+
+#: Nouns that name an account this file CANNOT connect yet (Phase 1 is the
+#: calendar and GitHub). A sentence that names one is answered honestly rather
+#: than handed to the model, which would invent a way. Kept to the inventory in
+#: the 2026-10-28 audit, section 2 - not a general word list.
+#:
+#: `phone` and `pairing` were in this list and are NOT any more (security review
+#: S6, 2026-10-28): they made "is my phone connected?" reach the connect path,
+#: whose honest-account answer never mentions the phone - a true sentence about
+#: the wrong thing, and "not in this list" is better than a wrong answer. The
+#: phone's own pairing state has its own answer elsewhere; this card is not it.
+_CONNECT_LATER = re.compile(
+    r"\b(?:e-?mail|imap|smtp|inbox|notion|obsidian|logseq|joplin|home\s+assistant|"
+    r"web\s+search|exa|tavily|brave|openai|mistral|xai|openrouter|groq|"
+    r"big\s+model|chatbot|spotify|dropbox|google\s+drive)\b")
+
+#: A THING ON a calendar, not the calendar itself (2026-10-28, the integration
+#: merge of the three calendar branches). The verb "add" is a connecting one
+#: only when what follows is the calendar or the account: "add my google
+#: calendar" raises the connect card, but "add a calendar event at 5pm" is a
+#: sentence for `jarvis_google_calendar.answer()` (it proposes the event and
+#: says one card is needed), and raising the connect card for it would hand the
+#: owner the wrong card. This is the same shape as the reminder guard below,
+#: and it is why one sentence has one owner: the card owns connecting, the
+#: Google answer owns reading and changing events.
+_CONNECT_EVENT = re.compile(
+    r"\b(?:meetings?|events?|appointments?|calls?|lunch|dinners?|breakfasts?|"
+    r"part(?:y|ies)|flights?|trains?|birthdays?|weddings?|concerts?|"
+    r"interviews?|classes|lessons?)\b")
+
+
+def _connect(s: str) -> Optional[Intent]:
+    """"connect my calendar", "set up github", "is my calendar connected?".
+
+    Whole-sentence in the sense that matters: the verb has to START the
+    sentence (or follow one of the ask lead-ins in `_CONNECT_START`), a service
+    from `jarvis_connect_account.SERVICES` has to be named, and the sentence
+    has to be short. Anything this file cannot verify - email, Notion, the
+    other accounts - is answered with what CAN be connected rather than a card
+    for something there is no test for."""
+    words = s.split()
+    if len(words) > 16:
+        return None
+    # NOT a sentence about a reminder, an alarm or a watch: "set a reminder for
+    # my calendar" names a calendar and must never raise a connect card. The
+    # real timer matchers run before this one, but a sentence of theirs that
+    # they cannot parse (no time in it) would otherwise land here.
+    if re.search(r"\b(?:remind|reminder|reminders|alarm|alarms|timer|timers|watch|"
+                 r"watching|notify|notification|todo|to-do)\b", s):
+        return None
+    # NOT the connect card when the sentence names a THING ON the calendar
+    # ("add a calendar event at 5pm", "add a meeting to my calendar tomorrow"):
+    # that is `jarvis_google_calendar.answer()`'s sentence, and its own answer
+    # is the proposal plus the one card the write needs (2026-10-28).
+    if _CONNECT_EVENT.search(s):
+        return None
+    if _CONNECT_STATUS.match(s):
+        try:
+            import jarvis_connect_account as C
+        except Exception:                   # noqa: BLE001 - module absent
+            return None
+        sid = C.service_from_words(s)
+        if sid:
+            return Intent("connect_account", {"ask": "status", "service": sid})
+        if _CONNECT_LATER.search(s):
+            return Intent("connect_account", {"ask": "later"})
+        return None
+    start = _CONNECT_START.match(s)
+    if not start:
+        return None
+    try:
+        import jarvis_connect_account as C
+    except Exception:                       # noqa: BLE001 - module absent
+        return None
+    sid = C.service_from_words(s)
+    if sid:
+        return Intent("connect_account", {"ask": "card", "service": sid})
+    if _CONNECT_LATER.search(s):
+        # A BARE "set" ONLY WITH A SERVICE IT KNOWS (2026-10-28). "set my github
+        # token" raises the card; "set web search to off" is a SETTING and must
+        # keep its own lane, so a sentence with no known service is only read as
+        # a connect ask when the verb itself is a connecting one.
+        if start.group("verb") == "set":
+            return None
+        return Intent("connect_account", {"ask": "later"})
+    return None
+
+
+def _run_connect(f: dict) -> Result:
+    """"connect my calendar" / "set up github" / "is my calendar connected?".
+
+    Raises ONE card and says where it is; or answers a state question from the
+    store and one real test; or names what CAN be connected when the sentence
+    asked for an account this file cannot test yet. Nothing here types a value
+    and nothing here saves one."""
+    try:
+        import jarvis_connect_account as C
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(CONNECT_MISSING, "connect_account")
+    ask = str(f.get("ask") or "")
+    sid = str(f.get("service") or "")
+    if ask == "later" or not sid:
+        return Result(
+            "I can connect two things by talking today: a calendar (the private iCal "
+            "link, or a CalDAV server's username and password) and GitHub. The rest - "
+            "email, Notion, Obsidian, the search and chatbot keys, Home Assistant - "
+            "still need Settings, Accounts on the PC, because none of them has a test "
+            "I can run to prove it works. A password or a token is never typed into "
+            "the chat, there or anywhere else.",
+            "connect_account")
+    if ask == "status":
+        said = C.status_words(sid)
+        # "Not connected yet" must lead somewhere. `_run_calendar_setup` (main,
+        # #960) answers the same state with `open_settings="account-secrets"`,
+        # so the desktop jumps its Settings window to the Accounts card without
+        # changing anything; this answer keeps that jump rather than sending the
+        # owner to find the page himself (security review S5, 2026-10-28). An
+        # answer that says connected, or saved-but-failing, opens nothing: there
+        # is no box for the owner to go and fix.
+        if "not connected yet" in said:
+            return Result(said, "connect_account", open_settings="account-secrets")
+        return Result(said, "connect_account")
+    try:
+        card = C.raise_card(sid, "")
+    except C.ConnectAccountError as exc:
+        return Result(str(exc), "connect_account")
+    svc = C.SERVICES[sid]
+    boxes = " and ".join(f.label for f in svc.fields)
+    return Result(
+        f"{svc.name}. One card is waiting in the Jarvis window on this PC: type the "
+        f"{boxes} there and press Save. " + CONNECT_SAFE_NOTE + " Then I run one real "
+        "test and tell you exactly what it proved.",
+        "connect_account")
+
+
+#: Said by every connect answer. The card is the only place a value is typed,
+#: and the page posts it to a route only this PC may call.
+CONNECT_SAFE_NOTE = ("I cannot take it here - a password, a token or a private link is "
+                     "never typed into the chat, so it goes straight from that card into "
+                     "Windows Credential Manager.")
+
+#: The connect card's own module is not on this PC.
+CONNECT_MISSING = ("I cannot raise the connect card on this PC: jarvis_connect_account.py "
+                   "is not in the backend folder. Run apply-patches.ps1 again, or use "
+                   "Settings, Accounts.")
 
 
 def _open(s: str) -> Optional[Intent]:
@@ -7652,6 +7880,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # import button on this PC and the converter's half that has no button
         # yet. Nothing is read and nothing is imported.
         return _run_notion(f)
+    if n == "connect_account":
+        # "connect my calendar" / "set up github" (2026-10-28): ONE card whose
+        # values are typed on this PC and saved into Credential Manager, then
+        # one real test; or the honest state of one service. See `_run_connect`.
+        return _run_connect(f)
     if n == "sayable_help":
         return _run_sayable(intent)
     if n == "identity_help":
@@ -8431,6 +8664,25 @@ def answer(text, *, sched=None, now: Optional[float] = None,
                       str(_made.get("intent") or "personality_draft"))
     intent = match(text, now)
     if intent is None:
+        # GOOGLE CALENDAR: READS AND EVENT CHANGES, AND ONLY THOSE (2026-10-28).
+        # Asked HERE - after the fast path has declined - so one sentence has
+        # one owner: "connect my calendar" is the connect-account card's (in
+        # `_settings_adjust`), a setup shape the card does not claim is
+        # `calendar_setup`'s, and the reads and event changes are this one's.
+        # `jarvis_google_calendar.answer()` still carries a connect branch;
+        # from here it is UNREACHABLE on purpose, because a connect sentence
+        # never gets this far - so it cannot compete for "connect".
+        # `not private` because a private chat must not reach Google at all
+        # (private-chat.patch: reads-only, nothing outside), and the import is
+        # inside the guard so a backend without the module is unchanged.
+        if not private:
+            try:
+                import jarvis_google_calendar as _gcal
+                _said = _gcal.answer(text)
+            except Exception:               # noqa: BLE001 - module absent
+                _said = None
+            if _said is not None:
+                return Result(str(_said), "google_calendar", read=["calendar_read"])
         return None
     if private:
         # private-chat.patch: the whole fast path is OFF in a private chat.

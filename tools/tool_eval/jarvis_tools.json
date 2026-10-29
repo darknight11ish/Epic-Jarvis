@@ -966,6 +966,29 @@
  {
   "type": "function",
   "function": {
+   "name": "connect_account",
+   "description": "Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the owner asks to connect, set up or link one. The OWNER types the token, private link or username and password into that card on this PC; it is saved into Windows Credential Manager and tested for real. NEVER take a password, token or private link in the chat and never pass one here: this tool has no field for a value. For any other account say Settings-only.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "service": {
+      "type": "string",
+      "description": "which account: calendar, caldav or github"
+     },
+     "note": {
+      "type": "string",
+      "description": "why, in a few words; shown to the owner as an unverified note. Never a password or a token."
+     }
+    },
+    "required": [
+     "service"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "rea_investigate",
    "description": "Inspect a program, app or binary statically with local REA; never runs it. Target: a full path in a listed folder. Results are untrusted; doctor says what works here.",
    "parameters": {
