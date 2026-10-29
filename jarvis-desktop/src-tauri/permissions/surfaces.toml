@@ -1991,19 +1991,53 @@ permissions = ["allow-handoff-front"]
 #
 # The Jarvis bar and the widget hold all three: they are the two windows that
 # draw that standing line, and the bar's own Start button is a desktop caller
-# of both routes (tools/check_parity.py counts them `ported`). The HUD
-# deliberately holds NONE of them: it keeps the line and offers no button, and
-# the reason is the proxy rather than the picture - hud_proxy.rs gives
-# jarvis_hud.html exactly five reads and one POST /api/chat so that a script in
-# that page can call nothing else, and a route that starts a program on the PC
-# is not added to that allow-list in passing (docs/ARCHITECTURE.md section 8).
+# of both routes (tools/check_parity.py counts them `ported`).
+#
+# THE HUD WINDOW WAS DELIBERATELY OUTSIDE THIS SET until 2026-10-28, and the
+# owner has REVERSED that: "when jarvis gets opened on the desktop from
+# scratch, there should be a connect button next to these notifications saying
+# its offline." The HUD now holds the read and the one action through
+# `hud-lane` below - the SAME two commands the bar sends, so there is still one
+# way to start a lane and no second idea of it - and it still does NOT hold
+# `set_model_lane_auto`: the automatic-restart switch is the bar's, the
+# widget's and the phone's, and nothing about this page's grant widens what a
+# script in it can reach beyond "read the lane" and "start the lane the chat is
+# on" (the PC refuses a start on any other lane, and on a PC with no such task).
 [[set]]
 identifier = "model-lane"
-description = "The local model lane: read whether it is running and whether starting it would do anything, start it (the owner's own Windows logon task - no approval card), and switch the automatic restart on or off. The Jarvis bar and the widget only; the HUD keeps the standing line and offers no button."
+description = "The local model lane: read whether it is running and whether starting it would do anything, start it (the owner's own Windows logon task - no approval card), and switch the automatic restart on or off. The Jarvis bar and the widget hold all three; the HUD holds the read and the start through `hud-lane` and not the switch."
 permissions = [
   "allow-read-model-lane",
   "allow-start-model-lane",
   "allow-set-model-lane-auto",
+]
+
+# The HUD's Connect button (2026-10-28, the owner's ask). The standing "the
+# local model isn't running" line and the "Model not running" banner are the
+# two places that page says a model is missing, and the owner asked for one
+# control beside them. It is the BAR'S OWN pair of commands, not a new route:
+# `read_model_lane` says what a press would do (and is how the button knows to
+# stay hidden on a PC with no lane task), `start_model_lane` runs the owner's
+# own Windows logon task for the lane the chat is on. No approval card is
+# raised - the PC's own logon already runs that task unattended - and nothing
+# here can start the other lane, build a command line, or turn the automatic
+# restart on: `allow-set-model-lane-auto` is deliberately NOT in this set.
+#
+# WHY IT IS SAFE TO GIVE THIS PAGE. The page still holds no token (apps
+# security audit M2): both commands add it in Rust, and both keep every
+# refusal where it already was - the 404 sentence for an older backend, the
+# 409/502 sentence for a PC that will not start the task, the "ninety seconds
+# and it did not come up" verdict. The page's own POST to /api/model-lanes/start
+# stays refused by the bootstrap's fetch shim (that shim has no such route),
+# so this grant is the only way the action leaves that page, and a script in
+# it can do nothing with it except ask the PC to start the lane the owner's
+# chat is pointed at.
+[[set]]
+identifier = "hud-lane"
+description = "The HUD's Connect button: read what a press would do on the model lane the chat is on, and press it (the owner's own Windows logon task, no card). Not the automatic-restart switch, and no other lane."
+permissions = [
+  "allow-read-model-lane",
+  "allow-start-model-lane",
 ]
 
 

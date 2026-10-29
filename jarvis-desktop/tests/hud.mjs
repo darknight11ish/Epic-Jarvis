@@ -134,6 +134,21 @@ async function openHud(browser, status, pageOptions = {}) {
   page.on("console", (m) => {
     if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) problems.push(m.text());
   });
+  // The theme a scenario wants in this page's localStorage BEFORE its own head
+  // script reads it (the pre-paint path), and two probes that prove the page -
+  // not this harness - painted it: `__themeAtInit` is read here, before any
+  // page code, and `__firstFrameTheme` at the first animation frame. The
+  // harness deliberately does NOT set `data-theme` itself: a check that read an
+  // attribute this script had written would prove nothing at all.
+  await page.addInitScript((theme) => {
+    if (theme) { try { localStorage.setItem("jarvis.theme", theme); } catch (e) {} }
+    window.__themeAtInit = document.documentElement
+      ? document.documentElement.getAttribute("data-theme") : null;
+    window.__firstFrameTheme = null;
+    requestAnimationFrame(() => {
+      window.__firstFrameTheme = document.documentElement.getAttribute("data-theme");
+    });
+  }, status.hudTheme || null);
   // The shell's IPC, as the HUD holds it (capabilities/hud.json): the mic's
   // summon_push_to_talk, and hud_proxy.rs's reads, chat and the mark, which
   // this stands in for the way Rust does them - the same request to the
@@ -894,6 +909,294 @@ await check("the reactor is faces.html in display mode, and it draws", async () 
   assert.equal(Math.round(box.height), 220);
   assert.equal(builtin, false, "the desktop shell was drawn with the browser's fallback orb");
   assert.deepEqual(problems, [], "a CSP refusal or a page error in the HUD or its face");
+});
+
+/* ── The face size (the owner's ask, 2026-10-28) ─────────────────────────── */
+
+/**
+ *   "in the jarvis faces in the left column of the hud there should also be a
+ *    size option on desktop"
+ *
+ * Small / Medium / Large multiply the face's own layout size. Two halves:
+ * the source rules (every rule that sizes #reactor multiplies its own base,
+ * and the saved choice is read before first paint), and the real page driven
+ * in a browser (the panel's three options, Medium by default, Large/Small
+ * changing the computed box at once, the device's storage being the ONLY
+ * write, and the choice surviving a reload). */
+
+await check("every rule that sizes the face keeps its base and multiplies the saved scale", () => {
+  const page = readFileSync(join(SRC, "jarvis_hud.html"), "utf8");
+  // Comments out, so the words "#reactor (220px in Cockpit...)" in the style's
+  // own prose cannot be mistaken for a rule.
+  const css = page.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const [size, scale] of [["", "1"], ["small", ".75"], ["medium", "1"], ["large", "1.25"]]) {
+    const selector = size ? `html[data-face-size="${size}"]` : "html";
+    assert.match(css, new RegExp(`${selector.replace(/[[\]"]/g, "\\$&")}\\{--face-scale:${scale.replace(".", "\\.")};\\}`),
+      `${selector || "html"} does not set --face-scale:${scale}`);
+  }
+  // EVERY rule that sizes #reactor - 232 base, 150 narrow page, Cockpit's
+  // 220/96/150/88, Studio's 48, Ambient's 320/240/190 - keeps its own number
+  // and multiplies it. A new shell rule written as a bare width/height fails
+  // here, which is the point: it would not follow the chosen size.
+  const rules = [...css.matchAll(/(?:^|\n)([^\n{}]*#reactor[^{}]*)\{([^}]*)\}/g)]
+    .map((m) => ({ selector: (m[1] || "").trim(), body: m[2] }))
+    .filter((rule) => /\bwidth\s*:/.test(rule.body) || /\bheight\s*:/.test(rule.body));
+  assert.equal(rules.length, 10,
+    `${rules.length} rule(s) size #reactor, not the ten layouts the page has: `
+    + rules.map((r) => r.selector).join(" | "));
+  for (const rule of rules) {
+    const width = /width:calc\((\d+)px \* var\(--face-scale, 1\)\)/.exec(rule.body);
+    const height = /height:calc\((\d+)px \* var\(--face-scale, 1\)\)/.exec(rule.body);
+    assert.ok(width, `${rule.selector} sizes the face without --face-scale: ${rule.body.trim()}`);
+    assert.ok(height, `${rule.selector} sizes the face height without --face-scale: ${rule.body.trim()}`);
+    assert.equal(width[1], height[1], `${rule.selector} is no longer square (${width[1]}x${height[1]})`);
+  }
+  // The bases the shells rely on are still the same numbers.
+  assert.deepEqual(rules.map((rule) => Number(/width:calc\((\d+)px/.exec(rule.body)[1])).sort((a, b) => a - b),
+    [48, 88, 96, 150, 150, 190, 220, 232, 240, 320],
+    "a shell's own face size changed while adding the multiplier");
+  // The size is read BEFORE first paint: inside the page's first inline
+  // <script> in <head>, before the stylesheet that paints the shell.
+  const head = page.slice(0, page.indexOf('<link rel="stylesheet" href="theme.css">'));
+  assert.match(head, /localStorage\.getItem\("jarvis\.face\.size"\)/,
+    "the head script does not read the face size, so the first frame would flash the wrong size");
+  assert.match(head, /document\.documentElement\.setAttribute\("data-face-size", jarvisFaceSize\)/,
+    "the head script reads the size but does not put it on <html>");
+  assert.ok(head.indexOf("jarvis.face.size") < head.indexOf("data-hud-shell"),
+    "the face size is read after the shell bootstrap instead of with the theme before first paint");
+  // One control row in the panel's own look, with no new script and no new file.
+  assert.match(css, /\.hud-faces-size\{display:flex/,
+    "the panel has no Face size row in the page's own layout");
+  assert.match(css, /\.hud-faces-size-item\[aria-pressed="true"\]\{[\s\S]*?border-color:var\(--ice\)/,
+    "the chosen size has no pressed look (the panel's own ice rule)");
+});
+
+await check("the panel's Face size is device-local, resizes the face at once, and raises nothing", async () => {
+  const { page, problems, direct } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.locator("#rail-faces").click();
+  const before = await page.evaluate(() => {
+    const panel = document.getElementById("hud-faces-menu");
+    const group = panel && panel.querySelector('[role="group"][aria-label="Face size"]');
+    const reactor = document.getElementById("reactor");
+    return {
+      open: Boolean(panel) && !panel.hidden,
+      options: group ? [...group.querySelectorAll("button")].map((button) => ({
+        label: button.textContent.trim(),
+        size: button.dataset.size || "",
+        pressed: button.getAttribute("aria-pressed"),
+      })) : [],
+      width: reactor.getBoundingClientRect().width,
+      height: reactor.getBoundingClientRect().height,
+      theme: document.documentElement.getAttribute("data-theme"),
+      face: reactor.getAttribute("src"),
+      stored: JSON.parse(JSON.stringify({ ...localStorage })),
+      invokes: window.__invokes.length,
+    };
+  });
+  assert.equal(before.open, true, "the Faces door in the left column did not open the panel");
+  assert.deepEqual(before.options.map((option) => option.label), ["Small", "Medium", "Large"],
+    `the panel's size options are ${JSON.stringify(before.options.map((o) => o.label))}`);
+  assert.deepEqual(before.options.map((option) => option.size), ["small", "medium", "large"],
+    "the size options do not name the three stored values");
+  assert.deepEqual(before.options.map((option) => option.pressed), ["false", "true", "false"],
+    "Medium is not pressed when this device has no saved size");
+  assert.equal(Math.round(before.width), 220, "Medium is not the Cockpit layout's own 220px face");
+  assert.equal(Math.round(before.height), 220, "the face is not square at Medium");
+  const directBefore = direct.length;
+
+  const clickSize = (size) => page.evaluate((chosen) =>
+    document.querySelector(`.hud-faces-size-item[data-size="${chosen}"]`).click(), size);
+  const readFace = () => page.evaluate(() => {
+    const reactor = document.getElementById("reactor");
+    const pressed = [...document.querySelectorAll(".hud-faces-size-item")]
+      .filter((button) => button.getAttribute("aria-pressed") === "true")
+      .map((button) => button.dataset.size);
+    return {
+      stored: localStorage.getItem("jarvis.face.size"),
+      attr: document.documentElement.getAttribute("data-face-size"),
+      width: reactor.getBoundingClientRect().width,
+      height: reactor.getBoundingClientRect().height,
+      pressed,
+      theme: document.documentElement.getAttribute("data-theme"),
+      face: reactor.getAttribute("src"),
+      storedAll: JSON.parse(JSON.stringify({ ...localStorage })),
+      invokes: window.__invokes.length,
+      line: document.querySelector("#hud-faces-menu .hud-presets-line").textContent,
+    };
+  });
+
+  await clickSize("large");
+  const large = await readFace();
+  assert.equal(large.stored, "large", "Large did not reach this device's localStorage");
+  assert.equal(large.attr, "large", "Large did not reach the page's one face-size attribute");
+  assert.deepEqual(large.pressed, ["large"], `the pressed size did not move to Large (${large.pressed})`);
+  assert.ok(large.width >= before.width * 1.2,
+    `Large is ${large.width}px against Medium's ${before.width}px - not at least 1.2x`);
+  assert.equal(Math.round(large.height), Math.round(large.width), "Large is not square");
+  assert.match(large.line, /Face size: Large/, "the panel did not say the size changed");
+
+  await clickSize("small");
+  const small = await readFace();
+  assert.equal(small.stored, "small", "Small did not reach this device's localStorage");
+  assert.ok(small.width <= before.width * 0.8,
+    `Small is ${small.width}px against Medium's ${before.width}px - not at most 0.8x`);
+  assert.deepEqual(small.pressed, ["small"], "the pressed size did not move to Small");
+
+  // ON THIS DEVICE ONLY: the one key this control may write, and nothing else.
+  const newKeys = Object.keys(small.storedAll).filter((key) => !(key in before.stored));
+  assert.deepEqual(newKeys, ["jarvis.face.size"],
+    `the size control wrote other localStorage key(s): ${JSON.stringify(newKeys)}`);
+  for (const key of Object.keys(before.stored)) {
+    assert.equal(small.storedAll[key], before.stored[key],
+      `the size control changed localStorage["${key}"], which is not its business`);
+  }
+  assert.equal(small.theme, before.theme, "the size control changed the theme");
+  assert.equal(small.face, before.face, "the size control changed which face is worn");
+  assert.equal(small.attr, "small");
+  // No command, no route, no card: a card needs a command or a POST, and the
+  // click made neither.
+  const added = await page.evaluate((at) => window.__invokes.slice(at).map(([name]) => name), before.invokes);
+  assert.deepEqual(added.filter((name) => /face|appearance|card|approv/i.test(name)), [],
+    `the size click asked the shell for something: ${JSON.stringify(added)}`);
+  assert.equal(direct.length, directBefore, "the size click made a request to the backend itself");
+
+  // A restart: the page reloads and this device still wears the chosen size,
+  // with the same option pressed.
+  await page.reload();
+  await page.waitForTimeout(500);
+  const reloaded = await page.evaluate(() => ({
+    attr: document.documentElement.getAttribute("data-face-size"),
+    width: document.getElementById("reactor").getBoundingClientRect().width,
+    stored: localStorage.getItem("jarvis.face.size"),
+  }));
+  assert.equal(reloaded.stored, "small", "a reload forgot the device's saved size");
+  assert.equal(reloaded.attr, "small", "a reload did not apply the saved size");
+  assert.ok(reloaded.width <= before.width * 0.8, `a reload drew the face at ${reloaded.width}px`);
+  await page.locator("#rail-faces").click();
+  const pressedAfterReload = await page.evaluate(() => [...document.querySelectorAll(".hud-faces-size-item")]
+    .filter((button) => button.getAttribute("aria-pressed") === "true")
+    .map((button) => button.dataset.size));
+  assert.deepEqual(pressedAfterReload, ["small"], "the panel forgot which size is chosen");
+  await page.close();
+  assert.deepEqual(problems, [], "a CSP refusal or a page error in the HUD when the face size changed");
+});
+
+await check("the 48-96px shells stay sane at every face size, and the keyboard chooses one", async () => {
+  // The brief's own edge, driven and not just counted in the stylesheet: the
+  // small pinned cores are where a multiplier could break a layout. Studio
+  // draws a 48px core beside its label; Cockpit's pinned core is 96px in this
+  // 1280px window (the 760px rule makes it 88px, and it is the same rule).
+  const { page, problems } = await openHud(browser, {
+    jarvis: false, ollama: true, proxy: false, hudLayout: presetLayout("studio") });
+  await page.waitForFunction(
+    () => document.body.dataset.hudShell === "split-stage", null, { timeout: 10000 });
+
+  const face = () => page.evaluate(() => {
+    const reactor = document.getElementById("reactor");
+    const wrap = reactor.closest(".reactor-wrap");
+    const box = reactor.getBoundingClientRect();
+    const wrapBox = wrap.getBoundingClientRect();
+    return {
+      shell: document.documentElement.getAttribute("data-hud-shell"),
+      core: document.getElementById("shell").dataset.core || "",
+      width: box.width,
+      height: box.height,
+      wrapWidth: wrapBox.width,
+      wrapHeight: wrapBox.height,
+      stored: localStorage.getItem("jarvis.face.size"),
+    };
+  });
+  // The panel's OWN control, the same click the owner makes. The controller is
+  // used instead of the rail button because Studio keeps the rail in a drawer;
+  // the buttons and `pickSize` are the page's real ones either way.
+  const choose = async (size) => {
+    await page.evaluate(() => window.__jarvisFacePicker.open());
+    await page.evaluate((chosen) => {
+      document.querySelector(`.hud-faces-size-item[data-size="${chosen}"]`).click();
+    }, size);
+  };
+
+  const studioMedium = await face();
+  assert.equal(Math.round(studioMedium.width), 48,
+    `Studio's own core is ${studioMedium.width}px, not the 48px its layout gives it`);
+  assert.equal(Math.round(studioMedium.height), 48, "Studio's core is not square at Medium");
+
+  // THE KEYBOARD: focus the Large option and press Enter. A native button fires
+  // its click, so the size has to move with no mouse anywhere in it.
+  await page.evaluate(() => window.__jarvisFacePicker.open());
+  await page.locator('.hud-faces-size-item[data-size="large"]').focus();
+  await page.keyboard.press("Enter");
+  const studioLarge = await face();
+  assert.equal(studioLarge.stored, "large", "Enter on the Large option did not choose it");
+  assert.equal(Math.round(studioLarge.width), 60,
+    `Studio at Large is ${studioLarge.width}px, not 48px * 1.25`);
+  assert.equal(Math.round(studioLarge.height), Math.round(studioLarge.width),
+    "Studio's core stopped being square at Large");
+  // The wrap RESERVES the bigger box - which is why this is width/height and not
+  // `transform: scale()` - so the state label and the log below are not covered.
+  assert.ok(studioLarge.wrapHeight >= studioLarge.height - 1,
+    `Studio's row is ${studioLarge.wrapHeight}px high around a ${studioLarge.height}px face - the face overflows it`);
+  assert.ok(studioLarge.wrapWidth >= studioLarge.width - 1,
+    "Studio's face is wider than the row that holds it");
+
+  await choose("small");
+  const studioSmall = await face();
+  assert.equal(Math.round(studioSmall.width), 36,
+    `Studio at Small is ${studioSmall.width}px, not 48px * 0.75`);
+
+  // Cockpit's pinned core - the smallest base in the desktop shells after
+  // Studio's. `data-core` is the page's own datum: this is the state the page
+  // itself sets once the chat has grown, or the owner docks the core. The
+  // saved size belongs to the DEVICE, not to a shell, so Medium is chosen
+  // again here rather than assumed: that is also the point - switching shells
+  // must not reset it, and it did not.
+  await choose("medium");
+  const studioAgain = await face();
+  assert.equal(Math.round(studioAgain.width), 48,
+    "choosing Medium did not return Studio's core to its own 48px");
+  await setHudLook(page, "cockpit");
+  // `data-core` is the page's own datum; setting it to the pinned state is the
+  // setup for the rule under test, so it is set before each read - a shell
+  // change repaints the core, and the canvas under test is the CSS rule.
+  const pin = () => page.evaluate(() => { document.getElementById("shell").dataset.core = "pinned"; });
+  await pin();
+  const pinnedMedium = await face();
+  assert.equal(pinnedMedium.shell, "three-column", "the page did not return to Cockpit");
+  assert.equal(pinnedMedium.core, "pinned", "the pinned-core rule is not the one under test");
+  assert.equal(Math.round(pinnedMedium.width), 96,
+    `Cockpit's pinned core is ${pinnedMedium.width}px, not the 96px its layout gives it`);
+  await choose("large");
+  await pin();
+  const pinnedLarge = await face();
+  assert.equal(Math.round(pinnedLarge.width), 120,
+    `Cockpit's pinned core at Large is ${pinnedLarge.width}px, not 96px * 1.25`);
+  await choose("small");
+  await pin();
+  const pinnedSmall = await face();
+  assert.equal(Math.round(pinnedSmall.width), 72,
+    `Cockpit's pinned core at Small is ${pinnedSmall.width}px, not 96px * 0.75`);
+  await page.close();
+  assert.deepEqual(problems, [],
+    "a CSP refusal or a page error in the small shells when the face size changed");
+});
+
+await check("the three vendored HUD copies carry the face size byte for byte", () => {
+  const digest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
+  const ROOT = join(HERE, "..", "..");
+  const pages = [
+    join(SRC, "jarvis_hud.html"),
+    join(ROOT, "backend", "jarvis_hud.html"),
+    join(ROOT, "jarvis-backend", "jarvis_hud.html"),
+  ];
+  assert.equal(new Set(pages.map(digest)).size, 1,
+    "the three jarvis_hud.html copies are not byte-identical");
+  const modules = [
+    join(SRC, "hud-presets.js"),
+    join(ROOT, "backend", "static", "hud-presets.js"),
+    join(ROOT, "jarvis-backend", "hud-presets.js"),
+  ];
+  assert.equal(new Set(modules.map(digest)).size, 1,
+    "the three hud-presets.js copies are not byte-identical");
 });
 
 await check("the HUD's own state machine drives the face, offline included", async () => {
@@ -1867,9 +2170,13 @@ await check("the HUD page holds no token, and every request it makes goes throug
   // list on 2026-10-27 with the owner's Live button in the left rail: it is a
   // READ of the session's own state (which device owns it, whether it is on),
   // granted by `hud-live` in surfaces.toml, and it carries no words of anyone's.
+  // `read_model_lane` joined on 2026-10-28 with the Connect button the owner
+  // asked for on the offline lines: it is the BAR'S own read of the lane the
+  // chat is on, granted by `hud-lane`; the start half (`start_model_lane`) is
+  // only sent when he presses, so it is not in a load-time list.
   // A command NOT named here is still a failure - that is what this check is for.
   assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout",
-    "get_lock_flags", "live_status"].includes(c)), [],
+    "get_lock_flags", "live_status", "read_model_lane"].includes(c)), [],
     `the HUD called ${JSON.stringify(held.invoked)}`);
   // Every read is one hud_proxy.rs allows (HUD_GET_PATHS and /api/retrieve).
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
@@ -2001,11 +2308,12 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
   }));
   await page.close();
   // The load-time shell calls are not this check's subject: the page's reads,
-  // the layout read, the two lock answers, and (2026-10-27) the rail's Live
-  // button asking once for the session's state. What the MIC does is the rest.
+  // the layout read, the two lock answers, (2026-10-27) the rail's Live
+  // button asking once for the session's state, and (2026-10-28) the Connect
+  // button's own read of the model lane. What the MIC does is the rest.
   assert.deepEqual(after.invokes.map((c) => c[0])
     .filter((c) => c !== "hud_get" && c !== "get_hud_layout" && c !== "get_lock_flags"
-      && c !== "live_status"),
+      && c !== "live_status" && c !== "read_model_lane"),
     ["summon_push_to_talk"],
     "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
   assert.equal(after.listening, false, "the page's own (browser) recogniser started");
@@ -2121,19 +2429,30 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // reload keeps it. Cosmetic: no card, and no binding, colour or animal
       // field can ride along. Appended at the end because that is where the
       // capability file's own list gained it.
-      "hud-faces"]);
+      "hud-faces",
+      // The Connect button on the two offline lines (2026-10-28, the OWNER
+      // ASKED: "when jarvis gets opened on the desktop from scratch, there
+      // should be a connect button next to these notifications saying its
+      // offline"). The BAR'S own two commands - `read_model_lane` and
+      // `start_model_lane` - never a new route: starting runs his own Windows
+      // logon task for the lane the chat is on, raises no card (that task
+      // already runs unattended at his logon), and cannot start the other lane.
+      // Deliberately NOT the whole `model-lane` set: `set_model_lane_auto`
+      // (the automatic-restart switch) stays on the bar, the widget and the
+      // phone. Appended at the end, where the capability file gained it.
+      "hud-lane"]);
   assert.equal(cap.permissions.includes("hud-layout-write"), true,
     "the HUD page's own Edit mode cannot save without the layout write grant");
   assert.equal(cap.permissions.includes("hud-layout-read"), true,
     "the H2 change must not take the H1 read grant away");
   const writeish = cap.permissions.filter((name) => [
     "hud-layout-write", "hud-approvals", "focus-presets", "hud-voice", "hud-schedule",
-    "hud-history", "hud-personalities", "hud-cloud-escalate", "hud-faces",
+    "hud-history", "hud-personalities", "hud-cloud-escalate", "hud-faces", "hud-lane",
   ].includes(name));
   assert.deepEqual(writeish.sort(),
     ["focus-presets", "hud-approvals", "hud-cloud-escalate", "hud-faces", "hud-history",
-      "hud-layout-write", "hud-personalities", "hud-schedule", "hud-voice"],
-    "the HUD window gained a write command beyond its own layout, Reminders, ONE chat's pin/file/delete, the wording-only personality switch, the cloud escalate switch and the face models picker");
+      "hud-lane", "hud-layout-write", "hud-personalities", "hud-schedule", "hud-voice"],
+    "the HUD window gained a write command beyond its own layout, Reminders, ONE chat's pin/file/delete, the wording-only personality switch, the cloud escalate switch, the face models picker and the lane's own start");
   assert.match(cap.description, /hud-layout-write/);
   assert.match(cap.description, /owner-approved/);
   assert.match(cap.description, /holds NO pairing token/);
@@ -3113,8 +3432,8 @@ async function openGalaxyOptions(page) {
   await page.waitForTimeout(120);
 }
 
-async function openGalaxy(browser, graph) {
-  const opened = await openHud(browser, { jarvis: true, ollama: true, proxy: false, graph });
+async function openGalaxy(browser, graph, extra = {}) {
+  const opened = await openHud(browser, { jarvis: true, ollama: true, proxy: false, graph, ...extra });
   await opened.page.click('[data-view="brain"]');
   await opened.page.waitForTimeout(500);
   await openGalaxyOptions(opened.page);
@@ -5678,6 +5997,122 @@ await check("P8 idle: a hidden window stops the Galaxy and pauses the infinite C
   await page.waitForTimeout(300);
   const backB = await page.evaluate(() => window.__rafFrames);
   assert.ok(backB > backA, "the Galaxy did not resume when the window came back");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+/* =========================================================================
+ * The theme reaches this window LIVE (2026-10-28 field test)
+ *
+ * Measured on the installed 0.2.351 app over WebView2 CDP
+ * (`.dsh-scratch/MAXOUT-2026-10-28/FIELDTEST-DESKTOP-2026-10-28/REPORT.md`,
+ * row "Theme picker (#theme-list) + fan-out"): picking Daylight in Settings
+ * repainted Settings, the bar, the widget and the Brain at once, and the HUD
+ * stayed on Reactor until the page was reloaded. Source agreed - this page had
+ * only the load-time read, and no `theme-changed` listener.
+ *
+ * Two checks hold both halves of the fix: the first painted frame still comes
+ * from the stored theme (the pre-paint read), and a live change arrives on the
+ * SAME event every other window follows - `theme-changed`, payload = the theme
+ * id - with no reload and no layout move.
+ * ========================================================================= */
+
+await check("Theme: the stored theme is on the root before the first frame (the pre-paint read)", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, hudTheme: "high-contrast" });
+  const seen = await page.evaluate(() => ({
+    atInit: window.__themeAtInit,
+    firstFrame: window.__firstFrameTheme,
+    worn: document.documentElement.getAttribute("data-theme"),
+    stored: localStorage.getItem("jarvis.theme"),
+  }));
+  assert.equal(seen.atInit, null,
+    `the harness itself put a theme on the root, so this would prove nothing: ${JSON.stringify(seen)}`);
+  assert.equal(seen.firstFrame, "high-contrast",
+    `the first painted frame did not wear the stored theme: ${JSON.stringify(seen)}`);
+  assert.equal(seen.worn, "high-contrast",
+    `the page did not keep the stored theme: ${JSON.stringify(seen)}`);
+  assert.equal(seen.stored, "high-contrast", "loading the page overwrote the stored theme");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("Theme: a change made in Settings is worn at once, without a reload, and the picture follows", async () => {
+  const { page, problems } = await openGalaxy(browser, GALAXY_GRAPH,
+    { tauriEvents: true, hudTheme: "deep-space" });
+  // The listener the other windows register (`jarvis-link.js` followTheme). An
+  // empty list would let this check pass while the page listened to nothing.
+  const listening = await page.evaluate(() =>
+    (window.__tauriEvents["theme-changed"] || []).length);
+  assert.equal(listening, 1,
+    "the HUD has no listener for the theme-changed event every other window follows");
+
+  const snap = () => page.evaluate(() => {
+    const swatch = document.querySelector("#legend .swatch");
+    const rects = ["#galaxy", "#rail-left", "#brain"].map((sel) => {
+      const r = document.querySelector(sel).getBoundingClientRect();
+      return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
+    });
+    return {
+      theme: document.documentElement.getAttribute("data-theme"),
+      stored: localStorage.getItem("jarvis.theme"),
+      surface: getComputedStyle(document.body).backgroundColor,
+      ink: tk("--text"),
+      inkNow: getComputedStyle(document.documentElement).getPropertyValue("--text").trim(),
+      swatch: swatch ? swatch.style.backgroundColor : null,
+      engine: galaxy.engineInfo(),
+      rects,
+    };
+  });
+  const before = await snap();
+  assert.equal(before.theme, "deep-space", "fixture: the page did not start on the stored theme");
+  assert.ok(before.swatch, "fixture: the legend has no swatch to re-colour");
+  assert.equal(before.ink, before.inkNow, "fixture: the ink cache already disagreed with the CSS");
+  await page.evaluate(() => { window.__themeDocMark = "the same document"; });
+
+  // Let the 3D engine finish coming up, or give up, BEFORE the change: which
+  // branch below runs must be decided by the machine, never by a race with the
+  // engine's own asynchronous build. A machine with no WebGL reports `failed`
+  // and the check says so out loud instead of counting it as a pass.
+  await page.waitForFunction(() => {
+    const info = galaxy.engineInfo();
+    return info.ready || info.failed;
+  }, null, { timeout: 20000 }).catch(() => {});
+  const hadEngine = (await page.evaluate(() => galaxy.engineInfo())).ready;
+
+  // The PC's own fan-out, exactly as Rust sends it: system_theme.rs
+  // `apply_now` -> `emit_all(THEME_CHANGED, theme)`, a plain id as the payload.
+  await page.evaluate(() => {
+    for (const fn of (window.__tauriEvents["theme-changed"] || [])) {
+      fn({ event: "theme-changed", id: 9, payload: "paper" });
+    }
+  });
+
+  const after = await snap();
+  const mark = await page.evaluate(() => window.__themeDocMark);
+  assert.equal(after.theme, "paper", "the HUD did not take the theme the PC broadcast");
+  assert.equal(after.stored, "paper", "the HUD did not store it, so the next load would paint the old theme");
+  assert.equal(mark, "the same document", "the page reloaded; the theme has to land without one");
+  assert.notEqual(after.surface, before.surface, "the window's surface did not repaint");
+  assert.notEqual(after.ink, before.ink, "the canvas ink cache kept the old palette");
+  assert.equal(after.ink, after.inkNow, "the canvas ink cache disagrees with the new palette");
+  assert.notEqual(after.swatch, before.swatch, "the legend's swatches kept the old theme's hex");
+  assert.deepEqual(after.rects, before.rects, "the theme change moved the layout");
+
+  // The 3D Galaxy bakes its vertex colours when it builds, so it is rebuilt
+  // from the new palette - and only when this machine was drawing one. Without
+  // an engine the rebuild is NOT exercised here and this says so, rather than
+  // counting a branch that never ran as proof.
+  if (hadEngine) {
+    await page.waitForFunction(() => {
+      const info = galaxy.engineInfo();
+      return info.ready && info.engine === "webgl" && info.info && info.info.draws > 0;
+    }, null, { timeout: 20000 });
+  } else {
+    const why = await page.evaluate(() => galaxy.engineInfo());
+    console.log(`      the 3D engine was not up in this run (failed=${why.failed}, module=${why.module}), `
+      + "so the rebuild is NOT exercised by this check - only the 2D ink and the legend were re-taken");
+  }
   await page.close();
   assert.deepEqual(problems, []);
 });

@@ -2412,12 +2412,21 @@ verbatim: no client composes a sentence out of fields, so the three cannot come
 to three ways of saying one fact. `tools/check_parity.py` carries
 `/api/model-lanes/auto` as `ported`.
 
-**The HUD window (`jarvis-desktop/src/jarvis_hud.html`) keeps only the standing
-line** - no button, no automatic line, no switch - for the reason it already had
-no button: it is vendored from the backend and runs under `hud_proxy.rs`, which
-allows it exactly five reads and one `POST /api/chat`, and widening that
-allow-list for routes that start a program on the PC or change a setting is a
-separate decision. Both windows that carry the action are one keystroke away.
+**The HUD window (`jarvis-desktop/src/jarvis_hud.html`) kept only the standing
+line until 2026-10-28**, and now carries the one action beside it. The owner
+reversed the earlier decision in his own words: *"when jarvis gets opened on the
+desktop from scratch, there should be a connect button next to these
+notifications saying its offline."* So the page holds `hud-lane`
+(`permissions/surfaces.toml`): the bar's own `read_model_lane` and
+`start_model_lane`, no new command and no new route, with the PC's refusals and
+its 404 sentence exactly as they already were. It still does **not** hold
+`set_model_lane_auto` - the automatic-restart switch stays on the bar, the
+widget and the phone - and `hud_proxy.rs`'s fixed read list is unchanged: the
+two calls go through Rust, which adds the token, which is why widening this
+page's reach was a one-set change and not an allow-list edit. The button is
+drawn from the PC's own `/api/model-lanes` answer and never from a guess, and
+the press is the bar's own "starting is not arriving" loop: the line clears only
+when the lane really answers.
 
 **THE RESIDUAL RISK, STATED PLAINLY.** An automatic restart cannot tell "it
 crashed" from "I meant to turn it off": a dead process carries no intent, and
@@ -3179,7 +3188,7 @@ neither: nothing safe to build it on exists yet (§10).
 
 **The form picture is on the Jarvis bar's card and the phone's card only** (2026-09-30, JARVIS-API §98). The second card of a filled-in web form carries one picture of the form, and it is shown where the card is decided in full: the desktop's Jarvis bar and the phone's Home. The desktop's widget, its toasts and the HUD page, every notification and the phone's home-screen widget stay title-only, like every card - a picture of the owner's name, phone and email does not belong on a lock screen or a widget. It is hidden under App lock and under "Hide memory lists and chat history" on both apps. The desktop's capture block is the same two settings, with the limits written out in §3 (`WDA_EXCLUDEFROMCAPTURE`, not a wall), so the form picture is covered there too and there is nothing one-sided to match. **It is the one screen picture NOT run through `jarvis_screen.clean_picture`** (owner, 2026-09-30): the owner must read their own details to check them, and the picture never reaches a model, is held in memory only, and is dropped when the card is decided. Every other screen picture still passes that door. Not a new way out of the PC: the form's words go out through browser control's existing `control_browser` way out, to the site the plan named.
 
-**"Start the local model" is on the Jarvis bar, the widget and the phone's Home, and deliberately NOT on the HUD window** (2026-10-13, JARVIS-API §137; the owner's decision after both of his Ollama lanes were dead for about five hours). The standing "the local model isn't running" line is drawn in all four places, and three of them now offer the one action that starts the lane the chat uses - by running **his own** Windows logon task, found on that PC by the half of its name a rename does not touch. **The HUD page is the one that keeps the line and offers no button**, and the reason is the proxy rather than the picture: `jarvis_hud.html` is vendored from the backend and runs under `hud_proxy.rs`, which allows it exactly five reads and one `POST /api/chat` precisely so that a script running in that page cannot call anything else. A route that starts a program on the PC is not something to add to that allow-list in passing - it is its own decision with its own review. Nothing is lost by it: the HUD's line still names the PC's own task, and the Jarvis bar (one summon away, and the window the owner chats in) carries the button. `tools/check_parity.py` is unaffected either way, because it reads the RUST commands and the JavaScript, and the bar's own `start_model_lane` is a desktop caller of both routes - so both are `ported`, and no other row in this section is needed for them.
+**"Start the local model" is on the Jarvis bar, the widget, the phone's Home and the HUD window** (2026-10-13, JARVIS-API §137; the owner's decision after both of his Ollama lanes were dead for about five hours; the HUD was added on 2026-10-28). The standing "the local model isn't running" line is drawn in all four places, and all four now offer the one action that starts the lane the chat uses - by running **his own** Windows logon task, found on that PC by the half of its name a rename does not touch. **The HUD page was the one that kept the line and offered no button**, because `jarvis_hud.html` is vendored from the backend and runs under `hud_proxy.rs`, which allowed it exactly five reads and one `POST /api/chat`. The owner reversed that on 2026-10-28 - *"when jarvis gets opened on the desktop from scratch, there should be a connect button next to these notifications saying its offline"* - and the reason the reversal is small is that the action was always a Tauri command with the token added in Rust, not a page fetch: `hud.json` now grants `hud-lane` (the bar's `read_model_lane` and `start_model_lane`, not the automatic switch), `hud_proxy.rs`'s list is untouched, and the page's own POST to `/api/model-lanes/start` is still refused by the bootstrap's fetch shim. So the worst a script in that page can do with it is what the bar's button does: ask the PC to start the one lane its chat is on, and read what the PC says about it. `tools/check_parity.py` is unaffected either way, because it reads the RUST commands and the JavaScript, and the bar's own `start_model_lane` is a desktop caller of both routes - so both are `ported`, and no other row in this section is needed for them.
 **The skill library's four new doors are on the backend only, and that is the scope of this slice rather than a one-sided decision** (2026-10-15): `jarvis_skill_hub.py` (`plugins/ready/skill-hub/`) serves `GET /api/skills/hub/references`, `GET /api/skills/hub/projects`, `POST /api/skills/chain` and `POST /api/skills/learn`. No screen calls any of them yet - reading a skill's own reference manual, opening a message with `/skill`, looking in a trusted project's `.jarvis/skills`, and `/learn` are all things no app offers today. **This slice adds no route that already existed**: the list (`GET /api/skills`) and the removal (`POST /api/skills/decide`, with the "are you sure?" before it) are unchanged and are still on BOTH apps. `tools/check_parity.py` carries all four in `BACKEND_ONLY` (2026-10-28), with this follow-up in each reason, so the gap is named rather than read as a clean pass it did not earn. **When a screen is built it goes on BOTH apps, on the same routes and the same card**: `/learn` saves only through `jarvis_skills.write_skill()`, which runs the scanner and raises the existing `modify_own_code` card itself, and it writes nothing at all when `jarvis_scrub` is absent.
 
 **Every documented route no app calls is declared in one register, with a written reason, and the wiring audit's eight are its first entries** (2026-10-28; the audit's "check_parity blind spot"; `tools/check_parity.py`'s `BACKEND_ONLY`). The receipts store's `GET /api/receipts` and `POST /api/receipts/<receipt_id>/undo` (JARVIS-API §132.7) and the skill hub's `GET /api/skills/hub/references`, `GET /api/skills/hub/projects`, `POST /api/skills/chain` and `POST /api/skills/learn` (§135.6) are backend-only today: neither app has the screen, and when it is built it goes on BOTH apps, on the same store, card and routes the paragraphs above describe. `POST /api/notion/preview` and `POST /api/notion/import` (§152) are backend-only and PC-only: the export and the vault are files on this PC, so a desktop screen is the named follow-up and the phone deliberately gets none. Until then no app has a surface for any of them, and the register says so for these eight and for every other documented route no app calls today. That is what makes "No undecided drift." mean something for a backend-only feature: a documented route in no app and in no table now fails the check, with the file and line, instead of printing a clean line over the gap.
@@ -3521,6 +3530,26 @@ reads it too), and Rust proves the id against the same
 `jarvis-visual-spec.json` (`spec.rs::has_face`) before anything is stored. A face
 is cosmetic, so the write raises no card, and the command carries no colour,
 binding or animal field: those stay the Faces window's.
+
+**The face size is this device's own look, and it is the desktop HUD's alone**
+(2026-10-28, the owner's ask: *"in the jarvis faces in the left column of the
+hud there should also be a size option on desktop"*). The same panel gains a
+`Face size` row - Small, Medium (the layout's own size) and Large - which
+multiplies whatever size the current shell gives the face by 0.75, 1 and 1.25
+through ONE `--face-scale` custom property that every `#reactor` width/height
+rule reads as `calc(base * var(--face-scale, 1))`. Width and height, never
+`transform: scale()`, so the wrap reserves the bigger box and a Large face
+pushes the log down instead of covering it; the 48px Studio dock and the
+96px pinned core (88px under the 760px rule, and the same CSS rule) are
+driven at all three sizes, not merely counted. The
+choice is THIS WebView's `localStorage` under `jarvis.face.size`, the same
+per-device road as `jarvis.theme`, and the HUD's head script reads it before
+first paint, so the first frame is already the chosen size and an app restart
+keeps it. It is a look, not a preference the PC owns: it calls no command,
+adds no route, raises no card, writes no other key, and changes neither the
+theme nor which face is worn. The phone has no HUD left column or faces
+panel, so there is nothing to port, `tools/check_parity.py` classifies nothing
+new, and `docs/JARVIS-API.md` is untouched because no route or command exists.
 
 **The phone's Right/Wrong pair moves into a per-message menu, and the new
 pinned messages stay on the phone: one-sided on purpose** (2026-10-27, the

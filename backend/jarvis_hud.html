@@ -71,15 +71,40 @@
   for the theme instead, so it cannot wait on anything more than this. If
   nothing is stored, or storage is unreadable (private mode, cleared site
   data), it paints deep-space - the same look this page always had.
+
+  This is the FIRST frame only. A theme changed in another window while this
+  one is open arrives as the same `theme-changed` event every other window
+  follows; `paintHudTheme` further down this file takes it, without a reload.
+  The list of ids lives here, once, and that function reads this same one.
 -->
 <script>
+  var jarvisHudThemes = ["deep-space", "paper", "high-contrast"];
   try {
     var jarvisHudTheme = localStorage.getItem("jarvis.theme");
-    if (["deep-space", "paper", "high-contrast"].indexOf(jarvisHudTheme) >= 0) {
+    if (jarvisHudThemes.indexOf(jarvisHudTheme) >= 0) {
       document.documentElement.setAttribute("data-theme", jarvisHudTheme);
     }
   } catch (e) {
     /* private mode, cleared site data - the default theme is correct */
+  }
+  /*
+    The face size, before first paint, from THIS device's own choice (the
+    owner's ask of 2026-10-28: "in the jarvis faces in the left column of the
+    hud there should also be a size option on desktop"). Like the theme above,
+    it is a per-device look kept in localStorage, not a shell setting: the
+    faces panel writes "jarvis.face.size" and this makes the FIRST frame the
+    size the owner chose, so the face never paints at the layout's own size
+    and jumps. The three values are the only ones the stylesheet knows
+    (`--face-scale` beside `#reactor`); anything else, or unreadable storage,
+    is the layout's own size, which is Medium.
+  */
+  try {
+    var jarvisFaceSize = localStorage.getItem("jarvis.face.size");
+    if (["small", "medium", "large"].indexOf(jarvisFaceSize) >= 0) {
+      document.documentElement.setAttribute("data-face-size", jarvisFaceSize);
+    }
+  } catch (e) {
+    /* private mode, cleared site data - the layout's own size is correct */
   }
   /* The HUD's shell and density, before first paint (H3, 2026-10-22; Q5).
      ONE truth is the saved layout document in the desktop settings store
@@ -424,12 +449,31 @@ html[data-hud-shell="split-stage"] .rail-menu-mode{display:none;}
   position:relative; display:flex; align-items:center; justify-content:center;
   padding:10px 0 4px; flex-shrink:0;
 }
+/* THE FACE SIZE (the owner's ask of 2026-10-28: "in the jarvis faces in the
+   left column of the hud there should also be a size option on desktop").
+   ONE multiplier, set on :root from THIS device's saved choice before first
+   paint (the head script above): Small 0.75x, Medium the layout's own size,
+   Large 1.25x.
+
+   Every rule below that sizes the face keeps ITS OWN base and multiplies it,
+   so no shell needs a second rule and none loses its size: the 232px page
+   default, the 150px narrow page, Cockpit's 220px and its 96/88px pinned
+   core, Studio's 48px dock, and Ambient's 320/240/190px core all move
+   together. Width and height, never `transform: scale()`: the wrap has to
+   RESERVE the bigger box, or a Large face would overlap the log instead of
+   pushing it down. 0.75 and 1.25 stay sane at the smallest base (36px/60px
+   for Studio's dock, 66px/120px for the pinned core). */
+html{--face-scale:1;}
+html[data-face-size="small"]{--face-scale:.75;}
+html[data-face-size="medium"]{--face-scale:1;}
+html[data-face-size="large"]{--face-scale:1.25;}
 /* An iframe now, not a canvas: the kit face, see "Arc reactor" in the script.
    Same box as before, click-through so it reads as part of this page rather
    than a window inside it. Round, like the Widget's: the face paints its own
    near-black well edge to edge, and a square of it on this stage's gradient
    read as a hole cut in the page rather than a reactor sitting on it. */
-#reactor{width:232px; height:232px; display:block; border:0; background:transparent;
+#reactor{width:calc(232px * var(--face-scale, 1)); height:calc(232px * var(--face-scale, 1));
+         display:block; border:0; background:transparent;
          border-radius:50%; pointer-events:none;}
 .reactor-state{
   position:absolute; bottom:-2px; left:50%; transform:translateX(-50%);
@@ -945,6 +989,32 @@ html[data-galaxy-hidden] .galaxy-off{display:flex !important;}
 #model-warn b{color:var(--gold); font-weight:500;}
 #model-warn #model-warn-host{color:var(--dim); opacity:.85;}
 
+/* The Connect button (2026-10-28, the owner's ask: "there should be a connect
+   button next to these notifications saying its offline"). One small control
+   at the end of either offline line, in the page's own mono/gold language, and
+   a real <button> - keyboard reachable, focusable, Enter and Space work, and
+   its words are the PC's own reading. It is never drawn from a guess: the
+   page paints it only while the PC says a press would really start a lane. */
+#model-warn .lane-start,
+#banner .lane-start{
+  align-self:center; padding:3px 10px; min-height:24px;
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.04em;
+  color:var(--gold); background:transparent; cursor:pointer;
+  border:1px solid var(--line-hot); border-radius:3px;
+}
+#model-warn .lane-start:hover,
+#banner .lane-start:hover{border-color:var(--gold);}
+#model-warn .lane-start:focus-visible,
+#banner .lane-start:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+#model-warn .lane-start:disabled,
+#banner .lane-start:disabled{color:var(--dim); border-color:var(--line); cursor:default;}
+#model-warn .lane-start[hidden],
+#banner .lane-start[hidden]{display:none;}
+#model-warn .lane-start-note,
+#banner .lane-start-note{color:var(--dim); font-size:10.5px; opacity:.9;}
+#model-warn .lane-start-note[hidden],
+#banner .lane-start-note[hidden]{display:none;}
+
 /* ---------- Jarvis Live's refusal popup ------------------------------ *
  * The owner's field bug of 2026-10-27: clicking Live with no microphone
  * "gives me a message but its in the left column and hard to read. it should
@@ -1028,7 +1098,7 @@ html[data-galaxy-hidden] .galaxy-off{display:flex !important;}
   }
   .rail.left .modes{flex-direction:row; padding:8px 4px;}
   .rail.left .hide-sm{display:none;}
-  #reactor{width:150px; height:150px;}
+  #reactor{width:calc(150px * var(--face-scale, 1)); height:calc(150px * var(--face-scale, 1));}
   #log{padding:12px 14px 6px;}
   .msg{max-width:100%;}
   .composer{padding:10px 12px 14px;}
@@ -1398,7 +1468,7 @@ html[data-hud-shell="three-column"] .preset{
 }
 html[data-hud-shell="three-column"] .preset-cloud{margin-top:5px; padding:5px 7px; font-size:10px;}
 html[data-hud-shell="three-column"] .preset-words{font-size:9px;}
-html[data-hud-shell="three-column"] #reactor{width:220px; height:220px;}
+html[data-hud-shell="three-column"] #reactor{width:calc(220px * var(--face-scale, 1)); height:calc(220px * var(--face-scale, 1));}
 html[data-hud-shell="three-column"] .core-expand{
   /* Beside the core, not at the far edge of a full-width wrap: the wrap is
      the whole stage row, so a right:0 button floated far from what it
@@ -1406,7 +1476,7 @@ html[data-hud-shell="three-column"] .core-expand{
   display:inline-flex; position:absolute; left:calc(50% + 118px); bottom:10px;
   font-size:10px; padding:4px 8px;
 }
-html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:96px; height:96px;}
+html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:calc(96px * var(--face-scale, 1)); height:calc(96px * var(--face-scale, 1));}
 html[data-hud-shell="three-column"] #shell[data-core="pinned"] .reactor-wrap{
   flex-direction:row; justify-content:flex-start; gap:16px; padding:6px 22px 4px;
 }
@@ -1511,7 +1581,7 @@ html[data-hud-shell="split-stage"][data-hud-tab="galaxy"] #brain{display:flex;}
 html[data-hud-shell="split-stage"] .reactor-wrap{
   flex-direction:row; justify-content:flex-start; gap:14px; padding:10px 18px 4px;
 }
-html[data-hud-shell="split-stage"] #reactor{width:48px; height:48px;}
+html[data-hud-shell="split-stage"] #reactor{width:calc(48px * var(--face-scale, 1)); height:calc(48px * var(--face-scale, 1));}
 html[data-hud-shell="split-stage"] .reactor-state{
   position:static; transform:none; font-size:9px;
 }
@@ -1740,7 +1810,7 @@ html[data-hud-shell="center-core"] #talk{align-items:center; position:relative;}
 html[data-hud-shell="center-core"] .reactor-wrap{
   margin-top:58px; padding:0; flex-shrink:0;
 }
-html[data-hud-shell="center-core"] #reactor{width:320px; height:320px;}
+html[data-hud-shell="center-core"] #reactor{width:calc(320px * var(--face-scale, 1)); height:calc(320px * var(--face-scale, 1));}
 html[data-hud-shell="center-core"] .reactor-rings{display:block;}
 html[data-hud-shell="center-core"] .reactor-state{bottom:-8px; letter-spacing:.34em;}
 html[data-hud-shell="center-core"] .core-expand{display:none;}
@@ -1794,17 +1864,17 @@ html[data-hud-shell="center-core"] .composer{
   html[data-hud-shell="split-stage"] #stage{grid-template-columns:minmax(0,1fr);}
   html[data-hud-shell="split-stage"] #brain{display:none !important;}
   html[data-hud-shell="split-stage"][data-hud-tab="galaxy"] #rail-right{display:none;}
-  html[data-hud-shell="center-core"] #reactor{width:240px; height:240px;}
+  html[data-hud-shell="center-core"] #reactor{width:calc(240px * var(--face-scale, 1)); height:calc(240px * var(--face-scale, 1));}
   html[data-hud-shell="center-core"] #log{max-height:26vh;}
 }
 @media (max-width:760px){
-  html[data-hud-shell="three-column"] #reactor{width:150px; height:150px;}
+  html[data-hud-shell="three-column"] #reactor{width:calc(150px * var(--face-scale, 1)); height:calc(150px * var(--face-scale, 1));}
   html[data-hud-shell="three-column"] .core-expand{left:calc(50% + 84px);}
-  html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:88px; height:88px;}
+  html[data-hud-shell="three-column"] #shell[data-core="pinned"] #reactor{width:calc(88px * var(--face-scale, 1)); height:calc(88px * var(--face-scale, 1));}
   html[data-hud-shell="split-stage"] #shell{grid-template-columns:52px minmax(0,1fr);}
   html[data-hud-shell="center-core"] .stage-bar{max-width:calc(100vw - 32px); flex-wrap:wrap; border-radius:16px;}
   html[data-hud-shell="center-core"] #ambient-status{max-width:calc(100vw - 32px);}
-  html[data-hud-shell="center-core"] #reactor{width:190px; height:190px;}
+  html[data-hud-shell="center-core"] #reactor{width:calc(190px * var(--face-scale, 1)); height:calc(190px * var(--face-scale, 1));}
 }
 /* The <=720 rules go LAST: the layout blocks above (`narrower windows`, whose
    <=1080 rule sets the Cockpit's two columns) are just as specific, so the
@@ -2170,6 +2240,23 @@ body[data-hud-edit="on"] .hud-card-hidden .hud-card-body{display:none;}
     background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
   }
   .hud-faces-item[aria-pressed="true"] .hud-faces-id{color:var(--ice);}
+  /* The Face size row (the owner's ask of 2026-10-28: "in the jarvis faces in
+     the left column of the hud there should also be a size option on desktop").
+     It sits under the panel's title, above the 25-face list, so it is seen
+     without scrolling. The three choices ARE the panel's own
+     `.hud-presets-item` buttons (same border, hover and focus ring); only the
+     row's layout and the chosen state are added here, and the chosen one takes
+     the same ice-pressed look as the current face above. */
+  .hud-faces-size{display:flex; align-items:center; gap:8px; margin:2px 0 6px;}
+  .hud-faces-size-label{flex:0 0 auto; font-size:9.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--dimmer);}
+  .hud-faces-sizes{display:flex; flex:1 1 auto; gap:2px; min-width:0;}
+  .hud-faces-size-item{display:block; flex:1 1 0; width:auto; min-width:0;
+    text-align:center; margin:0; padding:3px 4px; font-size:10px;}
+  .hud-faces-size-item[aria-pressed="true"]{
+    border-color:var(--ice); color:var(--ice);
+    background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
+  }
   .hud-presets-dialog{
     width:min(560px, calc(100vw - 32px)); max-height:82vh; overflow:auto;
     border:1px solid var(--line-hot); border-radius:6px; padding:14px;
@@ -2672,18 +2759,29 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
     <div id="initiative" hidden></div>
 
     <div id="banner">
-      <b>Demo data.</b>
-      Jarvis is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.
+      <span id="banner-text"><b>Demo data.</b>
+      Jarvis is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.</span>
+      <!-- The PC is answering and only its model is missing: the one action
+           that starts the lane Jarvis talks to. Painted from the PC's own
+           reading (lane-connect below), never from a guess, and it is the
+           same words and the same command the Jarvis bar's button sends. -->
+      <button id="banner-connect" class="lane-start" type="button" hidden></button>
+      <span id="banner-connect-note" class="lane-start-note" role="status" hidden></span>
     </div>
 
     <!-- The PC is answering and its own model is not. Standing, before any
          question, and its own state: this is NOT "Jarvis isn't connected" -
-         the PC is fine, only answers are. Filled in by lane-warning.js, from
-         `/api/status`'s own `ollama` field on every beat, so it clears itself
-         when the lane comes back and never acts on anything. -->
+         the PC is fine, only answers are. The sentence is filled in by
+         lane-warning.js, from `/api/status`'s own `ollama` field on every
+         beat, so it clears itself when the lane comes back. The BUTTON beside
+         it is the owner's ask of 2026-10-28 (the HUD was the one window with
+         no Start button); lane-connect below draws it from the PC's own
+         `/api/model-lanes` reading and sends the bar's own command. -->
     <div id="model-warn" hidden>
       <b id="model-warn-text"></b>
       <span id="model-warn-fix"></span>
+      <button id="model-warn-start" class="lane-start" type="button" hidden></button>
+      <span id="model-warn-start-note" class="lane-start-note" role="status" hidden></span>
       <span id="model-warn-host" hidden></span>
     </div>
 
@@ -3498,10 +3596,14 @@ const GROUP_STYLE = {
 function styleFor(group){ return GROUP_STYLE[group] || GROUP_STYLE.entity; }
 
 /** Resolved theme values, cached: reading a custom property is a forced
- * style recalc, and this runs per node per frame. This page sets its theme
- * once at load (see the bootstrap script at the top) and never changes it
- * without a reload, so unlike `brain.js`'s equivalent cache, nothing here
- * ever needs to be invalidated. */
+ * style recalc, and this runs per node per frame. This page used to set its
+ * theme once at load and never change it, so nothing here ever needed
+ * invalidating; it follows `theme-changed` live now (see `paintHudTheme`
+ * below the Galaxy), and a palette change has to throw this away or the
+ * picture keeps painting the previous theme - exactly the cache `brain.js`
+ * clears in its own `followTheme` callback (`_ink = null`). The one place
+ * that clears it is the Galaxy's `themeChanged()`, because it owns the other
+ * two things that bake colours: the legend's swatches and the 3D engine. */
 const tokenCache = new Map();
 function tk(name, fallback){
   let hit = tokenCache.get(name);
@@ -4390,6 +4492,41 @@ const galaxy = (() => {
     if(cosmosEngine) dropCosmos();
   }
 
+  /** Another window changed the theme, so the palette under this picture did
+   *  too - and three things here had baked the old one into pixels:
+   *
+   *  - the 2D ink cache (`tokenCache`), read per node per frame;
+   *  - the legend's swatches, whose hex was written into `style` when they
+   *    were built (`swatchStyle`), so a cached colour cannot follow a
+   *    variable;
+   *  - the 3D engine's vertex colours, handed over by `colorFor` when its
+   *    meshes were built (`galaxy-cosmos.js` converts them to ints at build
+   *    time), with no recolour call - one theme change does not warrant
+   *    adding one, and the engine already rebuilds on Hide/Show.
+   *
+   *  NOTHING OF THE LAYOUT MOVES. The legend is drawn from the nodes that are
+   *  on screen already (not `sourceGraph`, which is the whole graph: the
+   *  legend follows the lens), no node position changes, and the 2D camera and
+   *  the legend's own rows stay where they were. ONE THING DOES NOT SURVIVE,
+   *  and it is written here rather than left to be found: the 3D engine is
+   *  only rebuilt when this machine was drawing one, and a fresh engine
+   *  re-frames its own camera from the look's preset (`galaxy-cosmos.js`'s
+   *  `rebuildScene` -> `snapCamera`), so a 3D view the owner had dragged or
+   *  zoomed returns to the look's framing. A machine without 3D, or one whose
+   *  map is closed, builds from the new palette when it next opens
+   *  (`resumeCosmos`), so nothing is rebuilt for a picture nobody is showing. */
+  function themeChanged(){
+    tokenCache.clear();
+    if(nodes.length) buildLegend({ nodes });
+    if(!cosmosEngine) return;
+    dropCosmos();
+    // `setRunning(false)` first: setRunning(true) is what calls
+    // `resumeCosmos`, and it is a no-op while `running` is still true - so
+    // without this the engine would stay let go until the view changed.
+    setRunning(false);
+    syncRunning();
+  }
+
   /** Build the 3D engine again when the map is on screen after being hidden.
    *  A failure is remembered in `cosmosFailed`, so this can never become a
    *  rebuild loop. */
@@ -5087,6 +5224,9 @@ const galaxy = (() => {
 
   return {
     load, resize, setTrace, flyTo, setRunning, syncRunning, releaseCosmos,
+    /** The page's palette changed while this picture was on screen: re-take
+     *  every colour this module baked. See `themeChanged` above. */
+    themeChanged,
     /** P-1 (privacy audit 2026-10-27): drop every word this picture holds, and
      *  record the PC's own answer about whether the lists are hidden. */
     forget, setPrivateHidden,
@@ -5143,6 +5283,68 @@ const galaxy = (() => {
     }; }
   };
 })();
+
+/* =========================================================================
+ * The theme, while this window is open
+ * -------------------------------------------------------------------------
+ * Measured on the installed 0.2.351 app, 2026-10-28
+ * (`.dsh-scratch/MAXOUT-2026-10-28/FIELDTEST-DESKTOP-2026-10-28/REPORT.md`,
+ * row "Theme picker (#theme-list) + fan-out"): picking Daylight in Settings
+ * repainted Settings, the bar, the widget and the Brain at once, and the HUD
+ * stayed on Reactor - still dark, no error - until the page was reloaded.
+ *
+ * WHY IT COULD NOT FOLLOW. Every window is its own document, so one window
+ * changing `data-theme` cannot reach another. The fan-out that does reach them
+ * is one Tauri event: commands.rs `set_theme` -> system_theme.rs `apply_now`
+ * -> `emit_all(THEME_CHANGED, theme)`, with the theme id as the payload - and
+ * `jarvis-link.js`'s `followTheme` subscribes to it in the bar, the widget,
+ * the Brain and Settings (`TAURI.event.listen("theme-changed", ...)` then
+ * `applyTheme(event.payload)`). This page had only the load-time read at the
+ * top of the file, so it painted the stored theme once and then ignored the
+ * event for the life of the window.
+ *
+ * SAME EVENT, SAME PAYLOAD - deliberately not a new one and not an import.
+ * `followTheme` is not imported here: it drags `jarvis-link.js`'s state-colour
+ * pass into a page that has never had one, and a plain browser's copy of this
+ * page (jarvis_hud.py serves it too) has no `__TAURI__` at all. The part that
+ * matters is three lines of `applyTheme` - normalise the id, set `data-theme`,
+ * write the anti-flash cache - and this page's own list of ids.
+ *
+ * THE PAYLOAD IS THE EFFECTIVE THEME. "Match Windows light or dark mode" is
+ * decided in Rust (system_theme.rs reads the registry, because every window is
+ * built forced-dark and `prefers-color-scheme` would lie), and the id the PC
+ * broadcasts is whatever that decision came to. So there is nothing
+ * system-shaped to mirror here: taking the payload IS following the system.
+ *
+ * NO RELOAD, NO LAYOUT CHANGE. `data-theme` swaps theme.css's tokens; the only
+ * things that had the old palette baked into pixels are re-taken through
+ * `galaxy.themeChanged()`.
+ * ========================================================================= */
+
+/** Paints one theme on this window now, and remembers it for the next load.
+ *  Unknown or missing ids are Reactor, the fallback `jarvis-link.js`'s
+ *  `normaliseTheme` and the phone's `Themes.byId` also make. Returns the id
+ *  actually worn. */
+function paintHudTheme(name){
+  const theme = jarvisHudThemes.indexOf(name) >= 0 ? name : jarvisHudThemes[0];
+  if(document.documentElement.getAttribute("data-theme") === theme) return theme;
+  document.documentElement.setAttribute("data-theme", theme);
+  try{ localStorage.setItem("jarvis.theme", theme); }
+  catch(e){ /* storage unreadable: this window still follows, the next load cannot */ }
+  galaxy.themeChanged();
+  return theme;
+}
+
+// The shell is the only place the event exists: capabilities/hud.json holds
+// `core:event:allow-listen` (and always has - the face's voice and moments
+// listeners use it), so the send path below is the one every other window
+// takes. A browser-served page has no `__TAURI__` and keeps the pre-paint read.
+const hudThemeEvent = window.__TAURI__ && window.__TAURI__.event;
+if (hudThemeEvent && typeof hudThemeEvent.listen === "function") {
+  Promise.resolve(hudThemeEvent.listen("theme-changed", (event) => {
+    paintHudTheme(event && event.payload);
+  })).catch(() => { /* an older shell without the event: the pre-paint read stands */ });
+}
 
 /* The bar's private-answer rule, applied here too.
  *
@@ -6446,7 +6648,9 @@ async function boot(){
 
   if(!S.online){
     $("banner").classList.add("on");
-    $("banner").innerHTML = status
+    // Written into its own span, never over #banner's whole contents: the
+    // Connect button beside it must survive every status read (2026-10-28).
+    $("banner-text").innerHTML = status
       ? '<b>Model not running.</b> The HUD server is answering; the local model is not. '
         + 'Replies below are sample data.'
       : '<b>Demo data.</b> Jarvis is not answering yet — start '
@@ -6455,6 +6659,7 @@ async function boot(){
       ? "The PC is up, but its local model is not running yet. Everything below is sample data until it is."
       : "Running as a preview. On your desktop, start it with py -3 jarvis_hud.py to connect to the real Jarvis.");
   } else {
+    paintLaneConnectNow();
     addMessage("jarvis", "Systems online, sir. Local model loaded and the brain map is current. What are we working on?");
     if(S.jarvisMemory){
       addMessage("system",
@@ -6642,7 +6847,18 @@ async function paintHost(){
     }
   }catch(e){ /* keep what was last known; never guess "down" from a failure */ }
   hostWarn();
+  // The lane's own reading, on the same beat: it is the PC that decides whether
+  // a press would do anything, and a lane started somewhere else (the Jarvis
+  // bar, the phone, the logon task) has to take this page's button away too.
+  await refreshLane();
 }
+
+/** The last lane reading this page has, or null for "the PC has not said". */
+let laneRead = null;
+/** True while a press is being watched, so the button cannot be pressed twice. */
+let lanePressing = false;
+/** The PC's own refusal, or this page's plain sentence, under the button. */
+let laneNote = "";
 
 /* Draws the ONE standing status row under the title: the model truth and the
  * shell's live link truth, once each (see "ONE status row" below).
@@ -6668,6 +6884,12 @@ function hostWarn(){
     // one thing that has to be true before anything is typed.
     paintLaneWarning(document, S.ollama, S.linkUp);
   }
+  // The Connect button follows the same two facts, and is painted again on
+  // every beat, so a lane started from the Jarvis bar, the phone or the logon
+  // task takes the button (and the offline banner) away here too.
+  paintLaneConnectNow();
+  const banner = document.getElementById("banner");
+  if(banner && S.ollama === true) banner.classList.remove("on");
   const sub = document.getElementById("brand-sub");
   if(!sub) return;
   const modelUp = S.ollama !== false;
@@ -6689,6 +6911,314 @@ function hostWarn(){
 function isBrandFallback(){
   const sub = document.getElementById("brand-sub");
   return !!sub && /^\s*demo\b/i.test(sub.textContent || "");
+}
+
+/* ====================================================================== *
+ *  The Connect button: start the model lane this PC's chat uses
+ *
+ *  THE OWNER'S ASK, 2026-10-28, in his own words: "when jarvis gets opened on
+ *  the desktop from scratch, there should be a connect button next to these
+ *  notifications saying its offline." Two lines say a model is missing - the
+ *  standing #model-warn row ("The local model isn't running on your PC.") and
+ *  #banner ("Model not running. The HUD server is answering; the local model
+ *  is not.") - and until this slice neither offered anything to press. The HUD
+ *  was deliberately the ONE window with no Start button (docs/ARCHITECTURE.md
+ *  section 8, PR #409 era), because its reads were a fixed list in Rust. THE
+ *  OWNER HAS REVERSED THAT FOR THIS PAGE: the HUD now holds the lane's read
+ *  and its one action (`hud-lane` in permissions/surfaces.toml) and nothing
+ *  else of that set - the automatic-restart switch stays off this window.
+ *
+ *  WHAT THE PRESS REALLY DOES. It sends the SAME command the Jarvis bar sends
+ *  (`start_model_lane`, which the PC answers at POST /api/model-lanes/start),
+ *  and that runs the owner's OWN Windows logon task for the lane the chat is
+ *  pointed at, looked up on that PC by the half of its name a rename does not
+ *  touch. This page builds no command line, never says `ollama serve` and
+ *  cannot start a lane the chat is not on. No approval card is raised, because
+ *  the PC's own logon already runs that exact task unattended.
+ *
+ *  STARTING IS NOT ARRIVING, and nothing here says it is. The PC answers
+ *  "starting" at once, so the press then asks again on a short beat until the
+ *  lane really answers or the PC says it did not come up; only `state: "up"`
+ *  clears the warning, and a refusal is shown in the PC's own sentence with
+ *  the warning left standing. That is `lane-start.js`'s rule, in its words -
+ *  this page keeps the same shape here because it cannot import that module:
+ *  the browser-served copy of this page is dressed by the backend's
+ *  STATIC_ASSETS whitelist, which this repository does not own, so a new
+ *  module beside it would 404 and take the whole module graph (including
+ *  lane-warning.js) with it. `tests/hud-connect.mjs` runs this block and
+ *  `lane-start.js`'s `startUntilSettled` through the SAME fakes and demands
+ *  the same outcome, so the two cannot drift apart unannounced.
+ *
+ *  WHO ANSWERS. In the desktop shell the page holds no token (apps security
+ *  audit M2), so the two commands add it in Rust - exactly as the bar's button
+ *  does. Served by the backend in a plain browser there is no shell, so the
+ *  page asks the two routes itself with the header every HUD request carries.
+ * ====================================================================== */
+
+/* == hud-lane-connect start == (tests/hud-connect.mjs lifts this block) */
+
+/** The button, while the PC says a press would really start a lane. */
+const LANE_START_WORDS = "Start the local model";
+/** Mid-press, and until the lane either answers or runs out of time. */
+const LANE_STARTING_WORDS = "Starting\u2026";
+/** What a button that cannot do anything after all is called. */
+const LANE_CANNOT_START_WORDS = "Cannot start it";
+/** How often the page asks what became of a start it asked for. */
+const LANE_WATCH_BEAT_MS = 2000;
+/** The PC gives a lane ninety seconds; this is a little longer so its verdict
+ *  is the one the owner sees rather than this page giving up first. */
+const LANE_WATCH_LIMIT_MS = 100000;
+
+/** Whether a lane reading is the PC saying the lane is really back. */
+function laneIsUp(lane){
+  return Boolean(lane) && String(lane.state || "") === "up";
+}
+
+/**
+ * What the button says, from the PC's own reading of the lane, or null when
+ * the PC has not said. `lane` is `GET /api/model-lanes`'s answer: `state`
+ * ("up", "down", "starting"), `can_start`, `message`/`why`, `elapsed_s`.
+ */
+function laneButtonView(lane){
+  if(!lane || typeof lane !== "object"){
+    return { show: false, disabled: true, words: "", note: "", state: "" };
+  }
+  const state = String(lane.state || "");
+  if(state === "up"){
+    return { show: false, disabled: true, words: "", note: "", state };
+  }
+  if(state === "starting"){
+    return { show: true, disabled: true, words: LANE_STARTING_WORDS,
+             note: laneCountdownWords(lane), state };
+  }
+  if(lane.can_start === true){
+    return { show: true, disabled: false, words: LANE_START_WORDS, note: "", state };
+  }
+  // No such task on this PC, or the PC just tried: the reason, and no button.
+  const note = String(lane.message || lane.why || "");
+  return { show: false, disabled: true, words: LANE_CANNOT_START_WORDS, note, state };
+}
+
+/** The line under the button: what the PC itself said, or the seconds it has
+ *  been, or nothing made up. */
+function laneCountdownWords(lane){
+  const said = String((lane && lane.message) || "").trim();
+  if(said) return said;
+  const elapsed = Number(lane && lane.elapsed_s);
+  if(Number.isFinite(elapsed) && elapsed > 0){
+    const whole = Math.round(elapsed);
+    return `It has been ${whole} second${whole === 1 ? "" : "s"}; this can take up to a minute.`;
+  }
+  return "Starting it now; this can take up to a minute.";
+}
+
+/** What to say when the press could not be sent, or the PC refused it. Plain,
+ *  and never softened into a success: the warning stands either way. */
+function laneRefusalWords(reply){
+  const said = String((reply && (reply.error || reply.message)) || "").trim();
+  return said || "The PC would not start it just now. The local model is still not running.";
+}
+
+/**
+ * Draw the button into both offline surfaces of this page and return whether
+ * it is showing. `opts.banner` decides the banner half: that line only appears
+ * when the PC answers and its MODEL does not, and a page with no server to ask
+ * has nothing to start.
+ */
+function paintLaneConnect(doc, lane, onPress, opts){
+  opts = opts || {};
+  const view = laneButtonView(lane);
+  const bannerHalf = opts.banner === true;
+  let shown = false;
+  const put = (buttonId, noteId, allowed) => {
+    const button = doc && doc.getElementById ? doc.getElementById(buttonId) : null;
+    if(!button) return false;
+    const show = allowed && view.show;
+    button.textContent = show || allowed ? view.words : "";
+    button.hidden = !show;
+    button.disabled = !show || view.disabled;
+    button.setAttribute("aria-busy", show && view.disabled ? "true" : "false");
+    const note = doc.getElementById(noteId);
+    if(note){
+      // The line under the button is the PC's own sentence (or the countdown),
+      // and only while this surface is the one telling the owner about it.
+      note.textContent = allowed && view.note ? view.note : "";
+      note.hidden = !(allowed && view.note);
+    }
+    if(onPress) button.onclick = show && !view.disabled ? onPress : null;
+    return show;
+  };
+  // The standing row: the PC is answering and its own model is not.
+  shown = put("model-warn-start", "model-warn-start-note", true) || shown;
+  // The banner: only in its "model not running" state.
+  put("banner-connect", "banner-connect-note", bannerHalf);
+  return shown;
+}
+
+/* The two ways this page can ask. `core.invoke` for the shell (the token and
+ * every refusal live in Rust there), the routes themselves for a browser. */
+function hudLaneRead(){
+  const tauri = window.__TAURI__;
+  const core = tauri && tauri.core;
+  if(core && typeof core.invoke === "function"){
+    return core.invoke("read_model_lane");
+  }
+  return jfetch("/api/model-lanes", { cache: "no-store",
+    headers: { "X-Jarvis-Client": "hud" } }).then(function(r){
+      return r && r.ok ? r.json() : null;
+    });
+}
+
+function hudLaneAsk(){
+  const tauri = window.__TAURI__;
+  const core = tauri && tauri.core;
+  if(core && typeof core.invoke === "function"){
+    return core.invoke("start_model_lane");
+  }
+  return jfetch("/api/model-lanes/start", {
+    method: "POST", cache: "no-store", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Jarvis-Client": "hud" },
+    body: "{}",
+  }).then(function(r){
+    return r.json().catch(function(){ return null; }).then(function(body){
+      if(r.ok) return body;
+      const said = body && (body.error || body.message);
+      return { ok: false, error: String(said || `the PC answered HTTP ${r.status}`) };
+    });
+  });
+}
+
+/**
+ * Ask the PC to start the lane, then keep asking until it settles.
+ *
+ * Resolves with the LAST reading it saw - never with the press's own answer,
+ * which is only an acknowledgement - and `settled` says whether the lane
+ * reached a verdict inside the limit. A refusal resolves at once, so nothing
+ * is retried behind the owner's back. The shape and the words are
+ * `lane-start.js`'s `startUntilSettled`, which the bar and widget use.
+ */
+async function hudLanePress(io){
+  io = io || {};
+  const ask = io.ask || hudLaneAsk;
+  const read = io.read || hudLaneRead;
+  const wait = io.wait || ((ms) => new Promise(function(done){ setTimeout(done, ms); }));
+  const now = io.now || (() => Date.now());
+  const beatMs = io.beatMs || LANE_WATCH_BEAT_MS;
+  const limitMs = io.limitMs || LANE_WATCH_LIMIT_MS;
+  let first = null;
+  try{
+    first = await ask();
+  }catch(err){
+    return { ok: false, settled: true, lane: null, refused: true,
+             words: laneRefusalWords({ error: String((err && err.message) || err) }) };
+  }
+  if(first && first.ok === false){
+    return { ok: false, settled: true, lane: null, refused: true,
+             words: laneRefusalWords(first) };
+  }
+  if(laneIsUp(first)){
+    return { ok: true, settled: true, lane: first, refused: false, words: "" };
+  }
+  const started = now();
+  let last = first;
+  while(now() - started < limitMs){
+    await wait(beatMs);
+    try{
+      last = await read();
+    }catch(err){
+      continue;   // a read that did not land says nothing about the lane
+    }
+    if(laneIsUp(last)){
+      return { ok: true, settled: true, lane: last, refused: false, words: "" };
+    }
+    if(last && last.state === "down" && last.can_start === false){
+      return { ok: false, settled: true, lane: last, refused: false,
+               words: String(last.message || last.why || "") || laneRefusalWords(last) };
+    }
+  }
+  return { ok: false, settled: false, lane: last, refused: false,
+           words: "It did not come up in time. The local model is still not running." };
+}
+/* == hud-lane-connect end == */
+
+
+/** Redraws the button on both offline surfaces from the last reading. */
+function paintLaneConnectNow(){
+  const banner = document.getElementById("banner");
+  const bannerHalf = !!banner && banner.classList.contains("on") && S.ollama === false;
+  // The LANE's own reading decides, not the live stream's: `linkStatus.up`
+  // false means the shell's event stream dropped, which says nothing about
+  // whether the PC can be asked (the bridge read goes over its own road, and
+  // the warning line above is drawn from `S.ollama` whatever the stream says).
+  // Conflating the two hid this button in a plain browser and on every PC whose
+  // stream was reconnecting - found by driving the page, not by reading it.
+  // A lane mid-press is drawn as "starting" so a slow press cannot look like a
+  // stalled one.
+  const lane = lanePressing
+    ? Object.assign({}, laneRead || {}, { state: "starting" })
+    : laneRead;
+  paintLaneConnect(document, lane, startTheLane, { banner: bannerHalf });
+  if(!laneNote) return;
+  // The PC's refusal, or this page's plain sentence, under whichever line is
+  // the one on screen. Never invented, and never cleared by a repaint that has
+  // nothing new to say.
+  const standing = document.getElementById("model-warn");
+  const standingWanted = !!standing && !standing.hidden;
+  for(const [noteId, surface, wanted] of [
+    ["model-warn-start-note", standing, standingWanted],
+    ["banner-connect-note", banner, bannerHalf],
+  ]){
+    const note = document.getElementById(noteId);
+    if(!note || !surface) continue;
+    note.textContent = wanted ? laneNote : "";
+    note.hidden = !wanted;
+  }
+}
+
+/** Reads the lane and draws from it. Never throws; one read at a time. */
+let laneAsking = false;
+async function refreshLane(){
+  if(laneAsking) return laneRead;
+  laneAsking = true;
+  try{
+    const reading = await hudLaneRead();
+    // Only a read that landed changes anything: "the PC did not say" is not
+    // "the lane is down", and a button drawn from a failed read would be one
+    // more thing to learn to ignore.
+    if(reading && typeof reading === "object") laneRead = reading;
+  }catch(e){
+    /* keep what was last known; an older backend has no such route */
+  }finally{
+    laneAsking = false;
+  }
+  if(laneIsUp(laneRead)) laneNote = "";
+  paintLaneConnectNow();
+  return laneRead;
+}
+
+/** The owner's press: ask the PC, then watch until the lane answers or it gives up. */
+async function startTheLane(){
+  if(lanePressing) return;
+  lanePressing = true;
+  laneNote = "";
+  paintLaneConnectNow();
+  const outcome = await hudLanePress({});
+  lanePressing = false;
+  if(outcome && outcome.lane) laneRead = outcome.lane;
+  if(outcome && outcome.ok){
+    laneNote = "";
+    // The lane really answered: ask again so the line clears from the PC's
+    // own verdict rather than from this page's opinion (`paintHost` re-reads
+    // /api/status and the lane, and the banner clears itself from `ollama`).
+    await paintHost();
+    return;
+  }
+  if(outcome) laneNote = outcome.words || laneRefusalWords(null);
+  // Did not come up, or the PC refused it: the PC's own words, and the
+  // warning is left standing - which is the whole point. The state is read
+  // again so a "starting" reading left by the watch is replaced by the PC's
+  // own verdict, and the button is drawn from that rather than from a guess.
+  await refreshLane();
 }
 
 /* ONE status row (field fix, 2026-10-21).

@@ -2356,6 +2356,11 @@ export function mountFacePicker(options = {}) {
   const doc = options.document || globalThis.document;
   const win = options.window || globalThis.window || globalThis;
   if (!doc || !doc.body) return null;
+  // This device's saved face size, applied before the panel exists: the page's
+  // head script is the no-flash half (it runs before first paint), and this is
+  // the same one number rather than a second setting. It needs no shell.
+  let size = faceSizeOf(win);
+  applyFaceSize(doc, size);
   const door = doc.getElementById(options.doorId || FACE_DOOR_ID);
   if (!door) return null;   // an older page: no door, so nothing to wire
   const shellPresent = typeof options.shellPresent === "boolean"
@@ -2414,6 +2419,7 @@ export function mountFacePicker(options = {}) {
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Jarvis faces");
     panel.appendChild(nodeOf(doc, "p", "hud-presets-title", "Jarvis faces"));
+    panel.appendChild(sizeRow());
     panel.appendChild(nodeOf(doc, "div", "hud-presets-scroll"));
     const line = nodeOf(doc, "p", "hud-presets-line");
     line.setAttribute("role", "status");
@@ -2488,6 +2494,7 @@ export function mountFacePicker(options = {}) {
         .find((item) => item.dataset.face === keep);
       if (again && typeof again.focus === "function") again.focus({ preventScroll: true });
     }
+    paintSizes();
   }
 
   /** ONE face click. The mark is NOT set from this click: the save's own
@@ -2513,6 +2520,50 @@ export function mountFacePicker(options = {}) {
       busy = "";
       render();
     }
+  }
+
+  /** The three sizes, in the panel's own `.hud-presets-item` look: real
+   *  buttons in a `role="group"`, so Tab reaches each one and every one says
+   *  whether it is the chosen size - the same `aria-pressed` idiom the face
+   *  rows above use. Placed after the title and OUTSIDE `.hud-presets-scroll`,
+   *  so a render of the 25 faces never wipes it and it is seen without
+   *  scrolling. */
+  function sizeRow() {
+    const row = nodeOf(doc, "div", "hud-faces-size");
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", "Face size");
+    row.appendChild(nodeOf(doc, "span", "hud-faces-size-label", "Face size"));
+    const choices = nodeOf(doc, "div", "hud-faces-sizes");
+    for (const choice of FACE_SIZES) {
+      const button = nodeOf(doc, "button", "hud-presets-item hud-faces-size-item",
+        FACE_SIZE_WORDS[choice]);
+      button.type = "button";
+      button.dataset.size = choice;
+      button.setAttribute("aria-label", `${FACE_SIZE_WORDS[choice]} face size`);
+      button.addEventListener("click", () => pickSize(choice));
+      choices.appendChild(button);
+    }
+    row.appendChild(choices);
+    return row;
+  }
+
+  /** Repaint the pressed mark from the ONE remembered number. */
+  function paintSizes() {
+    if (!panel) return;
+    for (const button of panel.querySelectorAll(".hud-faces-size-item")) {
+      button.setAttribute("aria-pressed", button.dataset.size === size ? "true" : "false");
+    }
+  }
+
+  /** ONE size click: remember it on this device, apply it to the page's one
+   *  multiplier, and say what changed. It touches no command, no route and no
+   *  other preference - the theme and the worn face are untouched. */
+  function pickSize(choice) {
+    size = rememberFaceSize(win, choice, doc);
+    paintSizes();
+    note = `Face size: ${FACE_SIZE_WORDS[size]}. This device only.`;
+    const line = panel && panel.querySelector(".hud-presets-line");
+    if (line) line.textContent = note;
   }
 
   /** Under the door, kept inside the window - the Current Models rule. */
@@ -2594,3 +2645,63 @@ export function mountFacePicker(options = {}) {
  * above: `tests/hud-current-models.mjs` slices the Current Models section up to
  * that exact line, so the face panel lives after it and keeps that pin true. */
 export { FACE_PANEL_ID, FACE_DOOR_ID };
+
+/* ── 7. The face size (the owner's ask, 2026-10-28) ──────────────────────── */
+
+/**
+ * ONE device-local size for the face, next to the face list:
+ *
+ *   "in the jarvis faces in the left column of the hud there should also be a
+ *    size option on desktop"
+ *
+ * Small / Medium / Large multiply whatever size the page's own layout gives
+ * the face - the `--face-scale` rules beside `#reactor` in `jarvis_hud.html` -
+ * so the layout owns the base and this owns one number. That is why no shell
+ * needed a second rule: Cockpit keeps 220px, Studio 48px, Ambient 320px, the
+ * pinned core 96/88px, and each of them moves by 0.75 / 1 / 1.25.
+ *
+ * DEVICE-LOCAL, by the owner's words "on desktop": the choice is THIS
+ * WebView's `localStorage` under `jarvis.face.size`, the same per-device road
+ * as `jarvis.theme`, and the page's head script reads the same key before
+ * first paint so the first frame is already the chosen size. It is not the
+ * PC's settings store, calls no command, posts nothing and raises no card.
+ *
+ * WHAT IT IS NOT: not the theme (no other key is written), not the face (it
+ * never touches `appearance`), not the layout, and not a second source for
+ * either - the list and the save above stay exactly as they were.
+ */
+
+const FACE_SIZE_KEY = "jarvis.face.size";
+const FACE_SIZES = ["small", "medium", "large"];
+const FACE_SIZE_WORDS = { small: "Small", medium: "Medium", large: "Large" };
+
+/** The size this device remembers, or Medium (the layout's own size). */
+export function faceSizeOf(win) {
+  try {
+    const stored = win && win.localStorage ? win.localStorage.getItem(FACE_SIZE_KEY) : null;
+    return FACE_SIZES.indexOf(stored) >= 0 ? stored : "medium";
+  } catch {
+    return "medium";
+  }
+}
+
+/** Put the size on the page: the ONE value the stylesheet reads. */
+export function applyFaceSize(doc, size) {
+  const chosen = FACE_SIZES.indexOf(size) >= 0 ? size : "medium";
+  if (doc && doc.documentElement) doc.documentElement.setAttribute("data-face-size", chosen);
+  return chosen;
+}
+
+/** Remember the choice on THIS device and apply it. Storage that refuses
+ *  (private mode, a cleared profile) still gets the size for this page: the
+ *  setting is a look, and losing the memory is no reason for the click to do
+ *  nothing. */
+export function rememberFaceSize(win, size, doc) {
+  const chosen = applyFaceSize(doc || (win && win.document), size);
+  try {
+    if (win && win.localStorage) win.localStorage.setItem(FACE_SIZE_KEY, chosen);
+  } catch { /* private mode / no storage: the look still applies */ }
+  return chosen;
+}
+
+export { FACE_SIZE_KEY, FACE_SIZES };
