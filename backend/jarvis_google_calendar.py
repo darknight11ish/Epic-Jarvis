@@ -749,7 +749,7 @@ def exchange_code(code: str, verifier: str, redirect_uri: str, *,
         # ...), never the body: the body of a token response is where the
         # tokens are.
         raise FlowError("Google refused the code ({})".format(
-            str(body.get("error") or "HTTP {}".format(status))[:60]))
+            str(body.get("error") or "Google answered with error number {}".format(status))[:60]))
     refresh = body.get("refresh_token")
     if not isinstance(refresh, str) or not refresh:
         raise FlowError("Google did not send a refresh token, so Jarvis would stop "
@@ -830,7 +830,7 @@ def access_token(*, transport: Optional[Callable] = None,
         "grant_type": "refresh_token",
     }, transport=transport)
     if status != 200:
-        err = str(body.get("error") or "HTTP {}".format(status))[:60]
+        err = str(body.get("error") or "Google answered with error number {}".format(status))[:60]
         if err == "invalid_grant":
             raise NotConnected("the saved Google permission has expired - connect again "
                                "in Settings, Accounts (Google deletes a Testing-mode "
@@ -1011,7 +1011,7 @@ def _list_google(days_ahead: int, *, now: Optional[datetime] = None,
                          transport=transport)
     if status != 200:
         reason = str((body.get("error") or {}) if isinstance(body.get("error"), dict)
-                     else {}).get("message") or "HTTP {}".format(status)
+                     else {}).get("message") or "Google answered with error number {}".format(status)
         return {"ok": False, "connected": True, "events": [],
                 "reason": "Google refused the calendar read ({})".format(
                     _outside_field(reason)[:120])}
@@ -1307,7 +1307,7 @@ def create_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
     except FlowError as exc:
         return _refuse(503, str(exc), "failed")
     if status not in (200, 201):
-        return _refuse(502, "Google refused the new event (HTTP {})".format(status), "failed")
+        return _refuse(502, "Google refused the new event (error number {})".format(status), "failed")
     with _LOCK:
         _STATE["last_read"] = 0.0          # the list is now out of date
         _STATE["read_ok"] = False
@@ -1355,7 +1355,7 @@ def update_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
     except FlowError as exc:
         return _refuse(503, str(exc), "failed")
     if status != 200:
-        return _refuse(502, "Google refused the change (HTTP {})".format(status), "failed")
+        return _refuse(502, "Google refused the change (error number {})".format(status), "failed")
     with _LOCK:
         _STATE["last_read"] = 0.0
         _STATE["read_ok"] = False
@@ -1399,7 +1399,7 @@ def delete_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
     except FlowError as exc:
         return _refuse(503, str(exc), "failed")
     if status not in (200, 204):
-        return _refuse(502, "Google refused the delete (HTTP {})".format(status), "failed")
+        return _refuse(502, "Google refused the delete (error number {})".format(status), "failed")
     with _LOCK:
         _STATE["last_read"] = 0.0
         _STATE["read_ok"] = False
@@ -1426,7 +1426,7 @@ def disconnect(*, revoke: bool = True,
                                  transport=transport)
             revoked = status in (200, 400)   # 400 = it was already invalid
             if not revoked:
-                detail = "Google answered HTTP {}".format(status)
+                detail = "Google answered with error number {}".format(status)
         except FlowError as exc:
             detail = str(exc)
     had = _delete_secret(TARGET_REFRESH)
