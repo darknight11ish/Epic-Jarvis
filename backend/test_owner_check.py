@@ -1457,13 +1457,29 @@ def t_the_gate_believes_no_approved_row_without_a_stamp():
     check("owner-check.patch needed none of the owner's lines it had not already seen",
           not [l for l in log if l.startswith("owner-check.patch")], log)
     lines = text.splitlines()
-    branches = [i for i, l in enumerate(lines) if re.search(r'row\["state"\] == "approved"', l)]
+    # A branch is the line AND the body under it. The stand-in is a walk of
+    # fragments, and a hunk that has to invent its pre-image leaves that
+    # pre-image's own trailing CONTEXT line as the last line of the fragment:
+    # no-expiry-cards.patch's check() hunk was regenerated on 2026-10-28 with
+    # its full three-line trailing context, which ends on
+    # `if row["state"] == "approved":`, so the walk pastes a copy of that line
+    # immediately above `pending()`'s fragment. That copy opens no body - the
+    # next line is a "# gap" marker - so it is not one of the gate's branches
+    # and counting it was the 2026-10-28 CI failure. The two real branches
+    # themselves did not move.
+    branches = [i for i, l in enumerate(lines)
+                if re.search(r'row\["state"\] == "approved"', l)
+                and i + 1 < len(lines) and not lines[i + 1].startswith(_stack.GAP)]
     check("both of the gate's approved branches are there", len(branches) == 2, branches)
+    late = []
     for i in branches:
         after = "\n".join(lines[i + 1:i + 6])
         check(f"line {i + 1}: the stamp is asked before gate.approved is recorded",
               after.find("_approval_stamped(rid, action)") != -1
               and after.find("_approval_stamped") < after.find('_audit("gate.approved"'), after)
+        if '"late": True' in after:
+            late.append(i + 1)
+    check("the two are the wait's branch and the late-decision one", len(late) == 1, late)
 
     ns = {"_audit": lambda *a, **k: ns.setdefault("audits", []).append(a)}
 
