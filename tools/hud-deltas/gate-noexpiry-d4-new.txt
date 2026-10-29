@@ -1,0 +1,12 @@
+    """
+    _init()
+    with closing(_connect()) as c:
+        # A card past its deadline is not waiting for anybody, even while its
+        # row still says 'pending' (see _expire_overdue). Settle that BEFORE
+        # the SELECT, so no client - the phone's Approvals list, the desktop's
+        # three surfaces, the HUD - is handed a card it can only draw as
+        # "Timed out" with nothing to press and nothing that removes it.
+        _expire_overdue(c)
+        rows = c.execute(
+            "SELECT id,action,tier,detail,prompt,created,raised FROM approvals"
+            " WHERE state='pending' ORDER BY created").fetchall()
