@@ -2468,6 +2468,14 @@ $SHIPPED = @(
 # /api/models/install and /api/work/apply cards remain the only ways to act).
 # backend/_where.py's SHIPPED list has the same entry, at the end too.
 'jarvis_model_recommendations.py'
+# A real two-way Google Calendar (2026-10-28, the owner chose "both at once"):
+# the private iCal link (read-only) or a Google sign-in over a LOOPBACK redirect
+# with PKCE and a checked state (read/write), one active at a time. Its routes
+# come from its own install(), called by plugins/ready/google-calendar, so no
+# patch of its own. The refresh token is in Windows Credential Manager, access
+# tokens are in memory only, and every create/change/delete waits on its own
+# approval card.
+'jarvis_google_calendar.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

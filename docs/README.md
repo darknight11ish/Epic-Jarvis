@@ -1,13 +1,13 @@
 # The documents, and which ones are current
 
-There are **405 markdown documents** here, adding up to about **10.7 MB**. Neither
+There are **406 markdown documents** here, adding up to about **10.7 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-27
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 405 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 406 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
   Measure-Object -Property Length -Sum).Sum                             # about 10,684,325 bytes
 ```
