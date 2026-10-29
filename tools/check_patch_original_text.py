@@ -235,6 +235,31 @@ PIN = {
     # patch to the published base and proves an overdue card leaves the list
     # while a live one does not.
     "no-expiry-cards.patch":                   (9, 69),     # position 36
+    # 2026-10-28, no-deadline-cards.patch (the owner's ruling: "if there
+    # doesn't need to be a time limit don't have one"). It is the patch
+    # no-expiry-cards.patch is written against, so its context on THAT patch's
+    # own lines costs this walk nothing (8 of its 16 hunks). The other EIGHT
+    # read text only the owner's PC holds, and every one is honest rather than
+    # drift - no patch in this walk writes it:
+    #   * `_pending_card_id()`'s SELECT and its loop, which the owner's gate
+    #     already had (`gate-touches.patch` added the digest column around it,
+    #     not the row read);
+    #   * `check()`'s ask branch: the `reused = False` line, the INSERT's
+    #     column list and its bound values - the owner's own queue write, which
+    #     the digest hunk of `gate-touches.patch` sits inside but does not
+    #     replace;
+    #   * `check()`'s late-answer block after the wait (the owner's UPDATE and
+    #     its four honour-the-late-decision returns) - that block is not
+    #     touched by any earlier patch, including `gate-outcome.patch`, whose
+    #     hunks stop at the audit line's neighbourhood;
+    #   * `pending()`'s opening (`_init()` and the SELECT);
+    #   * `decide()`'s body, and the insertion point of `still_waiting()`
+    #     before `withdraw()`;
+    #   * `withdraw()`'s docstring, which this patch rewrites.
+    # Checked the other way by backend/test_gate_no_deadline.py, which applies
+    # BOTH patches to the published base with `git apply` (no fuzz), compiles
+    # the result and drives the card's whole life.
+    "no-deadline-cards.patch":                 (8, 133),    # position 37
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under

@@ -1317,35 +1317,75 @@ def _hello_child(message: str, timeout: float,
 # ---------------------------------------------------------------------------
 
 
-def _no_deadline(row: dict) -> bool:
-    """True only when the GATE says this action's card has no deadline.
+#: What a person reads when the request behind a card has stopped waiting.
+#: Since 2026-10-28 a card has NO deadline, so it can outlive the request that
+#: raised it; approving it at that point would record a yes that nothing runs.
+#: One sentence, no jargon, and it says what to do next.
+LATE_APPROVAL = (
+    "That card is not waiting for you any more: the request that asked has "
+    "finished, so nothing can be approved from it. Nothing was changed - ask "
+    "Jarvis again if you still want it.")
 
-    Asked of jarvis_gate rather than read off the row, because an absent
-    `expires_in` means two different things: a gate too old to send the field
-    (those cards DO expire, and DEFAULT_TIME_LEFT is the honest answer) and a
-    deliberate card the gate left the field off on purpose
-    (jarvis_gate.APPROVAL_NEVER_EXPIRES). Only the module that made the
-    decision can tell them apart. A backend without `timeout_for` - one older
-    than this change - gets False and exactly today's behaviour.
+
+def _no_deadline(row: dict) -> bool:
+    """True only for a card the GATE says has no window at all.
+
+    Two backends answer this differently and both are understood here:
+
+      * the one this repository ships since 2026-10-28 - `APPROVAL_NEVER_EXPIRES`
+        names the four ceremonies whose REQUEST waits for its own flow, and
+        every other card has a request window even though the CARD itself has
+        no deadline. `timeout_for()` answers None for every action now, so the
+        set, not the function, is what tells the two apart.
+      * a backend older than that - `APPROVAL_NEVER_EXPIRES` may be absent, and
+        `timeout_for()` is then the only answer it has.
+
+    A row from a backend with neither (a fieldless row and no set) is treated as
+    having a window: DEFAULT_TIME_LEFT is the honest fallback there, because
+    those cards really did expire.
     """
     try:
         import jarvis_gate
+        action = row.get("action")
+        never = getattr(jarvis_gate, "APPROVAL_NEVER_EXPIRES", None)
+        if isinstance(never, (set, frozenset)):
+            return action in never
         ask = getattr(jarvis_gate, "timeout_for", None)
         if callable(ask):
-            return ask(row.get("action")) is None
+            return ask(action) is None
     except Exception:
         pass
     return False
 
 
-def _time_left(row: dict) -> Optional[float]:
-    """Seconds the card still has, or None when it has no deadline at all.
+def _window_seconds() -> float:
+    """The shipped `approval_timeout_seconds`, read from the gate that uses it.
 
-    None is not a very large number. The gate leaves `expires_in` off a
-    deliberate card on purpose (jarvis_gate.APPROVAL_NEVER_EXPIRES): pairing a
-    phone, registering its approval key and restoring a backup wait for the
-    owner rather than lapsing. A caller that treated None as "0 seconds left"
-    would refuse exactly those cards, and one that treated it as a number of
+    Not a copy of 900: the owner can change it in Settings (5 minutes to an
+    hour), and a decision made late in a longer window must not be refused by
+    this module's own arithmetic.
+    """
+    try:
+        import jarvis_gate
+        value = float(getattr(jarvis_gate, "APPROVAL_TIMEOUT", 0) or 0)
+        if value > 0:
+            return value
+    except Exception:
+        pass
+    return DEFAULT_TIME_LEFT
+
+
+def _time_left(row: dict) -> Optional[float]:
+    """Seconds the card's request still has, or None when it has no window.
+
+    None is not a very large number. A card whose action's request waits for
+    its own flow (`jarvis_gate.APPROVAL_NEVER_EXPIRES`: pairing a phone,
+    registering its approval key and restoring a backup) has no moment to be
+    late for. Since 2026-10-28 the CARD of every other action has no deadline
+    either, but its REQUEST does, and that is the number this returns - from
+    the row's own `expires_in` when an older backend sent one, otherwise from
+    `created` plus the shipped wait. A caller that treated None as "0 seconds
+    left" would refuse the four ceremonies; one that treated it as a number of
     seconds would invent a deadline the gate does not have - so both branches
     below test it explicitly.
     """
@@ -1363,7 +1403,54 @@ def _time_left(row: dict) -> Optional[float]:
         except (TypeError, ValueError):
             return DEFAULT_TIME_LEFT
         return left if left == left else DEFAULT_TIME_LEFT   # NaN
-    return None if _no_deadline(row) else DEFAULT_TIME_LEFT
+    if _no_deadline(row):
+        return None
+    # No field, and the action's REQUEST has a window: recompute it from the
+    # row's own `created` (the same arithmetic the gate used to send the field)
+    # so a card older than its request's wait is still refused here.
+    try:
+        created = float(row.get("created"))
+    except (TypeError, ValueError):
+        return DEFAULT_TIME_LEFT
+    return created + _window_seconds() - time.time()
+
+
+def _still_waiting(request_id, row: dict) -> bool:
+    """Whether a request can still act on this card's answer.
+
+    Asked of the gate (`still_waiting`, added with the 2026-10-28 ruling) when
+    it has one, because the exact moment is on the row as `waited_until` and
+    only the gate reads it. A backend older than that has no such function:
+    fall back to the row's own seconds left, which is what that backend
+    actually enforces.
+    """
+    try:
+        import jarvis_gate
+        ask = getattr(jarvis_gate, "still_waiting", None)
+        if callable(ask):
+            return bool(ask(request_id))
+    except Exception:
+        raise
+    left = _time_left(row)
+    return left is None or left > 0
+
+
+def _take_off(request_id, why: str) -> bool:
+    """Withdraw a card whose request has finished, if this gate can.
+
+    `jarvis_gate.withdraw()` is the same lapse the pairing flows use: state
+    'expired', never 'denied', and it approves nothing. A backend without it
+    keeps the row, which the next start-up settles - so this is best-effort and
+    its answer changes nothing about the refusal itself.
+    """
+    try:
+        import jarvis_gate
+        take_off = getattr(jarvis_gate, "withdraw", None)
+        if callable(take_off):
+            return bool(take_off(request_id, why))
+    except Exception:
+        pass
+    return False
 
 
 def _find(rows, request_id) -> Optional[dict]:
@@ -1511,6 +1598,19 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
     if row is None:
         return None
     action = row.get("action")
+    # DECISION-TIME REVALIDATION (2026-10-28). A card has no deadline now, so
+    # it can still be on screen long after the request that raised it stopped
+    # waiting. Approving it then would record a yes that nothing runs - the
+    # exact "approved" / "nothing happened" pair this project refuses to
+    # produce. The card is withdrawn (a lapse, never a denial) and the person
+    # is told why, in one sentence, instead of a generic 409.
+    try:
+        waiting = _still_waiting(request_id, row)
+    except Exception:
+        return 503, {"ok": False, "error": QUEUE_UNREADABLE, "owner_check": "unreadable"}
+    if not waiting:
+        _take_off(request_id, "the request that asked had stopped waiting")
+        return 409, {"ok": False, "error": LATE_APPROVAL, "owner_check": "gone"}
     here = from_this_pc(peer, local, own)
     if action in PC_ONLY_ACTIONS and not here:
         # Approved on the PC only, with Windows Hello (PC_ONLY_ACTIONS).
@@ -1633,6 +1733,18 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         left_again = _time_left(again) if again is not None else None
         if again is None or (left_again is not None and left_again <= 0):
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
+        # ...and the request that raised the card must still be able to act on
+        # the answer (2026-10-28). The prompt can stay up for three minutes and
+        # the card can outlive its request, so this is asked again on the row
+        # that is live now - the same reason the seconds are re-read.
+        try:
+            waiting = _still_waiting(request_id, again)
+        except Exception:
+            return 503, {"ok": False, "error": QUEUE_UNREADABLE,
+                         "owner_check": "unreadable"}
+        if not waiting:
+            _take_off(request_id, "the request that asked had stopped waiting")
+            return 409, {"ok": False, "error": LATE_APPROVAL, "owner_check": "gone"}
     stamp(request_id, action)
     return None
 

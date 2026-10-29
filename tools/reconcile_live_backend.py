@@ -574,6 +574,32 @@ DELTA_TABLE = {
             "regions": NOEXPIRY_REGIONS,
         },
     },
+    # no-deadline-cards.patch (2026-10-28, the owner's ruling: "if there
+    # doesn't need to be a time limit don't have one"). SIXTEEN hunks in
+    # disjoint regions of `jarvis_gate.py`, so `"hunks": True`: each pre-image
+    # block is replaced by its post-image block, in file order, and a pre-image
+    # that is missing or not exactly once refuses the whole file. EIGHT of them
+    # edit no-expiry-cards.patch's own output, so this entry only works when
+    # that patch is already deployed - which the order in `$PATCHES` (and the
+    # live PC, where #773 is deployed) gives it. The probes are one post-image
+    # line from six different regions; none of them exists in the published
+    # base or in the pre-image, so only a gate that really carries the whole
+    # patch counts as present, and a half-applied file is finished by the
+    # per-hunk check rather than replaced twice. Its `jarvis_owner_check.py`
+    # half is a SHIPPED module, copied whole by deploy step 1.
+    "no-deadline-cards.patch": {
+        "jarvis_gate.py": {
+            "probes": (
+                "NO CARD HAS A DEADLINE (the owner's ruling of 2026-10-28",
+                "def wait_for(action: Any) -> Optional[float]:",
+                "def _wait_open(row: Any) -> bool:",
+                '"created,raised,target_digest,waited_until)"',
+                '_audit("gate.wait_finished"',
+                "def still_waiting(request_id: str) -> bool:",
+            ),
+            "hunks": True,
+        },
+    },
     # PWA Slice 3a (2026-10-23): the browser's own files, as TWO literal
     # inserts - the whitelist table + its handler in front of the class, and
     # the three-line dispatch branch in front of the page route. Neither

@@ -1567,15 +1567,17 @@ async function decide(approved, optionId = null) {
     flash(approved ? "Approved." : "Denied.", approved ? "ok" : null);
   } catch (error) {
     const message = String((error && error.message) || error);
-    // 409 means the id is unknown, expired, or already decided. Someone
-    // answered it — that is not an error to shout about.
+    // 409 means the id is unknown, already decided, or - since cards stopped
+    // expiring (2026-10-28) - the request that raised it has finished waiting.
+    // Someone answered it, or the asker is gone; neither is an error to shout
+    // about, and "Already handled elsewhere" was untrue for the second.
     const handled = /409|already/i.test(message);
     // Release the latch ONLY here, and only when the decision genuinely did
     // not land. A 409 means it was answered somewhere else, so the latch
     // stays. Releasing in `finally` instead would release it on SUCCESS too,
     // which is the whole thing the latch exists to prevent.
     if (!handled) state.decided = null;
-    flash(handled ? "Already handled elsewhere."
+    flash(handled ? "That card is not waiting any more — it was answered, or the request that asked has finished."
       : /^Nothing was approved\./.test(message) ? message : `${message} — nothing was decided.`,
           handled ? null : "bad");
   } finally {

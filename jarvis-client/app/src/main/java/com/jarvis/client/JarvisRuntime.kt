@@ -4652,8 +4652,13 @@ object JarvisRuntime {
                 }
                 is ApiResult.Failed -> {
                     if (result.error == ApiError.AlreadyHandled) {
-                        // Routine when the desktop and the phone are both open.
-                        _notice.value = "Already handled on the desktop."
+                        // Routine when the desktop and the phone are both open -
+                        // and since cards stopped expiring (2026-10-28) also
+                        // what a 409 means when the request that raised the card
+                        // has finished waiting. "Already handled" was untrue for
+                        // the second: nothing had been handled, and nothing ran.
+                        _notice.value = "That card is not waiting any more — it was answered, " +
+                            "or the request that asked has finished. Nothing ran from this tap."
                         refreshPending()
                     } else {
                         // A signature refusal the PC explained is its own

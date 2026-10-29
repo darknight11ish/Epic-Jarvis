@@ -2,6 +2,17 @@
 
     python3 test_pending_expiry_on_read.py
 
+THIS SUITE IS ABOUT ITS PATCH IN ISOLATION, AND THE STACK SUPERSEDED IT
+(2026-10-28). It proves the every-read sweep `no-expiry-cards.patch` added for
+the owner's "approval cards that are expired" report. The owner then ruled
+that no card has a time limit at all ("if there doesn't need to be a time
+limit don't have one"), and `no-deadline-cards.patch` - applied AFTER this one
+in the stack - removes that sweep from `pending()`: a card past its request's
+wait now STAYS, with its buttons, and a late yes is refused with the reason
+instead of the card vanishing. Both halves are proven on the full stack by
+`backend/test_gate_no_deadline.py`; this file keeps the evidence for the patch
+it is about.
+
 WHY THIS EXISTS
 
 The owner asked on 2026-10-28: "there is approval cards that are expired, how
