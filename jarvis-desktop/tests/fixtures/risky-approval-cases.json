@@ -9,7 +9,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a1",
         "notice": {
           "approve_ok": false,
@@ -40,7 +39,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a2",
         "notice": {
           "approve_ok": false,
@@ -70,7 +68,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a3",
         "notice": {
           "approve_ok": false,
@@ -101,7 +98,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a4",
         "notice": {
           "approve_ok": false,
@@ -136,7 +132,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a5",
         "notice": {
           "approve_ok": false,
@@ -167,7 +162,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a6",
         "notice": {
           "approve_ok": false,
@@ -198,7 +192,6 @@
         "action": "some_tool_nobody_classified",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a7",
         "notice": {
           "approve_ok": false,
@@ -229,7 +222,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a9",
         "notice": {
           "approve_ok": false,
@@ -260,7 +252,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a10",
         "notice": {
           "approve_ok": false,
@@ -291,7 +282,6 @@
         "action": "app_merge_change",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a17",
         "notice": {
           "approve_ok": false,
@@ -322,7 +312,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a11",
         "notice": {
           "approve_ok": false,
@@ -353,7 +342,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a12",
         "notice": {
           "approve_ok": false,
@@ -382,7 +370,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a13",
         "notice": {
           "approve_ok": false,
@@ -411,7 +398,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a14",
         "notice": {
           "approve_ok": false,
@@ -441,7 +427,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a15",
         "notice": {
           "approve_ok": false,
@@ -465,7 +450,6 @@
         "action": "append_logseq_journal",
         "created": 1799999970.0,
         "detail": "{}",
-        "expires_in": 570,
         "id": "a16",
         "prompt": "tool append_logseq_journal {}",
         "raised": null,

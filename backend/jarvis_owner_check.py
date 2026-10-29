@@ -1423,14 +1423,23 @@ def _still_waiting(request_id, row: dict) -> bool:
     only the gate reads it. A backend older than that has no such function:
     fall back to the row's own seconds left, which is what that backend
     actually enforces.
+
+    The fallback is also what runs where the gate is not importable at all:
+    `jarvis_gate.py` is patch-carried, so this repository, its base and CI hold
+    no such module. The import therefore cannot live inside the re-raising
+    `try` - that made every approval a 503 in `test_owner_check.py`, which
+    passes its own `pending()` and never reaches a gate. A gate that IS
+    importable but raises when asked still fails closed: that is a queue that
+    cannot be read, not a module that is not there.
     """
     try:
         import jarvis_gate
+    except Exception:
+        jarvis_gate = None
+    if jarvis_gate is not None:
         ask = getattr(jarvis_gate, "still_waiting", None)
         if callable(ask):
             return bool(ask(request_id))
-    except Exception:
-        raise
     left = _time_left(row)
     return left is None or left > 0
 
