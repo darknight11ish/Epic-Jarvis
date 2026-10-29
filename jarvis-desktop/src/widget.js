@@ -1444,7 +1444,8 @@ function syncApprovalButtons() {
   // two windows cannot answer it differently.
   const expiredCard = Boolean(state.approval && cardHasExpired(state.approval.expiresAt));
   const multiple = Boolean(
-    state.approval && Array.isArray(state.approval.options) && state.approval.options.length > 1
+    !state.appLock && state.approval && Array.isArray(state.approval.options)
+      && state.approval.options.length > 1
   );
   dom.btnApprYes.hidden = multiple || expiredCard;
   dom.btnApprNo.hidden = expiredCard;

@@ -3088,7 +3088,8 @@ function syncApprovalButtons() {
   // gate is not waiting for either answer (the phone made the same call).
   const expiredCard = Boolean(state.approval && cardHasExpired(state.approval.expiresAt));
   const multiple = Boolean(
-    state.approval && Array.isArray(state.approval.options) && state.approval.options.length > 1
+    !state.appLock && state.approval && Array.isArray(state.approval.options)
+      && state.approval.options.length > 1
   );
   dom.approvalApprove.hidden = multiple || expiredCard;
   dom.approvalDeny.hidden = expiredCard;
