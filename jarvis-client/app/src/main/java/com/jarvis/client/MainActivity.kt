@@ -41,6 +41,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.FragmentActivity
@@ -84,6 +86,7 @@ import com.jarvis.client.service.WakeWordService
 import com.jarvis.client.net.WakeWord
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.WakeRules
+import com.jarvis.client.ui.BottomReserve
 import com.jarvis.client.ui.NavBackHandler
 import com.jarvis.client.ui.NavScreens
 import com.jarvis.client.ui.OpenPlace
@@ -1348,6 +1351,16 @@ class MainActivity : FragmentActivity() {
         // purpose, since a dead process cannot say so itself.
         val laneAutoBusyNow by JarvisRuntime.laneAutoBusy.collectAsState()
         val laneAutoFailureNow by JarvisRuntime.laneAutoFailure.collectAsState()
+        // The fixed "Needs your OK" line's REAL height, in pixels - measured
+        // from the drawn line below, never typed in (2026-10-28; Gemini's F4).
+        // The line draws the PC's own card title, so it is two lines of text on
+        // a narrow phone and three when several cards wait: a hand-picked
+        // reserve would be too small exactly when it matters. Settings reads
+        // it through [BottomReserve] and keeps that much room under its last
+        // card, so "Unpair & clear the token" - the control the line used to
+        // cover - can be scrolled clear of it. Zero until the line is first
+        // drawn, which reserves nothing and changes no layout.
+        var waitingLinePx by remember { mutableIntStateOf(0) }
         val pending by JarvisRuntime.pending.collectAsState()
         // Collected here, and carried in HomeState below, for two reasons.
         //
@@ -2354,6 +2367,15 @@ class MainActivity : FragmentActivity() {
             // motion. Each screen draws from `screen`, not `nav.current`:
             // during the fade the old and the new screen are both on the glass.
             NavScreens(nav, transitions = look.transitions) { screen ->
+                // "Open the card" is drawn OVER this screen (below), so it takes
+                // no room from it. What it covers is worked out here, from its
+                // own measured height, and handed to the scrollable screens that
+                // keep room for it - Settings, whose last card is Devices with
+                // "Unpair & clear the token" on it (2026-10-28).
+                val waitingLineShown = screen != Screen.HOME && pending.isNotEmpty()
+                val waitingLineDp = with(LocalDensity.current) { waitingLinePx.toDp() }
+                val settingsBottomReserve =
+                    if (waitingLineShown) BottomReserve.forBanner(waitingLineDp.value).dp else 0.dp
                 when (screen) {
                     Screen.CHECKS -> {
                         val host by JarvisRuntime.settings.host.collectAsState()
@@ -3192,6 +3214,11 @@ class MainActivity : FragmentActivity() {
                         stale = stale,
                         onBack = { nav.back() },
                         modifier = root,
+                        // Room under the last card for the fixed "Needs your
+                        // OK" line, which is drawn over this screen and used to
+                        // sit on top of Devices' "Unpair & clear the token" at
+                        // max scroll (2026-10-28). Zero when no card is waiting.
+                        bottomReserve = settingsBottomReserve,
                         initialSection = sectionFor(Screen.SETTINGS),
                         // Bug audit 2026-09-27, finding #4: cleared once the
                         // screen has scrolled to it (or found no row for
@@ -3960,22 +3987,34 @@ class MainActivity : FragmentActivity() {
                 // any other. It only opens Home on that card; approving there
                 // is still a deliberate tap. An empty Box lets touches through
                 // to the screen underneath.
-                if (screen != Screen.HOME && pending.isNotEmpty()) {
+                if (waitingLineShown) {
                     Box(
                         Modifier
                             .fillMaxSize()
                             .windowInsetsPadding(WindowInsets.systemBars)
-                            .padding(12.dp),
+                            // The gap the line keeps from the screen's edges is
+                            // [BottomReserve.EDGE_DP] and not a second 12 here:
+                            // the screens that keep room for the line add that
+                            // same gap to their own bottom padding, and two
+                            // literals would drift apart and overlap again.
+                            .padding(BottomReserve.EDGE_DP.dp),
                         contentAlignment = Alignment.BottomCenter,
                     ) {
-                        CardWaitingLine(
-                            pending = pending,
-                            onOpen = { id ->
-                                nav.resetTo(Screen.HOME)
-                                focusApproval.value = id
-                                scope.launch { JarvisRuntime.refreshPending() }
-                            },
-                        )
+                        // The line measures ITSELF so Settings can reserve the
+                        // room it really needs. The extra Box is the measurement
+                        // point: CardWaitingLine pads itself AFTER the modifier
+                        // it is handed, so `modifier = Modifier.onSizeChanged`
+                        // would report the text without its padding.
+                        Box(Modifier.onSizeChanged { waitingLinePx = it.height }) {
+                            CardWaitingLine(
+                                pending = pending,
+                                onOpen = { id ->
+                                    nav.resetTo(Screen.HOME)
+                                    focusApproval.value = id
+                                    scope.launch { JarvisRuntime.refreshPending() }
+                                },
+                            )
+                        }
                     }
                 }
             }
