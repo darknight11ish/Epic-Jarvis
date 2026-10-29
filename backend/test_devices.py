@@ -905,6 +905,18 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # patch wrote, and the later_rewriting() half below
                                 # proves it.
                                 "model-recommendations.patch",
+                                # google-calendar-gate.patch (2026-10-28, the
+                                # security review of PR #961, finding N1) is
+                                # appended immediately before
+                                # plugin-loader.patch: ONE hunk in jarvis_gate.py
+                                # that adds a `_RISK` row at the END of the
+                                # table, far above devices.patch's own
+                                # register_approval_key row. It removes no line
+                                # and adds no `_NO_RULE_FROM_DENIAL` entry and no
+                                # `_TOOL_ACTIONS` line, so it rewrites nothing
+                                # devices.patch wrote; the later_rewriting() half
+                                # below is what proves it.
+                                "google-calendar-gate.patch",
                                 "cloud-honesty.patch"}
           and not _stack.later_rewriting("devices.patch", DEVICES_TIER_LINE)
           and not _stack.later_rewriting("devices.patch", DEVICES_RISK_LINE), order[-3:])

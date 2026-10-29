@@ -295,7 +295,15 @@ def t_the_patch_is_registered_last():
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
              "model-recommendations.patch",
-             "cloud-honesty.patch"}
+             "cloud-honesty.patch",
+             # google-calendar-gate.patch (2026-10-28, the security review of PR
+             # #961, finding N1) is appended immediately before
+             # plugin-loader.patch: ONE hunk in jarvis_gate.py that adds a `_RISK`
+             # row at the END of the table, after uncensored-optins.patch's own
+             # last row. It removes no line, adds no `_NO_RULE_FROM_DENIAL` entry
+             # and no `_TOOL_ACTIONS` line, and touches neither of the two stale
+             # rows this patch removes - so it cannot rewrite them.
+             "google-calendar-gate.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

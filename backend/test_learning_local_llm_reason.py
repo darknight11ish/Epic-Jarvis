@@ -316,9 +316,16 @@ def t_the_patch_is_the_one_in_the_stack():
     order = _stack.order()
     check(f"{PATCH_NAME} is in apply-patches.ps1's order",
           PATCH_NAME in order, order[-3:])
-    check("... immediately before plugin-loader.patch, which must stay last",
-          len(order) > 1 and order[-1] == "plugin-loader.patch"
-          and order[-2] == PATCH_NAME, order[-3:])
+    check("... immediately before plugin-loader.patch, bar the patch appended "
+          "after it, and the loader still last",
+          len(order) > 2 and order[-1] == "plugin-loader.patch"
+          # google-calendar-gate.patch (2026-10-28, the security review of PR
+          # #961) is appended after this one and before the loader: ONE hunk in
+          # jarvis_gate.py, a `_RISK` row at the END of its table, touching no
+          # file this patch touches. Every new patch is appended, so this is
+          # the list to extend, never a reason to move the loader.
+          and order[order.index(PATCH_NAME) + 1:]
+          == ["google-calendar-gate.patch", "plugin-loader.patch"], order[-3:])
     base = published_base_text()
     check("the published base carries the closed-world record",
           "def local_llm_failure" in base and "note_model_failure" in base

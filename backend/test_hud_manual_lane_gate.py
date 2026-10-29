@@ -145,12 +145,14 @@ def t_the_patch_and_the_base():
     # same rule test_gate_touches.py, test_gate_risk_rows.py, test_referee.py,
     # test_screen_attach.py and test_devices.py use: every new patch is
     # appended, so the next one pushes this one up the list, and that is not a
-    # defect in either of them. ONE is there now:
+    # defect in either of them. TWO are there now:
     # learning-extract-reason.patch (2026-10-28, DEF-017) touches
-    # jarvis_extract.py only - ONE file, no install block, no route, no gate
-    # row - so it rewrites nothing this patch wrote and the loader's anchor
-    # ("Before the main socket") is untouched by both.
-    later = {"learning-extract-reason.patch"}
+    # jarvis_extract.py only; google-calendar-gate.patch (2026-10-28, the
+    # security review of PR #961, finding N1) is ONE hunk in jarvis_gate.py - a
+    # `_RISK` row at the END of its table, nowhere near the chat turn's
+    # lane-picking block this patch rewrites. Neither touches jarvis_hud.py, so
+    # the loader's anchor ("Before the main socket") is untouched by all three.
+    later = {"learning-extract-reason.patch", "google-calendar-gate.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

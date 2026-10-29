@@ -886,6 +886,15 @@ def t_the_patch_and_the_lists():
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
              "model-recommendations.patch",
+             # google-calendar-gate.patch (2026-10-28, the security review of PR
+             # #961, finding N1) is appended immediately before
+             # plugin-loader.patch: ONE hunk in jarvis_gate.py that adds a `_RISK`
+             # row at the END of the table, after uncensored-optins.patch's own
+             # last row. It removes no line, adds no `_NO_RULE_FROM_DENIAL` entry
+             # and no `_TOOL_ACTIONS` line, and it is nowhere near referee.patch's
+             # own two rows - so it cannot rewrite them, and the
+             # later_rewriting() half below proves it.
+             "google-calendar-gate.patch",
              "cloud-honesty.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])

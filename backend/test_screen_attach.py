@@ -637,6 +637,14 @@ def t_hygiene():
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
              "model-recommendations.patch",
+             # google-calendar-gate.patch (2026-10-28, the security review of PR
+             # #961, finding N1) is appended immediately before
+             # plugin-loader.patch: ONE hunk in jarvis_gate.py that adds a `_RISK`
+             # row at the END of the table - nowhere near the POST /api/screen
+             # wrapper this patch installs, and it removes no line and adds no
+             # `_NO_RULE_FROM_DENIAL` or `_TOOL_ACTIONS` entry - so the request
+             # body is still read once, and still by this wrapper.
+             "google-calendar-gate.patch",
              "cloud-honesty.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order

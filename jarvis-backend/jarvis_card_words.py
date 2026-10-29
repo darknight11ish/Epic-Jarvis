@@ -71,6 +71,14 @@ TITLES = {
     "calendar_read": "read your calendar",
     "edit_calendar_event": "change an event in your calendar",
     "delete_calendar_event": "delete an event from your calendar",
+    # jarvis_google_calendar.py (2026-10-28, JARVIS-API section 161): the
+    # read/write Google sign-in. ONE card per create, change or delete, and the
+    # card's own text carries which one and the exact event. It is a risky
+    # approval - the event goes to Google's servers and cannot be taken back -
+    # and `google-calendar-gate.patch` writes that down in `jarvis_gate._RISK`
+    # at the value it already had, instead of leaving the card to the shared
+    # "not classified" fallback.
+    "google_calendar_write": "add, change or delete an event in Google Calendar",
     # --- files, commands, the computer and the phone
     "read_files_readonly": "read files on this PC",
     # M7 (2026-10-18): a sandbox run that reads the files the caller listed is
@@ -302,6 +310,10 @@ SUMMARY = {
     "calendar_read": "read your calendar",
     "edit_calendar_event": "change a calendar event",
     "delete_calendar_event": "delete a calendar event",
+    # The same card, cut to a breath (see TITLES above): the create, change and
+    # delete halves share one action name, so the row says the thing all three
+    # have in common rather than picking one of them.
+    "google_calendar_write": "add, change or delete a calendar event",
     # --- files, commands, the computer and the phone
     "read_files_readonly": "read files on this PC",
     "sandbox_file_run": "run a script that reads your files",

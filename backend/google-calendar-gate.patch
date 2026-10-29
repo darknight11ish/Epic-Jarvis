@@ -1,0 +1,20 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -1039,2 +1039,17 @@
+     "fiction_roleplay_enable": ("yes", "local", "turns on one model set aside for stories and role-play, with its own instructions instead of the assistant's; it is never your everyday assistant, turning it on changes nothing about your normal questions, nothing from a scene is saved or learned and no tool is used from one, it runs on this PC and sends nothing anywhere, and turning it off again is instant"),
++    # google-calendar-gate.patch (jarvis_google_calendar.py, 2026-10-28;
++    # JARVIS-API section 161). ONE card per event created, changed or deleted,
++    # showing the exact event. The write goes to Google's own servers, anybody
++    # the event invites may be emailed as soon as it is saved, and it cannot be
++    # taken back - so "no" and "outbound": the same pair the shared
++    # _UNKNOWN_RISK fallback already gave it, written down here so the owner
++    # can read and change it, and so the card says what the write does instead
++    # of "not classified, so treated as the worst case". This changes no
++    # prompt: an UNCLASSIFIED card is already treated as risky by all three
++    # approve rules (jarvis_owner_check.is_risky, lock/rules.rs, Security.kt),
++    # so Windows Hello asked either way. What was missing was the sentence and
++    # the owner's own table - and the tier line, which is in
++    # jarvis-framework.toml's [autonomy.tiers] (backend/rebuilt and
++    # jarvis-backend, the same file).
++    "google_calendar_write": ("no", "outbound", "writes the one event shown on the card into your Google Calendar; Google's servers keep it, anybody the event invites may be emailed as soon as it is saved, and it cannot be taken back"),
+ }

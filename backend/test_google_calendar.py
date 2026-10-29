@@ -48,7 +48,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -965,6 +965,26 @@ finally:
 
 print("\nChat sentences")
 
+#: The clock these checks are pinned to: a fixed UTC-7 offset, NOT the
+#: machine's own zone. `datetime(2026, 10, 28, 16, 0).astimezone()` attaches
+#: whatever zone the machine runs in, and `parse_meeting` keeps the zone of the
+#: `now` it is handed - so on a UTC runner the same call answered
+#: `15:00+00:00` and both literals below, which are Pacific, failed. The
+#: required `backend` job ran at 01:48Z on 2026-10-28 and failed exactly here.
+#: The parser was right: it answers in the zone of the clock it is given.
+#:
+#: WHY A FIXED OFFSET AND NOT A NAMED ZONE. UTC-7 is the shape
+#: `datetime.now().astimezone()` really hands `parse_meeting` in October: a
+#: fixed offset, never a DST-aware zone. A named zone would have resolved
+#: 3 November to -08:00 and the test would then assert something production
+#: does not do. The parser keeps the offset it is handed, so these literals
+#: carry -07:00 even across the DST change - that IS today's behaviour, written
+#: down rather than wished away. A parser that resolved each date's own offset
+#: would need -08:00 here, and this comment is where that change is recorded.
+PACIFIC_DAYLIGHT = timezone(timedelta(hours=-7))
+WEDNESDAY_AFTERNOON = datetime(2026, 10, 28, 16, 0, tzinfo=PACIFIC_DAYLIGHT)
+WEDNESDAY_MORNING = datetime(2026, 10, 28, 9, 0, tzinfo=PACIFIC_DAYLIGHT)
+
 G._reset_for_tests()
 use_config()
 with_store({})
@@ -976,25 +996,33 @@ check("the connect answer never invents an ICS export",
       "export" not in said.lower(), said)
 check("'what's on my calendar' when disconnected says so",
       "Not connected yet" in G.answer("what's on my calendar"))
-meeting = G.answer("add a meeting Tuesday 3pm",
-                   now=datetime(2026, 10, 28, 16, 0).astimezone())
+meeting = G.answer("add a meeting Tuesday 3pm", now=WEDNESDAY_AFTERNOON)
 check("'add a meeting Tuesday 3pm' proposes it and says it needs the sign-in way",
       "read-only" in meeting and "Tuesday" not in meeting or "read-only" in meeting,
       meeting)
 check("an unrelated sentence is not swallowed",
       G.answer("what's the weather like") is None)
 
-parsed = G.parse_meeting("add a meeting Tuesday 3pm",
-                         now=datetime(2026, 10, 28, 16, 0).astimezone())
+parsed = G.parse_meeting("add a meeting Tuesday 3pm", now=WEDNESDAY_AFTERNOON)
 check("Tuesday 3pm is the next Tuesday, 15:00-16:00",
       parsed["start"] == "2026-11-03T15:00:00-07:00"
       and parsed["end"] == "2026-11-03T16:00:00-07:00", parsed)
 check("the title comes from the owner's words", parsed["summary"] == "Meeting", parsed)
 lunch = G.parse_meeting("add a lunch tomorrow at 12:30 for 90 minutes",
-                        now=datetime(2026, 10, 28, 9, 0).astimezone())
+                        now=WEDNESDAY_MORNING)
 check("'tomorrow at 12:30 for 90 minutes' is 12:30-14:00 tomorrow",
       lunch["start"].startswith("2026-10-29T12:30")
       and lunch["end"].endswith("14:00:00-07:00"), lunch)
+# ... and the proof that the two checks above cannot depend on the machine's
+# own zone: the SAME instant, handed over in a different zone, answers the same
+# wall-clock date and hour - only the offset follows the clock it was given. A
+# parser that read `datetime.now()` internally instead of the `now` it was
+# handed would give this desk's answer on both and fail here.
+same_instant_utc = G.parse_meeting("add a meeting Tuesday 3pm",
+                                   now=WEDNESDAY_AFTERNOON.astimezone(timezone.utc))
+check("the parser follows the clock it is handed, not the machine's zone",
+      same_instant_utc["start"] == "2026-11-03T15:00:00+00:00"
+      and parsed["start"] == "2026-11-03T15:00:00-07:00", same_instant_utc)
 check("a day but no time is not guessed at",
       G.parse_meeting("add a meeting sometime next week") is None)
 check("no day at all is not guessed at",

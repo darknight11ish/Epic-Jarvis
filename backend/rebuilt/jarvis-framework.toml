@@ -661,6 +661,28 @@ import_notion_export     = "ask"
 # here so the tier is the owner's setting, not a fall-through.
 organize_obsidian_vault   = "ask"
 
+# --- The owner's Google Calendar, the read/write way ---------------------
+# Creating, changing or deleting ONE event in the account's Google Calendar
+# (jarvis_google_calendar.py, 2026-10-28; JARVIS-API section 161). It leaves
+# this PC: the event is written to Google's own servers, anyone it invites may
+# be emailed the moment it is saved, and it cannot be taken back. The card is
+# therefore a risky approval (Windows Hello on the PC, a screen lock on the
+# phone) - and it was one even before `google-calendar-gate.patch` added the
+# `_RISK` row, because all three approve rules treat an UNCLASSIFIED card as
+# risky on purpose. The row and this line write down what was already true:
+# the pair the shared `_UNKNOWN_RISK` fallback produced ("no", "outbound"), and
+# the tier this action already resolved to. What they fix is what the owner
+# sees and owns - the card no longer says "not classified, so treated as the
+# worst case", and one edit to `unknown_action_tier` can no longer move a
+# calendar write off "ask" silently. (The security review of PR #961, finding
+# N1, said the missing row meant no Windows Hello was asked; that half is not
+# what the code does, and JARVIS-API section 161 records the correction.)
+# Must stay "ask": jarvis_google_calendar.py reads this tier itself and refuses
+# to send anything at any other one (`_card_says_yes`). A file without this
+# line asks too (unknown_action_tier) - the safe direction, but a tier decided
+# by a shared default rather than by the owner's own table.
+google_calendar_write     = "ask"
+
 [self_modification]
 enabled = true
 # All must pass before a change is even offered to you for approval. Any

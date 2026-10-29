@@ -816,7 +816,19 @@ def t_the_patch_is_registered_and_carries_the_change():
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
              "model-recommendations.patch",
-             "cloud-honesty.patch"}
+             "cloud-honesty.patch",
+             # google-calendar-gate.patch (2026-10-28, the security review of PR
+             # #961, finding N1) is appended immediately before
+             # plugin-loader.patch: ONE hunk in jarvis_gate.py that adds a `_RISK`
+             # row at the END of the table, right after uncensored-optins.patch's
+             # own last row. It is a different table from the two `_PROTECTED`
+             # ones and from check()'s call this patch writes, it removes no line,
+             # and it adds no `_NO_RULE_FROM_DENIAL` and no `_TOOL_ACTIONS` entry -
+             # so it can rewrite nothing this patch wrote. It is placed after
+             # gate-touches rather than before it so that no patch-backed
+             # plug-in folder's `stack_order` moves (that number is the patch's
+             # index; see tools/gen_plugin_catalogue.py).
+             "google-calendar-gate.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

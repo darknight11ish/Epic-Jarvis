@@ -26595,8 +26595,11 @@ connect a Google calendar either through the **private iCal link** that already
 existed (read-only) or through a **real Google sign-in** (read/write). Only one
 is active at a time. The module is `backend/jarvis_google_calendar.py` (and its
 `jarvis-backend/` twin); its routes come from its own `install()`, called by
-`plugins/ready/google-calendar/plugin.json`, so it needs no patch and no change
-to `jarvis_hud.py`.
+`plugins/ready/google-calendar/plugin.json`, so it needs no patch for its
+routes and no change to `jarvis_hud.py`. It does ship **one** patch -
+`backend/google-calendar-gate.patch` - plus one `[autonomy.tiers]` line, and
+the **Writes** paragraph below says what that pair does (and what the security
+review's finding N1 got wrong about it).
 
 **The flow, in order.**
 
@@ -26669,6 +26672,30 @@ at any tier but `ask` is refused. A change or a delete is refused as stale (409,
 `outcome: "stale"`, no card) when the last successful read was more than
 `STREAM_MAX_AGE` (300 s) ago or the event id was not in that read (rule 4).
 Reads raise no card at all and have no gate parameter.
+
+**The card's risk is written down, and that half is a patch.** The action has
+no `jarvis_gate._RISK` row until `google-calendar-gate.patch` adds one, so the
+card takes `_UNKNOWN_RISK` ("not classified, so treated as the worst case") and
+the tier takes `unknown_action_tier`. **Both fallbacks are fail-safe**, and the
+security review of PR #961 (finding N1) said the fallback meant *no Windows
+Hello was asked* - **that half does not match the code**. All three approve
+rules treat an unclassified card as risky, deliberately and in the same words:
+`jarvis_owner_check.is_risky` ("a row this code cannot read is risky", so
+`classified is not True` returns true), the desktop's
+`lock/rules.rs::is_risky` (the same `classified != true` test), and the phone's
+`Security.kt::riskyByToday` (`if (!item.risk.classified) return true`). So
+Windows Hello on the PC and the phone's screen lock were asked for either way.
+What the missing row really cost: the card described the action as
+unclassified instead of saying what it does, and the reach/reversibility came
+from a shared default rather than from the owner's own table - the same
+"write down the value it already had" fix `gate-raise-rows.patch` made for two
+other actions. `google-calendar-gate.patch` therefore adds the row at exactly
+the pair the fallback already produced (`"no"`, `"outbound"`), so **no prompt
+or tier changes**; and `google_calendar_write = "ask"` joins
+`[autonomy.tiers]` in `backend/rebuilt/jarvis-framework.toml` (and the base's
+copy) at the tier it already resolved to, so one edit to `unknown_action_tier`
+can no longer move it. `backend/test_google_calendar.py` proves the module
+refuses to send anything at any tier but `ask`.
 
 **The private link.** With `mode = "ical"`, `GET /events` calls
 `jarvis_calendar.plan()`/`run()` - the same reader as before, not a second one -

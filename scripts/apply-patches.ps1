@@ -1835,6 +1835,32 @@ $PATCHES = @(
     # after f01-manual-lane-gate.patch, and its context is the `_local_llm`
     # block of the owner's own file, which no patch before it writes.
     'learning-extract-reason.patch'
+    # --- the Google Calendar sign-in's RISK row (2026-10-28) ------------------
+    # jarvis_google_calendar.py creates, changes and deletes real Google
+    # Calendar events, ONE card per write, under the action
+    # `google_calendar_write`. It shipped with NO row in `jarvis_gate._RISK`
+    # and no `[autonomy.tiers]` line, so the card took `_UNKNOWN_RISK` and the
+    # tier took `unknown_action_tier`. Both are fail-safe - an unclassified
+    # card is already treated as risky by all three approve rules
+    # (jarvis_owner_check.is_risky, the desktop's lock/rules.rs and the phone's
+    # Security.kt), and `unknown_action_tier` is "ask" as shipped - so nothing
+    # unsafe happened. Both are still wrong: the card says "not classified, so
+    # treated as the worst case" instead of what the write does, the reach and
+    # reversibility come from a shared default rather than the owner's own
+    # table, and the tier is a setting that can be loosened. The 2026-10-28
+    # security review of PR #961 recorded the missing row as finding N1; its
+    # "no Windows Hello" half does not match the code (that check is
+    # fail-safe), and docs/JARVIS-API.md section 161 carries the correction.
+    # ONE hunk in `jarvis_gate.py`: a `_RISK` row ("no", "outbound" - the value
+    # the fallback already gave it) at the END of the table, after
+    # uncensored-optins.patch's own last row. It is appended HERE, immediately
+    # before plugin-loader.patch (which must stay LAST of all), because that
+    # leaves every patch-backed plug-in folder's position in the catalogue
+    # unchanged; and a `_RISK` row this far from gate-touches.patch's own hunks
+    # cannot rewrite them, which test_gate_touches.py's `later` list records.
+    # The tier line itself is in backend/rebuilt/jarvis-framework.toml (and the
+    # base's copy), merged into the owner's own file only when it is missing.
+    'google-calendar-gate.patch'
     'plugin-loader.patch'
 )
 
