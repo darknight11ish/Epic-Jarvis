@@ -261,15 +261,25 @@ check("the Look switch writes the shared look through ONE command", () => {
 });
 
 check("a look chosen elsewhere arrives on the appearance event", () => {
-  const adopt = between(HUD, "function adopt(doc){", "\n  }", 1400);
-  assert.match(adopt, /appearance\.galaxy/,
+  // The adoption lives in the module that OWNS the look (`adoptLook`, beside
+  // lookStored), not in the reactor's `adopt()`. It used to sit in `adopt()`,
+  // which is another function's scope: `lookEngine`, `lookId` and `setLook`
+  // were not in it, so every push threw ReferenceError and the switcher never
+  // painted at all (measured 2026-10-29 by tests/hud.mjs and
+  // hud-galaxy-looks.mjs). What this check pins is the BEHAVIOUR - a pushed
+  // document applies the look and is not written back - wherever the code that
+  // does it lives.
+  const adopt = between(HUD, "function adoptLook(){", "\n  }", 900);
+  assert.match(adopt, /ownerLook\(\)/,
     "the page ignores the document's galaxy, so a look chosen on the phone never reaches this window");
-  assert.match(adopt, /setLook\(appearance\.galaxy, false\)/,
+  assert.match(adopt, /setLook\(want, false\)/,
     "the page applies the document's look either not at all or by writing it back");
+  assert.match(HUD, /addEventListener\("jarvis-appearance", adoptLook\)/,
+    "nothing listens for the appearance event, so a pushed look never arrives");
   // The shared value WINS over this device's key, or the phone's choice would
   // be overwritten by whatever this window last stored.
   const stored = between(HUD, "function lookStored(){", "\n  }", 900);
-  assert.match(stored, /appearance\.galaxy/,
+  assert.match(stored, /storedPreset\(shared\)/,
     "lookStored() still prefers this device's own key over the owner's shared look");
 });
 

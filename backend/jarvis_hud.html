@@ -3910,16 +3910,12 @@ const reactor = (() => {
     ready = true;
     sync();
     post();
-    // The owner's Galaxy look, from the shared document (2026-10-28). A look
-    // chosen on the phone or in the Brain window arrives HERE, on the same
-    // `appearance` event that repaints the face, so this window's Galaxy
-    // matches without a reload. `false` = "do not tell the PC back": this look
-    // came FROM the PC, and two windows echoing each other is how a setting
-    // starts rewriting itself.
-    if(lookEngine && appearance && typeof appearance.galaxy === "string"
-       && appearance.galaxy && lookEngine.storedPreset(appearance.galaxy) !== lookId){
-      setLook(appearance.galaxy, false);
-    }
+    // The Galaxy's look follows the SAME document, but the Galaxy owns that
+    // half: it hangs its own listener on `jarvis-appearance` (adoptLook in the
+    // galaxy module below). Not here - `lookEngine`, `lookId` and `setLook`
+    // are that module's own, and this function is in the reactor's, so naming
+    // them here was a ReferenceError that killed the switcher's whole paint
+    // (measured 2026-10-29 by tests/hud.mjs and hud-galaxy-looks.mjs).
   }
   window.addEventListener("jarvis-appearance", e => adopt(e.detail));
 
@@ -4333,11 +4329,30 @@ const galaxy = (() => {
    *  the phone all show one Galaxy (the owner: "including changing the jarvis
    *  face model and galaxy models"). This device's key is still read, and is
    *  what a plain browser with no shell falls back to - a browser has no
-   *  appearance document at all. */
+   *  appearance document at all.
+   *
+   *  It is read through `window.__jarvisAppearance`, the page's own seam:
+   *  hud_bootstrap.js sets that BEFORE it dispatches `jarvis-appearance`, so it
+   *  is always the current document. The reactor's `appearance` is a `let`
+   *  inside that module's own function, invisible here - naming it here threw
+   *  ReferenceError and this function is what the switcher's first paint calls,
+   *  so the whole look menu came up empty (measured 2026-10-29). */
+  function ownerAppearance(){
+    return window.__jarvisAppearance || null;
+  }
+
+  /** The owner's look id from the shared document, or "" when this page has no
+   *  document (a plain browser) or the document has no look in it. */
+  function ownerLook(){
+    const doc = ownerAppearance();
+    return doc && typeof doc.galaxy === "string" ? doc.galaxy : "";
+  }
+
   function lookStored(){
     if(!lookEngine) return null;
-    if(appearance && typeof appearance.galaxy === "string" && appearance.galaxy){
-      return lookEngine.storedPreset(appearance.galaxy);
+    const shared = ownerLook();
+    if(shared){
+      return lookEngine.storedPreset(shared);
     }
     try{
       const raw = localStorage.getItem(lookEngine.PRESET_STORAGE_KEY);
@@ -4351,7 +4366,7 @@ const galaxy = (() => {
    *  silently overriding whatever it had. */
   function lookChosen(){
     if(!lookEngine) return true;
-    if(appearance && typeof appearance.galaxy === "string" && appearance.galaxy) return true;
+    if(ownerLook()) return true;
     try{ return localStorage.getItem(lookEngine.PRESET_STORAGE_KEY) !== null; }
     catch(e){ return true; }
   }
@@ -4471,6 +4486,28 @@ const galaxy = (() => {
     }).catch(() => null);   // no module beside the page: the constellation stays
     return lookLoading;
   }
+
+  /** The owner's look, from the shared appearance document (2026-10-28). A look
+   *  chosen on the phone or in the Brain window arrives on the same
+   *  `jarvis-appearance` event that repaints the face, so this window's Galaxy
+   *  matches without a reload. `false` = "do not tell the PC back": this look
+   *  came FROM the PC, and two windows echoing each other is how a setting
+   *  starts rewriting itself.
+   *
+   *  The listener lives HERE, in the module that owns `lookEngine`, `lookId` and
+   *  `setLook` - not in the reactor. The reactor's `adopt()` is in a different
+   *  function that cannot see them, and naming them there threw ReferenceError
+   *  on every push (measured 2026-10-29). The reactor's listener is registered
+   *  first, and hud_bootstrap.js has already set `window.__jarvisAppearance`
+   *  before dispatching, so by the time this runs the document is current. */
+  function adoptLook(){
+    if(!lookEngine) return;
+    const shared = ownerLook();
+    if(!shared) return;
+    const want = lookEngine.storedPreset(shared);
+    if(want !== lookId) setLook(want, false);
+  }
+  window.addEventListener("jarvis-appearance", adoptLook);
 
   /** Load galaxy-cosmos.js: the 3D engine's pure half, then the engine itself
    *  only when a look needs it. Failure here is the flat picture, not an error. */
@@ -9747,12 +9784,15 @@ import { mountHudPresets, mountCurrentModels } from "./hud-presets.js";
  * imported on its own line: the line above is pinned verbatim by
  * tests/hud-current-models.mjs, and there is no reason to disturb a pin that
  * is still true. */
-import { mountFacePicker, setGalaxyLookOnPc } from "./hud-presets.js";
-/* The Look switch's one write (2026-10-28). The Galaxy code below is in the
- * page's own earlier script block, which cannot import this module, so the
- * function goes on the page's own namespace - the same way
+import { mountFacePicker } from "./hud-presets.js";
+/* And the Look switch's one write, on a THIRD line for the same reason:
+ * tests/face-models-rail.mjs pins the line above verbatim, so a second name
+ * riding it would fail a pin that is otherwise still true. The Galaxy code is
+ * in the page's own earlier script block, which cannot import this module, so
+ * the function goes on the page's own namespace - the same way
  * window.__jarvisHudEdit and window.__jarvisAppearance already cross that
  * line. Nothing but the look id is passed, and the command proves it. */
+import { setGalaxyLookOnPc } from "./hud-presets.js";
 window.__jarvisGalaxyLook = setGalaxyLookOnPc;
 /* PWA slice 2: a plain browser keeps per-DEVICE layouts (localStorage, via
  * hud-layout-store.js) instead of the host PC's store, so the editor and the
