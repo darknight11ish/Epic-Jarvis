@@ -65,18 +65,18 @@ it is one `apply-patches.ps1` copies in.
 
 | Loader order | Drop-in module | What it does |
 |---|---|---|
-| 145 | `skill-hub` | the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and /learn. |
-| 146 | `voiceprint` | Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it reaches a model. |
-| 147 | `receipts` | action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back. |
-| 148 | `auto-router` | estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first. |
-| 149 | `vault` | a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value. |
-| 150 | `notion-obsidian` | bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo. |
-| 152 | `self-improve` | two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do. |
-| 154 | `media-index` | searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (on asks once), and Delete the stored words. |
-| 156 | `vault-organizer` | plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice. |
-| 157 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
-| 158 | `antislop` | the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings. |
-| 159 | `google-calendar` | Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card. |
+| 146 | `skill-hub` | the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and /learn. |
+| 147 | `voiceprint` | Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it reaches a model. |
+| 148 | `receipts` | action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back. |
+| 149 | `auto-router` | estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first. |
+| 150 | `vault` | a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value. |
+| 151 | `notion-obsidian` | bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo. |
+| 153 | `self-improve` | two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do. |
+| 155 | `media-index` | searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (on asks once), and Delete the stored words. |
+| 157 | `vault-organizer` | plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice. |
+| 158 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
+| 159 | `antislop` | the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings. |
+| 160 | `google-calendar` | Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card. |
 
 ## What stays in the core
 

@@ -14,7 +14,7 @@
       "name": "skill-hub",
       "module": "jarvis_skill_hub",
       "install": "handler",
-      "stack_order": 145,
+      "stack_order": 146,
       "summary": "the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and /learn.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -22,7 +22,7 @@
       "name": "voiceprint",
       "module": "jarvis_voiceprint",
       "install": "handler",
-      "stack_order": 146,
+      "stack_order": 147,
       "summary": "Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it reaches a model.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -30,7 +30,7 @@
       "name": "receipts",
       "module": "jarvis_receipts",
       "install": "handler",
-      "stack_order": 147,
+      "stack_order": 148,
       "summary": "action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -38,7 +38,7 @@
       "name": "auto-router",
       "module": "jarvis_auto_router",
       "install": "none",
-      "stack_order": 148,
+      "stack_order": 149,
       "summary": "estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -46,7 +46,7 @@
       "name": "vault",
       "module": "jarvis_vault",
       "install": "handler",
-      "stack_order": 149,
+      "stack_order": 150,
       "summary": "a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -54,7 +54,7 @@
       "name": "notion-obsidian",
       "module": "jarvis_notion_obsidian",
       "install": "handler",
-      "stack_order": 150,
+      "stack_order": 151,
       "summary": "bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -62,7 +62,7 @@
       "name": "self-improve",
       "module": "jarvis_self_improve",
       "install": "handler",
-      "stack_order": 152,
+      "stack_order": 153,
       "summary": "two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -70,7 +70,7 @@
       "name": "media-index",
       "module": "jarvis_media_index",
       "install": "handler",
-      "stack_order": 154,
+      "stack_order": 155,
       "summary": "searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (on asks once), and Delete the stored words.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -78,7 +78,7 @@
       "name": "vault-organizer",
       "module": "jarvis_vault_organizer",
       "install": "handler",
-      "stack_order": 156,
+      "stack_order": 157,
       "summary": "plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -86,7 +86,7 @@
       "name": "sandbox",
       "module": "jarvis_sandbox_exec",
       "install": "handler",
-      "stack_order": 157,
+      "stack_order": 158,
       "summary": "the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once).",
       "why": "born as a folder: it replaces no patch"
     },
@@ -94,7 +94,7 @@
       "name": "antislop",
       "module": "jarvis_antislop",
       "install": "handler",
-      "stack_order": 158,
+      "stack_order": 159,
       "summary": "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -102,7 +102,7 @@
       "name": "google-calendar",
       "module": "jarvis_google_calendar",
       "install": "handler",
-      "stack_order": 159,
+      "stack_order": 160,
       "summary": "Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card.",
       "why": "born as a folder: it replaces no patch"
     }
