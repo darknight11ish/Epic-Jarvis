@@ -774,6 +774,17 @@ places between screens. Presentation only - no approval logic changed.
      auto-approved. The SELECT and INSERT are one `BEGIN IMMEDIATE`
      transaction (`jarvis_gate.check()`, `backend/gate-touches.patch` - the
      file is patch-carried, not shipped whole).
+     **A lapsed card really does reach `expired`, on every read (2026-10-28).**
+     The sweep that settles an overdue row is one helper, run at start-up and
+     again by `pending()` before it builds the list; until then it ran once per
+     PROCESS, so a card whose waiting thread died with an earlier process
+     stayed `pending` - served by `/api/pending`, drawn by both apps as an
+     unanswerable "waiting on you" card, and blocking a later identical request
+     for the life of that process (the owner's report of expired cards he could
+     not clear on his phone). It is a lapse and never a decision, it approves
+     nothing, and it cannot take a live card: the deadline is recomputed on the
+     PC at the moment of the read, and no client sends an id it could name a
+     card with.
   2. **State-replacing cards say so and take a second press.** The cards
      that REPLACE or delete what is already there - `restore_backup`,
      `register_approval_key`, `memory_forget_range`, and the

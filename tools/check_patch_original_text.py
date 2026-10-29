@@ -216,7 +216,7 @@ PIN = {
     "hud-origin-module.patch":                 (2, 73),    # position 144
     "hud-exclusive-bind.patch":                (1, 7),     # position 145
     # 2026-10-23, rescue #4 narrowed by the owner's ruling Q1: only pairing a
-    # device, an approval key and a restore may have no deadline. ALL EIGHT of
+    # device, an approval key and a restore may have no deadline. ALL NINE of
     # its hunks read text only the owner's PC holds - the module docstring, the
     # APPROVAL_TIMEOUT block, `_init()`'s stale-row sweep (touched by no patch
     # at all), `check()`'s deadline and wait loop, `pending()`'s expires_in
@@ -226,7 +226,15 @@ PIN = {
     # base with `git apply` (no fuzz), compiles the result and drives it. Its
     # three jarvis_owner_check.py/devices.py halves are shipped modules, not
     # patches, so they do not cost this walk anything.
-    "no-expiry-cards.patch":                   (8, 62),     # position 36
+    # 2026-10-28 (the owner's "approval cards that are expired" on his phone):
+    # the NINTH hunk is `pending()`'s own opening - `_init()` and the SELECT -
+    # where the read-time sweep is called, and it reads 7 more lines of text
+    # only the owner's PC holds for the same reason as the rest: no patch in
+    # this walk writes that opening. It is not drift. The other direction is
+    # checked by backend/test_pending_expiry_on_read.py, which applies this
+    # patch to the published base and proves an overdue card leaves the list
+    # while a live one does not.
+    "no-expiry-cards.patch":                   (9, 69),     # position 36
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under

@@ -132,7 +132,7 @@ on a throwaway copy instead.
 | `wiki.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The wiki builder.** Adds `GET /api/wiki` (the documents in your vault's `Jarvis Wiki/Sources` and their state) and `GET`/`POST /api/wiki/ingest` ("Add to wiki": the second card's model proposes pages, then ONE approval card, `wiki_update`, before anything is written), and the approval notice's words for it. After `second-card.patch` (textual). Needs `jarvis_wiki.py` — see its own section, at the end, and `docs/SECOND-CARD.md`, "Wiki builder". |
 | `big-model.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The big model (slow), all switched off.** Adds `GET`/`POST /api/big-model` (three switches; each ON is one approval card, `big_model_enable`), `GET /api/deep` and `POST /api/deep/ask` (deep questions, answered in the background), and the approval notice's words for the new action. Last in the list, after `wiki.patch` (textual). Needs `jarvis_big_model.py` — see its own section, at the end, and `docs/BIG-MODEL.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
-| `no-expiry-cards.patch` | `jarvis_gate.py` | **Which approval cards expire at all** (the owner's ruling of 2026-10-23, Q1): ONLY pairing a device (`pair_device`, `unretire_shared_key`), registering a phone's approval key (`register_approval_key`) and restoring a backup (`restore_backup`) wait without a deadline; every routine card keeps the 15-minute window `approval-expiry.patch` added. Nothing a caller sends can choose this — the exempt set is keyed on the gate's own action ids, never on a flow name, a number or an omitted value. Adds `timeout_for()`, `withdraw()` (so a cancelled pairing does not leave a permanent card), the start-up sweep's exclusion, and the `jarvis_owner_check.py` / `jarvis_devices.py` halves. Needs `approval-expiry.patch` (textual) — see its own section, at the end. |
+| `no-expiry-cards.patch` | `jarvis_gate.py` | **Which approval cards expire at all** (the owner's ruling of 2026-10-23, Q1): ONLY pairing a device (`pair_device`, `unretire_shared_key`), registering a phone's approval key (`register_approval_key`) and restoring a backup (`restore_backup`) wait without a deadline; every routine card keeps the 15-minute window `approval-expiry.patch` added. Nothing a caller sends can choose this — the exempt set is keyed on the gate's own action ids, never on a flow name, a number or an omitted value. Adds `timeout_for()`, `withdraw()` (so a cancelled pairing does not leave a permanent card), the start-up sweep's exclusion, and the `jarvis_owner_check.py` / `jarvis_devices.py` halves. **Since 2026-10-28 the sweep is one helper (`_expire_overdue()`) and `pending()` runs it before reading**, so a card left `pending` by a dead waiting thread leaves the queue on the next read instead of for the life of the process — the owner's "approval cards that are expired" on his phone. Needs `approval-expiry.patch` (textual) — see its own section, at the end. |
 | `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. Since 2026-09-29 its sound block also serves `POST /api/voice/voices/sample` ("Hear it": one fixed line in a named built-in voice, changes nothing) and needs `jarvis_kokoro.py` (Kokoro v1.0, voices by name) - "Kokoro v1.0 voices, saved by name", at the very end. |
 | `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
 | `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them (`provenance`, `conversation_id`, `device`, and since 2026-09-25 `interrupted` - the voice flow's cut-off sentence), and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). **Chat tags (2026-09-30, `docs/CHAT-TAGS-DESIGN.md`, JARVIS-API §99):** the same file also keeps the owner's tags - `GET/POST /api/history/tags`, `POST /api/history/tag`, `GET /api/history?tag=`; a sealed tag registry in `meta`, a plain `tag_id` column on each chat, no card, and it works while history is off (only the key is needed). Tested by `test_chat_tags.py`. **Fork from here (2026-09-30, JARVIS-API §110):** `POST /api/history/fork {"id", "upto"}` copies the first turns of a kept chat into a new "Fork of ..." chat (re-sealed under the new id, tag and outside-text marks kept, its own learning hush so nothing is learned twice, never a crisis, support, chatbot or comparison chat, no card, works with history off); every conversation row copy now reads one column list (`CONV_COLS`). Tested by `test_chat_fork.py`. Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
@@ -19660,6 +19660,40 @@ never a huge number, which would draw a countdown that ends in a refusal that
 never comes; both clients already treat an absent field as "no countdown". (3)
 the start-up sweep in `_init()` does not expire these rows by age, because that
 would undo the change by the back door.
+
+**And the sweep runs on every read of the queue (2026-10-28).** The owner asked
+"there is approval cards that are expired, how do I clear them easily from my
+android phone", and the phone was telling the truth: four cards sat under
+"4 WAITING ON YOU" with "Nothing runs until you decide.", every one saying
+"Timed out — ask the desktop to raise this again." and drawing no Approve and no
+Deny. The cause was `_init()`'s sweep running **once per process** (its
+`if _inited: return` guard): a card whose waiting thread died with an earlier
+process — a restart, a killed backend, an abandoned request — is not old enough
+to be swept by the next start-up if it was raised inside the last
+timeout-plus-60-seconds window, and after that nothing ever sweeps it. It stayed
+`pending` for the life of that process, so `/api/pending` served it, both apps
+drew it as an unanswerable card, and a later identical request was told "the
+same request is already waiting for you" about a card nobody was waiting on.
+The sweep is now one helper, `_expire_overdue()`, that `pending()` calls before
+it builds the list — so the queue a client is handed holds only rows still
+inside their own window. **It is a lapse, not a decision:** the state written is
+`expired` (what a timed-out `check()` records), never `denied`, and it approves
+nothing. **It cannot take a live card:** the deadline is recomputed on the PC at
+the moment of the read and no client sends an id, so a stale page has nothing to
+ask with. A card with no deadline is never touched. The 60-second grace
+`_init()` always allowed is kept, so an overdue row can still be served for up
+to a minute past its deadline and until the next read after that — the bounded
+cost of not tearing a card away from a waiting thread that may be about to
+record a late answer. A card that expires while a screen is already open still
+sits there until that screen next reads the queue; the phone's only added half
+is ONE LINE in `MainActivity.onResume` that re-reads `/api/pending` when the app
+comes to the front (a read - it approves, denies and clears nothing), so opening
+Jarvis is the whole answer to the owner's question. That line is Kotlin, so it is
+compiled by CI (`phone-unit-tests`) and by no check at this desk. **Tested by
+`backend/test_pending_expiry_on_read.py`** (8 tests / 30 checks: the
+once-per-process defect, an overdue card leaving while a live one stays, the
+grace, all four no-deadline cards, `decide()` refusing a lapsed card, the clean
+read, and the "already waiting" refusal going away).
 
 **The cost, said plainly.** A card with no clock cannot clean itself up. A
 pairing or approval-key card whose session is cancelled or replaced is taken off

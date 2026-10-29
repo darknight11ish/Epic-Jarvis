@@ -386,6 +386,32 @@ drives the gate and `backend/test_approval_contract.py` still builds the
 fixture from the real `notice_for` and `expires_in` code into
 `jarvis-client/app/src/test/resources/contract/pending-rows.json`.
 
+**A card past its deadline is not served at all** (2026-10-28). `GET
+/api/pending` runs the gate's own expiry sweep before it builds the list, so the
+`pending` array holds only rows still inside their own window: every row older
+than its action's timeout plus the same 60-second grace the start-up sweep
+always allowed is marked `expired` first. The four no-deadline cards above are
+never touched. **It is a lapse, never a decision** — nothing is approved or
+denied and nothing a person decided is hidden; the row still appears in
+`history` (and in the Activity list, §42) as `expired`. **And it cannot take a
+live card:** the deadline is recomputed on the PC at the moment of the read, no
+client sends an id, so a stale phone page has nothing to ask with. Why it
+exists: the start-up sweep ran once per PROCESS, so a card whose waiting thread
+died with an earlier process was served as "waiting on you" for the life of the
+next one — the owner's 2026-10-28 report of expired cards he could not clear on
+his phone, which the phone was drawing correctly (no Approve, no Deny, "Timed
+out") because it believed the row. `backend/test_pending_expiry_on_read.py`
+proves an overdue card leaves while a live one stays. The bounded cost: an
+overdue row can still be served for up to that 60-second grace and until the
+next read after it, and a card that expires while a screen is already open sits
+there until that screen next reads the queue. **No client-side "clear expired"
+control exists, and none is needed** — the card is gone from the next read and
+nothing can be approved by a card that is not served. The phone's only added
+half is one line in `MainActivity.onResume` that re-reads this route when the
+app comes to the front (2026-10-28), so opening Jarvis is the whole answer; it is
+a read and decides nothing. The desktop's HUD, widget and bar re-read on the
+events they already receive.
+
 ### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
 
 The approval gap's step 1 (`docs/APPROVAL-GAP-DESIGN.md`, the owner's
