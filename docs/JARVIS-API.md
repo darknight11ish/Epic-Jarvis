@@ -9687,7 +9687,7 @@ and passes the origin check.
  "title": "Things you can say",
  "detail": "Real sentences Jarvis already answers without the AI model. Tap one to put it in the box - it does not send.",
  "sentences": [<the 10, in order>],
- "footer": "More: right-click the Jarvis icon by the clock.",
+ "footer": "More: right-click the Jarvis icon by the clock on the PC.",
  "walkthrough_examples": [<3 of the 10, for a walkthrough screen 2>],
  "help_title": "What can I say?",
  "help_body": <the Help/FAQ paragraph, naming every sentence>,
@@ -12067,7 +12067,12 @@ the change is cosmetic and PC-wide, like the speed and the manner, so it is one
 and Clara answer to the short name the owner says as well as to their picker
 label ("Ashby (made for Jarvis)") and their real id (`mix_ashby`), because the
 label alone never matched the sentence. A name this PC's pack does not offer is
-refused with the real voice names and changes nothing. A RECORDED voice is a
+refused with the real voice names and changes nothing - except a Jarvis-made
+blend (Ashby, Clara) this PC has not made yet: those are known voices that are
+absent, not unknown ones, so the answer says they are not made yet, in the
+Voices screen's own words (`jarvis_kokoro.BLENDS_TO_MAKE`, naming the one line
+that makes them), instead of listing the 22 offered voices (2026-10-29, B3 of
+the phone field test). A RECORDED voice is a
 different feature: adding or switching to one is the `custom_voice` card, in
 the Voices screen, and no chat sentence can select one.
 
