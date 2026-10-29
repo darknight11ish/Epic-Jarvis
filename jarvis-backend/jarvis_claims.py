@@ -143,9 +143,15 @@ READ_ONLY_TOOLS = frozenset({
 #: jarvis_agent.TOOLS has to be classified by the person adding it, because the
 #: alternative (an unclassified tool counting as an action) is exactly how a
 #: read-only tool came to silence every correction for a year.
+#:
+#: connect_account (2026-10-28) is here although raising its card changes
+#: nothing by itself: a sentence saying the calendar or GitHub IS connected is
+#: not true until the owner saves that card, so the claim must be corrected
+#: like any other action's when only the card was raised.
 ACTING_TOOLS = frozenset({
     "append_logseq_journal", "append_obsidian_daily", "browser_control",
-    "change_setting", "control_computer", "control_phone", "create_joplin_note",
+    "change_setting", "connect_account", "control_computer", "control_phone",
+    "create_joplin_note",
     "draft_email", "home_control", "run_data_script", "send_email",
     "set_reminder", "set_timer", "shell_exec", "tidy_inbox", "todo_add",
     "todo_done",

@@ -966,6 +966,34 @@
       "read": false
     },
     {
+      "name": "the tool connect_account ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "connect_account"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "connect_account"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool rea_investigate ran",
       "heard": {
         "private_aloud": false,

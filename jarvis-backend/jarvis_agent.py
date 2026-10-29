@@ -6614,6 +6614,13 @@ TOOL_HINTS = {
                         r"\belectron\b", r"\bghidra\b", r"\bjadx\b", r"\bapk\b",
                         r"\.dll\b", r"\.exe\b", r"\bbinar(y|ies)\b",
                         r"\bdisassembl", r"\bsource ?map\b"),
+    # CONNECT_TOOL (2026-10-28): "connect my calendar", "set up GitHub", "link
+    # my calendar". Deliberately narrow: asking what is ON the calendar, or
+    # what a token is, must not pull the connect tool in - each pattern needs
+    # the connecting verb AND an account word.
+    "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|account)\b",
+                        r"\b(?:set ?up|link|sign in|log ?in)\b.*\b(?:calendar|caldav|"
+                        r"github|account)\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
