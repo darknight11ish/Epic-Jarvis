@@ -148,7 +148,7 @@ await check("A: the HUD is granted status/start/stop and nothing else of Live", 
 
 /* ── A3. Refused: READABLE in the stage, not tucked into the rail ────────── */
 
-const STAGE = between(HUD, '<main id="stage">', "</main>", 20000);
+const STAGE = between(HUD, '<main id="stage">', "</main>", 24000);
 const LEFT_RAIL = between(HUD, 'id="rail-left"', "</aside>", 30000);
 
 await check("A: a refused start shows a readable popup in the stage", () => {
