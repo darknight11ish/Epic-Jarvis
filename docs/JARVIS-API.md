@@ -26661,7 +26661,7 @@ logged, echoed or stored).**
 | route | what it does |
 |---|---|
 | `GET /api/connect-account/pending` | the cards waiting for the owner, metadata only. Never a value - none exists yet. |
-| `POST /api/connect-account/save` | body `{"card_id": "ca_...", "values": {"<field>": "<value>", ...}}`. Refuses any field the card did not declare (by name), an empty or oversized value (by label), and an unknown/expired/used card - none of those sentences ever contains a value. Then: each value goes to `jarvis_token_store.store_secret` (Credential Manager **and nowhere else**), the card is spent, the service is tested with the values that will actually be used, and the receipt names the store entries, the source that won, and the verdict. |
+| `POST /api/connect-account/save` | body `{"card_id": "ca_...", "values": {"<field>": "<value>", ...}}`. Refuses any field the card did not declare (by name), an empty or oversized value (by label), and an unknown, expired or used card - none of those sentences ever contains a value. The card is spent exactly once, and the re-check and the removal are **one step under the lock**, so two submits of the same card at the same moment cannot both save (one receipt, one write; the other is refused as voided). Then: each value goes to `jarvis_token_store.store_secret` (Credential Manager **and nowhere else**), the service is tested with the values that will actually be used, and the receipt names the store entries, the source that won, and the verdict. |
 | `POST /api/connect-account/cancel` | body `{"card_id": "ca_..."}`. The owner pressed Cancel. |
 
 Both POST routes refuse a non-loopback caller **before the body is read** (403),
@@ -26676,7 +26676,11 @@ answers "saved, but it did not work just now - the private link answered HTTP
 404. Nothing is reading it until that works." and never "connected". The status
 read is `jarvis_connect_account.status()` / `status_words(service)`; the chat
 answers "is my calendar connected?" from it. `probe=False` answers from the store
-alone (no socket) and says "not tested just now".
+alone (no socket) and says "not tested just now". When that answer is "not
+connected yet" the quick path's `Result` carries `open_settings:
+"account-secrets"`, the same jump the calendar-setup answer (#960) makes, so the
+desktop opens Settings, Accounts at the box that has to be filled in; an answer
+that says connected (or saved-but-failing) opens nothing.
 
 **What this deliberately does not do.** No OAuth of any kind, no Google or
 Microsoft API, no public tunnel, no network broker (rule 2). No phone card and no
@@ -26684,14 +26688,27 @@ phone route: the value is typed on this PC only (rule 3; `ARCHITECTURE.md` §8's
 connect-account row). No second store and no Settings box of its own - the same
 Credential Manager entries the reading modules own. The model gets **no argument
 for a value**: `connect_account` takes a service and a note, and an argument that
-looks like a value is refused with an explanation rather than dropped.
+looks like a value is refused with an explanation rather than dropped. A sentence
+about the PHONE is not this path's either: "is my phone connected?" is a question
+about pairing, and answering it with this card's own "what I cannot connect yet"
+text would be a true sentence about the wrong thing, so the phone's words are not
+in that list and the sentence keeps its own answer.
 
-**Tests.** `backend/test_connect_account.py` (153 checks: the store mapping, the
-card carrying no value, a refused store saving nothing, the verifiers passing and
-failing through an injected request hook, the status sentences, the tool's
-refusal of a value, the quick path's sentences, the host-only route, and that
-this adds no raw-key route) and `backend/test_account_secrets.py` (which now
+**Tests.** `backend/test_connect_account.py` (187 checks: the store mapping, the
+card carrying no value, the model's note stripped of every format character (a
+right-to-left override made it read backwards), a card spent exactly once by two
+threads saving at the same moment, an expired card refused before anything is
+written, a refused store saving nothing, the verifiers passing and failing through
+an injected request hook - including an absent plain-http rule failing CLOSED
+rather than open - the status sentences, #960's Settings jump on a "not connected
+yet" answer, the tool's refusal of a value, the quick path's sentences (and the
+phone's question NOT reaching this path), the host-only route refusing another
+machine before it reads a single byte of the body, and that this adds no raw-key
+route) and `backend/test_account_secrets.py` (which now
 covers the three new entries - and, in the required `credential-manager` CI job,
 writes/reads/deletes each one's shape on real Windows under a throwaway name).
-The HUD card's fields and its post path are pinned in
-`jarvis-desktop/tests/hud.mjs`.
+The HUD card is driven in a real browser: `jarvis-desktop/tests/hud.mjs` hands the
+page the host's own card list, clicks Save, and asserts the boxes come from
+`card.fields`, the secret box is masked, the NEWEST waiting card is the one drawn,
+the boxes are empty after the save and the values reached the backend as one card
+id plus the declared fields - with no token in the page.

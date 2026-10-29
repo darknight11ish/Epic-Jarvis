@@ -5940,10 +5940,16 @@ _CONNECT_STATUS = re.compile(
 #: calendar and GitHub). A sentence that names one is answered honestly rather
 #: than handed to the model, which would invent a way. Kept to the inventory in
 #: the 2026-10-28 audit, section 2 - not a general word list.
+#:
+#: `phone` and `pairing` were in this list and are NOT any more (security review
+#: S6, 2026-10-28): they made "is my phone connected?" reach the connect path,
+#: whose honest-account answer never mentions the phone - a true sentence about
+#: the wrong thing, and "not in this list" is better than a wrong answer. The
+#: phone's own pairing state has its own answer elsewhere; this card is not it.
 _CONNECT_LATER = re.compile(
     r"\b(?:e-?mail|imap|smtp|inbox|notion|obsidian|logseq|joplin|home\s+assistant|"
     r"web\s+search|exa|tavily|brave|openai|mistral|xai|openrouter|groq|"
-    r"big\s+model|chatbot|spotify|dropbox|google\s+drive|phone|pairing)\b")
+    r"big\s+model|chatbot|spotify|dropbox|google\s+drive)\b")
 
 
 def _connect(s: str) -> Optional[Intent]:
@@ -6020,7 +6026,17 @@ def _run_connect(f: dict) -> Result:
             "the chat, there or anywhere else.",
             "connect_account")
     if ask == "status":
-        return Result(C.status_words(sid), "connect_account")
+        said = C.status_words(sid)
+        # "Not connected yet" must lead somewhere. `_run_calendar_setup` (main,
+        # #960) answers the same state with `open_settings="account-secrets"`,
+        # so the desktop jumps its Settings window to the Accounts card without
+        # changing anything; this answer keeps that jump rather than sending the
+        # owner to find the page himself (security review S5, 2026-10-28). An
+        # answer that says connected, or saved-but-failing, opens nothing: there
+        # is no box for the owner to go and fix.
+        if "not connected yet" in said:
+            return Result(said, "connect_account", open_settings="account-secrets")
+        return Result(said, "connect_account")
     try:
         card = C.raise_card(sid, "")
     except C.ConnectAccountError as exc:

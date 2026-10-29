@@ -76,6 +76,7 @@ import re
 import secrets
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -296,9 +297,26 @@ def service_from_words(text: object) -> Optional[str]:
 
 
 def clean_label(label: object) -> str:
-    """The model's own note, made safe to show as untrusted text."""
+    """The model's own note, made safe to show as untrusted text.
+
+    Two kinds of character are removed, for two different reasons:
+
+      * a FORMAT character (Unicode category Cf) is invisible, and some of them
+        reorder what follows - U+202E RIGHT-TO-LEFT OVERRIDE made
+        "\\u202e your GitHub token" draw as "nekot buHtiG ruoy", which is a way
+        for the model to make the card say something the owner did not read
+        (security review N1, 2026-10-28). A zero-width space is in the same
+        category and is equally not worth showing. None of them carries a
+        meaning, so all of them are dropped rather than mapped to a space.
+      * a CONTROL character is replaced by a space, so a line break cannot
+        move the note into another part of the card.
+
+    Runs of whitespace then collapse and the whole note is capped.
+    """
     out = []
     for ch in str(label or ""):
+        if unicodedata.category(ch) == "Cf":
+            continue
         out.append(" " if (ord(ch) < 0x20 or ord(ch) == 0x7F) else ch)
     return " ".join("".join(out).split())[:MAX_LABEL_CHARS]
 
@@ -380,7 +398,13 @@ def raise_card(service_id: str, label: object = "", *,
 
 
 def pending_cards(*, clock: Callable[[], float] = time.time) -> list:
-    """Cards waiting for the owner, newest first, metadata only (no value)."""
+    """Cards waiting for the owner, NEWEST FIRST, metadata only (no value).
+
+    Newest first is not a preference: the HUD draws the first card in this list
+    and nothing else, so oldest-first would hide a card raised now behind one
+    raised minutes ago, for up to CARD_TTL_S (security review N4, 2026-10-28).
+    The sort is by creation time, descending.
+    """
     now = clock()
     with _LOCK:
         _prune_locked(now)
@@ -388,9 +412,9 @@ def pending_cards(*, clock: Callable[[], float] = time.time) -> list:
         for p in list(_PENDING.values()):
             view = card_view(p)
             view["expires_in_seconds"] = max(0, int(CARD_TTL_S - (now - p.created)))
-            out.append(view)
-    out.sort(key=lambda v: v["expires_in_seconds"])
-    return out
+            out.append((p.created, view))
+    out.sort(key=lambda pair: pair[0], reverse=True)
+    return [view for _created, view in out]
 
 
 def cancel_card(card_id: str) -> bool:
@@ -545,8 +569,14 @@ def _verify_caldav(values: Dict[str, str]) -> Tuple[bool, str]:
         import jarvis_local_http
         problem = jarvis_local_http.plain_http_problem(url, jarvis_calendar.URL_ENV,
                                                       "the calendar password")
-    except Exception:                       # noqa: BLE001
-        problem = ""
+    except Exception:                       # noqa: BLE001 - module absent
+        # FAIL CLOSED (security review N2, 2026-10-28). With no plain-http rule
+        # to ask, `problem = ""` would let an http:// address to the open
+        # internet carry the password, which is the one thing the rule exists to
+        # stop. The ICS path falls back to this module's own check for the same
+        # reason; `_check_url` itself needs `jarvis_local_http` for an http
+        # address and, with it absent, refuses anything but https.
+        problem = _check_url("CalDAV address", url)
     if problem:
         return False, problem
     body = (b'<?xml version="1.0" encoding="utf-8"?>'
@@ -621,11 +651,18 @@ def save_card(card_id: str, values: object, *,
     """Save ONE card's values into Credential Manager, then run its real test.
 
     The order is the security property:
-      1. the card is looked up (unknown/expired/used consumes nothing);
+      1. the card is looked up (unknown/expired/used consumes nothing). NOTE no
+         pruning happens here: the two checks below are the save path's only
+         TTL gate, so "an expired card cannot save" is enforced by a line this
+         file can point at and a test can kill (security review S2);
       2. the VALUES are checked against the card's own field names - an unknown
          key is refused by name, a missing or empty one is refused by label,
          and every value is length-capped. Nothing here echoes a value;
-      3. the card is consumed (one submit, ever);
+      3. the card is consumed - re-checked and removed as ONE step under
+         `_LOCK`. Two submits that both got past step 1 (two threads, or a
+         double tap) cannot both spend it: the second finds `_PENDING` no
+         longer holding THIS card and is refused before anything is written
+         (security review S1);
       4. each value goes to `jarvis_token_store.store_secret` - Credential
          Manager and NOWHERE else. A failure stops here, reports the store
          entry that refused, and saves nothing further: there is no plaintext
@@ -638,7 +675,6 @@ def save_card(card_id: str, values: object, *,
     cid = str(card_id or "")
     now = clock()
     with _LOCK:
-        _prune_locked(now)
         p = _PENDING.get(cid)
     if p is None:
         raise ConnectAccountVoided(
@@ -668,8 +704,15 @@ def save_card(card_id: str, values: object, *,
                 f"The {f.label} is longer than {MAX_VALUE_CHARS} characters; "
                 "nothing was saved.")
         clean[name] = text
-    # The card is spent exactly once, before anything is written.
-    cancel_card(cid)
+    # The card is spent exactly once, before anything is written - and the check
+    # and the removal are ONE step, so two saves of the same card cannot both
+    # get past here. The old code looked the card up, validated, and then spent
+    # it, and two threads both wrote (security review S1, 2026-10-28).
+    with _LOCK:
+        if _PENDING.get(cid) is not p:
+            raise ConnectAccountVoided(
+                "That connect card is unknown, used or expired; nothing was saved.")
+        del _PENDING[cid]
 
     import jarvis_token_store
     entries = targets(svc.id)

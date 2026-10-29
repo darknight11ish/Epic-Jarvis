@@ -127,6 +127,11 @@ async function openHud(browser, status, pageOptions = {}) {
   // Requests that reached the backend WITHOUT the token the shell adds - so
   // made by the page itself, not by the shell (apps security audit M2).
   const direct = [];
+  // The connect-account card's own save (2026-10-28): the body Rust would POST,
+  // recorded at the backend so a check asserts the real one. `caSaved` makes the
+  // pending route answer an empty list afterwards, as a spend card does.
+  const caWrites = [];
+  let caSaved = false;
   // Every ask for the browser HUD's face page, so a check can prove the page
   // asks once and then settles on the orb instead of retrying a failure.
   const faceAsks = [];
@@ -201,6 +206,29 @@ async function openHud(browser, status, pageOptions = {}) {
             return null;
           }
           case "hud_chat_cancel": return null;
+          // The connect-account card's two commands (2026-10-28). ONE card id
+          // and the values the owner typed - the same two arguments
+          // `hud_connect_account_save` takes - turned into the same POST Rust
+          // makes, with the token added here and never held by the page. So a
+          // check asserting the recorded body is asserting the real one.
+          case "hud_connect_account_save": {
+            const r = await origFetch(backend + "/api/connect-account/save", {
+              method: "POST",
+              headers: { ...shellHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify({ card_id: args.cardId, values: args.values }),
+            });
+            const reply = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(reply.error || `the server answered HTTP ${r.status}`);
+            return reply;
+          }
+          case "hud_connect_account_cancel": {
+            const r = await origFetch(backend + "/api/connect-account/cancel", {
+              method: "POST",
+              headers: { ...shellHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify({ card_id: args.cardId }),
+            });
+            return r.json().catch(() => ({}));
+          }
           // The Presets menu's PC lists (2026-10-27). The same GETs and POSTs
           // Rust makes, with the shell's token, so a write that reached the
           // backend without the shell is still a failure (audit M2).
@@ -425,6 +453,28 @@ async function openHud(browser, status, pageOptions = {}) {
         return route.fulfill({ status: 200, headers: cors,
           json: { available: true, pending: status.pending || [], history: [] } });
       }
+      // The connect-account card's own routes (2026-10-28). `status.caCards` is
+      // the host's own list, NEWEST FIRST (jarvis_connect_account.pending_cards
+      // - the page draws its first entry and nothing else). After a save the
+      // card has been spent, so the pending answer is empty, as the backend's is.
+      if (url.pathname === "/api/connect-account/pending") {
+        return route.fulfill({ status: 200, headers: cors,
+          json: { ok: true, cards: caSaved ? [] : (status.caCards || []) } });
+      }
+      if (url.pathname === "/api/connect-account/save" && req.method() === "POST") {
+        caWrites.push(JSON.parse(req.postData() || "{}"));
+        caSaved = true;
+        return route.fulfill({ status: 200, headers: cors, json: {
+          ok: true, service: "github", service_label: "GitHub (a personal access token)",
+          saved_to: ["Jarvis Backend/GitHub token"], verified: true,
+          verify_words: "GitHub accepted the token (signed in as owner)",
+          source: { token: "credential-manager" }, environment_wins_for: [],
+          needs_pc: true } });
+      }
+      if (url.pathname === "/api/connect-account/cancel" && req.method() === "POST") {
+        caSaved = true;
+        return route.fulfill({ status: 200, headers: cors, json: { ok: true, cancelled: true } });
+      }
       if (url.pathname === "/api/presets" || url.pathname === "/api/work") {
         // The Presets menu's own answer (2026-10-27). Only a scenario that asks
         // for one gets it; every other test keeps the old 404 path, so the
@@ -525,7 +575,8 @@ async function openHud(browser, status, pageOptions = {}) {
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
   await page.waitForTimeout(800);
   return { page, problems, chats, marks, decisions, memoryReads, memoryWrites, direct,
-           faceAsks, scheduleWrites, hudLayoutWrites, cloudEscalateWrites, presetApplyWrites };
+           faceAsks, scheduleWrites, hudLayoutWrites, cloudEscalateWrites, presetApplyWrites,
+           caWrites };
 }
 
 
@@ -2253,6 +2304,120 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
   assert.doesNotMatch(hideFn,
     /start_voice_capture|open_input_stream|cpal|stream_chat|post\(|approve|decide|reqwest|command\(/,
     "hide_quickbar must only hide the bar");
+});
+
+/* The connect-account card, DRIVEN (security review N7, 2026-10-28). The check
+ * above is regexes on the page's source: it can prove a line exists, not that
+ * the card works. This serves the real page to a real browser, hands it the
+ * host's own list and clicks Save, so what is asserted is the card the owner
+ * would see: boxes built from `card.fields`, the secret box masked, the newest
+ * card drawn, the boxes emptied before any message, and the values reaching
+ * Rust as ONE card id plus the declared fields - never a token the page holds.
+ *
+ * `pending_cards()` returns NEWEST FIRST (`jarvis_connect_account.py`), and the
+ * page draws `cards[0]`; the two facts together are why a card raised now is
+ * visible instead of hiding behind an older one for up to 300 s (N4). */
+await check("the connect card draws the newest waiting card and saves it through Rust", async () => {
+  const TYPED = "ghp_typed_by_the_owner_in_the_card";
+  const older = {
+    kind: "connect_account", card_id: "ca_" + "a".repeat(24),
+    service: "calendar_caldav",
+    service_label: "Calendar - a CalDAV server (username and password)",
+    summary: "Jarvis reads this calendar itself, read-only, on this PC.",
+    note: "", fields: [
+      { name: "username", label: "CalDAV username", kind: "username", secret: false, hint: "" },
+      { name: "password", label: "CalDAV password", kind: "password", secret: true,
+        hint: "If your provider gives you an app password for calendar apps, use that one." }],
+    agent_claimed_note: "", agent_note_is_untrusted: true,
+    stores_where: "Windows Credential Manager, on this PC",
+    store_entries: ["Jarvis Backend/CalDAV username",
+                    "Jarvis Backend/CalDAV password"],
+    from_this_pc_only: true, expires_in_seconds: 12,
+  };
+  const newer = {
+    kind: "connect_account", card_id: "ca_" + "b".repeat(24),
+    service: "github", service_label: "GitHub (a personal access token)",
+    summary: "Jarvis uses this token for GitHub searches, private repositories and CI watches.",
+    note: "The token is handled like a password: typed here, on this PC.",
+    fields: [{ name: "token", label: "GitHub personal access token", kind: "token",
+               secret: true, hint: "On github.com: Settings, Developer settings, Personal access tokens." }],
+    agent_claimed_note: "set up my github token", agent_note_is_untrusted: true,
+    stores_where: "Windows Credential Manager, on this PC",
+    store_entries: ["Jarvis Backend/GitHub token"],
+    from_this_pc_only: true, expires_in_seconds: 299,
+  };
+  // The host's list as `pending_cards()` returns it: the card just raised first.
+  const { page, problems, direct, caWrites } =
+    await openHud(browser, { jarvis: false, ollama: true, proxy: false,
+                             caCards: [newer, older] });
+  await K.until(page, "the connect card to be shown", async () =>
+    (await page.evaluate(() => document.getElementById("connect-account").hidden)) === false,
+    { ms: 5000 });
+
+  // THE NEWEST CARD, from the host's own words: the older card is in the list
+  // and is NOT what the owner is shown or asked to type.
+  const shown = await page.evaluate(() => ({
+    service: document.getElementById("ca-service").textContent,
+    summary: document.getElementById("ca-summary").textContent,
+    note: document.getElementById("ca-note").textContent,
+    inputs: [...document.querySelectorAll("#ca-fields input")].map((i) => ({
+      id: i.id, type: i.type, label: i.parentElement.querySelector("span")?.textContent || "",
+      title: i.title, value: i.value, maxLength: i.maxLength, autocomplete: i.autocomplete })),
+    save: document.getElementById("ca-save").textContent,
+    saveType: document.getElementById("ca-save").type,
+  }));
+  assert.equal(shown.service, newer.service_label, "the card draws the OLDER waiting card");
+  assert.equal(shown.summary, newer.summary, "the card's words are not the drawn card's");
+  assert.equal(shown.note, newer.agent_claimed_note,
+    "the card's note is not the drawn card's, or is not marked as the model's");
+  assert.deepEqual(shown.inputs.map((i) => i.id), ["ca-f-token"],
+    "the boxes are not built from the drawn card's fields (an older card's box is showing)");
+  assert.equal(shown.inputs[0].label, newer.fields[0].label, "the box label is not the host's");
+  assert.equal(shown.inputs[0].type, "password", "the token box is not masked");
+  assert.equal(shown.inputs[0].title, newer.fields[0].hint, "the box lost the host's hint");
+  assert.equal(shown.inputs[0].autocomplete, "off", "the token box allows autofill");
+  assert.equal(shown.inputs[0].maxLength, 4096, "the token box has no length cap");
+  assert.equal(shown.inputs[0].value, "", "a box was drawn with something in it");
+  assert.match(shown.save, /Save it on this PC/, "the button no longer says where the value goes");
+  assert.equal(shown.saveType, "button", "the Save control is not a button");
+
+  // Type, then Save: ONE command, carrying the card id and the declared field.
+  // The wait is for the RECEIPT, not for the invoke: the page clears its boxes
+  // only after Rust has answered, so asserting before that would be asserting
+  // the wrong moment.
+  await page.fill("#ca-f-token", TYPED);
+  await page.click("#ca-save");
+  await K.until(page, "the card to show its receipt", async () =>
+    (await page.evaluate(() =>
+      (document.getElementById("ca-status").textContent || "").length > 0)),
+    { ms: 8000 });
+
+  const after = await page.evaluate(() => ({
+    invokes: window.__invokes.filter(([cmd]) => cmd === "hud_connect_account_save"),
+    left: document.getElementById("ca-f-token")?.value,
+    status: document.getElementById("ca-status").textContent,
+    statusHidden: document.getElementById("ca-status").hidden,
+    cardHidden: document.getElementById("connect-account").hidden,
+    domText: document.getElementById("connect-account").textContent,
+    caCards: window.__caCards,
+  }));
+  assert.deepEqual(after.invokes.map(([, args]) => args),
+    [{ cardId: newer.card_id, values: { token: TYPED } }],
+    "the values did not reach Rust as ONE card id plus the card's fields");
+  // What reached the backend is the body Rust's `save_body` makes.
+  assert.deepEqual(caWrites, [{ card_id: newer.card_id, values: { token: TYPED } }],
+    "the save POST did not carry the card id and the typed value");
+  assert.deepEqual(direct, [], "the page posted the route itself instead of asking Rust");
+  assert.equal(after.left, "", "the token box was not cleared after Save");
+  assert.equal(after.statusHidden, false, "the receipt was not shown");
+  assert.match(after.status, /Jarvis Backend\/GitHub token/, "the receipt is not the host's names");
+  assert.match(after.status, /GitHub accepted the token/, "the receipt is not the host's verdict");
+  assert.ok(!after.domText.includes(TYPED), "the card still shows the typed value");
+  assert.ok(!after.status.includes(TYPED), "the receipt echoed the typed value");
+  assert.deepEqual(after.caCards, [], "the spent card is still in the page");
+  assert.equal(after.cardHidden, true, "the spent card is still on screen");
+  assert.deepEqual(problems, [], "the page logged or threw");
+  await page.close();
 });
 
 await check("a HUD reply is read aloud only with a voice on this computer", async () => {
