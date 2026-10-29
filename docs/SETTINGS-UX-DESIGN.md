@@ -236,3 +236,48 @@ S02  the phone's settings search uses the same words as the desktop's   grep:jar
 Nothing else here needs a row: "no setting was removed" is not a claim a grep
 can make honestly, and the existing desktop suites (19 of them read
 `settings.html`) already hold the ids and words that matter.
+
+## Amendment, 2026-10-28: the phone answers with the sections that NAME the words, and its Settings keeps room for the approvals line
+
+Two defects found on the owner's phone by Gemini's review (`F4`), both in the
+phone's Settings screen. Neither changes a setting, a row, a jump target or the
+desktop's page.
+
+- **A passing mention no longer answers while something names the word.** The
+  phone's box filters in the screen's own draw order and never ranked, and
+  every field was one bag of words, so typing **"pair"** returned VOICE,
+  APPEARANCE, DEVICES: the first two only *print* the conditional line "Pair
+  with your desktop first - these settings live on it.", Devices carries the
+  button "Pair with your PC", and all three hits were the same weakest tier. A
+  section's heading, the names of the controls drawn on it (`Row.titles`) and
+  the index's own synonyms (`Row.label`) are now the words it **NAMES**; the
+  sentences it prints (`Row.quotes`) are not, and a mention-only match answers
+  **only while no section names what was typed** (`SettingsSearch.namesIt`, the
+  rule in `matching`). So "pair" answers Devices alone, "pair with your pc" and
+  "unpair" find it too, and "pair with your desktop" still finds the two
+  sections that print it. Devices' card now indexes both of its buttons, so the
+  section is findable by the words on them, the same rule the 2026-10-13
+  switch-title defect established for `SwitchRow`s. **This is not the desktop's
+  ordering rule** - the desktop sorts every match by rank
+  (`compareMatches`); the phone cannot re-cut a `LazyColumn`'s items, so the one
+  thing a fixed-order screen can do is refuse to answer with the weaker source.
+  The four tiers, the edit budgets, the prefix guard and `rankPart` are
+  untouched, so the shared cross-app fixture still holds both engines to one
+  rule set, and the phone's own `FindAnything` (which already scores its rows)
+  is untouched.
+- **Room for a fixed overlay is measured, not typed in.** The phone's "Needs
+  your OK" line is drawn OVER every screen but Home, so it takes no room from
+  the screen under it; the list's 16 dp bottom padding left the last card's
+  last control under it, and "Unpair & clear the token" showed as a 6 px sliver
+  (the button at `[90,2058][990,2202]`, the line's top at `y=2064` on a
+  1080x2412 phone). `MainActivity` now measures the drawn line
+  (`onSizeChanged` - it wraps the PC's own card title, so its height is not a
+  constant) and `BottomReserve` turns that into the room a scrolling screen
+  keeps: the line, its 12 dp edge gap and 10 dp of air, added to Settings' own
+  padding. Nothing is reserved when no card waits. A screen that gains a fixed
+  overlay later follows the same rule: reserve the *drawn* height plus the gap,
+  and opt in, because reserving room an overlay does not use is blank space.
+  `BottomReserveTest` holds the arithmetic and the wiring; a Compose layout
+  cannot be measured in the JVM suite, and the test says so rather than implying
+  a rendered-pixel check.
+
