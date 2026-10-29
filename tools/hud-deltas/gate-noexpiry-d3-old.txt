@@ -1,0 +1,24 @@
+            # A process that died mid-wait leaves its row 'pending' forever,
+            # and the HUD keeps offering it. Anything older than the timeout
+            # plus a grace period cannot still have a waiter.
+            # Not for a card with NO deadline (APPROVAL_NEVER_EXPIRES): such
+            # a card is supposed to sit there until the owner answers it, and
+            # sweeping it on age would expire by the back door the very cards
+            # this change exists to leave waiting. The cost is said plainly: a
+            # deliberate card whose waiting thread died stays pending, and
+            # stays on screen, until the owner withdraws it or starts the
+            # pairing/restore again. That is the smaller risk of the two for
+            # these four ceremonies, and it is why withdraw() exists below and
+            # why the pairing and approval-key flows call it when their
+            # session is cancelled or replaced. Every other action, including
+            # every action nobody thought to classify, is swept exactly as
+            # before.
+            _forever = sorted(APPROVAL_NEVER_EXPIRES)
+            _marks = ",".join("?" * len(_forever))
+            c.execute(f"UPDATE approvals SET state='expired', decided=? "
+                      f"WHERE state='pending' AND created < ? "
+                      f"AND action NOT IN ({_marks})",
+                      (time.time(), time.time() - APPROVAL_TIMEOUT - 60, *_forever))
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS taint (
+                    key   TEXT PRIMARY KEY,
