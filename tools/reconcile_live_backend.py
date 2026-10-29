@@ -575,23 +575,24 @@ DELTA_TABLE = {
         },
     },
     # no-deadline-cards.patch (2026-10-28, the owner's ruling: "if there
-    # doesn't need to be a time limit don't have one"). SIXTEEN hunks in
-    # disjoint regions of `jarvis_gate.py`, so `"hunks": True`: each pre-image
-    # block is replaced by its post-image block, in file order, and a pre-image
-    # that is missing or not exactly once refuses the whole file. EIGHT of them
-    # edit no-expiry-cards.patch's own output, so this entry only works when
-    # that patch is already deployed - which the order in `$PATCHES` (and the
-    # live PC, where #773 is deployed) gives it. The probes are one post-image
-    # line from six different regions; none of them exists in the published
-    # base or in the pre-image, so only a gate that really carries the whole
-    # patch counts as present, and a half-applied file is finished by the
+    # doesn't need to be a time limit don't have one"; Gemini F3 / ruling f
+    # kept #965's read-time sweep, re-keyed on `waited_until`). SIXTEEN hunks
+    # in disjoint regions of `jarvis_gate.py`, so `"hunks": True`: each
+    # pre-image block is replaced by its post-image block, in file order, and a
+    # pre-image that is missing or not exactly once refuses the whole file.
+    # EIGHT of them edit no-expiry-cards.patch's own output, so this entry only
+    # works when that patch is already deployed - which the order in `$PATCHES`
+    # (and the live PC, where #773 is deployed) gives it. The probes are one
+    # post-image line from six different regions; none of them exists in the
+    # published base or in the pre-image, so only a gate that really carries the
+    # whole patch counts as present, and a half-applied file is finished by the
     # per-hunk check rather than replaced twice. Its `jarvis_owner_check.py`
     # half is a SHIPPED module, copied whole by deploy step 1.
     "no-deadline-cards.patch": {
         "jarvis_gate.py": {
             "probes": (
-                "NO CARD HAS A DEADLINE (the owner's ruling of 2026-10-28",
-                "def wait_for(action: Any) -> Optional[float]:",
+                "NO TIMER IS DRAWN ON A CARD, AND A CARD WHOSE REQUEST HAS FINISHED LEAVES",
+                "SINCE 2026-10-28 THIS IS THE REQUEST'S PATIENCE, NOT THE CARD'S LIFETIME.",
                 "def _wait_open(row: Any) -> bool:",
                 '"created,raised,target_digest,waited_until)"',
                 '_audit("gate.wait_finished"',

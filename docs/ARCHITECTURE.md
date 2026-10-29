@@ -242,33 +242,36 @@ immediate to turn off, and neither raises a card that something else answers:
 No approval card is ever answered for the owner, and no control approves
 more than one card.
 
-**An approval card has no deadline; the request that raised it does** (the
-owner's ruling of 2026-10-28: "if there doesn't need to be a time limit don't
-have one"; `backend/no-deadline-cards.patch`, applied after
-`no-expiry-cards.patch`). The card stays on every screen, with Approve and Deny
-and no countdown, until the owner answers it or the PC withdraws the work
-behind it; `pending()` sends no `expires_in` for any card, and no read of the
-queue takes a card away. **Waiting is still not approving:** nothing runs until
+**No card shows a time limit, and a card whose request has finished leaves the
+queue** (the owner's ruling of 2026-10-28: "if there doesn't need to be a time
+limit don't have one"; `backend/no-deadline-cards.patch`, applied after
+`no-expiry-cards.patch`). While its request is genuinely waiting, the card stays
+on every screen with Approve and Deny and NO countdown: `pending()` sends no
+`expires_in` for any card. **Waiting is still not approving:** nothing runs until
 a person answers, a denial is still a denial, and a card whose work is gone (a
 cancelled or replaced pairing) is withdrawn. **The request's own patience is
 what is bounded**, because the thread that waits is the thread that runs the
 action: it keeps `approval_timeout_seconds` (900 in the shipped config,
 changeable in Settings), and the moment it ends is written on the row
-(`waited_until`). At the decision the PC REVALIDATES: `jarvis_gate.still_waiting()`
-reads that moment against its own clock, `decide()` refuses an Approve for a row
-no request can still act on, and `jarvis_owner_check.approve_check()` answers
-409 with one plain sentence and withdraws the card at that moment - a lapse,
-never a denial, and never a silent expiry. **A Deny always works**, including
-on an old card. The four ceremonies of the 2026-10-23 ruling (Q1:
-`pair_device`, `unretire_shared_key`, `register_approval_key`,
-`restore_backup`) are unchanged in practice: their request waits until its own
-flow withdraws the card, so they are answerable for as long as the owner needs.
-The gate decides all of this from its own action ids only - there is no flow
-argument and no caller-supplied value that can ask for a longer wait. Start-up
-still settles rows no living request can act on (a `waited_until` more than the
-60-second grace past, or a pre-patch row with none); the once-per-read sweep the
-2026-10-28 "expired cards" fix added was removed with this ruling, because it
-took away exactly the card the ruling keeps.
+(`waited_until`). **#965's read-time sweep is KEPT, re-keyed on that moment:**
+once `waited_until` plus the same 60-second grace has passed, `pending()` marks
+the row `expired` before it builds the list, so no screen is ever handed a live
+Approve that could only answer 409 - the "zombie Approve" trap a literal
+no-limit would create. It is a lapse, never a decision, and it is recomputed on
+the PC at the moment of the read. At the decision the PC also REVALIDATES:
+`jarvis_gate.still_waiting()` reads that moment against its own clock,
+`decide()` refuses an Approve for a row no request can still act on, and
+`jarvis_owner_check.approve_check()` answers 409 with one plain sentence and
+withdraws the card if a stale page gets there before the read. **A Deny always
+works**, including on an old card. The four ceremonies of the 2026-10-23 ruling
+(Q1: `pair_device`, `unretire_shared_key`, `register_approval_key`,
+`restore_backup`) carry `waited_until = NULL`: the sweep never touches them, and
+their request waits until its own flow withdraws the card, so they are answerable
+for as long as the owner needs. The gate decides all of this from its own action
+ids only - there is no flow argument and no caller-supplied value that can ask
+for a longer wait. Start-up runs the same sweep, so a card left by a process that
+died is settled too; both halves are proven by `backend/test_gate_no_deadline.py`
+and, for the sweep's own patch in isolation, `backend/test_pending_expiry_on_read.py`.
 
 It also means Jarvis never drives its own approval surfaces. "Control the
 computer" refuses every window of Jarvis's own, and "control the phone"
@@ -808,21 +811,23 @@ places between screens. Presentation only - no approval logic changed.
      auto-approved. The SELECT and INSERT are one `BEGIN IMMEDIATE`
      transaction (`jarvis_gate.check()`, `backend/gate-touches.patch` - the
      file is patch-carried, not shipped whole).
-     **A card whose request has stopped waiting is not reused (2026-10-28).**
-     The card itself now stays `pending` until the owner answers or dismisses
-     it (`no-deadline-cards.patch`), so the match is the row's own
-     `waited_until`: a card past it can take no "yes", and a new identical
-     request gets a card of its own instead of being told "the same request is
-     already waiting for you" about one nothing is waiting on. **A dead
-     process's rows are still settled at the next start-up:** `_expire_overdue()`
-     runs once per process and settles only rows no living request can act on -
-     a `waited_until` more than the 60-second grace past, or a pre-patch row
-     with none - which is what the owner's 2026-10-28 report of expired cards he
-     could not clear on his phone needed. It is a lapse and never a decision, it
-     approves nothing, and it cannot take the card of a request still inside its
-     wait. The once-per-READ sweep that the same report added was removed by the
-     2026-10-28 no-deadline ruling: it took away exactly the card the ruling
-     keeps.
+     **A card whose request has stopped waiting is not reused, and leaves on
+     the next read (2026-10-28).** The card draws no countdown, but its row
+     records the request's last moment (`waited_until`); `pending()` runs
+     #965's read-time sweep before it builds the list, so a routine row past
+     that moment plus the same 60-second grace is marked `expired` and not
+     served. That is what stops a live Approve that could only answer 409.
+     Until that read lands the row is still `pending`, and the match is the
+     row's own `waited_until`: a card past it can take no "yes", and a new
+     identical request gets a card of its own instead of being told "the same
+     request is already waiting for you" about one nothing is waiting on.
+     **A dead process's rows are settled by the same sweep at the next
+     start-up** - and by the next read, which is what the owner's 2026-10-28
+     report of expired cards he could not clear on his phone needed. It is a
+     lapse and never a decision, it approves nothing, and it cannot take the
+     card of a request still inside its wait. The four ceremonies carry no
+     `waited_until` and are never swept; an explicit `withdraw()` still takes
+     their card off when the work is gone.
   2. **State-replacing cards say so and take a second press.** The cards
      that REPLACE or delete what is already there - `restore_backup`,
      `register_approval_key`, `memory_forget_range`, and the

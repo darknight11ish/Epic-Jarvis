@@ -1,65 +1,76 @@
-"""No approval card has a deadline, and a late "yes" is refused, not invented.
+"""No card shows a countdown, a finished request's card is swept, and a late
+"yes" is refused, not invented.
 
     python3 test_gate_no_deadline.py
 
 WHY THIS EXISTS
 
 The owner's ruling of 2026-10-28: **"if there doesn't need to be a time limit
-don't have one."** Until then a routine card waited `approval_timeout_seconds`
-(900 s in the shipped settings) and then refused itself. The card left every
-screen at the same moment, and a card that took longer than the window - a
-phone he picked up late, a question he wanted to think about - was simply gone.
+don't have one."** Until then a routine card drew a countdown, waited
+`approval_timeout_seconds` (900 s in the shipped settings) and then vanished.
+The complaint that survived review was the other half: a branch that removed
+the read-time sweep left a timed-out request's card on `/api/pending` with a
+live Approve that was guaranteed to answer `409 LATE_APPROVAL` after Windows
+Hello - the "zombie Approve button" (Gemini F3, ruling f).
 
 WHAT THE STACK DOES NOW (`backend/no-deadline-cards.patch`, applied after
-`no-expiry-cards.patch`):
+`no-expiry-cards.patch`), THE HONEST SYNTHESIS:
 
-  * the CARD has no deadline and no `expires_in`; it stays on every screen
-    until the owner answers it or the PC withdraws the work;
-  * the REQUEST that raised it still stops waiting after the shipped window -
-    a thread held for ever is not a permission - and when it stops, the row
-    stays 'pending'. `waited_until`, written at the INSERT, is the last moment
-    a "yes" can still be carried out;
-  * an APPROVE after that moment is refused by the gate (`still_waiting()`,
-    `decide()`) and by `jarvis_owner_check` with one plain sentence, and the
-    card is withdrawn at that moment: never silently expired, never "approved"
-    into nothing;
-  * a DENY always works. Refusing is the safe direction, and clearing an old
-    card with it is exactly what the ruling leaves the owner able to do;
+  * NO screen draws a countdown, and `/api/pending` sends no `expires_in` for
+    any card: while a request is genuinely waiting its card shows Approve and
+    Deny and no clock;
+  * the REQUEST that raised a routine card still stops waiting after the
+    shipped window - a thread held for ever is not a permission. `waited_until`,
+    written at the INSERT, is the last moment a "yes" can still be carried out;
+  * #965's READ-TIME SWEEP IS KEPT. Once `waited_until` plus the same 60-second
+    grace has passed, `pending()` settles the row 'expired' before it reads, so
+    no client is ever handed a card whose Approve can only answer 409. It is a
+    lapse, never a decision, and it is recomputed on the PC at read time;
+  * until that read lands, an APPROVE after `waited_until` is refused by the
+    gate (`still_waiting()`, `decide()`) and by `jarvis_owner_check` with one
+    plain sentence, and the card is withdrawn at that moment. The 409 is the
+    race guard, not the normal path;
+  * a DENY always works. Refusing is the safe direction;
   * the four ceremonies of the 2026-10-23 ruling (pairing a device, an approval
-    key, a restore) keep their own NO-wait behaviour: their request waits for
-    its flow to withdraw the card, so they are answerable for as long as the
-    owner needs.
+    key, a restore) have `waited_until = NULL`: #965's sweep never touches
+    them, and their request waits for its own flow to withdraw the card, so
+    they are answerable for as long as the owner needs.
 
 WHAT THIS PROVES
 
   1. t_the_stack_is_the_published_base_plus_both_patches
      Both patches apply with `git apply` to `jarvis-backend/jarvis_gate.py`,
-     the result compiles, `timeout_for()` answers None for every action,
-     `wait_for()` is the four ceremonies plus the shipped window for the rest,
+     the result compiles, `timeout_for()` is the REQUEST window (None for the
+     four ceremonies, the shipped 900 for the rest), `pending()` still runs
+     `_expire_overdue()` before its SELECT, the queue emits no `expires_in`,
      and the rows carry `waited_until`. The base is not edited to make it fit.
-  2. t_a_routine_card_is_still_pending_after_the_old_fifteen_minutes
+  2. t_a_card_whose_request_ended_is_still_pending_inside_the_grace
      The request ends at the shipped window (the caller reads timed_out); the
      ROW is still 'pending', `pending()` still serves it, and it carries no
      `expires_in` - so no screen can draw a countdown or "Timed out".
-  3. t_a_late_approval_is_refused_with_the_reason_and_the_card_leaves
-     `still_waiting()` is False, `decide(True)` is False, the owner's own
-     approve route answers 409 with one plain sentence, the row is 'expired'
-     (a lapse, never a denial) and the queue is empty afterwards.
-  4. t_a_decision_inside_the_window_is_still_accepted
+  3. t_the_read_sweep_takes_the_card_after_the_grace_so_no_approve_is_left
+     Advance past `waited_until + 60`; the NEXT `pending()` settles it: the row
+     is 'expired' (a lapse, never a denial), it is not listed, and an Approve
+     sent to that id afterwards is refused - no live Approve that will 409.
+  4. t_a_late_approval_is_refused_with_the_reason_and_the_card_leaves
+     Inside the grace the race guard is visible: `still_waiting()` is False,
+     `decide(True)` is False, and the owner's own approve route answers 409
+     with one plain sentence and withdraws the row.
+  5. t_a_decision_inside_the_window_is_still_accepted
      The control: the same card, answered while its request waits, is approved
      through `decide()` exactly as before.
-  5. t_a_deny_still_clears_a_card_whose_request_has_gone
+  6. t_a_deny_still_clears_a_card_whose_request_has_gone
      Refusing is never held: the late card can always be dismissed.
-  6. t_the_four_ceremonies_still_wait_with_no_number_at_all
-     A pairing or restore card is answerable hours later - the 2026-10-23
-     ruling is not narrowed by this one.
-  7. t_a_card_the_pc_withdrew_is_still_gone
+  7. t_the_four_ceremonies_are_never_swept
+     A pairing or restore card is answerable hours (and a day) later, its row
+     is never expired by a read, and the 2026-10-23 ruling is not narrowed.
+  8. t_a_card_the_pc_withdrew_is_still_gone
      `withdraw()` still takes a card off the list and ends its waiter.
-  8. t_a_row_left_by_a_dead_process_is_settled_at_start_up
+  9. t_a_row_left_by_a_dead_process_is_settled_on_the_next_read
      The 2026-10-28 unanswerable-card defect stays fixed: a lapsed routine row
-     (and an old fieldless one) is settled at start-up, while a ceremony row
-     with no wait is left alone.
-  9. t_a_lapsed_card_does_not_swallow_a_new_identical_request
+     (and an old fieldless one) is settled by a READ, not only at start-up,
+     while a ceremony row with no wait is left alone and the grace is honoured.
+ 10. t_a_lapsed_card_does_not_swallow_a_new_identical_request
      The "the same request is already waiting for you" bug cannot come back
      through a card whose request has gone.
 
@@ -297,30 +308,36 @@ def t_the_stack_is_the_published_base_plus_both_patches():
         return check("both patches apply to the published base", False, why)
     check("no-expiry-cards.patch and no-deadline-cards.patch apply with git", True)
     check("...and the base was not edited to make them fit",
-          "def wait_for(" not in (BASE / "jarvis_gate.py").read_text(encoding="utf-8"),
+          "waited_until" not in (BASE / "jarvis_gate.py").read_text(encoding="utf-8"),
           "the base already contains the change - re-anchor the patch instead")
 
     G = load_module("jarvis_gate", d)
     after = Path(G.__file__).read_text(encoding="utf-8")
+    pending_body = after.split("def pending")[1].split("def decide")[0]
     check("the patched module compiles", True)     # importing it is the proof
-    for action in ROUTINE + NEVER_EXPIRES:
-        check(f"{action}: the CARD has no deadline", G.timeout_for(action) is None,
-              G.timeout_for(action))
     for action in NEVER_EXPIRES:
         check(f"{action}: its REQUEST waits for its own flow",
-              G.wait_for(action) is None, G.wait_for(action))
+              G.timeout_for(action) is None, G.timeout_for(action))
     for action in ROUTINE:
         check(f"{action}: its REQUEST keeps the shipped 900",
-              G.wait_for(action) == float(MINUTES_15), G.wait_for(action))
+              G.timeout_for(action) == float(MINUTES_15), G.timeout_for(action))
     check("the patch adds no second copy of a shipped module",
           set(re.findall(r"^\+\+\+ b/(.+)$",
                          DEADLINE_PATCH.read_text(encoding="utf-8"), re.M))
           == {"jarvis_gate.py"})
     check("...and it is the one that removes the countdown",
-          'd["expires_in"]' not in after.split("def pending")[1].split("def decide")[0],
+          'd["expires_in"]' not in pending_body,
           "pending() still emits expires_in")
+    check("...while KEEPING #965's read-time sweep",
+          "_expire_overdue(c)" in pending_body,
+          "pending() no longer settles a card whose request has finished")
+    check("...and the sweep runs BEFORE the SELECT, not after it",
+          pending_body.index("_expire_overdue(c)") < pending_body.index("rows = c.execute"),
+          "a client could be handed the row the sweep exists to remove")
     check("...and rows record when their request stops waiting",
           "waited_until" in after)
+    check("...and the four ceremonies' rows carry no such moment",
+          "None if waited is None else now + waited" in after)
     # The two shipped modules are byte-identical twins (the rule in CLAUDE.md).
     for name in ("jarvis_owner_check.py", "jarvis_devices.py"):
         a = (BACKEND / name).read_bytes().replace(b"\r\n", b"\n")
@@ -329,10 +346,10 @@ def t_the_stack_is_the_published_base_plus_both_patches():
 
 
 # ---------------------------------------------------------------------------
-# 2. The card outlives its request
+# 2. The card outlives its request, but only for the grace
 # ---------------------------------------------------------------------------
 
-def t_a_routine_card_is_still_pending_after_the_old_fifteen_minutes():
+def t_a_card_whose_request_ended_is_still_pending_inside_the_grace():
     d, why = built()
     if d is None:
         return skip(why)
@@ -358,12 +375,50 @@ def t_a_routine_card_is_still_pending_after_the_old_fifteen_minutes():
         check("the REQUEST ends at the shipped window, refused as timed_out",
               v is not None and v.allowed is False and v.outcome == "timed_out",
               (v, box.get("error")))
-        check("...and the ROW IS STILL PENDING - the card did not vanish",
+        check("...and the ROW IS STILL PENDING inside the 60-second grace",
               state_of(G, row["id"]) == "pending", state_of(G, row["id"]))
         listed = [r["id"] for r in G.pending()]
         check("...and the queue still serves it, with no countdown field",
               row["id"] in listed and all("expires_in" not in r for r in G.pending()),
               listed)
+
+
+def t_the_read_sweep_takes_the_card_after_the_grace_so_no_approve_is_left():
+    d, why = built()
+    if d is None:
+        return skip(why)
+    G = load_module("jarvis_gate", d)
+    with simulated_clock(G) as clock:
+        box = {}
+        t = ask(G, "send_email", box)
+        row = wait_for_row(G, box)
+        if row is None:
+            return check("the routine card was raised", False, "no row")
+        clock.advance(MINUTES_15 + 1)
+        t.join(timeout=10)
+        check("inside the grace the row is still pending (setup)",
+              state_of(G, row["id"]) == "pending", state_of(G, row["id"]))
+
+        with closing(G._connect()) as c:
+            before = G._expire_overdue(c)
+        check("the grace itself settles nothing", before == 0, before)
+
+        clock.advance(61)             # now past waited_until + 60
+        listed = [r["id"] for r in G.pending()]
+        check("#965's read-time sweep took the card off the queue",
+              row["id"] not in listed, listed)
+        check("...and recorded it as a lapse, never a denial",
+              state_of(G, row["id"]) == "expired", state_of(G, row["id"]))
+        check("...so no screen can be handed a live Approve for it",
+              all(r["id"] != row["id"] for r in G.pending()))
+        check("...and an Approve sent to that id is refused",
+              G.still_waiting(row["id"]) is False
+              and G.decide(row["id"], True, by="the test") is False)
+        with closing(G._connect()) as c:
+            check("...while a clean read settles nothing", G._expire_overdue(c) == 0)
+        check("...and a fabricated id is refused too",
+              G.still_waiting("nosuchcard") is False
+              and G.decide("nosuchcard", True, by="the test") is False)
 
 
 def t_a_late_approval_is_refused_with_the_reason_and_the_card_leaves():
@@ -448,7 +503,7 @@ def t_a_deny_still_clears_a_card_whose_request_has_gone():
 # 3. The 2026-10-23 ceremonies are not narrowed by this
 # ---------------------------------------------------------------------------
 
-def t_the_four_ceremonies_still_wait_with_no_number_at_all():
+def t_the_four_ceremonies_are_never_swept():
     d, why = built()
     if d is None:
         return skip(why)
@@ -468,8 +523,18 @@ def t_the_four_ceremonies_still_wait_with_no_number_at_all():
         check("...and its request is still able to act on a yes",
               G.still_waiting(row["id"]) is True)
         check("...with no expires_in to count", "expires_in" not in row, row)
+        clock.advance(24 * 60 * 60)          # a day later
+        listed = [r["id"] for r in G.pending()]
+        check("...a DAY later the read-time sweep has still not touched it",
+              row["id"] in listed and state_of(G, row["id"]) == "pending",
+              {"listed": listed, "state": state_of(G, row["id"])})
+        with closing(G._connect()) as c:
+            check("...because a ceremony row carries no waited_until to sweep",
+                  G._expire_overdue(c) == 0
+                  and c.execute("SELECT waited_until FROM approvals WHERE id=?",
+                                (row["id"],)).fetchone()[0] is None)
         OC.stamp(row["id"], row["action"])
-        check("...so a decision hours later is accepted",
+        check("...so a decision a day later is accepted",
               G.decide(row["id"], True, by="the test") is True)
         t.join(timeout=10)
         v = box.get("v")
@@ -506,7 +571,7 @@ def t_a_card_the_pc_withdrew_is_still_gone():
 # 4. A dead process's rows are still settled, and never swallow a request
 # ---------------------------------------------------------------------------
 
-def t_a_row_left_by_a_dead_process_is_settled_at_start_up():
+def t_a_row_left_by_a_dead_process_is_settled_on_the_next_read():
     d, why = built()
     if d is None:
         return skip(why)
@@ -530,6 +595,22 @@ def t_a_row_left_by_a_dead_process_is_settled_at_start_up():
     check("...and the 60-second grace is still given to a row that only just lapsed",
           states.get(justlapsed) == "pending", states)
 
+    # The READ half, which is what stops a card outliving its request while the
+    # process keeps running (#965's defect): a row inserted after `_init()` is
+    # settled by the next `pending()`, never only by the next start-up.
+    later = seed(G, "send_email", time.time() - 120.0)
+    fieldless = seed(G, "search_the_web", None)
+    listed = [r["id"] for r in G.pending()]
+    after = {r["id"]: r["state"] for r in G.history(20)}
+    check("a lapsed row inserted after start-up is swept by the NEXT READ",
+          later not in listed and after.get(later) == "expired",
+          {"listed": listed, "state": after.get(later)})
+    check("...and a fieldless row cannot sit there offering a dead Approve",
+          fieldless not in listed and after.get(fieldless) == "expired",
+          {"listed": listed, "state": after.get(fieldless)})
+    check("...while the ceremony and the inside-the-grace row are still there",
+          ceremony in listed and justlapsed in listed, listed)
+
 
 def t_a_lapsed_card_does_not_swallow_a_new_identical_request():
     d, why = built()
@@ -551,13 +632,14 @@ def t_a_lapsed_card_does_not_swallow_a_new_identical_request():
 
 if __name__ == "__main__":
     for fn in (t_the_stack_is_the_published_base_plus_both_patches,
-               t_a_routine_card_is_still_pending_after_the_old_fifteen_minutes,
+               t_a_card_whose_request_ended_is_still_pending_inside_the_grace,
+               t_the_read_sweep_takes_the_card_after_the_grace_so_no_approve_is_left,
                t_a_late_approval_is_refused_with_the_reason_and_the_card_leaves,
                t_a_decision_inside_the_window_is_still_accepted,
                t_a_deny_still_clears_a_card_whose_request_has_gone,
-               t_the_four_ceremonies_still_wait_with_no_number_at_all,
+               t_the_four_ceremonies_are_never_swept,
                t_a_card_the_pc_withdrew_is_still_gone,
-               t_a_row_left_by_a_dead_process_is_settled_at_start_up,
+               t_a_row_left_by_a_dead_process_is_settled_on_the_next_read,
                t_a_lapsed_card_does_not_swallow_a_new_identical_request):
         print(f"\n--- {fn.__name__} ---")
         try:

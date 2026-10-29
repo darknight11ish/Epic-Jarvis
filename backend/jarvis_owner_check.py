@@ -1328,21 +1328,20 @@ LATE_APPROVAL = (
 
 
 def _no_deadline(row: dict) -> bool:
-    """True only for a card the GATE says has no window at all.
+    """True only for a card the GATE says has no request-side window at all.
 
-    Two backends answer this differently and both are understood here:
+    The one answer this repository ships since 2026-10-28 is the gate's own
+    set: `APPROVAL_NEVER_EXPIRES` names the four ceremonies whose REQUEST waits
+    for its own flow. Every other action's request waits
+    `approval_timeout_seconds` - `timeout_for()` answers exactly that - even
+    though the CARD draws no countdown and is taken off by the read-time sweep
+    once that wait plus the grace has passed.
 
-      * the one this repository ships since 2026-10-28 - `APPROVAL_NEVER_EXPIRES`
-        names the four ceremonies whose REQUEST waits for its own flow, and
-        every other card has a request window even though the CARD itself has
-        no deadline. `timeout_for()` answers None for every action now, so the
-        set, not the function, is what tells the two apart.
-      * a backend older than that - `APPROVAL_NEVER_EXPIRES` may be absent, and
-        `timeout_for()` is then the only answer it has.
-
-    A row from a backend with neither (a fieldless row and no set) is treated as
-    having a window: DEFAULT_TIME_LEFT is the honest fallback there, because
-    those cards really did expire.
+    A backend older than the set may have only `timeout_for()`; it is asked
+    then, and answers None for the same four ids. A backend with neither (a
+    fieldless row and no gate at all) is treated as having a window:
+    DEFAULT_TIME_LEFT is the honest fallback there, because those cards really
+    did expire.
     """
     try:
         import jarvis_gate
@@ -1381,13 +1380,13 @@ def _time_left(row: dict) -> Optional[float]:
     None is not a very large number. A card whose action's request waits for
     its own flow (`jarvis_gate.APPROVAL_NEVER_EXPIRES`: pairing a phone,
     registering its approval key and restoring a backup) has no moment to be
-    late for. Since 2026-10-28 the CARD of every other action has no deadline
-    either, but its REQUEST does, and that is the number this returns - from
-    the row's own `expires_in` when an older backend sent one, otherwise from
-    `created` plus the shipped wait. A caller that treated None as "0 seconds
-    left" would refuse the four ceremonies; one that treated it as a number of
-    seconds would invent a deadline the gate does not have - so both branches
-    below test it explicitly.
+    late for. Since 2026-10-28 the CARD of every other action draws no
+    countdown either, but its REQUEST does, and that is the number this
+    returns - from the row's own `expires_in` when an older backend sent one,
+    otherwise from `created` plus the shipped wait. A caller that treated None
+    as "0 seconds left" would refuse the four ceremonies; one that treated it
+    as a number of seconds would invent a deadline the gate does not have - so
+    both branches below test it explicitly.
     """
     # THE ROW'S OWN NUMBER WINS when it has one: if the gate sent
     # `expires_in`, that is this card's deadline, and 0 or a negative number

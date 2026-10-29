@@ -367,33 +367,46 @@ text"). It is part of the text; show it the way the rest is shown.
 
 **`expires_in` IS NOT SENT AT ALL SINCE 2026-10-28** (the owner's ruling: "if
 there doesn't need to be a time limit don't have one";
-`backend/no-deadline-cards.patch`). Every card stays on every screen, with its
-Approve and Deny and no countdown, until the owner answers it or the PC
-withdraws the work. The field is left OFF, never `0` (which both apps read as
-"expired now") and never a very large number (which would draw a countdown that
-ends in a refusal that never comes). Both clients already treat an absent field
-as "no countdown" — they have done so for the four ceremonies below since
-2026-10-23 — so no client change was needed for the card to draw correctly. The
-field is still UNDERSTOOD: a backend older than this patch sends it (seconds
-left before it stops waiting, `approval_timeout_seconds`, 900 in the shipped
-config since 2026-10-14, changeable in Settings), and the phone, desktop and HUD
-still count down from it. `backend/test_approval_contract.py` no longer builds
-`expires_in` into `jarvis-client/app/src/test/resources/contract/pending-rows.json`,
-and both clients' contract tests keep a check that an older backend's field is
+`backend/no-deadline-cards.patch`). No screen is handed a countdown: while a
+request is genuinely waiting, its card shows Approve and Deny and no clock. The
+field is left OFF, never `0` (which both apps read as "expired now") and never a
+very large number (which would draw a countdown that ends in a refusal that
+never comes). Both clients already treat an absent field as "no countdown" —
+they have done so for the four ceremonies below since 2026-10-23 — so no client
+change was needed for the card to draw correctly. The field is still
+UNDERSTOOD: a backend older than this patch sends it (seconds left before it
+stops waiting, `approval_timeout_seconds`, 900 in the shipped config since
+2026-10-14, changeable in Settings), and the phone, desktop and HUD still count
+down from it. `backend/test_approval_contract.py` no longer builds `expires_in`
+into `jarvis-client/app/src/test/resources/contract/pending-rows.json`, and
+both clients' contract tests keep a check that an older backend's field is
 still read.
 
 **The four ceremonies of the 2026-10-23 ruling are not narrowed** (Q1;
 `backend/no-expiry-cards.patch`): pairing a device (`pair_device`,
 `unretire_shared_key`), registering a phone's approval key
 (`register_approval_key`) and restoring a backup (`restore_backup`) are
-answerable for as long as the owner needs. Since 2026-10-28 the difference is
-only in their REQUEST: theirs waits until its own flow withdraws the card,
-while every other request waits `approval_timeout_seconds`.
+answerable for as long as the owner needs. Since 2026-10-28 their rows carry no
+`waited_until`, so the read-time sweep below never touches them, and the
+difference is only in their REQUEST: theirs waits until its own flow withdraws
+the card, while every other request waits `approval_timeout_seconds`.
 
-**A card whose request has finished waiting stays on the list, and a late
-Approve is refused in plain words** (2026-10-28). The card has no deadline, but
-the request that raised it does; when that wait ends, nothing is left to carry
-out a "yes". So `POST /api/approve` revalidates at the decision: the PC's own
+**A routine card whose request has finished is swept on the next read, so no
+live Approve is left; the 409 is the race guard** (2026-10-28, Gemini F3 /
+ruling f). The card has no countdown, but the request that raised it does, and
+that last moment is on the row (`waited_until`). `GET /api/pending` runs the
+gate's own `_expire_overdue()` before it builds the list: a routine row past
+`waited_until` plus the same 60-second grace is marked `expired` and **not
+served**, so no screen is handed a card whose Approve is guaranteed to answer
+409. **It is a lapse, never a decision** — nothing is approved or denied, and
+the row still appears in `history` (and in the Activity list, §42) as
+`expired`. **It cannot take a live card:** the moment is recomputed on the PC at
+the read, from this machine's clock; a card whose request is still waiting has
+`waited_until` in the future and is left alone.
+
+Inside that 60-second grace a card can still be on a screen whose queue was read
+just before the moment passed. A tap then must not record a yes that nothing
+will run, so `POST /api/approve` revalidates at the decision: the PC's own
 `jarvis_owner_check.approve_check()` asks `jarvis_gate.still_waiting()` before
 any Windows Hello prompt and again after it, answers **409** with one sentence —
 *"That card is not waiting for you any more: the request that asked has
@@ -404,23 +417,21 @@ on a card whose request is gone: refusing is the safe direction. The desktop HUD
 shows the 409's sentence as it is; the desktop bar/widget and the phone say
 their own plain sentence ("That card is not waiting any more — it was answered,
 or the request that asked has finished") and re-read the queue, so the withdrawn
-card leaves the screen. `GET /api/pending` no longer runs any expiry sweep: a
-card is not removed by a clock at all. Start-up still settles rows no living
-request can act on (a `waited_until` more than the 60-second grace past, or a
-row from before this patch with none), and `backend/test_gate_no_deadline.py`
-proves all of it — including that a routine card is still `pending` after the
-old fifteen minutes, and that a late approval is refused with that exact
-sentence and never silently expired. `backend/test_pending_expiry_on_read.py`
-stays as the record of the every-read sweep this superseded.
+card leaves the screen. `backend/test_gate_no_deadline.py` proves all of it —
+including that a routine card inside the grace is still `pending` with no
+`expires_in`, that the next read after the grace takes it, and that a late
+approval is refused with that exact sentence and never silently expired.
+`backend/test_pending_expiry_on_read.py` stays as the evidence for the
+every-read sweep in the patch that introduced it.
 
-**A process that died mid-wait is still tidied at the next start-up**, which is
-what the 2026-10-28 "cards that are expired" report needed: the helper
-`_expire_overdue()` runs once per process and settles only rows no living
-request can act on. It is a lapse, never a decision; nothing a person decided is
-hidden, and the row still appears in `history` (and in the Activity list, §42)
-as `expired`. The phone's one added line in `MainActivity.onResume` (re-reading
-this route when the app comes to the front) stays as it was — a read, which
-decides nothing.
+**A process that died mid-wait is still tidied at the next start-up** (and by
+the first read after it), which is what the 2026-10-28 "cards that are expired"
+report needed: the helper `_expire_overdue()` settles only rows no living
+request can act on — a routine row past its `waited_until` plus the grace, or a
+row from before this patch with no `waited_until` (nothing can approve it). It
+is a lapse, never a decision; nothing a person decided is hidden. The phone's
+one added line in `MainActivity.onResume` (re-reading this route when the app
+comes to the front) stays as it was — a read, which decides nothing.
 
 ### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
 
